@@ -46,10 +46,34 @@ track set drives which artifacts/sections/loops apply. See `references/classific
 ## MCP tools (in `mcp/lib/spec.js`, dispatched by `mcp/server.js`)
 `spec_init` · `spec_classify` · `spec_create` · `spec_list` · `spec_status` · `spec_next_task` ·
 `spec_complete_task` · `ears_validate` · `trace_check` · `spec_doctor` · `spec_approve` ·
-`spec_clarify` · `spec_roadmap` · `spec_depend` · `spec_scan` · `spec_coverage` ·
-`steering_scaffold` (17 total). All are pure-local file ops on `.specs/` (or read-only codebase
-scan for brownfield); none hit the network. They scaffold and check — they never overwrite existing
-files. Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked.
+`steering_scaffold` · `spec_roadmap` · `spec_backlog` · `spec_depend` · `spec_scan` ·
+`spec_coverage` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature`
+(**21 total**; verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). The
+server is **tools-only** — it advertises `capabilities: { tools: { listChanged: false } }` and exposes
+no `resources`/`prompts`. All tools are pure-local file ops on `.specs/` (or read-only codebase scan
+for brownfield); none hit the network. They scaffold and check — they never overwrite existing files.
+Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked.
+
+## Config paths: committable (relative) vs. host-installed (absolute)
+Two distinct distribution targets, deliberately kept separate — never conflate them:
+
+- **In-repo dotfiles are committable and portable.** They use relative / workspace-relative
+  references, never a machine path, so `git clone`/download Just Works:
+  - `.mcp.json` → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js` (Claude Code resolves the plugin root)
+  - `.vscode/mcp.json` → `${workspaceFolder}/mcp/server.js`
+  - `.cursor/mcp.json`, `.gemini/settings.json` → `mcp/server.js` (cwd-relative)
+
+  `.vscode/mcp.json` is the **one** tracked file under `.vscode/`; everything else there is gitignored
+  via a surgical exception (`.vscode/*` then `!.vscode/mcp.json` — must ignore by contents, not the
+  dir, or git can't re-include the file). Never commit an absolute path into these.
+
+- **Installing into a USER's own project needs absolute paths.** Outside Claude Code there is no
+  `${CLAUDE_PLUGIN_ROOT}`, so the user's editor must point at *this clone's* absolute `mcp/server.js`.
+  That host-specific config is **generated on demand, never committed**: `node bin/dev-spec.js
+  mcp-config <client>` (`claude-desktop|claude-code|cursor|vscode|gemini|codex|all`) prints a ready
+  config with the absolute path resolved from `__dirname` (`mcpConfig()` in `bin/dev-spec.js`). The
+  `integrations/*` templates carry the literal `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder as a
+  copy-paste fallback. (There is **no** `install_host_context` symbol — the mechanism is `mcp-config`.)
 
 ## Conventions & gotchas
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —

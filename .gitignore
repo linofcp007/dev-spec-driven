@@ -13,6 +13,14 @@ Desktop.ini
 .idea/
 *.code-workspace
 
+# Editor workspace dir — ignore everything EXCEPT the committed MCP config.
+# .vscode/mcp.json is workspace-relative (${workspaceFolder}) and portable, so it
+# stays tracked; personal settings.json/launch.json/tasks.json stay local.
+# (Use `.vscode/*`, NOT `.vscode/` — git can't re-include a file whose parent dir
+#  is ignored, so the directory must be ignored by its contents for `!` to work.)
+.vscode/*
+!.vscode/mcp.json
+
 # Logs / temp / coverage
 *.log
 tmp/
