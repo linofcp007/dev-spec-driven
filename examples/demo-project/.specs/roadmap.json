@@ -1,0 +1,18 @@
+{
+  "features": {
+    "usage-metering": {
+      "dependsOn": [
+        "api-keys"
+      ]
+    }
+  },
+  "backlog": [
+    {
+      "name": "two-factor-auth",
+      "note": "TOTP via authenticator"
+    }
+  ],
+  "meta": {
+    "lang": "en"
+  }
+}

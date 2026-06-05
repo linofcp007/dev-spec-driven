@@ -1,0 +1,30 @@
+{
+  "name": "dev-spec-driven",
+  "version": "1.8.0",
+  "description": "Unified, track-based spec-driven development: a Claude Code plugin + a local zero-dependency MCP server + a universal CLI that works in any MCP/agent tool (Claude, Cursor, Windsurf, Copilot, Gemini, Codex). No cloud, no CI, no cost.",
+  "type": "commonjs",
+  "private": true,
+  "license": "MIT",
+  "author": "Carlos Pereira <carlospereira@prodigitalkey.com>",
+  "homepage": "https://github.com/linofcp007/dev-spec-driven#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/linofcp007/dev-spec-driven.git"
+  },
+  "bugs": {
+    "url": "https://github.com/linofcp007/dev-spec-driven/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "dev-spec": "bin/dev-spec.js"
+  },
+  "scripts": {
+    "test": "node mcp/test.js && node bin/test-cli.js",
+    "mcp": "node mcp/server.js",
+    "cli": "node bin/dev-spec.js",
+    "evals": "node mcp/evals/run-evals.js"
+  },
+  "dependencies": {}
+}

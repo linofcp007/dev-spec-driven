@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap — demo-project</title>
+<style>
+:root{ --brand:#11689B; --accent:#00AAFF; --accent2:#4A90E2;
+  --bg:#040405; --bg2:#0A0A0C; --bg3:#121216; --text:#FFFFFF; --muted:#8A91A5; --border:rgba(74,144,226,.18);
+  --c-done:#00e164; --c-prog:#FFD700; --c-block:#ff6b6b; --c-muted:#8A91A5; }
+:root[data-theme="light"]{ --bg:#F8F9FA; --bg2:#FFFFFF; --bg3:#E9ECEF; --text:#1A1D20; --muted:#6C757D; --border:rgba(17,104,155,.18); --c-muted:#9aa3af; }
+@media (prefers-color-scheme: light){ :root:not([data-theme]){ --bg:#F8F9FA; --bg2:#FFFFFF; --bg3:#E9ECEF; --text:#1A1D20; --muted:#6C757D; --border:rgba(17,104,155,.18); --c-muted:#9aa3af; } }
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:2px solid var(--brand);padding-bottom:14px}
+h1{font-size:1.5rem;margin:0;font-weight:700} h1 small{color:var(--muted);font-weight:500;font-size:.85rem}
+.spacer{flex:1}
+.toggle{cursor:pointer;border:1px solid var(--border);background:var(--bg2);color:var(--text);border-radius:999px;padding:7px 14px;font:inherit;font-size:.85rem}
+.toggle:hover{border-color:var(--brand)}
+.prog{margin:18px 0 6px;font-weight:600}
+.pbar{height:10px;border-radius:999px;background:var(--bg3);overflow:hidden;margin:8px 0}
+.pbar>span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--accent))}
+.sub{color:var(--muted);font-size:.9rem}
+.legend{color:var(--muted);font-size:.85rem;margin:8px 0 4px;display:flex;gap:14px;flex-wrap:wrap}
+.legend .dot{margin-right:5px}
+h2{font-size:1.05rem;margin:28px 0 10px;color:var(--accent)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle}
+.cards{display:flex;gap:12px;flex-wrap:wrap}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:220px}
+.card b{display:block;margin-bottom:4px} .tracks{display:inline-block;font-size:.72rem;font-weight:500;color:var(--accent2);background:rgba(74,144,226,.12);border:1px solid var(--border);padding:2px 9px;border-radius:8px;margin:3px 0;white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:.9rem;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border)} th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+tr:last-child td{border-bottom:none} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+.pct{white-space:nowrap} .pct .bar{display:inline-block;width:54px;height:6px;border-radius:999px;background:var(--bg3);vertical-align:middle;margin-right:7px;overflow:hidden}
+.pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)}
+.met{color:var(--c-done)} .unmet{color:var(--c-block)}
+ul{list-style:none;padding:0;margin:0} li{padding:5px 0;border-bottom:1px solid var(--border)} li:last-child{border:none}
+footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid var(--border);padding-top:12px}
+</style>
+</head>
+<body><div class="wrap">
+<header>
+  <h1>Roadmap <small>— demo-project</small></h1>
+  <span class="spacer"></span>
+  <button class="toggle" id="tg" aria-label="Theme">◐ Theme</button>
+</header>
+
+<div class="prog">Progress: 70%</div>
+<div class="pbar"><span style="width:70%"></span></div>
+<div class="sub">0/2 features complete · 0/16 tasks done</div>
+<div class="legend">
+  <span><span class="dot" style="background:var(--c-done)"></span>done</span>
+  <span><span class="dot" style="background:var(--c-prog)"></span>in progress</span>
+  <span><span class="dot" style="background:var(--c-block)"></span>blocked</span>
+  <span><span class="dot" style="background:var(--c-muted)"></span>not started</span>
+</div>
+
+
+<h2>▶ Next up</h2>
+<div class="cards"><div class="card"><b>api-keys</b><span class="tracks">core +tdd +saas</span><div>next #1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</div></div></div>
+
+<h2>Features</h2>
+<table><thead><tr><th></th><th>Feature</th><th>Tracks</th><th>Phase</th><th>%</th><th>Tasks</th><th>Deps</th><th>Next</th></tr></thead><tbody><tr><td><span class="dot" style="background:var(--c-muted)"></span></td><td><a href="./api-keys/requirements.md">api-keys</a></td><td><span class="tracks">core +tdd +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:70%"></span></span>70%</td><td>0/8</td><td>—</td><td class="next">#1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</td></tr>
+<tr><td><span class="dot" style="background:var(--c-block)"></span></td><td><a href="./usage-metering/requirements.md">usage-metering</a></td><td><span class="tracks">core +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:70%"></span></span>70%</td><td>0/8</td><td><span class="unmet">api-keys</span></td><td class="next">blocked</td></tr></tbody></table>
+
+<h2>Dependencies</h2>
+<ul><li><b>usage-metering</b> ← <span class="unmet">api-keys</span></li></ul>
+
+<h2>⚠ Needs attention</h2>
+<ul><li><b>usage-metering</b> — blocked by api-keys</li>
+<li><b>usage-metering</b> — design has unfilled (TODO) sections</li></ul>
+
+<h2>Backlog (planned, not yet specced)</h2>
+<ul><li><input type="checkbox" disabled> <b>two-factor-auth</b> — TOTP via authenticator</li></ul>
+
+<footer>AUTO-GENERATED by dev-spec — do not edit by hand.</footer>
+</div>
+<script>
+(function(){
+  var k="dev-spec-theme", b=document.getElementById("tg"), r=document.documentElement;
+  var s=localStorage.getItem(k); if(s) r.setAttribute("data-theme", s);
+  b.addEventListener("click", function(){
+    var cur=r.getAttribute("data-theme");
+    if(!cur){ cur = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; }
+    var nx = cur==="light" ? "dark" : "light";
+    r.setAttribute("data-theme", nx); localStorage.setItem(k, nx);
+  });
+})();
+</script>
+</body>
+</html>

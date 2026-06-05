@@ -1,0 +1,25 @@
+{
+  "approvals": {
+    "classification": {
+      "at": "2026-06-05T19:17:26.839Z",
+      "by": "example"
+    },
+    "requirements": {
+      "at": "2026-06-05T19:17:26.864Z",
+      "by": "example"
+    },
+    "design": {
+      "at": "2026-06-05T19:17:26.873Z",
+      "by": "example"
+    },
+    "test-plan": {
+      "at": "2026-06-05T19:17:26.881Z",
+      "by": "example"
+    },
+    "tasks": {
+      "at": "2026-06-05T19:17:26.890Z",
+      "by": "example"
+    }
+  },
+  "lastApprovedPhase": "tasks"
+}

@@ -1,0 +1,26 @@
+# Normalize line endings. Authored on Windows, but the Node scripts, hooks and the
+# newline-delimited MCP protocol run cross-platform — keep LF in the repo everywhere.
+* text=auto eol=lf
+
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.cjs  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.sh   text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Windows-only scripts keep CRLF (none currently, defensive)
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Treat these as binary (no diff/eol munging)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary

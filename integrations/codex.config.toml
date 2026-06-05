@@ -1,0 +1,4 @@
+# Append to ~/.codex/config.toml (single-quoted = literal path; backslashes safe too).
+[mcp_servers.spec-driven]
+command = "node"
+args = ['/ABSOLUTE/PATH/TO/dev-spec-driven/mcp/server.js']
