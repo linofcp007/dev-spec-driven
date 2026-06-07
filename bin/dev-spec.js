@@ -110,18 +110,18 @@ function main() {
     }
 
     case "init": {
-      const r = spec.initProject(projectDir, pos.length ? pos : ["core"]);
-      return out(r, (r) => console.log("Created in " + r.specsDir + ":\n  " + (r.created.join(", ") || "(nothing new)") + (r.skipped.length ? "\n  (existing, kept: " + r.skipped.join(", ") + ")" : "")));
+      const r = spec.initProject(projectDir, pos.length ? pos : ["core"], flags.lang);
+      return out(r, (r) => console.log("Created in " + r.specsDir + " [" + r.lang + "]:\n  " + (r.created.join(", ") || "(nothing new)") + (r.skipped.length ? "\n  (existing, kept: " + r.skipped.join(", ") + ")" : "")));
     }
 
     case "create": {
-      if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...]');
+      if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
       const name = pos[0];
       const tracks = pos.slice(1).length ? pos.slice(1) : spec.classify(name).tracks;
       const cls = spec.classify(name);
-      const r = spec.createFeature(projectDir, name, tracks, undefined, cls);
+      const r = spec.createFeature(projectDir, name, tracks, undefined, cls, flags.lang);
       if (!r.ok) die(r.error);
-      return out(r, (r) => console.log("Feature '" + r.slug + "' [" + r.label + "]\n  " + r.created.join(", ")));
+      return out(r, (r) => console.log("Feature '" + r.slug + "' [" + r.label + "] (" + r.lang + ")\n  " + r.created.join(", ")));
     }
 
     case "list": {
@@ -325,8 +325,8 @@ function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
   classify "<description>"        Recommend tracks (core/+tdd/+saas/+ai), multilingual
-  init [tracks...]                Scaffold .specs/steering for the given tracks
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks)
+  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --lang en|pt|es)
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all
   doctor <feature>                Health-check → ready to advance?
@@ -347,7 +347,7 @@ function helpText() {
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config for a client (or 'all')
 
-  Flags: --json  --project <dir>
+  Flags: --json  --project <dir>  --lang en|pt|es (init/create/roadmap)
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

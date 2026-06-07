@@ -37,6 +37,15 @@ ok(cr.out.includes("quickstart.md") && cr.out.includes("checklist.md"), "create 
 const tasksTxt = fs.readFileSync(path.join(tmp, ".specs", "invoice-summary", "tasks.md"), "utf8");
 ok(/\[US1\]/.test(tasksTxt) && /\[shared\]/.test(tasksTxt) && /\[P\]/.test(tasksTxt), "tasks scaffold uses [US1]/[shared] story tags + [P]");
 
+// trilingual CLI: --lang on create (PT) and a Spanish project via --lang on init
+const ptcr = run(["create", "Painel Faturas", "saas", "--lang", "pt"]);
+ok(/\(pt\)/.test(ptcr.out), "create --lang pt reports the feature language");
+const ptReqCli = fs.readFileSync(path.join(tmp, ".specs", "painel-faturas", "requirements.md"), "utf8");
+ok(/## Histórias de Utilizador/.test(ptReqCli) && /O SISTEMA DEVE/.test(ptReqCli), "create --lang pt writes Portuguese requirements");
+const esSub = path.join(tmp, "es-cli");
+ok(/\[es\]/.test(run(["init", "tdd", "--lang", "es", "--project", esSub]).out), "init --lang es reports the project language");
+ok(/# Estándares de Pruebas/.test(fs.readFileSync(path.join(esSub, ".specs", "steering", "testing-standards.md"), "utf8")), "init --lang es writes Spanish steering");
+
 // doctor (fresh scaffold not ready)
 const doc = run(["doctor", "Invoice Summary"]);
 ok(/verdict=FAIL/.test(doc.out) && doc.out.includes("readyToAdvance=false"), "doctor flags fresh scaffold");

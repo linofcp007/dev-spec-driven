@@ -65,7 +65,8 @@ function main(raw) {
       const lines = list.features.map(
         (f) => `  • ${f.name} [${f.tracks}] — ${f.phase} (${f.tasksDone}/${f.tasks} tasks)`
       );
-      emit("SessionStart", "dev-spec-driven — features in .specs/:\n" + lines.join("\n"));
+      const h = spec.msg(spec.projectLang(pdir)).hook;
+      emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);
     }
@@ -78,12 +79,15 @@ function main(raw) {
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
 
+    const feature = path.basename(path.dirname(filePath));
+    const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
+
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
     let roadmapNote = "";
     if (base !== "roadmap.md" && base !== "roadmap.html") {
       try {
         const w = spec.writeRoadmapMd(pdir);
-        if (w.ok) roadmapNote = `Roadmap updated → ${w.overallPercent}% (${w.complete}/${w.total} features).`;
+        if (w.ok) roadmapNote = h.roadmapUpdated(w.overallPercent, w.complete, w.total);
       } catch {
         /* best-effort */
       }
@@ -97,29 +101,24 @@ function main(raw) {
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");
         if (!errs.length && !warns.length) {
-          emit("PostToolUse", `EARS check: ${r.summary.criteriaDetected} criteria, all clean ✓`);
+          emit("PostToolUse", h.earsClean(r.summary.criteriaDetected));
         }
         const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${i.severity}] ${i.msg}`);
-        emit(
-          "PostToolUse",
-          `EARS check on requirements.md — ${errs.length} error(s), ${warns.length} warning(s):\n${top.join("\n")}` +
-            (errs.length ? "\nFix the errors before advancing to design." : "")
-        );
+        emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0));
       }
 
       if (base === "tasks.md") {
-        const feature = path.basename(path.dirname(filePath));
         const tr = spec.traceCheck(pdir, feature);
         if (!tr.ok) process.exit(0);
         if (tr.verdict === "pass") {
-          emit("PostToolUse", `Traceability: all ${tr.totalAcs} ACs covered by tasks ✓`);
+          emit("PostToolUse", h.traceOk(tr.totalAcs));
         }
         const parts = [];
-        if (tr.uncoveredByTasks.length) parts.push(`ACs with no task: ${tr.uncoveredByTasks.join(", ")}`);
-        if (tr.phantomAcsInTasks.length) parts.push(`tasks reference unknown ACs (typos?): ${tr.phantomAcsInTasks.join(", ")}`);
-        if (tr.uncoveredByTests && tr.uncoveredByTests.length) parts.push(`ACs with no planned test: ${tr.uncoveredByTests.join(", ")}`);
-        if (tr.phantomTestsInTasks && tr.phantomTestsInTasks.length) parts.push(`tasks reference unknown tests: ${tr.phantomTestsInTasks.join(", ")}`);
-        emit("PostToolUse", `Traceability gaps in ${feature}:\n  - ${parts.join("\n  - ")}`);
+        if (tr.uncoveredByTasks.length) parts.push(h.traceUncovered(tr.uncoveredByTasks.join(", ")));
+        if (tr.phantomAcsInTasks.length) parts.push(h.tracePhantomAc(tr.phantomAcsInTasks.join(", ")));
+        if (tr.uncoveredByTests && tr.uncoveredByTests.length) parts.push(h.traceUncoveredTests(tr.uncoveredByTests.join(", ")));
+        if (tr.phantomTestsInTasks && tr.phantomTestsInTasks.length) parts.push(h.tracePhantomTests(tr.phantomTestsInTasks.join(", ")));
+        emit("PostToolUse", h.traceGaps(feature, parts.join("\n  - ")));
       }
     } catch {
       process.exit(0);

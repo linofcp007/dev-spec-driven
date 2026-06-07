@@ -33,11 +33,12 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Idempotent — never overwrites existing files.",
+      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). Idempotent — never overwrites existing files.",
     inputSchema: {
       type: "object",
       properties: {
         tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Tracks in use across the project. 'core' is always included." },
+        lang: { type: "string", enum: ["en", "pt", "es"], description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
         projectDir: { type: "string", description: "Project root. Defaults to SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd." },
       },
     },
@@ -58,13 +59,14 @@ const TOOLS = [
   {
     name: "spec_create",
     description:
-      "Scaffold a feature's spec folder under `.specs/<slug>/` with the artifact skeleton for the chosen tracks: classification.md, requirements.md (EARS + stable AC IDs), design.md (with mandatory +saas/+ai sections), tasks.md, plus test-plan.md/tests/ (+tdd), eval-plan.md/prompts/evals/ (+ai), load-test.md (+saas). Idempotent.",
+      "Scaffold a feature's spec folder under `.specs/<slug>/` with the artifact skeleton for the chosen tracks: classification.md, requirements.md (EARS + stable AC IDs), design.md (with mandatory +saas/+ai sections), tasks.md, plus test-plan.md/tests/ (+tdd), eval-plan.md/prompts/evals/ (+ai), load-test.md (+saas). Artifacts are generated in `lang` (en/pt/es) — defaults to the project language, persisted per feature in .state.json. Idempotent.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name (human readable; slugified for the folder)." },
         tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Active tracks. 'core' always added." },
         summary: { type: "string", description: "Optional one-line feature summary." },
+        lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
         projectDir: { type: "string" },
       },
       required: ["name", "tracks"],
@@ -112,8 +114,8 @@ const TOOLS = [
   },
   {
     name: "steering_scaffold",
-    description: "Create a single steering file from its template (constitution.md, product.md, tech.md, structure.md, testing-standards.md, scale.md, observability.md, cost.md, ai-strategy.md). Idempotent.",
-    inputSchema: { type: "object", properties: { file: { type: "string" }, projectDir: { type: "string" } }, required: ["file"] },
+    description: "Create a single steering file from its template (constitution.md, product.md, tech.md, structure.md, testing-standards.md, scale.md, observability.md, cost.md, ai-strategy.md), in `lang` (en/pt/es; defaults to the project language). Idempotent.",
+    inputSchema: { type: "object", properties: { file: { type: "string" }, lang: { type: "string", enum: ["en", "pt", "es"] }, projectDir: { type: "string" } }, required: ["file"] },
   },
   {
     name: "spec_roadmap",
@@ -177,11 +179,11 @@ function runTool(name, args) {
   const pdir = spec.resolveProjectDir(args.projectDir);
   switch (name) {
     case "spec_init":
-      return spec.initProject(pdir, args.tracks);
+      return spec.initProject(pdir, args.tracks, args.lang);
     case "spec_classify":
       return spec.classify(args.description, { name: args.name });
     case "spec_create":
-      return spec.createFeature(pdir, args.name, args.tracks, args.summary, spec.classify(args.summary || args.name || ""));
+      return spec.createFeature(pdir, args.name, args.tracks, args.summary, spec.classify(args.summary || args.name || ""), args.lang);
     case "spec_list":
       return spec.listFeatures(pdir);
     case "spec_status":
@@ -209,7 +211,7 @@ function runTool(name, args) {
     case "spec_approve":
       return spec.approvePhase(pdir, args.name, args.phase, args.by);
     case "steering_scaffold":
-      return spec.scaffoldSteeringFile(pdir, args.file);
+      return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
     case "spec_roadmap": {
       const rm = spec.roadmap(pdir);
       if (args.write) {

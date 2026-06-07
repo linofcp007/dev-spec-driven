@@ -3,6 +3,40 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.9.0]
+
+### Added — trilingual generation (EN / PT / ES): the engine now WRITES, not just reads, three languages
+- **Localized scaffolding.** `spec_init` and `spec_create` accept `lang` (`en`/`pt`/`es`); every
+  generated artifact (classification / requirements / design / tasks / test-plan / eval-plan /
+  load-test / quickstart / checklist), every steering stub, the prompt stub and the evals README come
+  out in that language. CLI: `--lang en|pt|es` on `init` / `create`.
+- **Single source of truth + per-feature override.** The project language is persisted in
+  `.specs/roadmap.json` `meta.lang` (set by `spec_init`, inherited by every new feature); a feature can
+  override it, persisted in `.specs/<feature>/.state.json`. Resolution: explicit `lang` > project
+  default > `en`.
+- **Localized tool messages.** `spec_doctor`, `spec_clarify`, `spec_next_action`, `spec_add_track` and
+  the local hooks (EARS / traceability / roadmap-refresh / session start) now respond in the feature's
+  language.
+- **New module `mcp/lib/i18n.js`** holds all localized content (artifact + steering builders, tool
+  messages); `spec.js` keeps the logic and delegates. EN output is byte-identical to 1.8.0.
+
+### Fixed
+- `spec_status` scale-section completeness matched English literals only — it now uses the EN/PT/ES
+  synonym tables, so a PT/ES design reports section presence correctly.
+- `spec_add_track` detected an existing `+tdd` block by the English "Testability Notes" heading only —
+  it now matches the localized heading too (no duplicate scaffolding in a PT/ES project).
+
+### Conventions
+- Structural tokens stay **English-stable** across all languages (AC/SC/test IDs, `[SaaS]`/`[AI]`,
+  `[US1]`/`[shared]`/`[P]`, the `> **TODO**` sentinel, `[NEEDS CLARIFICATION]`, the `_Requirements:_`/
+  `_Implements:_` annotation tags, `**Checkpoint:**`, the ` ```mermaid `/` ```typescript ` fences, and
+  the eval-harness `## System` heading). EARS keywords and section headings are localized and matched by
+  the existing synonym (`SAAS_SECTIONS`/`AI_SECTIONS`) and `RE_*` tables.
+
+### Tests
+- `mcp/test.js` 55 → 66 assertions (PT and ES end-to-end scaffolds + per-feature language override);
+  `bin/test-cli.js` 34 → 38. Still zero runtime dependencies.
+
 ## [1.8.0]
 
 ### Added — review-driven UX: real gates, lifecycle, resume

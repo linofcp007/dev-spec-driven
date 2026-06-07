@@ -5,9 +5,12 @@ instructions file — **Codex CLI, Gemini CLI, Cursor, Windsurf, Copilot, Claude
 can follow it. The full reference lives in `skills/dev-spec-driven/SKILL.md` and `references/`.
 
 > **Language:** detect the user's language and respond in it (English, Português, Español),
-> including the prose inside generated artifacts. Keep structural tokens stable (AC IDs like
-> `US-1.AC-1`, task markers `_Requirements:_`, track names `core/+tdd/+saas/+ai`). EARS keywords
-> work in all three: `SHALL`/`DEVE`/`DEBE`, `WHEN`/`QUANDO`/`CUANDO`, etc.
+> including the prose inside generated artifacts. Pass `--lang en|pt|es` to `dev-spec init`
+> (sets the project default) and `dev-spec create` (per feature; inherits the project default) so
+> the scaffolds, steering and tool messages come out already localized — you only fill the
+> placeholders. Keep structural tokens stable (AC IDs like `US-1.AC-1`, task markers
+> `_Requirements:_`, track names `core/+tdd/+saas/+ai`). EARS keywords work in all three:
+> `SHALL`/`DEVE`/`DEBE`, `WHEN`/`QUANDO`/`CUANDO`, etc.
 
 ## What this is
 
@@ -34,8 +37,8 @@ Key operations (CLI form):
 
 ```
 dev-spec classify "<feature description>"     # recommend tracks (multilingual, weighted)
-dev-spec init [tracks...]                      # scaffold .specs/steering (incl. constitution.md)
-dev-spec create "<name>" [tracks...]           # scaffold the feature's artifact skeleton
+dev-spec init [tracks...] [--lang en|pt|es]    # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
+dev-spec create "<name>" [tracks...] [--lang]  # scaffold the feature's artifact skeleton (inherits project lang)
 dev-spec status [feature] | list               # progress, phase, tracks
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance?

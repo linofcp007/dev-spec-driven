@@ -11,8 +11,21 @@
 
 const fs = require("fs");
 const path = require("path");
+const i18n = require("./i18n.js");
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai"];
+
+// Language resolution. The project's language is the single source of truth, persisted in
+// .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
+// .specs/<feature>/.state.json lang. spec.js resolves the lang and hands it to i18n builders.
+const normalizeLang = i18n.normalizeLang;
+function projectLang(projectDir) {
+  return normalizeLang(roadmapLang(projectDir)); // roadmapLang reads meta.lang (hoisted below)
+}
+function featureLang(projectDir, name) {
+  const st = readState(projectDir, name); // readState is hoisted below
+  return normalizeLang(st.lang || projectLang(projectDir));
+}
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
@@ -312,54 +325,40 @@ function steeringFilesForTracks(tracks) {
   return files;
 }
 
-const STEERING_STUBS = {
-  "constitution.md":
-    "# Constitution\n\nNon-negotiable principles every feature must obey. Keep these few, concrete, and testable.\nThe `doctor` and `/prReview` check work against them; a design that violates a principle is blocked.\n\n## Principles\n1. [e.g., Every write is idempotent or explicitly justified.]\n2. [e.g., No PII in logs; user IDs are pseudonymized.]\n3. [e.g., No breaking API change without a versioned migration path.]\n4. [e.g., Errors fail closed (deny) on the security path.]\n\n## Constraints\n- [Hard tech/regulatory constraints that bound all designs.]\n\n## Decision Rules\n- [How to break ties — e.g., 'prefer boring/proven over clever'.]\n",
-  "product.md":
-    "# Product\n\n## Vision\n[One sentence: what is this product and who is it for?]\n\n## Target Users\n- Primary: [who uses this daily?]\n- Secondary: [who else touches it?]\n\n## Success Metrics\n- [specific 6-month metric]\n\n## Non-goals\n- [what this is explicitly NOT]\n\n## Business Model\n[how it makes money]\n",
-  "tech.md":
-    "# Tech\n\n## Stack\n- Frontend: []\n- Backend: []\n- Database: []\n- Auth: []\n\n## Infrastructure\n- Hosting / Region / CDN: []\n\n## Conventions\n- Language / formatting / test runner / migrations / commit format: []\n\n## Constraints\n- Runtime version / browser support / accessibility / regulatory: []\n",
-  "structure.md":
-    "# Project Structure\n\n## Layout\n[directory tree]\n\n## Naming\n- Files / components / API routes / DB tables / metrics: []\n\n## Commits\nConventional commits: `type(scope): description`. Types: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches & Reviews\n- main + feature/<name>; reviews required for merges to main.\n",
-  "testing-standards.md":
-    "# Testing Standards\n\n## Runner & Tooling\n- Unit/Integration: []\n- E2E: []\n- Mocking: []\n\n## Coverage Policy\n- Default target: []\n- Critical paths (auth/billing/data): 100% branch.\n\n## TDD Discipline\n- No implementation before a failing test exercising the real path.\n- 'Failing for the right reason' = assertion/NotImplemented, not import/syntax error.\n",
-  "scale.md":
-    "# Scale Targets\n\n## Load Targets\n| Horizon | Concurrent | DAU | MAU | Peak RPS | Data |\n|---|---|---|---|---|---|\n| Launch | | | | | |\n| 6 months | | | | | |\n| 2 years | | | | | |\n\n## SLA Targets\n| Endpoint class | P95 | P99 | Uptime |\n|---|---|---|---|\n| Critical journey | | | |\n\n## Critical User Journeys\n1. []\n\n## Escalation Thresholds\n- []\n",
-  "observability.md":
-    "# Observability Standards\n\n## Logging\nStructured JSON. Required fields: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. No secrets/PII.\n\n## Metrics\nPrometheus-style snake_case + unit suffix. Per feature: request count, duration histogram, error count, one business counter. Beware label cardinality.\n\n## Traces\nOpenTelemetry, W3C context. Sample 10% in prod, always sample errors.\n\n## Alerts (each links a runbook)\n- P0 page now / P1 ≤15min / P2 slack / P3 digest.\n",
-  "cost.md":
-    "# Cost Budget\n\n## Infrastructure Budget\nTarget: < $XX/month year 1.\n\n## Cost Per User Target\nTarget: < $0.50 per MAU. If exceeded, stop and optimize.\n\n## Cost Alerts\n- Daily > $100 slack / > $200 page.\n\n## Per-Feature Cost Review\nEach design.md Cost Envelope estimates $/1000 users/month and flags cost-critical paths.\n",
-  "ai-strategy.md":
-    "# AI Strategy\n\n## Model Roster\n| Role | Model (pinned ID) | Why |\n|---|---|---|\n| Primary | | |\n| Fallback | | |\n| Judge/grader | | |\n\n## Provider & Data Posture\n- Provider / DPA status / does PII reach the model: []\n\n## Prompt Discipline\n- Prompts in .specs/<feature>/prompts/vN.md, versioned. No change ships without eval re-run.\n\n## Cost Envelope\n- Target $/user action / hard alert threshold: []\n\n## Safety Posture\n- Injection defense / moderation / refusal policy: []\n\n## Eval Bar (ship criteria)\n- Golden ≥85% good · Adversarial safety 100% refused · Regression 100% maintained.\n\n## Lifecycle\n- Pin policy / deprecation watch / eval-gated migration.\n",
-};
+// Steering stub CONTENT lives in i18n.js (EN/PT/ES); filenames stay constant here.
 
-function initProject(projectDir, tracks) {
+function initProject(projectDir, tracks, lang) {
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
   ensureDir(steering);
+  // Seed/refresh the project language (single source of truth) if one was requested.
+  if (lang) setRoadmapLang(projectDir, normalizeLang(lang));
+  const lng = projectLang(projectDir);
   const wanted = steeringFilesForTracks(normalizeTracks(tracks));
   const created = [];
   const skipped = [];
   for (const f of wanted) {
-    const stub = STEERING_STUBS[f] || `# ${f.replace(/\.md$/, "")}\n\n[fill me in]\n`;
+    const stub = i18n.steeringStub(f, lng) || `# ${f.replace(/\.md$/, "")}\n\n[fill me in]\n`;
     if (writeIfAbsent(path.join(steering, f), stub)) created.push(f);
     else skipped.push(f);
   }
   return {
     specsDir: root,
     steeringDir: steering,
+    lang: lng,
     created,
     skipped,
-    note: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
+    note: i18n.msg(lng).initNote,
   };
 }
 
-function scaffoldSteeringFile(projectDir, fileName) {
+function scaffoldSteeringFile(projectDir, fileName, lang) {
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
-  const stub = STEERING_STUBS[fileName];
+  const lng = normalizeLang(lang || projectLang(projectDir));
+  const stub = i18n.steeringStub(fileName, lng);
   if (!stub) {
-    return { ok: false, error: `Unknown steering file '${fileName}'. Known: ${Object.keys(STEERING_STUBS).join(", ")}` };
+    return { ok: false, error: `Unknown steering file '${fileName}'. Known: ${i18n.steeringKnownFiles().join(", ")}` };
   }
   const created = writeIfAbsent(path.join(steering, fileName), stub);
   return { ok: true, file: path.join(steering, fileName), created };
@@ -369,376 +368,38 @@ function scaffoldSteeringFile(projectDir, fileName) {
 // Feature artifact skeletons
 // ---------------------------------------------------------------------------
 
-function classificationMd(name, tracks, summary, cls) {
-  const sig = (cls && cls.signals) || { tdd: [], saas: [], ai: [] };
-  const sigLine = (t) =>
-    tracks.includes(t)
-      ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
-      : null;
-  const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [none beyond core]";
-  return (
-`# Classification: ${name}
-
-## Mode
-Spec
-
-## Active Tracks
-${trackLabel(tracks)}
-
-## Signals
-${signalLines}
-
-## Blast Radius
-[What breaks if this is wrong? Who is affected? Recoverable? How fast?]
-${tracks.includes("saas") ? "\n## Hot Path?\n[Yes/No — if yes, load-test.md is required.]\n" : ""}${tracks.includes("ai") ? "\n## Autonomy Level\n[Advisory | Semi-autonomous | Autonomous]\n" : ""}${tracks.includes("saas") || tracks.includes("ai") ? "\n## Volume / Cost Projection\n- Launch / 6mo / 2yr: [load, ~$/month]\n" : ""}
-## Compliance Tags
-[GDPR | PCI | HIPAA | SOC2 | none]
-
-${summary ? "## Summary\n" + summary + "\n" : ""}`
-  );
+function classificationMd(name, tracks, summary, cls, lang) {
+  return i18n.classification({ name, tracks, label: trackLabel(tracks), signals: cls && cls.signals, summary }, lang);
 }
 
-function requirementsMd(name, tracks, summary) {
-  const saasAc = tracks.includes("saas")
-    ? "\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95.\n"
-    : "";
-  const aiAc = tracks.includes("ai")
-    ? "\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size.\n"
-    : "";
-  return (
-`# Feature: ${name}
-
-## Summary
-${summary || "[1-2 sentences: what this does and why it matters]"}
-
-## User Stories (prioritized — each independently testable)
-
-Priorities: **P1** = critical, a viable MVP on its own · **P2** = secondary · **P3** = enhancement.
-Each story must deliver standalone value if shipped alone.
-
-### US-1 (P1 — MVP): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Why P1:** [why this is the minimum viable slice]
-**Independent Test:** Can be fully tested by [specific action] and delivers [specific value], without the other stories.
-
-#### Acceptance Criteria (EARS)
-1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
-3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}
-
-### US-2 (P2): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Independent Test:** [how to test this alone]
-
-#### Acceptance Criteria (EARS)
-1. **US-2.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-
-## Success Criteria (measurable, technology-agnostic)
-Outcomes the feature must achieve — business/UX, not implementation. Quantify each.
-- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
-- **SC-002** — [e.g., error rate on [flow] stays below [N]%]
-
-## Edge Cases & Error Handling
-- **EC-1** — [Scenario]: [Expected behavior]
-
-## Non-Functional Requirements
-- **NFR-1** — [measurable performance / security / accessibility constraint]
-
-## Out of Scope
-- [What this feature does NOT include]
-
-## Assumptions
-- [Anything assumed true that, if wrong, changes the spec]
-
-<!-- EARS: every AC contains SHALL/DEVE/DEBE and is testable; avoid vague terms; keep stable AC IDs.
-     Mark any ambiguity inline with a bracketed marker like  [NEEDS CLARIFICATION: which provider?] .
-     The design phase is gated — it cannot start while any such marker remains unresolved. -->
-`
-  );
+function requirementsMd(name, tracks, summary, lang) {
+  return i18n.requirements({ name, tracks, summary }, lang);
 }
 
 // Mandatory design sections for a single track. Shared by designMd (greenfield) and addTrack
 // (escalating an existing feature) so the two can never drift.
-function trackDesignBlock(track) {
-  if (track === "tdd") {
-    return `
-## Testability Notes
-- **Seams:** [where test doubles inject]
-- **Determinism:** [clocks, randomness, IDs abstracted how]
-- **Side effects to isolate:** [network, fs, time, external services]
-- **Test data strategy:** [factories, fixtures, seeds]
-`;
-  }
-  if (track === "saas") {
-    return `
-## [SaaS] Performance Budget
-> **TODO** — replace with real values (remove this line when done).
-- P50/P95/P99 latency targets · max DB query time · max memory/request · throughput target.
-
-## [SaaS] Scale Design
-> **TODO** — replace with real values (remove this line when done).
-- Concurrent users (launch/6mo/2yr) · data growth · hot paths · caching (TTL+invalidation) · queue strategy · indexes · sharding.
-
-## [SaaS] Multi-tenancy Model
-> **TODO** — replace with real values (remove this line when done).
-- Isolation (pooled/siloed/bridged) · how tenant_id is enforced · noisy-neighbor limits · export/delete (GDPR).
-
-## [SaaS] Observability
-> **TODO** — replace with real values (remove this line when done).
-- Metrics (name each) · structured logs (events+fields) · traces (spans) · alerts (metric→threshold→who) · dashboard panels.
-
-## [SaaS] Cost Envelope
-> **TODO** — replace with real values (remove this line when done).
-- $/1000 users/month (compute/storage/network/3p) · cost-critical paths · cost metric + alert threshold.
-`;
-  }
-  if (track === "ai") {
-    return `
-## [AI] 1. Model Strategy
-> **TODO** — replace with real values (remove this line when done).
-Primary / fallback model · features used · context-window usage · why not another model.
-
-## [AI] 2. Prompt Architecture
-> **TODO** — replace with real values (remove this line when done).
-System prompt · user template (variables) · few-shot source · versioning (prompts/vN.md, not inline).
-
-## [AI] 3. Token Economics
-> **TODO** — replace with real values (remove this line when done).
-Typical in/out tokens · cost/call · cost/user action · cost/1000 users/month · regression threshold.
-
-## [AI] 4. Latency Budget
-> **TODO** — replace with real values (remove this line when done).
-Time to first token · total response time · end-to-end user-perceived latency.
-
-## [AI] 5. Eval Strategy
-> **TODO** — replace with real values (remove this line when done).
-Golden set · adversarial set · regression set · grading method · ship threshold · eval frequency.
-
-## [AI] 6. Safety & Abuse
-> **TODO** — replace with real values (remove this line when done).
-Injection defense · content moderation · jailbreak resistance · PII handling · rate limiting.
-
-## [AI] 7. Fallback & Degradation
-> **TODO** — replace with real values (remove this line when done).
-Provider outage · rate-limit hit · garbage output detection · cost circuit breaker.
-
-## [AI] 8. Observability for AI
-> **TODO** — replace with real values (remove this line when done).
-Per-call logging (prompt version, model, tokens, cost, latency, ids) · metrics · sampled prompts · traces · alerts.
-
-## [AI] 9. Model Lifecycle
-> **TODO** — replace with real values (remove this line when done).
-Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy.
-
-## [AI] 10. Multi-modality (if applicable)
-> **TODO** — replace with real values (remove this line when done).
-Input types · size/count limits · token counting per type · validation pipeline.
-`;
-  }
-  return "";
+function trackDesignBlock(track, lang) {
+  return i18n.trackDesignBlock(track, lang);
 }
 
-function designMd(name, tracks) {
-  const extra = ["tdd", "saas", "ai"].filter((t) => tracks.includes(t)).map(trackDesignBlock).join("");
-  return (
-`# Design: ${name}
-
-## Overview
-[How this integrates with the existing system. Key decisions and rationale.]
-
-## Architecture
-\`\`\`mermaid
-graph TD
-    A[Component] -->|action| B[Component]
-    B -->|query| C[(Database)]
-\`\`\`
-
-## Data Models
-\`\`\`typescript
-interface Entity {
-  id: string;
-  // fields with comments explaining purpose
-}
-\`\`\`
-
-## API Contracts
-### POST /api/resource
-- **Request:** \`{ field: type }\`
-- **Response (200):** \`{ field: type }\`
-- **Errors:** 400 (validation), 401 (auth), 404 (not found)
-
-## Security Considerations
-[Auth, validation, data exposure risks]
-
-## Error Handling
-[Strategy per failure mode from requirements]
-
-## Testing Strategy
-- Unit / Integration / E2E: [what each covers]
-
-## Constitution Check
-Verify this design against each principle in \`steering/constitution.md\`. GATE: must pass before
-implementation; re-check after any design change.
-- [ ] [Principle 1] — complies
-- [ ] [Principle 2] — complies
-(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)
-
-## Complexity Tracking
-Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.
-| What | Why it's needed | Simpler alternative rejected because |
-|---|---|---|
-| [e.g., second cache layer] | [reason] | [why the simple option fails] |
-${extra}
-<!-- Tracks active: ${trackLabel(tracks)}. Mandatory track sections above must have real
-     content — an honest "not needed because X" is fine; blank is not. -->
-`
-  );
+function designMd(name, tracks, lang) {
+  return i18n.design({ name, tracks, label: trackLabel(tracks) }, lang);
 }
 
-function tasksMd(name, tracks) {
-  const greenMarker = tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
-  const evalMarker = tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
-  const metricMarker = tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + slugify(name) + "}_" : "";
-  let n = 0;
-  const id = () => ++n;
-  let phases =
-`## Phase: Setup
-- [ ] ${id()}. [shared][P] [project/dev setup if needed — deps, scaffolding]
-
-## Phase: Foundational (blocks all stories)
-- [ ] ${id()}. [shared] [Models, schemas, indexes shared across stories]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
-
-## Story US-1 (P1 — MVP)
-- [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
-- [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
-  - _Requirements: US-1.AC-4_
-**Checkpoint:** US-1 is fully functional and independently testable/shippable.
-`;
-  if (tracks.includes("saas")) {
-    phases +=
-`
-## Story US-1 — Observability & Scale
-- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_
-`;
-  }
-  if (tracks.includes("ai")) {
-    phases +=
-`
-## Story US-1 — AI
-- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_
-`;
-  }
-  phases +=
-`
-## Story US-2 (P2)
-- [ ] ${id()}. [US2] [Behavior for US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
-**Checkpoint:** US-2 works without breaking US-1.
-
-## Phase: Polish (cross-cutting)
-- [ ] ${id()}. [shared][P] [docs, cleanup, edge-case hardening]
-`;
-  return (
-`# Tasks: ${name}
-
-<!-- Tracks: ${trackLabel(tracks)}. Organized by user story so each is independently shippable
-     (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
-     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
-     carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
-     marks where a story is independently testable.
-     If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
-     back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->
-
-${phases}`
-  );
+function tasksMd(name, tracks, lang) {
+  return i18n.tasks({ name, tracks, label: trackLabel(tracks), slug: slugify(name) }, lang);
 }
 
-function testPlanMd(name) {
-  return (
-`# Test Plan: ${name}
-
-## Strategy
-- **Test runner:** []
-- **Mocking approach:** []
-- **Coverage target:** []
-- **Critical paths requiring 100% branch coverage:** []
-
-## Traceability Matrix
-
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
-| T-01 | unit | [behavior] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integration | [behavior] | US-1.AC-2 | \`tests/integration/...\` |
-
-## Coverage Check
-Every AC must appear in at least one "Covers" cell. Gaps (with justification):
-- [none]
-
-## Test Data & Fixtures
-- []
-
-## Out of Scope for Testing
-- []
-`
-  );
+function testPlanMd(name, lang) {
+  return i18n.testPlan(name, lang);
 }
 
-function evalPlanMd(name) {
-  return (
-`# Eval Plan: ${name}
-
-## Golden Set (50–200 items)
-Representative inputs with expected-quality outputs / rubric. Covers typical queries, personas, lengths.
-
-## Adversarial Set
-Prompt injections, jailbreaks, out-of-scope requests (should refuse), unsafe-output elicitation, degenerate inputs.
-
-## Regression Set
-Every fixed production failure becomes a permanent eval case. Grows, never shrinks.
-
-## Grading
-- Method per set: exact match / schema validation / LLM-as-judge (with rubric) / human review.
-- Grader prompts are versioned and tested.
-
-## Quality Thresholds (ship criteria)
-- Golden: ≥ [85]% good-or-excellent
-- Adversarial safety: 100% refused (zero tolerance)
-- Adversarial injection: ≥ [98]% ignored
-- Regression: 100% maintained
-
-## Baseline
-Run golden through a minimal v1 prompt + planned model; record baseline score here before implementing.
-- Baseline (date/score): [ ]
-`
-  );
+function evalPlanMd(name, lang) {
+  return i18n.evalPlan(name, lang);
 }
 
-function loadTestMd(name) {
-  return (
-`# Load Test: ${name}
-
-## Scenarios
-- Steady state · Burst · Soak · Spike
-
-## Budget (from design.md Performance Budget)
-- P50/P95/P99 targets · throughput target · error-rate ceiling.
-
-## Tooling
-- k6 / Artillery script location: []
-
-## Pass Criteria
-Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
-`
-  );
+function loadTestMd(name, lang) {
+  return i18n.loadTest(name, lang);
 }
 
 const SAMPLE_GOLDEN = JSON.stringify(
@@ -768,91 +429,31 @@ const SAMPLE_ADVERSARIAL = JSON.stringify(
   2
 ) + "\n";
 
-const EVALS_README =
-  "# Evals\n\n" +
-  "Local, offline-friendly eval harness. Run from the project root:\n\n" +
-  "```\nnode <plugin>/mcp/evals/run-evals.js <feature-slug>\n```\n\n" +
-  "- Uses your own `ANTHROPIC_API_KEY` (env). No CI, no third party beyond your model provider.\n" +
-  "- Without an API key (or with `--dry-run`) it validates the sets and prints the plan without calling a model.\n" +
-  "- `--set-baseline` records the current scores as the baseline to compare future runs against.\n\n" +
-  "Set files: `golden.json`, `adversarial.json`, optional `regression.json`.\n" +
-  "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
-  "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
-
-function quickstartMd(name) {
-  return (
-`# Quickstart: ${name}
-
-A human-runnable acceptance scenario — the manual smoke test that proves the feature works
-end-to-end. Keep it concrete; anyone should be able to follow it.
-
-## Preconditions
-- [env / data / accounts needed]
-
-## Steps (happy path — US-1 / P1)
-1. [do this]
-2. [then this]
-3. **Expect:** [observable result tied to a Success Criterion, e.g. SC-001]
-
-## Negative path
-1. [trigger an error condition from an IF…THEN AC]
-2. **Expect:** [graceful handling]
-
-## Done when
-- [ ] The happy path produces the expected result.
-- [ ] The negative path is handled gracefully.
-- [ ] Success Criteria (SC-…) are observably met.
-`
-  );
+function quickstartMd(name, lang) {
+  return i18n.quickstart(name, lang);
 }
 
-function checklistMd(name, tracks) {
+function checklistMd(name, tracks, lang) {
   const t = normalizeTracks(tracks);
-  const items = [
-    "Requirements: every AC is testable, has a stable ID, no vague terms (run `ears`).",
-    "Design: respects the project constitution (no principle violated).",
-    "Design: at least one Mermaid diagram; security + error handling covered.",
-    "Traceability: every AC maps to a task (run `trace`).",
-  ];
-  if (t.includes("tdd")) items.push("TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits.");
-  if (t.includes("saas")) items.push("SaaS: 5 mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
-  if (t.includes("ai")) items.push("AI: 10 mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
-  items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
-  return "# Checklist: " + name + "\n\nTracks: " + trackLabel(t) + ". Tick before calling the feature done.\n\n" +
-    items.map((i) => "- [ ] " + i).join("\n") + "\n";
+  return i18n.checklist({ name, tracks: t, label: trackLabel(t) }, lang);
 }
 
-function integrationPlanMd(name) {
-  return (
-`# Integration Plan: ${name}
-
-## Integration Points
-- [Existing components/modules this feature touches]
-
-## Required Modifications
-- [What must change in existing code, and why]
-
-## Sequencing
-- Phase 1: [e.g., DB migrations]
-- Phase 2: [e.g., backend service]
-- Phase 3: [e.g., wire UI]
-
-## Risks & Mitigations
-- [Risk]: [mitigation / rollback]
-
-## Affected Files (best estimate)
-- [path → change]
-`
-  );
+function integrationPlanMd(name, lang) {
+  return i18n.integrationPlan(name, lang);
 }
 
-function createFeature(projectDir, name, tracks, summary, cls) {
+function createFeature(projectDir, name, tracks, summary, cls, lang) {
   const slug = slugify(name);
   if (!slug) return { ok: false, error: "Feature name produced an empty slug." };
   const t = normalizeTracks(tracks);
   const root = specsRoot(projectDir);
   const dir = path.join(root, slug);
   ensureDir(dir);
+
+  // Resolve the feature's language (explicit > project default > en) and persist it so later
+  // tools (doctor/clarify/next-action) and +track escalation stay in the same language.
+  const lng = normalizeLang(lang || projectLang(projectDir));
+  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, approvals: {} }, null, 2));
 
   const created = [];
   const skip = [];
@@ -861,34 +462,34 @@ function createFeature(projectDir, name, tracks, summary, cls) {
     else skip.push(rel);
   };
 
-  put("classification.md", classificationMd(name, t, summary, cls));
-  put("requirements.md", requirementsMd(name, t, summary));
-  put("design.md", designMd(name, t));
+  put("classification.md", classificationMd(name, t, summary, cls, lng));
+  put("requirements.md", requirementsMd(name, t, summary, lng));
+  put("design.md", designMd(name, t, lng));
   if (t.includes("tdd")) {
-    put("test-plan.md", testPlanMd(name));
+    put("test-plan.md", testPlanMd(name, lng));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
   }
   if (t.includes("ai")) {
-    put("eval-plan.md", evalPlanMd(name));
+    put("eval-plan.md", evalPlanMd(name, lng));
     ensureDir(path.join(dir, "prompts"));
     ensureDir(path.join(dir, "evals", "graders"));
-    writeIfAbsent(path.join(dir, "prompts", "v1.md"), "# Prompt v1 — " + name + "\n\n## System\nYou are a helpful assistant for " + name + ". Be accurate and concise. If you don't know, say so. Refuse requests outside your task.\n\n## User Template\n[user message / {{variables}}]\n");
+    writeIfAbsent(path.join(dir, "prompts", "v1.md"), i18n.promptStub(name, lng));
     writeIfAbsent(path.join(dir, "evals", "golden.json"), SAMPLE_GOLDEN);
     writeIfAbsent(path.join(dir, "evals", "adversarial.json"), SAMPLE_ADVERSARIAL);
-    writeIfAbsent(path.join(dir, "evals", "README.md"), EVALS_README);
+    writeIfAbsent(path.join(dir, "evals", "README.md"), i18n.evalsReadme(lng));
   }
   if (t.includes("saas")) {
-    put("load-test.md", loadTestMd(name));
+    put("load-test.md", loadTestMd(name, lng));
   }
-  put("quickstart.md", quickstartMd(name));
-  put("checklist.md", checklistMd(name, t));
+  put("quickstart.md", quickstartMd(name, lng));
+  put("checklist.md", checklistMd(name, t, lng));
   // tasks.md last (it references the tracks)
-  put("tasks.md", tasksMd(name, t));
+  put("tasks.md", tasksMd(name, t, lng));
 
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, slug, dir, tracks: t, label: trackLabel(t), created, skipped: skip };
+  return { ok: true, slug, dir, tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip };
 }
 
 // ---------------------------------------------------------------------------
@@ -978,12 +579,11 @@ function statusFeature(projectDir, name) {
   const done = tasks.filter((t) => t.done).length;
   const next = tasks.find((t) => !t.done) || null;
 
-  // scale-section completeness (saas)
+  // scale-section completeness (saas) — match headings by EN/PT/ES synonym, not English literals.
   let scaleSections = null;
   if (tracks.includes("saas")) {
     const design = readIfExists(path.join(dir, "design.md")) || "";
-    const required = ["Performance Budget", "Scale Design", "Multi-tenancy", "Observability", "Cost Envelope"];
-    scaleSections = required.map((s) => ({ section: s, present: design.includes(s) }));
+    scaleSections = SAAS_SECTIONS.map((sec) => ({ section: sec.name, present: extractSection(design, sec.syn) != null }));
   }
   let aiSections = null;
   if (tracks.includes("ai")) {
@@ -1364,38 +964,41 @@ function addTrack(projectDir, name, track) {
   const tr = String(track || "").toLowerCase().replace(/^\+/, "");
   if (!["tdd", "saas", "ai"].includes(tr)) return { ok: false, error: "track must be one of: tdd | saas | ai" };
 
+  const lng = featureLang(projectDir, name); // escalate in the feature's own language
+  const msg = i18n.msg(lng);
   const existing = detectTracks(dir);
-  if (existing.includes(tr)) return { ok: true, feature: slug, added: [], note: `already on +${tr}`, tracks: trackLabel(existing) };
+  if (existing.includes(tr)) return { ok: true, feature: slug, added: [], note: msg.addTrackAlready(tr), tracks: trackLabel(existing) };
 
   const added = [];
   const put = (rel, content) => { if (writeIfAbsent(path.join(dir, rel), content)) added.push(rel); };
 
   if (tr === "tdd") {
-    put("test-plan.md", testPlanMd(name));
+    put("test-plan.md", testPlanMd(name, lng));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
   }
   if (tr === "ai") {
-    put("eval-plan.md", evalPlanMd(name));
+    put("eval-plan.md", evalPlanMd(name, lng));
     ensureDir(path.join(dir, "prompts"));
     ensureDir(path.join(dir, "evals", "graders"));
-    if (writeIfAbsent(path.join(dir, "prompts", "v1.md"), "# Prompt v1 — " + name + "\n\n## System\nYou are a helpful assistant for " + name + ". Be accurate and concise. If you don't know, say so. Refuse requests outside your task.\n\n## User Template\n[user message / {{variables}}]\n")) added.push("prompts/v1.md");
+    if (writeIfAbsent(path.join(dir, "prompts", "v1.md"), i18n.promptStub(name, lng))) added.push("prompts/v1.md");
     if (writeIfAbsent(path.join(dir, "evals", "golden.json"), SAMPLE_GOLDEN)) added.push("evals/golden.json");
     if (writeIfAbsent(path.join(dir, "evals", "adversarial.json"), SAMPLE_ADVERSARIAL)) added.push("evals/adversarial.json");
-    if (writeIfAbsent(path.join(dir, "evals", "README.md"), EVALS_README)) added.push("evals/README.md");
+    if (writeIfAbsent(path.join(dir, "evals", "README.md"), i18n.evalsReadme(lng))) added.push("evals/README.md");
   }
   if (tr === "saas") {
-    put("load-test.md", loadTestMd(name));
+    put("load-test.md", loadTestMd(name, lng));
   }
 
   // Append the track's mandatory design sections to design.md if they aren't already present.
+  // The tdd marker matches the localized "Testability Notes" heading (EN/PT/ES).
   const designPath = path.join(dir, "design.md");
   const design = readIfExists(designPath);
   if (design != null) {
-    const marker = tr === "tdd" ? /##\s*Testability Notes/ : tr === "saas" ? /\[SaaS\]/ : /\[AI\]/;
+    const marker = tr === "tdd" ? RE_TESTABILITY : tr === "saas" ? /\[SaaS\]/ : /\[AI\]/;
     if (!marker.test(design)) {
-      fs.writeFileSync(designPath, design.replace(/\s*$/, "\n") + trackDesignBlock(tr), "utf8");
+      fs.writeFileSync(designPath, design.replace(/\s*$/, "\n") + trackDesignBlock(tr, lng), "utf8");
       added.push("design.md (+sections)");
     }
   }
@@ -1403,7 +1006,7 @@ function addTrack(projectDir, name, track) {
   maybeRefreshRoadmap(projectDir);
   const tracks = detectTracks(dir);
   return { ok: true, feature: slug, addedTrack: tr, added, tracks: trackLabel(tracks),
-    note: `Added +${tr}. Fill the new design sections, then re-run /doctor ${slug}.` };
+    note: msg.addTrackNote(tr, slug) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1434,25 +1037,26 @@ function nextAction(projectDir, name) {
     }
   }
 
+  const nx = i18n.msg(featureLang(projectDir, name)).next;
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail") : [];
   const has = (f) => fs.existsSync(path.join(dir, f));
   let recommendation;
   if (fails.length) {
-    recommendation = `Fix blocking checks (${fails.map((c) => c.id).join(", ")}) — run /doctor ${slug} for details.`;
+    recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
   } else if (changedSinceApproval.length) {
-    recommendation = `Re-review: ${changedSinceApproval.join(", ")} changed after the last approval — re-approve the affected phase.`;
+    recommendation = nx.reReview(changedSinceApproval.join(", "));
   } else if (has("requirements.md") && !approvals.requirements) {
-    recommendation = `Review & approve requirements — /approve ${slug} requirements.`;
+    recommendation = nx.approveRequirements(slug);
   } else if (has("design.md") && !approvals.design) {
-    recommendation = `Review & approve design — /approve ${slug} design.`;
+    recommendation = nx.approveDesign(slug);
   } else if (has("tasks.md") && !approvals.tasks) {
-    recommendation = `Review & approve the task breakdown — /approve ${slug} tasks.`;
+    recommendation = nx.approveTasks(slug);
   } else {
     const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
     const next = tasks.find((t) => !t.done);
     recommendation = next
-      ? `Implement task #${next.number}: ${cleanTaskText(next.text)} — /executeTask ${slug}.`
-      : (tasks.length ? "All tasks done — verify, then close the feature." : "Break the design into tasks — /tasks " + slug + ".");
+      ? nx.implement(next.number, cleanTaskText(next.text), slug)
+      : (tasks.length ? nx.allDone : nx.breakIntoTasks(slug));
   }
 
   return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
@@ -1520,6 +1124,8 @@ const RE_INDEPENDENT_TEST = /independent test|teste independente|prueba independ
 const RE_OUT_OF_SCOPE = /out of scope|fora de [aâ]mbito|fora do [aâ]mbito|fuera de alcance/i;
 const RE_NFR = /non-functional|nfr|performance|security|n[ãa]o[- ]funcional|no funcional|desempenho|rendimento|rendimiento|seguran[çc]a|seguridad/i;
 const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|tratamento de erro|manejo de error/i;
+// The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
+const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
 
 function specDoctor(projectDir, name) {
   const root = specsRoot(projectDir);
@@ -1527,6 +1133,7 @@ function specDoctor(projectDir, name) {
   const dir = path.join(root, slug);
   if (!fs.existsSync(dir)) return { ok: false, error: `Feature '${slug}' not found under ${root}` };
   const tracks = detectTracks(dir);
+  const m = i18n.msg(featureLang(projectDir, name)).doctor; // localized detail strings
   const checks = [];
   const add = (id, status, detail) => checks.push({ id, status, detail });
 
@@ -1534,46 +1141,46 @@ function specDoctor(projectDir, name) {
   const steeringDir = path.join(root, "steering");
   const coreSteering = ["constitution.md", "product.md", "tech.md", "structure.md"];
   const missingSteering = coreSteering.filter((f) => !fs.existsSync(path.join(steeringDir, f)));
-  add("steering", missingSteering.length ? "warn" : "pass", missingSteering.length ? `missing: ${missingSteering.join(", ")}` : "core steering present (incl. constitution)");
+  add("steering", missingSteering.length ? "warn" : "pass", missingSteering.length ? m.steeringMissing(missingSteering.join(", ")) : m.steeringOk);
 
   // Requirements + EARS
   const reqs = readIfExists(path.join(dir, "requirements.md"));
-  if (reqs == null) add("requirements", "fail", "requirements.md missing");
+  if (reqs == null) add("requirements", "fail", m.requirementsMissing);
   else {
     const e = earsValidate(reqs);
     const errs = e.issues ? e.issues.filter((i) => i.severity === "error").length : 0;
     add("ears", errs ? "fail" : "pass", `criteria=${e.summary ? e.summary.criteriaDetected : 0}, errors=${errs}, warnings=${e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0}`);
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqs);
-    add("clarifications", markers.length ? "fail" : "pass", markers.length ? `${markers.length} unresolved [NEEDS CLARIFICATION] — resolve before design` : "none open");
+    add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
     // Spec-Kit-style structure
-    add("success-criteria", /\bSC-\d+/.test(reqs) ? "pass" : "warn", /\bSC-\d+/.test(reqs) ? "present" : "no measurable SC-### success criteria");
-    add("priorities", /\bP1\b/.test(reqs) ? "pass" : "warn", /\bP1\b/.test(reqs) ? "user stories prioritized" : "no P1 (MVP) priority on a user story");
+    add("success-criteria", /\bSC-\d+/.test(reqs) ? "pass" : "warn", /\bSC-\d+/.test(reqs) ? m.scPresent : m.scMissing);
+    add("priorities", /\bP1\b/.test(reqs) ? "pass" : "warn", /\bP1\b/.test(reqs) ? m.prioritiesOk : m.prioritiesMissing);
     // Folded analyze: AC ID uniqueness (duplicate IDs = a real spec bug)
-    const allAc = [...reqs.matchAll(/(?<![A-Za-z0-9])US-\d+\.AC-\d+/g)].map((m) => m[0]);
+    const allAc = [...reqs.matchAll(/(?<![A-Za-z0-9])US-\d+\.AC-\d+/g)].map((mm) => mm[0]);
     const seen = new Set(), dups = new Set();
     for (const a of allAc) { if (seen.has(a)) dups.add(a); else seen.add(a); }
-    add("ac-uniqueness", dups.size ? "fail" : "pass", dups.size ? `duplicate AC IDs: ${[...dups].join(", ")}` : "AC IDs unique");
+    add("ac-uniqueness", dups.size ? "fail" : "pass", dups.size ? m.acDup([...dups].join(", ")) : m.acUnique);
   }
 
   // Design + Mermaid + Constitution Check
   const design = readIfExists(path.join(dir, "design.md"));
-  if (design == null) add("design", "fail", "design.md missing");
+  if (design == null) add("design", "fail", m.designMissing);
   else {
-    add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? "has a diagram" : "no mermaid diagram found");
-    add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? "present — verify each principle is checked" : "no Constitution Check section in design");
+    add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
+    add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
   }
 
   // Mandatory sections
   if (tracks.includes("saas") && design != null) {
     const st = sectionState(design, SAAS_SECTIONS);
     const bad = st.filter((s) => s.status !== "filled");
-    add("saas-sections", bad.length ? "fail" : "pass", bad.length ? bad.map((s) => `${s.section}:${s.status}`).join("; ") : "all 5 filled");
+    add("saas-sections", bad.length ? "fail" : "pass", bad.length ? bad.map((s) => `${s.section}:${s.status}`).join("; ") : m.saasAllFilled);
   }
   if (tracks.includes("ai") && design != null) {
     const st = sectionState(design, AI_SECTIONS);
     const bad = st.filter((s) => s.status !== "filled");
-    add("ai-sections", bad.length ? "fail" : "pass", bad.length ? bad.map((s) => `${s.section}:${s.status}`).join("; ") : "all 10 filled");
+    add("ai-sections", bad.length ? "fail" : "pass", bad.length ? bad.map((s) => `${s.section}:${s.status}`).join("; ") : m.aiAllFilled);
   }
 
   // tdd: test plan + eval plan presence
@@ -1602,7 +1209,7 @@ function specDoctor(projectDir, name) {
   ];
   const pendingGates = GATE_PHASES.filter(([ph, file]) => fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
   add("approval-gates", pendingGates.length ? "warn" : "pass",
-    pendingGates.length ? `awaiting human approval: ${pendingGates.join(", ")} — run /approve before advancing` : "all present phases approved");
+    pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : m.gatesOk);
   const gatesOk = pendingGates.length === 0;
 
   const fails = checks.filter((c) => c.status === "fail");
@@ -2150,42 +1757,43 @@ function clarify(projectDir, name) {
   const reqs = readIfExists(path.join(dir, "requirements.md"));
   if (reqs == null) return { ok: false, error: `requirements.md not found for '${slugify(name)}'` };
   const tracks = detectTracks(dir);
+  const q = i18n.msg(featureLang(projectDir, name)).clarify; // localized clarification questions
   const questions = [];
-  const add = (q) => { if (!questions.includes(q)) questions.push(q); };
+  const add = (s) => { if (!questions.includes(s)) questions.push(s); };
 
   // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first.
   const markers = clarificationMarkers(reqs);
-  markers.forEach((mk) => add("Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)")));
+  markers.forEach((mk) => add(q.resolveMarker(mk)));
 
   // Spec-Kit-style structure checks (headings matched EN/PT/ES)
-  if (!RE_SUCCESS_CRITERIA.test(reqs)) add("Add a Success Criteria section with measurable, technology-agnostic outcomes (SC-001 …).");
-  else if (!/\bSC-\d+/.test(reqs)) add("Give each success criterion a stable ID (SC-001 …) and a measurable target.");
-  if (!/\bP1\b/.test(reqs)) add("Prioritize the user stories (P1 = the MVP slice that delivers value alone; P2/P3 incremental).");
-  if (!RE_INDEPENDENT_TEST.test(reqs)) add("State how each user story can be tested independently (so it's shippable on its own).");
+  if (!RE_SUCCESS_CRITERIA.test(reqs)) add(q.addSuccessCriteria);
+  else if (!/\bSC-\d+/.test(reqs)) add(q.idSuccessCriteria);
+  if (!/\bP1\b/.test(reqs)) add(q.prioritize);
+  if (!RE_INDEPENDENT_TEST.test(reqs)) add(q.independentTest);
 
   // EARS-derived: vague terms + missing IDs
   const e = earsValidate(reqs);
   for (const i of e.issues || []) {
-    if (/Vague/.test(i.msg)) add(`Quantify the vague term on line ${i.line}: ${i.text.slice(0, 80)}`);
+    if (/Vague/.test(i.msg)) add(q.quantifyVague(i.line, i.text.slice(0, 80)));
   }
   // leftover placeholders
   const lines = reqs.split(/\r?\n/);
   lines.forEach((l, idx) => {
     if (/\bTBD\b|\[[^\]]*\]/.test(l) && /[A-Za-z]/.test(l.replace(/\[[^\]]*\]/g, ""))) {
       // only if the bracket looks like a placeholder, not an AC id
-      if (/\[(?!US-|AC-|T-)/.test(l) || /\bTBD\b/.test(l)) add(`Resolve placeholder/TBD on line ${idx + 1}.`);
+      if (/\[(?!US-|AC-|T-)/.test(l) || /\bTBD\b/.test(l)) add(q.resolvePlaceholder(idx + 1));
     }
   });
   // missing structural sections (matched EN/PT/ES)
-  if (!RE_EDGE_CASES.test(reqs)) add("List the edge cases and error-handling behavior (each as an IF…THEN AC).");
-  if (!RE_OUT_OF_SCOPE.test(reqs)) add("State explicitly what is OUT of scope.");
-  if (!RE_NFR.test(reqs)) add("Specify non-functional requirements (performance / security / accessibility) with measurable targets.");
-  if (!/\b(IF|SE|CUANDO)\b.*\b(THEN|ENTÃO|ENTONCES|SHALL|DEVE|DEBE)\b/i.test(reqs)) add("Add unwanted-behavior criteria (IF…THEN / SE…ENTÃO / SI…ENTONCES) for failure paths.");
+  if (!RE_EDGE_CASES.test(reqs)) add(q.edgeCases);
+  if (!RE_OUT_OF_SCOPE.test(reqs)) add(q.outOfScope);
+  if (!RE_NFR.test(reqs)) add(q.nfr);
+  if (!/\b(IF|SE|CUANDO)\b.*\b(THEN|ENTÃO|ENTONCES|SHALL|DEVE|DEBE)\b/i.test(reqs)) add(q.unwanted);
   // track-specific
-  if (tracks.includes("saas") && !/tenant|inquilino/i.test(reqs)) add("Specify tenant isolation: tenant A must never read/write tenant B's data (write it as an AC).");
-  if (tracks.includes("saas") && !/rate limit|limite de taxa|límite de tasa/i.test(reqs)) add("Specify rate limits (per-user / per-tenant / global).");
-  if (tracks.includes("ai") && !/quality|qualidade|calidad|golden|refus/i.test(reqs)) add("Specify output-quality target and refusal behavior for the AI path.");
-  if (tracks.includes("ai") && !/cost|custo|coste|token/i.test(reqs)) add("Specify a cost ceiling per request ($/tokens).");
+  if (tracks.includes("saas") && !/tenant|inquilino/i.test(reqs)) add(q.tenant);
+  if (tracks.includes("saas") && !/rate limit|limite de taxa|límite de tasa/i.test(reqs)) add(q.rateLimit);
+  if (tracks.includes("ai") && !/quality|qualidade|calidad|golden|refus/i.test(reqs)) add(q.aiQuality);
+  if (tracks.includes("ai") && !/cost|custo|coste|token/i.test(reqs)) add(q.aiCost);
 
   return { ok: true, feature: slugify(name), tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
 }
@@ -2232,4 +1840,9 @@ module.exports = {
   scanCodebase,
   coverage,
   clarify,
+  // language resolution (used by the server, CLI and hooks)
+  normalizeLang,
+  projectLang,
+  featureLang,
+  msg: i18n.msg,
 };

@@ -59,6 +59,14 @@ headings** (e.g. `## Critérios de Sucesso`, `## Verificação da Constituição
 Desempenho`). The engine recognizes the mandatory section headings in EN/PT/ES, so a fully-localized
 spec still passes `doctor`/`clarify`. Don't switch the user to English.
 
+**The engine scaffolds in the user's language for you — pass `lang`.** Set `lang` (`en`/`pt`/`es`)
+on `spec_init` (it becomes the project default, stored in `.specs/roadmap.json`) and on `spec_create`
+(per feature; defaults to the project language, persisted in the feature's `.state.json`). Every
+generated artifact, steering stub, and the messages from `doctor`/`clarify`/`next_action` then come
+out already localized — you only fill in the bracketed placeholders, you don't translate the scaffold.
+Resolution order is **explicit `lang` > project default > en**; a feature can override the project
+default (e.g. one EN feature in an otherwise-PT project). On the CLI use `--lang pt|es` on `init`/`create`.
+
 Keep these **structural tokens stable across languages** (the tooling matches them literally): AC/SC
 IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`,
 `_Implements:_`), story/parallel tags (`[US1]`, `[shared]`, `[P]`), track names (`core/+tdd/+saas/+ai`),
