@@ -30,7 +30,6 @@ hooks/precommit-check.js       optional git pre-commit validator
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
 INTEGRATIONS.md                per-tool setup + MCP config snippets
-_archive/                      the 4 original skills, untouched
 
 ## Three surfaces over ONE engine
 `mcp/lib/spec.js` is the single source of truth. It is exposed three ways: (1) the MCP server for

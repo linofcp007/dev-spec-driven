@@ -110,11 +110,12 @@ run in your own environment when you choose, not on a paid CI runner.
 ### Develop / test
 
 ```bash
-node mcp/test.js          # smoke-test the MCP server end-to-end (55 assertions)
-node bin/test-cli.js      # smoke-test the universal CLI (34 assertions)
+node mcp/test.js          # smoke-test the MCP server end-to-end (66 assertions)
+node bin/test-cli.js      # smoke-test the universal CLI (38 assertions)
 ```
 
-> Replaces four predecessor skills; the originals are preserved under [`_archive/`](./_archive).
+> Replaces four predecessor skills; their content lives here as composable tracks (the originals
+> remain in git history and the v1.8.0 release if you ever need them).
 > MIT licensed.
 
 ---
@@ -201,7 +202,8 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 node mcp/test.js          # testa o servidor MCP de ponta a ponta (27 asserções)
 ```
 
-> Substitui quatro skills antecessoras; os originais estão preservados em [`_archive/`](./_archive).
+> Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
+> ficam no histórico git e na release v1.8.0, se algum dia precisares).
 > Licença MIT.
 
 ---
@@ -288,7 +290,8 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 node mcp/test.js          # prueba el servidor MCP de extremo a extremo (27 aserciones)
 ```
 
-> Sustituye cuatro skills predecesoras; los originales se conservan en [`_archive/`](./_archive).
+> Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
+> originales quedan en el historial git y en la release v1.8.0, por si alguna vez los necesitas).
 > Licencia MIT.
 
 ---
@@ -306,8 +309,9 @@ dev-spec-driven/                      ← plugin root
 ├── mcp/
 │   ├── server.js                     ← local stdio MCP server (21 tools, zero-dependency)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, roadmap, scan)
+│   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — 55 assertions)
+│   └── test.js                       ← smoke test (node mcp/test.js — 66 assertions)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
@@ -316,8 +320,7 @@ dev-spec-driven/                      ← plugin root
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
 ├── .mcp.json
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md
-├── INSTALL.md
-└── _archive/                         ← the 4 original skills, untouched
+└── INSTALL.md
 ```
 
 See [INSTALL.md](./INSTALL.md) for persistent installation, hooks, the git pre-commit validator,

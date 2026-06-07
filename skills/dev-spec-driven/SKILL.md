@@ -41,7 +41,7 @@ webhook in a multi-tenant product that also calls an LLM, and needs TDD + scale 
 all at once. This single skill handles both.
 
 This skill unifies four predecessors. Their content lives here as **composable tracks** plus a
-deep `references/` library (and the originals are preserved in `_archive/` at the plugin root):
+deep `references/` library:
 
 | Track | Replaces | What it adds |
 |---|---|---|

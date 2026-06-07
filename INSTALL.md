@@ -139,4 +139,5 @@ The CLI also runs standalone in any shell — `node bin/dev-spec.js help`.
 /plugin uninstall dev-spec-driven
 ```
 
-or just stop passing `--plugin-dir`. The originals remain in `_archive/` if you ever want them back.
+or just stop passing `--plugin-dir`. The four predecessor skills live in git history and the v1.8.0
+release if you ever want them back.
