@@ -44,3 +44,6 @@ dist/
 # Eval harness local artifacts (generated in a user's project, not tracked)
 **/evals/baseline.json
 **/evals/report.json
+
+# dev-guardian outputs
+.guardian/
