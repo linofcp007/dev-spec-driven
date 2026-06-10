@@ -3,6 +3,16 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.9.1]
+
+### Fixed
+- **Plugin failed to load hooks: `Duplicate hooks file detected`.** The manifest
+  (`.claude-plugin/plugin.json`) declared `"hooks": "./hooks/hooks.json"`, but Claude Code already
+  loads the standard `hooks/hooks.json` automatically — the explicit reference loaded the same file a
+  second time and errored out. Removed the `hooks` key from the manifest; `hooks/hooks.json` (and its
+  PostToolUse/SessionStart `spec-hook.js`) still load via the standard path. `manifest.hooks` is only
+  for *additional* hook files.
+
 ## [1.9.0]
 
 ### Added — trilingual generation (EN / PT / ES): the engine now WRITES, not just reads, three languages

@@ -13,7 +13,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 
 ## Layout
 ```
-.claude-plugin/plugin.json     manifest (skills, commands, hooks, mcpServers point here)
+.claude-plugin/plugin.json     manifest (skills, commands, mcpServers point here; NO hooks key — see gotcha)
 .claude-plugin/marketplace.json local marketplace for install
 .mcp.json                      registers the `spec-driven` stdio server
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
@@ -133,6 +133,10 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 - **Mandatory section "filled" detection**: the design scaffold seeds each +saas/+ai section with a
   visible `> **TODO**` sentinel line. `spec_doctor` treats a section as unfilled while that line
   remains. When you fill a section, remove the `TODO` line.
+- **Hooks: never reference `hooks/hooks.json` in `plugin.json`.** Claude Code auto-loads the standard
+  `hooks/hooks.json` from the plugin root. Declaring `"hooks": "./hooks/hooks.json"` in the manifest
+  loads it a SECOND time → `Duplicate hooks file detected` and the plugin fails to load hooks (the bug
+  fixed in 1.9.1). `manifest.hooks` is ONLY for *additional* hook files at non-standard paths.
 - **Hooks on Windows**: read stdin asynchronously (not `fs.readFileSync(0)`), and flush stdout
   before `process.exit` (write callback) — pipes truncate otherwise.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node

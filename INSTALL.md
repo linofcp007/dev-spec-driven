@@ -100,9 +100,10 @@ claude plugin details dev-spec-driven
 
 ## Local automation (optional, all free)
 
-**Hooks** load automatically with the plugin (`hooks/hooks.json`): saving a `requirements.md`
-lints EARS, saving a `tasks.md` checks traceability, and session start prints feature status. To
-turn them off, remove the `"hooks"` line from `.claude-plugin/plugin.json` (or disable the plugin).
+**Hooks** load automatically with the plugin from the standard `hooks/hooks.json` (the manifest must
+NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): saving a
+`requirements.md` lints EARS, saving a `tasks.md` checks traceability, and session start prints
+feature status. To turn them off, disable the plugin (or empty `hooks/hooks.json`).
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs) — install inside
 your repo:
