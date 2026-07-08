@@ -185,10 +185,10 @@ const SIGNALS = {
     weak: [
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
       "tokens", "token cost", "assistant", "temperature", "context window", "retrieval",
-      "moderation", "few-shot", "sampling", " ai ", "generative",
+      "moderation", "few-shot", "sampling", "ai", "generative",
       // PT/ES
       "agente", "modelo", "geração", "resumo", "assistente", "inferência", "custo de tokens",
-      "generación", "resumen", "asistente", "coste de tokens", " ia ", "generativo", "generativa",
+      "generación", "resumen", "asistente", "coste de tokens", "ia", "generativo", "generativa",
     ],
   },
 };
@@ -209,6 +209,40 @@ function isNegated(text, idx, kwLen) {
   return NEG_AFTER.test(after);
 }
 
+// Signals are matched as WORDS, never as bare substrings. A plain `indexOf` fired 'claude' inside
+// '.claude-plugin', 'rag' inside 'storage', 'sla' inside 'translate' and 'auth' inside 'author' —
+// and a phantom STRONG signal auto-enables a track, which in turn hides the negation the classifier
+// computed for that same track. Never reintroduce `indexOf` here.
+
+// Keywords deliberately written as STEMS: any letters may follow ('idempoten' → idempotent /
+// idempotency / idempotência, 'hallucinat' → hallucinations, 'summariz' → summarization).
+const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina"]);
+// Inflections accepted on an exact keyword: payment→payments, cache→cached, rate-limit→rate-limiting.
+const INFLECTION = "(?:e?s|ed|ing|d)?";
+// Short acronyms ('rag', 'sla', 'slo', 'gpt', 'llm', 'ai') pluralize but never conjugate — without
+// this, 'rag' + 'ing' would make "raging" a strong +ai signal.
+const ACRONYM_INFLECTION = "s?";
+// Hyphen compounds that keep the head word a real signal ('AI-powered', 'LLM-based') rather than
+// turning it into an identifier ('claude-plugin').
+const ADJ_SUFFIX = "(?:-(?:based|powered|driven|generated|assisted|enabled|native|ready|first))?";
+
+const KW_RE = new Map();
+function keywordRe(kw) {
+  let re = KW_RE.get(kw);
+  if (re) return re;
+  const body = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tail = STEMS.has(kw) ? "\\p{L}*" : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX;
+  // Left edge: not glued to a word char, and not part of a dotted/slashed/hyphenated identifier
+  // ('.claude-plugin', 'src/rag.ts'). Right edge: after the optional inflection/adjective, no word
+  // char and no '-<letter>' compound ('claude-plugin') — but '-<digit>' stays legal ('gpt-4').
+  re = new RegExp(
+    "(?<![\\p{L}\\p{N}_\\-./\\\\])" + body + tail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
+    "gu"
+  );
+  KW_RE.set(kw, re);
+  return re;
+}
+
 function classify(description, opts = {}) {
   const raw = String(description || "");
   const text = " " + raw.toLowerCase() + " ";
@@ -219,15 +253,15 @@ function classify(description, opts = {}) {
   for (const track of ["tdd", "saas", "ai"]) {
     for (const tier of ["strong", "weak"]) {
       for (const kw of SIGNALS[track][tier]) {
-        let from = 0;
-        let idx;
-        while ((idx = text.indexOf(kw, from)) !== -1) {
-          if (isNegated(text, idx, kw.length)) {
+        const re = keywordRe(kw);
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          if (isNegated(text, m.index, m[0].length)) {
             if (!negated[track].includes(kw)) negated[track].push(kw);
           } else if (!matched[track][tier].includes(kw)) {
             matched[track][tier].push(kw);
           }
-          from = idx + kw.length;
         }
       }
     }
@@ -235,10 +269,12 @@ function classify(description, opts = {}) {
 
   // De-dupe by containment: a keyword that is a substring of another matched keyword in the same
   // track (e.g. "agent" ⊂ "agente", "model" ⊂ "modelo", "tokens" ⊂ "custo de tokens") is ONE
-  // concept, not two signals — otherwise a single PT/ES word would auto-enable a track.
+  // concept, not two signals — otherwise a single PT/ES word would auto-enable a track. The
+  // containment must sit at a word edge, or a short keyword vanishes inside an unrelated one
+  // ("ai" ⊂ "guardr-ai-l").
   for (const t of ["tdd", "saas", "ai"]) {
     const all = [...matched[t].strong, ...matched[t].weak];
-    const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && m.includes(k)));
+    const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
     matched[t].strong = keep(matched[t].strong);
     matched[t].weak = keep(matched[t].weak);
   }
@@ -277,9 +313,16 @@ function classify(description, opts = {}) {
   for (const p of possible) {
     notes.push(`Possible +${p.track} — weak signal '${p.signal.trim()}' (needs corroboration; not auto-enabled).`);
   }
+  // A negation is never silently dropped. It cannot *veto* a track — "the system shall not
+  // hallucinate" negates 'hallucinat' on a feature that is unmistakably +ai — so when the track is
+  // on anyway, surface the contradiction for the human who confirms Phase 0.
   for (const t of ["tdd", "saas", "ai"]) {
-    if (negated[t].length && !active.has(t)) {
+    if (!negated[t].length) continue;
+    const quoted = negated[t].map((k) => `'${k.trim()}'`).join(", ");
+    if (!active.has(t)) {
       notes.push(`+${t} kept off — '${negated[t][0].trim()}' appeared negated.`);
+    } else {
+      notes.push(`+${t} is ON although ${quoted} appeared negated — enabled by: ${signals[t].join(", ")}. Confirm this is intentional.`);
     }
   }
 
@@ -295,19 +338,20 @@ function classify(description, opts = {}) {
     note: notes.length ? notes.join(" ") : null,
     notes,
     mode: opts.mode || "spec",
-    reasoning: buildReasoning(tracks, signals, confidence),
+    reasoning: buildReasoning(tracks, signals, confidence, negated),
   };
 }
 
-function buildReasoning(tracks, signals, confidence) {
+function buildReasoning(tracks, signals, confidence, negated) {
   const lines = ["core: always on (every Spec-mode feature)."];
   for (const t of ["tdd", "saas", "ai"]) {
+    const neg = negated && negated[t] && negated[t].length ? negated[t].map((k) => `'${k.trim()}'`).join(", ") : null;
     if (tracks.includes(t)) {
       const uniq = [...new Set(signals[t])].slice(0, 6);
       const conf = confidence ? ` [${confidence[t]} confidence]` : "";
-      lines.push(`+${t}: ON${conf} — matched signals: ${uniq.join(", ")}.`);
+      lines.push(`+${t}: ON${conf} — matched signals: ${uniq.join(", ")}.${neg ? ` (${neg} appeared negated.)` : ""}`);
     } else {
-      lines.push(`+${t}: off — no signals matched.`);
+      lines.push(`+${t}: off — ${neg ? `${neg} appeared negated.` : "no signals matched."}`);
     }
   }
   return lines.join("\n");
@@ -676,23 +720,41 @@ const VAGUE_RE = new RegExp(
   "iu"
 );
 
-function earsValidate(text) {
-  const issues = [];
-  if (!text || !text.trim()) return { ok: false, error: "No text provided." };
-  const lines = text.split(/\r?\n/);
-  let acCount = 0;
-  let withShall = 0;
-  let withId = 0;
-  let needsClar = 0;
-  let inComment = false;
+// A criterion is a LOGICAL unit, not a physical line. Markdown list items continue across lines
+// (indented or lazy), and EARS phrasing — "WHILE <state> WHEN <trigger> THE SYSTEM SHALL <response>"
+// — pushes past one line for anything non-trivial. Validating line-by-line scored a wrapped
+// criterion twice: the half carrying the ID has no modal verb (error) and the half carrying the
+// modal verb has no ID (warn). Group first, lint the joined criterion. Never go back to per-line.
+const RE_LIST_ITEM = /^\s*(?:\d+[.)]|[-*+])\s+/; // starts a new criterion block
+const RE_NUMBERED = /^\s*\d+[.)]\s+/; // …and is enumerated, so it may be an AC without a modal verb
+// Block-level constructs that can never be part of a criterion, and end the one in progress.
+const RE_BLOCK_BREAK = /^\s*(?:#{1,6}\s|>|\||(?:-{3,}|={3,}|\*{3,})\s*$)/;
+const RE_FENCE = /^\s*(```+|~~~+)/;
+const RE_MODAL = /\b(SHALL|DEVE|DEVER[ÁA]|DEBE|DEBER[ÁA])\b/i;
+const RE_AC_SHAPE = /\b(WHEN|WHILE|IF|WHERE|THE SYSTEM|SHOULD|MUST|WILL|NEEDS? TO|QUANDO|ENQUANTO|SE|ONDE|O SISTEMA|CUANDO|MIENTRAS|DONDE|EL SISTEMA)\b/i;
+const RE_EARS_KEYWORD = /\b(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|DONDE)\b/i;
+const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA DEVE|EL SISTEMA DEBE)/i;
+const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+)/;
 
-  lines.forEach((line, i) => {
+// Strip HTML comments (possibly multi-line) so template guidance doesn't count as real content,
+// then fold the surviving lines into criterion blocks.
+function criterionBlocks(text) {
+  const cleaned = []; // every content line, comments removed — [NEEDS CLARIFICATION] scans these
+  const blocks = [];
+  let inComment = false;
+  let fence = null; // open code-fence marker: its body is code, never a criterion ("const shall = 1")
+  let cur = null;
+  const flush = () => {
+    if (cur) blocks.push(cur);
+    cur = null;
+  };
+
+  text.split(/\r?\n/).forEach((raw, i) => {
     const ln = i + 1;
-    // Strip HTML comments (possibly multi-line) so guidance examples don't count, but KEEP any real
-    // content before `<!--` / after `-->` on the same line.
+    let line = raw;
     if (inComment) {
       const end = line.indexOf("-->");
-      if (end === -1) return;
+      if (end === -1) return; // wholly inside a comment: no content, and no break in the criterion
       line = line.slice(end + 3);
       inComment = false;
     }
@@ -702,43 +764,85 @@ function earsValidate(text) {
       inComment = true;
       line = line.slice(0, openIdx);
     }
-    if (!line.trim()) return;
-    // Unresolved [NEEDS CLARIFICATION] marker (real content only) — design is gated on these.
-    if (/\[NEEDS[ _-]CLARIFICATION/i.test(line)) {
-      needsClar++;
-      issues.push({ line: ln, severity: "warn", msg: "Unresolved [NEEDS CLARIFICATION] marker — resolve before design.", text: line.trim() });
+    const fenceHere = line.match(RE_FENCE);
+    if (fence) {
+      if (fenceHere && line.trim().startsWith(fence)) fence = null;
+      return; // inside a fence: no content, no criteria
     }
-    // Heuristic: an AC is a numbered list item under an Acceptance Criteria context,
-    // or any line mentioning SHALL.
-    const isNumbered = /^\s*\d+\.\s+/.test(line);
+    if (fenceHere) {
+      fence = fenceHere[1];
+      return flush();
+    }
+    if (!line.trim()) {
+      // A blank source line ends the criterion; a line that held only a comment does not.
+      if (!raw.trim()) flush();
+      return;
+    }
+    cleaned.push({ line: ln, text: line.trim() });
+    if (RE_BLOCK_BREAK.test(line)) return flush();
+    if (RE_LIST_ITEM.test(line)) {
+      flush();
+      cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), parts: [line.trim()] };
+      return;
+    }
+    if (cur) {
+      cur.endLine = ln; // indented or lazy continuation of the criterion above
+      cur.parts.push(line.trim());
+      return;
+    }
+    cur = { line: ln, endLine: ln, numbered: false, parts: [line.trim()] };
+  });
+  flush();
+  return { cleaned, blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, text: b.parts.join(" ") })) };
+}
+
+function earsValidate(text) {
+  if (!text || !text.trim()) return { ok: false, error: "No text provided." };
+  const issues = [];
+  const { cleaned, blocks } = criterionBlocks(text);
+  let acCount = 0;
+  let withShall = 0;
+  let withId = 0;
+  let needsClar = 0;
+
+  // Unresolved [NEEDS CLARIFICATION] markers can sit anywhere (heading, table, prose), not just in
+  // a criterion — design is gated on these, so scan every content line.
+  for (const c of cleaned) {
+    if (/\[NEEDS[ _-]CLARIFICATION/i.test(c.text)) {
+      needsClar++;
+      issues.push({ line: c.line, severity: "warn", msg: "Unresolved [NEEDS CLARIFICATION] marker — resolve before design.", text: c.text });
+    }
+  }
+
+  for (const b of blocks) {
+    const add = (severity, msg) => {
+      const issue = { line: b.line, severity, msg, text: b.text };
+      if (b.endLine !== b.line) issue.endLine = b.endLine;
+      issues.push(issue);
+    };
     // EARS modal verb — English SHALL plus Portuguese DEVE/DEVERÁ and Spanish DEBE/DEBERÁ.
-    const mentionsShall = /\b(SHALL|DEVE|DEVER[ÁA]|DEBE|DEBER[ÁA])\b/i.test(line);
+    const mentionsShall = RE_MODAL.test(b.text);
     // A numbered list item that reads like a requirement (EARS keyword EN/PT/ES, or a modal
     // verb like should/must/deve/debe) is treated as an acceptance criterion.
-    const looksLikeAc =
-      mentionsShall ||
-      (isNumbered &&
-        /\b(WHEN|WHILE|IF|WHERE|THE SYSTEM|SHOULD|MUST|WILL|NEEDS? TO|QUANDO|ENQUANTO|SE|ONDE|O SISTEMA|CUANDO|MIENTRAS|DONDE|EL SISTEMA)\b/i.test(line));
-    if (!looksLikeAc && !mentionsShall) return;
+    const looksLikeAc = mentionsShall || (b.numbered && RE_AC_SHAPE.test(b.text));
+    if (!looksLikeAc) continue;
 
     acCount++;
     if (mentionsShall) withShall++;
-    else issues.push({ line: ln, severity: "error", msg: "Criterion has no modal verb (SHALL / DEVE / DEBE) — not a valid EARS statement.", text: line.trim() });
+    else add("error", "Criterion has no modal verb (SHALL / DEVE / DEBE) — not a valid EARS statement.");
 
-    if (/(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+)/.test(line)) withId++;
-    else if (looksLikeAc) issues.push({ line: ln, severity: "warn", msg: "Criterion has no stable ID (e.g., US-1.AC-1).", text: line.trim() });
+    if (RE_STABLE_ID.test(b.text)) withId++;
+    else add("warn", "Criterion has no stable ID (e.g., US-1.AC-1).");
 
-    const vague = line.match(VAGUE_RE);
-    if (vague) issues.push({ line: ln, severity: "warn", msg: `Vague term '${vague[1].toLowerCase()}' — replace with a concrete, testable value.`, text: line.trim() });
+    const vague = b.text.match(VAGUE_RE);
+    if (vague) add("warn", `Vague term '${vague[1].toLowerCase()}' — replace with a concrete, testable value.`);
     // EARS keyword presence (EN/PT/ES)
-    if (
-      mentionsShall &&
-      !/\b(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|DONDE)\b/i.test(line) &&
-      !/(THE SYSTEM SHALL|O SISTEMA DEVE|EL SISTEMA DEBE)/i.test(line)
-    ) {
-      issues.push({ line: ln, severity: "info", msg: "No EARS keyword (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). OK for ubiquitous requirements; confirm intentional.", text: line.trim() });
+    if (mentionsShall && !RE_EARS_KEYWORD.test(b.text) && !RE_UBIQUITOUS.test(b.text)) {
+      add("info", "No EARS keyword (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). OK for ubiquitous requirements; confirm intentional.");
     }
-  });
+  }
+
+  issues.sort((a, b) => a.line - b.line); // stable: clarification markers first on a shared line
 
   return {
     ok: true,

@@ -3,6 +3,36 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.9.2]
+
+### Fixed — engine correctness (dogfooding the plugin on its own specs)
+- **`ears_validate` was line-based, not criterion-based — it hard-failed any well-written long
+  criterion.** EARS phrasing wraps across lines (`WHILE … WHEN … THE SYSTEM SHALL …`), and markdown
+  list items continue on the next line. The validator scored each *physical* line: the half carrying
+  the ID had no modal verb (**error**), the half carrying the modal verb had no ID (**warn**) — the
+  same criterion counted twice. Because `spec_doctor` gates the phase on `errors === 0` (and the
+  PostToolUse hook + pre-commit check run the same validator), this **blocked the design gate and
+  commits** on any criterion over ~one line. Criteria are now folded into logical blocks first
+  (bounded by blank lines, headings, tables, HR and fenced code), then each whole criterion is
+  linted. Issues report the criterion's start `line` (plus `endLine` when it spans several).
+- **Fenced code counted as acceptance criteria.** A `const shall = 1;` line inside a ` ``` ` block
+  matched the modal-verb heuristic. Fence state is now tracked; a fence body is never a criterion.
+- **`spec_classify` matched signals as substrings, firing phantom tracks.** `indexOf` fired `claude`
+  inside `.claude-plugin/plugin.json` (→ `+ai`), `rag` inside `storage` (→ `+ai`), `sla` inside
+  `translate` (→ `+saas`) and `auth` inside `author` (→ `+tdd`). Keywords are now matched at word
+  boundaries, keeping inflections (`payments`, `rate-limiting`), plural-only for ≤3-char acronyms
+  (so `rag`+`ing` ≠ `raging`), deliberate stems (`idempoten`, `hallucinat`) and `-based`/`-powered`
+  adjectives, while rejecting `-<letter>` compounds and dotted/slashed identifiers (`gpt-4` still
+  matches). All 260 signal keywords verified to still self-match.
+- **A phantom signal silently masked the negation the classifier had computed.** Because the bogus
+  strong match turned a track on, the "kept off — negated" note never fired. Negation now annotates
+  rather than vetoes: when a track is on *and* has negated keywords, `classify` surfaces the conflict
+  (`+ai is ON although 'llm' appeared negated — confirm this is intentional`) for the Phase-0 review.
+
+### Tests
+- `mcp/test.js` 66 → 80 assertions (wrapped EN/PT/ES criteria, block boundaries, substring traps,
+  inflection/acronym coverage, negation-conflict surfacing).
+
 ## [1.9.1]
 
 ### Fixed

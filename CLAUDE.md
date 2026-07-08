@@ -109,6 +109,28 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 ## Conventions & gotchas
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
+- **`earsValidate` is criterion-based, never line-based.** EARS phrasing (`ENQUANTO … QUANDO … O
+  SISTEMA DEVE …`) wraps past one line, and markdown list items continue across lines (indented or
+  lazy). `criterionBlocks()` folds physical lines into logical criteria FIRST — bounded by blank
+  lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
+  ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
+  **not** split a criterion. Linting per line scored a wrapped AC twice: the half holding the ID had
+  no modal verb (**error**) and the half holding the modal verb had no ID (**warn**), which
+  hard-failed `spec_doctor`'s `ears` gate on any well-written long criterion. Issues report the
+  criterion's start `line` (plus `endLine` when it spans several).
+- **Classifier signals are matched as WORDS, never substrings** (`keywordRe`, not `indexOf`).
+  `indexOf` fired `claude` inside `.claude-plugin`, `rag` inside `sto·rag·e`, `sla` inside
+  `tran·sla·te`, `auth` inside `auth·or` — and a phantom STRONG signal auto-enables a track, which
+  then *hides* the negation the classifier computed for it. The regex allows inflections
+  (`payment→payments`, `rate-limit→rate-limiting`), plural-only for ≤3-char acronyms (so `rag`+`ing`
+  ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`),
+  and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
+  (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). When you add a
+  keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
+- **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
+  `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
+  keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
+  human who confirms Phase 0 — it must never silently drop a negation it computed.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template
@@ -146,7 +168,7 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(66 assertions, incl. a PT and an ES end-to-end scaffold + per-feature lang override; `node
+(80 assertions, incl. a PT and an ES end-to-end scaffold + per-feature lang override; `node
 bin/test-cli.js` adds 38 for the CLI). Add an assertion when you add a tool or change behavior. Keep
 it dependency-free.
 `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.

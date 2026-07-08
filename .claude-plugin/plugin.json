@@ -2,7 +2,7 @@
   "name": "dev-spec-driven",
   "displayName": "Dev Spec-Driven",
   "description": "Unified, track-based spec-driven development: EARS requirements, technical design, traceable tasks, and approval-gated execution. Composes optional TDD, SaaS-scale, and AI-eval tracks per feature. Ships a fully local, zero-dependency MCP server for spec scaffolding, classification, status, task tracking, EARS linting, and traceability checks. No cloud, no CI, no cost.",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "author": {
     "name": "Carlos Pereira",
     "email": "carlospereira@prodigitalkey.com"

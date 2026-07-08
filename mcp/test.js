@@ -124,6 +124,53 @@ function payload(res) {
   ok(ptEars.summary.criteriaDetected === 2 && ptEars.summary.withShall === 2, "EARS accepts PT modal DEVE (2 criteria, 2 with modal)");
   ok(ptEars.verdict === "pass" && ptEars.issues.some((i) => i.msg.includes("amigável")), "EARS passes PT (no SHALL error) and flags PT vague 'amigável'");
 
+  // --- regression: a criterion is a LOGICAL unit, not a physical line. EARS phrasing wraps
+  //     ("WHILE … WHEN … THE SYSTEM SHALL …"); a line-based parser scored each half separately
+  //     (ID half → "no modal verb" error, modal half → "no stable ID" warn). ---
+  const wrapped = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "## Acceptance Criteria\n\n" +
+    "1. **US-1.AC-1** — WHEN a user submits the form THE SYSTEM SHALL validate every field\n" +
+    "2. **US-2.AC-2** — IF the access token has expired, THEN\n" +
+    "   THE SYSTEM SHALL return HTTP 401 with the code TOKEN_EXPIRED\n" +
+    "3. **US-2.AC-3** — WHILE an upload is in progress,\n" +
+    "   THE SYSTEM SHALL display the completed percentage\n" } }));
+  ok(wrapped.summary.criteriaDetected === 3, "wrapped EARS criteria count once each (got " + wrapped.summary.criteriaDetected + ", want 3)");
+  ok(wrapped.summary.withShall === 3 && wrapped.summary.withStableId === 3, "wrapped criteria keep their modal + stable ID (shall=" + wrapped.summary.withShall + ", id=" + wrapped.summary.withStableId + ")");
+  ok(wrapped.verdict === "pass" && wrapped.issues.length === 0, "wrapped criteria raise no spurious issues (got " + wrapped.issues.length + ")");
+  const wrappedPt = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — QUANDO o utilizador submete o formulário, O SISTEMA DEVE validar os campos\n" +
+    "2. **US-2.AC-2** — SE o token expirou, ENTÃO\n" +
+    "   O SISTEMA DEVE devolver um erro 401 com o código TOKEN_EXPIRED\n" } }));
+  ok(wrappedPt.summary.criteriaDetected === 2 && wrappedPt.verdict === "pass", "wrapped PT criteria validate as 2 passing criteria");
+  ok(wrapped.issues.filter((i) => i.severity === "error").length === 0, "no 'missing modal verb' error from a wrapped criterion");
+  // Block-level constructs bound a criterion: fenced code is code (a `const shall = 1` line is not
+  // an AC), a heading ends the criterion, and a comment-only line does not split one.
+  const bounded = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n```ts\nconst shall = 1;\n```\n## Out of Scope\nEverything else" } }));
+  ok(bounded.summary.criteriaDetected === 1, "fenced code + heading bound the criterion (got " + bounded.summary.criteriaDetected + ", want 1)");
+  const commented = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — IF the token expired, THEN\n<!-- reviewer: check this -->\n   THE SYSTEM SHALL return HTTP 401" } }));
+  ok(commented.summary.criteriaDetected === 1 && commented.verdict === "pass", "a comment-only line does not split a criterion");
+  const vagueWrap = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — WHEN a page loads,\n   THE SYSTEM SHALL render it fast" } }));
+  ok((vagueWrap.issues.find((i) => /Vague/.test(i.msg)) || {}).line === 1, "a vague term on a continuation line is reported at the criterion's start line");
+
+  // --- regression: signals are matched as WORDS, not substrings. `indexOf` fired 'claude'
+  //     inside '.claude-plugin', 'rag' inside 'storage', 'sla' inside 'translate', 'auth'
+  //     inside 'author' — a phantom STRONG signal silently masked the negation it computed. ---
+  const fp = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Fix the duplicate hooks key in .claude-plugin/plugin.json. No LLM involved — this is pure JSON parsing." } }));
+  ok(!fp.tracks.includes("ai"), "classify does not fire +ai on 'claude' inside '.claude-plugin/plugin.json' (" + fp.label + ")");
+  ok(/negated/i.test(fp.note || ""), "classify reports the negated 'llm' it computed");
+  const subs = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Add object storage for uploaded files, translate the UI into Spanish, and show the author name on each post." } }));
+  ok(subs.tracks.length === 1 && subs.tracks[0] === "core", "no phantom tracks from storage/translate/author substrings (got " + subs.label + ")");
+  // …but real signals must still match, including inflections, versions and hyphenated adjectives.
+  const kept = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "An AI-powered assistant on GPT-4 and Claude: reduce hallucinations, add guardrails, and log token cost." } }));
+  ok(kept.tracks.includes("ai"), "classify still detects +ai from 'AI-powered', 'GPT-4', 'Claude', 'hallucinations' (" + kept.label + ")");
+  const infl = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Process Stripe payments and refunds, replay webhooks idempotently, and enforce rate-limiting per tenant." } }));
+  ok(infl.tracks.includes("tdd") && infl.tracks.includes("saas"), "classify matches inflected keywords (payments/webhooks/idempotently/rate-limiting) (" + infl.label + ")");
+  const conflict = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Summarize support tickets with an LLM and detect hallucinations, but no auth is needed for this internal page." } }));
+  ok(conflict.tracks.includes("ai") && !conflict.tracks.includes("tdd"), "negation suppresses only the negated track (+ai on, +tdd off: " + conflict.label + ")");
+
   // --- new: spec_doctor flags unfilled mandatory sections on a fresh scaffold ---
   const doc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
   ok(doc.ok && doc.verdict === "fail" && doc.readyToAdvance === false, "spec_doctor flags fresh scaffold as not ready (verdict=" + doc.verdict + ")");
