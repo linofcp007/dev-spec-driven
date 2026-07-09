@@ -1338,10 +1338,44 @@ function specDoctor(projectDir, name) {
 // Roadmap & feature dependencies (.specs/roadmap.json)
 // ---------------------------------------------------------------------------
 
-const PHASE_PERCENT = { empty: 0, classified: 10, requirements: 20, design: 40, "test-plan": 50, "eval-plan": 50, tests: 60, "tasks-ready": 70, executing: 85, complete: 100 };
+// Progress model. Planning (classify → design → tasks-ready) is the run-up; the
+// bulk of the work is *implementing* the tasks. So all planning phases together
+// top out at PLANNING_CEILING, and the implementation span (executing → complete)
+// is driven by the real fraction of tasks done — not a flat per-phase number.
+// This stops a fully-planned-but-unimplemented feature (phase "tasks-ready", zero
+// tasks done) from reading as ~70% complete when no code has been written yet.
+const PLANNING_CEILING = 30;
+const PHASE_PERCENT = {
+  empty: 0,
+  classified: 4,
+  requirements: 8,
+  design: 16,
+  "test-plan": 20,
+  "eval-plan": 20,
+  tests: 25,
+  "tasks-ready": PLANNING_CEILING,
+  executing: PLANNING_CEILING, // real value comes from featurePercent (task-driven)
+  complete: 100,
+};
 
 function phasePercent(phase) {
   return PHASE_PERCENT[phase] != null ? PHASE_PERCENT[phase] : 0;
+}
+
+// Task-aware completion percentage. Once tasks exist, implementation spans
+// PLANNING_CEILING → 100 in proportion to the tasks actually completed.
+// "complete" is the only phase that reaches 100; an in-flight "executing"
+// feature is capped at 99 so it can never masquerade as done.
+function featurePercent(phase, tasksDone, tasksTotal) {
+  if (phase === "complete") return 100;
+  if (phase === "tasks-ready" || phase === "executing") {
+    const total = Number(tasksTotal) || 0;
+    if (total <= 0) return PLANNING_CEILING;
+    const done = Math.max(0, Math.min(total, Number(tasksDone) || 0));
+    const impl = Math.round((done / total) * (100 - PLANNING_CEILING));
+    return Math.min(99, PLANNING_CEILING + impl);
+  }
+  return phasePercent(phase);
 }
 
 function roadmapPath(projectDir) {
@@ -1421,7 +1455,7 @@ function roadmap(projectDir) {
   const pctByName = {};
   const feats = list.features.map((f) => {
     const meta = rm.features[f.name] || {};
-    const pct = phasePercent(f.phase);
+    const pct = featurePercent(f.phase, f.tasksDone, f.tasks);
     pctByName[f.name] = pct;
     return { name: f.name, tracks: f.tracks, phase: f.phase, percent: pct, dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
   });
@@ -1933,6 +1967,7 @@ module.exports = {
   nextAction,
   specDoctor,
   phasePercent,
+  featurePercent,
   readRoadmap,
   setDependency,
   roadmap,

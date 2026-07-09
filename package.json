@@ -1,6 +1,6 @@
 {
   "name": "dev-spec-driven",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "description": "Unified, track-based spec-driven development: a Claude Code plugin + a local zero-dependency MCP server + a universal CLI that works in any MCP/agent tool (Claude, Cursor, Windsurf, Copilot, Gemini, Codex). No cloud, no CI, no cost.",
   "type": "commonjs",
   "private": true,

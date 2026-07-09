@@ -3,6 +3,20 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.9.3]
+
+### Fixed
+- **Roadmap progress no longer reads ~70% before any code is written.** The completion percentage
+  was derived purely from the *phase*, so a fully-planned feature (phase `tasks-ready`, zero tasks
+  implemented) reported **70%**, and an `executing` feature reported a flat **85%** regardless of how
+  many tasks were actually done — even though implementation is the bulk of the work. Planning now
+  tops out at **30%** and the implementation span (`executing` → `complete`) is driven by the *real*
+  fraction of tasks completed (`featurePercent`, using the counts `detectPhase` already parsed): a
+  planned-but-unimplemented feature reads **30%**, `executing` 2/4 reads **65%**, and only `complete`
+  reaches **100%** (in-flight `executing` is capped at 99% so it never masquerades as done). Applies
+  to `spec_roadmap`, the generated `ROADMAP.md`/`.html`, and the roadmap-updated message. Regression
+  test added.
+
 ## [1.9.2]
 
 ### Fixed — engine correctness (dogfooding the plugin on its own specs)

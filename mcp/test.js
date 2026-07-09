@@ -209,6 +209,30 @@ function payload(res) {
   await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "User Auth", number: 1 } });
   ok(/🟡/.test(fs.readFileSync(path.join(tmp, ".specs", "ROADMAP.md"), "utf8")), "ROADMAP.md auto-regenerates on spec_complete_task (no write)");
 
+  // --- regression: progress % reflects real task completion, not just the phase. A fully-planned
+  //     but unimplemented feature (phase "tasks-ready", 0 tasks done) used to read as a flat 70%,
+  //     even though implementation — the bulk of the work — had not started. Planning now tops out
+  //     at the planning ceiling (30%) and the executing phase is driven by the real done/total. ---
+  const progDir = path.join(tmp, ".specs", "progress-demo");
+  fs.mkdirSync(progDir, { recursive: true });
+  fs.writeFileSync(path.join(progDir, "requirements.md"), "# Requirements\n", "utf8");
+  fs.writeFileSync(path.join(progDir, "design.md"), "# Design\n", "utf8");
+  const fourTasks = (doneCount) =>
+    "# Tasks\n\n" + [1, 2, 3, 4].map((n) => `- [${n <= doneCount ? "x" : " "}] ${n}. Task ${n}`).join("\n") + "\n";
+  const pctOf = async (name) =>
+    (payload(await rpc("tools/call", { name: "spec_roadmap", arguments: {} })).features.find((f) => f.name === name) || {});
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(0), "utf8");
+  let pf = await pctOf("progress-demo");
+  ok(pf.phase === "tasks-ready" && pf.percent === 30, "tasks-ready (0/4 done) reads as planning ceiling 30%, not 70% (got " + pf.percent + ")");
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(2), "utf8");
+  pf = await pctOf("progress-demo");
+  ok(pf.phase === "executing" && pf.percent === 65, "executing 2/4 done interpolates to 65% (got " + pf.percent + ")");
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(4), "utf8");
+  pf = await pctOf("progress-demo");
+  ok(pf.phase === "complete" && pf.percent === 100, "all tasks done → complete → 100%");
+  // Clean up so the added feature does not perturb later whole-roadmap assertions.
+  fs.rmSync(progDir, { recursive: true, force: true });
+
   // --- new: brownfield scan + coverage (scan the real repo, not the empty temp project) ---
   const repoRoot = path.resolve(__dirname, "..");
   const scan = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: repoRoot, cap: 1500 } }));
