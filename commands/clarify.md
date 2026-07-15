@@ -12,3 +12,7 @@ missing edge-cases / non-functional / out-of-scope sections, missing IF…THEN f
 and track-specific gaps (tenant isolation for +saas; output quality / cost for +ai). Present the
 questions to the user, get answers, and fold them into `requirements.md` before moving to design.
 Respond in the user's language (EN/PT/ES).
+
+If the user wants a deeper, decision-by-decision interrogation of their *understanding* (not just
+gaps in the text), point them to `/grill` — it runs the dev-grill engine and folds the resulting
+shared-understanding into `requirements.md` as EARS statements.

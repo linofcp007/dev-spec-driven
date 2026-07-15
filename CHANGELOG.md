@@ -3,6 +3,23 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.10.0]
+
+### Added
+- **`/grill` — planning-time interrogation of your *understanding*, not just the text.** The sharp,
+  decision-tree cousin of `/clarify`: it runs the dev-grill engine (or an inline fallback) over a
+  feature's significant decision-branches — business rules, validation → failure paths, in/out of
+  scope, the language-agnostic I/O contract, edge cases — one question at a time, then folds the
+  resulting shared understanding into `requirements.md` as EARS acceptance criteria and filled-in
+  edge-case / out-of-scope / non-functional sections. `/clarify` now points to it for deeper passes.
+- **`references/improvement-specs.md` — how to spec internal-improvement work.** Defines the
+  *improvement spec*: a feature whose success criterion is a **re-measurable metric delta** (coverage
+  floor, size budget, complexity, dead-code, perf/security budgets pulled from the project's guardian
+  budgets) rather than new behaviour, with a mandatory behaviour-preserving guard (+tdd
+  characterization tests) so "cleaner" never means "broken". Closes the dev-guardian loop: gate
+  measures → seeds specs → grill → execute → re-run the gate to prove the delta. `/backlog` now
+  routes `guardian-improve` seeds here, and the reference is indexed in the skill's library.
+
 ## [1.9.3]
 
 ### Fixed

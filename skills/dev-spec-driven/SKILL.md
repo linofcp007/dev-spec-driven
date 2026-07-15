@@ -541,6 +541,7 @@ commands are namespaced, e.g. `/dev-spec-driven:doctor`.)
 - `references/classification-matrix.md` — track-routing brain (the decision procedure)
 - `references/classification-examples-saas.md` / `references/classification-examples-ai.md` — worked examples
 - `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration)
+- `references/improvement-specs.md` — spec'ing internal-improvement work (the metric delta is the acceptance criterion; closes the dev-guardian loop)
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
 - `references/steering-templates.md` — all 8 steering-file templates
 - `references/example-spec.md` — end-to-end example (requirements → design → tasks), core/auth
