@@ -21,7 +21,7 @@ per-run cost — everything runs on your machine.
 > Cursor · Windsurf · GitHub Copilot (VS Code) · Gemini CLI · OpenAI Codex CLI · any MCP client ·
 > plain CLI. Three portable layers carry the workflow everywhere — a standard **MCP server**, a
 > **universal `dev-spec` CLI**, and **`AGENTS.md`** instructions. See **[INTEGRATIONS.md](./INTEGRATIONS.md)**
-> or run `node bin/dev-spec.js mcp-config all`. No GitHub Actions, no cost.
+> or run `node cli/dev-spec.js mcp-config all`. No GitHub Actions, no cost.
 
 ---
 
@@ -111,7 +111,7 @@ run in your own environment when you choose, not on a paid CI runner.
 
 ```bash
 node mcp/test.js          # smoke-test the MCP server end-to-end (66 assertions)
-node bin/test-cli.js      # smoke-test the universal CLI (38 assertions)
+node cli/test-cli.js      # smoke-test the universal CLI (38 assertions)
 ```
 
 > Replaces four predecessor skills; their content lives here as composable tracks (the originals
@@ -305,7 +305,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
 ├── commands/                         ← 31 slash commands (trilingual descriptions)
-├── bin/dev-spec.js                   ← universal CLI (works in any tool / shell)
+├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
 │   ├── server.js                     ← local stdio MCP server (21 tools, zero-dependency)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, roadmap, scan)

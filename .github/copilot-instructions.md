@@ -11,7 +11,7 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   +saas/+ai sections filled) → test/eval plan → failing tests / eval harness → tasks (traceable) →
   execute (red-green-refactor or prompt-iteration per track).
 - Use the local engine for mechanical steps (zero-dependency, no CI):
-  `node bin/dev-spec.js classify|init|create|doctor|trace|ears|next|done|approve|evals`.
+  `node cli/dev-spec.js classify|init|create|doctor|trace|ears|next|done|approve|evals`.
   The `spec-driven` MCP server (VS Code agent mode, `.vscode/mcp.json`) exposes the same operations.
 - Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Run `dev-spec doctor`
   before advancing a phase.

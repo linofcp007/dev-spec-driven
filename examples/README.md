@@ -31,10 +31,10 @@ demo-project/
 From the plugin root:
 
 ```bash
-node bin/dev-spec.js doctor   api-keys --project examples/demo-project
-node bin/dev-spec.js trace    api-keys --project examples/demo-project
-node bin/dev-spec.js roadmap            --project examples/demo-project
-node bin/dev-spec.js clarify  api-keys --project examples/demo-project
+node cli/dev-spec.js doctor   api-keys --project examples/demo-project
+node cli/dev-spec.js trace    api-keys --project examples/demo-project
+node cli/dev-spec.js roadmap            --project examples/demo-project
+node cli/dev-spec.js clarify  api-keys --project examples/demo-project
 ```
 
 ### `doctor api-keys` → ready to advance ✓

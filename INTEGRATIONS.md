@@ -5,13 +5,13 @@ The methodology travels through **three portable layers**, so it works far beyon
 1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets the
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …).
-2. **Universal CLI** (`bin/dev-spec.js`) — the same engine from any terminal or tool, even without MCP.
+2. **Universal CLI** (`cli/dev-spec.js`) — the same engine from any terminal or tool, even without MCP.
 3. **Instructions files** — `AGENTS.md` (cross-tool) plus per-tool rule files, so the agent follows
    the workflow.
 
 Everything is **local, zero-dependency (Node ≥18), no GitHub Actions, no cost.**
 
-> Tip: run `node bin/dev-spec.js mcp-config <client>` to print a ready-to-paste config with the
+> Tip: run `node cli/dev-spec.js mcp-config <client>` to print a ready-to-paste config with the
 > correct absolute path already filled in. `<client>` = `claude-desktop`, `claude-code`, `cursor`,
 > `windsurf`, `vscode`, `gemini`, `codex`, or `all`.
 >
@@ -21,7 +21,7 @@ Everything is **local, zero-dependency (Node ≥18), no GitHub Actions, no cost.
 > `.vscode/mcp.json`, and `.gemini/settings.json`.
 
 Replace `<PLUGIN>` below with the absolute path to your clone of this repo (where you ran
-`git clone https://github.com/linofcp007/dev-spec-driven.git`). Tip: `node bin/dev-spec.js mcp-config <client>`
+`git clone https://github.com/linofcp007/dev-spec-driven.git`). Tip: `node cli/dev-spec.js mcp-config <client>`
 prints the config with that path already filled in for your machine.
 
 ---
@@ -114,10 +114,10 @@ use `AGENTS.md` (many of these read it) or copy the relevant snippet into the to
 The engine is a normal CLI — usable in any environment:
 
 ```bash
-node "<PLUGIN>/bin/dev-spec.js" classify "multi-tenant billing webhook with an LLM summary"
-node "<PLUGIN>/bin/dev-spec.js" create "Invoice Summary" tdd saas ai
-node "<PLUGIN>/bin/dev-spec.js" doctor "Invoice Summary"
-node "<PLUGIN>/bin/dev-spec.js" evals "Invoice Summary" --dry-run
+node "<PLUGIN>/cli/dev-spec.js" classify "multi-tenant billing webhook with an LLM summary"
+node "<PLUGIN>/cli/dev-spec.js" create "Invoice Summary" tdd saas ai
+node "<PLUGIN>/cli/dev-spec.js" doctor "Invoice Summary"
+node "<PLUGIN>/cli/dev-spec.js" evals "Invoice Summary" --dry-run
 ```
 
 Optionally put it on PATH (`npm link` in this folder gives you a global `dev-spec`), then just

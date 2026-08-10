@@ -12,7 +12,7 @@ please respect them in every change:
 ## Architecture in one line
 
 `mcp/lib/spec.js` is the single engine. It's exposed three ways — the **MCP server** (`mcp/server.js`),
-the universal **`dev-spec` CLI** (`bin/dev-spec.js`), and the Claude Code **skill + commands + hooks**.
+the universal **`dev-spec` CLI** (`cli/dev-spec.js`), and the Claude Code **skill + commands + hooks**.
 When you add an operation, add it to `spec.js` first, then wire it into all three and add a test.
 
 Full maintainer notes (conventions, gotchas, the track model, multilingual rules) are in
@@ -22,7 +22,7 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 
 ```bash
 node mcp/test.js        # MCP server end-to-end (55 assertions)
-node bin/test-cli.js    # universal CLI (34 assertions)
+node cli/test-cli.js    # universal CLI (34 assertions)
 # or both:
 npm test
 ```

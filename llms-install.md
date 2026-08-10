@@ -39,7 +39,7 @@ no API key.
    ready-to-paste snippet with the absolute path already filled in for your machine:
 
    ```bash
-   node /ABSOLUTE/PATH/dev-spec-driven/bin/dev-spec.js mcp-config generic
+   node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config generic
    # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | all
    ```
 

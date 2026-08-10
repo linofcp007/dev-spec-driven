@@ -12,11 +12,11 @@ Follow the spec-driven workflow described in [`AGENTS.md`](../../AGENTS.md). Sum
   (`core` always; `+tdd` / `+saas` / `+ai` as warranted), then run requirements → design → (tests/
   evals) → tasks → execute, with the user approving each phase.
 - Use the bundled engine for the mechanical steps (local, zero-cost, no CI):
-  `node bin/dev-spec.js classify|init|create|doctor|trace|ears|next|done|approve|evals`.
+  `node cli/dev-spec.js classify|init|create|doctor|trace|ears|next|done|approve|evals`.
   If MCP is configured, the `spec-driven` server exposes the same operations as tools.
 - Write artifacts under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
 - **No GitHub Actions / no paid CI** — everything runs locally.
 - **Respond in the user's language** (EN/PT/ES), including artifact prose. EARS keywords work in all
   three (`SHALL`/`DEVE`/`DEBE`).
 
-Run `node bin/dev-spec.js doctor <feature>` before advancing a phase; only proceed on `readyToAdvance`.
+Run `node cli/dev-spec.js doctor <feature>` before advancing a phase; only proceed on `readyToAdvance`.

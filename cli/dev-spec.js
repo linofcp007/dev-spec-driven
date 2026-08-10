@@ -9,7 +9,7 @@
  * where MCP isn't available. It is the same engine the MCP server exposes.
  *
  * Usage:
- *   node bin/dev-spec.js <command> [args]   (or `dev-spec <command>` if on PATH)
+ *   node cli/dev-spec.js <command> [args]   (or `dev-spec <command>` if on PATH)
  *
  * Commands:
  *   classify "<description>"            Recommend tracks (multilingual)

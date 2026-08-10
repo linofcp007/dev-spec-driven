@@ -132,7 +132,7 @@ or generate a config instantly (prints the correct absolute path for your machin
 node "$plugin\bin\dev-spec.js" mcp-config all
 ```
 
-The CLI also runs standalone in any shell — `node bin/dev-spec.js help`.
+The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
 
 ## Uninstall
 

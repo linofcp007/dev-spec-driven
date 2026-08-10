@@ -3,6 +3,25 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.10.1]
+
+### Fixed
+- **Marketplace sync failed on Claude Desktop / claude.ai.** The top-level `bin/` directory is now
+  `cli/`. Desktop does not clone the repository — it delegates validation to a remote Anthropic
+  service, which rejected the plugin with `status=failed_content`: *"Plugin contains a top-level
+  bin/ directory ('bin/dev-spec.js', 'bin/test-cli.js'). claude.ai-hosted plugins may not ship bin/
+  executables because they are added to PATH on the CLI but are not shown on the admin approval
+  surface. Declare executable entry points via hooks, commands, or mcpServers instead."* The UI
+  surfaced this only as **"Marketplace sync failed. Check the repository URL"**, which is misleading
+  — the URL was always correct. Installing through the Claude Code CLI was never affected, because
+  it uses a local `git clone` and skips this validation, so a passing CLI install is not evidence
+  that Desktop will accept the plugin.
+- The universal CLI is now `node cli/dev-spec.js` and its smoke test `node cli/test-cli.js` — same
+  commands, same assertions. `package.json` (`bin`, `test`, `cli` scripts) and all 16 referencing
+  files were updated: `README.md`, `INSTALL.md`, `INTEGRATIONS.md`, `CONTRIBUTING.md`, `CLAUDE.md`,
+  `AGENTS.md`, `GEMINI.md`, `llms-install.md`, `examples/`, `integrations/` and the per-tool rule
+  files for Cursor, Windsurf and Copilot.
+
 ## [1.10.0]
 
 ### Added

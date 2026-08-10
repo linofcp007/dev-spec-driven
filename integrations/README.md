@@ -8,7 +8,7 @@ Two ways to get a working config:
 
 1. **Generate it (recommended)** — prints the config with the correct absolute path for *your* machine:
    ```bash
-   node bin/dev-spec.js mcp-config <client>     # claude-desktop | cursor | windsurf | vscode | gemini | codex | all
+   node cli/dev-spec.js mcp-config <client>     # claude-desktop | cursor | windsurf | vscode | gemini | codex | all
    ```
 2. **Copy a template and replace the placeholder** with your real path to `mcp/server.js`.
 

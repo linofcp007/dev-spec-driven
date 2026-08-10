@@ -24,18 +24,28 @@ mcp/lib/spec.js                ALL domain logic (classify, scaffold, lint, trace
 mcp/lib/i18n.js                ALL localized content EN/PT/ES (artifact + steering builders, tool messages)
 mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry-run offline)
 mcp/test.js                    smoke test — `node mcp/test.js`
-bin/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs)
+cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs)
+cli/test-cli.js                smoke test for the CLI — `node cli/test-cli.js` (never a top-level bin/, see below)
 hooks/hooks.json + spec-hook.js local PostToolUse/SessionStart automation
 hooks/precommit-check.js       optional git pre-commit validator
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
 INTEGRATIONS.md                per-tool setup + MCP config snippets
 
+## Never ship a top-level `bin/`
+Claude Desktop / claude.ai does not clone the repo: it validates it on a remote Anthropic service
+that **rejects** any plugin shipping a top-level `bin/` (those files land on PATH in the CLI but are
+invisible on the admin approval surface). The sync fails with `status=failed_content` and the UI
+shows only "Marketplace sync failed. Check the repository URL" — which points nowhere near the cause.
+The local CLI (`/plugin marketplace add`) uses `git clone` and does **not** apply this rule, so it
+passes even when Desktop refuses; it is not a valid pre-check. Executable entry points go in `cli/`,
+`hooks/`, `commands/` or `mcpServers`.
+
 ## Three surfaces over ONE engine
 `mcp/lib/spec.js` is the single source of truth. It is exposed three ways: (1) the MCP server for
 MCP clients, (2) the `dev-spec` CLI for any tool/terminal, (3) Claude Code skill+commands+hooks.
 When you add an operation, add it to `spec.js` first, then wire it into server.js (tool) AND
-bin/dev-spec.js (subcommand) AND mcp/test.js (assertion). Keep the CLI and MCP behavior identical.
+cli/dev-spec.js (subcommand) AND mcp/test.js (assertion). Keep the CLI and MCP behavior identical.
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
 never hardcoded in spec.js — see the Trilingual section.
 ```
@@ -100,9 +110,9 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 
 - **Installing into a USER's own project needs absolute paths.** Outside Claude Code there is no
   `${CLAUDE_PLUGIN_ROOT}`, so the user's editor must point at *this clone's* absolute `mcp/server.js`.
-  That host-specific config is **generated on demand, never committed**: `node bin/dev-spec.js
+  That host-specific config is **generated on demand, never committed**: `node cli/dev-spec.js
   mcp-config <client>` (`claude-desktop|claude-code|cursor|vscode|gemini|codex|all`) prints a ready
-  config with the absolute path resolved from `__dirname` (`mcpConfig()` in `bin/dev-spec.js`). The
+  config with the absolute path resolved from `__dirname` (`mcpConfig()` in `cli/dev-spec.js`). The
   `integrations/*` templates carry the literal `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder as a
   copy-paste fallback. (There is **no** `install_host_context` symbol — the mechanism is `mcp-config`.)
 
@@ -169,7 +179,7 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
 (80 assertions, incl. a PT and an ES end-to-end scaffold + per-feature lang override; `node
-bin/test-cli.js` adds 38 for the CLI). Add an assertion when you add a tool or change behavior. Keep
+cli/test-cli.js` adds 38 for the CLI). Add an assertion when you add a tool or change behavior. Keep
 it dependency-free.
 `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

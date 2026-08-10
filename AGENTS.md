@@ -30,7 +30,7 @@ Tracks combine (e.g. a billing webhook in a multi-tenant SaaS that calls an LLM 
 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
-- **CLI (works anywhere):** `node bin/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
+- **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
 - **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as tools.
 
 Key operations (CLI form):

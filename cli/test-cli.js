@@ -2,8 +2,8 @@
 "use strict";
 
 /**
- * Smoke test for the universal CLI (bin/dev-spec.js). Exercises the subcommands against a
- * throwaway temp project and asserts on output. Run: `node bin/test-cli.js`
+ * Smoke test for the universal CLI (cli/dev-spec.js). Exercises the subcommands against a
+ * throwaway temp project and asserts on output. Run: `node cli/test-cli.js`
  */
 
 const { spawnSync } = require("child_process");
