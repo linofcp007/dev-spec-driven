@@ -84,8 +84,10 @@ function main(raw) {
       const pdir = process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
       const list = spec.listFeatures(pdir);
       if (!list.exists || !list.features.length) process.exit(0);
-      const h = spec.msg(spec.projectLang(pdir)).hook;
-      const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, f.phase, f.tasksDone, f.tasks));
+      const m = spec.msg(spec.projectLang(pdir));
+      const h = m.hook;
+      const phase = (p) => (m.phaseNames && m.phaseNames[p]) || p; // 'executing' → 'em execução' / 'en ejecución'
+      const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, phase(f.phase), f.tasksDone, f.tasks));
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);
@@ -132,13 +134,10 @@ function main(raw) {
       if (base === "tasks.md") {
         const tr = spec.traceCheck(pdir, feature);
         if (!tr.ok) process.exit(0);
-        if (tr.verdict === "pass") return emit("PostToolUse", h.traceOk(tr.totalAcs));
-        const parts = [];
-        if (tr.uncoveredByTasks.length) parts.push(h.traceUncovered(tr.uncoveredByTasks.join(", ")));
-        if (tr.phantomAcsInTasks.length) parts.push(h.tracePhantomAc(tr.phantomAcsInTasks.join(", ")));
-        if (tr.uncoveredByTests && tr.uncoveredByTests.length) parts.push(h.traceUncoveredTests(tr.uncoveredByTests.join(", ")));
-        if (tr.phantomTestsInTasks && tr.phantomTestsInTasks.length) parts.push(h.tracePhantomTests(tr.phantomTestsInTasks.join(", ")));
-        return emit("PostToolUse", h.traceGaps(feature, parts.join("\n  - ")));
+        // Every gap kind the engine reports, with its IDs (a hand-picked subset used to leave an empty "- ").
+        const parts = spec.traceGapLines(tr, spec.featureLang(pdir, feature));
+        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n"));
+        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")));
       }
     } catch {
       process.exit(0);
