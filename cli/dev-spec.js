@@ -50,6 +50,7 @@ const pos = [];
 // (so `depend a b --order 3` no longer turns "3" into a dependency).
 const VALUE_FLAGS = new Set(["project", "lang", "order", "cap", "by", "summary", "kind", "max", "evidence", "exit", "cmd"]);
 // @wp WP1 value-flags >>>
+VALUE_FLAGS.add("shell"); // done --run --shell bash|<path>
 // @wp WP1 <<<
 
 // @wp WP2 value-flags >>>
@@ -268,33 +269,49 @@ function main() {
     }
 
     case "done": {
-      if (!pos[0] || pos[1] == null) die("usage: dev-spec done <feature> <task-number> [--run | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
-      if (!/^\d+$/.test(String(pos[1]).trim())) die("task number must be an integer"); // before running anything
+      if (!pos[0] || pos[1] == null) die("usage: dev-spec done <feature> <task-number> [--run [--shell bash|<path>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
+      const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
+      if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
+      const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
+      let hint = null;
       if (flags.run) {
         // Evidence before claims: run the task's own _Verify:_ command(s) from the project root; any failure
-        // leaves the task open. (Commands come from YOUR tasks.md — the same trust as an npm script.)
+        // leaves the task open. taskBrief resolves the SAME task completeTask ticks (first open one of a
+        // duplicated number), so the command that runs belongs to the task that gets ticked.
         const b = spec.taskBrief(projectDir, pos[0], pos[1]);
         if (!b.ok) die(b.error);
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
-        if (!cmds.length) die("task " + pos[1] + " has no runnable _Verify: <command>_ marker");
-        let tail = "";
+        if (!cmds.length) die(D.noRunnable(b.task.number));
+        // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).
+        const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
         for (const cmd of cmds) {
-          console.log("$ " + cmd);
-          const run = spawnSync(cmd, { shell: true, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-          tail = ((run.stdout || "") + (run.stderr || "")).split(/\r?\n/).filter((l) => l.trim()).slice(-5).join("\n");
-          if (tail) console.log(tail.replace(/^/gm, "  "));
+          say("$ " + cmd);
+          // Runs the user's OWN _Verify:_ command from their tasks.md, only on an explicit --run (the same
+          // trust as an npm script) — a shell is the point: the marker is a shell command line.
+          // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+          const run = spawnSync(cmd, { shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+          const summary = spec.summarizeRunOutput((run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : ""));
+          if (summary) say(summary.replace(/^/gm, "  "));
           const code = run.status == null ? 1 : run.status;
-          if (code !== 0) { evidence = { command: cmd, exitCode: code, summary: tail }; break; }
-          evidence = { command: cmds.join(" && "), exitCode: 0, summary: tail };
+          if (code !== 0) {
+            evidence = { command: cmd, exitCode: code, summary };
+            if (process.platform === "win32" && shell === true) hint = D.shellHint;
+            break;
+          }
+          evidence = { command: cmds.join(" && "), exitCode: 0, summary };
         }
       } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       const r = spec.completeTask(projectDir, pos[0], pos[1], evidence);
-      if (!r.ok) die(r.error);
+      if (!r.ok) {
+        console.error("dev-spec: " + r.error);
+        if (hint) console.error(hint);
+        process.exit(1);
+      }
       return out(r, (r) => {
-        console.log("Task " + r.completed + " done" + (r.verified ? " (verified)" : "") + ". " + r.done + "/" + r.total + (r.next ? "  next → #" + r.next.number + " " + r.next.text : "  — all done ✓"));
+        console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
         if (r.note) console.log("  ⚠ " + r.note);
       });
     }
@@ -482,8 +499,8 @@ function helpText() {
   next-action <feature>           "You are here → do this next" (+ what changed since approval)
   brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
-  done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records
-                                  the evidence (a failure leaves it open); or --evidence "…" [--exit N] [--cmd "…"]
+  done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records the evidence
+                                  (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
   finish <feature> [--write]      Readiness report + merge summary from the spec chain (exit 1 if not ready)
   approve <feature> <phase>       Record a phase approval (.state.json)
   add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
