@@ -260,10 +260,14 @@ function runTool(name, args) {
       if (args.write || args.html) { // html:true implies writing (same as the CLI's --html)
         const wrote = [];
         const m = spec.writeRoadmapMd(pdir, args.lang);
-        if (m.ok) wrote.push(m.file);
+        // A refused write (broken/wrong-shaped roadmap.json, hand-written ROADMAP.md) is an error, exactly as
+        // the CLI exits 1 on it — it used to vanish into ok:true, wrote:[].
+        if (!m.ok) return m;
+        wrote.push(m.file);
         if (args.html) {
           const h = spec.writeRoadmapHtml(pdir, args.lang);
           if (h.ok) wrote.push(h.file);
+          else rm.warnings = [h.error]; // non-fatal, like the CLI (which prints it on stderr), but never silent
         }
         rm.wrote = wrote;
       }
@@ -343,7 +347,9 @@ const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const TYPE_CHECK = {
   string: (v) => typeof v === "string",
-  integer: (v) => Number.isInteger(v), // 1.9 is not an integer (parseInt would make it task 1)
+  // Safe integers only: 1.9 is not an integer, and neither is 1e21 for the engine — String(1e21) is '1e+21',
+  // which parseInt reads as 1 (both used to tick task 1).
+  integer: (v) => Number.isSafeInteger(v),
   number: (v) => typeof v === "number" && Number.isFinite(v),
   boolean: (v) => typeof v === "boolean",
   array: (v) => Array.isArray(v),

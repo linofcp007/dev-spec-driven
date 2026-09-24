@@ -163,6 +163,12 @@ ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /ro
   ok(run(["depend", "a", "--order", "x", "--project", dp]).code === 1 && run(["depend", "a", "--project", dp, "--add"]).code === 1,
     "depend --order x (not an integer) and --add without a value exit 1");
   ok(run(["depend", "a", "--clear", "--project", dp]).code === 0 && depsOfA() === "", "depend --clear empties the list explicitly");
+  // A repeated flag used to keep only its last value (`--add b --add c` added c alone, exit 0).
+  const rep = run(["depend", "a", "--add", "b", "--add=c", "--project", dp]);
+  ok(rep.code === 0 && /depends on: b, c/.test(rep.out) && depsOfA() === "b,c", "depend --add b --add=c adds both (every occurrence counts)");
+  run(["depend", "a", "b", "c", "--project", dp]);
+  ok(depsOfA() === "b,c" && run(["depend", "a", "--rm", "b", "--rm", "c", "--project", dp]).code === 0 && depsOfA() === "", "depend --rm b --rm c removes both");
+  ok(run(["depend", "a", "--add", "b", "--project", dp, "--add"]).code === 1 && depsOfA() === "", "a repeated --add with a missing value exits 1 and changes nothing");
   ok(/--add x,y/.test(run(["help"]).out), "help documents depend --add/--rm/--clear");
   const ap = spawnSync(process.execPath, [CLI, "approve", "a", "requirements", "--project", dp], { encoding: "utf8", env: { ...process.env, USER: "wp3-tester", USERNAME: "wp3-tester" } });
   run(["approve", "a", "design", "--by", "carol", "--project", dp]);

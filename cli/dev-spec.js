@@ -348,11 +348,24 @@ function main() {
     case "depend": {
       const usage = "usage: dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
       if (!pos[0]) die(usage);
-      if (("add" in flags && typeof flags.add !== "string") || ("rm" in flags && typeof flags.rm !== "string")) die(usage);
+      // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c
+      // alone. Collect every occurrence here, walking argv with the parser's own rules.
+      const every = (name) => {
+        const vals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = argv[i];
+          if (a === "--json") continue;
+          if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === name) vals.push(a.slice(a.indexOf("=") + 1)); }
+          else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) { const v = argv[++i]; if (a.slice(2) === name) vals.push(v); }
+        }
+        return vals;
+      };
+      const adds = every("add"), rms = every("rm");
+      if (adds.concat(rms).some((v) => typeof v !== "string")) die(usage);
       // Same semantics as the MCP tool: positional deps REPLACE the list, --clear empties it, --add/--rm edit
       // it; with nothing at all it only shows the current deps (a bare `depend <f>` used to clear them).
       const deps = pos.slice(1).length ? pos.slice(1) : flags.clear ? [] : undefined;
-      const r = spec.setDependency(projectDir, pos[0], deps, flags.order, { add: flags.add, remove: flags.rm });
+      const r = spec.setDependency(projectDir, pos[0], deps, flags.order, { add: adds.length ? adds.join(",") : undefined, remove: rms.length ? rms.join(",") : undefined });
       if (!r.ok) die(r.error);
       return out(r, (r) => console.log(r.feature + " depends on: " + (r.dependsOn.join(", ") || "(none)") + (r.order != null ? "  order=" + r.order : "") + (r.unknownDeps.length ? "  ⚠ unknown deps: " + r.unknownDeps.join(", ") : "")));
     }
