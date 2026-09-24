@@ -89,7 +89,7 @@ Streams the answer token-by-token via Server-Sent Events.
 
 ## Section 1: Model Strategy
 
-- **Primary:** `claude-sonnet-4-6-20250929` (pinned by dated version for reproducibility)
+- **Primary:** `claude-sonnet-5` (pinned to the exact published model ID for reproducibility — never an invented date suffix)
 - **Fallback:** `claude-haiku-4-5-20251001` — triggered on primary timeout or rate limit;
   lower quality but usable
 - **Embeddings:** `text-embedding-3-small` (OpenAI) or `voyage-3-lite` (Voyage) — chosen
@@ -369,7 +369,7 @@ Span per call: `search.query` → `embed.embed` → `search.retrieve` → `model
 ## Section 9: Model Lifecycle
 
 ### Currently pinned
-- Primary: `claude-sonnet-4-6-20250929`
+- Primary: `claude-sonnet-5`
 - Fallback: `claude-haiku-4-5-20251001`
 - Embedding: `text-embedding-3-small-20240215` (OpenAI)
 
@@ -390,7 +390,7 @@ When a new model is available:
 6. Document migration decision + data in design.md (appendix)
 
 ### Pin policy
-- Pin to dated version (reproducibility over automatic upgrades)
+- Pin to the exact published model ID (reproducibility over automatic upgrades)
 - Migrate on quarterly cadence, or sooner if deprecation announced
 
 ---

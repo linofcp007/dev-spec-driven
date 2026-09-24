@@ -21,8 +21,9 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 ## Developing
 
 ```bash
-node mcp/test.js        # MCP server end-to-end (55 assertions)
-node cli/test-cli.js    # universal CLI (34 assertions)
+node mcp/test.js        # MCP server end-to-end (180 assertions)
+node cli/test-cli.js    # universal CLI (53 assertions)
+claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 3   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
 # or both:
 npm test
 ```
@@ -33,8 +34,8 @@ For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the
 ## Pull requests
 
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin wrappers.
-- Update `CHANGELOG.md` and bump the version in `package.json` **and** `.claude-plugin/plugin.json`
-  together.
+- Update `CHANGELOG.md` and bump the version in `package.json`, `.claude-plugin/plugin.json` **and**
+  `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree).
 - Run `claude plugin validate .` and make sure `npm test` is green.
 - No machine-specific absolute paths in committed files (use `${CLAUDE_PLUGIN_ROOT}`, `${workspaceFolder}`,
   or a relative path; for global tool configs ship a placeholder + point to `dev-spec mcp-config`).

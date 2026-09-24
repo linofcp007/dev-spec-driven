@@ -35,7 +35,7 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 31 commands, and
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 35 commands, the 3 agents, and
 the `spec-driven` MCP server load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
@@ -67,7 +67,7 @@ You don't need Claude to test the server — run the bundled smoke test:
 node "$plugin\mcp\test.js"
 ```
 
-Expected tail: `55 passed, 0 failed`. (And `node "$plugin\bin\test-cli.js"` → `34 passed, 0 failed`.)
+Expected tail: `180 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `53 passed, 0 failed`.)
 
 To watch the raw protocol, you can pipe a request in by hand:
 
@@ -80,7 +80,7 @@ To watch the raw protocol, you can pipe a request in by hand:
 ## How the MCP finds your project
 
 The server resolves the project directory in this order:
-1. `SPEC_PROJECT_DIR` (set by `.mcp.json` to `${CLAUDE_PROJECT_DIR}`)
+1. `SPEC_PROJECT_DIR` (set by the plugin's `mcp/servers.json` to `${CLAUDE_PROJECT_DIR}`)
 2. `CLAUDE_PROJECT_DIR`
 3. the process working directory
 
@@ -105,12 +105,13 @@ NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): 
 `requirements.md` lints EARS, saving a `tasks.md` checks traceability, and session start prints
 feature status. To turn them off, disable the plugin (or empty `hooks/hooks.json`).
 
-**Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs) — install inside
-your repo:
+**Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
+content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the
+plugin folder later moves:
 
 ```powershell
 $hook = "$(git rev-parse --git-dir)/hooks/pre-commit"
-Set-Content $hook "#!/bin/sh`nnode `"$plugin/hooks/precommit-check.js`" || exit 1"
+Set-Content $hook "#!/bin/sh`n[ -f `"$plugin/hooks/precommit-check.js`" ] || exit 0`nnode `"$plugin/hooks/precommit-check.js`" || exit 1"
 ```
 
 **Eval harness** (+ai features) — run live with your own key, or offline with `--dry-run`:
@@ -129,7 +130,7 @@ This plugin works far beyond Claude Code via its MCP server, the universal `dev-
 or generate a config instantly (prints the correct absolute path for your machine):
 
 ```powershell
-node "$plugin\bin\dev-spec.js" mcp-config all
+node "$plugin\cli\dev-spec.js" mcp-config all
 ```
 
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.

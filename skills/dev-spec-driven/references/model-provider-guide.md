@@ -106,15 +106,15 @@ In `design.md` Model Strategy section:
 
 Two schools:
 
-### Pin to Dated Version (recommended for production)
-- Model ID includes dated version (e.g., `claude-sonnet-4-6-20250929`)
+### Pin an Exact Model ID (recommended for production)
+- Use the exact published model ID (e.g., `claude-sonnet-5`; some older models carry a date, e.g. `claude-haiku-4-5-20251001`) — copy it from the provider's model list, never invent a date suffix
 - Reproducible results; eval scores stay valid
 - Requires explicit migration when version deprecates
 - **Use for:** production features with eval coverage, contractual SLAs, regulated
   workloads
 
 ### Track Latest
-- Model alias without dated version (e.g., `claude-sonnet-latest`)
+- A floating alias, where the provider offers one (check the provider's model list — don't guess alias names)
 - Automatic access to improvements
 - Risk: behavior changes silently, breaks your tests, affects production quality
 - **Use for:** prototypes, internal tools, features where "slightly better over time" is

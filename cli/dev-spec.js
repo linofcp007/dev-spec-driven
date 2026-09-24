@@ -24,6 +24,7 @@
  *   done <feature> <n>                 Mark task n complete
  *   approve <feature> <phase>          Record a phase approval
  *   next-action <feature>              "You are here → do this next" (+ changed-since-approval)
+ *   brief <feature> [n] [--write]      Self-contained brief for one task (subagent execution)
  *   add-track <feature> <track>        Escalate a feature to +tdd/+saas/+ai (additive)
  *   feature <action> <name> [new]      remove | archive | rename a feature
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
@@ -45,17 +46,20 @@ const EVALS = path.resolve(__dirname, "..", "mcp", "evals", "run-evals.js");
 const argv = process.argv.slice(2);
 const flags = {};
 const pos = [];
+// Flags that take a value, as `--flag value` or `--flag=value`. Any other `--flag` is a boolean switch
+// (so `depend a b --order 3` no longer turns "3" into a dependency).
+const VALUE_FLAGS = new Set(["project", "lang", "order", "cap", "by", "summary", "kind", "max", "evidence", "exit", "cmd"]);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "--json") flags.json = true;
-  else if (a === "--project") flags.project = argv[++i];
-  else if (a === "--lang") flags.lang = argv[++i];
-  else if (a.startsWith("--") && a.includes("=")) { const [k, v] = a.slice(2).split("="); flags[k] = v; }
+  else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
+  else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) flags[a.slice(2)] = argv[++i];
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else pos.push(a);
 }
 const cmd = pos.shift();
-const projectDir = path.resolve(flags.project || process.env.SPEC_PROJECT_DIR || process.cwd());
+// --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > cwd — the same resolution as the MCP server.
+const projectDir = spec.resolveProjectDir(flags.project);
 
 function out(obj, human) {
   if (flags.json) console.log(JSON.stringify(obj, null, 2));
@@ -80,7 +84,7 @@ function mcpConfig(client) {
     windsurf: "Windsurf — ~/.codeium/windsurf/mcp_config.json:\n" + JSON.stringify({ mcpServers: { "spec-driven": stdio } }, null, 2),
     vscode: "VS Code / GitHub Copilot (agent mode) — .vscode/mcp.json:\n" + JSON.stringify({ servers: { "spec-driven": { type: "stdio", ...stdio } } }, null, 2),
     gemini: "Gemini CLI — ~/.gemini/settings.json (or .gemini/settings.json):\n" + JSON.stringify({ mcpServers: { "spec-driven": stdio } }, null, 2),
-    codex: "OpenAI Codex CLI — ~/.codex/config.toml (single-quoted = literal path):\n[mcp_servers.spec-driven]\ncommand = \"node\"\nargs = ['" + S + "']",
+    codex: "OpenAI Codex CLI — ~/.codex/config.toml:\n[mcp_servers.spec-driven]\ncommand = \"node\"\nargs = [" + JSON.stringify(S) + "]", // basic string: safe for paths with ' (forward slashes need no escaping)
     generic: "Generic stdio MCP client:\n  command: node\n  args: [\"" + S + "\"]",
   };
   if (client && client !== "all") {
@@ -101,7 +105,7 @@ function main() {
 
     case "classify": {
       if (!pos[0]) die('usage: dev-spec classify "<description>"');
-      const r = spec.classify(pos.join(" "));
+      const r = spec.classify(pos.join(" "), { lang: flags.lang });
       return out(r, (r) => {
         console.log("Tracks: " + r.label + "   confidence: " + JSON.stringify(r.confidence));
         console.log(r.reasoning);
@@ -114,14 +118,15 @@ function main() {
       return out(r, (r) => console.log("Created in " + r.specsDir + " [" + r.lang + "]:\n  " + (r.created.join(", ") || "(nothing new)") + (r.skipped.length ? "\n  (existing, kept: " + r.skipped.join(", ") + ")" : "")));
     }
 
+    case "bugfix":
     case "create": {
       if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
       const name = pos[0];
-      const tracks = pos.slice(1).length ? pos.slice(1) : spec.classify(name).tracks;
-      const cls = spec.classify(name);
-      const r = spec.createFeature(projectDir, name, tracks, undefined, cls, flags.lang);
+      const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
+      const tracks = pos.slice(1).length ? pos.slice(1) : undefined; // none → engine: keep existing / classify new
+      const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind);
       if (!r.ok) die(r.error);
-      return out(r, (r) => console.log("Feature '" + r.slug + "' [" + r.label + "] (" + r.lang + ")\n  " + r.created.join(", ")));
+      return out(r, (r) => console.log("Feature '" + r.slug + "' [" + r.label + "] (" + r.lang + ")\n  " + r.created.join(", ") + (r.note ? "\n  " + r.note : "")));
     }
 
     case "list": {
@@ -147,6 +152,7 @@ function main() {
       if (!pos[0]) die("usage: dev-spec doctor <feature>");
       const r = spec.specDoctor(projectDir, pos[0]);
       if (!r.ok) die(r.error);
+      if (r.verdict === "fail") process.exitCode = 1; // scriptable: blocking checks → non-zero
       return out(r, (r) => {
         console.log("Doctor: " + r.feature + "  [" + r.tracks + "]  verdict=" + r.verdict.toUpperCase() + "  readyToAdvance=" + r.readyToAdvance);
         r.checks.forEach((c) => console.log("  " + (c.status === "pass" ? "✓" : c.status === "warn" ? "▲" : "✗") + " " + c.id + (c.detail ? " — " + c.detail : "")));
@@ -157,6 +163,7 @@ function main() {
       if (!pos[0]) die("usage: dev-spec trace <feature>");
       const r = spec.traceCheck(projectDir, pos[0]);
       if (!r.ok) die(r.error);
+      if (r.verdict !== "pass") process.exitCode = 1; // scriptable: gaps → non-zero
       return out(r, (r) => {
         console.log("Trace: " + r.feature + "  verdict=" + r.verdict + "  ACs=" + r.totalAcs + "  coveredByTasks=" + r.coveredByTasks);
         if (r.uncoveredByTasks.length) console.log("  uncovered by tasks: " + r.uncoveredByTasks.join(", "));
@@ -168,14 +175,9 @@ function main() {
 
     case "ears": {
       if (!pos[0]) die("usage: dev-spec ears <feature|path-to.md>");
-      let text;
-      if (fs.existsSync(pos[0]) && fs.statSync(pos[0]).isFile()) text = fs.readFileSync(pos[0], "utf8");
-      else {
-        const f = path.join(spec.specsRoot(projectDir), spec.slugify(pos[0]), "requirements.md");
-        if (!fs.existsSync(f)) die("no requirements.md for '" + spec.slugify(pos[0]) + "' and not a file path");
-        text = fs.readFileSync(f, "utf8");
-      }
-      const r = spec.earsValidate(text);
+      const isFile = fs.existsSync(pos[0]) && fs.statSync(pos[0]).isFile();
+      const r = isFile ? spec.earsValidate(fs.readFileSync(pos[0], "utf8"), flags.lang || spec.projectLang(projectDir)) : spec.earsFeature(projectDir, pos[0]);
+      if (r.ok && r.verdict === "fail") process.exitCode = 1; // scriptable: EARS errors → non-zero
       if (!r.ok) die(r.error);
       return out(r, (r) => {
         console.log("EARS: " + r.summary.criteriaDetected + " criteria, " + r.summary.withShall + " with modal, verdict=" + r.verdict);
@@ -185,21 +187,89 @@ function main() {
 
     case "next": {
       if (!pos[0]) die("usage: dev-spec next <feature>");
-      const r = spec.nextTask(projectDir, pos[0]);
+      const r = spec.nextTask(projectDir, pos[0], { batch: !!flags.batch, max: flags.max });
       if (!r.ok) die(r.error);
-      return out(r, (r) => console.log(r.next ? "Next → #" + r.next.number + " " + r.next.text + "  (" + r.remaining + "/" + r.total + " left)" : "All tasks done ✓"));
+      return out(r, (r) => {
+        console.log(r.next ? "Next → #" + r.next.number + " " + r.next.text + "  (" + r.remaining + "/" + r.total + " left)" : "All tasks done ✓");
+        if (r.batch && r.batch.length > 1) console.log("  parallel batch: " + r.batch.map((b) => "#" + b.number + " [" + b.implements.join(", ") + "]").join("  "));
+      });
+    }
+
+    case "finish": {
+      // dev-spec finish <feature> [--write] — readiness report + PR description from the spec chain
+      if (!pos[0]) die("usage: dev-spec finish <feature> [--write]");
+      const r = spec.finishFeature(projectDir, pos[0], { write: !!flags.write });
+      if (!r.ok) die(r.error);
+      if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
+      return out(r, (r) => {
+        console.log(r.message);
+        r.blockers.forEach((b) => console.log("  ✗ " + b));
+        console.log("\n" + r.checks.map((c) => "  [ ] " + c).join("\n"));
+        if (r.wrote) console.log("\nPR description → " + r.paths.pr);
+        else console.log("\n# " + r.prTitle + "\n\n" + r.prBody);
+      });
+    }
+
+    case "steering": {
+      // dev-spec steering <file> [--lang] — one steering file from its template (same as steering_scaffold)
+      if (!pos[0]) die("usage: dev-spec steering <constitution.md|product.md|tech.md|…> [--lang en|pt|es]");
+      const r = spec.scaffoldSteeringFile(projectDir, pos[0], flags.lang);
+      if (!r.ok) die(r.error);
+      return out(r, (r) => console.log((r.created ? "Created " : "Exists (left untouched) ") + r.file));
+    }
+
+    case "brief": {
+      // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
+      if (!pos[0]) die("usage: dev-spec brief <feature> [task-number] [--write]");
+      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: !!flags.write, includeBrief: flags["include-brief"] ? true : undefined });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => {
+        if (!r.task) return console.log(r.note);
+        if (r.brief) console.log(r.brief);
+        if (r.wrote) {
+          console.log("Brief → " + r.paths.brief + (r.inlineOnly ? "  (inline only: +ai prompt task)" : ""));
+          console.log("  report → " + r.paths.report);
+          console.log("  ledger → " + r.paths.ledger);
+        }
+        if (r.unresolved.acs.length || r.unresolved.tests.length) console.error("  ⚠ unresolved: " + [...r.unresolved.acs, ...r.unresolved.tests].join(", "));
+      });
     }
 
     case "done": {
-      if (!pos[0] || pos[1] == null) die("usage: dev-spec done <feature> <task-number>");
-      const r = spec.completeTask(projectDir, pos[0], pos[1]);
+      if (!pos[0] || pos[1] == null) die("usage: dev-spec done <feature> <task-number> [--run | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
+      if (!/^\d+$/.test(String(pos[1]).trim())) die("task number must be an integer"); // before running anything
+      let evidence;
+      if (flags.run) {
+        // Evidence before claims: run the task's own _Verify:_ command(s) from the project root; any failure
+        // leaves the task open. (Commands come from YOUR tasks.md — the same trust as an npm script.)
+        const b = spec.taskBrief(projectDir, pos[0], pos[1]);
+        if (!b.ok) die(b.error);
+        const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
+        if (!cmds.length) die("task " + pos[1] + " has no runnable _Verify: <command>_ marker");
+        let tail = "";
+        for (const cmd of cmds) {
+          console.log("$ " + cmd);
+          const run = spawnSync(cmd, { shell: true, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+          tail = ((run.stdout || "") + (run.stderr || "")).split(/\r?\n/).filter((l) => l.trim()).slice(-5).join("\n");
+          if (tail) console.log(tail.replace(/^/gm, "  "));
+          const code = run.status == null ? 1 : run.status;
+          if (code !== 0) { evidence = { command: cmd, exitCode: code, summary: tail }; break; }
+          evidence = { command: cmds.join(" && "), exitCode: 0, summary: tail };
+        }
+      } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
+        evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
+      }
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence);
       if (!r.ok) die(r.error);
-      return out(r, (r) => console.log("Task " + r.completed + " done. " + r.done + "/" + r.total + (r.next ? "  next → #" + r.next.number + " " + r.next.text : "  — all done ✓")));
+      return out(r, (r) => {
+        console.log("Task " + r.completed + " done" + (r.verified ? " (verified)" : "") + ". " + r.done + "/" + r.total + (r.next ? "  next → #" + r.next.number + " " + r.next.text : "  — all done ✓"));
+        if (r.note) console.log("  ⚠ " + r.note);
+      });
     }
 
     case "approve": {
       if (!pos[0] || !pos[1]) die("usage: dev-spec approve <feature> <phase>");
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], process.env.USER || process.env.USERNAME || "user");
+      const r = spec.approvePhase(projectDir, pos[0], pos[1], flags.by || process.env.USER || process.env.USERNAME || "user");
       if (!r.ok) die(r.error);
       return out(r, (r) => console.log("Approved '" + r.approved + "' for " + r.feature + " ✓"));
     }
@@ -219,13 +289,20 @@ function main() {
     }
 
     case "roadmap": {
+      const wrote = [];
       if (flags.write || flags.html || flags.md) {
         const m = spec.writeRoadmapMd(projectDir, flags.lang);
         if (!m.ok) die(m.error);
-        console.log("✎ wrote " + m.file + "  (" + m.overallPercent + "%, " + m.complete + "/" + m.total + ")");
-        if (flags.html) { const h = spec.writeRoadmapHtml(projectDir, flags.lang); if (h.ok) console.log("✎ wrote " + h.file); }
+        wrote.push(m.file);
+        if (!flags.json) console.log("✎ wrote " + m.file + "  (" + m.overallPercent + "%, " + m.complete + "/" + m.total + ")");
+        if (flags.html) {
+          const h = spec.writeRoadmapHtml(projectDir, flags.lang);
+          if (h.ok) { wrote.push(h.file); if (!flags.json) console.log("✎ wrote " + h.file); }
+          else console.error("dev-spec: " + h.error);
+        }
       }
       const r = spec.roadmap(projectDir);
+      if (wrote.length) r.wrote = wrote; // --json stays one valid JSON document
       return out(r, (r) => {
         if (!r.features.length) return console.log("No features yet under " + r.specsDir);
         console.log("Roadmap — overall " + r.overallPercent + "%  (" + r.complete + "/" + r.total + " complete)" + (r.cycle ? "  ⚠ CYCLE: " + r.cycle.join(" → ") : ""));
@@ -235,7 +312,8 @@ function main() {
 
     case "depend": {
       if (!pos[0]) die("usage: dev-spec depend <feature> [dep1 dep2 ...] [--order N]");
-      const deps = pos.slice(1);
+      // Only --order given → keep the declared deps; no deps and no order → clear them (as before).
+      const deps = pos.slice(1).length ? pos.slice(1) : flags.order != null ? undefined : [];
       const r = spec.setDependency(projectDir, pos[0], deps, flags.order);
       if (!r.ok) die(r.error);
       return out(r, (r) => console.log(r.feature + " depends on: " + (r.dependsOn.join(", ") || "(none)") + (r.order != null ? "  order=" + r.order : "") + (r.unknownDeps.length ? "  ⚠ unknown deps: " + r.unknownDeps.join(", ") : "")));
@@ -326,16 +404,22 @@ function helpText() {
 
   classify "<description>"        Recommend tracks (core/+tdd/+saas/+ai), multilingual
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --lang en|pt|es)
+  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …)
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --lang en|pt|es)
+  bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all
-  doctor <feature>                Health-check → ready to advance?
+  doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)
   trace <feature>                 Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs)
   clarify <feature>               Surface ambiguities/gaps in requirements before design
   ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words)
-  next <feature>                  Next unchecked task
+  next <feature> [--batch]        Next unchecked task (--batch: + the [P] tasks that can run beside it)
   next-action <feature>           "You are here → do this next" (+ what changed since approval)
-  done <feature> <n>              Mark task n complete
+  brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
+                                  --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
+  done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records
+                                  the evidence (a failure leaves it open); or --evidence "…" [--exit N] [--cmd "…"]
+  finish <feature> [--write]      Readiness report + PR description from the spec chain (exit 1 if not ready)
   approve <feature> <phase>       Record a phase approval (.state.json)
   add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle
@@ -347,9 +431,15 @@ function helpText() {
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config for a client (or 'all')
 
-  Flags: --json  --project <dir>  --lang en|pt|es (init/create/roadmap)
+  Flags: --json  --project <dir>  --lang en|pt|es (init/create/roadmap)  --order N (depend)
+         --cap N (scan)  --by NAME (approve)  --write / --include-brief (brief)
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }
 
-main();
+// Engine guards (e.g. an unreadable roadmap.json) surface as a one-line error, not a stack trace.
+try {
+  main();
+} catch (e) {
+  die(e.message);
+}

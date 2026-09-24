@@ -38,13 +38,18 @@ Key operations (CLI form):
 ```
 dev-spec classify "<feature description>"     # recommend tracks (multilingual, weighted)
 dev-spec init [tracks...] [--lang en|pt|es]    # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
-dev-spec create "<name>" [tracks...] [--lang]  # scaffold the feature's artifact skeleton (inherits project lang)
+dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …)
+dev-spec create "<name>" [tracks...] [--lang] [--summary "…"]  # scaffold the feature (no tracks → auto-classify; inherits project lang)
 dev-spec status [feature] | list               # progress, phase, tracks
 dev-spec clarify <feature>                      # surface requirement gaps before design
-dev-spec doctor <feature>                      # health-check → ready to advance?
+dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
 dev-spec ears <feature|file.md>                # lint EARS (SHALL/DEVE/DEBE, IDs, vague words)
 dev-spec trace <feature>                       # AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs)
-dev-spec next/done <feature> [n]               # drive execution
+dev-spec next <feature> [--batch]              # next task (--batch: + the [P] tasks that can run beside it)
+dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
+dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
+dev-spec finish <feature> [--write]            # blockers + fresh checks + PR description from the spec chain
+dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, DoD)
 dev-spec approve <feature> <phase>             # record an approval gate
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
 dev-spec depend <feature> [deps...]            # declare dependencies / order (rejects cycles)
@@ -63,7 +68,7 @@ For anything beyond a quick fix (Vibe mode = just do it, no artifacts):
 3. **Test/Eval plan** — +tdd: enumerate tests mapped to AC IDs. +ai: golden/adversarial/regression sets + thresholds + baseline. Approve.
 4. **Failing tests / eval harness** — +tdd: write tests, all red for the right reason (hard gate). +ai: deterministic tests + runnable eval harness + baseline. No implementation before this passes.
 5. **Tasks** — ordered, traceable; markers `_Requirements:_` always, `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
-6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). Mark done with `dev-spec done`. Before "done": load test + observability (+saas), cost + safety validation (+ai).
+6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs and tests already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` — evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open. Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
 
 At each phase boundary, run `dev-spec doctor <feature>`; only advance when it reports
 `readyToAdvance`. Record sign-off with `dev-spec approve <feature> <phase>`.

@@ -14,7 +14,8 @@
  * Flags:
  *   --dry-run            validate + print plan, do not call the model
  *   --set-baseline       write the current scores to evals/baseline.json
- *   --model=<id>         override model (default: $DEV_SPEC_MODEL or claude-sonnet-4-6)
+ *   --model=<id>         override model (default: $DEV_SPEC_MODEL or claude-sonnet-5)
+ *   --require-live       fail (exit 2) instead of silently dry-running when ANTHROPIC_API_KEY is unset
  *   --project=<dir>      project root (default: $CLAUDE_PROJECT_DIR or cwd)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
  *
@@ -27,7 +28,7 @@ const fs = require("fs");
 const path = require("path");
 const spec = require(path.join(__dirname, "..", "lib", "spec.js"));
 
-const DEFAULT_MODEL = process.env.DEV_SPEC_MODEL || "claude-sonnet-4-6";
+const DEFAULT_MODEL = process.env.DEV_SPEC_MODEL || "claude-sonnet-5";
 const DEFAULT_THRESHOLDS = { golden: 0.85, adversarial: 1.0, regression: 1.0 };
 
 // Flags that take a value, accepted as either --key=value or --key value (the universal CLI
@@ -79,8 +80,9 @@ async function callModel(system, user, model) {
       "x-api-key": process.env.ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify({ model, max_tokens: 1024, system, messages: [{ role: "user", content: user }] }),
-    signal: AbortSignal.timeout(30000),
+    // Current models think adaptively by default and thinking counts toward max_tokens — leave room for the answer.
+    body: JSON.stringify({ model, max_tokens: 4096, system, messages: [{ role: "user", content: user }] }),
+    signal: AbortSignal.timeout(120000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
@@ -151,6 +153,10 @@ async function main() {
 
   const model = flags.model || DEFAULT_MODEL;
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  if (flags["require-live"] && !hasKey && !flags["dry-run"]) {
+    console.error("eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.");
+    process.exit(2);
+  }
   const dryRun = !!flags["dry-run"] || !hasKey;
   const doJudge = !dryRun;
 
@@ -245,6 +251,10 @@ async function main() {
   }
 
   if (dryRun) {
+    if (belowThreshold) {
+      console.log("\nDry run found invalid eval set(s) — fix them before a live run.");
+      process.exit(1);
+    }
     console.log("\nDry run complete — sets are valid. Set ANTHROPIC_API_KEY and re-run for live scores.");
     process.exit(0);
   }

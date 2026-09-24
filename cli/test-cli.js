@@ -59,6 +59,13 @@ ok(/#1/.test(run(["next", "Invoice Summary"]).out), "next → task 1");
 ok(run(["done", "Invoice Summary", "1"]).out.includes("Task 1 done"), "done marks task 1");
 ok(/#2/.test(run(["next", "Invoice Summary"]).out), "next advances to 2");
 
+// v1.11: brief — self-contained task brief (defaults to the next open task)
+const br = run(["brief", "Invoice Summary"]);
+ok(br.code === 0 && /# Task brief — invoice-summary · task 2/.test(br.out) && /## Definition of done/.test(br.out), "brief prints the next open task's brief");
+const brw = run(["brief", "Invoice Summary", "2", "--write"]);
+ok(/task-2-brief\.md/.test(brw.out) && fs.existsSync(path.join(tmp, ".specs", "invoice-summary", ".execution", "task-2-brief.md")), "brief --write writes .execution/task-2-brief.md");
+ok(run(["brief", "Invoice Summary", "999"]).code === 1, "brief on a missing task exits non-zero");
+
 // approve
 ok(run(["approve", "Invoice Summary", "design"]).out.includes("Approved 'design'"), "approve records gate");
 
@@ -76,6 +83,11 @@ ok(/question/i.test(run(["clarify", "Invoice Summary"]).out), "clarify lists que
 run(["create", "User Auth", "tdd"]);
 ok(run(["depend", "Invoice Summary", "user-auth"]).out.includes("depends on: user-auth"), "depend declares a dependency");
 ok(/Circular|circular/.test(run(["depend", "User Auth", "invoice-summary"]).out), "depend rejects a cycle");
+const ordOut = run(["depend", "Invoice Summary", "--order", "3"]).out;
+ok(/depends on: user-auth/.test(ordOut) && /order=3/.test(ordOut) && !/unknown deps/.test(ordOut), "depend --order N (space form) sets the order and keeps the deps");
+let rmJson = null;
+try { rmJson = JSON.parse(run(["roadmap", "--write", "--json"]).out); } catch { /* invalid JSON */ }
+ok(rmJson && Array.isArray(rmJson.wrote) && rmJson.wrote.length === 1, "roadmap --write --json prints one valid JSON document");
 ok(/overall \d+%/.test(run(["roadmap"]).out), "roadmap shows overall %");
 ok(run(["backlog", "add", "sso-login", "SAML"]).out.includes("sso-login"), "backlog add records a planned feature");
 ok(/wrote/.test(run(["roadmap", "--write", "--html"]).out) && fs.existsSync(path.join(tmp, ".specs", "ROADMAP.md")) && fs.existsSync(path.join(tmp, ".specs", "ROADMAP.html")), "roadmap --write generates ROADMAP.md (+ --html → ROADMAP.html)");
@@ -96,8 +108,39 @@ ok(run(["feature", "remove", "user-auth"]).out.includes("Removed"), "feature rem
 // mcp-config
 const mc = run(["mcp-config", "cursor"]);
 ok(mc.out.includes("mcpServers") && mc.out.includes("server.js"), "mcp-config cursor prints a config");
-ok(run(["mcp-config", "codex"]).out.includes("[mcp_servers.spec-driven]"), "mcp-config codex prints TOML");
+const codex = run(["mcp-config", "codex"]).out;
+ok(codex.includes("[mcp_servers.spec-driven]") && /args = \["[^"]+server\.js"\]/.test(codex), "mcp-config codex prints TOML with a basic-string path (safe for ')");
 ok(run(["mcp-config", "all"]).out.includes("Claude Desktop"), "mcp-config all prints every client");
+
+// v1.11 parity: steering subcommand, scriptable exit codes, --summary, CLAUDE_PROJECT_DIR
+const stDir = path.join(tmp, "steer-proj");
+ok(/Created .*scale\.md/.test(run(["steering", "scale.md", "--project", stDir]).out) && /Exists/.test(run(["steering", "scale.md", "--project", stDir]).out), "steering <file> scaffolds one steering file (idempotent)");
+ok(run(["doctor", "Invoice Summary"]).code === 1 && run(["classify", "x"]).code === 0, "doctor exits 1 when a blocking check fails (scriptable)");
+const sumOut = run(["create", "Digest", "--summary", "summarize tickets with an LLM"]).out;
+ok(/\+ai/.test(sumOut), "create --summary feeds the auto-classifier (same as the MCP tool)");
+const cpd = path.join(tmp, "cpd-proj");
+const rc = spawnSync(process.execPath, [CLI, "init", "core"], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: cpd } });
+ok(rc.status === 0 && fs.existsSync(path.join(cpd, ".specs", "steering")), "the CLI honors CLAUDE_PROJECT_DIR like the MCP server");
+
+// v1.12: done --run records evidence from the task's own _Verify:_ command; bugfix; finish; next --batch
+const vp = path.join(tmp, "v112-proj");
+run(["create", "Pay", "tdd", "--project", vp]);
+fs.writeFileSync(path.join(vp, ".specs", "pay", "tasks.md"),
+  "- [ ] 1. [US1] ok task\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] failing task\n  - _Verify: node -e \"process.exit(3)\"_\n" +
+  "- [ ] 3. [US1][P] a\n  - _Implements: src/a.js_\n- [ ] 4. [US1][P] b\n  - _Implements: src/b.js_\n");
+const d1 = run(["done", "pay", "1", "--run", "--project", vp]);
+ok(d1.code === 0 && /\(verified\)/.test(d1.out) && /process\.exit\(0\)/.test(JSON.parse(fs.readFileSync(path.join(vp, ".specs", "pay", ".state.json"), "utf8")).evidence["1"].command),
+  "done --run executes the _Verify:_ command and records the evidence");
+const d2 = run(["done", "pay", "2", "--run", "--project", vp]);
+ok(d2.code === 1 && /exit 3/.test(d2.out) && /- \[ \] 2\./.test(fs.readFileSync(path.join(vp, ".specs", "pay", "tasks.md"), "utf8")), "done --run with a failing _Verify:_ leaves the task open (exit 1)");
+const dBad = run(["done", "pay", "", "--run", "--project", vp]);
+ok(dBad.code === 1 && !/^\$ /m.test(dBad.out), "done with a non-integer task number fails BEFORE running any command");
+run(["done", "pay", "2", "--evidence", "manual check", "--project", vp]);
+ok(/parallel batch: #3 \[src\/a\.js\]\s+#4 \[src\/b\.js\]/.test(run(["next", "pay", "--batch", "--project", vp]).out), "next --batch lists the [P] tasks that can run in parallel");
+const bfx = run(["bugfix", "Login Loop", "--summary", "bounce to /login", "--project", vp]);
+ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-loop", "bug.md")), "bugfix scaffolds the systematic-debugging flow");
+const fin = run(["finish", "login-loop", "--project", vp]);
+ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the PR draft from the spec");
 
 // unknown command errors
 ok(run(["wat"]).code === 1, "unknown command exits non-zero");

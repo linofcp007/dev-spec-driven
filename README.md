@@ -3,7 +3,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node: >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![dependencies: 0](https://img.shields.io/badge/dependencies-0-success.svg)](./package.json)
-[![tests: 89 passing](https://img.shields.io/badge/tests-89%20passing-success.svg)](./mcp/test.js)
+[![tests: 233 passing](https://img.shields.io/badge/tests-233%20passing-success.svg)](./mcp/test.js)
 [![CI: none (local only)](https://img.shields.io/badge/CI-none%20·%20local%20only-informational.svg)](#why-no-github-actions)
 
 **One spec-driven development skill that adapts to the project — trilingual (EN · PT · ES).**
@@ -52,7 +52,8 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
 | `spec_init` / `spec_create` | Scaffold steering + a feature folder for the active tracks |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, section completeness |
-| `spec_next_task` / `spec_complete_task` | Drive execution and tick off tasks |
+| `spec_next_task` / `spec_complete_task` | Drive execution and tick off tasks — with recorded **verification evidence** (a failed run refuses the tick); `batch` for parallel `[P]` tasks |
+| `spec_finish` | Close a feature: blockers, fresh checks to run, and a PR description generated from the spec chain |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); flags phantom refs (typos) |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS + trace + sections + steering) |
@@ -62,6 +63,35 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase + spec coverage % |
 | `steering_scaffold` | Create one steering file from template (incl. `constitution.md`) |
+| `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, definition of done (the basis of subagent execution) |
+
+### Subagent-driven execution (opt-in)
+
+`/executeTask <feature> --subagents` keeps the main session's context for coordination: per task it
+writes a brief (`spec_task_brief`), dispatches the plugin's **`dev-spec-driven:spec-implementer`** agent, sends the diff
+to the **`dev-spec-driven:spec-reviewer`** agent (verdict per AC ID + quality + track checks), runs a fix loop of at most
+5 rounds, and only then ticks the task. It runs on its own within a story, stops at every
+`**Checkpoint:**` for your review, and never changes an AC, the design or a test without going back to
+that phase. It uses about 2–3× the tokens of inline execution, so it is worth it on features with ~6+
+independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-execution.md`. Adapted from the
+`subagent-driven-development` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
+
+### Evidence, bugfixes and finishing
+
+- **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
+  command, exit code and output summary, refuses the tick on a failure, and `doctor` / `ROADMAP.md` /
+  `spec_finish` keep flagging tasks ticked without evidence. CLI: `dev-spec done <feature> <n> --run`.
+- **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** (the doctor
+  blocks the fix until it's written) → failing regression test → fix → verify.
+- **`/spec-finish`** — what still blocks, the checks to run fresh, and a PR description built from the
+  spec (ACs, tasks with their evidence, root cause/fix); then merge, open a PR or keep the branch.
+- **`/spec-review-feedback`** — review comments classified against the spec: fix AC violations, route
+  spec changes back to their phase, push back on out-of-scope asks.
+- **`/spec-doctor --deep`** — a `spec-critic` agent reviews the *meaning* of a spec at its gate.
+- **Bounded mode** between Vibe and Spec (short design in chat + an explicit yes), **Global
+  Constraints** inlined into every task brief, **parallel `[P]` tasks** in separate worktrees, and
+  **plugin evals** (`evals/`, `claude plugin eval`) that check the skill triggers in EN/PT/ES.
+  These ideas are adapted from [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Local automation, not CI
 
@@ -94,10 +124,10 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
 
 ### Commands
 
-`/spec` · `/init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/writeTests` · `/createTask` · `/executeTask` · `/doctor` · `/approve` ·
+`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
+`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
 `/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/status` · `/commit` · `/prReview` · `/promptReview` ·
+`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — aliases `/ds` `/dsx` `/dss`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`.)
 
@@ -110,8 +140,8 @@ run in your own environment when you choose, not on a paid CI runner.
 ### Develop / test
 
 ```bash
-node mcp/test.js          # smoke-test the MCP server end-to-end (66 assertions)
-node cli/test-cli.js      # smoke-test the universal CLI (38 assertions)
+node mcp/test.js          # smoke-test the MCP server end-to-end (180 assertions)
+node cli/test-cli.js      # smoke-test the universal CLI (53 assertions)
 ```
 
 > Replaces four predecessor skills; their content lives here as composable tracks (the originals
@@ -183,10 +213,10 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
 
 ### Comandos
 
-`/spec` · `/init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/writeTests` · `/createTask` · `/executeTask` · `/doctor` · `/approve` ·
+`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
+`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
 `/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/status` · `/commit` · `/prReview` · `/promptReview` ·
+`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atalhos `/ds` `/dsx` `/dss`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`.)
 
@@ -199,7 +229,7 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 ### Desenvolver / testar
 
 ```bash
-node mcp/test.js          # testa o servidor MCP de ponta a ponta (27 asserções)
+node mcp/test.js          # testa o servidor MCP de ponta a ponta (180 asserções)
 ```
 
 > Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
@@ -271,10 +301,10 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
 
 ### Comandos
 
-`/spec` · `/init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/writeTests` · `/createTask` · `/executeTask` · `/doctor` · `/approve` ·
+`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
+`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
 `/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/status` · `/commit` · `/prReview` · `/promptReview` ·
+`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atajos `/ds` `/dsx` `/dss`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`.)
 
@@ -287,7 +317,7 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 ### Desarrollar / probar
 
 ```bash
-node mcp/test.js          # prueba el servidor MCP de extremo a extremo (27 aserciones)
+node mcp/test.js          # prueba el servidor MCP de extremo a extremo (180 aserciones)
 ```
 
 > Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
@@ -304,21 +334,23 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 31 slash commands (trilingual descriptions)
+├── commands/                         ← 35 slash commands (trilingual descriptions)
+├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
+├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (21 tools, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (23 tools, zero-dependency)
+│   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, roadmap, scan)
 │   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — 66 assertions)
+│   └── test.js                       ← smoke test (node mcp/test.js — 180 assertions)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← ready-made, path-filled MCP configs per tool
 ├── examples/demo-project/            ← a worked feature (v1.5 shape) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
-├── .mcp.json
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md
 └── INSTALL.md
 ```

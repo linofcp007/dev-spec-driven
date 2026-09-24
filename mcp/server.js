@@ -7,10 +7,8 @@
  * Implements the Model Context Protocol over newline-delimited JSON-RPC 2.0
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
- * Tools (all operate on the project's `.specs/` directory):
- *   spec_init, spec_classify, spec_create, spec_list, spec_status,
- *   spec_next_task, spec_complete_task, ears_validate, trace_check,
- *   steering_scaffold
+ * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
+ * 23 tools, verify with an `initialize` + `tools/list` handshake.
  */
 
 const readline = require("readline");
@@ -26,6 +24,8 @@ try {
 }
 const SERVER_INFO = { name: "dev-spec-driven", version: VERSION };
 const DEFAULT_PROTOCOL = "2024-11-05";
+// Protocol revisions this tools-only server speaks. A client asking for another one gets the latest.
+const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18"];
 
 // --- Tool catalogue --------------------------------------------------------
 
@@ -33,7 +33,7 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). Idempotent — never overwrites existing files.",
+      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). Idempotent — never overwrites existing files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -51,7 +51,8 @@ const TOOLS = [
       type: "object",
       properties: {
         description: { type: "string", description: "Plain-language description of the feature/request." },
-        name: { type: "string", description: "Optional feature name." },
+        name: { type: "string", description: "Optional feature name (also used as evidence)." },
+        lang: { type: "string", enum: ["en", "pt", "es"], description: "Language of the notes/reasoning. Default: the description's own language." },
       },
       required: ["description"],
     },
@@ -64,12 +65,13 @@ const TOOLS = [
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name (human readable; slugified for the folder)." },
-        tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Active tracks. 'core' always added." },
+        tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
         summary: { type: "string", description: "Optional one-line feature summary." },
+        kind: { type: "string", enum: ["feature", "bugfix"], description: "'bugfix' scaffolds the systematic-debugging flow instead: bug.md (reproduction · root cause · fix), a one-story requirements.md (IF…THEN), a regression test plan and the fixed task order (reproduce → root cause → failing regression test → fix → verify). Always +tdd." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
         projectDir: { type: "string" },
       },
-      required: ["name", "tracks"],
+      required: ["name"],
     },
   },
   {
@@ -84,18 +86,40 @@ const TOOLS = [
   },
   {
     name: "spec_next_task",
-    description: "Return the next unchecked task for a feature (its number and text), plus remaining/total counts.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: { type: "string" } }, required: ["name"] },
+    description: "Return the next unchecked task for a feature (its number and text), plus remaining/total counts. With `batch: true`, also return the tasks that can run in parallel with it: the following open [P] tasks of the same section whose _Implements:_ files are declared and disjoint (for parallel subagents in separate worktrees; max 3 by default).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, batch: { type: "boolean", description: "Also return the parallel batch." }, max: { type: "integer", description: "Batch size cap (default 3, max 8)." }, projectDir: { type: "string" } }, required: ["name"] },
+  },
+  {
+    name: "spec_task_brief",
+    description:
+      "Build a self-contained brief for ONE task (default: the next open task) so a fresh implementer can execute it without reading the whole spec: task text + story/phase/[P]/closing checkpoint, the full EARS text of every AC in `_Requirements:_`, the test-plan row of every T-ID in `_Makes green:_`, evals/metrics/files markers, the design sections that mention the task, the steering files to read, unresolved (phantom) references, and the definition of done for the task's loop (core / tdd / ai-prompt — +ai prompt tasks are flagged inlineOnly). Generated in the feature's language. With `write: true` it writes `.specs/<feature>/.execution/task-<N>-brief.md` (self-gitignored workspace, plus an append-only ledger.md) and returns the paths instead of the content — the basis of subagent-driven execution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Feature name/slug." },
+        number: { type: "integer", description: "Task number. Omit for the next open task." },
+        write: { type: "boolean", description: "Write the brief to .specs/<feature>/.execution/ and return paths (content omitted unless includeBrief)." },
+        includeBrief: { type: "boolean", description: "Include the brief markdown in the result (default: true when not writing, false when writing)." },
+        projectDir: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "spec_finish",
+    description:
+      "Close a feature (finishing-a-development-branch): readiness report — doctor blocking checks, open tasks, tasks ticked without verification evidence, phases awaiting approval — plus the track-gated checks only a fresh run or a human can confirm (full suite green; +saas load test + observability; +ai cost + safety; bugfix: no longer reproduces), and a PR title + description GENERATED FROM THE SPEC CHAIN (summary, root cause/fix for bugfixes, ACs, tasks with their evidence, tests, checks, spec files). `readyToFinish` is true only with zero blockers. With `write: true` the description is written to .specs/<feature>/.execution/pr-description.md (content omitted unless includeBody). It never merges, pushes or approves — the human picks: merge locally, open a PR, or keep the branch.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean" }, includeBody: { type: "boolean" }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
-    description: "Mark task N as done in a feature's tasks.md (flips `- [ ] N.` to `- [x] N.`) and returns updated progress + the new next task.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, number: { type: "integer" }, projectDir: { type: "string" } }, required: ["name", "number"] },
+    description: "Mark task N as done in a feature's tasks.md (flips `- [ ] N.` to `- [x] N.`) and returns updated progress + the new next task. Pass `evidence` — the verification you actually ran (the task's _Verify:_ command, its exit code and an output summary): it is recorded in .state.json, a non-zero exitCode REFUSES the tick (evidence before claims), and a task that declares _Verify:_ but gets no evidence is ticked with a warning that doctor/roadmap keep surfacing. Evidence can also be back-filled for a task ticked earlier.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, number: { type: "integer" }, evidence: { type: "object", properties: { command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '14/14 passing' or the last lines of output" } }, description: "Verification actually run for this task." }, projectDir: { type: "string" } }, required: ["name", "number"] },
   },
   {
     name: "ears_validate",
-    description: "Lint EARS acceptance criteria: flags criteria missing 'SHALL', missing stable IDs (US-1.AC-1), and vague words (fast, user-friendly, appropriate, …). Pass `text` directly, or `name` to lint that feature's requirements.md.",
-    inputSchema: { type: "object", properties: { text: { type: "string" }, name: { type: "string" }, projectDir: { type: "string" } } },
+    description: "Lint EARS acceptance criteria: flags criteria missing a modal verb (SHALL / DEVE / DEBE), missing stable IDs (US-1.AC-1), and vague words (fast, user-friendly, appropriate, …). Pass `text` directly, or `name` to lint that feature's requirements.md. Each issue has a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification) and a `msg` in the feature's language (or `lang` for raw text).",
+    inputSchema: { type: "object", properties: { text: { type: "string" }, name: { type: "string" }, lang: { type: "string", enum: ["en", "pt", "es"] }, projectDir: { type: "string" } } },
   },
   {
     name: "trace_check",
@@ -119,7 +143,7 @@ const TOOLS = [
   },
   {
     name: "spec_roadmap",
-    description: "Show the multi-feature roadmap: each feature's tracks, phase, completion % (derived from phase), declared dependencies, blocked status (a dep is met when that feature is 100%), plus overall %% and any circular dependency. With `write: true`, (re)generates the always-current overview: `.specs/ROADMAP.md` by default (Markdown, keeps the Mermaid dependency graph — git/PR-friendly) — and also a self-contained brand-styled `.specs/ROADMAP.html` (light/dark toggle, offline) when `html: true`. Pass `lang` ('en'/'pt'/'es') to localize the chrome (stored for auto-refresh). Reads .specs/roadmap.json + the feature folders.",
+    description: "Show the multi-feature roadmap: each feature's tracks, phase, completion % (planning phases up to 30%, then driven by the fraction of tasks done), declared dependencies, blocked status (a dep is met when that feature is 100%), plus overall % and any circular dependency. With `write: true`, (re)generates the always-current overview: `.specs/ROADMAP.md` by default (Markdown, keeps the Mermaid dependency graph — git/PR-friendly) — and also a self-contained brand-styled `.specs/ROADMAP.html` (light/dark toggle, offline) when `html: true`. Pass `lang` ('en'/'pt'/'es') to localize the roadmap chrome only (stored as meta.roadmapLang for auto-refresh; the project language is unchanged). `html: true` implies writing. A same-named file that dev-spec did not generate is never overwritten. Reads .specs/roadmap.json + the feature folders.",
     inputSchema: { type: "object", properties: { projectDir: { type: "string" }, write: { type: "boolean", description: "(Re)write .specs/ROADMAP.md (default format)." }, html: { type: "boolean", description: "Also (re)write the brand-styled .specs/ROADMAP.html." }, lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the roadmap chrome." } } },
   },
   {
@@ -171,8 +195,9 @@ const TOOLS = [
 
 function runTool(name, args) {
   args = args || {};
-  // Containment: a tool call (agent-driven) must not redirect writes outside the project with `..`.
-  // (The CLI, which is user-driven and explicit, is intentionally not restricted.)
+  // Guard against RELATIVE traversal only: a tool call must not reach out of the project with `..`.
+  // This is NOT a sandbox — an absolute projectDir is accepted by design (multi-project use), and the
+  // engine confines every write to <projectDir>/.specs/. (The CLI, user-driven, is not restricted.)
   if (args.projectDir && /(^|[\\/])\.\.([\\/]|$)/.test(String(args.projectDir))) {
     return { ok: false, error: "projectDir must not contain '..' path segments." };
   }
@@ -181,29 +206,26 @@ function runTool(name, args) {
     case "spec_init":
       return spec.initProject(pdir, args.tracks, args.lang);
     case "spec_classify":
-      return spec.classify(args.description, { name: args.name });
-    case "spec_create":
-      return spec.createFeature(pdir, args.name, args.tracks, args.summary, spec.classify(args.summary || args.name || ""), args.lang);
+      return spec.classify(args.description, { name: args.name, lang: args.lang });
+    case "spec_create": {
+      // No tracks → the engine keeps an existing feature's tracks, or classifies a new one (same as the CLI).
+      const cls = spec.classify(args.summary || "", { name: args.name, lang: args.lang });
+      return spec.createFeature(pdir, args.name, args.tracks, args.summary, cls, args.lang, args.kind);
+    }
     case "spec_list":
       return spec.listFeatures(pdir);
     case "spec_status":
       return spec.statusFeature(pdir, args.name);
     case "spec_next_task":
-      return spec.nextTask(pdir, args.name);
+      return spec.nextTask(pdir, args.name, { batch: args.batch, max: args.max });
+    case "spec_task_brief":
+      return spec.taskBrief(pdir, args.name, args.number, { write: args.write, includeBrief: args.includeBrief });
     case "spec_complete_task":
-      return spec.completeTask(pdir, args.name, args.number);
-    case "ears_validate": {
-      let text = args.text;
-      if (!text && args.name) {
-        const f = path.join(spec.specsRoot(pdir), spec.slugify(args.name), "requirements.md");
-        try {
-          text = fs.readFileSync(f, "utf8");
-        } catch {
-          return { ok: false, error: `requirements.md not found for '${spec.slugify(args.name)}'` };
-        }
-      }
-      return spec.earsValidate(text);
-    }
+      return spec.completeTask(pdir, args.name, args.number, args.evidence);
+    case "spec_finish":
+      return spec.finishFeature(pdir, args.name, { write: args.write, includeBody: args.includeBody });
+    case "ears_validate":
+      return !args.text && args.name ? spec.earsFeature(pdir, args.name) : spec.earsValidate(args.text, args.lang || spec.projectLang(pdir));
     case "trace_check":
       return spec.traceCheck(pdir, args.name);
     case "spec_doctor":
@@ -214,7 +236,7 @@ function runTool(name, args) {
       return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
     case "spec_roadmap": {
       const rm = spec.roadmap(pdir);
-      if (args.write) {
+      if (args.write || args.html) { // html:true implies writing (same as the CLI's --html)
         const wrote = [];
         const m = spec.writeRoadmapMd(pdir, args.lang);
         if (m.ok) wrote.push(m.file);
@@ -249,8 +271,10 @@ function runTool(name, args) {
 
 // --- JSON-RPC / MCP plumbing ----------------------------------------------
 
+let batchSink = null; // while handling a batch, replies are collected and sent as ONE array
 function send(msg) {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+  if (batchSink) batchSink.push(msg);
+  else process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
 function result(id, value) {
@@ -261,25 +285,34 @@ function error(id, code, message) {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
+// Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
+// error, not a folder called "undefined".
+function missingArgs(toolName, args) {
+  const tool = TOOLS.find((t) => t.name === toolName);
+  if (!tool || !tool.inputSchema || !Array.isArray(tool.inputSchema.required)) return [];
+  return tool.inputSchema.required.filter((k) => args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim()));
+}
+
 function handle(msg) {
+  if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
   const isNotification = id === undefined || id === null;
+  // Notifications never get a response — and never run tools.
+  if (isNotification) return;
 
   try {
     switch (method) {
       case "initialize": {
-        const proto = (params && params.protocolVersion) || DEFAULT_PROTOCOL;
+        const asked = params && params.protocolVersion;
+        const proto = SUPPORTED_PROTOCOLS.includes(asked) ? asked : asked ? SUPPORTED_PROTOCOLS[SUPPORTED_PROTOCOLS.length - 1] : DEFAULT_PROTOCOL;
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
           capabilities: { tools: { listChanged: false } },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution. ears_validate and trace_check enforce quality gates. All file ops are local to the project's .specs/ directory.",
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). ears_validate, trace_check and spec_doctor enforce quality gates. All file ops are local to the project's .specs/ directory.",
         });
       }
-      case "notifications/initialized":
-      case "initialized":
-        return; // no response to notifications
       case "ping":
         return result(id, {});
       case "tools/list":
@@ -287,6 +320,10 @@ function handle(msg) {
       case "tools/call": {
         const toolName = params && params.name;
         const args = (params && params.arguments) || {};
+        const missing = missingArgs(toolName, args);
+        if (missing.length) {
+          return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing required argument(s): " + missing.join(", ") }, null, 2) }], isError: true });
+        }
         let out;
         try {
           out = runTool(toolName, args);
@@ -300,11 +337,10 @@ function handle(msg) {
         });
       }
       default:
-        if (isNotification) return;
         return error(id, -32601, "Method not found: " + method);
     }
   } catch (e) {
-    if (!isNotification) error(id, -32603, "Internal error: " + e.message);
+    error(id, -32603, "Internal error: " + e.message);
   }
 }
 
@@ -317,10 +353,19 @@ function main() {
     try {
       msg = JSON.parse(trimmed);
     } catch {
-      return; // ignore non-JSON lines
+      return error(null, -32700, "Parse error");
     }
-    if (Array.isArray(msg)) msg.forEach(handle);
-    else handle(msg);
+    if (Array.isArray(msg)) {
+      if (!msg.length) return error(null, -32600, "Invalid Request");
+      batchSink = [];
+      try {
+        msg.forEach(handle);
+      } finally {
+        const replies = batchSink;
+        batchSink = null;
+        if (replies.length) process.stdout.write(JSON.stringify(replies) + "\n");
+      }
+    } else handle(msg);
   });
   rl.on("close", () => process.exit(0));
 }

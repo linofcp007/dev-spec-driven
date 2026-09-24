@@ -28,7 +28,7 @@ prints the config with that path already filled in for your machine.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 31 commands, hooks, and the MCP server all load:
+Native — it's a plugin. Skills, the 35 commands, the 3 agents, hooks, and the MCP server all load:
 
 ```bash
 claude --plugin-dir "<PLUGIN>"
@@ -131,7 +131,7 @@ Optionally put it on PATH (`npm link` in this folder gives you a global `dev-spe
 |---|---|---|---|
 | Engine tools (classify, scaffold, doctor, trace, EARS) | ✅ MCP | ✅ MCP | ✅ CLI |
 | Workflow methodology | ✅ skill | ✅ `AGENTS.md` / rules file | ✅ `AGENTS.md` |
-| Slash commands (`/spec`, `/doctor`, …) | ✅ | — (use the CLI instead) | — (use the CLI) |
+| Slash commands (`/spec`, `/spec-doctor`, …) | ✅ | — (use the CLI instead) | — (use the CLI) |
 | Hooks (auto EARS/trace on save) | ✅ | — (use git `pre-commit`) | ✅ git pre-commit |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
 

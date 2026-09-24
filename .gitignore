@@ -47,3 +47,6 @@ dist/
 
 # dev-guardian outputs
 .guardian/
+
+# Plugin eval results (claude plugin eval) — local runs, never committed
+evals/results/

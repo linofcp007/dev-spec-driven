@@ -93,7 +93,7 @@ your judge prompt needs work.
 Mitigate by:
 - Including in the rubric explicit "ignore length/verbosity unless it affects content"
 - Including a few "known-bad but confident" outputs to verify judge catches them
-- Pinning the judge model by dated version
+- Pinning the judge model to an exact published model ID
 
 ### Human Review
 For quality-sensitive work where LLM-as-judge isn't reliable enough.

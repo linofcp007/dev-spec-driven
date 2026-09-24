@@ -1,35 +1,17 @@
 ---
 name: dev-spec-driven
 description: >
-  Unified, track-based spec-driven development — the single skill that unifies four predecessor
-  spec-driven workflows (the base flow, test-spec-first, saas-spec-scale, and ai-product-spec-scale)
-  into one. Turns ideas into formal EARS
-  requirements, technical designs, and traceable, approval-gated tasks, then composes optional
-  tracks PER FEATURE to match the project's real needs: +tdd (test-first, red-green-refactor),
-  +saas (performance/scale/multi-tenancy/observability/cost + load testing), and +ai
-  (eval-driven dev, prompts-as-code, token economics, safety, model lifecycle). A local,
-  zero-dependency MCP server scaffolds and tracks everything offline (no cloud, no CI, no cost).
-  Use whenever the user wants to plan a feature before coding, write requirements or a spec,
-  design an architecture, break work into tasks, do spec-driven / test-driven development, build
-  production SaaS, or build an AI/LLM feature. Triggers on "dev-spec", "spec mode", "spec this",
-  "requirements", "EARS", "design doc", "task breakdown", "create spec", "implementation plan",
-  "TDD", "tests first", "test-driven", "red green refactor", "no code without a test",
-  "multi-tenant", "production-ready", "scale", "SLA", "observability", "load testing",
-  "performance budget", "LLM", "agent", "chatbot", "RAG", "prompt", "eval", "hallucination",
-  "token cost", "AI product", "prompt injection", and on "plan this feature", "let's spec this
-  out", "write requirements for", "break this into tasks", "make this production-grade", "spec
-  this AI feature". Also triggers in Portuguese and Spanish: "planear/planificar funcionalidade",
-  "criar requisitos", "especificar", "desenhar arquitetura", "dividir em tarefas", "testes
-  primeiro", "pronto para produção", "multi-inquilino", "funcionalidade de IA/LLM"; "planear/
-  diseñar la función", "crear requisitos", "especificar", "dividir en tareas", "pruebas primero",
-  "listo para producción", "multiinquilino", "función de IA/LLM". Also fires on intent phrases:
-  "before I start coding", "help me scope this", "the requirements keep changing", "how should I
-  build X", "what's the plan for X"; PT "antes de começar a programar", "ajuda-me a delimitar isto",
-  "os requisitos mudam sempre", "como devo construir X", "qual é o plano para X"; ES "antes de
-  empezar a programar", "ayúdame a acotar esto", "los requisitos cambian siempre", "cómo debería
-  construir X". Even when the user just says "I want to build X" (or "quero construir X" / "quiero
-  construir X") for a non-trivial feature, suggest planning with this workflow first. Respond in the
-  user's language (EN/PT/ES).
+  Unified, track-based spec-driven development: turns ideas into EARS requirements, technical
+  designs and traceable, approval-gated tasks, composing optional tracks per feature: +tdd
+  (test-first, red-green-refactor), +saas (scale, multi-tenancy, observability, cost, load tests)
+  and +ai (evals, prompts-as-code, token economics, safety). A local zero-dependency MCP server
+  scaffolds and checks everything offline. Use when the user wants to plan a feature before coding,
+  write requirements or a spec, design an architecture, break work into tasks, execute a task plan
+  (inline or with subagents), do TDD, make something production-grade, or build an LLM/AI feature.
+  Triggers: "spec this", "requirements", "EARS", "design doc", "task breakdown", "TDD", "tests
+  first", "multi-tenant", "load testing", "LLM", "RAG", "eval", "prompt"; PT "especificar",
+  "requisitos", "dividir em tarefas", "testes primeiro"; ES "especificar", "requisitos", "dividir en
+  tareas", "pruebas primero". Respond in the user's language (EN/PT/ES).
 ---
 
 # Dev Spec-Driven (unified, track-based)
@@ -50,6 +32,23 @@ deep `references/` library:
 | **+saas** | saas-spec-scale | 5 mandatory scale sections, multi-tenancy, observability, cost, load tests |
 | **+ai** | ai-product-spec-scale | Eval plan, prompts-as-code, token economics, safety, model lifecycle |
 
+## When to use this skill
+
+Planning phrases: "dev-spec", "spec mode", "spec this", "create spec", "implementation plan", "plan
+this feature", "let's spec this out", "write requirements for", "break this into tasks". Test-first:
+"tests first", "test-driven", "red green refactor", "no code without a test". Production/scale:
+"production-ready", "make this production-grade", "scale", "SLA", "observability", "performance
+budget". AI: "agent", "chatbot", "hallucination", "token cost", "AI product", "prompt injection", "spec
+this AI feature". Execution: "execute the tasks", "implement the plan", "use subagents". PT: "planear
+funcionalidade", "criar requisitos", "desenhar arquitetura", "pronto para produção", "multi-inquilino",
+"funcionalidade de IA/LLM". ES: "planificar/diseñar la función", "crear requisitos", "listo para
+producción", "multiinquilino", "función de IA/LLM". Intent: "before I start coding", "help me scope
+this", "the requirements keep changing", "how should I build X", "what's the plan for X"; PT "antes de
+começar a programar", "ajuda-me a delimitar isto", "qual é o plano para X"; ES "antes de empezar a
+programar", "ayúdame a acotar esto", "cuál es el plan para X". When the user just says "I want to build
+X" ("quero construir X" / "quiero construir X") for a non-trivial feature, suggest planning with this
+workflow first.
+
 ## Language (EN / PT / ES)
 
 This skill is **trilingual**. Detect the language of the user's request and **mirror it** in
@@ -59,23 +58,14 @@ headings** (e.g. `## Critérios de Sucesso`, `## Verificação da Constituição
 Desempenho`). The engine recognizes the mandatory section headings in EN/PT/ES, so a fully-localized
 spec still passes `doctor`/`clarify`. Don't switch the user to English.
 
-**The engine scaffolds in the user's language for you — pass `lang`.** Set `lang` (`en`/`pt`/`es`)
-on `spec_init` (it becomes the project default, stored in `.specs/roadmap.json`) and on `spec_create`
-(per feature; defaults to the project language, persisted in the feature's `.state.json`). Every
-generated artifact, steering stub, and the messages from `doctor`/`clarify`/`next_action` then come
-out already localized — you only fill in the bracketed placeholders, you don't translate the scaffold.
-Resolution order is **explicit `lang` > project default > en**; a feature can override the project
-default (e.g. one EN feature in an otherwise-PT project). On the CLI use `--lang pt|es` on `init`/`create`.
+**The engine scaffolds in the user's language — pass `lang`** on `spec_init` (project default) and
+`spec_create` (per feature; explicit `lang` > project default > en). Artifacts, steering stubs and every
+tool message then come out localized — fill the placeholders, don't translate the scaffold.
 
 Keep these **structural tokens stable across languages** (the tooling matches them literally): AC/SC
 IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`,
-`_Implements:_`), story/parallel tags (`[US1]`, `[shared]`, `[P]`), track names (`core/+tdd/+saas/+ai`),
-and the `[NEEDS CLARIFICATION:]` marker. EARS keywords may be localized (they're detected in all three).
-
-EARS keywords may be written in the user's language and still pass `ears_validate`:
-- **EN:** WHEN / WHILE / IF…THEN / WHERE · THE SYSTEM SHALL
-- **PT:** QUANDO / ENQUANTO / SE…ENTÃO / ONDE · O SISTEMA DEVE
-- **ES:** CUANDO / MIENTRAS / SI…ENTONCES / DONDE · EL SISTEMA DEBE
+`_Implements:_`, `_Verify:_`), story/parallel tags (`[US1]`, `[shared]`, `[P]`), track names, and the
+`[NEEDS CLARIFICATION:]` marker. EARS keywords may be localized (they're detected in all three).
 
 If the user mixes languages or asks to switch, follow their lead. When unsure, match the language of
 their most recent message.
@@ -93,24 +83,31 @@ their most recent message.
    about it" — the source of every 3AM incident and every surprise bill.
 5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no
    cloud runners, no per-run cost. Specs live in `.specs/` and are versioned in your git repo.
+6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the
+   final code: tasks declare `_Verify: <command>_` and `spec_complete_task` records the result
+   (`references/verification.md`). The thoughts that precede skipping a phase are listed in
+   `references/red-flags.md`.
 
 ---
 
 ## The local MCP server (use it — it's free and offline)
 
-This plugin bundles a zero-dependency Node MCP server named **`spec-driven`**. It does the
-mechanical work so you can focus on judgement. Prefer these tools over hand-rolling file edits
-for the structural steps:
+The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over
+hand-rolled edits for the structural steps:
 
 | Tool | Use it for |
 |---|---|
 | `spec_classify` | Phase 0 — seed the track recommendation from a description (keyword heuristic) |
 | `spec_init` | Scaffold `.specs/steering/` with the right steering files for the active tracks |
-| `spec_create` | Scaffold a feature folder with the exact artifact skeleton for its tracks |
+| `spec_create` | Scaffold a feature folder with the exact artifact skeleton for its tracks (`kind: "bugfix"` → the bugfix flow) |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | Detailed status of one feature (phase, tasks, scale-section completeness, eval state) |
-| `spec_next_task` | Get the next unchecked task |
-| `spec_complete_task` | Mark task N done in `tasks.md` |
+| `spec_next_task` | Get the next unchecked task (`batch:true` → + the `[P]` tasks that can run beside it) |
+| `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved to spec text, design context, DoD); `write:true` → `.specs/<feature>/.execution/` for subagent execution |
+| `spec_complete_task` | Mark task N done in `tasks.md`, with `evidence` (command, exit code, summary) — a failed run refuses the tick |
+| `spec_finish` | Close a feature: blockers + fresh checks to run + a PR description generated from the spec chain |
+| `spec_next_action` | "You are here → do this next" + artifacts changed since approval |
+| `spec_add_track` / `spec_feature` | Escalate a feature to a new track (additive) / remove · archive · rename it |
 | `ears_validate` | Lint requirements for SHALL, stable IDs, and vague words |
 | `trace_check` | Verify every AC is covered by a task (and a test on +tdd); flags phantom refs |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS + trace + sections + steering) |
@@ -121,75 +118,50 @@ for the structural steps:
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase + spec coverage % |
 | `steering_scaffold` | Create one steering file from template (incl. `constitution.md`) |
 
-The MCP tools produce **skeletons and checks**; *you* fill them with real, project-specific
-content using the templates in `references/`. The MCP never overwrites existing files. If the MCP
-server isn't connected (e.g. on claude.ai), fall back to writing the files by hand from the
-reference templates — the workflow is identical.
+The tools produce **skeletons and checks** (never overwriting your files); *you* fill them with real
+content from the `references/` templates. No MCP connection (e.g. claude.ai)? Write the files by hand.
 
 ---
 
 ## First Things First: Mode, then Tracks
 
 ### Vibe Mode — Just Build It
-Use when the user says "just do it", "quick fix", "nothing fancy"; the task is a bug fix, small
+Use when the user says "just do it", "quick fix", "nothing fancy"; the task is a trivial fix, small
 tweak, copy change, or single-file change; it's < ~30 min; or they already know exactly what they
 want. Skip all artifacts and tracks. Solve the problem. If it grows complex, offer to switch.
+
+### Bounded Mode — Short Design, Explicit Yes
+A well-scoped change to a flow that **already exists in this repo** (a new flag, a small endpoint, a
+one-file behaviour change). Ask only the questions that matter, present a short design **in chat** (a
+few sentences, the files you'll touch, how you'll verify it), and STOP until the user says yes — that
+approval is as binding as a phase gate. No artifacts. If there's no existing flow to change, it isn't
+bounded. **The ratchet is one-way:** hidden complexity found mid-task upgrades the mode (Vibe → Bounded
+→ Spec), never the reverse. For a real defect, use the **bugfix flow** (`/spec-bugfix`, below).
 
 ### Spec Mode — Plan First, Then Build
 Everything else. Spec Mode always begins with **Phase 0: Classification**, which selects the
 composable track set for this feature. Then it runs the pipeline below, with the track-conditional
 phases switched on or off.
 
-If unsure which mode: casual language → Vibe; formal/complex/"system"/"integration"/"properly" →
-Spec. When truly ambiguous, suggest Spec and let the user decide.
+If unsure which mode: casual language → Vibe; a contained change to existing code → Bounded;
+formal/complex/"system"/"integration"/"properly" → Spec. Say the mode out loud so the user can override
+it; when in doubt between two, take the heavier one.
 
 ### Brownfield — adopt SDD in an EXISTING codebase
-When the project already has code (no `.specs/` yet, or "document/spec our existing app"):
-1. **Scan** — run `spec_scan` (CLI: `dev-spec scan`) for a local inventory: stack, top-level
-   modules, candidate endpoints, file mix. Read key files to understand the architecture.
-2. **Infer steering + constitution** — from the scan + code, draft `steering/` and especially
-   `constitution.md` that **acknowledges the existing patterns** rather than imposing new ones.
-   Present for approval.
-3. **Reverse-engineer specs** — for the core modules, create features (`spec_create`) and fill
-   `requirements.md`/`design.md` to describe what the code *actually does today* (mark them as
-   reverse-engineered). Pick a strategy: constitution-only, or + baseline specs for 2-3 core
-   modules, or full coverage — match effort to need.
-4. **Coverage** — `spec_coverage` (CLI: `dev-spec coverage`) reports what % of modules have specs;
-   prioritize the gaps.
-5. **New feature, integration-aware** — then classify + spec the new feature normally, plus an
-   `integration-plan.md` (integration points, required changes, sequencing, risks). Use the
-   `_Implements: path_` task marker so `trace` ties specs to real files.
-Respect what's there; adopt incrementally; prove value on one module before expanding.
+When the project already has code (no `.specs/` yet, or "document/spec our existing app"): **scan**
+(`spec_scan`) → **infer steering + a constitution that acknowledges the existing patterns** → reverse-
+engineer specs for the core modules (describe what the code does *today*) → **coverage** (`spec_coverage`)
+→ spec new features integration-aware (`integration-plan.md`, `_Implements:_`). Adopt incrementally;
+prove value on one module first. Full flow and strategies: `references/brownfield.md`.
 
 ---
 
 ## Directory Structure
 
-All artifacts live in `.specs/` at the project root:
-
-```
-project-root/
-└── .specs/
-    ├── roadmap.json              # multi-feature order + dependencies (managed by spec_depend)
-    ├── steering/                 # shared project context (created per active tracks)
-    │   ├── constitution.md       # core (always) — non-negotiable principles
-    │   ├── product.md  tech.md  structure.md        # core (always)
-    │   ├── testing-standards.md                      # +tdd
-    │   ├── scale.md  observability.md  cost.md       # +saas
-    │   └── ai-strategy.md                            # +ai
-    └── [feature-name]/
-        ├── classification.md     # mode + active tracks + signals + blast radius
-        ├── requirements.md       # EARS, stable AC IDs (US-1.AC-1 …)
-        ├── design.md             # base sections + mandatory +saas / +ai sections
-        ├── test-plan.md          # +tdd
-        ├── tests/                # +tdd — failing tests live/index here
-        ├── eval-plan.md          # +ai — golden / adversarial / regression sets
-        ├── prompts/  evals/      # +ai — versioned prompts + eval sets (JSON) + graders
-        ├── load-test.md          # +saas hot path
-        ├── quickstart.md         # human-runnable acceptance scenario (manual smoke test)
-        ├── checklist.md          # track-aware quality checklist
-        └── tasks.md              # story-organized, traceable plan ([P] = parallelizable)
-```
+All artifacts live in `.specs/` at the project root: `steering/` (shared context, per active track),
+`roadmap.json`, and one folder per feature — `classification.md`, `requirements.md`, `design.md`,
+`tasks.md`, `quickstart.md`, `checklist.md`, plus `test-plan.md` + `tests/` (+tdd), `eval-plan.md` +
+`prompts/` + `evals/` (+ai) and `load-test.md` (+saas). Annotated tree: `references/tooling-reference.md`.
 
 ### Steering Files
 Before any spec work, read whatever exists in `.specs/steering/`. If the core files are missing,
@@ -253,8 +225,9 @@ for approval.
 | Optional | WHERE | Where SSO is configured, the system shall skip the password step. |
 | Unwanted | IF…THEN | If password fails 5 times, then lock the account for 15 minutes. |
 
-Compound order: WHILE → WHEN → IF. Every criterion must be testable and specific — no "fast",
-"user-friendly", "appropriate"; use concrete values. Full reference: `references/ears-guide.md`.
+PT: QUANDO / ENQUANTO / SE…ENTÃO / ONDE · O SISTEMA DEVE — ES: CUANDO / MIENTRAS / SI…ENTONCES / DONDE ·
+EL SISTEMA DEBE (all pass `ears_validate`). Compound order: WHILE → WHEN → IF. Every criterion must be
+testable and specific — no "fast", "user-friendly"; use concrete values. Full reference: `references/ears-guide.md`.
 
 ### Track-specific ACs to always consider
 - **+saas:** tenant isolation (`WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT
@@ -368,7 +341,7 @@ every planned T-ID should map to a task). Present for review.
 Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize
 your understanding to confirm alignment. Then work tasks **in order**, choosing the loop per task:
 
-- **core task (no +tdd):** announce → implement per design → run existing tests → `spec_complete_task` → report.
+- **core task (no +tdd):** announce → implement per design → run existing tests → `spec_complete_task {evidence}` → report.
 - **+tdd task:** announce target tests → confirm red for the right reason → write the *minimum* code
   to green them → run the **full** suite (targets green, prior green still green, future-task tests
   still red) → refactor on green → mark `✓ (T-xx green)`.
@@ -390,6 +363,26 @@ If blocked, pause and discuss — don't improvise outside the design. If a test/
 gap, go back to that phase, not the implementation. If a "green" test is actually wrong, pause,
 explain, fix the plan with approval, rerun — never quietly edit a test to pass.
 
+### Execution strategy: inline (default) or subagents (opt-in)
+
+**Inline** is the loop above: you implement every task in this session. **Subagents**
+(`/executeTask <feature> --subagents`, or when the user asks) keeps your context for coordination: per
+task you write a brief with `spec_task_brief {name, number, write:true}`, dispatch the plugin's
+**`dev-spec-driven:spec-implementer`** agent with the brief path, send its diff to the **`dev-spec-driven:spec-reviewer`** agent
+(verdict per AC ID + quality + track checks), run a fix loop of at most 5 rounds, and only then call
+`spec_complete_task`. Offer it for features with ~6+ mostly independent tasks. It costs roughly 2–3× the
+tokens. Invariants:
+- you (the controller) never write feature code; `tasks.md` `[x]` means *implemented and reviewed*;
+- run continuously within a story, but **stop at every `**Checkpoint:**`** for human review;
+- any finding that would change an AC, the design or a planned test goes **back to that phase**. Never
+  rule on it yourself;
+- +ai prompt/eval tasks (`inlineOnly` in the brief) stay inline;
+- hosts without subagents (Cursor, Windsurf, Copilot, Gemini, claude.ai) use inline, and can still use
+  `dev-spec brief` to focus each task.
+
+Full protocol (ledger, pre-flight scan, review packages, fix loop, model selection, final review):
+`references/subagent-execution.md`.
+
 ### User commands during execution
 "implement"/"next" (next task) · "implement N" (jump) · "continue" (resume) · "status" (progress +
 test/eval state) · "pause" (stop after current task).
@@ -398,7 +391,7 @@ test/eval state) · "pause" (stop after current task).
 
 ## Supporting Workflows
 
-### Commit Messages (`/commit`)
+### Commit Messages (`/spec-commit`)
 Conventional commits referencing the chain:
 ```
 feat(billing): implement webhook signature verification
@@ -423,8 +416,8 @@ delta noted). Model migrations are **eval-gated only**: run the current eval set
 compare per set, switch only if equal-or-better (or tune the prompt to recover), record the
 decision in the Model Lifecycle section. Never migrate blind.
 
-### Health Check & Gates (`/doctor`, `/approve`, `/next-action`)
-Before advancing a phase, run `/doctor` (the `spec_doctor` tool): it runs EARS lint, traceability,
+### Health Check & Gates (`/spec-doctor`, `/approve`, `/next-action`)
+Before advancing a phase, run `/spec-doctor` (the `spec_doctor` tool): it runs EARS lint, traceability,
 steering presence, design+Mermaid, and — per active track — whether the mandatory +saas/+ai
 sections are present AND filled (no leftover `TODO` sentinel), and returns a `readyToAdvance`
 verdict. It also enforces a **real approval gate**: any artifact that exists but whose phase hasn't
@@ -435,6 +428,30 @@ isn't just quality-checked, it's sign-off-checked. When the user signs off on a 
 phase, the doctor verdict and the gates and tells you the single next step — and flags any artifact
 edited *after* its approval so a post-approval change is re-reviewed, not silently shipped.
 
+`/spec-doctor <feature> --deep` adds a semantic review of the artifact at the gate by the
+`dev-spec-driven:spec-critic` agent — completeness, contradictions, ambiguity, testability, scope, YAGNI —
+which the structural checks can't see.
+
+### Bugfix (`/spec-bugfix`)
+A defect gets a light spec, not a full one: `spec_create {kind:"bugfix"}` scaffolds `bug.md`
+(reproduction · expected vs actual · **root cause** · fix · regression test), a one-story requirement
+(`IF <trigger> THEN THE SYSTEM SHALL <correct behaviour>`), a regression test plan and the fixed order
+**reproduce → root cause → failing regression test → fix → verify**. `spec_doctor` fails until the root
+cause is written with evidence — no fix before the cause is known. After three failed fixes, stop and
+question the design. Full flow: `references/bugfix.md`.
+
+### Finishing a feature (`/spec-finish`)
+`spec_finish` reports what still blocks (doctor fails, open tasks, tasks without evidence, pending
+approvals), lists the checks to run fresh (full suite; +saas load test + observability; +ai cost + safety;
+bugfix: no longer reproduces) and generates the PR title and description **from the spec chain** (ACs,
+tasks with their evidence, tests, root cause/fix). Then the user picks: merge locally, open a PR, or keep
+the branch — never merge or push on your own.
+
+### Review feedback (`/spec-review-feedback`)
+Evaluate every review comment against the spec before touching code: an AC violation gets fixed; a spec
+change goes back to its phase for approval; an out-of-scope ask gets a reasoned push-back citing
+`Out of Scope`; unclear items get a question. No performative agreement. `references/review-feedback.md`.
+
 ### Adjusting a feature (`/add-track`, `/feature`)
 Needs changed? `/add-track <feature> <tdd|saas|ai>` (the `spec_add_track` tool) escalates an existing
 feature to a new track — **additive only**: it scaffolds just the missing artifacts and appends that
@@ -443,45 +460,27 @@ track's mandatory design sections, never overwriting your work. `/feature <remov
 **rename** (slug + folder + every `roadmap.json` dependency reference), or **remove** (destructive —
 confirm first). All keep the roadmap's dependency graph consistent.
 
-### Local automation (hooks — the free CI substitute)
-This plugin ships local hooks (`hooks/hooks.json`), not CI: on saving `requirements.md` it lints
-EARS; on saving `tasks.md` it runs a traceability check; at session start it prints feature status.
-An optional git `pre-commit` validator (`hooks/precommit-check.js`) blocks commits with EARS errors
-or phantom AC/test references. All local, zero cost — no GitHub Actions anywhere.
-
-### Integrations & handoffs
-These compose with the user's other plugins when present: at `/prReview` or before a deploy, hand
-security/quality off to **dev-guardian** (`/guardian-review`, `/guardian-scan`); for UI-heavy
-features, reach for **ui-ux-pro-max** during design/build. Don't duplicate what those do — route to
-them.
+### Local automation & handoffs
+Local hooks, not CI: saving `requirements.md` lints EARS, saving `tasks.md` checks traceability, session
+start prints feature status; the optional `pre-commit` validator blocks staged EARS errors / phantom refs.
+Hand security/quality to **dev-guardian** (`/guardian-review`, `/guardian-scan`) and UI work to
+**ui-ux-pro-max** when present — route to them, don't duplicate them.
 
 ### Roadmap & Dependencies (`/roadmap`, `/depend`, `/backlog`)
 For multi-feature projects, model the order and dependencies between features. `spec_depend`
 declares "feature X depends on Y" (or sets an explicit order) and **rejects cycles**; `spec_roadmap`
-shows every feature's tracks, phase, completion % (derived from phase), blocked status (a dependency
-is met when that feature is 100%), overall %, and any cycle. Use it for "what should I build next?",
-"what depends on auth?", and "move X before Y". Don't start a feature whose dependencies aren't met
-without saying so.
-
-**Always-current roadmap overview.** The default is **`.specs/ROADMAP.md`** (git/PR-friendly, keeps
-the Mermaid dependency graph): a progress bar, feature table, dependency graph, "needs attention",
-and a backlog of planned-but-unspecced features. **An optional self-contained `.specs/ROADMAP.html`**
-(`html: true` / `--html`) renders the same as a brand-styled page (Pro Digital Key palette, offline,
-light/dark toggle defaulting to the system theme). It's kept up to date automatically: the engine
-regenerates it on every mutation (`spec_create`, `spec_complete_task`, `spec_approve`, `spec_depend`,
-`spec_backlog`) and a hook regenerates it when you hand-edit a spec file. As a backstop, call
-`spec_roadmap` with `write: true` (CLI: `dev-spec roadmap --write [--html]`). **Pass the user's
-language** (`lang` / `--lang pt`) so the roadmap chrome matches — it's stored and reused on
-auto-refresh. Track future work with `spec_backlog` (`/backlog add "name"`). The files are
-auto-generated — never hand-edit them.
+shows every feature's tracks, phase, completion % (planning up to 30%, then driven by tasks done),
+blocked status (a dependency is met when that feature is 100%), overall %, and any cycle. Use it for
+"what should I build next?", "what depends on auth?" and "move X before Y". Don't start a feature whose
+dependencies aren't met without saying so. The always-current `.specs/ROADMAP.md` (+ optional
+`ROADMAP.html`) is regenerated automatically — never hand-edit it; details in
+`references/tooling-reference.md`.
 
 ### Phase Summaries (always present one at each gate)
-At every approval gate, present a short, structured summary so the human can review fast:
-**(1) what was produced · (2) key decisions + rationale · (3) tracks/sections affected · (4) things
-to review / watch-outs / risks · (5) the `spec_doctor` verdict · (6) next step.** Then explicitly
-ask for approval. Keep it tight — this is a review aid, not a wall of text.
+At every gate: **(1) what was produced · (2) key decisions + rationale · (3) tracks/sections affected ·
+(4) risks to review · (5) the `spec_doctor` verdict · (6) next step** — then ask for approval. Keep it tight.
 
-### Status (`/status`) & Mode/Track Switching
+### Status (`/spec-status`) & Mode/Track Switching
 "status" → run `spec_status` / `spec_list`: report mode, active tracks, phase, task progress, test
 red/green and eval scores, and section completeness. Switch anytime: "let's vibe" → Vibe; "spec
 this" → Spec from Phase 0; "escalate to +tdd/+saas/+ai" mid-feature → add the track and its
@@ -492,48 +491,20 @@ classify.
 ---
 
 ## Environment Notes
-- **Claude Code / Cowork:** Full support. Specs in `.specs/`, real test files in the project's
-  standard location, prompts/evals in the feature folder. The local MCP server handles scaffolding
-  and tracking. Git versions everything. No CI required.
-- **claude.ai:** Present artifacts in code blocks; the user copies them across. The MCP server and
-  test/load/eval execution need a real environment — describe expected results instead of running.
+- **Claude Code / Cowork:** full support — the local MCP server scaffolds and tracks, git versions everything.
+- **claude.ai:** present artifacts in code blocks for the user to copy; the MCP server and test/load/eval
+  runs need a real environment — describe expected results instead of running.
 
 ---
 
 ## Command Reference
-| Command | Phase | What it does |
-|---|---|---|
-| `/spec` | entry | Start/resume the whole workflow for a feature — picks mode + tracks, then runs the pipeline (uses `spec_classify`/`spec_status`) |
-| `/init` | setup | Scaffold `.specs/steering/` for the active tracks (uses `spec_init`) |
-| `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |
-| `/createSpec` | 1 | Requirements in EARS with stable AC IDs (uses `ears_validate`) |
-| `/design` | 2 | Design with base + active-track mandatory sections |
-| `/testPlan` | 3 | (+tdd) enumerate tests, map to AC IDs, choose layers |
-| `/evalPlan` | 3 | (+ai) golden/adversarial/regression sets, graders, thresholds, baseline |
-| `/writeTests` | 4 | (+tdd/+ai) failing tests + eval harness; the hard gate |
-| `/createTask` | 5 | Traceable, ordered tasks (uses `trace_check`) |
-| `/executeTask` | 6 | Implement: core / red-green-refactor / prompt-iteration per task |
-| `/doctor` | gate | Health-check a feature; returns readyToAdvance + gate status (uses `spec_doctor`) |
-| `/approve` | gate | Record a phase approval to `.state.json` (uses `spec_approve`) |
-| `/next-action` | any | "You are here → do this next" + what changed since approval (uses `spec_next_action`) |
-| `/add-track` | any | Escalate a feature to +tdd/+saas/+ai, additive (uses `spec_add_track`) |
-| `/feature` | any | Remove / archive / rename a feature, deps kept consistent (uses `spec_feature`) |
-| `/eval` | +ai | Run the local eval harness (golden/adversarial/regression) with your API key |
-| `/clarify` | 1 | Surface requirement ambiguities/gaps before design (uses `spec_clarify`) |
-| `/roadmap` | any | Multi-feature roadmap: %, deps, blocked, cycles; writes `.specs/ROADMAP.md` (uses `spec_roadmap`) |
-| `/depend` | any | Declare feature dependencies / order, cycle-checked (uses `spec_depend`) |
-| `/backlog` | any | Add/remove planned features shown in ROADMAP.md (uses `spec_backlog`) |
-| `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
-| `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
-| `/coverage` | brownfield | Spec coverage % of existing code (uses `spec_coverage`) |
-| `/commit` | support | Conventional commits referencing spec + tests + evals |
-| `/prReview` | support | Track-aware PR review against the full chain |
-| `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
-| `/migrateModel` | support | (+ai) eval-gated model migration |
-| `/status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |
 
-**Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/status`. (As a plugin, all
-commands are namespaced, e.g. `/dev-spec-driven:doctor`.)
+Full table (command → phase → tool it uses): `references/tooling-reference.md`. Entry point `/spec`
+(alias `/ds`); execute with `/executeTask` (`/dsx`, `--subagents` for implementer + reviewer per task);
+status `/spec-status` (`/dss`); gates `/spec-doctor` + `/approve`. As a plugin every command is
+namespaced (`/dev-spec-driven:spec-doctor`); the `spec-` prefix on `/spec-init`, `/spec-status`,
+`/spec-doctor` and `/spec-commit` keeps them clear of Claude Code's built-in `/init`, `/status`,
+`/doctor` and `/commit`.
 
 ---
 
@@ -543,7 +514,13 @@ commands are namespaced, e.g. `/dev-spec-driven:doctor`.)
 - `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration)
 - `references/improvement-specs.md` — spec'ing internal-improvement work (the metric delta is the acceptance criterion; closes the dev-guardian loop)
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 8 steering-file templates
+- `references/steering-templates.md` — all 9 steering-file templates
+- `references/tooling-reference.md` — command table, annotated `.specs/` tree, roadmap generation details
+- `references/verification.md` — evidence before claims: the gate, `_Verify:_`, recorded evidence
+- `references/bugfix.md` — systematic debugging as a light spec (reproduce → root cause → regression test → fix)
+- `references/review-feedback.md` — handling review comments against the spec
+- `references/red-flags.md` — the rationalizations that precede skipping each phase
+- `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → fix loop, ledger, checkpoints, model selection
 - `references/example-spec.md` — end-to-end example (requirements → design → tasks), core/auth
 - `references/example-spec-combined.md` — worked example with all four tracks (`core +tdd +saas +ai`)
 - `references/test-patterns.md` — naming, AAA, table-driven tests, anti-patterns

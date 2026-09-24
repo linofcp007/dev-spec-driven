@@ -1,9 +1,9 @@
 ---
-description: Short alias for /status — feature/project status. Estado. Estado.
+description: Short alias for /spec-status — feature/project status. Estado. Estado.
 argument-hint: "[feature name | blank for all]"
 ---
 
-Use the **dev-spec-driven** skill status workflow. Short alias for `/status`.
+Use the **dev-spec-driven** skill status workflow. Short alias for `/spec-status`.
 
 Target: $ARGUMENTS
 

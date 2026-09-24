@@ -278,6 +278,7 @@ ${extra}
 ## Story US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Core behavior for US-1]
   - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 - [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 is fully functional and independently testable/shippable.
@@ -323,8 +324,103 @@ ${extra}
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
      back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->
 
+## Global Constraints
+<!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
+     naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
+     Give each task a _Verify: <command>_: spec_complete_task records its result as the task's evidence. -->
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
+
 ${phases}`
       );
+    },
+
+    bugReport(a) {
+      return `# Bug: ${a.name}
+
+<!-- Bugfix flow (systematic debugging): reproduce → find the ROOT CAUSE with evidence → write the failing
+     regression test → fix the cause, not the symptom → verify. spec_doctor fails until "Root Cause" is
+     filled: no fix before the cause is known. -->
+
+## Summary
+${a.summary || "[one line: what is broken, for whom, since when]"}
+
+## Reproduction
+> **TODO** — exact steps, input and environment that reproduce it every time.
+
+## Expected vs Actual
+- **Expected:** [correct behavior]
+- **Actual:** [what happens — error message, output, log lines]
+
+## Root Cause
+> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not "probably".
+
+## Fix
+[What changes and why it removes the root cause — one fix, not a bundle.]
+
+## Regression Test
+- **T-01** — reproduces the bug: fails before the fix, passes after it.
+`;
+    },
+
+    bugRequirements(a) {
+      return `# Bugfix: ${a.name}
+
+## Summary
+${a.summary || "[one line: the bug being fixed]"}
+
+## User Stories
+
+### US-1 (P1 — fix): ${a.name}
+**Independent Test:** regression test T-01 reproduces the bug before the fix and passes after it.
+
+#### Acceptance Criteria (EARS)
+1. **US-1.AC-1** — IF [the condition that triggers the bug] THEN THE SYSTEM SHALL [the correct behavior]
+2. **US-1.AC-2** — THE SYSTEM SHALL keep [the neighbouring behavior that already worked] unchanged
+
+## Success Criteria
+- **SC-001** — the reproduction steps in bug.md no longer reproduce the bug.
+
+## Edge Cases and Error Handling
+- **EC-1** — [nearby inputs that must keep working]
+
+## Out of Scope
+- Unrelated refactors — file them as separate work.
+`;
+    },
+
+    bugTestPlan(name) {
+      return `# Test Plan: ${name}
+
+| Test ID | Layer | Description | Covers (AC IDs) | File |
+|---------|-------|-------------|-----------------|------|
+| T-01 | [unit/integration] | regression — reproduces the bug (red before the fix) | US-1.AC-1 | \`[path]\` |
+| T-02 | [unit/integration] | neighbouring behavior still works | US-1.AC-2 | \`[path]\` |
+`;
+    },
+
+    bugTasks(name) {
+      return `# Tasks: ${name}
+
+<!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
+     No fix before bug.md → Root Cause is filled with evidence. -->
+
+## Global Constraints
+- [exact values the fix must respect — versions, limits, formats]
+
+## Phase: Fix
+- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction
+  - _Requirements: US-1.AC-1_
+- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)
+  - _Requirements: US-1.AC-1_
+- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output)
+  - _Requirements: US-1.AC-1_
+  - _Makes green: T-01_
+- [ ] 4. [US1] Fix the root cause — one change, not a bundle
+  - _Requirements: US-1.AC-1, US-1.AC-2_
+  - _Makes green: T-01, T-02_
+  - _Verify: [full test suite command]_
+**Checkpoint:** the bug no longer reproduces and the full suite is green.
+`;
     },
 
     testPlan(name) {
@@ -586,11 +682,11 @@ Resultados que a feature deve atingir — negócio/UX, não implementação. Qua
 
 ## [SaaS] Design de Escala
 > **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
-- Utilizadores concorrentes (lançamento/6m/2a) · crescimento de dados · caminhos críticos · caching (TTL+invalidação) · estratégia de filas · índices · sharding.
+- Utilizadores em simultâneo (lançamento/6m/2a) · crescimento de dados · caminhos críticos · caching (TTL+invalidação) · estratégia de filas · índices · sharding.
 
 ## [SaaS] Modelo Multi-inquilino
 > **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
-- Isolamento (pooled/siloed/bridged) · como o tenant_id é imposto · limites noisy-neighbor · exportar/eliminar (GDPR).
+- Isolamento (pooled/siloed/bridged) · como o tenant_id é garantido · limites noisy-neighbor · exportar/eliminar (GDPR).
 
 ## [SaaS] Observabilidade
 > **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
@@ -687,7 +783,7 @@ interface Entity {
 
 ## Verificação da Constituição
 Verifica este design contra cada princípio em \`steering/constitution.md\`. GATE: tem de passar antes
-da implementação; re-verifica após qualquer alteração de design.
+da implementação; volta a verificar após qualquer alteração de design.
 - [ ] [Princípio 1] — cumpre
 - [ ] [Princípio 2] — cumpre
 (Se um princípio não puder ser cumprido, NÃO o quebres em silêncio — regista-o em Rastreio de Complexidade abaixo.)
@@ -721,6 +817,7 @@ ${extra}
 ## História US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamento central para US-1]
   - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 - [ ] ${id()}. [US1][P] [tarefa paralelizável — ficheiro diferente, sem deps]
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
@@ -763,11 +860,106 @@ ${extra}
      trabalho transversal. [P] = paralelizável (ficheiros diferentes, sem deps). Cada tarefa leva
      _Requirements:_; tarefas TDD levam _Makes green:_. Usa _Implements: caminho_ para ligar uma tarefa
      a um ficheiro de código real. Um **Checkpoint** marca onde uma história é testável de forma independente.
-     Se as histórias NÃO forem lançáveis de forma independente, foram mal fatiadas — re-fatia-as, ou
+     Se as histórias NÃO forem lançáveis de forma independente, foram mal fatiadas — volta a fatiá-las, ou
      recorre a um layout por camada técnica (Fundação→Lógica→API→…) mantendo as tags [US1]. -->
+
+## Restrições Globais
+<!-- Valores exatos que todas as tarefas têm de respeitar, copiados tal e qual da spec/steering (versões
+     mínimas, regras de nomes, limites, formatos) — o spec_task_brief copia esta secção para cada brief.
+     Dá a cada tarefa um _Verify: <comando>_: o spec_complete_task regista o resultado como evidência. -->
+- [ex.: Node >= 20 · sem dependências de runtime novas · campos da API em snake_case]
 
 ${phases}`
       );
+    },
+
+    bugReport(a) {
+      return `# Bug: ${a.name}
+
+<!-- Fluxo de bugfix (depuração sistemática): reproduzir → encontrar a CAUSA RAIZ com evidência → escrever o
+     teste de regressão a falhar → corrigir a causa, não o sintoma → verificar. O spec_doctor falha enquanto
+     a "Causa Raiz" não estiver preenchida: nenhuma correção antes de se conhecer a causa. -->
+
+## Resumo
+${a.summary || "[uma linha: o que está partido, para quem, desde quando]"}
+
+## Reprodução
+> **TODO** — passos, input e ambiente exatos que o reproduzem sempre.
+
+## Esperado vs Atual
+- **Esperado:** [comportamento correto]
+- **Atual:** [o que acontece — mensagem de erro, output, linhas de log]
+
+## Causa Raiz
+> **TODO** — a causa, com evidência (stack trace, log, asserção a falhar, a alteração que a introduziu). Não "provavelmente".
+
+## Correção
+[O que muda e porque é que elimina a causa raiz — uma correção, não um pacote.]
+
+## Teste de Regressão
+- **T-01** — reproduz o bug: falha antes da correção e passa depois.
+`;
+    },
+
+    bugRequirements(a) {
+      return `# Bugfix: ${a.name}
+
+## Resumo
+${a.summary || "[uma linha: o bug a corrigir]"}
+
+## Histórias de Utilizador
+
+### US-1 (P1 — correção): ${a.name}
+**Teste Independente:** o teste de regressão T-01 reproduz o bug antes da correção e passa depois.
+
+#### Critérios de Aceitação (EARS)
+1. **US-1.AC-1** — SE [a condição que provoca o bug] ENTÃO O SISTEMA DEVE [o comportamento correto]
+2. **US-1.AC-2** — O SISTEMA DEVE manter [o comportamento vizinho que já funcionava] inalterado
+
+## Critérios de Sucesso
+- **SC-001** — os passos de reprodução do bug.md deixam de reproduzir o bug.
+
+## Casos Limite e Tratamento de Erros
+- **EC-1** — [inputs próximos que têm de continuar a funcionar]
+
+## Fora de Âmbito
+- Refatorações não relacionadas — regista-as como trabalho à parte.
+`;
+    },
+
+    bugTestPlan(name) {
+      return `# Test Plan: ${name}
+
+| Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
+|---------|--------|-----------|----------------|----------|
+| T-01 | [unit/integração] | regressão — reproduz o bug (vermelho antes da correção) | US-1.AC-1 | \`[caminho]\` |
+| T-02 | [unit/integração] | o comportamento vizinho continua a funcionar | US-1.AC-2 | \`[caminho]\` |
+`;
+    },
+
+    bugTasks(name) {
+      return `# Tasks: ${name}
+
+<!-- A ordem de um bugfix é fixa: reproduzir → causa raiz → teste de regressão a falhar → corrigir → verificar.
+     Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência. -->
+
+## Restrições Globais
+- [valores exatos que a correção tem de respeitar — versões, limites, formatos]
+
+## Fase: Correção
+- [ ] 1. [shared] Reproduzir o bug de forma fiável e escrever os passos em bug.md → Reprodução
+  - _Requirements: US-1.AC-1_
+- [ ] 2. [shared] Encontrar a causa raiz com evidência; preencher bug.md → Causa Raiz (ainda sem corrigir)
+  - _Requirements: US-1.AC-1_
+- [ ] 3. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output)
+  - _Requirements: US-1.AC-1_
+  - _Makes green: T-01_
+- [ ] 4. [US1] Corrigir a causa raiz — uma alteração, não um pacote
+  - _Requirements: US-1.AC-1, US-1.AC-2_
+  - _Makes green: T-01, T-02_
+  - _Verify: [comando da suite de testes completa]_
+**Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
+`;
     },
 
     testPlan(name) {
@@ -866,11 +1058,11 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
 
 ## Caminho negativo
 1. [aciona uma condição de erro de um AC SE…ENTÃO]
-2. **Esperado:** [tratamento gracioso]
+2. **Esperado:** [tratamento controlado]
 
 ## Concluído quando
 - [ ] O caminho feliz produz o resultado esperado.
-- [ ] O caminho negativo é tratado graciosamente.
+- [ ] O caminho negativo é tratado de forma controlada.
 - [ ] Os Critérios de Sucesso (SC-…) são observavelmente cumpridos.
 `
       );
@@ -884,7 +1076,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
         "Rastreabilidade: cada AC mapeia para uma tarefa (corre `trace`).",
       ];
       if (a.tracks.includes("tdd")) items.push("TDD: todos os testes planeados escritos e a vermelho pela razão certa antes do código.", "TDD: commits de teste entram antes dos commits de implementação.");
-      if (a.tracks.includes("saas")) items.push("SaaS: 5 secções obrigatórias de design preenchidas (sem TODO).", "SaaS: isolamento de inquilino imposto (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; teste de carga cumpre o orçamento (caminho crítico).");
+      if (a.tracks.includes("saas")) items.push("SaaS: 5 secções obrigatórias de design preenchidas (sem TODO).", "SaaS: isolamento de inquilino garantido (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; teste de carga cumpre o orçamento (caminho crítico).");
       if (a.tracks.includes("ai")) items.push("IA: 10 secções obrigatórias de design preenchidas (sem TODO).", "IA: golden ≥ limiar, segurança adversarial 100%, regressão mantida.", "IA: prompts versionados em prompts/vN.md; custo dentro do orçamento.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar a feature por concluída.\n\n" +
@@ -926,7 +1118,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
       const sig = a.signals || { tdd: [], saas: [], ai: [] };
       const sigLine = (t) =>
         a.tracks.includes(t)
-          ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[señal]"} — [por qué aplica]`
+          ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[señal]"} — [por qué se aplica]`
           : null;
       const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [ninguno además de core]";
       return (
@@ -1139,7 +1331,7 @@ de la implementación; revisa de nuevo tras cualquier cambio de diseño.
 Justifica todo lo que viole un principio de la constitución o añada complejidad no obvia. Vacío es bueno.
 | Qué | Por qué es necesario | Alternativa más simple rechazada porque |
 |---|---|---|
-| [p.ej., segunda capa de cache] | [razón] | [por qué la opción simple falla] |
+| [p.ej., segunda capa de caché] | [razón] | [por qué la opción simple falla] |
 ${extra}
 <!-- Tracks activos: ${a.label}. Las secciones obligatorias de los tracks de arriba deben tener
      contenido real — un honesto "no hace falta porque X" sirve; en blanco no. -->
@@ -1164,6 +1356,7 @@ ${extra}
 ## Historia US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamiento central para US-1]
   - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Verify: [comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]_
 - [ ] ${id()}. [US1][P] [tarea paralelizable — archivo distinto, sin deps]
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 está totalmente funcional y es testeable/lanzable de forma independiente.
@@ -1204,13 +1397,108 @@ ${extra}
 <!-- Tracks: ${a.label}. Organizado por historia de usuario para que cada una sea lanzable de forma
      independiente (P1 primero). Cada tarea se marca con su historia: [US1]/[US2] o [shared] para
      trabajo transversal. [P] = paralelizable (archivos distintos, sin deps). Cada tarea lleva
-     _Requirements:_; las tareas TDD llevan _Makes green:_. Usa _Implements: ruta_ para ligar una tarea
+     _Requirements:_; las tareas TDD llevan _Makes green:_. Usa _Implements: ruta_ para vincular una tarea
      a un archivo de código real. Un **Checkpoint** marca dónde una historia es testeable de forma independiente.
      Si las historias NO son lanzables de forma independiente, se trocearon mal — vuelve a trocearlas, o
      recurre a un layout por capa técnica (Fundación→Lógica→API→…) manteniendo las tags [US1]. -->
 
+## Restricciones Globales
+<!-- Valores exactos que toda tarea debe respetar, copiados tal cual de la spec/steering (versiones
+     mínimas, reglas de nombres, límites, formatos) — spec_task_brief copia esta sección en cada brief.
+     Da a cada tarea un _Verify: <comando>_: spec_complete_task registra el resultado como evidencia. -->
+- [p. ej.: Node >= 20 · sin dependencias de runtime nuevas · campos de la API en snake_case]
+
 ${phases}`
       );
+    },
+
+    bugReport(a) {
+      return `# Bug: ${a.name}
+
+<!-- Flujo de bugfix (depuración sistemática): reproducir → encontrar la CAUSA RAÍZ con evidencia → escribir
+     la prueba de regresión que falla → corregir la causa, no el síntoma → verificar. spec_doctor falla
+     mientras la "Causa Raíz" no esté rellenada: ninguna corrección antes de conocer la causa. -->
+
+## Resumen
+${a.summary || "[una línea: qué está roto, para quién, desde cuándo]"}
+
+## Reproducción
+> **TODO** — pasos, entrada y entorno exactos que lo reproducen siempre.
+
+## Esperado vs Actual
+- **Esperado:** [comportamiento correcto]
+- **Actual:** [lo que ocurre — mensaje de error, salida, líneas de log]
+
+## Causa Raíz
+> **TODO** — la causa, con evidencia (stack trace, log, aserción que falla, el cambio que la introdujo). No "probablemente".
+
+## Corrección
+[Qué cambia y por qué elimina la causa raíz — una corrección, no un paquete.]
+
+## Prueba de Regresión
+- **T-01** — reproduce el bug: falla antes de la corrección y pasa después.
+`;
+    },
+
+    bugRequirements(a) {
+      return `# Bugfix: ${a.name}
+
+## Resumen
+${a.summary || "[una línea: el bug a corregir]"}
+
+## Historias de Usuario
+
+### US-1 (P1 — corrección): ${a.name}
+**Prueba Independiente:** la prueba de regresión T-01 reproduce el bug antes de la corrección y pasa después.
+
+#### Criterios de Aceptación (EARS)
+1. **US-1.AC-1** — SI [la condición que provoca el bug] ENTONCES EL SISTEMA DEBE [el comportamiento correcto]
+2. **US-1.AC-2** — EL SISTEMA DEBE mantener [el comportamiento vecino que ya funcionaba] sin cambios
+
+## Criterios de Éxito
+- **SC-001** — los pasos de reproducción de bug.md dejan de reproducir el bug.
+
+## Casos Límite y Manejo de Errores
+- **EC-1** — [entradas cercanas que deben seguir funcionando]
+
+## Fuera de Alcance
+- Refactorizaciones no relacionadas — regístralas como trabajo aparte.
+`;
+    },
+
+    bugTestPlan(name) {
+      return `# Test Plan: ${name}
+
+| Test ID | Capa | Descripción | Cubre (AC IDs) | Fichero |
+|---------|------|-------------|----------------|---------|
+| T-01 | [unit/integración] | regresión — reproduce el bug (rojo antes de la corrección) | US-1.AC-1 | \`[ruta]\` |
+| T-02 | [unit/integración] | el comportamiento vecino sigue funcionando | US-1.AC-2 | \`[ruta]\` |
+`;
+    },
+
+    bugTasks(name) {
+      return `# Tareas: ${name}
+
+<!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
+     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia. -->
+
+## Restricciones Globales
+- [valores exactos que la corrección debe respetar — versiones, límites, formatos]
+
+## Fase: Corrección
+- [ ] 1. [shared] Reproducir el bug de forma fiable y escribir los pasos en bug.md → Reproducción
+  - _Requirements: US-1.AC-1_
+- [ ] 2. [shared] Encontrar la causa raíz con evidencia; rellenar bug.md → Causa Raíz (aún sin corregir)
+  - _Requirements: US-1.AC-1_
+- [ ] 3. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida)
+  - _Requirements: US-1.AC-1_
+  - _Makes green: T-01_
+- [ ] 4. [US1] Corregir la causa raíz — un cambio, no un paquete
+  - _Requirements: US-1.AC-1, US-1.AC-2_
+  - _Makes green: T-01, T-02_
+  - _Verify: [comando de la suite de pruebas completa]_
+**Checkpoint:** el bug deja de reproducirse y la suite completa está en verde.
+`;
     },
 
     testPlan(name) {
@@ -1267,7 +1555,7 @@ Cada fallo de producción corregido se convierte en un caso de evaluación perma
 - Regresión: 100% mantenido
 
 ## Baseline
-Corre el golden con un prompt v1 mínimo + modelo planeado; registra aquí la puntuación baseline antes de implementar.
+Ejecuta el golden con un prompt v1 mínimo + modelo planeado; registra aquí la puntuación baseline antes de implementar.
 - Baseline (fecha/puntuación): [ ]
 `
       );
@@ -1305,7 +1593,7 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
 ## Pasos (camino feliz — US-1 / P1)
 1. [haz esto]
 2. [luego esto]
-3. **Esperado:** [resultado observable ligado a un Criterio de Éxito, p.ej. SC-001]
+3. **Esperado:** [resultado observable vinculado a un Criterio de Éxito, p.ej. SC-001]
 
 ## Camino negativo
 1. [dispara una condición de error de un AC SI…ENTONCES]
@@ -1321,10 +1609,10 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
 
     checklist(a) {
       const items = [
-        "Requisitos: cada AC es testeable, tiene ID estable, sin términos vagos (corre `ears`).",
+        "Requisitos: cada AC es testeable, tiene ID estable, sin términos vagos (ejecuta `ears`).",
         "Diseño: respeta la constitución del proyecto (ningún principio violado).",
         "Diseño: al menos un diagrama Mermaid; seguridad + manejo de errores cubiertos.",
-        "Trazabilidad: cada AC mapea a una tarea (corre `trace`).",
+        "Trazabilidad: cada AC mapea a una tarea (ejecuta `trace`).",
       ];
       if (a.tracks.includes("tdd")) items.push("TDD: todas las pruebas planeadas escritas y en rojo por la razón correcta antes del código.", "TDD: los commits de prueba entran antes que los de implementación.");
       if (a.tracks.includes("saas")) items.push("SaaS: 5 secciones obligatorias de diseño rellenadas (sin TODO).", "SaaS: aislamiento de inquilino impuesto (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; prueba de carga cumple el presupuesto (ruta crítica).");
@@ -1401,13 +1689,13 @@ const STEERING = {
     "testing-standards.md":
       "# Padrões de Teste\n\n## Runner e Ferramentas\n- Unit/Integração: []\n- E2E: []\n- Mocking: []\n\n## Política de Cobertura\n- Alvo por defeito: []\n- Caminhos críticos (auth/faturação/dados): 100% de ramos.\n\n## Disciplina TDD\n- Sem implementação antes de um teste a falhar que exercite o caminho real.\n- 'Falhar pela razão certa' = assertion/NotImplemented, não erro de import/sintaxe.\n",
     "scale.md":
-      "# Alvos de Escala\n\n## Alvos de Carga\n| Horizonte | Concorrentes | DAU | MAU | Pico RPS | Dados |\n|---|---|---|---|---|---|\n| Lançamento | | | | | |\n| 6 meses | | | | | |\n| 2 anos | | | | | |\n\n## Alvos de SLA\n| Classe de endpoint | P95 | P99 | Disponibilidade |\n|---|---|---|---|\n| Jornada crítica | | | |\n\n## Jornadas Críticas de Utilizador\n1. []\n\n## Limiares de Escalonamento\n- []\n",
+      "# Alvos de Escala\n\n## Alvos de Carga\n| Horizonte | Simultâneos | DAU | MAU | Pico RPS | Dados |\n|---|---|---|---|---|---|\n| Lançamento | | | | | |\n| 6 meses | | | | | |\n| 2 anos | | | | | |\n\n## Alvos de SLA\n| Classe de endpoint | P95 | P99 | Disponibilidade |\n|---|---|---|---|\n| Jornada crítica | | | |\n\n## Jornadas Críticas de Utilizador\n1. []\n\n## Limiares de Escalonamento\n- []\n",
     "observability.md":
-      "# Padrões de Observabilidade\n\n## Logging\nJSON estruturado. Campos obrigatórios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sem secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufixo de unidade. Por feature: contagem de pedidos, histograma de duração, contagem de erros, um contador de negócio. Cuidado com a cardinalidade de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Amostra 10% em prod, amostra sempre os erros.\n\n## Alertas (cada um liga a um runbook)\n- P0 página já / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Padrões de Observabilidade\n\n## Logging\nJSON estruturado. Campos obrigatórios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sem secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufixo de unidade. Por feature: contagem de pedidos, histograma de duração, contagem de erros, um contador de negócio. Cuidado com a cardinalidade de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Amostra 10% em prod, amostra sempre os erros.\n\n## Alertas (cada um liga a um runbook)\n- P0 alerta imediato (page) / P1 ≤15min / P2 slack / P3 digest.\n",
     "cost.md":
-      "# Orçamento de Custo\n\n## Orçamento de Infraestrutura\nAlvo: < $XX/mês no ano 1.\n\n## Alvo de Custo Por Utilizador\nAlvo: < $0,50 por MAU. Se for excedido, para e otimiza.\n\n## Alertas de Custo\n- Diário > $100 slack / > $200 página.\n\n## Revisão de Custo Por Feature\nCada Envelope de Custo no design.md estima $/1000 utilizadores/mês e sinaliza caminhos críticos de custo.\n",
+      "# Orçamento de Custo\n\n## Orçamento de Infraestrutura\nAlvo: < $XX/mês no ano 1.\n\n## Alvo de Custo Por Utilizador\nAlvo: < $0,50 por MAU. Se for excedido, para e otimiza.\n\n## Alertas de Custo\n- Diário > $100 slack / > $200 alerta imediato (page).\n\n## Revisão de Custo Por Feature\nCada Envelope de Custo no design.md estima $/1000 utilizadores/mês e sinaliza caminhos críticos de custo.\n",
     "ai-strategy.md":
-      "# Estratégia de IA\n\n## Lista de Modelos\n| Papel | Modelo (ID fixado) | Porquê |\n|---|---|---|\n| Primário | | |\n| Fallback | | |\n| Juiz/classificador | | |\n\n## Postura de Fornecedor e Dados\n- Fornecedor / estado do DPA / a PII chega ao modelo: []\n\n## Disciplina de Prompt\n- Prompts em .specs/<feature>/prompts/vN.md, versionados. Nenhuma mudança é lançada sem re-correr os evals.\n\n## Envelope de Custo\n- Alvo $/ação de utilizador / limite de alerta rígido: []\n\n## Postura de Segurança\n- Defesa contra injeção / moderação / política de recusa: []\n\n## Barra de Avaliação (critérios para lançar)\n- Golden ≥85% bom · Segurança adversarial 100% recusado · Regressão 100% mantida.\n\n## Ciclo de Vida\n- Política de fixação / vigilância de descontinuação / migração com gate de avaliação.\n",
+      "# Estratégia de IA\n\n## Lista de Modelos\n| Papel | Modelo (ID fixado) | Porquê |\n|---|---|---|\n| Primário | | |\n| Fallback | | |\n| Juiz/classificador | | |\n\n## Postura de Fornecedor e Dados\n- Fornecedor / estado do DPA / a PII chega ao modelo: []\n\n## Disciplina de Prompt\n- Prompts em .specs/<feature>/prompts/vN.md, versionados. Nenhuma mudança é lançada sem voltar a correr os evals.\n\n## Envelope de Custo\n- Alvo $/ação de utilizador / limite de alerta rígido: []\n\n## Postura de Segurança\n- Defesa contra injeção / moderação / política de recusa: []\n\n## Barra de Avaliação (critérios para lançar)\n- Golden ≥85% bom · Segurança adversarial 100% recusado · Regressão 100% mantida.\n\n## Ciclo de Vida\n- Política de fixação / vigilância de descontinuação / migração com gate de avaliação.\n",
   },
   es: {
     "constitution.md":
@@ -1423,11 +1711,11 @@ const STEERING = {
     "scale.md":
       "# Objetivos de Escala\n\n## Objetivos de Carga\n| Horizonte | Concurrentes | DAU | MAU | Pico RPS | Datos |\n|---|---|---|---|---|---|\n| Lanzamiento | | | | | |\n| 6 meses | | | | | |\n| 2 años | | | | | |\n\n## Objetivos de SLA\n| Clase de endpoint | P95 | P99 | Disponibilidad |\n|---|---|---|---|\n| Recorrido crítico | | | |\n\n## Recorridos Críticos de Usuario\n1. []\n\n## Umbrales de Escalado\n- []\n",
     "observability.md":
-      "# Estándares de Observabilidad\n\n## Logging\nJSON estructurado. Campos obligatorios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sin secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufijo de unidad. Por función: conteo de solicitudes, histograma de duración, conteo de errores, un contador de negocio. Cuidado con la cardinalidad de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Muestrea 10% en prod, muestrea siempre los errores.\n\n## Alertas (cada una liga a un runbook)\n- P0 página ya / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Estándares de Observabilidad\n\n## Logging\nJSON estructurado. Campos obligatorios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sin secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufijo de unidad. Por función: conteo de solicitudes, histograma de duración, conteo de errores, un contador de negocio. Cuidado con la cardinalidad de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Muestrea 10% en prod, muestrea siempre los errores.\n\n## Alertas (cada una liga a un runbook)\n- P0 alerta inmediata (page) / P1 ≤15min / P2 slack / P3 digest.\n",
     "cost.md":
-      "# Presupuesto de Coste\n\n## Presupuesto de Infraestructura\nObjetivo: < $XX/mes en el año 1.\n\n## Objetivo de Coste Por Usuario\nObjetivo: < $0,50 por MAU. Si se excede, para y optimiza.\n\n## Alertas de Coste\n- Diario > $100 slack / > $200 página.\n\n## Revisión de Coste Por Función\nCada Presupuesto de Coste en el design.md estima $/1000 usuarios/mes y señala rutas críticas de coste.\n",
+      "# Presupuesto de Coste\n\n## Presupuesto de Infraestructura\nObjetivo: < $XX/mes en el año 1.\n\n## Objetivo de Coste Por Usuario\nObjetivo: < $0,50 por MAU. Si se excede, para y optimiza.\n\n## Alertas de Coste\n- Diario > $100 slack / > $200 alerta inmediata (page).\n\n## Revisión de Coste Por Función\nCada Presupuesto de Coste en el design.md estima $/1000 usuarios/mes y señala rutas críticas de coste.\n",
     "ai-strategy.md":
-      "# Estrategia de IA\n\n## Lista de Modelos\n| Rol | Modelo (ID fijado) | Por qué |\n|---|---|---|\n| Primario | | |\n| Fallback | | |\n| Juez/calificador | | |\n\n## Postura de Proveedor y Datos\n- Proveedor / estado del DPA / la PII llega al modelo: []\n\n## Disciplina de Prompt\n- Prompts en .specs/<feature>/prompts/vN.md, versionados. Ningún cambio se lanza sin re-correr los evals.\n\n## Presupuesto de Coste\n- Objetivo $/acción de usuario / umbral de alerta rígido: []\n\n## Postura de Seguridad\n- Defensa contra inyección / moderación / política de rechazo: []\n\n## Barra de Evaluación (criterios para lanzar)\n- Golden ≥85% bueno · Seguridad adversarial 100% rechazado · Regresión 100% mantenida.\n\n## Ciclo de Vida\n- Política de fijación / vigilancia de descontinuación / migración con gate de evaluación.\n",
+      "# Estrategia de IA\n\n## Lista de Modelos\n| Rol | Modelo (ID fijado) | Por qué |\n|---|---|---|\n| Primario | | |\n| Fallback | | |\n| Juez/calificador | | |\n\n## Postura de Proveedor y Datos\n- Proveedor / estado del DPA / la PII llega al modelo: []\n\n## Disciplina de Prompt\n- Prompts en .specs/<feature>/prompts/vN.md, versionados. Ningún cambio se lanza sin volver a ejecutar los evals.\n\n## Presupuesto de Coste\n- Objetivo $/acción de usuario / umbral de alerta rígido: []\n\n## Postura de Seguridad\n- Defensa contra inyección / moderación / política de rechazo: []\n\n## Barra de Evaluación (criterios para lanzar)\n- Golden ≥85% bueno · Seguridad adversarial 100% rechazado · Regresión 100% mantenida.\n\n## Ciclo de Vida\n- Política de fijación / vigilancia de descontinuación / migración con gate de evaluación.\n",
   },
 };
 
@@ -1446,21 +1734,21 @@ const EVALS_README = {
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n",
   pt:
     "# Evals\n\n" +
-    "Harness de avaliação local, amigável a offline. Corre a partir da raiz do projeto:\n\n" +
+    "Harness de avaliação local, funciona offline. Corre a partir da raiz do projeto:\n\n" +
     "```\nnode <plugin>/mcp/evals/run-evals.js <slug-da-feature>\n```\n\n" +
     "- Usa o teu próprio `ANTHROPIC_API_KEY` (env). Sem CI, sem terceiros além do teu fornecedor de modelo.\n" +
     "- Sem chave de API (ou com `--dry-run`) valida os conjuntos e imprime o plano sem chamar um modelo.\n" +
-    "- `--set-baseline` regista as pontuações atuais como baseline para comparar com corridas futuras.\n\n" +
+    "- `--set-baseline` regista as pontuações atuais como baseline para comparar com execuções futuras.\n\n" +
     "Ficheiros de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de item: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "O system prompt é lido do `../prompts/vN.md` mais recente (a sua secção `## System`).\n",
   es:
     "# Evals\n\n" +
-    "Harness de evaluación local, amigable con offline. Corre desde la raíz del proyecto:\n\n" +
+    "Harness de evaluación local, apto para uso sin conexión. Ejecútalo desde la raíz del proyecto:\n\n" +
     "```\nnode <plugin>/mcp/evals/run-evals.js <slug-de-la-función>\n```\n\n" +
     "- Usa tu propio `ANTHROPIC_API_KEY` (env). Sin CI, sin terceros más allá de tu proveedor de modelo.\n" +
     "- Sin clave de API (o con `--dry-run`) valida los conjuntos e imprime el plan sin llamar a un modelo.\n" +
-    "- `--set-baseline` registra las puntuaciones actuales como baseline para comparar con corridas futuras.\n\n" +
+    "- `--set-baseline` registra las puntuaciones actuales como baseline para comparar con ejecuciones futuras.\n\n" +
     "Archivos de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de ítem: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "El system prompt se lee del `../prompts/vN.md` más reciente (su sección `## System`).\n",
@@ -1475,8 +1763,99 @@ const MSG = {
   en: {
     initNote: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
     createNote: (lang) => null, // EN feature: no extra note
-    addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /doctor ${slug}.`,
+    addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `already on +${tr}`,
+    notes: {
+      scan: "Heuristic inventory only — the agent interprets this to infer steering/constitution and reverse-engineer specs.",
+      coverage: "Coarse heuristic: maps top-level code dirs to documented features by name. Use as a starting point, not a hard metric.",
+    },
+    evidence: {
+      failed: (n, code) => `Task ${n}: the verification failed (exit ${code}) — not marking it done.`,
+      missing: (n, slug) => `Task ${n} has a _Verify:_ command but no evidence was recorded — pass the evidence (command, exit code, summary) or run: dev-spec done ${slug} ${n} --run`,
+      ran: (cmd, code) => `ran: ${cmd} → exit ${code}`,
+      failedTicked: (n, code) => `Task ${n} is already ticked, but its re-verification failed (exit ${code}) — recorded; it now counts as unverified until a passing run is recorded.`,
+      badExit: (v) => `exitCode must be an integer (got '${v}').`,
+      needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
+    },
+    finish: {
+      ready: (slug) => `'${slug}' is ready to finish — confirm the checks below, then merge, open a PR or keep the branch.`,
+      notReady: (slug) => `'${slug}' is not ready to finish:`,
+      doctor: (ids) => `doctor has blocking checks: ${ids}`,
+      open: (list) => `open tasks: ${list}`,
+      unverified: (list) => `tasks ticked without verification evidence: ${list}`,
+      gates: (list) => `phases awaiting approval: ${list}`,
+      noTasks: "no tasks yet — break the design into tasks first",
+      checkSuite: "The FULL test suite is green on a fresh run (paste the command and its output).",
+      checkLoad: "+saas: the load test meets the performance budget (load-test.md).",
+      checkObs: "+saas: observability validated — metrics emitting, logs visible, alerts and dashboard in place.",
+      checkCost: "+ai: real token cost is within ~20% of the design projection.",
+      checkSafety: "+ai: full adversarial set run, 100% on safety-critical categories, ~20 outputs spot-checked by a human.",
+      checkBug: "bugfix: the reproduction steps in bug.md no longer reproduce the bug.",
+      prSummary: "## Summary",
+      prAcs: "## Acceptance criteria",
+      prTasks: "## Tasks",
+      prTests: "## Tests",
+      prChecks: "## Checks before merge",
+      prSpec: "## Spec",
+      prRootCause: "## Root cause",
+      prFix: "## Fix",
+      noEvidence: "no evidence recorded",
+    },
+    kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
+    langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
+    err: {
+      noUsableName: (name) => `Feature name '${name}' has no usable characters (a-z, 0-9) for a folder name.`,
+      reserved: (slug) => `'${slug}' is a reserved name — pick another feature name.`,
+      reservedWin: (slug) => `'${slug}' is a reserved name on Windows — pick another feature name.`,
+      notFound: (slug, root) => `Feature '${slug}' not found under ${root}`,
+      invalidJson: (rel, detail) => `${rel} is not valid JSON (${detail}) — fix it by hand; refusing to overwrite it.`,
+      tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
+      requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
+      taskNotFound: (n) => `Task ${n} not found in tasks.md`,
+      numberInt: "number must be an integer",
+      noText: "No text provided.",
+      unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
+      alreadyArchived: (slug) => `'${slug}' is already archived (.specs/_archive/${slug}). Remove it there first.`,
+      renameNeedsName: "rename needs a new name.",
+      sameSlug: "New name is the same slug.",
+      alreadyExists: (slug) => `'${slug}' already exists.`,
+      badAction: "action must be one of: remove | archive | rename",
+      badTrack: "track must be one of: tdd | saas | ai",
+      cycle: (chain) => `Circular dependency: ${chain}`,
+      nameRequired: "name required",
+      noSpecs: (root) => `No .specs/ at ${root}`,
+      notGenerated: (file) => `${file} exists and was not generated by dev-spec — left untouched.`,
+      unknownSteering: (file, known) => `Unknown steering file '${file}'. Known: ${known}`,
+    },
+    ears: {
+      needsClar: "Unresolved [NEEDS CLARIFICATION] marker — resolve before design.",
+      noModal: "Criterion has no modal verb (SHALL / DEVE / DEBE) — not a valid EARS statement.",
+      noId: "Criterion has no stable ID (e.g., US-1.AC-1).",
+      vague: (term) => `Vague term '${term}' — replace with a concrete, testable value.`,
+      noKeyword: "No EARS keyword (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). OK for ubiquitous requirements; confirm intentional.",
+    },
+    classify: {
+      conf: { high: "high", medium: "medium", none: "none" },
+      core: "core: always on (every Spec-mode feature).",
+      on: (t, conf, list, neg) => `+${t}: ON${conf ? ` [${conf} confidence]` : ""} — matched signals: ${list}.${neg ? ` (${neg} appeared negated.)` : ""}`,
+      off: (t, neg) => `+${t}: off — ${neg ? `${neg} appeared negated.` : "no signals matched."}`,
+      substantial: "No track signals matched but the description is substantial — consider whether +tdd applies (correctness/edge cases).",
+      weakOnly: (list) => `On from weak signals only — double-check: ${list}.`,
+      possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
+      keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
+      onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
+    },
+    sectionStatus: { missing: "missing", unfilled: "unfilled" },
+    sectionNames: {},
+    precommit: {
+      header: "dev-spec-driven pre-commit:",
+      earsErrors: (f, n) => `✗ ${f}: ${n} EARS error(s)`,
+      earsClean: (f, n) => `✓ ${f}: EARS clean (${n} criteria)`,
+      phantom: (f, n) => `✗ ${f}: ${n} phantom AC/test reference(s) — likely typos`,
+      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) not covered by a task (warning)`,
+      traceClean: (f, n) => `✓ ${f}: traceability clean (${n} ACs)`,
+      blocked: (n) => `\nCommit blocked: ${n} blocking issue(s) in staged spec files. Fix or 'git commit --no-verify' to bypass.`,
+    },
     doctor: {
       steeringMissing: (list) => `missing: ${list}`,
       steeringOk: "core steering present (incl. constitution)",
@@ -1498,16 +1877,24 @@ const MSG = {
       aiAllFilled: "all 10 filled",
       gatesPending: (list) => `awaiting human approval: ${list} — run /approve before advancing`,
       gatesOk: "all present phases approved",
+      unverified: (list) => `ticked without verification evidence: ${list}`,
+      verifiedOk: "every ticked task with a _Verify:_ command has evidence",
+      rootCauseMissing: "bug.md → Root Cause not filled — no fix before the cause is known",
+      rootCauseOk: "root cause documented",
+      reproMissing: "bug.md → Reproduction not filled",
+      reproOk: "reproduction documented",
     },
     next: {
-      fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /doctor ${slug} for details.`,
+      fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /spec-doctor ${slug} for details.`,
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
+      approveTestPlan: (slug) => `Review & approve the test plan — /approve ${slug} test-plan.`,
+      approveEvalPlan: (slug) => `Review & approve the eval plan — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: "All tasks done — verify, then close the feature.",
-      breakIntoTasks: (slug) => `Break the design into tasks — /tasks ${slug}.`,
+      breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)"),
@@ -1538,14 +1925,112 @@ const MSG = {
       tracePhantomTests: (list) => `tasks reference unknown tests: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap updated → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features in .specs/:",
+      sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tasks)`,
     },
   },
 
   pt: {
     initNote: "Os stubs são placeholders. A skill preenche-os com conteúdo real (ver references/steering-templates.md).",
     createNote: () => null,
-    addTrackNote: (tr, slug) => `+${tr} adicionado. Preenche as novas secções de design e volta a correr /doctor ${slug}.`,
+    addTrackNote: (tr, slug) => `+${tr} adicionado. Preenche as novas secções de design e volta a correr /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `já tem +${tr}`,
+    notes: {
+      scan: "Apenas um inventário heurístico — o agente interpreta-o para inferir o steering/constituição e fazer engenharia reversa das specs.",
+      coverage: "Heurística grosseira: associa as pastas de código de topo às features documentadas pelo nome. Usa-a como ponto de partida, não como métrica rigorosa.",
+    },
+    evidence: {
+      failed: (n, code) => `Tarefa ${n}: a verificação falhou (exit ${code}) — não a marco como feita.`,
+      missing: (n, slug) => `A tarefa ${n} tem um comando _Verify:_ mas não foi registada evidência — passa a evidência (comando, exit code, resumo) ou corre: dev-spec done ${slug} ${n} --run`,
+      ran: (cmd, code) => `corrido: ${cmd} → exit ${code}`,
+      failedTicked: (n, code) => `A tarefa ${n} já está marcada, mas a nova verificação falhou (exit ${code}) — ficou registado; passa a contar como não verificada até se registar uma execução com sucesso.`,
+      badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
+      needsExit: "Uma evidência que indica um comando precisa do exit code — ou dá só um resumo, para uma verificação manual.",
+    },
+    finish: {
+      ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge, abre um PR ou mantém o branch.`,
+      notReady: (slug) => `'${slug}' ainda não está pronta para fechar:`,
+      doctor: (ids) => `o doctor tem verificações bloqueantes: ${ids}`,
+      open: (list) => `tarefas por fazer: ${list}`,
+      unverified: (list) => `tarefas marcadas sem evidência de verificação: ${list}`,
+      gates: (list) => `fases a aguardar aprovação: ${list}`,
+      noTasks: "ainda não há tarefas — divide primeiro o design em tarefas",
+      checkSuite: "A suite de testes COMPLETA está verde numa execução nova (cola o comando e o output).",
+      checkLoad: "+saas: o teste de carga cumpre o orçamento de desempenho (load-test.md).",
+      checkObs: "+saas: observabilidade validada — métricas a ser emitidas, logs visíveis, alertas e dashboard configurados.",
+      checkCost: "+ai: o custo real em tokens está a ~20% da projeção do design.",
+      checkSafety: "+ai: conjunto adversarial completo corrido, 100% nas categorias críticas de segurança, ~20 outputs revistos por um humano.",
+      checkBug: "bugfix: os passos de reprodução do bug.md já não reproduzem o bug.",
+      prSummary: "## Resumo",
+      prAcs: "## Critérios de aceitação",
+      prTasks: "## Tarefas",
+      prTests: "## Testes",
+      prChecks: "## Verificações antes do merge",
+      prSpec: "## Spec",
+      prRootCause: "## Causa raiz",
+      prFix: "## Correção",
+      noEvidence: "sem evidência registada",
+    },
+    kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
+    langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
+    err: {
+      noUsableName: (name) => `O nome de feature '${name}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta.`,
+      reserved: (slug) => `'${slug}' é um nome reservado — escolhe outro nome para a feature.`,
+      reservedWin: (slug) => `'${slug}' é um nome reservado no Windows — escolhe outro nome para a feature.`,
+      notFound: (slug, root) => `Feature '${slug}' não encontrada em ${root}`,
+      invalidJson: (rel, detail) => `${rel} não é JSON válido (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
+      tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
+      requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
+      taskNotFound: (n) => `Tarefa ${n} não encontrada em tasks.md`,
+      numberInt: "o número tem de ser um inteiro",
+      noText: "Nenhum texto fornecido.",
+      unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
+      alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}). Remove-a de lá primeiro.`,
+      renameNeedsName: "para renomear é preciso um nome novo.",
+      sameSlug: "O nome novo dá o mesmo slug.",
+      alreadyExists: (slug) => `'${slug}' já existe.`,
+      badAction: "a ação tem de ser: remove | archive | rename",
+      badTrack: "o track tem de ser: tdd | saas | ai",
+      cycle: (chain) => `Dependência circular: ${chain}`,
+      nameRequired: "o nome é obrigatório",
+      noSpecs: (root) => `Não há .specs/ em ${root}`,
+      notGenerated: (file) => `${file} existe e não foi gerado pelo dev-spec — não foi alterado.`,
+      unknownSteering: (file, known) => `Ficheiro de steering desconhecido '${file}'. Conhecidos: ${known}`,
+    },
+    ears: {
+      needsClar: "Marcador [NEEDS CLARIFICATION] por resolver — resolve-o antes do design.",
+      noModal: "O critério não tem verbo modal (SHALL / DEVE / DEBE) — não é uma frase EARS válida.",
+      noId: "O critério não tem ID estável (ex.: US-1.AC-1).",
+      vague: (term) => `Termo vago '${term}' — substitui-o por um valor concreto e testável.`,
+      noKeyword: "Sem palavra-chave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceitável em requisitos ubíquos; confirma que é intencional.",
+    },
+    classify: {
+      conf: { high: "alta", medium: "média", none: "nenhuma" },
+      core: "core: sempre ativo (todas as features em modo Spec).",
+      on: (t, conf, list, neg) => `+${t}: ATIVO${conf ? ` [confiança ${conf}]` : ""} — sinais encontrados: ${list}.${neg ? ` (${neg} apareceu negado.)` : ""}`,
+      off: (t, neg) => `+${t}: inativo — ${neg ? `${neg} apareceu negado.` : "nenhum sinal encontrado."}`,
+      substantial: "Nenhum sinal de track encontrado, mas a descrição é substancial — considera se +tdd se aplica (correção/casos limite).",
+      weakOnly: (list) => `Ativo só por sinais fracos — confirma: ${list}.`,
+      possible: (t, sig) => `Possível +${t} — sinal fraco '${sig}' (precisa de corroboração; não foi ativado).`,
+      keptOff: (t, kw) => `+${t} mantido inativo — '${kw}' apareceu negado.`,
+      onAlthough: (t, quoted, list) => `+${t} está ATIVO embora ${quoted} tenha aparecido negado — ativado por: ${list}. Confirma que é intencional.`,
+    },
+    sectionStatus: { missing: "em falta", unfilled: "por preencher" },
+    sectionNames: {
+      "Performance Budget": "Orçamento de Desempenho", "Scale Design": "Design de Escala", "Multi-tenancy": "Modelo Multi-inquilino",
+      "Observability": "Observabilidade", "Cost Envelope": "Envelope de Custo", "Model Strategy": "Estratégia de Modelo",
+      "Prompt Architecture": "Arquitetura de Prompt", "Token Economics": "Economia de Tokens", "Latency Budget": "Orçamento de Latência",
+      "Eval Strategy": "Estratégia de Avaliação", "Safety & Abuse": "Segurança e Abuso", "Fallback & Degradation": "Fallback e Degradação",
+      "Observability for AI": "Observabilidade de IA", "Model Lifecycle": "Ciclo de Vida do Modelo", "Multi-modality": "Multimodalidade",
+    },
+    precommit: {
+      header: "dev-spec-driven pre-commit:",
+      earsErrors: (f, n) => `✗ ${f}: ${n} erro(s) EARS`,
+      earsClean: (f, n) => `✓ ${f}: EARS limpo (${n} critérios)`,
+      phantom: (f, n) => `✗ ${f}: ${n} referência(s) AC/teste fantasma — provavelmente erros de escrita`,
+      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) sem tarefa (aviso)`,
+      traceClean: (f, n) => `✓ ${f}: rastreabilidade limpa (${n} ACs)`,
+      blocked: (n) => `\nCommit bloqueado: ${n} problema(s) bloqueante(s) nos ficheiros de spec em staging. Corrige-os, ou usa 'git commit --no-verify' para passar à frente.`,
+    },
     doctor: {
       steeringMissing: (list) => `em falta: ${list}`,
       steeringOk: "steering essencial presente (incl. constituição)",
@@ -1567,16 +2052,24 @@ const MSG = {
       aiAllFilled: "as 10 preenchidas",
       gatesPending: (list) => `a aguardar aprovação humana: ${list} — corre /approve antes de avançar`,
       gatesOk: "todas as fases presentes aprovadas",
+      unverified: (list) => `marcadas sem evidência de verificação: ${list}`,
+      verifiedOk: "todas as tarefas marcadas com comando _Verify:_ têm evidência",
+      rootCauseMissing: "bug.md → Causa Raiz por preencher — nenhuma correção antes de se conhecer a causa",
+      rootCauseOk: "causa raiz documentada",
+      reproMissing: "bug.md → Reprodução por preencher",
+      reproOk: "reprodução documentada",
     },
     next: {
-      fixChecks: (ids, slug) => `Corrige as verificações bloqueantes (${ids}) — corre /doctor ${slug} para detalhes.`,
-      reReview: (files) => `Re-revisão: ${files} mudou após a última aprovação — volta a aprovar a fase afetada.`,
+      fixChecks: (ids, slug) => `Corrige as verificações bloqueantes (${ids}) — corre /spec-doctor ${slug} para detalhes.`,
+      reReview: (files) => `Nova revisão: ${files} alterado(s) após a última aprovação — volta a aprovar a fase afetada.`,
       approveRequirements: (slug) => `Revê e aprova os requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revê e aprova o design — /approve ${slug} design.`,
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
+      approveTestPlan: (slug) => `Revê e aprova o plano de testes — /approve ${slug} test-plan.`,
+      approveEvalPlan: (slug) => `Revê e aprova o plano de evals — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: "Todas as tarefas feitas — verifica e depois fecha a feature.",
-      breakIntoTasks: (slug) => `Divide o design em tarefas — /tasks ${slug}.`,
+      breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(não especificado)"),
@@ -1607,18 +2100,116 @@ const MSG = {
       tracePhantomTests: (list) => `tarefas referem testes desconhecidos: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap atualizado → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features em .specs/:",
+      sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
     },
   },
 
   es: {
     initNote: "Los stubs son placeholders. La skill los rellena con contenido real (ver references/steering-templates.md).",
     createNote: () => null,
-    addTrackNote: (tr, slug) => `+${tr} añadido. Rellena las nuevas secciones de diseño y vuelve a correr /doctor ${slug}.`,
+    addTrackNote: (tr, slug) => `+${tr} añadido. Rellena las nuevas secciones de diseño y vuelve a ejecutar /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `ya tiene +${tr}`,
+    notes: {
+      scan: "Solo un inventario heurístico — el agente lo interpreta para inferir el steering/constitución y hacer ingeniería inversa de las specs.",
+      coverage: "Heurística aproximada: asocia las carpetas de código de primer nivel con las funciones documentadas por nombre. Úsala como punto de partida, no como métrica estricta.",
+    },
+    evidence: {
+      failed: (n, code) => `Tarea ${n}: la verificación falló (exit ${code}) — no se marca como hecha.`,
+      missing: (n, slug) => `La tarea ${n} tiene un comando _Verify:_ pero no se registró evidencia — pasa la evidencia (comando, exit code, resumen) o ejecuta: dev-spec done ${slug} ${n} --run`,
+      ran: (cmd, code) => `ejecutado: ${cmd} → exit ${code}`,
+      failedTicked: (n, code) => `La tarea ${n} ya está marcada, pero su nueva verificación falló (exit ${code}) — se ha registrado; cuenta como no verificada hasta que se registre una ejecución correcta.`,
+      badExit: (v) => `exitCode debe ser un entero (recibido '${v}').`,
+      needsExit: "Una evidencia que indica un comando necesita su exit code — o da solo un resumen, para una verificación manual.",
+    },
+    finish: {
+      ready: (slug) => `'${slug}' está lista para cerrar — confirma las verificaciones de abajo y luego haz merge, abre un PR o mantén la rama.`,
+      notReady: (slug) => `'${slug}' aún no está lista para cerrar:`,
+      doctor: (ids) => `el doctor tiene verificaciones bloqueantes: ${ids}`,
+      open: (list) => `tareas pendientes: ${list}`,
+      unverified: (list) => `tareas marcadas sin evidencia de verificación: ${list}`,
+      gates: (list) => `fases esperando aprobación: ${list}`,
+      noTasks: "aún no hay tareas — primero desglosa el diseño en tareas",
+      checkSuite: "La suite de pruebas COMPLETA está en verde en una ejecución nueva (pega el comando y la salida).",
+      checkLoad: "+saas: la prueba de carga cumple el presupuesto de rendimiento (load-test.md).",
+      checkObs: "+saas: observabilidad validada — métricas emitiéndose, logs visibles, alertas y dashboard configurados.",
+      checkCost: "+ai: el coste real en tokens está a ~20% de la proyección del diseño.",
+      checkSafety: "+ai: conjunto adversarial completo ejecutado, 100% en las categorías críticas de seguridad, ~20 salidas revisadas por una persona.",
+      checkBug: "bugfix: los pasos de reproducción de bug.md ya no reproducen el bug.",
+      prSummary: "## Resumen",
+      prAcs: "## Criterios de aceptación",
+      prTasks: "## Tareas",
+      prTests: "## Pruebas",
+      prChecks: "## Verificaciones antes del merge",
+      prSpec: "## Spec",
+      prRootCause: "## Causa raíz",
+      prFix: "## Corrección",
+      noEvidence: "sin evidencia registrada",
+    },
+    kindKept: (kept, asked) => `Esta función ya es del tipo '${kept}' — se mantiene (pediste '${asked}'). Crea otra para un tipo distinto.`,
+    langKept: (kept, asked) => `Esta función ya está en '${kept}' — se mantiene (pediste '${asked}'). Una función, un idioma.`,
+    err: {
+      noUsableName: (name) => `El nombre de función '${name}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta.`,
+      reserved: (slug) => `'${slug}' es un nombre reservado — elige otro nombre para la función.`,
+      reservedWin: (slug) => `'${slug}' es un nombre reservado en Windows — elige otro nombre para la función.`,
+      notFound: (slug, root) => `Función '${slug}' no encontrada en ${root}`,
+      invalidJson: (rel, detail) => `${rel} no es JSON válido (${detail}) — corrígelo a mano; no se sobrescribirá.`,
+      tasksMissing: (slug) => `tasks.md no encontrado para '${slug}'`,
+      requirementsMissing: (slug) => `requirements.md no encontrado para '${slug}'`,
+      taskNotFound: (n) => `Tarea ${n} no encontrada en tasks.md`,
+      numberInt: "el número debe ser un entero",
+      noText: "No se ha proporcionado texto.",
+      unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
+      alreadyArchived: (slug) => `'${slug}' ya está archivada (.specs/_archive/${slug}). Elimínala de allí primero.`,
+      renameNeedsName: "para renombrar hace falta un nombre nuevo.",
+      sameSlug: "El nombre nuevo da el mismo slug.",
+      alreadyExists: (slug) => `'${slug}' ya existe.`,
+      badAction: "la acción debe ser: remove | archive | rename",
+      badTrack: "el track debe ser: tdd | saas | ai",
+      cycle: (chain) => `Dependencia circular: ${chain}`,
+      nameRequired: "el nombre es obligatorio",
+      noSpecs: (root) => `No hay .specs/ en ${root}`,
+      notGenerated: (file) => `${file} existe y no lo generó dev-spec — no se ha modificado.`,
+      unknownSteering: (file, known) => `Fichero de steering desconocido '${file}'. Conocidos: ${known}`,
+    },
+    ears: {
+      needsClar: "Marcador [NEEDS CLARIFICATION] sin resolver — resuélvelo antes del diseño.",
+      noModal: "El criterio no tiene verbo modal (SHALL / DEVE / DEBE) — no es una frase EARS válida.",
+      noId: "El criterio no tiene ID estable (p. ej., US-1.AC-1).",
+      vague: (term) => `Término vago '${term}' — sustitúyelo por un valor concreto y comprobable.`,
+      noKeyword: "Sin palabra clave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceptable en requisitos ubicuos; confirma que es intencionado.",
+    },
+    classify: {
+      conf: { high: "alta", medium: "media", none: "ninguna" },
+      core: "core: siempre activo (toda función en modo Spec).",
+      on: (t, conf, list, neg) => `+${t}: ACTIVO${conf ? ` [confianza ${conf}]` : ""} — señales encontradas: ${list}.${neg ? ` (${neg} apareció negado.)` : ""}`,
+      off: (t, neg) => `+${t}: inactivo — ${neg ? `${neg} apareció negado.` : "ninguna señal encontrada."}`,
+      substantial: "Ninguna señal de track, pero la descripción es sustancial — considera si aplica +tdd (corrección/casos límite).",
+      weakOnly: (list) => `Activo solo por señales débiles — compruébalo: ${list}.`,
+      possible: (t, sig) => `Posible +${t} — señal débil '${sig}' (necesita corroboración; no se ha activado).`,
+      keptOff: (t, kw) => `+${t} se mantiene inactivo — '${kw}' apareció negado.`,
+      onAlthough: (t, quoted, list) => `+${t} está ACTIVO aunque ${quoted} apareció negado — activado por: ${list}. Confirma que es intencionado.`,
+    },
+    sectionStatus: { missing: "falta", unfilled: "sin rellenar" },
+    sectionNames: {
+      "Performance Budget": "Presupuesto de Rendimiento", "Scale Design": "Diseño de Escala", "Multi-tenancy": "Modelo Multiinquilino",
+      "Observability": "Observabilidad", "Cost Envelope": "Presupuesto de Coste", "Model Strategy": "Estrategia de Modelo",
+      "Prompt Architecture": "Arquitectura de Prompt", "Token Economics": "Economía de Tokens", "Latency Budget": "Presupuesto de Latencia",
+      "Eval Strategy": "Estrategia de Evaluación", "Safety & Abuse": "Seguridad y Abuso", "Fallback & Degradation": "Fallback y Degradación",
+      "Observability for AI": "Observabilidad de IA", "Model Lifecycle": "Ciclo de Vida del Modelo", "Multi-modality": "Multimodalidad",
+    },
+    precommit: {
+      header: "dev-spec-driven pre-commit:",
+      earsErrors: (f, n) => `✗ ${f}: ${n} error(es) EARS`,
+      earsClean: (f, n) => `✓ ${f}: EARS limpio (${n} criterios)`,
+      phantom: (f, n) => `✗ ${f}: ${n} referencia(s) AC/prueba fantasma — probablemente erratas`,
+      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) sin tarea (aviso)`,
+      traceClean: (f, n) => `✓ ${f}: trazabilidad limpia (${n} ACs)`,
+      blocked: (n) => `\nCommit bloqueado: ${n} problema(s) bloqueante(s) en los ficheros de spec preparados. Corrígelos o usa 'git commit --no-verify' para omitirlos.`,
+    },
     doctor: {
       steeringMissing: (list) => `falta: ${list}`,
       steeringOk: "steering esencial presente (incl. constitución)",
-      requirementsMissing: "requirements.md falta",
+      requirementsMissing: "falta requirements.md",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] sin resolver — resuelve antes del diseño`,
       clarificationsNone: "ninguno sin resolver",
       scPresent: "presente",
@@ -1627,25 +2218,33 @@ const MSG = {
       prioritiesMissing: "sin prioridad P1 (MVP) en una historia de usuario",
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
-      designMissing: "design.md falta",
+      designMissing: "falta design.md",
       mermaidOk: "tiene un diagrama",
       mermaidMissing: "no se encontró diagrama mermaid",
       constitutionOk: "presente — verifica que cada principio se comprueba",
       constitutionMissing: "sin sección Verificación de la Constitución en el diseño",
       saasAllFilled: "las 5 rellenadas",
       aiAllFilled: "las 10 rellenadas",
-      gatesPending: (list) => `esperando aprobación humana: ${list} — corre /approve antes de avanzar`,
+      gatesPending: (list) => `esperando aprobación humana: ${list} — ejecuta /approve antes de avanzar`,
       gatesOk: "todas las fases presentes aprobadas",
+      unverified: (list) => `marcadas sin evidencia de verificación: ${list}`,
+      verifiedOk: "toda tarea marcada con comando _Verify:_ tiene evidencia",
+      rootCauseMissing: "bug.md → Causa Raíz sin rellenar — ninguna corrección antes de conocer la causa",
+      rootCauseOk: "causa raíz documentada",
+      reproMissing: "bug.md → Reproducción sin rellenar",
+      reproOk: "reproducción documentada",
     },
     next: {
-      fixChecks: (ids, slug) => `Corrige las verificaciones bloqueantes (${ids}) — corre /doctor ${slug} para detalles.`,
-      reReview: (files) => `Revisión de nuevo: ${files} cambió tras la última aprobación — vuelve a aprobar la fase afectada.`,
+      fixChecks: (ids, slug) => `Corrige las verificaciones bloqueantes (${ids}) — ejecuta /spec-doctor ${slug} para ver los detalles.`,
+      reReview: (files) => `Nueva revisión: ${files} modificado(s) tras la última aprobación — vuelve a aprobar la fase afectada.`,
       approveRequirements: (slug) => `Revisa y aprueba los requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revisa y aprueba el diseño — /approve ${slug} design.`,
       approveTasks: (slug) => `Revisa y aprueba el desglose de tareas — /approve ${slug} tasks.`,
+      approveTestPlan: (slug) => `Revisa y aprueba el plan de pruebas — /approve ${slug} test-plan.`,
+      approveEvalPlan: (slug) => `Revisa y aprueba el plan de evals — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
       allDone: "Todas las tareas hechas — verifica y luego cierra la función.",
-      breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /tasks ${slug}.`,
+      breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resuelve [NEEDS CLARIFICATION]: " + (mk || "(sin especificar)"),
@@ -1676,9 +2275,251 @@ const MSG = {
       tracePhantomTests: (list) => `tareas referencian pruebas desconocidas: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap actualizado → ${pct}% (${complete}/${total} funciones).`,
       sessionHeader: "dev-spec-driven — funciones en .specs/:",
+      sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tareas)`,
     },
   },
 };
+
+// ===========================================================================
+// Task brief (spec_task_brief) — the self-contained brief a fresh implementer reads first.
+// Labels and loop rules per language; renderBrief() owns the layout. IDs, `_Label:_` markers and
+// **Checkpoint:** stay English-stable inside the rendered brief.
+// ===========================================================================
+
+const BRIEF = {
+  en: {
+    title: (feature, n) => `# Task brief — ${feature} · task ${n}`,
+    intro: "Read this first — it is your requirements. Exact values below are binding; build nothing beyond this task.",
+    story: "Story", phase: "Phase", parallel: "Parallel", tracks: "Tracks", loop: "Loop",
+    yes: "yes [P]", no: "no",
+    inlineOnly: "⚠ **Inline only** — prompt/eval task: the controller runs it in the main session (evals cost money; accept/revert is a judgment call). Do not delegate it.",
+    task: "## Task",
+    context: "## Where this fits (user story)",
+    acs: "## Acceptance criteria (binding)",
+    acsNone: "_No acceptance criteria referenced — report NEEDS_CONTEXT rather than inventing scope._",
+    tests: "## Tests to make green",
+    evals: "## Evals affected",
+    metrics: "## Metrics to emit",
+    files: "## Files (_Implements:_)",
+    design: "## Design context",
+    designToc: (p) => `Full design: \`${p}\` — sections:`,
+    designOmitted: "Relevant but not included (size) — read them in design.md:",
+    steering: "## Global constraints",
+    constraintsIntro: "Binding for every task (tasks.md → Global Constraints):",
+    verification: "## Verification (_Verify:_)",
+    verifyRule: "Run every _Verify:_ command above on the final code and put the exact command, its exit code and the last lines of its output in the report — the controller records them with spec_complete_task as the task's evidence.",
+    steeringRead: "Read before coding:",
+    unresolved: "## ⚠ Unresolved references",
+    unresolvedNote: "The task cites these IDs but the spec doesn't define them. Report NEEDS_CONTEXT instead of guessing.",
+    dod: "## Definition of done",
+    loopRules: {
+      core: [
+        "Implement exactly what the task and its acceptance criteria require — nothing extra (YAGNI).",
+        "Run the existing test suite: everything that was green stays green.",
+        "Commit with a conventional message that cites the task (e.g. `feat(scope): … — task #N`).",
+        "Never edit an existing test to make it pass. If a test looks wrong, stop and report BLOCKED.",
+      ],
+      tdd: [
+        "RED first: run the target tests and confirm they fail for the right reason (assertion / not implemented — not a typo or a missing import). Put the command and output in the report.",
+        "Write the minimum code that turns the target tests green.",
+        "Run the FULL suite: targets green, previously green tests still green, later tasks' tests still red.",
+        "Refactor only on green. Never change a planned test's expectation — if it looks wrong, stop and report BLOCKED.",
+        "Commit citing the task and the tests it makes green (`Makes T-01, T-02 green`).",
+      ],
+      "ai-prompt": [
+        "Record the eval baseline before changing anything.",
+        "Edit the prompt in a NEW versioned file (`prompts/vN.md`), never in place.",
+        "Run the full eval harness; accept only if golden improved or held and adversarial held — otherwise revert.",
+        "Commit with the eval delta (`Eval delta: golden 82% → 87%`).",
+      ],
+    },
+    metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
+    evalsRule: "This change touches an AI path: run the eval harness afterwards — golden holds or improves, adversarial holds — and put the scores in the report.",
+    checkpoint: "When this story's last task is done, the controller stops for human review at the checkpoint:",
+    report: "## Report",
+    reportTo: (p) => `Write your full report to \`${p}\`, then reply with only the status line (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), your commits, a one-line test summary and any concerns.`,
+    ledgerHeader: (feature) => `# Execution ledger — feature: ${feature}\n\n<!-- One line per event, appended by the controller (never rewritten):\n     Preflight: … · Ruling: <what> — <why> — <cost if wrong> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
+    allDone: "All tasks are done — nothing to brief.",
+    alreadyDone: (n) => `Task ${n} is already marked done.`,
+  },
+  pt: {
+    title: (feature, n) => `# Brief da tarefa — ${feature} · tarefa ${n}`,
+    intro: "Lê isto primeiro — são os teus requisitos. Os valores abaixo são vinculativos; não construas nada além desta tarefa.",
+    story: "História", phase: "Fase", parallel: "Paralela", tracks: "Tracks", loop: "Ciclo",
+    yes: "sim [P]", no: "não",
+    inlineOnly: "⚠ **Só inline** — tarefa de prompt/evals: o controlador executa-a na sessão principal (as evals custam dinheiro; aceitar/reverter é uma decisão). Não a delegues.",
+    task: "## Tarefa",
+    context: "## Onde isto encaixa (história de utilizador)",
+    acs: "## Critérios de aceitação (vinculativos)",
+    acsNone: "_Nenhum critério de aceitação referido — responde NEEDS_CONTEXT em vez de inventar âmbito._",
+    tests: "## Testes a pôr a verde",
+    evals: "## Evals afetadas",
+    metrics: "## Métricas a emitir",
+    files: "## Ficheiros (_Implements:_)",
+    design: "## Contexto de design",
+    designToc: (p) => `Design completo: \`${p}\` — secções:`,
+    designOmitted: "Relevantes mas não incluídas (tamanho) — lê-as no design.md:",
+    steering: "## Restrições globais",
+    constraintsIntro: "Vinculativas para todas as tarefas (tasks.md → Restrições Globais):",
+    verification: "## Verificação (_Verify:_)",
+    verifyRule: "Corre cada comando _Verify:_ acima sobre o código final e põe no relatório o comando exato, o exit code e as últimas linhas do output — o controlador regista-os com o spec_complete_task como evidência da tarefa.",
+    steeringRead: "Lê antes de programar:",
+    unresolved: "## ⚠ Referências não resolvidas",
+    unresolvedNote: "A tarefa cita estes IDs mas a spec não os define. Responde NEEDS_CONTEXT em vez de adivinhar.",
+    dod: "## Definição de pronto",
+    loopRules: {
+      core: [
+        "Implementa exatamente o que a tarefa e os seus critérios de aceitação exigem — nada a mais (YAGNI).",
+        "Corre a suite de testes existente: tudo o que estava verde continua verde.",
+        "Faz commit com uma mensagem convencional que cite a tarefa (ex.: `feat(âmbito): … — tarefa #N`).",
+        "Nunca alteres um teste existente para o pôr a passar. Se um teste parecer errado, pára e responde BLOCKED.",
+      ],
+      tdd: [
+        "Primeiro VERMELHO: corre os testes-alvo e confirma que falham pela razão certa (asserção / não implementado — não um erro de escrita nem um import em falta). Põe o comando e o output no relatório.",
+        "Escreve o código mínimo que põe os testes-alvo a verde.",
+        "Corre a suite COMPLETA: alvos a verde, testes que estavam verdes continuam verdes, testes de tarefas futuras continuam vermelhos.",
+        "Refatora só com tudo verde. Nunca mudes a expectativa de um teste planeado — se parecer errada, pára e responde BLOCKED.",
+        "Faz commit citando a tarefa e os testes que põe a verde (`Makes T-01, T-02 green`).",
+      ],
+      "ai-prompt": [
+        "Regista a baseline das evals antes de mudar o que quer que seja.",
+        "Edita o prompt num ficheiro versionado NOVO (`prompts/vN.md`), nunca no mesmo ficheiro.",
+        "Corre o harness de evals completo; aceita só se o golden melhorou ou se manteve e o adversarial se manteve — caso contrário, reverte.",
+        "Faz commit com o delta das evals (`Eval delta: golden 82% → 87%`).",
+      ],
+    },
+    metricsRule: "Cada métrica listada acima é mesmo emitida — mostra a evidência no relatório.",
+    evalsRule: "Esta alteração toca num caminho de IA: corre o harness de evals no fim — o golden mantém-se ou melhora, o adversarial mantém-se — e põe as pontuações no relatório.",
+    checkpoint: "Quando a última tarefa desta história estiver feita, o controlador pára para revisão humana no checkpoint:",
+    report: "## Relatório",
+    reportTo: (p) => `Escreve o relatório completo em \`${p}\` e responde só com a linha de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), os teus commits, um resumo de uma linha dos testes e eventuais preocupações.`,
+    ledgerHeader: (feature) => `# Ledger de execução — feature: ${feature}\n\n<!-- Uma linha por evento, acrescentada pelo controlador (nunca reescrita):\n     Preflight: … · Ruling: <o quê> — <porquê> — <custo se estiver errado> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
+    allDone: "Todas as tarefas estão feitas — não há nada para o brief.",
+    alreadyDone: (n) => `A tarefa ${n} já está marcada como feita.`,
+  },
+  es: {
+    title: (feature, n) => `# Brief de la tarea — ${feature} · tarea ${n}`,
+    intro: "Lee esto primero — son tus requisitos. Los valores de abajo son vinculantes; no construyas nada más allá de esta tarea.",
+    story: "Historia", phase: "Fase", parallel: "Paralela", tracks: "Tracks", loop: "Ciclo",
+    yes: "sí [P]", no: "no",
+    inlineOnly: "⚠ **Solo inline** — tarea de prompt/evals: el controlador la ejecuta en la sesión principal (las evals cuestan dinero; aceptar/revertir es una decisión). No la delegues.",
+    task: "## Tarea",
+    context: "## Dónde encaja (historia de usuario)",
+    acs: "## Criterios de aceptación (vinculantes)",
+    acsNone: "_Ningún criterio de aceptación referenciado — responde NEEDS_CONTEXT en vez de inventar alcance._",
+    tests: "## Pruebas a poner en verde",
+    evals: "## Evals afectadas",
+    metrics: "## Métricas a emitir",
+    files: "## Ficheros (_Implements:_)",
+    design: "## Contexto de diseño",
+    designToc: (p) => `Diseño completo: \`${p}\` — secciones:`,
+    designOmitted: "Relevantes pero no incluidas (tamaño) — léelas en design.md:",
+    steering: "## Restricciones globales",
+    constraintsIntro: "Vinculantes para toda tarea (tasks.md → Restricciones Globales):",
+    verification: "## Verificación (_Verify:_)",
+    verifyRule: "Ejecuta cada comando _Verify:_ de arriba sobre el código final y pon en el informe el comando exacto, su exit code y las últimas líneas de la salida — el controlador los registra con spec_complete_task como evidencia de la tarea.",
+    steeringRead: "Lee antes de programar:",
+    unresolved: "## ⚠ Referencias sin resolver",
+    unresolvedNote: "La tarea cita estos IDs pero la spec no los define. Responde NEEDS_CONTEXT en vez de adivinar.",
+    dod: "## Definición de hecho",
+    loopRules: {
+      core: [
+        "Implementa exactamente lo que exigen la tarea y sus criterios de aceptación — nada más (YAGNI).",
+        "Ejecuta la suite de pruebas existente: todo lo que estaba en verde sigue en verde.",
+        "Haz commit con un mensaje convencional que cite la tarea (p. ej. `feat(ámbito): … — tarea #N`).",
+        "Nunca modifiques una prueba existente para que pase. Si una prueba parece incorrecta, para y responde BLOCKED.",
+      ],
+      tdd: [
+        "Primero ROJO: ejecuta las pruebas objetivo y confirma que fallan por la razón correcta (aserción / no implementado — no una errata ni un import que falta). Pon el comando y la salida en el informe.",
+        "Escribe el código mínimo que pone las pruebas objetivo en verde.",
+        "Ejecuta la suite COMPLETA: objetivos en verde, las que estaban en verde siguen en verde, las de tareas futuras siguen en rojo.",
+        "Refactoriza solo en verde. Nunca cambies la expectativa de una prueba planificada — si parece incorrecta, para y responde BLOCKED.",
+        "Haz commit citando la tarea y las pruebas que pone en verde (`Makes T-01, T-02 green`).",
+      ],
+      "ai-prompt": [
+        "Registra la baseline de las evals antes de cambiar nada.",
+        "Edita el prompt en un fichero versionado NUEVO (`prompts/vN.md`), nunca en el mismo.",
+        "Ejecuta el harness de evals completo; acepta solo si golden mejoró o se mantuvo y adversarial se mantuvo — si no, revierte.",
+        "Haz commit con el delta de evals (`Eval delta: golden 82% → 87%`).",
+      ],
+    },
+    metricsRule: "Cada métrica listada arriba se emite de verdad — muestra la evidencia en el informe.",
+    evalsRule: "Este cambio toca una ruta de IA: ejecuta el harness de evals al final — golden se mantiene o mejora, adversarial se mantiene — y pon las puntuaciones en el informe.",
+    checkpoint: "Cuando la última tarea de esta historia esté hecha, el controlador se detiene para revisión humana en el checkpoint:",
+    report: "## Informe",
+    reportTo: (p) => `Escribe el informe completo en \`${p}\` y responde solo con la línea de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), tus commits, un resumen de una línea de las pruebas y cualquier duda.`,
+    ledgerHeader: (feature) => `# Ledger de ejecución — función: ${feature}\n\n<!-- Una línea por evento, añadida por el controlador (nunca reescrita):\n     Preflight: … · Ruling: <qué> — <por qué> — <coste si es erróneo> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
+    allDone: "Todas las tareas están hechas — no hay nada para el brief.",
+    alreadyDone: (n) => `La tarea ${n} ya está marcada como hecha.`,
+  },
+};
+
+// Layout of the brief (language-neutral; every label comes from BRIEF[lang]).
+function renderBrief(d, lang) {
+  const t = BRIEF[normalizeLang(lang)];
+  const out = [];
+  const push = (...lines) => out.push(...lines);
+  const task = d.task;
+  push(t.title(d.feature, task.number), "", "> " + t.intro, "");
+  push(`- **${t.story}:** ${task.story || "—"} · **${t.phase}:** ${task.phase || "—"} · **${t.parallel}:** ${task.parallel ? t.yes : t.no}`);
+  push(`- **${t.tracks}:** ${d.tracks} · **${t.loop}:** ${d.loop}`);
+  if (d.inlineOnly) push("", t.inlineOnly);
+
+  push("", t.task, `${task.number}. ${task.text}`, ...task.body.map((l) => "   " + l));
+  if (d.stories.length) {
+    push("", t.context);
+    d.stories.forEach((s, i) => { if (i) push(""); push(`**${s[0]}**`, ...s.slice(1)); });
+  }
+
+  push("", t.acs);
+  if (d.acceptanceCriteria.length) d.acceptanceCriteria.forEach((a) => push("- " + a.text));
+  else push(t.acsNone);
+
+  if (d.tests.length) {
+    push("", t.tests);
+    let lastHeader;
+    for (const r of d.tests) {
+      if (r.header && r.header !== lastHeader) {
+        push(r.header, r.sep || r.header.replace(/[^|]/g, "-"));
+        lastHeader = r.header;
+      } else if (!r.header) lastHeader = undefined;
+      push(r.row);
+    }
+  }
+  if (d.evals.length) push("", t.evals, ...d.evals.map((e) => "- " + e));
+  if (d.metrics.length) push("", t.metrics, ...d.metrics.map((m) => "- `" + m + "`"));
+  if (d.implements.length) push("", t.files, ...d.implements.map((f) => "- `" + f + "`"));
+  const verify = d.verify || [];
+  if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
+
+  if (d.design.toc.length) {
+    push("", t.design, t.designToc(d.design.path) + " " + d.design.toc.join(" · "));
+    d.design.included.forEach((s) => push("", "### " + s.title, s.body));
+    if (d.design.omitted.length) push("", t.designOmitted + " " + d.design.omitted.join(" · "));
+  }
+
+  const constraints = d.globalConstraints || [];
+  if (constraints.length || d.steering.length) {
+    push("", t.steering);
+    if (constraints.length) push(t.constraintsIntro, ...constraints);
+    if (constraints.length && d.steering.length) push("");
+    if (d.steering.length) push(t.steeringRead + " " + d.steering.map((p) => "`" + p + "`").join(", "));
+  }
+
+  if (d.unresolved.acs.length || d.unresolved.tests.length) {
+    push("", t.unresolved, t.unresolvedNote, ...[...d.unresolved.acs, ...d.unresolved.tests].map((id) => "- " + id));
+  }
+
+  push("", t.dod, ...t.loopRules[d.loop].map((r, i) => `${i + 1}. ${r}`));
+  let extra = t.loopRules[d.loop].length;
+  if (d.metrics.length) push(`${++extra}. ${t.metricsRule}`);
+  if (d.evals.length && d.loop !== "ai-prompt") push(`${++extra}. ${t.evalsRule}`);
+  if (verify.length) push(`${++extra}. ${t.verifyRule}`);
+  if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
+
+  push("", t.report, t.reportTo(d.reportPath), "");
+  return out.join("\n");
+}
 
 // ===========================================================================
 // Public API — thin dispatchers that resolve the language and delegate.
@@ -1708,4 +2549,12 @@ module.exports = {
   steeringKnownFiles: () => Object.keys(STEERING.en),
   // tool messages
   msg: (lang) => MSG[normalizeLang(lang)],
+  // task brief (spec_task_brief)
+  brief: (lang) => BRIEF[normalizeLang(lang)],
+  // bugfix templates (spec_create kind:"bugfix")
+  bugReport: (a, lang) => L(lang).bugReport(a),
+  bugRequirements: (a, lang) => L(lang).bugRequirements(a),
+  bugTestPlan: (name, lang) => L(lang).bugTestPlan(name),
+  bugTasks: (name, lang) => L(lang).bugTasks(name),
+  renderBrief,
 };

@@ -314,8 +314,8 @@ Features projecting > $0.10/user/month additional cost need explicit approval be
 ## Model Roster
 | Role | Model (pinned ID) | Why |
 |---|---|---|
-| Primary | [e.g., claude-opus-4-8] | [capability/quality reason] |
-| Fallback / cheap path | [e.g., claude-sonnet-4-6] | [degradation, cost, latency] |
+| Primary | [e.g., claude-opus-5] | [capability/quality reason] |
+| Fallback / cheap path | [e.g., claude-sonnet-5] | [degradation, cost, latency] |
 | Judge / grader | [e.g., a strong model] | eval grading (kept separate from generation) |
 
 ## Provider & Data Posture
@@ -342,7 +342,7 @@ Features projecting > $0.10/user/month additional cost need explicit approval be
 - Regression set: 100% maintained
 
 ## Lifecycle
-- **Pin policy:** [pin dated version vs track latest — reproducibility vs auto-improvement]
+- **Pin policy:** [pin an exact model ID vs track a floating alias — reproducibility vs auto-improvement]
 - **Deprecation watch:** [how you learn a model is being retired]
 - **Migration:** eval-gated only — run current eval set on the new model, compare, then switch.
 ```
