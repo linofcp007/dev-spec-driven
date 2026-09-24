@@ -179,6 +179,29 @@ fs.writeFileSync(path.join(w1p, ".specs", "tarefas", "tasks.md"), "- [ ] 1. um\n
 const w1Pt = run(["done", "tarefas", "1", "--project", w1p]);
 ok(/Tarefa 1 feita\. 1\/2\s+próxima → #2 dois/.test(w1Pt.out) && /tem de ser um inteiro/.test(run(["done", "tarefas", "x", "--project", w1p]).out) &&
   /já estava feita/.test(run(["done", "tarefas", "1", "--project", w1p]).out), "done output and refusals follow the feature language (PT)");
+// Review fixes: the second "3." never borrows the first one's passing run; "--exit 0" without --cmd can't clear
+// a recorded failure; a one-line ```code``` span doesn't hide the tasks below it.
+run(["create", "Dup Two", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "dup-two", "tasks.md"),
+  "- [ ] 3. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(7)\"_\n");
+const w1D1 = run(["done", "dup-two", "3", "--run", "--project", w1p]);
+const w1D2 = run(["done", "dup-two", "3", "--project", w1p]);
+const w1DDoc = run(["doctor", "dup-two", "--project", w1p]);
+ok(w1D1.code === 0 && /Task 3 done \(verified\)\. 1\/2/.test(w1D1.out) && w1D2.code === 0 && /Task 3 done\. 2\/2/.test(w1D2.out) && !/\(verified\)/.test(w1D2.out) &&
+  /renumber/.test(w1D2.out) && /verification — .*#3 \(number shared with another task\)/.test(w1DDoc.out),
+  "done on the second '3.' (its exit-7 _Verify:_ never ran) is not '(verified)'; doctor flags it");
+run(["create", "Claim", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "claim", "tasks.md"), "- [ ] 1. docs\n- [ ] 2. x\n");
+const w1C1 = run(["done", "claim", "1", "--cmd", "npm run lint", "--exit", "2", "--evidence", "lint failed", "--project", w1p]);
+const w1C2 = run(["done", "claim", "1", "--evidence", "fixed it", "--exit", "0", "--project", w1p]);
+ok(w1C1.code === 1 && w1C2.code === 0 && /Task 1 done\. 1\/2/.test(w1C2.out) && !/\(verified\)/.test(w1C2.out) && /latest recorded run failed \(exit 2\)/.test(w1C2.out),
+  "--evidence + --exit 0 without --cmd after a failed run ticks but stays unverified (a claimed exit code is not a run)");
+run(["create", "Fence", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "fence", "tasks.md"), "## Phase: Build\n- [x] 1. Wire the CLI\n  ```npm test```\n- [ ] 2. Write docs\n- [ ] 3. Release\n");
+const w1FSt = run(["status", "fence", "--project", w1p]);
+const w1FDone = run(["done", "fence", "2", "--project", w1p]);
+ok(/phase=executing/.test(w1FSt.out) && /1\/3/.test(w1FSt.out) && w1FDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Release/.test(w1FDone.out),
+  "status/done see the tasks below a one-line ```code``` span (not a fence)");
 // @wp WP1 <<<
 
 // @wp WP2 cli-tests >>>

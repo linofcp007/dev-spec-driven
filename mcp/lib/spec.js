@@ -797,9 +797,13 @@ function statusFeature(projectDir, name) {
   const tasks = parseTasks(tasksText);
   const done = tasks.filter((t) => t.done).length;
   const next = tasks.find((t) => !t.done) || null;
-  // Tasks whose _Verify:_ holds a command: only a passing run verifies them (a note doesn't).
-  const runnable = new Set(taskBlocks(tasksText || "").filter((b) => taskMarkers(b).verify.length).map((b) => b.number));
+  // Judged per task BLOCK (its own _Verify:_, its own record), never per number: a duplicated number must
+  // not lend one task's run or _Verify:_ to the other. Same order as parseTasks (stable sort by number).
+  const blocks = taskBlocks(tasksText || "");
+  const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
+  const list = blocks.map((b) => ({ number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text,
+    verified: !taskEvidenceIssue(evidence, b, dups.has(b.number)) })).sort((a, b) => a.number - b.number);
 
   // scale-section completeness (saas) — match headings by EN/PT/ES synonym, not English literals.
   let scaleSections = null;
@@ -819,8 +823,7 @@ function statusFeature(projectDir, name) {
     tracks: trackLabel(tracks),
     phase: detectPhase(dir, tracks),
     artifacts,
-    tasks: { total: tasks.length, done, next: next ? { number: next.number, text: next.text } : null,
-      list: tasks.map((t) => ({ ...t, verified: evidenceOk(evidence[String(t.number)], runnable.has(t.number)) })) },
+    tasks: { total: tasks.length, done, next: next ? { number: next.number, text: next.text } : null, list },
     scaleSections,
     aiSections,
   };
@@ -888,8 +891,10 @@ function completeTask(projectDir, name, number, evidence) {
   if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
   // The same scanner + resolver as status/brief/`done --run`: a "- [ ] N." inside a comment or a code fence
   // is never ticked, "1.1" is not task 1, and a duplicated number resolves to its first OPEN task.
-  const task = resolveTask(taskBlocks(text), n);
+  const blocks = taskBlocks(text);
+  const task = resolveTask(blocks, n);
   if (!task) return { ok: false, error: E.taskNotFound(n) };
+  const dup = blocks.filter((b) => b.number === n).length > 1;
   const lng = featureLang(projectDir, f.slug);
   const EV = i18n.msg(lng).evidence;
   const EG = i18n.msg(lng).evidenceGate;
@@ -905,7 +910,9 @@ function completeTask(projectDir, name, number, evidence) {
   const alreadyDone = task.done;
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
-    state.evidence[key] = recordEvidence(state.evidence[key], ev, new Date().toISOString());
+    // A duplicated number's record that belongs to the OTHER task is replaced, never extended (one record
+    // per number: that task is unverified until the tasks are renumbered).
+    state.evidence[key] = recordEvidence(ownEvidence(state.evidence, task, dup), ev, new Date().toISOString(), taskStamp(task));
     writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   }
   let updated = text;
@@ -923,8 +930,8 @@ function completeTask(projectDir, name, number, evidence) {
   const tasks = parseTasks(updated);
   const next = tasks.find((t) => !t.done) || null;
   const runnable = taskMarkers(task).verify.length > 0;
-  const entry = (state.evidence || {})[key];
-  const reason = evidenceIssue(entry, runnable);
+  const entry = ownEvidence(state.evidence || {}, task, dup);
+  const reason = taskEvidenceIssue(state.evidence || {}, task, dup);
   const res = {
     ok: true,
     feature: f.slug,
@@ -939,6 +946,7 @@ function completeTask(projectDir, name, number, evidence) {
     res.unverifiedReason = reason; // stable code — callers branch on this, never on the note's text
     res.note = reason === "failed-run" ? EG.failedRun(n, entry.exitCode, f.slug, runnable)
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
+      : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : EV.missing(n, f.slug);
   }
   return res;
@@ -1258,26 +1266,90 @@ function traceCheck(projectDir, name) {
 const RE_TASK_LINE = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/; // "1.1 sub-step" is not task 1
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
-// Comments are blanked IN PLACE (same length, newlines kept), so each line keeps its index and the checkbox
-// its column; `vis` is what a reader sees. Only CLOSED comments, like stripHtmlComments (trace_check): a
-// stray "<!--" must not silently hide every task below it (and flip the phase to "complete").
+// CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
+// is inline code, not a fence); a tilde fence's can.
+const RE_TASK_FENCE_OPEN = /^(\s*)(?:(`{3,})[^`]*|(~{3,}).*)$/;
+// Read like a markdown reader, in document order: fenced code first, then — outside code — HTML comments,
+// where an `inline code span` wins over a "<!--"/"-->" inside it. Comments are blanked IN PLACE (same
+// length), so each line keeps its index and the checkbox its column; `vis` is what a reader sees.
+// A marker that never closes (a fence opener, a "<!--") is plain text: a stray marker must not silently
+// hide every task below it (and flip the phase to "complete").
 function scanTaskLines(tasksText) {
-  const masked = String(tasksText || "").replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\r\n]/g, COMMENT_MASK));
-  let fence = null;
-  return masked.split("\n").map((m) => {
-    const src = m.replace(/\r$/, "");
-    const vis = src.split(COMMENT_MASK).join("");
-    const f = vis.match(RE_FENCE);
+  const lines = String(tasksText || "").split("\n").map((l) => l.replace(/\r$/, ""));
+  // Facts about the lines BELOW each line, so an unclosed marker is known the moment it opens (one linear
+  // pass): the longest ``` / ~~~ closer, the smallest indentation of a non-blank line, and any "-->".
+  const n = lines.length;
+  const below = { "`": new Array(n + 1).fill(0), "~": new Array(n + 1).fill(0), indent: new Array(n + 1).fill(Infinity), close: new Array(n + 1).fill(false) };
+  for (let i = n - 1; i >= 0; i--) {
+    const c = lines[i].match(/^\s*(`{3,}|~{3,})\s*$/);
+    for (const ch of ["`", "~"]) below[ch][i] = Math.max(below[ch][i + 1], c && c[1][0] === ch ? c[1].length : 0);
+    below.indent[i] = lines[i].trim() ? Math.min(below.indent[i + 1], indentOf(lines[i])) : below.indent[i + 1];
+    below.close[i] = below.close[i + 1] || lines[i].includes("-->");
+  }
+  const out = [];
+  let fence = null; // { ch, len, indent }
+  let comment = false;
+  for (let i = 0; i < n; i++) {
+    const src = lines[i];
+    const indent = indentOf(src);
     if (fence) {
-      if (f && vis.trim().startsWith(fence)) fence = null;
-      return { vis, code: true };
+      const c = src.match(/^\s*(`{3,}|~{3,})\s*$/); // a closer: the same character, at least as long, nothing after
+      if (c && c[1][0] === fence.ch && c[1].length >= fence.len) { fence = null; out.push({ vis: src, code: true }); continue; }
+      // A fence opened inside a list item ends with it: a less-indented line (the next "- [ ] N.") is
+      // outside, as in CommonMark — so an unclosed fence in a task's body can't swallow the next task.
+      if (!(fence.indent > 0 && src.trim() && indent < fence.indent)) { out.push({ vis: src, code: true }); continue; }
+      fence = null;
     }
-    if (f) { fence = f[1]; return { vis, code: true, fenceOpen: true }; }
-    const t = src.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
-    if (!t) return { vis, code: false, task: null };
-    const text = src.slice(src.length - t[4].length).split(COMMENT_MASK).join("").trim();
-    return { vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text } };
-  });
+    const f = !comment && src.match(RE_TASK_FENCE_OPEN);
+    const mark = f && (f[2] || f[3]);
+    if (mark && (below[mark[0]][i + 1] >= mark.length || (indent > 0 && below.indent[i + 1] < indent))) {
+      fence = { ch: mark[0], len: mark.length, indent };
+      out.push({ vis: src, code: true, fenceOpen: true });
+      continue;
+    }
+    let masked = "";
+    for (let k = 0; k < src.length;) {
+      if (comment) {
+        const end = src.indexOf("-->", k);
+        const stop = end === -1 ? src.length : end + 3;
+        masked += COMMENT_MASK.repeat(stop - k);
+        k = stop;
+        if (end !== -1) comment = false;
+      } else if (src[k] === "`") {
+        const run = src.slice(k).match(/^`+/)[0].length;
+        const close = closingBackticks(src, k + run, run);
+        const stop = close === -1 ? k + run : close + run; // an unmatched run is literal backticks
+        masked += src.slice(k, stop);
+        k = stop;
+      } else if (src.startsWith("<!--", k) && (src.indexOf("-->", k + 4) !== -1 || below.close[i + 1])) {
+        comment = true;
+        masked += COMMENT_MASK.repeat(4);
+        k += 4;
+      } else {
+        masked += src[k++];
+      }
+    }
+    const vis = masked.split(COMMENT_MASK).join("");
+    const t = masked.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
+    if (!t) { out.push({ vis, code: false, task: null }); continue; }
+    const text = masked.slice(masked.length - t[4].length).split(COMMENT_MASK).join("").trim();
+    out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text } });
+  }
+  return out;
+}
+// Leading whitespace width — a UTF-8 BOM on the first line is not indentation.
+function indentOf(s) {
+  return s.match(/^\s*/)[0].replace(/﻿/g, "").length;
+}
+// Index of the next run of exactly `len` backticks at or after `from` (a code span's closer), or -1.
+function closingBackticks(s, from, len) {
+  for (let k = from; k < s.length;) {
+    if (s[k] !== "`") { k++; continue; }
+    const run = s.slice(k).match(/^`+/)[0].length;
+    if (run === len) return k;
+    k += run;
+  }
+  return -1;
 }
 function taskBlocks(tasksText) {
   const blocks = [];
@@ -1400,35 +1472,51 @@ function normalizeEvidence(ev) {
   if (out.command && out.exitCode == null) return { error: "needsExit" };
   // A bare exit code proves nothing ({exitCode: 0} used to verify a task on its own).
   if (!out.command && !out.summary) return out.exitCode != null ? { error: "noContent" } : null;
+  // "exit 0" with no command is a claim, not a run: it stays a note, so it can't clear a recorded failed run
+  // (a non-zero one is still refused and recorded — erring toward "not verified").
+  if (!out.command && out.exitCode === 0) delete out.exitCode;
   if (out.exitCode == null) out.manual = true; // a human-attested check (no command was run)
   return out;
 }
 // Why a task is NOT verified — a stable reason code (null = verified):
 //   no-evidence · failed-run (the latest recorded run failed; only a later PASSING run clears it) ·
-//   manual-note-on-runnable-verify (the task's _Verify:_ holds a command, but only a note was given).
+//   manual-note-on-runnable-verify (the task's _Verify:_ holds a command, but only a note was given) ·
+//   duplicate-number (see taskEvidenceIssue).
 // `runnable` = the task's _Verify:_ is a real command (not a [bracketed placeholder/manual note]): then
-// only {command, exitCode: 0} verifies it. A check with no command may be attested by a summary.
+// only {command, exitCode: 0} verifies it. A check with no command may be attested by a summary. An exit
+// code only counts next to the command that produced it (a v1.12 record could hold a bare {exitCode: 0}).
 function evidenceIssue(e, runnable) {
   if (!e || typeof e !== "object" || Array.isArray(e)) return "no-evidence";
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
-  return e.exitCode === 0 || (e.manual === true && !!e.summary) ? null : "no-evidence";
+  return (e.command && e.exitCode === 0) || !!e.summary ? null : "no-evidence";
 }
-function evidenceOk(e, runnable) {
-  return !evidenceIssue(e, runnable);
+// Evidence is keyed by task NUMBER and stamped with the task's text (`task`). When a number is duplicated, a
+// record only counts for the occurrence it was recorded for: ticking the second "3." must never borrow the
+// first one's passing run (the doctor's duplicate-tasks warn says to renumber them).
+const taskStamp = (block) => String(block.text || "").slice(0, 500);
+function ownEvidence(evidence, block, dup) {
+  const e = evidence[String(block.number)];
+  return !dup || (e && typeof e === "object" && e.task === taskStamp(block)) ? e : undefined;
+}
+function taskEvidenceIssue(evidence, block, dup) {
+  const e = ownEvidence(evidence, block, dup);
+  const reason = evidenceIssue(e, taskMarkers(block).verify.length > 0);
+  // The number HAS a record, but it belongs to another task with the same number.
+  return reason === "no-evidence" && e === undefined && evidence[String(block.number)] != null ? "duplicate-number" : reason;
 }
 // evidence[n] stays the LATEST RUN {command, exitCode, summary, at} (the v1.12 shape) plus `history`, its
-// last EVIDENCE_HISTORY runs (oldest dropped) for pass-rate metrics. A note after a run is attached as
-// `note` — it never overwrites (or clears) the run's result.
+// last EVIDENCE_HISTORY runs (oldest dropped) for pass-rate metrics, and the `task` stamp. A note after a
+// run is attached as `note` — it never overwrites (or clears) the run's result.
 const EVIDENCE_HISTORY = 5;
-function recordEvidence(prev, ev, at) {
+function recordEvidence(prev, ev, at, task) {
   const p = prev && typeof prev === "object" && !Array.isArray(prev) ? prev : null;
   const pRun = p && p.exitCode != null;
-  if (ev.exitCode == null) return pRun ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at };
+  if (ev.exitCode == null) return pRun ? { ...p, note: ev.summary, noteAt: at, task } : { ...ev, at, task };
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
   if (!hist.length && pRun) hist = [runOf(p)]; // a v1.12 record: its run seeds the history
   const run = runOf({ ...ev, at });
-  return { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+  return { ...run, task, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
 }
 function runOf(e) {
   const r = {};
@@ -1452,13 +1540,14 @@ function verificationStatus(projectDir, slug, dir) {
   const blocks = taskBlocks(readIfExists(path.join(dir, "tasks.md")) || "");
   const evidence = stateEvidence(projectDir, slug);
   const withVerify = blocks.filter((b) => taskMarkers(b).verify.length);
+  const dups = new Set(duplicateTaskNumbers(blocks));
   const unverifiedDetail = [];
   for (const b of blocks) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
     const runnable = taskMarkers(b).verify.length > 0;
-    const e = evidence[String(b.number)];
-    if (!runnable && e == null) continue; // no command and nothing recorded: nothing to verify
-    const reason = evidenceIssue(e, runnable);
+    // no command and nothing recorded (for THIS task — a duplicated number's record may be the other's)
+    if (!runnable && ownEvidence(evidence, b, dups.has(b.number)) == null) continue;
+    const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
     if (reason) unverifiedDetail.push({ number: b.number, reason });
   }
   return { withVerify: withVerify.length, evidence, unverified: unverifiedDetail.map((d) => d.number), unverifiedDetail };
@@ -1796,8 +1885,9 @@ function finishFeature(projectDir, name, opts = {}) {
   if (acs.length) body.push(F.prAcs, ...acs.map((a) => "- " + a.text), "");
   if (blocks.length) {
     body.push(F.prTasks);
+    const dups = new Set(duplicateTaskNumbers(blocks));
     for (const b of blocks) {
-      const ev = vs.evidence[String(b.number)];
+      const ev = ownEvidence(vs.evidence, b, dups.has(b.number)); // never the other "N."'s run
       const hasVerify = taskMarkers(b).verify.length > 0;
       let tail = "";
       if (ev) tail = " — " + [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") : "", oneLine(ev.summary)].filter(Boolean).join(" · ");
