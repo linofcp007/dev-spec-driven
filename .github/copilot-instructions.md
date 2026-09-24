@@ -1,7 +1,7 @@
 <!-- This is a static instructions file read by GitHub Copilot. It is NOT a GitHub Action / workflow
-     and triggers no CI and no cost. The repo deliberately ships no .github/workflows/. -->
+     and runs nothing: no CI, no cost. The repo deliberately ships no .github/workflows/. -->
 
-> Paths here are relative to the dev-spec-driven clone; for your own project, generate this file with `node <clone>/cli/dev-spec.js rules copilot`.
+> Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules copilot` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).
 
 # dev-spec-driven (Copilot instructions)
 

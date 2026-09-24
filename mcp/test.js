@@ -867,10 +867,24 @@ function payload(res) {
   const docsRules = [[path.join(".cursor", "rules", "dev-spec-driven.mdc"), "cursor"], [path.join(".windsurf", "rules", "dev-spec-driven.md"), "windsurf"],
     [path.join(".github", "copilot-instructions.md"), "copilot"], ["GEMINI.md", "gemini"], ["AGENTS.md", "agents"]];
   const docsAgents = docsRead("AGENTS.md");
-  ok(docsRules.every(([f, tool]) => { const t = docsRead(f); return /relative to the dev-spec-driven clone/.test(t) && t.includes("cli/dev-spec.js rules " + tool) && /no pull requests/i.test(t); }) &&
+  // `rules <tool>` copies these files verbatim and makes only a BARE `cli/dev-spec.js` absolute, so the note must
+  // stay true in the generated copy (no "relative to the clone") and no path may carry a prefix like `<clone>/`.
+  ok(docsRules.every(([f, tool]) => { const t = docsRead(f); return /^> Paths in this file point into the dev-spec-driven clone\. `node cli\/dev-spec\.js rules /m.test(t) &&
+    !/relative to the dev-spec-driven clone/.test(t) && !/[\w./<>-]cli\/dev-spec\.js/.test(t) && t.includes("cli/dev-spec.js rules " + tool) && /no pull requests/i.test(t); }) &&
     !/(?<!skills\/dev-spec-driven\/)references\//.test(docsAgents) && ["next-action", "add-track", "feature", "backlog", "rules"].every((c) => new RegExp("^dev-spec " + c + " ", "m").test(docsAgents)) &&
     /rules <tool>/.test(docsRead("INTEGRATIONS.md")) && /ABSOLUTE\/PATH\/TO/.test(docsRead("INTEGRATIONS.md")) && !/Pre-filled config files/.test(docsRead("INTEGRATIONS.md")),
-    "rule files + AGENTS.md: clone-relative note, `rules <tool>`, no pull requests; AGENTS.md paths prefixed + CLI list complete; INTEGRATIONS admits the placeholder");
+    "rule files + AGENTS.md: a note that survives `rules <tool>`, bare CLI paths, no pull requests; AGENTS.md paths prefixed + CLI list complete; INTEGRATIONS admits the placeholder");
+  const docsIntegr = docsRead("INTEGRATIONS.md");
+  ok(["mkdir -p .cursor/rules && node", "mkdir -p .windsurf/rules && node", "mkdir -p .github && node", "New-Item -ItemType Directory -Force .cursor\\rules",
+    "cmd /c 'node \"<PLUGIN>\\cli\\dev-spec.js\" rules cursor > .cursor\\rules\\dev-spec-driven.mdc'"].every((s) => docsIntegr.includes(s)) &&
+    /PowerShell 5\.1[^\n]*\n?[^\n]*UTF-16/.test(docsIntegr) && /INTEGRATIONS\.md[^\n]*\n?[^\n]*UTF-16/.test(docsRead("INSTALL.md")),
+    "INTEGRATIONS: `rules <tool>` redirects create the folder first; PowerShell goes through `cmd /c` (a bare `>` in 5.1 writes UTF-16)");
+  const docsStep = (n) => (docsAgents.split("\n" + n + ". **")[1] || "").split("\n")[0];
+  ok(/for a task whose `_Verify:_` names a runnable command, a text note alone/.test(docsStep(6)) && /`_Verify: <command>_` always/.test(docsStep(5)) &&
+    /`_Verify: <command>_` always/.test(docsRead("commands", "createTask.md")) && /target tests/.test(docsRead("commands", "createTask.md")) &&
+    ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
+    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsSkill),
+    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution");
   const docsInstall = docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
   ok(!/Copy-Item -Recurse/.test(docsInstall) && /\/plugin marketplace add <path-to-your-clone>/.test(docsInstall) && /dev-spec-driven@dev-spec-driven-marketplace/.test(docsInstall) &&
     [docsInstall, docsContrib].every((t) => /claude plugin validate [^\n]*plugin\.json/.test(t) && /claude plugin validate (?:\.|"\$plugin")[\s`]/.test(t)) &&
@@ -918,18 +932,37 @@ function payload(res) {
     .flatMap((d) => walkFiles(path.join(root, d)).filter((p) => p.endsWith(".md")))
     .concat([path.join(".cursor", "rules"), path.join(".windsurf", "rules")].flatMap((d) => walkFiles(path.join(root, d))))
     .concat(["README.md", "AGENTS.md", "CONTRIBUTING.md", "INSTALL.md", "INTEGRATIONS.md", "GEMINI.md", path.join(".github", "copilot-instructions.md")].map((f) => path.join(root, f)));
-  // Negations are allowed ("no PR", "never open a PR", "without a pull request", "sem PR", "no PRs or CI", "not in CI").
-  const prNegation = /\b(?:no|not|never|without|sem|sin|nunca|nem|ni)\s+(?:(?:to\s+)?(?:open|opening|abrir|abre)\s+)?(?:(?:a|an|any|the|um|uma|un|una)\s+)?(?:PRs?|pull requests?)\b(?:\s*(?:,|or|and|nor|ou|o|e|y)\s*(?:no\s+)?CI\b)?/gi;
-  const ciNegation = /\b(?:no|not|never|without|sem|sin|nunca|não)\s+(?:(?:in|on|em|en)\s+)?(?:(?:a|the)\s+)?(?:paid\s+)?CI\b/gi;
+  // Negations are dropped before matching. `no` is ambiguous: the English/Spanish negator ("no PRs", "(no CI)")
+  // or the European-Portuguese contraction em+o ("o delta de eval no PR" = IN the PR). So a plural is always a
+  // negation, but a singular `no PR`/`no CI` only after punctuation or at a line start; right after a word it
+  // reads as PT and is flagged (write "…, no CI" or use never/without). never/not/without/sem/sin/nunca/nem/
+  // ni/não may sit up to 3 words before the noun ("never run in CI", "not in the PR", "never open a PR").
+  const negTail = String.raw`(?:\s*(?:,|or|and|nor|ou|o|e|y)\s*(?:no\s+)?(?:paid\s+)?CI\b)?`;
+  const negations = [String.raw`\bno\s+(?:PRs|pull requests)\b`, String.raw`(?<![A-Za-zÀ-ÿ0-9_]\s*)\bno\s+(?:paid\s+)?(?:PR|pull request|CI)\b`,
+    String.raw`\b(?:not|never|without|sem|sin|nunca|nem|ni|não|neither|nor)(?:\s+[A-Za-zÀ-ÿ0-9'’-]+){0,3}?\s+(?:PRs?|pull requests?|CI)\b`]
+    .map((r) => new RegExp(r + negTail, "gi"));
+  const dropNegations = (t) => negations.reduce((s, re) => s.replace(re, ""), t);
+  const PR = "(?:PR|[Pp]ull [Rr]equest)";
   const steersRe = new RegExp([
-    /\b[Oo]pen(?:s|ing)? (?:a|an|the|your) (?:PR|pull request)\b/, /\babr(?:e|ir) (?:um|uma|un|una) (?:PR|pull request)\b/,
-    /\b[Ee]very (?:prompt )?PR\b/, /\bPR comment/, /\b[Ii]n (?:the |a |your )?PR\b/, /\bPRs? (?:is|are) blocked/, /\bPR-friendly/,
-    /\b[Pp]ush and open/, /\bCI gate/, /\b[Ii]n (?:the )?CI\b/, /\b[Oo]n CI\b/,
-  ].map((r) => r.source).join("|"));
-  const steersToPr = proseFiles.filter((p) => steersRe.test(fs.readFileSync(p, "utf8").replace(prNegation, "").replace(ciNegation, "")));
-  ok(["in the PR", "Prompt PRs are blocked", "git/PR-friendly", "Open a pull request", "push and open one", "on every PR", "a CI gate", "runs in CI"].every((s) => steersRe.test(s)) &&
-    ["no PR or CI needed", "no pull requests, no CI", "never open a PR", "without a PR", "sem PR", "sin PR", "no PRs or CI", "locally, not in CI", "/prReview", "comments on PRs"]
-      .every((s) => !steersRe.test(s.replace(prNegation, "").replace(ciNegation, ""))), "the PR/CI guard catches steering phrases and allows negations");
+    String.raw`\b(?:[Oo]pen|[Cc]reate|[Ss]ubmit|[Rr]aise|[Ff]ile)(?:s|ed|ing)?\b[^.\n]{0,20}?\b${PR}s?\b`,
+    String.raw`\b(?:abr(?:e|ir|a|as|es)|cri(?:a|ar|e)|crea|crear)\b[^.\n]{0,15}?\b${PR}s?\b`, // PT/ES open/create
+    String.raw`\b(?:[Ee]very|[Ee]ach|[Cc]ada) (?:prompt )?${PR}\b`, String.raw`\bPR comment`, String.raw`\bPR #\d`,
+    String.raw`\bPRs? (?:is|are) blocked`, String.raw`\bPR-friendly`, String.raw`\b[Ii]n (?:the |a |your |each |every )?${PR}\b`,
+    String.raw`\b[Ee]n (?:el |un |cada )?${PR}\b`, String.raw`[A-Za-zÀ-ÿ]\s+nos?\s+(?:${PR}s?|CI)\b`, // ES "en el PR", PT "no PR"/"nos PRs"
+    String.raw`\b[Pp]ush(?:es|ing)? and open`, String.raw`\bCI gate`, String.raw`\b[Ii]n (?:the |your |a |our )?CI\b`, String.raw`\b[Oo]n CI\b`,
+    String.raw`\b[Ee]n (?:el |la )?CI\b`,
+  ].join("|"));
+  const steersToPr = proseFiles.filter((p) => steersRe.test(dropNegations(fs.readFileSync(p, "utf8"))));
+  const guardMissed = ["in the PR", "Prompt PRs are blocked", "git/PR-friendly", "Open a pull request", "push and open one", "on every PR", "a CI gate", "runs in CI",
+    "Põe o delta de eval no PR.", "Os testes de carga correm no CI.", "Incluye el delta de evals en el PR.", "Depois, abrir o PR com o resumo.", "comenta nos PRs",
+    "Then create a pull request with the summary.", "Push the branch and open a new PR.", "Run the load test in your CI pipeline.", "Every pull request must include evals.",
+    "Fix: PR #1234 adds index."].filter((s) => !steersRe.test(dropNegations(s)));
+  const guardFlagged = ["no PR or CI needed", "no pull requests, no CI", "never open a PR", "without a PR", "sem PR", "sin PR", "no PRs or CI", "locally, not in CI",
+    "/prReview", "comments on PRs", "Evals are never run in CI.", "Keep the summary local, not in the PR.", "Do not create a pull request.", "(no CI, no extra service)",
+    "Automatización local, no CI", "Automação local, não CI", "sem pull requests, sem CI", "No PR needed.", "merge locally; no PRs",
+    "**No GitHub Actions / no paid CI / no pull requests**", "a PRD", "the CIA"].filter((s) => steersRe.test(dropNegations(s)));
+  ok(guardMissed.length === 0 && guardFlagged.length === 0,
+    "the PR/CI guard catches EN/PT/ES steering and allows negations (missed: " + guardMissed.join(" | ") + "; wrongly flagged: " + guardFlagged.join(" | ") + ")");
   ok(steersToPr.length === 0 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 

@@ -27,9 +27,23 @@ Everything is **local, zero-dependency (Node ≥18), no GitHub Actions, no paid 
 > don't exist in your project. Generate them instead — `node "<PLUGIN>/cli/dev-spec.js" rules <tool>`
 > (`cursor` | `windsurf` | `copilot` | `gemini` | `agents`) prints the rule file with this clone's
 > absolute paths; redirect it to the destination shown per tool below (if that file already exists,
-> merge the output into it instead of overwriting it).
+> merge the output into it instead of overwriting it). Run it from your project's root. A shell
+> redirect does not create missing folders, so create the folder first. In **Windows PowerShell 5.1**,
+> `>` writes UTF-16, and piping to `Out-File`/`Set-Content` re-encodes the text through the console code
+> page, so let `cmd` do the redirect. It keeps the exact UTF-8 bytes and works in PowerShell 7 too:
+>
+> ```bash
+> # macOS / Linux / Git Bash
+> mkdir -p .cursor/rules && node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc
+> ```
+>
+> ```powershell
+> # PowerShell (5.1 or 7)
+> New-Item -ItemType Directory -Force .cursor\rules | Out-Null
+> cmd /c 'node "<PLUGIN>\cli\dev-spec.js" rules cursor > .cursor\rules\dev-spec-driven.mdc'
+> ```
 
-Replace `<PLUGIN>` below with the absolute path to your clone of this repo (where you ran
+Replace `<PLUGIN>` throughout this page with the absolute path to your clone of this repo (where you ran
 `git clone https://github.com/linofcp007/dev-spec-driven.git`). Tip: `node cli/dev-spec.js mcp-config <client>`
 prints the config with that path already filled in for your machine.
 
@@ -76,7 +90,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   ```
 - **Rules:** [`.cursor/rules/dev-spec-driven.mdc`](./.cursor/rules/dev-spec-driven.mdc) ships in this
   repo (`alwaysApply: true`). For your own project, generate it with absolute paths:
-  `node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`.
+  `mkdir -p .cursor/rules && node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`
+  (PowerShell: the recipe at the top).
 
 ## Windsurf
 
@@ -86,7 +101,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   ```
 - **Rules:** [`.windsurf/rules/dev-spec-driven.md`](./.windsurf/rules/dev-spec-driven.md)
   (`trigger: always_on`). For your own project:
-  `node "<PLUGIN>/cli/dev-spec.js" rules windsurf > .windsurf/rules/dev-spec-driven.md`.
+  `mkdir -p .windsurf/rules && node "<PLUGIN>/cli/dev-spec.js" rules windsurf > .windsurf/rules/dev-spec-driven.md`
+  (PowerShell: the recipe at the top).
 
 ## GitHub Copilot (VS Code, agent mode)
 
@@ -97,7 +113,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   Enable agent mode and start the server from the MCP view.
 - **Instructions:** [`.github/copilot-instructions.md`](./.github/copilot-instructions.md) (a static
   file Copilot reads — **not** a GitHub Action, no CI, no cost). For your own repo:
-  `node "<PLUGIN>/cli/dev-spec.js" rules copilot > .github/copilot-instructions.md`.
+  `mkdir -p .github && node "<PLUGIN>/cli/dev-spec.js" rules copilot > .github/copilot-instructions.md`
+  (PowerShell: the recipe at the top).
 
 ## Gemini (Gemini CLI / Code Assist)
 
@@ -106,7 +123,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Instructions:** Gemini CLI reads `GEMINI.md` at the project root automatically. For your own project:
-  `node "<PLUGIN>/cli/dev-spec.js" rules gemini > GEMINI.md`.
+  `node "<PLUGIN>/cli/dev-spec.js" rules gemini > GEMINI.md` (PowerShell: the recipe at the top, which
+  also keeps the file UTF-8).
 
 ## OpenAI Codex (Codex CLI)
 
@@ -117,7 +135,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   args = ['<PLUGIN>/mcp/server.js']
   ```
 - **Instructions:** Codex reads `AGENTS.md` at the project root automatically. For your own project:
-  `node "<PLUGIN>/cli/dev-spec.js" rules agents > AGENTS.md`.
+  `node "<PLUGIN>/cli/dev-spec.js" rules agents > AGENTS.md` (PowerShell: the recipe at the top, which
+  also keeps the file UTF-8).
 
 ## Any other MCP client (Cline, Roo, Zed, Continue, …)
 

@@ -5,7 +5,7 @@ instructions file — **Codex CLI, Gemini CLI, Cursor, Windsurf, Copilot, Claude
 can follow it. The full reference lives in `skills/dev-spec-driven/SKILL.md` and
 `skills/dev-spec-driven/references/`.
 
-> Paths here are relative to the dev-spec-driven clone; for your own project, generate this file with `node <clone>/cli/dev-spec.js rules agents`.
+> Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules agents` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).
 
 > **Language:** detect the user's language and respond in it (English, Português, Español),
 > including the prose inside generated artifacts. Pass `--lang en|pt|es` to `dev-spec init`
@@ -33,7 +33,7 @@ Tracks combine (e.g. a billing webhook in a multi-tenant SaaS that calls an LLM 
 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
-- **CLI (works anywhere):** `node <clone>/cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
+- **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
 - **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as tools.
 
 Key operations (CLI form):
@@ -76,8 +76,8 @@ flow (Bounded mode = a short design in chat and an explicit yes, no artifacts):
 2. **Design** — base sections + the mandatory sections of the active tracks (5 for +saas, 10 for +ai). The scaffold marks each with a `> **TODO**` sentinel; replace it with real content. No blank mandatory sections. Approve.
 3. **Test/Eval plan** — +tdd: enumerate tests mapped to AC IDs. +ai: golden/adversarial/regression sets + thresholds + baseline. Approve.
 4. **Failing tests / eval harness** — +tdd: write tests, all red for the right reason (hard gate). +ai: deterministic tests + runnable eval harness + baseline. No implementation before this passes.
-5. **Tasks** — ordered, traceable; markers `_Requirements:_` always, `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
-6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs and tests already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` (MCP: `spec_complete_task`) — the only way to tick a task; evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open, and a text note alone (`--evidence "…"` without `--cmd "…" --exit 0`) ticks it but leaves it unverified. Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `skills/dev-spec-driven/references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
+5. **Tasks** — ordered, traceable; markers `_Requirements:_` and `_Verify: <command>_` always (+tdd: the command that runs that task's own tests — the full suite stays red until the last task), `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
+6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs and tests already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` (MCP: `spec_complete_task`) — the only way to tick a task; evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open; for a task whose `_Verify:_` names a runnable command, a text note alone (`--evidence "…"` without `--cmd "…" --exit 0`) ticks it but leaves it unverified (a task with no runnable `_Verify:_` can be attested by that note). Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `skills/dev-spec-driven/references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
 
 At each phase boundary, run `dev-spec doctor <feature>`; only advance when it reports
 `readyToAdvance`. Record sign-off with `dev-spec approve <feature> <phase>`.

@@ -140,6 +140,9 @@ node "$plugin\cli\dev-spec.js" mcp-config all
 node "$plugin\cli\dev-spec.js" rules cursor    # the workflow rule file for your project (also windsurf|copilot|gemini|agents)
 ```
 
+To save a rule file into your project, use the recipe in INTEGRATIONS.md → *Rule files for your own
+project*. In Windows PowerShell 5.1, a plain `>` writes UTF-16.
+
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
 
 ## Uninstall
