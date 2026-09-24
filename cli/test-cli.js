@@ -218,6 +218,15 @@ ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requi
   frmJ && frmJ.needsConfirm === true && fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove without --yes deletes nothing, lists what it would delete, exits 1");
 const fry = run(["feature", "remove", "doomed", "--yes", "--project", w4]);
 ok(fry.code === 0 && /Removed 'doomed'/.test(fry.out) && !fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove --yes deletes it");
+// A broken roadmap.json: the preview reports the roadmap error instead of promising a delete --yes can't do.
+const w4bad = path.join(w4, "bad-roadmap");
+fs.mkdirSync(w4bad, { recursive: true });
+run(["init", "--project", w4bad]);
+run(["create", "Delta", "core", "--project", w4bad]);
+fs.writeFileSync(path.join(w4bad, ".specs", "roadmap.json"), "{broken");
+const frb = run(["feature", "remove", "delta", "--project", w4bad]);
+ok(frb.code === 1 && /roadmap\.json/.test(frb.out) && !/Would permanently delete/.test(frb.out) && !/--yes/.test(frb.out) &&
+  fs.existsSync(path.join(w4bad, ".specs", "delta")), "feature remove preview with a broken roadmap.json exits 1 with the roadmap error, no delete promise");
 
 // rules <tool>: the rule file with this clone's absolute paths (nothing relative left to break when pasted).
 const ROOT4 = path.resolve(__dirname, "..").replace(/\\/g, "/");

@@ -887,6 +887,18 @@ function payload(res) {
       fs.readdirSync(lnkOut).length === 30 && fs.existsSync(path.join(w4, ".specs")),
       "remove preview does not follow symlinks/junctions (got " + lnkPrev.wouldDelete.files + " of " + realFiles + "); the delete leaves the link targets alone");
   } else ok(true, "remove preview vs symlinks: skipped (links not creatable here)");
+  // With an unreadable roadmap.json the preview returns the same error the confirmed remove would — it used to
+  // list what "would" be deleted and ask for confirm:true, then the confirmed call refused.
+  const badRmDir = path.join(w4, "bad-roadmap");
+  S.initProject(badRmDir, ["core"]);
+  const badRmF = S.createFeature(badRmDir, "Delta", ["core"]);
+  fs.writeFileSync(path.join(badRmDir, ".specs", "roadmap.json"), "{broken");
+  const badPrev = S.manageFeature(badRmDir, "remove", "delta");
+  const badConf = S.manageFeature(badRmDir, "remove", "delta", undefined, { confirm: true });
+  const badPrevMcp = await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "delta", projectDir: badRmDir } });
+  ok(badPrev.ok === false && !badPrev.needsConfirm && !badPrev.wouldDelete && /roadmap\.json/.test(badPrev.error) && badPrev.error === badConf.error &&
+    badPrevMcp.result.isError === true && !payload(badPrevMcp).needsConfirm && fs.existsSync(badRmF.dir),
+    "remove preview with a broken roadmap.json returns the roadmap error (no needsConfirm), like the confirmed call");
 
   // spec_finish includeBody with write (the CLI's --include-body maps to it); classify reports its language.
   const finBody = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", write: true, includeBody: true, projectDir: vDir } }));

@@ -1852,6 +1852,9 @@ function renameFeature(projectDir, name, newName) {
 function removePreview(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
   let files = 0;
   const walk = (d) => safeReaddir(d).forEach((e) => {
     const p = path.join(d, e);
