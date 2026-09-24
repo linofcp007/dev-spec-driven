@@ -146,6 +146,29 @@ ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /ro
 // @wp WP1 <<<
 
 // @wp WP2 cli-tests >>>
+{ // 1.13 WP2 — track input, add-track --remove, status marks (own block scope)
+  const w2 = path.join(tmp, "wp2-proj");
+  run(["init", "core", "--project", w2]);
+  const typo = run(["create", "Typo", "tdd,sass", "--project", w2]);
+  const typoInit = run(["init", "ia", "--project", w2]);
+  ok(typo.code === 1 && /did you mean 'saas'/.test(typo.out) && !fs.existsSync(path.join(w2, ".specs", "typo")) && typoInit.code === 1 && /did you mean 'ai'/.test(typoInit.out),
+    "create/init with an unknown track exit 1 with a did-you-mean (nothing scaffolded)");
+  const multi = run(["create", "Checkout", "+tdd", "+saas", "--project", w2]);
+  ok(multi.code === 0 && /\[core \+tdd \+saas\]/.test(multi.out), "create accepts '+tdd +saas' style tracks");
+  const st = run(["status", "checkout", "--project", w2]).out;
+  ok(/phase=requirements/.test(st) && /◐ Performance Budget \(unfilled\)/.test(st) && !/✓/.test(st.split("Scale sections:")[1] || "✓"),
+    "status: a fresh scaffold is in 'requirements' and its scale sections read ◐ (unfilled), never ✓");
+  const des = path.join(w2, ".specs", "checkout", "design.md");
+  fs.writeFileSync(des, fs.readFileSync(des, "utf8").replace(/(## \[SaaS\] Performance Budget\n)> \*\*TODO\*\*[^\n]*\n/, "$1P95 < 200 ms.\n"));
+  ok(/✓ Performance Budget · ◐ Scale Design \(unfilled\)/.test(run(["status", "checkout", "--project", w2]).out), "status prints ✓ only for the filled section (same rule as doctor)");
+  const addBoth = run(["add-track", "checkout", "ai", "--project", w2]);
+  const rm = run(["add-track", "checkout", "saas", "--remove", "--project", w2]);
+  const rmCore = run(["add-track", "checkout", "core", "--remove", "--project", w2]);
+  ok(addBoth.code === 0 && /\[core \+tdd \+saas \+ai\]/.test(addBoth.out) && rm.code === 0 && /now \[core \+tdd \+ai\]/.test(rm.out) && /load-test\.md/.test(rm.out) &&
+    fs.existsSync(path.join(w2, ".specs", "checkout", "load-test.md")) && rmCore.code === 1,
+    "add-track --remove turns a track off (files kept, listed); 'core' can't be removed");
+  ok(/add-track <feature> <track\.\.\.>/.test(run(["help"]).out) && /--remove/.test(run(["help"]).out), "help documents add-track --remove");
+}
 // @wp WP2 <<<
 
 // @wp WP3 cli-tests >>>

@@ -283,25 +283,11 @@ ${extra}
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 is fully functional and independently testable/shippable.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## Story US-1 — Observability & Scale
-- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## Story US-1 — AI
-- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.en.trackTasks({ track: t, start: n + 1 });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
@@ -332,6 +318,32 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    // A track's template task block (none for +tdd — it only adds markers). Shared by tasks() and
+    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start }.
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## Story US-1 — Observability & Scale
+- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
+  - _Requirements: US-1.AC-6_
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## Story US-1 — AI
+- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
+  - _Affects evals: golden, adversarial, regression_
+- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
+  - _Requirements: US-1.AC-9_
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -822,25 +834,11 @@ ${extra}
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## História US-1 — Observabilidade e Escala
-- [ ] ${id()}. [US1] Emitir métricas, adicionar dashboard, configurar alertas
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Teste de carga — verificar o orçamento de desempenho do design.md (só caminho crítico)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## História US-1 — IA
-- [ ] ${id()}. [US1] Prompt v1 + ligação ao harness de avaliação (tarefa separada por mudança de prompt)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.pt.trackTasks({ track: t, start: n + 1 });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
@@ -871,6 +869,30 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## História US-1 — Observabilidade e Escala
+- [ ] ${id()}. [US1] Emitir métricas, adicionar dashboard, configurar alertas
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Teste de carga — verificar o orçamento de desempenho do design.md (só caminho crítico)
+  - _Requirements: US-1.AC-6_
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## História US-1 — IA
+- [ ] ${id()}. [US1] Prompt v1 + ligação ao harness de avaliação (tarefa separada por mudança de prompt)
+  - _Affects evals: golden, adversarial, regression_
+- [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
+  - _Requirements: US-1.AC-9_
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -1361,25 +1383,11 @@ ${extra}
   - _Requirements: US-1.AC-4_
 **Checkpoint:** US-1 está totalmente funcional y es testeable/lanzable de forma independiente.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## Historia US-1 — Observabilidad y Escala
-- [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## Historia US-1 — IA
-- [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.es.trackTasks({ track: t, start: n + 1 });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
@@ -1410,6 +1418,30 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## Historia US-1 — Observabilidad y Escala
+- [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
+  - _Requirements: US-1.AC-6_
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## Historia US-1 — IA
+- [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
+  - _Affects evals: golden, adversarial, regression_
+- [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
+  - _Requirements: US-1.AC-9_
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -1932,6 +1964,18 @@ const MSG = {
     // @wp WP1 <<<
 
     // @wp WP2 msg-en >>>
+    tracks: {
+      unknown: (items, valid) => `Unknown track${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (did you mean '${u.suggestion}'?)` : "")).join(", ")}. Valid tracks: ${valid}.`,
+      cannotRemoveCore: "'core' is always on — it can't be removed.",
+      bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
+      notActive: (list) => `Not active: ${list} — nothing to remove.`,
+      removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' already existed: added ${list} (artifacts, design sections, steering, tasks) — nothing was overwritten.`,
+      designTitle: (name) => `# Design: ${name}`,
+      acPlaceholder: (tr) => `[the +${tr} criterion this task proves]`,
+      designSections: (marker) => `design.md (${marker} sections)`,
+      taskBlock: (track, start) => BUILD.en.trackTasks({ track, start }),
+    },
     // @wp WP2 <<<
 
     // @wp WP3 msg-en >>>
@@ -2140,6 +2184,18 @@ const MSG = {
     // @wp WP1 <<<
 
     // @wp WP2 msg-pt >>>
+    tracks: {
+      unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (querias dizer '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
+      cannotRemoveCore: "O 'core' está sempre ativo — não pode ser removido.",
+      bugfixNeedsTdd: "Um bugfix é sempre test-first — não se pode remover o +tdd.",
+      notActive: (list) => `Não ativo: ${list} — nada a remover.`,
+      removed: (list, slug) => `Tracks desativados: ${list}. Nenhum ficheiro foi apagado — os artefactos inativos ficam no sítio e voltam a contar se voltares a adicionar o track. Volta a correr /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' já existia — tracks adicionados: ${list} (artefactos, secções de design, steering, tarefas) — nada foi substituído.`,
+      designTitle: (name) => `# Design: ${name}`,
+      acPlaceholder: (tr) => `[o critério +${tr} que esta tarefa prova]`,
+      designSections: (marker) => `design.md (secções ${marker})`,
+      taskBlock: (track, start) => BUILD.pt.trackTasks({ track, start }),
+    },
     // @wp WP2 <<<
 
     // @wp WP3 msg-pt >>>
@@ -2348,6 +2404,18 @@ const MSG = {
     // @wp WP1 <<<
 
     // @wp WP2 msg-es >>>
+    tracks: {
+      unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (¿querías decir '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
+      cannotRemoveCore: "'core' está siempre activo — no se puede quitar.",
+      bugfixNeedsTdd: "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+      notActive: (list) => `No activo: ${list} — nada que quitar.`,
+      removed: (list, slug) => `Tracks desactivados: ${list}. No se borró ningún archivo — los artefactos inactivos se quedan donde están y vuelven a contar si vuelves a añadir el track. Vuelve a ejecutar /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' ya existía — tracks añadidos: ${list} (artefactos, secciones de diseño, steering, tareas) — no se sobrescribió nada.`,
+      designTitle: (name) => `# Diseño: ${name}`,
+      acPlaceholder: (tr) => `[el criterio +${tr} que prueba esta tarea]`,
+      designSections: (marker) => `design.md (secciones ${marker})`,
+      taskBlock: (track, start) => BUILD.es.trackTasks({ track, start }),
+    },
     // @wp WP2 <<<
 
     // @wp WP3 msg-es >>>

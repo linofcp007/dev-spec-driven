@@ -180,8 +180,8 @@ const TOOLS = [
   {
     name: "spec_add_track",
     description:
-      "Escalate an EXISTING feature to a new track (+tdd, +saas or +ai) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md) and appends that track's mandatory design.md sections. Use when a feature grew into needing tests, scale, or AI after it was created.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", enum: ["tdd", "saas", "ai"] }, projectDir: { type: "string" } }, required: ["name", "track"] },
+      "Escalate an EXISTING feature to a new track (+tdd, +saas or +ai) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md), appends that track's mandatory design.md sections and template tasks, adds its steering files, updates classification.md's Active Tracks line and persists the track set in .state.json. `track` takes one or several ('saas,ai', '+saas +ai'); an unknown track is an error with a did-you-mean. With `remove: true` the track is turned OFF instead - non-destructive: no file is deleted, the result lists the now-inactive artifacts, and doctor/status/next_action stop requiring them ('core' can't be removed; a bugfix keeps +tdd). Use when a feature grew into needing tests, scale, or AI after it was created (or no longer does).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai - or several: 'saas,ai' / '+saas +ai'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files are kept, listed as inactive)." }, projectDir: { type: "string" } }, required: ["name", "track"] },
   },
   {
     name: "spec_feature",
@@ -282,7 +282,7 @@ function runTool(name, args) {
     case "spec_next_action":
       return spec.nextAction(pdir, args.name);
     case "spec_add_track":
-      return spec.addTrack(pdir, args.name, args.track);
+      return spec.addTrack(pdir, args.name, args.track, { remove: !!args.remove });
     case "spec_feature":
       return spec.manageFeature(pdir, args.action, args.name, args.newName);
 

@@ -163,15 +163,46 @@ function existingFeature(projectDir, name) {
   return f;
 }
 
+// Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
+// ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
+// (with a did-you-mean) instead of being dropped — silently losing 'sass' also skipped auto-classification.
+// → { tracks (stable order, incl. core), named (valid tokens as given), given (any token at all), unknown }
+function parseTracks(input) {
+  const tokens = (Array.isArray(input) ? input : input == null ? [] : [input])
+    .flatMap((x) => String(x == null ? "" : x).split(/[\s,+]+/))
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  const named = [...new Set(tokens.filter((t) => VALID_TRACKS.includes(t)))];
+  const unknown = [...new Set(tokens.filter((t) => !VALID_TRACKS.includes(t)))].map((token) => ({ token, suggestion: suggestTrack(token) }));
+  const set = new Set([...named, "core"]); // core is always on
+  return { tracks: VALID_TRACKS.filter((t) => set.has(t)), named, given: tokens.length > 0, unknown };
+}
 function normalizeTracks(tracks) {
-  let arr = [];
-  if (Array.isArray(tracks)) arr = tracks.slice();
-  else if (typeof tracks === "string")
-    arr = tracks.split(/[\s,+]+/).filter(Boolean);
-  arr = arr.map((t) => String(t).toLowerCase().replace(/^\+/, ""));
-  const set = new Set(arr.filter((t) => VALID_TRACKS.includes(t)));
-  set.add("core"); // core is always on
-  return VALID_TRACKS.filter((t) => set.has(t)); // stable order
+  return parseTracks(tracks).tracks; // lenient: valid tokens only (the boundaries use parseTracks and report unknowns)
+}
+// Words people type for a track — suggestion only, never accepted as input.
+const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas" };
+function suggestTrack(token) {
+  if (TRACK_ALIASES[token]) return TRACK_ALIASES[token];
+  // Optimal-string-alignment distance: a transposition ('sasa', 'ia') costs 1.
+  const dist = (a, b) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+    return d[a.length][b.length];
+  };
+  let best = null;
+  for (const t of VALID_TRACKS) {
+    const n = dist(token, t);
+    if (n <= Math.max(1, Math.floor(token.length / 2)) && (!best || n < best.n)) best = { t, n };
+  }
+  return best ? best.t : null;
+}
+function unknownTracksError(lang, unknown) {
+  return i18n.msg(lang).tracks.unknown(unknown, VALID_TRACKS.join(", "));
 }
 
 function trackLabel(tracks) {
@@ -520,6 +551,8 @@ function steeringFilesForTracks(tracks) {
 // Steering stub CONTENT lives in i18n.js (EN/PT/ES); filenames stay constant here.
 
 function initProject(projectDir, tracks, lang) {
+  const pt = parseTracks(tracks);
+  if (pt.unknown.length) return { ok: false, error: unknownTracksError(normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
   ensureDir(steering);
@@ -530,7 +563,7 @@ function initProject(projectDir, tracks, lang) {
     setRoadmapLang(projectDir, lang);
   }
   const lng = projectLang(projectDir);
-  const wanted = steeringFilesForTracks(normalizeTracks(tracks));
+  const wanted = steeringFilesForTracks(pt.tracks);
   const created = [];
   const skipped = [];
   for (const f of wanted) {
@@ -642,31 +675,54 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
-  const given = tracks != null && tracks !== "" && !(Array.isArray(tracks) && !tracks.length);
   const existed = fs.existsSync(dir);
+  const pt = parseTracks(tracks);
+  const given = pt.given;
+  if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const storedKind = existed ? readState(projectDir, slug).kind || "feature" : null;
   const askedKind = kind ? String(kind).toLowerCase() : null;
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
-  // A bugfix is always test-first (the regression test is its proof); other tracks come later via add_track.
-  const t = bugfix ? normalizeTracks(["tdd"])
-    : given ? normalizeTracks(tracks)
-    : existed ? detectTracks(dir)
+  // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
+  // path as spec_add_track below (a re-run never drops a track and never re-classifies). A NEW bugfix is
+  // always test-first (the regression test is its proof); other tracks come later via add_track.
+  const current = existed ? detectTracks(dir) : null;
+  const t = existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
+    : bugfix ? normalizeTracks(["tdd"])
+    : given ? pt.tracks
     : (cls || classify(summary || "", { name, lang })).tracks;
+  const newTracks = existed ? t.filter((x) => !current.includes(x)) : [];
+  if (newTracks.length && readState(projectDir, slug).invalid) return { ok: false, error: readState(projectDir, slug).invalid };
   ensureDir(dir);
 
   // Resolve the feature's language (explicit > project default > en) and persist it so later
-  // tools (doctor/clarify/next-action) and +track escalation stay in the same language.
+  // tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
+  // persisted too — detectTracks reads it back instead of guessing from the files.
   const stored = readState(projectDir, slug).lang;
   const lng = normalizeLang(stored || lang || projectLang(projectDir));
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
-  writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", approvals: {} } : { lang: lng, approvals: {} }, null, 2));
+  writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", tracks: t, approvals: {} } : { lang: lng, tracks: t, approvals: {} }, null, 2));
 
   const created = [];
   const skip = [];
   const put = (rel, content) => {
     if (writeIfAbsent(path.join(dir, rel), content)) created.push(rel);
     else skip.push(rel);
+  };
+  // Shared tail: new tracks on an existing feature, the backlog entry this feature fulfils, the roadmap.
+  const finish = (res) => {
+    if (newTracks.length) {
+      const a = applyTracks(projectDir, f, name, newTracks, lng);
+      if (!a.ok) return a;
+      a.added.forEach((x) => { if (!created.includes(x)) created.push(x); });
+      res.addedTracks = newTracks;
+    }
+    const fromBacklog = pruneBacklog(projectDir, slug);
+    if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
+    maybeRefreshRoadmap(projectDir);
+    const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null].filter(Boolean);
+    if (notes.length) res.note = notes.join(" ");
+    return res;
   };
 
   if (bugfix) {
@@ -676,11 +732,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     put("tasks.md", i18n.bugTasks(name, lng));
-    maybeRefreshRoadmap(projectDir);
-    const res = { ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip };
-    const notes = [kindNote, langNote].filter(Boolean);
-    if (notes.length) res.note = notes.join(" ");
-    return res;
+    return finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
   }
 
   put("classification.md", classificationMd(name, t, summary, cls, lng));
@@ -709,25 +761,60 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
   // tasks.md last (it references the tracks)
   put("tasks.md", tasksMd(name, t, lng));
 
-  maybeRefreshRoadmap(projectDir);
-  const res = { ok: true, slug, dir, kind: "feature", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip };
-  const notes = [kindNote, langNote].filter(Boolean);
-  if (notes.length) res.note = notes.join(" ");
-  return res;
+  return finish({ ok: true, slug, dir, kind: "feature", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
+}
+
+// A feature that now has a folder is no longer planned-but-unspecced: drop its backlog entry (matched by
+// slug). Best-effort — an unreadable roadmap.json is left alone (the mutators report it).
+function pruneBacklog(projectDir, slug) {
+  try {
+    if (roadmapError(projectDir)) return [];
+    const rm = readRoadmap(projectDir);
+    const before = Array.isArray(rm.backlog) ? rm.backlog : [];
+    const gone = before.filter((b) => b && slugify(b.name) === slug);
+    if (!gone.length) return [];
+    rm.backlog = before.filter((b) => !gone.includes(b));
+    writeRoadmap(projectDir, rm);
+    return gone.map((b) => b.name);
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Introspection: list / status / tasks
 // ---------------------------------------------------------------------------
 
+// The feature's active tracks — the ONE source every tool uses (status, doctor, add_track, roadmap,
+// next_action, brief…). Since 1.13 they are persisted in .state.json `tracks` (create / add_track /
+// add_track --remove write them). Older features fall back to their files; there a [SaaS]/[AI] marker only
+// counts on a real markdown heading — a Mermaid node `X[AI]` or prose used to switch +ai on (doctor then
+// failed 10 "missing" AI sections and add_track said "already on +ai").
 function detectTracks(dir) {
+  const st = readJson(statePath(dir)).data;
+  const saved = st && typeof st === "object" && !Array.isArray(st) ? st.tracks : null;
+  if (Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && VALID_TRACKS.includes(x.toLowerCase()))) {
+    return normalizeTracks(saved);
+  }
   const t = ["core"];
   if (fs.existsSync(path.join(dir, "test-plan.md")) || fs.existsSync(path.join(dir, "tests"))) t.push("tdd");
-  // saas: load-test.md OR design has [SaaS] sections
   const design = readIfExists(path.join(dir, "design.md")) || "";
-  if (fs.existsSync(path.join(dir, "load-test.md")) || /\[SaaS\]/.test(design)) t.push("saas");
-  if (fs.existsSync(path.join(dir, "eval-plan.md")) || fs.existsSync(path.join(dir, "evals")) || /\[AI\]/.test(design)) t.push("ai");
+  if (fs.existsSync(path.join(dir, "load-test.md")) || headingHasMarker(design, "[SaaS]")) t.push("saas");
+  if (fs.existsSync(path.join(dir, "eval-plan.md")) || fs.existsSync(path.join(dir, "evals")) || headingHasMarker(design, "[AI]")) t.push("ai");
   return VALID_TRACKS.filter((x) => t.includes(x));
+}
+
+// A markdown heading (outside fenced code and HTML comments) carrying a track marker.
+function headingHasMarker(md, marker) {
+  const lines = stripHtmlComments(md).split(/\r?\n/);
+  const m = marker.toLowerCase();
+  return headingIndex(lines).some((i) => lines[i].toLowerCase().includes(m));
+}
+
+// Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
+// is not a gate, not a phase and not a "changed since approval".
+function phaseActive(phase, tracks) {
+  return phase === "test-plan" ? tracks.includes("tdd") : phase === "eval-plan" ? tracks.includes("ai") : true;
 }
 
 function parseTasks(tasksText) {
@@ -752,10 +839,27 @@ function parseTasks(tasksText) {
   return tasks;
 }
 
-// A scaffold task whose whole description is a [bracketed placeholder] (after the known tags).
+// A task description without its leading tags, whitespace-folded — the unit placeholder checks compare.
+function taskDescription(text) {
+  return String(text || "").replace(/^(?:\[(?:US\d+|shared|P)\]\s*)+/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+// The scaffold's own tasks (every language, every track, bugfix flow): their descriptions are template text
+// until the user edits them — "Emit metrics, add dashboard, configure alerts" is not a breakdown yet.
+let TEMPLATE_TASKS = null;
+function templateTaskSet() {
+  if (TEMPLATE_TASKS) return TEMPLATE_TASKS;
+  const set = new Set();
+  for (const l of i18n.LANGS) {
+    const tpl = i18n.tasks({ name: "x", tracks: VALID_TRACKS, label: "", slug: "x" }, l) + "\n" + i18n.bugTasks("x", l);
+    for (const t of parseTasks(tpl)) set.add(taskDescription(t.text));
+  }
+  return (TEMPLATE_TASKS = set);
+}
+// A scaffold task: its whole description is a [bracketed placeholder] (after the known tags), or it is
+// still the verbatim text of a template task (the +saas/+ai track tasks, the bugfix steps).
 function isPlaceholderTask(text) {
-  const rest = String(text || "").replace(/^(?:\[(?:US\d+|shared|P)\]\s*)+/i, "").trim();
-  return /^\[[^\]]*\]$/.test(rest);
+  const rest = taskDescription(text);
+  return /^\[[^\]]*\]$/.test(rest) || templateTaskSet().has(rest);
 }
 
 function detectPhase(dir, tracks) {
@@ -765,22 +869,33 @@ function detectPhase(dir, tracks) {
   const allDone = tasks.length > 0 && tasks.every((t) => t.done);
   if (allDone) return "complete";
   if (anyDone) return "executing";
-  // A scaffold whose tasks are ALL still [bracketed placeholders] hasn't been broken into tasks yet.
+  // A scaffold whose tasks are ALL still placeholders / template tasks hasn't been broken into tasks yet.
   if (has("tasks.md") && tasks.some((t) => !isPlaceholderTask(t.text))) return "tasks-ready";
-  if (tracks.includes("ai") && has("eval-plan.md")) return "eval-plan";
-  if (tracks.includes("tdd") && has("test-plan.md")) return "test-plan";
-  if (has("design.md")) return "design";
-  if (has("requirements.md")) return "requirements";
+  // Planning: the user is at the EARLIEST artifact of the chain that is still a template (artifactState), so
+  // a fresh scaffold is in "requirements" — not in its last scaffolded phase (test-plan 20%, or tasks-ready
+  // 30% for +saas/+ai). Once every artifact is filled, the last planning phase present.
+  const chain = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]]
+    .filter(([ph, f]) => phaseActive(ph, tracks) && has(f));
+  const open = chain.find(([, f]) => artifactState({ file: path.join(dir, f) }) !== "filled");
+  if (open) return open[0];
+  if (chain.length) return chain[chain.length - 1][0];
   if (has("classification.md")) return "classified";
   return "empty";
+}
+
+// A folder name a feature command can address (current or pre-1.11 slug). `.obsidian`, `My Notes/` are not
+// features: they used to list as 0% features that no command could reach or remove.
+function isFeatureFolder(name) {
+  return !name.startsWith(".") && !name.startsWith("_") && !RESERVED_SLUGS.has(name) && slugify(name) === name;
 }
 
 function listFeatures(projectDir) {
   const root = specsRoot(projectDir);
   if (!fs.existsSync(root)) return { specsDir: root, exists: false, features: [] };
-  const entries = fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && d.name !== "steering" && !d.name.startsWith("_"));
+  const dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+  const entries = dirs.filter((d) => isFeatureFolder(d.name));
+  // Visible, non-addressable folders are named (so a hand-made "My Feature/" can be renamed), never listed.
+  const ignored = dirs.filter((d) => !isFeatureFolder(d.name) && !/^[._]/.test(d.name) && !RESERVED_SLUGS.has(d.name)).map((d) => d.name);
   const features = entries.map((d) => {
     const dir = path.join(root, d.name);
     const tracks = detectTracks(dir);
@@ -795,7 +910,9 @@ function listFeatures(projectDir) {
       tasksDone: done,
     };
   });
-  return { specsDir: root, exists: true, features };
+  const res = { specsDir: root, exists: true, features };
+  if (ignored.length) res.ignored = ignored;
+  return res;
 }
 
 function statusFeature(projectDir, name) {
@@ -810,16 +927,17 @@ function statusFeature(projectDir, name) {
   const done = tasks.filter((t) => t.done).length;
   const next = tasks.find((t) => !t.done) || null;
 
-  // scale-section completeness (saas) — match headings by EN/PT/ES synonym, not English literals.
+  // Mandatory-section completeness — headings matched by EN/PT/ES synonym. `filled` uses the SAME rule as
+  // doctor (sectionState: no `> **TODO**` sentinel, non-empty body): status used to show ✓ for sections doctor
+  // called unfilled.
+  const design = readIfExists(path.join(dir, "design.md")) || "";
+  const sectionView = (st) => st.map((s) => ({ section: s.section, present: s.status !== "missing", filled: s.status === "filled" }));
   let scaleSections = null;
-  if (tracks.includes("saas")) {
-    const design = readIfExists(path.join(dir, "design.md")) || "";
-    scaleSections = SAAS_SECTIONS.map((sec) => ({ section: sec.name, present: extractSection(design, sec.syn, "[SaaS]") != null }));
-  }
+  if (tracks.includes("saas")) scaleSections = sectionView(sectionState(design, SAAS_SECTIONS, "[SaaS]"));
   let aiSections = null;
   if (tracks.includes("ai")) {
-    const design = readIfExists(path.join(dir, "design.md")) || "";
-    aiSections = { hasEvalPlan: fs.existsSync(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)), designHasAiSections: /\[AI\]/.test(design) };
+    aiSections = { hasEvalPlan: fs.existsSync(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)),
+      designHasAiSections: headingHasMarker(design, "[AI]"), sections: sectionView(sectionState(design, AI_SECTIONS, "[AI]")) };
   }
 
   return {
@@ -1843,62 +1961,199 @@ function manageFeature(projectDir, action, name, arg) {
 }
 
 // ---------------------------------------------------------------------------
-// spec_add_track — escalate an existing feature to a new track (additive, never overwrites)
+// spec_add_track — turn a track on (additive, never overwrites) or off (non-destructive) for a feature
 // ---------------------------------------------------------------------------
 
-function addTrack(projectDir, name, track) {
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]" };
+
+// The ONE code path that turns tracks ON for an existing feature — spec_add_track, and spec_create re-run on
+// an existing feature with new tracks: missing artifacts, the track's design sections, its steering files, its
+// template tasks, classification.md's Active Tracks line, and state.tracks. Additive: writeIfAbsent and
+// append-if-missing, never a rewrite of what the user wrote.
+function applyTracks(projectDir, f, name, trs, lng) {
+  const { slug, dir, root } = f;
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const T = i18n.msg(lng).tracks;
+  const before = detectTracks(dir);
+  const after = VALID_TRACKS.filter((t) => before.includes(t) || trs.includes(t));
+  const added = [];
+  const note = (x) => { if (!added.includes(x)) added.push(x); };
+  const put = (rel, content) => { if (writeIfAbsent(path.join(dir, rel), content)) note(rel); };
+  const coreSteering = steeringFilesForTracks([]);
+
+  for (const tr of trs) {
+    if (tr === "tdd") {
+      put("test-plan.md", testPlanMd(name, lng));
+      ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
+    }
+    if (tr === "ai") {
+      put("eval-plan.md", evalPlanMd(name, lng));
+      ensureDir(path.join(dir, "prompts"));
+      ensureDir(path.join(dir, "evals", "graders"));
+      put("prompts/v1.md", i18n.promptStub(name, lng));
+      put("evals/golden.json", SAMPLE_GOLDEN);
+      put("evals/adversarial.json", SAMPLE_ADVERSARIAL);
+      put("evals/README.md", i18n.evalsReadme(lng));
+    }
+    if (tr === "saas") put("load-test.md", loadTestMd(name, lng));
+
+    // The track's mandatory design sections, unless a real heading already carries them (tdd: the localized
+    // "Testability Notes" heading). A marker in a Mermaid node or in prose does not count.
+    const designPath = path.join(dir, "design.md");
+    const design = readIfExists(designPath);
+    if (design != null) {
+      const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, TRACK_MARKER[tr]);
+      if (!present) {
+        fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
+        note("design.md (+sections)");
+      }
+    } else if (tr !== "tdd") {
+      // A bugfix has no design.md: the escalated track's mandatory sections still need a home (localized title).
+      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng))) note("design.md (+sections)");
+    }
+
+    // Steering the track needs (scale/observability/cost, ai-strategy, testing-standards) — project-level,
+    // so in the project language; core steering stays spec_init's job.
+    for (const sf of steeringFilesForTracks([tr]).filter((x) => !coreSteering.includes(x))) {
+      const stub = i18n.steeringStub(sf, projectLang(projectDir));
+      if (stub && writeIfAbsent(path.join(root, "steering", sf), stub)) note("steering/" + sf);
+    }
+
+    // The track's template tasks, appended once (tdd has none — it only adds markers).
+    const tasksPath = path.join(dir, "tasks.md");
+    const tasksText = readIfExists(tasksPath);
+    if (tasksText != null) {
+      const block = trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng);
+      if (block) {
+        fs.writeFileSync(tasksPath, tasksText.trimEnd() + "\n" + block, "utf8");
+        note("tasks.md (+tasks)");
+      }
+    }
+  }
+
+  if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note("classification.md (Active Tracks)");
+  state.tracks = after;
+  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
+  return { ok: true, added, tracks: after };
+}
+
+// The template task block for a track, numbered after the last task — or null when the track has none or
+// tasks.md already holds it (its heading, in any language). Its _Requirements:_ cite the track's template ACs
+// (US-1.AC-6 / US-1.AC-9), which a feature escalated later may not define: keep the IDs requirements.md
+// has, else leave a placeholder — a phantom ID would read as a typo in trace_check.
+function trackTaskBlock(tr, tasksText, reqText, lng) {
+  const T = i18n.msg(lng).tracks;
+  if (!T.taskBlock(tr, 1) || trackTaskHeading(tr, tasksText)) return null;
+  const start = Math.max(0, ...parseTasks(tasksText).map((t) => t.number)) + 1;
+  const known = extractAcIds(stripHtmlComments(reqText || ""));
+  return T.taskBlock(tr, start).replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
+    const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => known.has(id));
+    return "_Requirements: " + (keep.length ? keep.join(", ") : T.acPlaceholder(tr)) + "_";
+  });
+}
+// The heading of a track's template task block as it appears in tasks.md (in any language), or null.
+function trackTaskHeading(tr, tasksText) {
+  const norm = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const wanted = new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(norm));
+  if (!wanted.size) return null;
+  const hit = stripHtmlComments(tasksText || "").split(/\r?\n/).find((l) => /^#{1,6}\s/.test(l) && wanted.has(norm(l)));
+  return hit ? hit.replace(/^#{1,6}\s+/, "").trim() : null;
+}
+
+// classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
+// new label. Only the leading track run is replaced ("core +tdd — confirmed by X" keeps its tail); a missing
+// line is inserted. Returns true when the file changed.
+const RE_ACTIVE_TRACKS = /^#{1,6}\s+(?:active tracks|tracks ativos|tracks activos)\s*$/i;
+const RE_TRACK_RUN = /^\s*core(?:\s+\+(?:tdd|saas|ai))*(?=\s|$)/i;
+function updateActiveTracks(file, label) {
+  const raw = readIfExists(file);
+  if (raw == null) return false;
+  const eol = raw.includes("\r\n") ? "\r\n" : "\n";
+  const lines = raw.split(/\r?\n/);
+  const h = lines.findIndex((l) => RE_ACTIVE_TRACKS.test(l.trim()));
+  if (h === -1) return false;
+  let i = h + 1;
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (i < lines.length && RE_TRACK_RUN.test(lines[i])) {
+    const next = lines[i].replace(RE_TRACK_RUN, label);
+    if (next === lines[i]) return false;
+    lines[i] = next;
+  } else {
+    lines.splice(h + 1, 0, label);
+  }
+  writeFileAtomic(file, lines.join(eol));
+  return true;
+}
+
+// Turning tracks OFF is non-destructive: state.tracks and the Active Tracks line change, every file stays,
+// and the now-inactive artifacts are listed (re-adding the track brings them back into play).
+function removeTracks(projectDir, f, named, lng) {
+  const { slug, dir } = f;
+  const T = i18n.msg(lng).tracks;
+  if (named.includes("core")) return { ok: false, error: T.cannotRemoveCore };
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  if (state.kind === "bugfix" && named.includes("tdd")) return { ok: false, error: T.bugfixNeedsTdd };
+  const before = detectTracks(dir);
+  const gone = named.filter((t) => before.includes(t));
+  const plus = (list) => list.map((t) => "+" + t).join(", ");
+  if (!gone.length) return { ok: true, feature: slug, removedTracks: [], inactive: [], tracks: trackLabel(before), note: T.notActive(plus(named)) };
+  const after = before.filter((t) => !gone.includes(t));
+  state.tracks = after;
+  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
+  updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after));
+  maybeRefreshRoadmap(projectDir);
+  return { ok: true, feature: slug, removedTracks: gone, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(gone), slug) };
+}
+
+function inactiveArtifacts(dir, gone, T) {
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"] };
+  const design = readIfExists(path.join(dir, "design.md")) || "";
+  const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
+  const out = [];
+  for (const t of gone) {
+    files[t].filter((x) => fs.existsSync(path.join(dir, x))).forEach((x) => out.push(x));
+    if (TRACK_MARKER[t] && headingHasMarker(design, TRACK_MARKER[t])) out.push(T.designSections(TRACK_MARKER[t]));
+    const th = trackTaskHeading(t, tasksText);
+    if (th) out.push("tasks.md (" + th + ")");
+  }
+  return out;
+}
+
+// spec_add_track {name, track, remove?}. `track` takes one or several ("saas,ai", "+saas +ai", an array).
+function addTrack(projectDir, name, track, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
-  const tr = String(track || "").toLowerCase().replace(/^\+/, "");
-  if (!["tdd", "saas", "ai"].includes(tr)) return { ok: false, error: errs(projectDir, slug).badTrack };
-
-  const lng = featureLang(projectDir, name); // escalate in the feature's own language
+  const lng = featureLang(projectDir, slug); // escalate in the feature's own language
   const msg = i18n.msg(lng);
+  const pt = parseTracks(track);
+  if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
+  if (opts.remove) {
+    if (!pt.named.length) return { ok: false, error: errs(projectDir, slug).badTrack };
+    return removeTracks(projectDir, f, pt.named, lng);
+  }
+  const asked = pt.named.filter((t) => t !== "core");
+  if (!asked.length) return { ok: false, error: errs(projectDir, slug).badTrack };
+
   const existing = detectTracks(dir);
-  if (existing.includes(tr)) return { ok: true, feature: slug, added: [], note: msg.addTrackAlready(tr), tracks: trackLabel(existing) };
+  const fresh = asked.filter((t) => !existing.includes(t));
+  if (!fresh.length) return { ok: true, feature: slug, added: [], addedTracks: [], note: msg.addTrackAlready(asked.join(", +")), tracks: trackLabel(existing) };
 
-  const added = [];
-  const put = (rel, content) => { if (writeIfAbsent(path.join(dir, rel), content)) added.push(rel); };
-
-  if (tr === "tdd") {
-    put("test-plan.md", testPlanMd(name, lng));
-    ensureDir(path.join(dir, "tests", "unit"));
-    ensureDir(path.join(dir, "tests", "integration"));
-    ensureDir(path.join(dir, "tests", "e2e"));
-  }
-  if (tr === "ai") {
-    put("eval-plan.md", evalPlanMd(name, lng));
-    ensureDir(path.join(dir, "prompts"));
-    ensureDir(path.join(dir, "evals", "graders"));
-    if (writeIfAbsent(path.join(dir, "prompts", "v1.md"), i18n.promptStub(name, lng))) added.push("prompts/v1.md");
-    if (writeIfAbsent(path.join(dir, "evals", "golden.json"), SAMPLE_GOLDEN)) added.push("evals/golden.json");
-    if (writeIfAbsent(path.join(dir, "evals", "adversarial.json"), SAMPLE_ADVERSARIAL)) added.push("evals/adversarial.json");
-    if (writeIfAbsent(path.join(dir, "evals", "README.md"), i18n.evalsReadme(lng))) added.push("evals/README.md");
-  }
-  if (tr === "saas") {
-    put("load-test.md", loadTestMd(name, lng));
-  }
-
-  // Append the track's mandatory design sections to design.md if they aren't already present.
-  // The tdd marker matches the localized "Testability Notes" heading (EN/PT/ES).
-  const designPath = path.join(dir, "design.md");
-  const design = readIfExists(designPath);
-  if (design != null) {
-    const marker = tr === "tdd" ? RE_TESTABILITY : tr === "saas" ? /\[SaaS\]/ : /\[AI\]/;
-    if (!marker.test(design)) {
-      fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
-      added.push("design.md (+sections)");
-    }
-  } else if (tr !== "tdd") {
-    // A bugfix has no design.md: the escalated track's mandatory sections still need a home.
-    if (writeIfAbsent(designPath, "# Design: " + name + "\n" + trackDesignBlock(tr, lng))) added.push("design.md (+sections)");
-  }
-
+  const r = applyTracks(projectDir, f, name, fresh, lng);
+  if (!r.ok) return r;
   maybeRefreshRoadmap(projectDir);
-  const tracks = detectTracks(dir);
-  return { ok: true, feature: slug, addedTrack: tr, added, tracks: trackLabel(tracks),
-    note: msg.addTrackNote(tr, slug) };
+  const res = { ok: true, feature: slug, addedTrack: fresh[0], addedTracks: fresh, added: r.added, tracks: trackLabel(r.tracks),
+    note: msg.addTrackNote(fresh.join(", +"), slug) };
+  const already = asked.filter((t) => existing.includes(t));
+  if (already.length) res.alreadyOn = already;
+  return res;
+}
+
+// Convenience for callers that prefer a verb: same as addTrack(..., { remove: true }).
+function removeTrack(projectDir, name, track) {
+  return addTrack(projectDir, name, track, { remove: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -1921,7 +2176,7 @@ function nextAction(projectDir, name) {
   for (const [ph, file] of Object.entries(PHASE_FILE)) {
     const a = approvals[ph];
     const abs = path.join(dir, file);
-    if (!a || !fs.existsSync(abs)) continue;
+    if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
     if (a.fingerprint) {
       if (artifactFingerprint(abs, ph) !== a.fingerprint) changedSinceApproval.push(file);
     } else if (a.at && ph !== "tasks") {
@@ -1941,9 +2196,9 @@ function nextAction(projectDir, name) {
     recommendation = nx.approveRequirements(slug);
   } else if (has("design.md") && !approvals.design) {
     recommendation = nx.approveDesign(slug);
-  } else if (has("test-plan.md") && !approvals["test-plan"]) {
+  } else if (tracks.includes("tdd") && has("test-plan.md") && !approvals["test-plan"]) {
     recommendation = nx.approveTestPlan(slug);
-  } else if (has("eval-plan.md") && !approvals["eval-plan"]) {
+  } else if (tracks.includes("ai") && has("eval-plan.md") && !approvals["eval-plan"]) {
     recommendation = nx.approveEvalPlan(slug);
   } else if (has("tasks.md") && !approvals.tasks) {
     recommendation = nx.approveTasks(slug);
@@ -1968,7 +2223,7 @@ function nextAction(projectDir, name) {
 const SAAS_SECTIONS = [
   { name: "Performance Budget", syn: ["performance budget", "orçamento de desempenho", "orcamento de desempenho", "orçamento de performance", "presupuesto de rendimiento"] },
   { name: "Scale Design", syn: ["scale design", "design de escala", "desenho de escala", "diseño de escala", "escalabilidade", "escalabilidad"] },
-  { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant"] },
+  { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino"] },
   { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"] },
   { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"] },
 ];
@@ -1998,6 +2253,20 @@ function headingIndex(lines) {
   return out;
 }
 
+// Does a heading line name one of the synonyms? Never a level-1 title — it carries the feature NAME
+// ("# Feature: Weekly summary email", "# Bug: Fix login crash" used to BE the Summary / Fix section). The
+// synonym must START the heading text, after an optional [SaaS]/[AI] marker, numbering ("1.", "10)",
+// "Section 1:" — the form references/mandatory-ai-design-sections.md uses) and emphasis, and end at a word
+// boundary ("fix" ≠ "Fixtures").
+const RE_HEADING_LEAD = /^(?:[\s*_—–:-]+|\[(?:saas|ai)\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\s+\d+[.:)]?(?=\s|$)|\d+(?:\.\d+)*[.):]?(?=\s))/;
+function headingMatches(line, syns) {
+  const m = line.match(/^#{2,6}\s+(.*)$/);
+  if (!m) return false;
+  let t = m[1].toLowerCase();
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(RE_HEADING_LEAD, ""); }
+  return syns.some((s) => t.startsWith(s) && !/[\p{L}\p{N}]/u.test(t.charAt(s.length)));
+}
+
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
 // designs), but never one that carries the OTHER track's marker.
@@ -2005,7 +2274,7 @@ function extractSection(md, synonyms, marker) {
   const syns = (Array.isArray(synonyms) ? synonyms : [synonyms]).map((s) => s.toLowerCase());
   const lines = (md || "").split(/\r?\n/);
   const heads = headingIndex(lines);
-  const matches = (i) => syns.some((s) => lines[i].toLowerCase().includes(s));
+  const matches = (i) => headingMatches(lines[i], syns);
   const MARKERS = ["[saas]", "[ai]"];
   let start = -1;
   if (marker) start = heads.find((i) => lines[i].toLowerCase().includes(marker.toLowerCase()) && matches(i));
@@ -2030,6 +2299,117 @@ function sectionState(design, sections, marker) {
     if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return { section: sec.name, status: "unfilled" };
     return { section: sec.name, status: "filled" };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Template placeholders — what a scaffold still waits for (the gates build on these two)
+// ---------------------------------------------------------------------------
+
+// Bracket contents that are never a placeholder: English-stable tags, stable IDs (alone or as a list).
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*[,;/]?\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
+const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
+
+// [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
+// kind 'bracket' | 'todo'):
+//   • bracketed prose: `[trigger]`, `[1-2 sentences: what this does and why it matters]`, `[N]`, `$[0.03]`,
+//     an empty `[]` / `[ ]` slot, and a code span that is nothing but one (`` `[path]` ``);
+//   • the `> **TODO**` sentinel line.
+// NOT placeholders: links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is
+// defined), footnotes `[^1]`, callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`,
+// the English-stable tags ([US1] [P] [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1],
+// [T-01]…), indexing glued to a word (`x[0]`), escaped `\[`, [NEEDS CLARIFICATION] (clarificationMarkers
+// tracks those), other code spans, and anything inside HTML comments or fenced code. Language-agnostic, so
+// EN/PT/ES templates behave the same.
+function placeholderReport(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const out = [];
+  const refs = new Set();
+  const visible = []; // [lineNo, content] outside comments and fences
+  let inComment = false;
+  let fence = null;
+  lines.forEach((raw, i) => {
+    let line = raw;
+    if (inComment) {
+      const end = line.indexOf("-->");
+      if (end === -1) return;
+      line = line.slice(end + 3);
+      inComment = false;
+    }
+    line = line.replace(/<!--.*?-->/g, "");
+    const open = line.indexOf("<!--");
+    if (open !== -1) { inComment = true; line = line.slice(0, open); }
+    const fm = line.match(RE_FENCE);
+    if (fence) { if (fm && line.trim().startsWith(fence)) fence = null; return; }
+    if (fm) { fence = fm[1]; return; }
+    const def = line.match(RE_REF_DEFINITION);
+    if (def) { refs.add(def[1].trim().toLowerCase()); return; }
+    visible.push([i + 1, line]);
+  });
+  for (const [ln, line] of visible) {
+    if (RE_TODO_SENTINEL.test(line)) { out.push({ line: ln, text: line.trim(), kind: "todo" }); continue; }
+    bracketPlaceholders(line, refs).forEach((t) => out.push({ line: ln, text: t, kind: "bracket" }));
+  }
+  return out;
+}
+
+function bracketPlaceholders(line, refs) {
+  // Code is opaque — except a span that is only a placeholder, which is unwrapped and scanned.
+  const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
+    /^\s*\[[^\]]*\]\s*$/.test(body) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
+  const found = [];
+  const box = s.match(RE_LIST_CHECKBOX);
+  const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
+    let depth = 0;
+    for (let j = i; j < s.length; j++) {
+      if (s[j] === "\\") { j++; continue; }
+      if (s[j] === "[") depth++;
+      else if (s[j] === "]" && --depth === 0) return j;
+    }
+    return -1;
+  };
+  for (let i = box ? box[0].length : 0; i < s.length; i++) {
+    if (s[i] === "\\") { i++; continue; }
+    if (s[i] !== "[") continue;
+    const j = groupEnd(i);
+    if (j === -1) break; // unbalanced: nothing reliable after this point
+    const inner = s.slice(i + 1, j);
+    const before = i > 0 ? s[i - 1] : "";
+    const after = s[j + 1] || "";
+    let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
+      (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
+      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner);
+    let end = j;
+    if (after === "[") { // reference link [x][y]: both halves are syntax
+      const k = groupEnd(j + 1);
+      if (k !== -1) { skip = true; end = k; }
+    }
+    if (!skip) found.push("[" + inner + "]");
+    i = end;
+  }
+  return found;
+}
+
+// 'missing' | 'placeholder' | 'filled' for an artifact — `input` is { file } or { text }, or a string
+// (a single-line string that is absolute or ends in .md/.json is a path, anything else is text). The rule is
+// deterministic and language-agnostic:
+//   missing      no input, or the file does not exist;
+//   placeholder  it exists but (a) holds nothing beyond headings once HTML comments are set aside, (b) still
+//                contains a template placeholder (placeholderReport: bracketed prose or the `> **TODO**`
+//                sentinel), or (c) equals `opts.template` (a string or a list) ignoring whitespace;
+//   filled       anything else.
+function artifactState(input, opts = {}) {
+  if (input == null) return "missing";
+  let text;
+  if (typeof input === "object") text = input.file != null ? readIfExists(input.file) : input.text;
+  else if (!/[\r\n]/.test(input) && (path.isAbsolute(input) || /\.(md|markdown|json)$/i.test(input))) text = readIfExists(input);
+  else text = String(input);
+  if (text == null) return "missing";
+  const squash = (x) => String(x).replace(/\s+/g, "");
+  const templates = opts.template == null ? [] : [].concat(opts.template);
+  if (templates.some((tpl) => squash(tpl) === squash(text))) return "placeholder";
+  if (!stripHtmlComments(text).split(/\r?\n/).some((l) => l.trim() && !/^#{1,6}(\s|$)/.test(l.trim()))) return "placeholder";
+  return placeholderReport(text).length ? "placeholder" : "filled";
 }
 
 // Multilingual heading matchers for the doctor / clarify checks.
@@ -2142,7 +2522,7 @@ function specDoctor(projectDir, name) {
     ["eval-plan", "eval-plan.md"],
     ["tasks", "tasks.md"],
   ];
-  const pendingGates = GATE_PHASES.filter(([ph, file]) => fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
+  const pendingGates = GATE_PHASES.filter(([ph, file]) => phaseActive(ph, tracks) && fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
   add("approval-gates", pendingGates.length ? "warn" : "pass",
     pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : m.gatesOk);
   const gatesOk = pendingGates.length === 0;
@@ -2374,6 +2754,22 @@ function cleanTaskText(t) {
   return String(t || "").replace(/^(?:\[[^\]]*\]\s*)+/, "");
 }
 
+// design.md minus the [SaaS]/[AI] sections of tracks that were turned off (their text stays, inactive).
+function activeDesign(design, tracks) {
+  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => TRACK_MARKER[t].toLowerCase());
+  if (!off.length) return design;
+  const lines = design.split(/\r?\n/);
+  const heads = headingIndex(lines);
+  const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
+  const drop = new Set();
+  for (const h of heads) {
+    if (!off.some((m) => lines[h].toLowerCase().includes(m))) continue;
+    const end = heads.find((x) => x > h && level(x) <= level(h));
+    for (let i = h; i < (end == null ? lines.length : end); i++) drop.add(i);
+  }
+  return lines.filter((_, i) => !drop.has(i)).join("\n");
+}
+
 // Shared computation for both renderers.
 function roadmapData(projectDir) {
   const rmv = roadmap(projectDir);
@@ -2385,7 +2781,7 @@ function roadmapData(projectDir) {
     const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
     const design = readIfExists(path.join(dir, "design.md")) || "";
     const clar = clarificationMarkers(reqs).length;
-    const designTodo = /^>\s*\*\*TODO\*\*/m.test(design);
+    const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, detectTracks(dir)));
     const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
     const done = tasks.filter((t) => t.done).length;
     tasksDone += done;
@@ -2863,6 +3259,14 @@ module.exports = {
   // @wp WP1 <<<
 
   // @wp WP2 exports >>>
+  parseTracks,
+  detectTracks,
+  detectPhase,
+  isPlaceholderTask,
+  placeholderReport,
+  artifactState,
+  extractSection,
+  removeTrack,
   // @wp WP2 <<<
 
   // @wp WP3 exports >>>
