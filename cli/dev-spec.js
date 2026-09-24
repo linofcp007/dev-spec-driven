@@ -49,6 +49,38 @@ const pos = [];
 // Flags that take a value, as `--flag value` or `--flag=value`. Any other `--flag` is a boolean switch
 // (so `depend a b --order 3` no longer turns "3" into a dependency).
 const VALUE_FLAGS = new Set(["project", "lang", "order", "cap", "by", "summary", "kind", "max", "evidence", "exit", "cmd"]);
+// @wp WP1 value-flags >>>
+// @wp WP1 <<<
+
+// @wp WP2 value-flags >>>
+// @wp WP2 <<<
+
+// @wp WP3 value-flags >>>
+// @wp WP3 <<<
+
+// @wp WP4 value-flags >>>
+// @wp WP4 <<<
+
+// @wp WP5 value-flags >>>
+// @wp WP5 <<<
+
+// @wp WP6 value-flags >>>
+// @wp WP6 <<<
+
+// @wp WP7 value-flags >>>
+// @wp WP7 <<<
+
+// @wp WP8 value-flags >>>
+// @wp WP8 <<<
+
+// @wp WP9 value-flags >>>
+// @wp WP9 <<<
+
+// @wp WP10 value-flags >>>
+// @wp WP10 <<<
+
+// @wp WP11 value-flags >>>
+// @wp WP11 <<<
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "--json") flags.json = true;
@@ -382,6 +414,39 @@ function main() {
         else console.log("Removed '" + r.feature + "' ✓");
       });
     }
+
+    // @wp WP1 commands >>>
+    // @wp WP1 <<<
+
+    // @wp WP2 commands >>>
+    // @wp WP2 <<<
+
+    // @wp WP3 commands >>>
+    // @wp WP3 <<<
+
+    // @wp WP4 commands >>>
+    // @wp WP4 <<<
+
+    // @wp WP5 commands >>>
+    // @wp WP5 <<<
+
+    // @wp WP6 commands >>>
+    // @wp WP6 <<<
+
+    // @wp WP7 commands >>>
+    // @wp WP7 <<<
+
+    // @wp WP8 commands >>>
+    // @wp WP8 <<<
+
+    // @wp WP9 commands >>>
+    // @wp WP9 <<<
+
+    // @wp WP10 commands >>>
+    // @wp WP10 <<<
+
+    // @wp WP11 commands >>>
+    // @wp WP11 <<<
 
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));

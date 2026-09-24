@@ -142,6 +142,39 @@ ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-lo
 const fin = run(["finish", "login-loop", "--project", vp]);
 ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
 
+// @wp WP1 cli-tests >>>
+// @wp WP1 <<<
+
+// @wp WP2 cli-tests >>>
+// @wp WP2 <<<
+
+// @wp WP3 cli-tests >>>
+// @wp WP3 <<<
+
+// @wp WP4 cli-tests >>>
+// @wp WP4 <<<
+
+// @wp WP5 cli-tests >>>
+// @wp WP5 <<<
+
+// @wp WP6 cli-tests >>>
+// @wp WP6 <<<
+
+// @wp WP7 cli-tests >>>
+// @wp WP7 <<<
+
+// @wp WP8 cli-tests >>>
+// @wp WP8 <<<
+
+// @wp WP9 cli-tests >>>
+// @wp WP9 <<<
+
+// @wp WP10 cli-tests >>>
+// @wp WP10 <<<
+
+// @wp WP11 cli-tests >>>
+// @wp WP11 <<<
+
 // unknown command errors
 ok(run(["wat"]).code === 1, "unknown command exits non-zero");
 

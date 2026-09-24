@@ -93,7 +93,7 @@ function payload(res) {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 23, "tools/list returns 23 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length >= 23, "tools/list returns at least the 23 v1.12 tools (got " + list.result.tools.length + ")"); // exact count restored at release
 
   const cls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Stripe billing webhook for multi-tenant SaaS that also summarizes invoices with an LLM" } }));
   ok(cls.tracks.includes("tdd") && cls.tracks.includes("saas") && cls.tracks.includes("ai"), "classify detects tdd+saas+ai (" + cls.label + ")");
@@ -798,6 +798,42 @@ function payload(res) {
   const tc = S.finishFeature(vDir, "title-case");
   ok(tc.mergeTitle === "feat(title-case): Per-tenant API keys, e.g. Stripe-style secrets" && !/\n# pass/.test(tc.mergeSummary) && /`` node -e/.test(tc.mergeSummary),
     "merge title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
+
+  // @wp WP1 tests >>>
+  // @wp WP1 <<<
+
+  // @wp WP2 tests >>>
+  // @wp WP2 <<<
+
+  // @wp WP3 tests >>>
+  // @wp WP3 <<<
+
+  // @wp WP4 tests >>>
+  // @wp WP4 <<<
+
+  // @wp WP5 tests >>>
+  // @wp WP5 <<<
+
+  // @wp WP6 tests >>>
+  // @wp WP6 <<<
+
+  // @wp WP7 tests >>>
+  // @wp WP7 <<<
+
+  // @wp WP8 tests >>>
+  // @wp WP8 <<<
+
+  // @wp WP9 tests >>>
+  // @wp WP9 <<<
+
+  // @wp WP10 tests >>>
+  // @wp WP10 <<<
+
+  // @wp WP11 tests >>>
+  // @wp WP11 <<<
+
+  // @wp DOCS tests >>>
+  // @wp DOCS <<<
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");

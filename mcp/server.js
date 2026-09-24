@@ -189,6 +189,27 @@ const TOOLS = [
       "Manage a feature's lifecycle: remove (delete its `.specs/<slug>/` folder), archive (move it to `.specs/_archive/<slug>/`, out of the active roadmap), or rename (slug + folder + roadmap.json key, with all dependsOn references updated). All actions keep roadmap.json dependencies consistent and regenerate the roadmap. 'remove' is destructive - prefer 'archive'.",
     inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, projectDir: { type: "string" } }, required: ["action", "name"] },
   },
+
+  // @wp WP5 tools >>>
+  // @wp WP5 <<<
+
+  // @wp WP6 tools >>>
+  // @wp WP6 <<<
+
+  // @wp WP7 tools >>>
+  // @wp WP7 <<<
+
+  // @wp WP8 tools >>>
+  // @wp WP8 <<<
+
+  // @wp WP9 tools >>>
+  // @wp WP9 <<<
+
+  // @wp WP10 tools >>>
+  // @wp WP10 <<<
+
+  // @wp WP11 tools >>>
+  // @wp WP11 <<<
 ];
 
 // --- Tool dispatch ---------------------------------------------------------
@@ -264,6 +285,28 @@ function runTool(name, args) {
       return spec.addTrack(pdir, args.name, args.track);
     case "spec_feature":
       return spec.manageFeature(pdir, args.action, args.name, args.newName);
+
+    // @wp WP5 dispatch >>>
+    // @wp WP5 <<<
+
+    // @wp WP6 dispatch >>>
+    // @wp WP6 <<<
+
+    // @wp WP7 dispatch >>>
+    // @wp WP7 <<<
+
+    // @wp WP8 dispatch >>>
+    // @wp WP8 <<<
+
+    // @wp WP9 dispatch >>>
+    // @wp WP9 <<<
+
+    // @wp WP10 dispatch >>>
+    // @wp WP10 <<<
+
+    // @wp WP11 dispatch >>>
+    // @wp WP11 <<<
+
     default:
       throw new Error("Unknown tool: " + name);
   }

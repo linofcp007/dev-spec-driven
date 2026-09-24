@@ -1927,6 +1927,39 @@ const MSG = {
       sessionHeader: "dev-spec-driven — features in .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tasks)`,
     },
+
+    // @wp WP1 msg-en >>>
+    // @wp WP1 <<<
+
+    // @wp WP2 msg-en >>>
+    // @wp WP2 <<<
+
+    // @wp WP3 msg-en >>>
+    // @wp WP3 <<<
+
+    // @wp WP4 msg-en >>>
+    // @wp WP4 <<<
+
+    // @wp WP5 msg-en >>>
+    // @wp WP5 <<<
+
+    // @wp WP6 msg-en >>>
+    // @wp WP6 <<<
+
+    // @wp WP7 msg-en >>>
+    // @wp WP7 <<<
+
+    // @wp WP8 msg-en >>>
+    // @wp WP8 <<<
+
+    // @wp WP9 msg-en >>>
+    // @wp WP9 <<<
+
+    // @wp WP10 msg-en >>>
+    // @wp WP10 <<<
+
+    // @wp WP11 msg-en >>>
+    // @wp WP11 <<<
   },
 
   pt: {
@@ -2102,6 +2135,39 @@ const MSG = {
       sessionHeader: "dev-spec-driven — features em .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
     },
+
+    // @wp WP1 msg-pt >>>
+    // @wp WP1 <<<
+
+    // @wp WP2 msg-pt >>>
+    // @wp WP2 <<<
+
+    // @wp WP3 msg-pt >>>
+    // @wp WP3 <<<
+
+    // @wp WP4 msg-pt >>>
+    // @wp WP4 <<<
+
+    // @wp WP5 msg-pt >>>
+    // @wp WP5 <<<
+
+    // @wp WP6 msg-pt >>>
+    // @wp WP6 <<<
+
+    // @wp WP7 msg-pt >>>
+    // @wp WP7 <<<
+
+    // @wp WP8 msg-pt >>>
+    // @wp WP8 <<<
+
+    // @wp WP9 msg-pt >>>
+    // @wp WP9 <<<
+
+    // @wp WP10 msg-pt >>>
+    // @wp WP10 <<<
+
+    // @wp WP11 msg-pt >>>
+    // @wp WP11 <<<
   },
 
   es: {
@@ -2277,6 +2343,39 @@ const MSG = {
       sessionHeader: "dev-spec-driven — funciones en .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tareas)`,
     },
+
+    // @wp WP1 msg-es >>>
+    // @wp WP1 <<<
+
+    // @wp WP2 msg-es >>>
+    // @wp WP2 <<<
+
+    // @wp WP3 msg-es >>>
+    // @wp WP3 <<<
+
+    // @wp WP4 msg-es >>>
+    // @wp WP4 <<<
+
+    // @wp WP5 msg-es >>>
+    // @wp WP5 <<<
+
+    // @wp WP6 msg-es >>>
+    // @wp WP6 <<<
+
+    // @wp WP7 msg-es >>>
+    // @wp WP7 <<<
+
+    // @wp WP8 msg-es >>>
+    // @wp WP8 <<<
+
+    // @wp WP9 msg-es >>>
+    // @wp WP9 <<<
+
+    // @wp WP10 msg-es >>>
+    // @wp WP10 <<<
+
+    // @wp WP11 msg-es >>>
+    // @wp WP11 <<<
   },
 };
 
