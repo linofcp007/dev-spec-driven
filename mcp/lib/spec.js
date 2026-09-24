@@ -1856,8 +1856,10 @@ function removePreview(projectDir, name) {
   const walk = (d) => safeReaddir(d).forEach((e) => {
     const p = path.join(d, e);
     let st;
-    try { st = fs.statSync(p); } catch { return; }
-    if (st.isDirectory()) walk(p); else files++;
+    // lstat, never stat: a symlink/junction is ONE entry, as for fs.rmSync — following it would count files
+    // outside the feature (that the delete never touches) and recurse forever through a link loop.
+    try { st = fs.lstatSync(p); } catch { return; }
+    if (st.isDirectory() && !st.isSymbolicLink()) walk(p); else files++;
   });
   walk(f.dir);
   return {

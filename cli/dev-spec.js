@@ -25,13 +25,13 @@
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
  *   done <feature> <n>                 Mark task n complete
- *   approve <feature> <phase>          Record a phase approval
- *   next-action <feature>              "You are here → do this next" (+ changed-since-approval)
- *   brief <feature> [n] [--write]      Self-contained brief for one task (subagent execution)
+ *   approve <feature> <phase> [--by NAME]  Record a phase approval (--by = who approved)
+ *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
+ *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
  *   add-track <feature> <track>        Escalate a feature to +tdd/+saas/+ai (additive)
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename a feature
- *   roadmap [--write] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
+ *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--order N]  Declare dependencies / order (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase
@@ -43,6 +43,7 @@
  *                                      with this clone's absolute paths, to paste into a project
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
+ *        done: --run · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  */
 
 const fs = require("fs");
@@ -122,8 +123,9 @@ for (let i = 0; i < argv.length; i++) {
   if (a === "--json") flags.json = true;
   else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
-    // A value flag never swallows the next flag: `--order --json` must not set order="--json".
-    if (argv[i + 1] === undefined || argv[i + 1].startsWith("--")) missingValue = missingValue || a.slice(2);
+    // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
+    // `--<letter>` token is a flag — `---` (front matter, an HR) or `-- draft` stays a value, like over MCP.
+    if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) missingValue = missingValue || a.slice(2);
     else flags[a.slice(2)] = argv[++i];
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
@@ -503,7 +505,8 @@ function main() {
       };
       if (!pos[0]) die("usage: dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
       const tool = String(pos[0]).toLowerCase();
-      if (!RULE_FILES[tool]) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")));
+      // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
+      if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")));
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
       const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8");
       // One pass (so skills/…/references/x.md is never rewritten twice). `../../AGENTS.md` (the Cursor link)
@@ -575,7 +578,7 @@ function helpText() {
   ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})
   next <feature> [--batch]        Next unchecked task (--batch: + the [P] tasks that can run beside it; --max N, default 3)
-  next-action <feature>           "You are here → do this next" (+ what changed since approval)
+  next-action <feature>           "You are here → do this next" (+ what changed since approval); alias: na
   brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
   done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records
@@ -585,7 +588,7 @@ function helpText() {
   approve <feature> <phase>       Record a phase approval (.state.json)
   add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes)
-  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
+  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Declare dependencies / order (rejects cycles)
   backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
   scan [path]                     Brownfield: inventory an existing codebase (stack, modules, endpoints)
@@ -597,7 +600,7 @@ function helpText() {
   Flags: --json  --project <dir>  --lang en|pt|es (init/create/steering/roadmap/ears)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
-         --yes (feature remove)  --write / --html (roadmap)  --cap N (scan)  --by NAME (approve)
+         --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME (approve)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;

@@ -268,6 +268,26 @@ ok(/Aclarar: pagos/.test(run(["clarify", "pagos", "--project", es4]).out) && /No
   /'pagos' renombrada → 'cobros'/.test(run(["feature", "rename", "pagos", "Cobros", "--project", es4]).out), "clarify/remove preview/errors/rename (ES) are localized");
 ok(/confianza: tdd=/.test(run(["classify", "página de pagos con suscripciones para el usuario"]).out) && /confiança: /.test(run(["classify", "página de pagamentos para o utilizador"]).out),
   "classify labels follow the language of the reasoning (ES/PT)");
+
+// Review fixes: a value that merely starts with dashes is still a value (`---` front matter, "-- draft").
+const fm = "---\ntitle: x\n---\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b";
+const fmCli = run(["ears", "--text", fm]);
+ok(fmCli.code === 0 && /1 criteria, 1 with modal, verdict=pass/.test(fmCli.out) && JSON.stringify(JSON.parse(run(["ears", "--text", fm, "--json"]).out)) === JSON.stringify(S4.earsValidate(fm, "en")),
+  "ears --text '---…' is a value (front matter/HR), same result as ears_validate {text}");
+const dashSum = run(["create", "Dashy", "core", "--summary", "-- draft", "--project", w4]);
+ok(dashSum.code === 0 && /'dashy'/.test(dashSum.out) && run(["depend", "gaps", "--order", "--lang", "en", "--project", w4]).code === 1,
+  "--summary '-- draft' is a value; '--order --lang …' is still a missing value");
+// rules: prototype keys are unknown tools (localized error), never a raw TypeError.
+const rproto = ["constructor", "__proto__", "toString"].map((t) => run(["rules", t]));
+ok(rproto.every((r) => r.code === 1 && /unknown tool '/.test(r.out) && /cursor, windsurf, copilot, gemini, agents/.test(r.out) && !/argument must be/.test(r.out)),
+  "rules constructor/__proto__/toString → 'unknown tool', not a Node TypeError");
+// Every flag the CLI reads is documented (docblock + help), aliases included.
+const flagsRead = [...new Set([...fs.readFileSync(CLI, "utf8").matchAll(/\bflags(?:\.([a-z]+)|\["([a-z-]+)"\])/g)].map((m) => "--" + (m[1] || m[2])))]
+  .filter((x) => x !== "--json" && x !== "--project");
+ok(flagsRead.length >= 15 && flagsRead.every((x) => doc4.includes(x)) && ["--by", "--include-brief", "--run", "--evidence", "--exit", "--cmd", "--md"].every((x) => doc4.includes(x)),
+  "the header docblock lists every flag the CLI reads (missing: " + flagsRead.filter((x) => !doc4.includes(x)).join(",") + ")");
+ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(x)).every((x) => help4.includes(x)) && /--md/.test(help4) && /alias: na/.test(help4),
+  "help mentions every flag it owns plus the --md and na aliases");
 // @wp WP4 <<<
 
 // @wp WP5 cli-tests >>>

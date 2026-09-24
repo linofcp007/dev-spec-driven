@@ -868,6 +868,25 @@ function payload(res) {
   const yesConf = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "gaps", confirm: true, projectDir: w4 } }));
   ok(yesConf.ok === true && !fs.existsSync(w4f.dir) && /Remover 'lacunas'/.test(S.manageFeature(w4, "remove", "lacunas").error),
     "spec_feature remove with confirm:true deletes; the confirmation message is in the feature's language (PT)");
+  // The remove preview counts a symlink/junction as ONE entry (like fs.rmSync) — it used to follow it, counting
+  // files outside the feature and recursing through a link loop.
+  const lnkF = S.createFeature(w4, "Linky", ["core"]);
+  const lnkOut = path.join(w4, "outside");
+  fs.mkdirSync(lnkOut, { recursive: true });
+  for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(lnkOut, "f" + i + ".txt"), "x");
+  let linked = true;
+  try {
+    fs.symlinkSync(lnkOut, path.join(lnkF.dir, "linked"), "junction"); // junction: no admin rights needed on Windows
+    fs.symlinkSync(path.join(w4, ".specs"), path.join(lnkF.dir, "loop"), "junction");
+  } catch { linked = false; }
+  if (linked) {
+    const realFiles = fs.readdirSync(lnkF.dir).length; // flat folder: every entry is a file or a link
+    const lnkPrev = S.manageFeature(w4, "remove", "linky");
+    const lnkDel = S.manageFeature(w4, "remove", "linky", undefined, { confirm: true });
+    ok(lnkPrev.needsConfirm === true && lnkPrev.wouldDelete.files === realFiles && lnkDel.ok === true && !fs.existsSync(lnkF.dir) &&
+      fs.readdirSync(lnkOut).length === 30 && fs.existsSync(path.join(w4, ".specs")),
+      "remove preview does not follow symlinks/junctions (got " + lnkPrev.wouldDelete.files + " of " + realFiles + "); the delete leaves the link targets alone");
+  } else ok(true, "remove preview vs symlinks: skipped (links not creatable here)");
 
   // spec_finish includeBody with write (the CLI's --include-body maps to it); classify reports its language.
   const finBody = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", write: true, includeBody: true, projectDir: vDir } }));
