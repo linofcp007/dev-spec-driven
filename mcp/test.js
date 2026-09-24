@@ -476,7 +476,7 @@ function payload(res) {
   // Important: unparseable JSON is reported, never "repaired" into an empty file (data loss).
   S.setDependency(rDir, "billing", ["autenticacao"]);
   const rmPath = path.join(rSpecs, "roadmap.json");
-  fs.writeFileSync(rmPath, "﻿" + fs.readFileSync(rmPath, "utf8")); // Windows editor BOM
+  fs.writeFileSync(rmPath, "\uFEFF" + fs.readFileSync(rmPath, "utf8")); // Windows editor BOM
   ok(S.backlog(rDir, "add", "Exports").ok && S.readRoadmap(rDir).features.billing.dependsOn[0] === "autenticacao", "roadmap.json with a BOM is read, not reset");
   const broken = fs.readFileSync(rmPath, "utf8").replace(/\}\s*$/, ",}");
   fs.writeFileSync(rmPath, broken);
@@ -806,6 +806,188 @@ function payload(res) {
   // @wp WP2 <<<
 
   // @wp WP3 tests >>>
+  { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const errText = (res) => { try { return JSON.parse(res.result.content[0].text).error || ""; } catch { return res.result.content[0].text; } };
+    const body = (res) => { try { return payload(res); } catch { return { ok: false, error: res.result.content[0].text }; } };
+    const safe = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } }; // a regression must FAIL, not crash the run
+    const w3 = path.join(tmp, "proj-wp3");
+    S.initProject(w3, ["tdd"], "en");
+    const w3f = S.createFeature(w3, "Arg Check", ["core"]);
+    const w3Tasks = path.join(w3f.dir, "tasks.md");
+    fs.writeFileSync(w3Tasks, "- [ ] 1. a\n- [ ] 2. b\n");
+
+    // 1. Argument types are checked against the advertised inputSchema before dispatch.
+    const r19 = await call("spec_complete_task", { name: "arg-check", number: 1.9, projectDir: w3 });
+    ok(r19.result.isError && /number must be an integer \(got 1\.9\)/.test(errText(r19)) && S.nextTask(w3, "arg-check").next.number === 1,
+      "MCP rejects number 1.9 (not an integer) instead of ticking task 1");
+    const rObj = await call("spec_create", { name: { a: 1 }, projectDir: w3 });
+    ok(rObj.result.isError && /name must be a string/.test(errText(rObj)) && !fs.existsSync(path.join(w3, ".specs", "object-object")),
+      "MCP rejects an object name (no .specs/object-object/)");
+    const rCap = await call("spec_scan", { cap: "abc", projectDir: w3 });
+    const rCap0 = await call("spec_scan", { cap: 0, projectDir: w3 });
+    ok(rCap.result.isError && /cap must be an integer/.test(errText(rCap)) && rCap0.result.isError && /≥ 1/.test(errText(rCap0)),
+      "MCP rejects cap 'abc' and cap 0 (both scanned 0 files)");
+    const rText = await call("ears_validate", { text: 123 });
+    ok(rText.result.isError && /text must be a string/.test(errText(rText)) && !/trim/.test(errText(rText)), "MCP rejects a numeric text (no 'text.trim is not a function')");
+    const rDepStr = await call("spec_depend", { name: "arg-check", dependsOn: "steering", projectDir: w3 });
+    ok(rDepStr.result.isError && /dependsOn must be an array/.test(errText(rDepStr)), "MCP rejects dependsOn given as a string");
+    const rEnum = await call("spec_create", { name: "Enum Check", tracks: ["tdd", "quantum"], projectDir: w3 });
+    ok(rEnum.result.isError && /tracks\[1\] must be one of: core, tdd, saas, ai/.test(errText(rEnum)) && !fs.existsSync(path.join(w3, ".specs", "enum-check")),
+      "array items are checked against the enum (the bad item is named)");
+    const rNested = await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
+    ok(rNested.result.isError && /evidence\.exitCode must be an integer/.test(errText(rNested)) && /- \[ \] 2\./.test(fs.readFileSync(w3Tasks, "utf8")),
+      "nested object properties are validated (evidence.exitCode)");
+    const rExtra = await call("spec_list", { projectDir: w3, bogus: { deep: 1 } });
+    ok(!rExtra.result.isError && body(rExtra).features.some((x) => x.name === "arg-check"), "unknown extra properties are ignored");
+    const rArr = await call("spec_list", [w3]);
+    ok(rArr.result.isError && /arguments must be a JSON object/.test(errText(rArr)), "non-object arguments are rejected");
+    const w3pt = path.join(tmp, "proj-wp3-pt");
+    S.initProject(w3pt, [], "pt");
+    const rPt = await call("spec_create", { name: 5, projectDir: w3pt });
+    ok(rPt.result.isError && /name tem de ser uma string/.test(errText(rPt)), "argument errors are localized (PT project)");
+
+    // 2. User-controlled keys never index Object.prototype.
+    const protoRes = [];
+    for (const k of ["constructor", "__proto__", "toString", "hasOwnProperty"]) protoRes.push(await call("steering_scaffold", { file: k, projectDir: w3 }));
+    ok(protoRes.every((r) => r.result.isError && /Unknown steering file/.test(errText(r)) && !/^ERROR|ERR_INVALID_ARG_TYPE/.test(r.result.content[0].text)),
+      "steering_scaffold {file: constructor|__proto__|toString|hasOwnProperty} → the unknown-file error, not a TypeError");
+    const ctorDir = path.join(tmp, "proj-wp3-ctor");
+    S.createFeature(ctorDir, "constructor", ["core"]);
+    S.createFeature(ctorDir, "other", ["core"]);
+    const ctorDep = safe(() => S.setDependency(ctorDir, "constructor", ["other"]));
+    const ctorJson = safe(() => JSON.parse(fs.readFileSync(path.join(ctorDir, ".specs", "roadmap.json"), "utf8")));
+    ok(ctorDep.ok && ctorJson.features && Object.prototype.hasOwnProperty.call(ctorJson.features, "constructor") && ctorJson.features.constructor.dependsOn[0] === "other" &&
+      Object.dependsOn === undefined && ({}).dependsOn === undefined,
+      "a feature slugged 'constructor' is a plain roadmap key (no Object.prototype pollution, not lost on write)");
+    const ctorCycle = safe(() => S.setDependency(ctorDir, "other", ["constructor"]));
+    const ctorView = safe(() => S.roadmap(ctorDir));
+    ok(/Circular/.test(ctorCycle.error || "") && ctorView.ok && ctorView.features.find((x) => x.name === "constructor").dependsOn[0] === "other",
+      "the cycle check and the roadmap see the 'constructor' feature's deps");
+    const ghostDir = path.join(tmp, "proj-wp3-ghost");
+    S.createFeature(ghostDir, "a", ["core"]);
+    fs.writeFileSync(path.join(ghostDir, ".specs", "roadmap.json"), JSON.stringify({ features: { a: { dependsOn: ["constructor"] } } }));
+    let ghost = null;
+    try { ghost = S.roadmap(ghostDir); } catch { /* crashed in findCycle */ }
+    ok(ghost && ghost.features[0].unmetDeps.includes("constructor"), "a dep named 'constructor' that is not a feature is unmet — no crash in the cycle check");
+
+    // 3. Valid JSON with the wrong shape is refused like unparseable JSON — before any destructive step.
+    const shp = path.join(tmp, "proj-wp3-shape");
+    S.createFeature(shp, "a", ["core"]);
+    const shpRm = path.join(shp, ".specs", "roadmap.json");
+    const badShape = JSON.stringify({ features: { b: null } });
+    fs.writeFileSync(shpRm, badShape);
+    const rmA = body(await call("spec_feature", { action: "remove", name: "a", projectDir: shp }));
+    ok(rmA.ok === false && /unexpected shape/.test(rmA.error) && /features\.b/.test(rmA.error) && fs.existsSync(path.join(shp, ".specs", "a")) && fs.readFileSync(shpRm, "utf8") === badShape,
+      "roadmap.json {features:{b:null}} → remove refuses BEFORE deleting the folder; the file is untouched");
+    const shapes = [
+      [{ features: { a: { dependsOn: "b" } } }, /features\.a\.dependsOn/],
+      [{ features: { a: { dependsOn: ["b", 3] } } }, /features\.a\.dependsOn/],
+      [{ features: [] }, /'features'/],
+      [{ backlog: {} }, /'backlog'/],
+      [{ backlog: [{ note: "x" }] }, /'backlog' entry/],
+      [{ meta: "pt" }, /'meta'/],
+      [[], /top level/],
+    ];
+    ok(shapes.every(([data, re]) => {
+      fs.writeFileSync(shpRm, JSON.stringify(data));
+      const before = fs.readFileSync(shpRm, "utf8");
+      const results = [() => S.backlog(shp, "add", "X"), () => S.backlog(shp, "rm", "X"), () => S.setDependency(shp, "a", []), () => S.manageFeature(shp, "archive", "a"),
+        () => S.initProject(shp, [], "es"), () => S.writeRoadmapMd(shp, "es")].map(safe);
+      return results.every((r) => r.ok === false && !r.threw && re.test(r.error)) && fs.readFileSync(shpRm, "utf8") === before && fs.existsSync(path.join(shp, ".specs", "a"));
+    }), "wrong-shaped roadmap.json (dependsOn / features / backlog / meta / top level) → every mutator refuses, the file is untouched");
+    fs.writeFileSync(shpRm, JSON.stringify({ meta: { lang: "pt" }, features: { a: { dependsOn: "b" } }, backlog: {} }));
+    let shapeRead = null;
+    try { shapeRead = S.roadmap(shp); } catch { /* crashed */ }
+    const aRow = shapeRead && shapeRead.ok && shapeRead.features.find((x) => x.name === "a");
+    ok(aRow && aRow.dependsOn.length === 0 && /estrutura inesperada/.test(safe(() => S.backlog(shp, "add", "X")).error || ""),
+      "reads survive a wrong-shaped roadmap.json (sanitized) and the refusal stays in the project language (meta.lang pt)");
+    const stp = path.join(tmp, "proj-wp3-state");
+    const stF = S.createFeature(stp, "a", ["core"]);
+    const stShape = path.join(stF.dir, ".state.json");
+    const badState = JSON.stringify({ lang: "pt", approvals: [] });
+    fs.writeFileSync(stShape, badState);
+    const apShape = body(await call("spec_approve", { name: "a", phase: "requirements", projectDir: stp }));
+    ok(apShape.ok === false && /estrutura inesperada/.test(apShape.error) && /'approvals'/.test(apShape.error) && fs.readFileSync(stShape, "utf8") === badState && S.featureLang(stp, "a") === "pt",
+      ".state.json with approvals:[] → approve refuses (in the feature's language), file untouched, lang still read");
+    fs.writeFileSync(stShape, JSON.stringify({ lang: "en", evidence: "x", approvals: {} }));
+    fs.writeFileSync(path.join(stF.dir, "tasks.md"), "- [ ] 1. a\n");
+    const evShape = safe(() => S.completeTask(stp, "a", 1, { command: "npm test", exitCode: 0 }));
+    ok(evShape.ok === false && /'evidence'/.test(evShape.error) && /- \[ \] 1\./.test(fs.readFileSync(path.join(stF.dir, "tasks.md"), "utf8")),
+      ".state.json with evidence:\"x\" → recording evidence is refused and the task stays open");
+    fs.writeFileSync(stShape, JSON.stringify({ tracks: "tdd" }));
+    ok(/'tracks'/.test(S.readState(stp, "a").invalid || "") && S.approvePhase(stp, "a", "design").ok === false, ".state.json with tracks:\"tdd\" is flagged invalid too");
+
+    // 4. spec_depend: existing features only; add/remove; {name} alone is a read; [] clears.
+    const dp = path.join(tmp, "proj-wp3-dep");
+    ["a", "b", "c"].forEach((n) => S.createFeature(dp, n, ["core"]));
+    const dpRm = path.join(dp, ".specs", "roadmap.json");
+    const unk = body(await call("spec_depend", { name: "a", dependsOn: ["b", "nope", "steering"], projectDir: dp }));
+    ok(unk.ok === false && /not found: nope, steering/.test(unk.error) && !S.readRoadmap(dp).features.a, "spec_depend refuses unknown/reserved dependencies and lists them (nothing stored)");
+    const dep = async (args) => body(await call("spec_depend", { name: "a", projectDir: dp, ...args }));
+    const dA = await dep({ add: ["b"] });
+    const dB = await dep({ add: ["c", "b"] });
+    const dC = await dep({ remove: ["b"] });
+    ok(dA.dependsOn.join() === "b" && dB.dependsOn.join() === "b,c" && dC.dependsOn.join() === "c", "spec_depend add/remove edit the list incrementally (deduplicated)");
+    const beforeRead = fs.readFileSync(dpRm, "utf8");
+    const dRead = await dep({});
+    ok(dRead.ok && dRead.dependsOn.join() === "c" && fs.readFileSync(dpRm, "utf8") === beforeRead, "spec_depend {name} alone returns the deps and writes nothing");
+    const dCyc = body(await call("spec_depend", { name: "c", add: ["a"], projectDir: dp }));
+    ok(dCyc.ok === false && /Circular/.test(dCyc.error), "an incremental add is cycle-checked");
+    const dClear = await dep({ dependsOn: [] });
+    ok(dClear.ok && dClear.dependsOn.length === 0 && S.readRoadmap(dp).features.a.dependsOn.length === 0, "dependsOn: [] clears the list explicitly");
+    fs.writeFileSync(dpRm, JSON.stringify({ features: { a: { dependsOn: ["gone", "b"] } } }));
+    const dStale = await dep({ remove: ["gone"] });
+    ok(dStale.ok && dStale.dependsOn.join() === "b", "a stale dependency (feature deleted by hand) can still be removed");
+    ok(/order must be an integer/.test(safe(() => S.setDependency(dp, "a", undefined, "abc")).error || ""), "a non-integer order is refused by the engine (same as MCP's integer check)");
+
+    // 5. One default approver on both surfaces.
+    const expectBy = process.env.USER || process.env.USERNAME || "user";
+    const apBy = body(await call("spec_approve", { name: "b", phase: "requirements", projectDir: dp }));
+    ok(apBy.ok && apBy.approvals.requirements.by === expectBy, "MCP approve without `by` records $USER/$USERNAME (same default as the CLI), not a fixed 'user'");
+
+    // 6. Eval harness: resolver (accents, legacy slugs), project-dir resolution, localized output.
+    const EVALS = path.join(__dirname, "evals", "run-evals.js");
+    const evp = path.join(tmp, "proj-wp3-evals");
+    S.initProject(evp, ["ai"], "pt");
+    const evF = S.createFeature(evp, "Análise Avançada", ["ai"]);
+    const runEv = (args, env) => spawnSync(process.execPath, [EVALS, ...args], { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "", ...env } });
+    const ev1 = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    ok(evF.slug === "analise-avancada" && ev1.status === 0 && /feature 'analise-avancada'/.test(ev1.stdout) && /correria/.test(ev1.stdout) && /Dry run concluído/.test(ev1.stdout),
+      "run-evals --dry-run on a PT feature with an accented name resolves it and reports in PT");
+    fs.renameSync(evF.dir, path.join(evp, ".specs", "an-lise-avan-ada")); // the pre-1.11 slug of the same name
+    const ev2 = runEv(["Análise Avançada", "--dry-run"], { SPEC_PROJECT_DIR: evp, CLAUDE_PROJECT_DIR: "${CLAUDE_PROJECT_DIR}" });
+    ok(ev2.status === 0 && /feature 'an-lise-avan-ada'/.test(ev2.stdout), "run-evals finds legacy slugs and honours SPEC_PROJECT_DIR (an unexpanded ${CLAUDE_PROJECT_DIR} is ignored)");
+    const ev3 = runEv(["Inexistente", "--dry-run", "--project", evp]);
+    ok(ev3.status === 2 && /não encontrada/.test(ev3.stderr), "run-evals on an unknown feature → localized error, exit 2");
+    const evLive = runEv(["Análise Avançada", "--require-live", "--project", evp]);
+    const evBase = runEv(["Análise Avançada", "--dry-run", "--set-baseline", "--project", evp]);
+    ok(evLive.status === 2 && /--require-live/.test(evLive.stderr) && /recuso/.test(evLive.stderr) && evBase.status === 0 && !fs.existsSync(path.join(evp, ".specs", "an-lise-avan-ada", "evals", "baseline.json")),
+      "--require-live without a key still exits 2 (localized); a dry run never writes a baseline");
+
+    // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
+      console.log("  skip - git not available: pre-commit regression not run");
+    } else {
+      const repo = path.join(tmp, "proj-wp3-git");
+      fs.mkdirSync(repo, { recursive: true });
+      const git = (...a) => spawnSync("git", a, { cwd: repo, encoding: "utf8" });
+      git("init", "-q");
+      const pf = path.join(repo, "serviços e apps", ".specs", "autenticacao");
+      fs.mkdirSync(pf, { recursive: true });
+      fs.writeFileSync(path.join(pf, ".state.json"), JSON.stringify({ lang: "pt", approvals: {} }));
+      fs.writeFileSync(path.join(pf, "requirements.md"), "## Critérios de Aceitação\n1. **US-1.AC-1** — QUANDO o utilizador entra, O SISTEMA DEVE mostrar o painel\n2. **US-1.AC-2** — QUANDO o utilizador sai, o painel é fechado\n");
+      fs.writeFileSync(path.join(pf, "tasks.md"), "- [ ] 1. Painel\n  - _Requirements: US-1.AC-1, US-9.AC-9_\n");
+      git("add", "-A");
+      const pc = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "precommit-check.js")], { cwd: repo, encoding: "utf8" });
+      ok(pc.status === 1 && /serviços e apps\/\.specs\/autenticacao\/requirements\.md: 1 erro\(s\) EARS/.test(pc.stdout),
+        "pre-commit checks staged spec files under accented/space paths (the EARS error blocks the commit)");
+      ok(/fantasma[^\n]*US-9\.AC-9/.test(pc.stdout) && /sem tarefa[^\n]*US-1\.AC-2/.test(pc.stdout), "pre-commit names the phantom and uncovered AC IDs (localized)");
+    }
+
+    // 8. No invisible code points in this file (the BOM test writes it as an escape).
+    ok(!fs.readFileSync(__filename, "utf8").includes(String.fromCharCode(0xfeff)), "mcp/test.js carries no literal U+FEFF");
+  }
   // @wp WP3 <<<
 
   // @wp WP4 tests >>>

@@ -134,7 +134,7 @@ const TOOLS = [
   {
     name: "spec_approve",
     description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. Makes approval-gated progress auditable and resumable.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"] }, by: { type: "string" }, projectDir: { type: "string" } }, required: ["name", "phase"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"] }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user' — same as the CLI)." }, projectDir: { type: "string" } }, required: ["name", "phase"] },
   },
   {
     name: "steering_scaffold",
@@ -153,13 +153,13 @@ const TOOLS = [
   },
   {
     name: "spec_depend",
-    description: "Declare feature dependencies and/or order in .specs/roadmap.json. Rejects changes that would create a circular dependency. Use for 'feature X depends on Y' or 'do X before Y' (set order).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, dependsOn: { type: "array", items: { type: "string" }, description: "Feature slugs this feature depends on." }, order: { type: "integer", description: "Optional explicit ordering position." }, projectDir: { type: "string" } }, required: ["name"] },
+    description: "Show or edit a feature's dependencies and/or order in .specs/roadmap.json. `dependsOn` REPLACES the list ([] clears it); `add` / `remove` edit it incrementally; `order` sets the position; `name` alone only returns the current dependencies (nothing is written). Every dependency must be an existing feature. Rejects changes that would create a circular dependency. Use for 'feature X depends on Y' or 'do X before Y' (set order).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, dependsOn: { type: "array", items: { type: "string" }, description: "Replaces the list with these feature slugs ([] clears it)." }, add: { type: "array", items: { type: "string" }, description: "Feature slugs to add to the current list." }, remove: { type: "array", items: { type: "string" }, description: "Feature slugs to remove from the current list." }, order: { type: "integer", description: "Optional explicit ordering position." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
     name: "spec_scan",
     description: "Brownfield: heuristic local scan of an EXISTING codebase (no model, no cost) — file inventory by extension, top-level modules, detected stack (from manifests), and candidate HTTP endpoints. The agent interprets this to infer steering/constitution and reverse-engineer specs.",
-    inputSchema: { type: "object", properties: { projectDir: { type: "string" }, cap: { type: "integer", description: "Max files to scan (default 5000)." } } },
+    inputSchema: { type: "object", properties: { projectDir: { type: "string" }, cap: { type: "integer", minimum: 1, description: "Max files to scan (default 5000)." } } },
   },
   {
     name: "spec_coverage",
@@ -219,8 +219,8 @@ function runTool(name, args) {
   // Guard against RELATIVE traversal only: a tool call must not reach out of the project with `..`.
   // This is NOT a sandbox — an absolute projectDir is accepted by design (multi-project use), and the
   // engine confines every write to <projectDir>/.specs/. (The CLI, user-driven, is not restricted.)
-  if (args.projectDir && /(^|[\\/])\.\.([\\/]|$)/.test(String(args.projectDir))) {
-    return { ok: false, error: "projectDir must not contain '..' path segments." };
+  if (args.projectDir && RE_DOTDOT.test(String(args.projectDir))) {
+    return { ok: false, error: argMessages().dotdot };
   }
   const pdir = spec.resolveProjectDir(args.projectDir);
   switch (name) {
@@ -272,7 +272,7 @@ function runTool(name, args) {
     case "spec_backlog":
       return spec.backlog(pdir, args.action, args.name, args.note);
     case "spec_depend":
-      return spec.setDependency(pdir, args.name, args.dependsOn, args.order);
+      return spec.setDependency(pdir, args.name, args.dependsOn, args.order, { add: args.add, remove: args.remove });
     case "spec_scan":
       return spec.scanCodebase(pdir, { cap: args.cap });
     case "spec_coverage":
@@ -336,6 +336,70 @@ function missingArgs(toolName, args) {
   return tool.inputSchema.required.filter((k) => args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim()));
 }
 
+// Argument TYPES, also straight from the inputSchema, checked before dispatch. A wrong type used to reach the
+// engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
+// scanned 0 files, text 123 threw 'text.trim is not a function'. Unknown extra properties are ignored.
+const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const TYPE_CHECK = {
+  string: (v) => typeof v === "string",
+  integer: (v) => Number.isInteger(v), // 1.9 is not an integer (parseInt would make it task 1)
+  number: (v) => typeof v === "number" && Number.isFinite(v),
+  boolean: (v) => typeof v === "boolean",
+  array: (v) => Array.isArray(v),
+  object: (v) => v !== null && typeof v === "object" && !Array.isArray(v),
+  null: (v) => v === null,
+};
+// Validation messages in the project's language (projectDir only when it is a string without '..').
+function argMessages(args) {
+  const pd = args && typeof args.projectDir === "string" && !RE_DOTDOT.test(args.projectDir) ? args.projectDir : undefined;
+  try {
+    return spec.msg(spec.projectLang(spec.resolveProjectDir(pd))).args;
+  } catch {
+    return spec.msg("en").args;
+  }
+}
+function shortJson(v) {
+  let s;
+  try { s = JSON.stringify(v); } catch { s = undefined; }
+  if (s === undefined) s = String(v);
+  return s.length > 60 ? s.slice(0, 57) + "…" : s;
+}
+function expectedType(schema, A) {
+  const types = [].concat(schema.type || []);
+  let d = Array.isArray(schema.enum) ? A.oneOf(schema.enum.join(", "))
+    : types.map((t) => (t === "array" && schema.items ? A.arrayOf(expectedType(schema.items, A)) : hasOwn(A.type, t) ? A.type[t] : t)).join(" | ");
+  if (schema.minimum != null) d += " " + A.atLeast(schema.minimum);
+  return d;
+}
+function schemaIssues(schema, value, where, out) {
+  const types = [].concat(schema.type || []);
+  const bad = () => out.push({ where, schema, value });
+  if (types.length && !types.some((t) => hasOwn(TYPE_CHECK, t) && TYPE_CHECK[t](value))) return bad();
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return bad();
+  if (typeof value === "number" && schema.minimum != null && value < schema.minimum) return bad();
+  if (Array.isArray(value) && schema.items) value.forEach((v, i) => schemaIssues(schema.items, v, `${where}[${i}]`, out));
+  if (TYPE_CHECK.object(value) && schema.properties) propertyIssues(schema.properties, value, where + ".", out);
+}
+// Iterates the SCHEMA's keys (never the caller's), so '__proto__' / 'constructor' arguments are just ignored.
+function propertyIssues(props, obj, prefix, out) {
+  for (const [k, s] of Object.entries(props)) {
+    // absent or null = not given (the engine applies its default) — the same rule as missingArgs
+    if (hasOwn(obj, k) && obj[k] !== undefined && obj[k] !== null) schemaIssues(s, obj[k], prefix + k, out);
+  }
+}
+// [{ where, schema, value }] — formatted (and localized) only when there is something to report.
+function invalidArgs(toolName, args) {
+  const tool = TOOLS.find((t) => t.name === toolName);
+  if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return [];
+  const out = [];
+  propertyIssues(tool.inputSchema.properties, args, "", out);
+  return out;
+}
+function argError(id, message) {
+  return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }, null, 2) }], isError: true });
+}
+
 function handle(msg) {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
@@ -362,10 +426,15 @@ function handle(msg) {
         return result(id, { tools: TOOLS });
       case "tools/call": {
         const toolName = params && params.name;
-        const args = (params && params.arguments) || {};
+        const rawArgs = params ? params.arguments : undefined;
+        if (rawArgs != null && !TYPE_CHECK.object(rawArgs)) return argError(id, argMessages().notObject);
+        const args = rawArgs || {};
         const missing = missingArgs(toolName, args);
-        if (missing.length) {
-          return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing required argument(s): " + missing.join(", ") }, null, 2) }], isError: true });
+        if (missing.length) return argError(id, argMessages(args).missing(missing.join(", ")));
+        const invalid = invalidArgs(toolName, args);
+        if (invalid.length) {
+          const A = argMessages(args);
+          return argError(id, A.invalid(invalid.map((i) => A.item(i.where, expectedType(i.schema, A), shortJson(i.value))).join("; ")));
         }
         let out;
         try {
