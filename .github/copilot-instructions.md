@@ -1,6 +1,8 @@
 <!-- This is a static instructions file read by GitHub Copilot. It is NOT a GitHub Action / workflow
      and triggers no CI and no cost. The repo deliberately ships no .github/workflows/. -->
 
+> Paths here are relative to the dev-spec-driven clone; for your own project, generate this file with `node <clone>/cli/dev-spec.js rules copilot`.
+
 # dev-spec-driven (Copilot instructions)
 
 When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (repo root):
@@ -15,6 +17,7 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   The `spec-driven` MCP server (VS Code agent mode, `.vscode/mcp.json`) exposes the same operations.
 - Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Run `dev-spec doctor`
   before advancing a phase.
-- **No GitHub Actions / no paid CI** — tests, load tests, and evals run locally when chosen.
+- **No GitHub Actions / no paid CI / no pull requests** — tests, load tests, and evals run locally when
+  chosen; integrate by merging locally.
 - **Respond in the user's language** (EN/PT/ES), including artifact prose. EARS keywords work in all
   three (`SHALL`/`DEVE`/`DEBE`, `WHEN`/`QUANDO`/`CUANDO`).

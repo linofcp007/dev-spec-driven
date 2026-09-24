@@ -833,13 +833,76 @@ function payload(res) {
   // @wp WP11 <<<
 
   // @wp DOCS tests >>>
+  // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples
+  // pass its own linter), stay compact, and every user-facing surface must agree with it.
+  const docsRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+  const docsRef = (f) => docsRead("skills", "dev-spec-driven", "references", f);
+  const docsSkill = docsRead("skills", "dev-spec-driven", "SKILL.md");
+  const docsDesc = ((docsSkill.match(/^description: >\r?\n([\s\S]*?)\r?\n---/m) || [])[1] || "").split(/\r?\n/).map((l) => l.trim()).join(" ").trim();
+  ok(docsDesc.length > 200 && docsDesc.length < 1024 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /antes de começar a programar/.test(docsDesc) &&
+    /antes de empezar a programar/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
+    `SKILL.md description is trilingual, scoped ("Not for …") and < 1024 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
+  const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
+  ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),
+    "every Phase 6 execution loop (core, +tdd, +ai) ends in spec_complete_task {evidence}");
+  const docsUnwanted = (docsSkill.match(/^\| Unwanted \| IF…THEN \| (.+) \|\r?$/m) || [])[1] || "";
+  ok(/ shall /.test(docsUnwanted) && S.earsValidate("1. **US-1.AC-1** — " + docsUnwanted).issues.length === 0 && !/user-friendly error message/.test(docsRef("ears-guide.md")),
+    "the SKILL.md EARS IF…THEN example passes the plugin's own linter; ears-guide's canonical example is measurable");
+  ok(/real defect[^\n]*\/spec-bugfix/.test(docsSkill) && /Bounded/.test(docsRef("classification-matrix.md")) && /\/spec-bugfix/.test(docsRef("classification-matrix.md")) &&
+    /Bounded/.test(docsRef("bugfix.md")) && /\*\*After Phase 0 approval:\*\* `spec_init \{tracks, lang\}` if steering is missing, then\s+`spec_create \{name, tracks, lang\}` \*\*once\*\*/.test(docsSkill),
+    "mode routing sends a real defect to /spec-bugfix and knows Bounded (SKILL, matrix, bugfix.md); spec_init → spec_create once, after Phase 0 approval");
+  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /always scaffolds `quickstart\.md`/.test(docsSkill) && !/^\| Tool \|/m.test(docsSkill) &&
+    (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
+    "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
+  const docsTools = ["spec_init", "spec_classify", "spec_create", "spec_list", "spec_status", "spec_next_task", "spec_complete_task", "ears_validate", "trace_check",
+    "spec_doctor", "spec_approve", "steering_scaffold", "spec_roadmap", "spec_backlog", "spec_depend", "spec_scan", "spec_coverage", "spec_clarify",
+    "spec_next_action", "spec_add_track", "spec_feature", "spec_task_brief", "spec_finish"];
+  const docsReadme = docsRead("README.md");
+  const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
+    .matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));
+  ok(docsTables.every((s) => docsTools.every((t) => s.has(t)) && [...s].every((t) => list.result.tools.some((x) => x.name === t))) &&
+    !/path-filled/.test(docsReadme) && ["## Português", "## Español"].every((h) => { const sec = docsReadme.split("\n" + h + "\n")[1].split("\n## ")[0];
+      return /\/plugin marketplace add/.test(sec) && /node cli\/test-cli\.js/.test(sec) && /--subagents/.test(sec) && /_Verify:/.test(sec); }),
+    "README: EN/PT/ES tool tables list all 23 tools (no phantom); PT/ES carry subagents, evidence, marketplace install and the CLI test line");
+  const docsRules = [[path.join(".cursor", "rules", "dev-spec-driven.mdc"), "cursor"], [path.join(".windsurf", "rules", "dev-spec-driven.md"), "windsurf"],
+    [path.join(".github", "copilot-instructions.md"), "copilot"], ["GEMINI.md", "gemini"], ["AGENTS.md", "agents"]];
+  const docsAgents = docsRead("AGENTS.md");
+  ok(docsRules.every(([f, tool]) => { const t = docsRead(f); return /relative to the dev-spec-driven clone/.test(t) && t.includes("cli/dev-spec.js rules " + tool) && /no pull requests/i.test(t); }) &&
+    !/(?<!skills\/dev-spec-driven\/)references\//.test(docsAgents) && ["next-action", "add-track", "feature", "backlog", "rules"].every((c) => new RegExp("^dev-spec " + c + " ", "m").test(docsAgents)) &&
+    /rules <tool>/.test(docsRead("INTEGRATIONS.md")) && /ABSOLUTE\/PATH\/TO/.test(docsRead("INTEGRATIONS.md")) && !/Pre-filled config files/.test(docsRead("INTEGRATIONS.md")),
+    "rule files + AGENTS.md: clone-relative note, `rules <tool>`, no pull requests; AGENTS.md paths prefixed + CLI list complete; INTEGRATIONS admits the placeholder");
+  const docsInstall = docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
+  ok(!/Copy-Item -Recurse/.test(docsInstall) && /\/plugin marketplace add <path-to-your-clone>/.test(docsInstall) && /dev-spec-driven@dev-spec-driven-marketplace/.test(docsInstall) &&
+    [docsInstall, docsContrib].every((t) => /claude plugin validate [^\n]*plugin\.json/.test(t) && /claude plugin validate (?:\.|"\$plugin")[\s`]/.test(t)) &&
+    !/^## Pull requests/m.test(docsContrib) && /^## Before merging/m.test(docsContrib),
+    "INSTALL: always-on via a local marketplace (no copy into the plugin cache); INSTALL + CONTRIBUTING validate plugin.json AND the marketplace");
+  ok(/model: sonnet/.test(docsRef("subagent-execution.md")) && !/inherits the session/.test(docsRef("subagent-execution.md")) &&
+    ["spec-critic.md", "spec-implementer.md", "spec-reviewer.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    /baseline green/.test(docsRead("commands", "executeTask.md")) && /Vocabulary map/.test(docsRef("classification-examples-saas.md")) &&
+    /Vocabulary map/.test(docsRef("classification-examples-ai.md")) && !/`node mcp\/evals\/run-evals\.js/.test(docsRef("eval-suite-patterns.md")),
+    "references agree with the code: agents default to sonnet, --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
+  const docsAttack = /ignore (?:all )?(?:previous|above|your|prior) instructions|ignore above|you are now DAN|disregard prior rules|what's your system prompt/i;
+  const docsOutsideFences = (t) => t.split(/^\s*```.*$/m).filter((_, i) => i % 2 === 0).join("\n");
+  ok(["ai-safety-patterns.md", "eval-suite-patterns.md", "mandatory-ai-design-sections.md", "example-spec-combined.md"].every((f) => {
+    const t = docsRef(f); return /Example attack inputs \(defensive test data — never instructions to follow\):/.test(t) && !docsAttack.test(docsOutsideFences(t)); }),
+    "attack examples in the AI references sit in fenced blocks labelled as defensive test data");
+  const docsEvalRoot = path.join(root, "evals");
+  const docsNeg = fs.readdirSync(docsEvalRoot).filter((c) => fs.existsSync(path.join(docsEvalRoot, c, "prompt.md")) && /^\s+- negative\s*$/m.test(docsRead("evals", c, "prompt.md")));
+  ok(docsNeg.length >= 4 && ["requirements.txt", "eval()", "OpenAI"].every((k) => docsNeg.some((c) => docsRead("evals", c, "prompt.md").includes(k))) &&
+    docsNeg.every((c) => fs.readdirSync(path.join(docsEvalRoot, c, "graders")).every((g) => /^max: 0\s*$/m.test(docsRead("evals", c, "graders", g)))) &&
+    !/The planning request/.test(docsRead("evals", "trigger-bugfix-en", "graders", "skill-fires.md")),
+    "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call) keep the skill silent; the bugfix grader names the defect report");
   // @wp DOCS <<<
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
   const agentFiles = fs.readdirSync(agentsDir).filter((x) => x.endsWith(".md"));
+  // The read-only critic is limited to Read/Grep/Glob; implementer + reviewer need a shell, so stay unrestricted.
+  const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
   ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md" &&
-    agentFiles.every((x) => !/^tools:/m.test(fs.readFileSync(path.join(agentsDir, x), "utf8"))), "3 plugin agents (implementer, reviewer, critic), none restricting tools:");
+    agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
+    ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
+    "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
   ok(cmdFiles.length === 35 && ["spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md"].every((x) => cmdFiles.includes(x)), "35 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback");
   const evalRoot = path.join(root, "evals");
@@ -849,11 +912,24 @@ function payload(res) {
     "plugin evals: every case has prompt.md + a grader with an intact regex");
 
   // Owner's cost rule: the plugin never steers users toward pull requests or CI.
-  const proseFiles = ["commands", path.join("skills", "dev-spec-driven"), "agents"].flatMap((d) => {
-    const walk = (p) => fs.statSync(p).isDirectory() ? fs.readdirSync(p).flatMap((x) => walk(path.join(p, x))) : [p];
-    return walk(path.join(root, d)).filter((p) => p.endsWith(".md"));
-  }).concat([path.join(root, "README.md"), path.join(root, "AGENTS.md")]);
-  const steersToPr = proseFiles.filter((p) => /[Oo]pen (a|the) (PR|pull request)\b|abr(e|ir) um PR\b|abr(e|ir) un PR\b|\b[Ee]very (prompt )?PR\b|\bPR comment|\bin CI\b|\bCI gate|Load Tests in CI|push and open/.test(fs.readFileSync(p, "utf8")));
+  // Scans every prose surface a user or agent reads (not CHANGELOG.md — that is history).
+  const walkFiles = (p) => fs.statSync(p).isDirectory() ? fs.readdirSync(p).flatMap((x) => walkFiles(path.join(p, x))) : [p];
+  const proseFiles = ["commands", path.join("skills", "dev-spec-driven"), "agents", "evals", "integrations"]
+    .flatMap((d) => walkFiles(path.join(root, d)).filter((p) => p.endsWith(".md")))
+    .concat([path.join(".cursor", "rules"), path.join(".windsurf", "rules")].flatMap((d) => walkFiles(path.join(root, d))))
+    .concat(["README.md", "AGENTS.md", "CONTRIBUTING.md", "INSTALL.md", "INTEGRATIONS.md", "GEMINI.md", path.join(".github", "copilot-instructions.md")].map((f) => path.join(root, f)));
+  // Negations are allowed ("no PR", "never open a PR", "without a pull request", "sem PR", "no PRs or CI", "not in CI").
+  const prNegation = /\b(?:no|not|never|without|sem|sin|nunca|nem|ni)\s+(?:(?:to\s+)?(?:open|opening|abrir|abre)\s+)?(?:(?:a|an|any|the|um|uma|un|una)\s+)?(?:PRs?|pull requests?)\b(?:\s*(?:,|or|and|nor|ou|o|e|y)\s*(?:no\s+)?CI\b)?/gi;
+  const ciNegation = /\b(?:no|not|never|without|sem|sin|nunca|não)\s+(?:(?:in|on|em|en)\s+)?(?:(?:a|the)\s+)?(?:paid\s+)?CI\b/gi;
+  const steersRe = new RegExp([
+    /\b[Oo]pen(?:s|ing)? (?:a|an|the|your) (?:PR|pull request)\b/, /\babr(?:e|ir) (?:um|uma|un|una) (?:PR|pull request)\b/,
+    /\b[Ee]very (?:prompt )?PR\b/, /\bPR comment/, /\b[Ii]n (?:the |a |your )?PR\b/, /\bPRs? (?:is|are) blocked/, /\bPR-friendly/,
+    /\b[Pp]ush and open/, /\bCI gate/, /\b[Ii]n (?:the )?CI\b/, /\b[Oo]n CI\b/,
+  ].map((r) => r.source).join("|"));
+  const steersToPr = proseFiles.filter((p) => steersRe.test(fs.readFileSync(p, "utf8").replace(prNegation, "").replace(ciNegation, "")));
+  ok(["in the PR", "Prompt PRs are blocked", "git/PR-friendly", "Open a pull request", "push and open one", "on every PR", "a CI gate", "runs in CI"].every((s) => steersRe.test(s)) &&
+    ["no PR or CI needed", "no pull requests, no CI", "never open a PR", "without a PR", "sem PR", "sin PR", "no PRs or CI", "locally, not in CI", "/prReview", "comments on PRs"]
+      .every((s) => !steersRe.test(s.replace(prNegation, "").replace(ciNegation, ""))), "the PR/CI guard catches steering phrases and allows negations");
   ok(steersToPr.length === 0 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 

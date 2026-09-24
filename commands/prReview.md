@@ -12,7 +12,7 @@ Review against the full chain, gating checks by the feature's active tracks:
 - **+tdd** — red-first evidence in git history (test commits before impl); every AC has a test.
 - **+saas** — scale sections filled; every new query has `WHERE tenant_id = ?`; observability points
   added; new hot paths hit cache (cost).
-- **+ai** — eval delta present in the PR; prompt changes live in versioned files (not inline
+- **+ai** — eval delta present in the merge summary / commit; prompt changes live in versioned files (not inline
   strings); PII-to-model reviewed; cost tracking on new model calls.
 - **Security** — injection, authz, data exposure — always.
 

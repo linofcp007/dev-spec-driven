@@ -9,16 +9,25 @@ The methodology travels through **three portable layers**, so it works far beyon
 3. **Instructions files** — `AGENTS.md` (cross-tool) plus per-tool rule files, so the agent follows
    the workflow.
 
-Everything is **local, zero-dependency (Node ≥18), no GitHub Actions, no cost.**
+Everything is **local, zero-dependency (Node ≥18), no GitHub Actions, no paid CI, no pull requests, no cost.**
 
 > Tip: run `node cli/dev-spec.js mcp-config <client>` to print a ready-to-paste config with the
 > correct absolute path already filled in. `<client>` = `claude-desktop`, `claude-code`, `cursor`,
 > `windsurf`, `vscode`, `gemini`, `codex`, or `all`.
 >
-> 📁 **Pre-filled config files are already generated** in [`integrations/`](./integrations/) — just
-> copy each to its destination (see [`integrations/README.md`](./integrations/README.md)). Opening
-> *this* folder in Cursor/VS Code/Gemini also works out of the box via the root `.cursor/mcp.json`,
+> 📁 **Config templates** live in [`integrations/`](./integrations/). They are **not** path-filled:
+> each carries the placeholder `/ABSOLUTE/PATH/TO/dev-spec-driven/mcp/server.js`, to replace with your
+> clone's path — or skip them and run `node cli/dev-spec.js mcp-config <client>`, which prints the same
+> config already filled in (see [`integrations/README.md`](./integrations/README.md)). Opening *this*
+> folder in Cursor/VS Code/Gemini works out of the box via the root `.cursor/mcp.json`,
 > `.vscode/mcp.json`, and `.gemini/settings.json`.
+>
+> 📝 **Rule files for your own project:** the rule files in this repo (`.cursor/rules/`, `.windsurf/rules/`,
+> `.github/copilot-instructions.md`, `GEMINI.md`, `AGENTS.md`) use paths relative to this clone, which
+> don't exist in your project. Generate them instead — `node "<PLUGIN>/cli/dev-spec.js" rules <tool>`
+> (`cursor` | `windsurf` | `copilot` | `gemini` | `agents`) prints the rule file with this clone's
+> absolute paths; redirect it to the destination shown per tool below (if that file already exists,
+> merge the output into it instead of overwriting it).
 
 Replace `<PLUGIN>` below with the absolute path to your clone of this repo (where you ran
 `git clone https://github.com/linofcp007/dev-spec-driven.git`). Tip: `node cli/dev-spec.js mcp-config <client>`
@@ -50,8 +59,9 @@ Add the MCP server to `claude_desktop_config.json`
 }
 ```
 
-Restart Claude Desktop. The `spec-driven` tools appear. The workflow itself: paste `AGENTS.md`
-into a Project's custom instructions (Claude Desktop has no skills/rules file convention).
+Restart Claude Desktop. The `spec-driven` tools appear. The workflow itself: paste the output of
+`node "<PLUGIN>/cli/dev-spec.js" rules agents` into a Project's custom instructions (Claude Desktop has
+no skills/rules file convention).
 
 ## Claude CoWork
 
@@ -65,7 +75,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.cursor/rules/dev-spec-driven.mdc`](./.cursor/rules/dev-spec-driven.mdc) ships in this
-  repo (`alwaysApply: true`). Copy it into your own project's `.cursor/rules/` to carry the workflow.
+  repo (`alwaysApply: true`). For your own project, generate it with absolute paths:
+  `node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`.
 
 ## Windsurf
 
@@ -74,7 +85,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.windsurf/rules/dev-spec-driven.md`](./.windsurf/rules/dev-spec-driven.md)
-  (`trigger: always_on`). Copy into your project's `.windsurf/rules/`.
+  (`trigger: always_on`). For your own project:
+  `node "<PLUGIN>/cli/dev-spec.js" rules windsurf > .windsurf/rules/dev-spec-driven.md`.
 
 ## GitHub Copilot (VS Code, agent mode)
 
@@ -84,7 +96,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   ```
   Enable agent mode and start the server from the MCP view.
 - **Instructions:** [`.github/copilot-instructions.md`](./.github/copilot-instructions.md) (a static
-  file Copilot reads — **not** a GitHub Action, no CI, no cost). Copy into your repo.
+  file Copilot reads — **not** a GitHub Action, no CI, no cost). For your own repo:
+  `node "<PLUGIN>/cli/dev-spec.js" rules copilot > .github/copilot-instructions.md`.
 
 ## Gemini (Gemini CLI / Code Assist)
 
@@ -92,7 +105,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   ```json
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
-- **Instructions:** [`GEMINI.md`](./GEMINI.md) at the repo root — Gemini CLI reads it automatically.
+- **Instructions:** Gemini CLI reads `GEMINI.md` at the project root automatically. For your own project:
+  `node "<PLUGIN>/cli/dev-spec.js" rules gemini > GEMINI.md`.
 
 ## OpenAI Codex (Codex CLI)
 
@@ -102,12 +116,14 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   command = "node"
   args = ['<PLUGIN>/mcp/server.js']
   ```
-- **Instructions:** Codex reads [`AGENTS.md`](./AGENTS.md) automatically.
+- **Instructions:** Codex reads `AGENTS.md` at the project root automatically. For your own project:
+  `node "<PLUGIN>/cli/dev-spec.js" rules agents > AGENTS.md`.
 
 ## Any other MCP client (Cline, Roo, Zed, Continue, …)
 
 Point it at a stdio server: `command: node`, `args: ["<PLUGIN>/mcp/server.js"]`. For instructions,
-use `AGENTS.md` (many of these read it) or copy the relevant snippet into the tool's rules file.
+generate `AGENTS.md` with `rules agents` (many of these read it) or paste its output into the tool's
+rules file.
 
 ## Plain CLI / shell / scripts (no MCP, no agent)
 

@@ -228,7 +228,9 @@ suite, load test, observability, cost/safety) and writes a merge summary built f
 
 ## Model selection
 
-Always pass `model` explicitly — an omitted model inherits the session's (usually the most expensive).
+Pass `model` explicitly on every dispatch. The three plugin agents declare `model: sonnet` in their
+frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and reviewer work,
+wrong for the cheap transcription tasks and the final review below.
 
 | Role | Tier (Claude Code alias) |
 |---|---|

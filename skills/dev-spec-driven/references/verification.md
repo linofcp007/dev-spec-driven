@@ -24,10 +24,14 @@ BEFORE claiming any status:
   `.state.json → evidence`. A non-zero `exitCode` **refuses the tick**. A task with `_Verify:_` ticked
   without evidence gets a warning, and `spec_doctor` (check `verification`), `ROADMAP.md` ("needs
   attention") and `spec_finish` (a blocker) keep surfacing it until evidence is back-filled.
-- **What counts as verified:** exit code `0`, or a summary-only manual attestation (for checks that
-  have no command, e.g. "checked the login page by hand"). A command given without its exit code, or a
-  non-integer exit code, is rejected. A failed re-check of an already-ticked task is **recorded** and the
-  task becomes unverified until a passing run is recorded.
+- **Tick only through the engine.** `spec_complete_task` (CLI `dev-spec done`) is the only way a task
+  gets ticked — never edit the `- [ ]` checkbox by hand; the evidence lives next to the tick.
+- **What counts as verified:** a task whose `_Verify:_` names a runnable command is verified only by
+  `{command, exitCode: 0}` — a text note alone ticks it but leaves it **unverified**. A summary-only
+  manual attestation ("checked the login page by hand") verifies only a task with no runnable command
+  (no `_Verify:_`, or a `[placeholder]`). A command given without its exit code, or a non-integer exit
+  code, is rejected. A failed re-check of an already-ticked task is **recorded** and the task becomes
+  unverified until a passing run is recorded.
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open and exits 1. Or report it by hand:
   `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.

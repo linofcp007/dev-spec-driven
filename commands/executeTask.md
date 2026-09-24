@@ -16,7 +16,8 @@ code and output summary — evidence before claims (`references/verification.md`
 task is not done.
 
 **`--subagents` (or the user asks for subagents).** Follow `references/subagent-execution.md`: check the
-preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes),
+preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes,
+baseline green: run the full suite once and ledger the result),
 then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:spec-implementer` agent with the brief and
 report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
 fix loop (max 5 rounds) → `spec_complete_task` only after a clean review. Keep the ledger. Stop at every

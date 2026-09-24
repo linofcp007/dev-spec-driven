@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+> Paths here are relative to the dev-spec-driven clone; for your own project, generate this file with `node <clone>/cli/dev-spec.js rules windsurf`.
+
 # dev-spec-driven (Windsurf rule)
 
 Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
@@ -14,5 +16,5 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
   The `spec-driven` MCP server exposes the same operations if configured.
 - Artifacts live in `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
 - Mandatory +saas/+ai design sections must be filled (no leftover `> TODO`).
-- No GitHub Actions / no paid CI — everything runs locally.
+- No GitHub Actions / no paid CI / no pull requests — everything runs locally; integrate by merging locally.
 - Respond in the user's language (EN/PT/ES). EARS keywords work in all three (`SHALL`/`DEVE`/`DEBE`).

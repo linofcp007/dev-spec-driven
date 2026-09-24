@@ -43,3 +43,6 @@ machine when this repo is the open project — no editing needed.
   server entry.
 - After editing a config, restart the tool (or restart the MCP server from its UI). Verify the
   `spec-driven` tools appear. Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+- The workflow rules for your own project are generated the same way:
+  `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints that tool's rule file with
+  this clone's absolute paths (the copies in this repo use clone-relative paths).

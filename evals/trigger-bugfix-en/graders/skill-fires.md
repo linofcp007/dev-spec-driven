@@ -5,4 +5,4 @@ tool: Skill
 input_match: '"skill":\s*"dev-spec-driven:[\w-]+"'
 min: 1
 ---
-The planning request must route into the dev-spec-driven workflow (its skill or one of its commands).
+The defect report must route into the dev-spec-driven workflow (its bugfix flow, skill or one of its commands).

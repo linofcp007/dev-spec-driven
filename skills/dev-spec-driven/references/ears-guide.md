@@ -90,7 +90,8 @@ Requirements that specify how the system should handle error conditions or undes
 
 **Examples:**
 - If the database connection is lost, then the system shall retry with exponential backoff
-  up to 3 times, then fail gracefully with a user-friendly error message.
+  up to 3 times, then return HTTP 503 with a `Retry-After: 30` header and an error message that
+  names the operation that failed.
 - If the user enters an invalid password 5 consecutive times, then the system shall lock the
   account for 15 minutes and send a security alert email.
 - If the payment gateway returns an error, then the system shall preserve the cart contents

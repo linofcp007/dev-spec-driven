@@ -4,7 +4,9 @@
 for a defect: `bug.md` (reproduction · expected vs actual · **root cause** · fix · regression test), a
 one-story `requirements.md` whose criterion is the corrected behaviour as `IF … THEN THE SYSTEM SHALL …`,
 a regression test plan (`T-01` reproduces the bug, `T-02` guards the neighbouring behaviour) and a
-fixed task order. It sits between Vibe (no discipline) and a full Spec (too heavy for one defect).
+fixed task order. It sits between Vibe (no discipline) and a full Spec (too heavy for one defect), and
+it is not Bounded mode either: Bounded (a short design in chat for a contained change to an existing flow)
+has no reproduction, root cause or regression test — a real defect needs all three.
 Adapted from the `systematic-debugging` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ## The iron law

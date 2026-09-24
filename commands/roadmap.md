@@ -9,7 +9,7 @@ Args: $ARGUMENTS
 
 Run the `spec_roadmap` MCP tool. With `write: true` (CLI `dev-spec roadmap --write`) it (re)generates
 **`.specs/ROADMAP.md`** — the default overview (progress bar, feature table, Mermaid dependency graph,
-needs-attention, backlog; git/PR-friendly). Add `html: true` (`--html`) to also write a self-contained,
+needs-attention, backlog; git-friendly). Add `html: true` (`--html`) to also write a self-contained,
 offline, brand-styled **`.specs/ROADMAP.html`** (light/dark toggle that defaults to the system theme).
 **Pass `lang` (`--lang pt|es|en`) matching the user's language** — it localizes the chrome and is
 stored for auto-refresh. Report: each feature's tracks, phase, %, dependencies and whether they're
