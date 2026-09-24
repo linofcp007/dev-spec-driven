@@ -741,15 +741,15 @@ function payload(res) {
     .replace(/## Fix\n\[[^\n]*\]/, "## Fix\nClear the cookie before redirecting."));
   ok(S.specDoctor(vDir, "login-loop").checks.find((c) => c.id === "root-cause").status === "pass", "filling bug.md → Root Cause clears the gate");
   const notReady = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", projectDir: vDir } }));
-  ok(notReady.ok && notReady.readyToFinish === false && notReady.blockers.length >= 2 && /^fix\(login-loop\): users bounce back/.test(notReady.prTitle) &&
-    /cookie/.test(notReady.prBody) && notReady.checks.some((c) => /no longer reproduce/.test(c)), "spec_finish reports blockers + a PR draft built from the spec (root cause, fix)");
+  ok(notReady.ok && notReady.readyToFinish === false && notReady.blockers.length >= 2 && /^fix\(login-loop\): users bounce back/.test(notReady.mergeTitle) &&
+    /cookie/.test(notReady.mergeSummary) && notReady.checks.some((c) => /no longer reproduce/.test(c)), "spec_finish reports blockers + a merge summary built from the spec (root cause, fix)");
   [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
   const ready = S.finishFeature(vDir, "login-loop", { write: true });
-  const prFile = fs.readFileSync(ready.paths.pr, "utf8");
-  ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.prBody === undefined,
-    "all tasks done + evidence + approvals → readyToFinish; the PR description (with evidence) is written to .execution/");
+  const prFile = fs.readFileSync(ready.paths.summary, "utf8");
+  ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
+    "all tasks done + evidence + approvals → readyToFinish; the merge summary (with evidence) is written to .execution/");
   const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
   ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
     "bugfix scaffolds are localized (PT)");
@@ -796,8 +796,8 @@ function payload(res) {
   fs.writeFileSync(path.join(shortT.dir, "tasks.md"), "- [x] 1. a\n  - _Verify: node x.js_\n");
   S.completeTask(vDir, "title-case", 1, { command: "node -e \"console.log(`x`)\"", exitCode: 0, summary: "# tests 5\n# pass 5" });
   const tc = S.finishFeature(vDir, "title-case");
-  ok(tc.prTitle === "feat(title-case): Per-tenant API keys, e.g. Stripe-style secrets" && !/\n# pass/.test(tc.prBody) && /`` node -e/.test(tc.prBody),
-    "PR title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
+  ok(tc.mergeTitle === "feat(title-case): Per-tenant API keys, e.g. Stripe-style secrets" && !/\n# pass/.test(tc.mergeSummary) && /`` node -e/.test(tc.mergeSummary),
+    "merge title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
@@ -811,6 +811,15 @@ function payload(res) {
   ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) &&
     fs.readdirSync(path.join(evalRoot, c, "graders")).some((g) => /input_match: '"skill":\\s\*"dev-spec-driven:\[\\w-\]\+"'/.test(fs.readFileSync(path.join(evalRoot, c, "graders", g), "utf8")))),
     "plugin evals: every case has prompt.md + a grader with an intact regex");
+
+  // Owner's cost rule: the plugin never steers users toward pull requests or CI.
+  const proseFiles = ["commands", path.join("skills", "dev-spec-driven"), "agents"].flatMap((d) => {
+    const walk = (p) => fs.statSync(p).isDirectory() ? fs.readdirSync(p).flatMap((x) => walk(path.join(p, x))) : [p];
+    return walk(path.join(root, d)).filter((p) => p.endsWith(".md"));
+  }).concat([path.join(root, "README.md"), path.join(root, "AGENTS.md")]);
+  const steersToPr = proseFiles.filter((p) => /[Oo]pen (a|the) (PR|pull request)\b|abr(e|ir) um PR\b|abr(e|ir) un PR\b|\b[Ee]very (prompt )?PR\b|\bPR comment|\bin CI\b|\bCI gate|Load Tests in CI|push and open/.test(fs.readFileSync(p, "utf8")));
+  ok(steersToPr.length === 0 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
+    "no command/skill/agent text steers toward PRs or CI (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");

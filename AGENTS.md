@@ -48,7 +48,7 @@ dev-spec trace <feature>                       # AC ↔ task ↔ test ↔ code (
 dev-spec next <feature> [--batch]              # next task (--batch: + the [P] tasks that can run beside it)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
-dev-spec finish <feature> [--write]            # blockers + fresh checks + PR description from the spec chain
+dev-spec finish <feature> [--write]            # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, DoD)
 dev-spec approve <feature> <phase>             # record an approval gate
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
@@ -78,6 +78,6 @@ At each phase boundary, run `dev-spec doctor <feature>`; only advance when it re
 - **No implementation without approval** at each gate.
 - **Traceability end-to-end**: code → tasks → (tests/evals) → design → requirements → need.
 - **Mandatory track sections are mandatory** — an honest "not needed because X" is fine; blank is not.
-- **Everything is local. No GitHub Actions, no paid CI.** Tests/load/evals run in the user's own env.
+- **Everything is local. No GitHub Actions, no paid CI, no pull requests** — integrate by merging locally. Tests/load/evals run in the user's own env.
 
 See `skills/dev-spec-driven/references/` for EARS, scale, eval, safety, and prompt-engineering guides.

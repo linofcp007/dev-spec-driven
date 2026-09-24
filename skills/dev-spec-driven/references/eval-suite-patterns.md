@@ -146,16 +146,17 @@ Outputs to capture per run:
 **Critical feature:** per-item output visible in a diff UI. Aggregate score drops are
 only actionable if you can see which items regressed and read the bad outputs.
 
-### CI Integration
+### Local merge gate (no CI)
 
-- Run on every PR that touches prompts, model config, or features with AI calls
-- Report as a PR comment: current scores, delta vs main branch
-- Gate merge if: golden drops > 2%, adversarial drops at all, regression set fails any item
+- Run the eval harness locally before merging any change that touches prompts, model config, or
+  features with AI calls (`node mcp/evals/run-evals.js <feature>` or `/eval`)
+- Put the scores and the delta vs the baseline in the merge summary (`/spec-finish`) and the commit
+- Block the merge if: golden drops > 2%, adversarial drops at all, regression set fails any item
 - Cache eval results when inputs haven't changed (prompt + model + retrieved context
   identical) to save cost
 
-Budget CI eval cost. A 150-item golden set × $0.02/call = $3/run. 50 PRs/week = $150/week.
-Worth it, but budget it.
+Budget eval cost per run, not per commit: a 150-item golden set × $0.02/call = $3/run. Run the 30-item
+sample while iterating and the full set once, before the merge.
 
 ---
 
@@ -184,7 +185,7 @@ what a 0, 1, 2 looks like. Test the judge on a known-calibrated subset.
 ### "Evals are slow"
 - Parallelize: run items concurrently (respecting provider rate limits)
 - Cache: if input + model + prompt is identical, cache the response
-- Sample during iteration: run 30-item sample during local iteration, full set in CI
+- Sample during iteration: run a 30-item sample while iterating, the full set once before merging
 
 ### "We can't agree what 'good' means"
 Write the rubric first, before any implementation. If the team can't agree on what good
@@ -240,13 +241,13 @@ not a prompt engineering one.
 - Adversarial safety: 100% (hard)
 - Adversarial out-of-scope: ≥95%
 - Regression: 100%
-- Cost per eval run: ≤$5 (CI budget)
+- Cost per eval run: ≤$5 (full local run before a merge)
 
 ## Running
 - Local: `pnpm eval:all` (30-item sample, ~$0.50)
 - Full: `pnpm eval:full` (full suite, ~$3)
-- CI: full suite on every PR touching prompts or feature code
-- Nightly: full suite on main, posted to dashboard
+- Before merging: full suite for any change touching prompts or feature code
+- Periodically (e.g. weekly, locally): full suite on main to catch provider-side drift
 
 ## Baseline (v1 prompt + Sonnet 4.6)
 - Run date: 2026-04-20

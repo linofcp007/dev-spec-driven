@@ -1,6 +1,6 @@
 # Handling review feedback (against the spec)
 
-`/spec-review-feedback` — when review comments arrive (a human reviewer, a PR bot, the `spec-reviewer`
+`/spec-review-feedback` — when review comments arrive (a human reviewer, a review tool, the `spec-reviewer`
 agent's final review), evaluate every comment **against the spec before changing code**. The spec gives
 you what generic review etiquette lacks: an objective answer to "is this in scope?".
 Adapted from the `receiving-code-review` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).

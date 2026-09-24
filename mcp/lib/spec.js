@@ -1578,7 +1578,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// spec_finish — close a feature: readiness report + a PR description generated from the spec chain
+// spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
+// (no PRs, no CI — the owner's cost rule; the summary is the merge commit message)
 // ---------------------------------------------------------------------------
 
 // The first paragraph of a section (wrapped lines joined), or null for a placeholder / TODO sentinel.
@@ -1593,7 +1594,7 @@ function sectionFirstParagraph(md, synonyms) {
   const text = para.join(" ");
   return text && !/^\[.*\]$/.test(text) && !RE_TODO_SENTINEL.test(text) ? text : null;
 }
-// Markdown helpers for the PR body: multi-line output collapsed to one line; a code span whose fence is
+// Markdown helpers for the merge summary: multi-line output collapsed to one line; a code span whose fence is
 // longer than any backtick run inside it.
 function oneLine(s) {
   return String(s || "").replace(/\s*\r?\n\s*/g, " ⏎ ").trim();
@@ -1604,7 +1605,7 @@ function codeSpan(s) {
   const fence = "`".repeat(longest + 1);
   return longest ? fence + " " + text + " " + fence : fence + text + fence;
 }
-// A commit/PR title: the first sentence, at most ~72 chars, cut at a word boundary. Abbreviations like
+// A commit title: the first sentence, at most ~72 chars, cut at a word boundary. Abbreviations like
 // "e.g." / "i.e." / "p. ej." don't end a sentence.
 function shortTitle(text, max = 72) {
   const first = text.split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0];
@@ -1643,10 +1644,10 @@ function finishFeature(projectDir, name, opts = {}) {
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
 
-  // PR description from the spec chain.
+  // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
   const summary = sectionFirstParagraph(reqs, ["summary", "resumo", "resumen"]) || slug;
-  const prTitle = `${kind === "bugfix" ? "fix" : "feat"}(${slug}): ${shortTitle(summary)}`;
+  const mergeTitle = `${kind === "bugfix" ? "fix" : "feat"}(${slug}): ${shortTitle(summary)}`;
   const body = [F.prSummary, summary, ""];
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
@@ -1677,15 +1678,15 @@ function finishFeature(projectDir, name, opts = {}) {
   const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md"]
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
-  const prBody = body.join("\n") + "\n";
+  const mergeSummary = body.join("\n") + "\n";
 
   const exDir = path.join(dir, ".execution");
-  const prPath = path.join(exDir, "pr-description.md");
+  const summaryPath = path.join(exDir, "merge-summary.md");
   const write = !!opts.write;
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    fs.writeFileSync(prPath, "# " + prTitle + "\n\n" + prBody, "utf8"); // derived: regenerated on every call
+    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
   }
   const ready = blockers.length === 0;
   const res = {
@@ -1700,11 +1701,11 @@ function finishFeature(projectDir, name, opts = {}) {
     unverified: vs.unverified,
     pendingGates,
     checks,
-    prTitle,
-    paths: { pr: prPath },
+    mergeTitle,
+    paths: { summary: summaryPath },
     wrote: write,
   };
-  if (opts.includeBody != null ? !!opts.includeBody : !write) res.prBody = prBody;
+  if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
 

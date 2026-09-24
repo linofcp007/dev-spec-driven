@@ -54,7 +54,7 @@ and rewritten from the test — not "kept as reference", not "adapted".
 |---|---|
 | "It passed earlier" | Run it fresh, on the final code. |
 | "Should work now" | "Should" is not evidence. |
-| "Just open the PR, CI will tell us" | There is no CI here by design — the local run IS the gate. |
+| "Just merge, something downstream will catch it" | Nothing downstream runs: no CI by design — the local run IS the gate. |
 
 ## Bugfix
 

@@ -1,5 +1,5 @@
 ---
-description: Close a feature — verify it's really done, draft the PR from the spec, then merge, open a PR or keep the branch. PT - fecha a feature (verifica, gera o PR a partir da spec). ES - cierra la función (verifica, genera el PR desde la spec).
+description: Close a feature locally — verify it's really done, draft the merge summary from the spec, then merge locally or keep the branch (no PRs, no CI). PT - fecha a feature localmente (verifica, resumo do merge a partir da spec). ES - cierra la función en local (verifica, resumen del merge desde la spec).
 argument-hint: "[feature name]"
 ---
 
@@ -13,13 +13,15 @@ Feature: $ARGUMENTS
 2. **Verify fresh, now** (`references/verification.md`): run the full test suite and every check the
    report lists for the active tracks (+saas load test and observability, +ai cost and safety, bugfix: the
    reproduction no longer reproduces). Show the commands and their output. No evidence, no "done".
-3. Show the PR title and description generated from the spec chain
-   (`.specs/<feature>/.execution/pr-description.md`) and ask the user to approve the `execution` phase
+3. Show the merge title and summary generated from the spec chain
+   (`.specs/<feature>/.execution/merge-summary.md`) and ask the user to approve the `execution` phase
    (`spec_approve`).
-4. Offer exactly three options: **1. merge into the base branch locally · 2. push and open a Pull Request
-   (with that description) · 3. keep the branch as-is.** Execute only the one the user picks; merging and
-   pushing are theirs to confirm. After merging locally, run the suite again on the result.
-5. Clean up: delete `.specs/<feature>/.execution/` once merged or the PR is open; the roadmap already
+4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the
+   summary as the commit message) **· 2. keep the branch as-is.** Integration is local by design: pull requests and
+   CI are not part of this workflow (they cost money and aren't needed). Execute only
+   the option the user picks; after merging, run the full suite again on the result. Pushing the merged
+   base branch is a separate step the user must approve.
+5. Clean up: delete `.specs/<feature>/.execution/` once merged; the roadmap already
    shows the feature at 100%.
 
 Respond in the user's language (EN/PT/ES).

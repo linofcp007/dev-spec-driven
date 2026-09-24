@@ -34,7 +34,7 @@ project-root/
 
 `.specs/<feature>/.state.json` records the feature's language and phase approvals (with a content
 fingerprint per approved artifact). `.specs/<feature>/.execution/` is the self-ignoring workspace of
-subagent-driven execution (briefs, reports, ledger) and of `spec_finish` (`pr-description.md`).
+subagent-driven execution (briefs, reports, ledger) and of `spec_finish` (`merge-summary.md`).
 Verification evidence recorded by `spec_complete_task` lives in `.state.json → evidence[<task>]`.
 
 ## Roadmap generation
@@ -84,10 +84,10 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
 | `/coverage` | brownfield | Spec coverage % of existing code (uses `spec_coverage`) |
 | `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → failing regression test → fix → verify (uses `spec_create {kind:"bugfix"}`) |
-| `/spec-finish` | close | Blockers + fresh checks + a PR description from the spec chain; then merge / PR / keep (uses `spec_finish`) |
+| `/spec-finish` | close | Blockers + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
 | `/spec-review-feedback` | support | Classify review comments against the spec: fix AC violations, route spec changes, push back on out-of-scope |
 | `/spec-commit` | support | Conventional commits referencing spec + tests + evals |
-| `/prReview` | support | Track-aware PR review against the full chain |
+| `/prReview` | support | Track-aware local pre-merge review against the full chain |
 | `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
 | `/migrateModel` | support | (+ai) eval-gated model migration |
 | `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |

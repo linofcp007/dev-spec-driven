@@ -220,10 +220,10 @@ load-bearing findings go to the human.
 
 Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
 fails, open tasks, tasks without evidence, pending approvals), the track-gated checks to run fresh (full
-suite, load test, observability, cost/safety) and writes a PR description built from the spec chain to
-`.execution/pr-description.md`. **Collect every `Ruling:` line from the ledger into your final message**
+suite, load test, observability, cost/safety) and writes a merge summary built from the spec chain to
+`.execution/merge-summary.md`. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
-(`spec_approve`) and to choose: merge locally, open a PR, or keep the branch. When done, delete
+(`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history is the record now.
 
 ## Model selection

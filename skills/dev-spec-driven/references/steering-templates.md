@@ -359,5 +359,5 @@ Features projecting > $0.10/user/month additional cost need explicit approval be
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
 4. **Quarterly:** review with the team. Targets shift, SLAs tighten, costs drift, models change.
-5. **In code review:** a PR that contradicts a steering file (new service without `cost.md` update,
+5. **In code review:** a change that contradicts a steering file (new service without `cost.md` update,
    new endpoint without observability, prompt change without eval) is blocked.

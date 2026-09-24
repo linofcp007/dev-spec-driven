@@ -67,7 +67,7 @@ You don't need Claude to test the server — run the bundled smoke test:
 node "$plugin\mcp\test.js"
 ```
 
-Expected tail: `180 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `53 passed, 0 failed`.)
+Expected tail: `181 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `53 passed, 0 failed`.)
 
 To watch the raw protocol, you can pipe a request in by hand:
 

@@ -196,7 +196,7 @@ function main() {
     }
 
     case "finish": {
-      // dev-spec finish <feature> [--write] — readiness report + PR description from the spec chain
+      // dev-spec finish <feature> [--write] — readiness report + merge summary from the spec chain (no PRs)
       if (!pos[0]) die("usage: dev-spec finish <feature> [--write]");
       const r = spec.finishFeature(projectDir, pos[0], { write: !!flags.write });
       if (!r.ok) die(r.error);
@@ -205,8 +205,8 @@ function main() {
         console.log(r.message);
         r.blockers.forEach((b) => console.log("  ✗ " + b));
         console.log("\n" + r.checks.map((c) => "  [ ] " + c).join("\n"));
-        if (r.wrote) console.log("\nPR description → " + r.paths.pr);
-        else console.log("\n# " + r.prTitle + "\n\n" + r.prBody);
+        if (r.wrote) console.log("\nMerge summary → " + r.paths.summary);
+        else console.log("\n# " + r.mergeTitle + "\n\n" + r.mergeSummary);
       });
     }
 
@@ -419,7 +419,7 @@ function helpText() {
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
   done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records
                                   the evidence (a failure leaves it open); or --evidence "…" [--exit N] [--cmd "…"]
-  finish <feature> [--write]      Readiness report + PR description from the spec chain (exit 1 if not ready)
+  finish <feature> [--write]      Readiness report + merge summary from the spec chain (exit 1 if not ready)
   approve <feature> <phase>       Record a phase approval (.state.json)
   add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle

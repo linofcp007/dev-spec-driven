@@ -1778,7 +1778,7 @@ const MSG = {
       needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
     },
     finish: {
-      ready: (slug) => `'${slug}' is ready to finish — confirm the checks below, then merge, open a PR or keep the branch.`,
+      ready: (slug) => `'${slug}' is ready to finish — confirm the checks below, then merge locally or keep the branch.`,
       notReady: (slug) => `'${slug}' is not ready to finish:`,
       doctor: (ids) => `doctor has blocking checks: ${ids}`,
       open: (list) => `open tasks: ${list}`,
@@ -1947,7 +1947,7 @@ const MSG = {
       needsExit: "Uma evidência que indica um comando precisa do exit code — ou dá só um resumo, para uma verificação manual.",
     },
     finish: {
-      ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge, abre um PR ou mantém o branch.`,
+      ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge local ou mantém o branch.`,
       notReady: (slug) => `'${slug}' ainda não está pronta para fechar:`,
       doctor: (ids) => `o doctor tem verificações bloqueantes: ${ids}`,
       open: (list) => `tarefas por fazer: ${list}`,
@@ -2122,7 +2122,7 @@ const MSG = {
       needsExit: "Una evidencia que indica un comando necesita su exit code — o da solo un resumen, para una verificación manual.",
     },
     finish: {
-      ready: (slug) => `'${slug}' está lista para cerrar — confirma las verificaciones de abajo y luego haz merge, abre un PR o mantén la rama.`,
+      ready: (slug) => `'${slug}' está lista para cerrar — confirma las verificaciones de abajo y luego haz merge local o mantén la rama.`,
       notReady: (slug) => `'${slug}' aún no está lista para cerrar:`,
       doctor: (ids) => `el doctor tiene verificaciones bloqueantes: ${ids}`,
       open: (list) => `tareas pendientes: ${list}`,

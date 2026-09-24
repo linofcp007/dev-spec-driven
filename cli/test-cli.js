@@ -140,7 +140,7 @@ ok(/parallel batch: #3 \[src\/a\.js\]\s+#4 \[src\/b\.js\]/.test(run(["next", "pa
 const bfx = run(["bugfix", "Login Loop", "--summary", "bounce to /login", "--project", vp]);
 ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-loop", "bug.md")), "bugfix scaffolds the systematic-debugging flow");
 const fin = run(["finish", "login-loop", "--project", vp]);
-ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the PR draft from the spec");
+ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
 
 // unknown command errors
 ok(run(["wat"]).code === 1, "unknown command exits non-zero");

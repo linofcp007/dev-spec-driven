@@ -105,7 +105,7 @@ hand-rolled edits for the structural steps:
 | `spec_next_task` | Get the next unchecked task (`batch:true` → + the `[P]` tasks that can run beside it) |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved to spec text, design context, DoD); `write:true` → `.specs/<feature>/.execution/` for subagent execution |
 | `spec_complete_task` | Mark task N done in `tasks.md`, with `evidence` (command, exit code, summary) — a failed run refuses the tick |
-| `spec_finish` | Close a feature: blockers + fresh checks to run + a PR description generated from the spec chain |
+| `spec_finish` | Close a feature: blockers + fresh checks to run + a merge summary generated from the spec chain |
 | `spec_next_action` | "You are here → do this next" + artifacts changed since approval |
 | `spec_add_track` / `spec_feature` | Escalate a feature to a new track (additive) / remove · archive · rename it |
 | `ears_validate` | Lint requirements for SHALL, stable IDs, and vague words |
@@ -443,9 +443,9 @@ question the design. Full flow: `references/bugfix.md`.
 ### Finishing a feature (`/spec-finish`)
 `spec_finish` reports what still blocks (doctor fails, open tasks, tasks without evidence, pending
 approvals), lists the checks to run fresh (full suite; +saas load test + observability; +ai cost + safety;
-bugfix: no longer reproduces) and generates the PR title and description **from the spec chain** (ACs,
-tasks with their evidence, tests, root cause/fix). Then the user picks: merge locally, open a PR, or keep
-the branch — never merge or push on your own.
+bugfix: no longer reproduces) and generates the merge title and summary **from the spec chain** (ACs,
+tasks with their evidence, tests, root cause/fix). Then the user picks: merge locally or keep the branch —
+no pull requests, no CI (local by design); never merge or push on your own.
 
 ### Review feedback (`/spec-review-feedback`)
 Evaluate every review comment against the spec before touching code: an AC violation gets fixed; a spec

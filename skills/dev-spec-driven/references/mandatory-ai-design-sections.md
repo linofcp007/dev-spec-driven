@@ -249,7 +249,7 @@ Every production quality issue becomes a case. Examples from early testing:
 - Regression set: 100%
 
 ### Frequency
-- Every PR that touches prompts or model config: full eval run, posted in PR comment
+- Every change that touches prompts or model config: full eval run locally before merging, scores in the merge summary
 - Weekly: full eval run on main, tracked over time in dashboard
 - Monthly: 10 random production samples manually reviewed by team
 
@@ -278,7 +278,7 @@ Layered defense:
 ### Jailbreak resistance
 Adversarial set includes documented jailbreak patterns (role-playing as "unrestricted
 AI", encoding tricks, multi-turn context stuffing). Current baseline: 100% resistance on
-test set. CI gate: any new jailbreak pattern that succeeds goes into the adversarial
+test set. Local gate: any new jailbreak pattern that succeeds goes into the adversarial
 set and must be fixed.
 
 ### PII handling
@@ -349,7 +349,7 @@ after 7 days. Access restricted to on-call engineers.
 - `model_ttft_seconds{feature, model}` — histogram
 - `model_tokens_total{feature, direction}` — counter
 - `model_cost_dollars_total{feature}` — counter
-- `eval_score{set, metric}` — gauge, updated by nightly eval run
+- `eval_score{set, metric}` — gauge, updated by each full eval run
 - `rag_retrieval_relevance_score{}` — histogram, measured per query
 - `refusal_total{feature, reason}` — counter
 
@@ -425,7 +425,7 @@ When v2 lands, this section becomes required content.
 - Circuit breaker trip on cost threshold
 - PII redaction in log sampling
 
-### Eval harness (runs nightly + on every prompt PR)
+### Eval harness (runs locally before every prompt change is merged + weekly on main)
 See `eval-plan.md` in this spec directory for detail.
 
 ### Load test

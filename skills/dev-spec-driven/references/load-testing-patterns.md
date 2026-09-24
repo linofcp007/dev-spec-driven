@@ -253,10 +253,10 @@ you have 1.6× headroom — thin. Either scale out or optimize.
 
 ---
 
-## Running Load Tests in CI
+## When to run load tests (locally — no CI)
 
-Full load tests don't belong in PR CI (too slow, too expensive). But **smoke load tests**
-do: a 2-minute steady-state run against staging that verifies P95 hasn't regressed.
+A **smoke load test** (a 2-minute steady-state run against staging that verifies P95 hasn't regressed)
+before merging any hot-path change; the full suite on the occasions below. Both run from your machine.
 
 Run full load suite:
 - **Before any major release**

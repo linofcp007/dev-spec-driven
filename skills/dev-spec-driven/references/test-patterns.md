@@ -214,7 +214,7 @@ The first is a specification. The second is broken infrastructure.
 | Testing private methods directly | Couples test to implementation | Test through the public API; if something needs its own tests, extract it |
 | Shared mutable state between tests | Flaky, order-dependent | Reset state in `beforeEach`, or use fresh instances |
 | `sleep(100)` for async waits | Flaky, slow | Use proper waiters (`waitFor`, `await until(...)`) |
-| Snapshot tests for complex objects without review | Rot silently, anyone can update with `-u` | Use for stable, small outputs only; require a human review in the PR template |
+| Snapshot tests for complex objects without review | Rot silently, anyone can update with `-u` | Use for stable, small outputs only; require a human review before merging |
 | Multiple unrelated assertions | First failure masks the rest | Split into separate tests |
 | Tests that duplicate the implementation | Change with the impl, prove nothing | Test observable behaviour, not the algorithm |
 | `expect(something).toBeTruthy()` | Hides the real expectation | Assert the specific value |

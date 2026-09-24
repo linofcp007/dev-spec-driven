@@ -3,6 +3,18 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.12.1]
+
+### Changed
+- **No pull requests, no CI — anywhere in the workflow.** Before, `/spec-finish` offered to "push and open a
+  Pull Request" and several references recommended running evals or load tests "in CI" / "on every PR".
+  Integration is now **local only**: `/spec-finish` offers *merge locally* or *keep the branch*, and
+  the generated text is a **merge summary** for the merge commit message. `spec_finish` returns
+  `mergeTitle` / `mergeSummary` / `paths.summary` (`.execution/merge-summary.md`), replacing
+  `prTitle` / `prBody` / `paths.pr` from 1.12.0. Eval, load-test and prompt-review guidance now
+  describes a local merge gate. A new test fails if any command, skill, agent or reference text steers
+  toward PRs or CI.
+
 ## [1.12.0]
 
 More ideas from [obra/superpowers](https://github.com/obra/superpowers) (MIT), rebuilt on the spec engine

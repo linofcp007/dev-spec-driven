@@ -5,8 +5,8 @@ Context for anyone (human or Claude) working on this plugin. Read this before ch
 ## What this is
 A Claude Code **plugin** that unifies four spec-driven skills into one **track-based** skill, plus
 a bundled **local, zero-dependency MCP server**. Hard constraints set by the owner:
-- **No GitHub Actions / no paid CI.** All automation is local (hooks + the MCP server). Never add a
-  `.github/workflows/` for this project.
+- **No GitHub Actions / no paid CI / no pull requests.** All automation is local (hooks + the MCP
+  server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`,
   `readline`, `child_process`, built-in `fetch`). No `npm install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
@@ -239,7 +239,7 @@ the engine never dispatches anything (keeps it cross-tool). Adapted from obra/su
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(180 assertions, incl. a PT and an ES end-to-end scaffold + per-feature lang override and one regression per
+(181 assertions, incl. a PT and an ES end-to-end scaffold + per-feature lang override and one regression per
 finding of the v1.11 full review and final review; `node cli/test-cli.js` adds 53 for the CLI). The harness fails (exit 1) if the
 server dies or stops answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free.
@@ -255,7 +255,10 @@ it dependency-free.
 - **`kind: "bugfix"`** is stored in `.state.json`; `createFeature` scaffolds `bug.md` +
   bug requirements/test plan/tasks (always +tdd), `specDoctor` swaps the design checks for
   `reproduction` (warn) and `root-cause` (**fail** until filled — the iron law).
-- **`spec_finish`** builds the PR body from the spec chain; it never merges, pushes or approves.
+- **`spec_finish`** builds a merge title + summary (`mergeTitle`/`mergeSummary`, `.execution/merge-summary.md`)
+  from the spec chain; it never merges, pushes or approves. **No PRs:** the owner's cost rule extends to
+  pull requests — the plugin integrates by local merge only and must never steer users to open a PR or
+  run CI (a test asserts no command/skill/agent text does).
 - **Global Constraints** heading synonyms: `RE_GLOBAL_CONSTRAINTS` (EN/PT/ES); placeholder bullets are
   skipped when inlined into briefs.
 - **Plugin evals** (`evals/<case>/prompt.md` + `graders/*.md`) follow the `claude plugin eval`

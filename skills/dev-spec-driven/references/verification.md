@@ -48,5 +48,5 @@ BEFORE claiming any status:
 ## Red flags — stop and run the command
 
 "should", "probably", "seems to", "looks correct" · satisfaction before running anything ("Done!",
-"Perfect!") · about to commit / push / open a PR without a fresh run · trusting a report you didn't check ·
+"Perfect!") · about to commit / merge / push without a fresh run · trusting a report you didn't check ·
 "just this once" · being tired and wanting it over.

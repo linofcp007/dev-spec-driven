@@ -18,7 +18,7 @@ Bug: $ARGUMENTS
 5. **Failing regression test** (T-01) — red for the right reason, output pasted.
 6. **Fix the cause** (one change), run the suite, record the evidence:
    `spec_complete_task {…, evidence}` / `dev-spec done <feature> 4 --run`.
-7. Close with `/spec-finish` (the PR description carries the root cause and the fix).
+7. Close with `/spec-finish` (the merge summary carries the root cause and the fix).
 
 After three failed fixes, stop and discuss the design with the user. If the fix needs a design decision or
 several stories, it's a feature: say so and move it to `/spec`. Respond in the user's language (EN/PT/ES).

@@ -3,7 +3,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node: >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![dependencies: 0](https://img.shields.io/badge/dependencies-0-success.svg)](./package.json)
-[![tests: 233 passing](https://img.shields.io/badge/tests-233%20passing-success.svg)](./mcp/test.js)
+[![tests: 234 passing](https://img.shields.io/badge/tests-234%20passing-success.svg)](./mcp/test.js)
 [![CI: none (local only)](https://img.shields.io/badge/CI-none%20·%20local%20only-informational.svg)](#why-no-github-actions)
 
 **One spec-driven development skill that adapts to the project — trilingual (EN · PT · ES).**
@@ -53,7 +53,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_init` / `spec_create` | Scaffold steering + a feature folder for the active tracks |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, section completeness |
 | `spec_next_task` / `spec_complete_task` | Drive execution and tick off tasks — with recorded **verification evidence** (a failed run refuses the tick); `batch` for parallel `[P]` tasks |
-| `spec_finish` | Close a feature: blockers, fresh checks to run, and a PR description generated from the spec chain |
+| `spec_finish` | Close a feature: blockers, fresh checks to run, and a merge summary generated from the spec chain |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); flags phantom refs (typos) |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS + trace + sections + steering) |
@@ -83,8 +83,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   `spec_finish` keep flagging tasks ticked without evidence. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** (the doctor
   blocks the fix until it's written) → failing regression test → fix → verify.
-- **`/spec-finish`** — what still blocks, the checks to run fresh, and a PR description built from the
-  spec (ACs, tasks with their evidence, root cause/fix); then merge, open a PR or keep the branch.
+- **`/spec-finish`** — what still blocks, the checks to run fresh, and a merge summary built from the
+  spec (ACs, tasks with their evidence, root cause/fix); then merge locally or keep the branch — no
+  pull requests, no CI.
 - **`/spec-review-feedback`** — review comments classified against the spec: fix AC violations, route
   spec changes back to their phase, push back on out-of-scope asks.
 - **`/spec-doctor --deep`** — a `spec-critic` agent reviews the *meaning* of a spec at its gate.
@@ -140,7 +141,7 @@ run in your own environment when you choose, not on a paid CI runner.
 ### Develop / test
 
 ```bash
-node mcp/test.js          # smoke-test the MCP server end-to-end (180 assertions)
+node mcp/test.js          # smoke-test the MCP server end-to-end (181 assertions)
 node cli/test-cli.js      # smoke-test the universal CLI (53 assertions)
 ```
 
@@ -229,7 +230,7 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 ### Desenvolver / testar
 
 ```bash
-node mcp/test.js          # testa o servidor MCP de ponta a ponta (180 asserções)
+node mcp/test.js          # testa o servidor MCP de ponta a ponta (181 asserções)
 ```
 
 > Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
@@ -317,7 +318,7 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 ### Desarrollar / probar
 
 ```bash
-node mcp/test.js          # prueba el servidor MCP de extremo a extremo (180 aserciones)
+node mcp/test.js          # prueba el servidor MCP de extremo a extremo (181 aserciones)
 ```
 
 > Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
@@ -344,7 +345,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, roadmap, scan)
 │   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — 180 assertions)
+│   └── test.js                       ← smoke test (node mcp/test.js — 181 assertions)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules

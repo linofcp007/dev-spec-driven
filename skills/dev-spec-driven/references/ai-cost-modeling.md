@@ -108,7 +108,7 @@ and they pay $Y/month, unit economics are fragile when $X creeps up.
 
 ### Prompt Creep
 - System prompt grows 100 tokens → permanent cost increase per call forever
-- Solution: prompts in versioned files, diffs tracked, eval + cost impact on every PR
+- Solution: prompts in versioned files, diffs tracked, eval + cost impact checked locally before each prompt change is merged
 
 ### Context Window Expansion
 - Better retrieval brings top-10 instead of top-5 → 2× input cost

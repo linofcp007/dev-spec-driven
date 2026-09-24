@@ -20,7 +20,7 @@ that makes the error go away without explaining it is a new bug waiting.
    inputs, versions); don't guess. Check what changed recently (`git log`, dependency bumps, config).
    Write the steps in `bug.md → Reproduction`.
 2. **Root cause** (task 2). Trace the bad value backwards to where it originates. In a multi-component
-   path (API → service → DB, CI → build → deploy), instrument each boundary once and run it, so the
+   path (API → service → DB, build → package → deploy), instrument each boundary once and run it, so the
    evidence shows WHERE it breaks before you theorise WHY. Compare with a working example of the same
    pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
    test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`.
@@ -32,7 +32,7 @@ that makes the error go away without explaining it is a new bug waiting.
    defence in depth: should the invalid value also be rejected at the boundary where it entered?
 
 **Checkpoint:** the reproduction steps no longer reproduce the bug and the full suite is green. Close
-with `/spec-finish` — the PR description carries the root cause and the fix from `bug.md`.
+with `/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
 
 ## When a fix doesn't work
 
