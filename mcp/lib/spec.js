@@ -5367,7 +5367,9 @@ function nextAction(projectDir, name) {
   if (pending) {
     open = gateArtifacts(dir, tracks, kind, pending).map((file) => artifactReport(dir, file, tracks)).find((r) => r.state !== "filled") || null;
     if (!open) {
-      const g = approvalChecks(projectDir, slug, dir, pending, tracks, kind, lng);
+      // doctor already ran this gate's own checks when it is its first pending gate (nextGate) — the tests gate scans the
+      // test code, so it is never run twice.
+      const g = doc.nextGate && doc.nextGate.phase === pending ? { checks: doc.nextGate.failing } : approvalChecks(projectDir, slug, dir, pending, tracks, kind, lng);
       if (g.checks.length) refused = g.checks;
     }
   }

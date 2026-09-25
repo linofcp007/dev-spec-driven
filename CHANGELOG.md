@@ -421,7 +421,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 740 assertions (was 181), `node cli/test-cli.js` 249 (was 53); the tool count is
+- `node mcp/test.js` 753 assertions (was 181), `node cli/test-cli.js` 252 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

@@ -5891,17 +5891,23 @@ function endRun() {
     // raw EPERM (archive / rename / restore / remove share it).
     const inUseFLk = S.createFeature(rmPLk, "Held open", ["core"]);
     const realRenLk = fs.renameSync;
-    let renCallsLk = 0;
-    fs.renameSync = function (a, b) { if (path.resolve(String(a)) === path.resolve(inUseFLk.dir)) { renCallsLk++; const e = new Error("EBUSY: resource busy or locked, rename"); e.code = "EBUSY"; throw e; } return realRenLk.call(fs, a, b); };
-    let archLk, rmBusyLk;
+    let renCallsLk = 0, failFor = Infinity;
+    fs.renameSync = function (a, b) {
+      if (path.resolve(String(a)) === path.resolve(inUseFLk.dir) && renCallsLk++ < failFor) { const e = new Error("EBUSY: resource busy or locked, rename"); e.code = "EBUSY"; throw e; }
+      return realRenLk.call(fs, a, b);
+    };
+    let archLk, rmBusyLk, archCallsLk;
     try {
-      archLk = S.manageFeature(rmPLk, "archive", "held-open");
+      archLk = S.manageFeature(rmPLk, "archive", "held-open"); // held for good: every retry fails
+      archCallsLk = renCallsLk;
+      renCallsLk = 0; failFor = 2; // a brief hold (a scanner): the retried rename then succeeds (Windows only retries)
       rmBusyLk = S.manageFeature(rmPLk, "remove", "held-open", null, { confirm: true });
     } finally { fs.renameSync = realRenLk; }
+    const win = process.platform === "win32";
     ok(archLk.ok === false && archLk.busy && archLk.inUse && /^The folder \.specs\/held-open is in use by another program/.test(archLk.error) && !/EBUSY|EPERM/.test(archLk.error) &&
-      rmBusyLk.ok === false && rmBusyLk.inUse && fs.existsSync(inUseFLk.dir) && renCallsLk === (process.platform === "win32" ? 20 : 2) &&
+      archCallsLk === (win ? 10 : 1) && (win ? rmBusyLk.ok === true && !fs.existsSync(inUseFLk.dir) : rmBusyLk.ok === false && rmBusyLk.inUse && fs.existsSync(inUseFLk.dir)) &&
       /A pasta \.specs\/x está a ser usada por outro programa/.test(S.msg("pt").err.folderInUse(".specs/x")) && /La carpeta \.specs\/x está en uso/.test(S.msg("es").err.folderInUse(".specs/x")),
-      "a folder held open by another program: archive / remove retry the rename (Windows), then answer a localized 'folder in use' (EN/PT/ES) — nothing moved or deleted, never a raw EBUSY/EPERM (got " + JSON.stringify([archLk.error, renCallsLk]) + ")");
+      "a folder held open by another program: the rename is retried (Windows — a brief hold then succeeds), a lasting one answers a localized 'folder in use' (EN/PT/ES) with nothing moved, never a raw EBUSY/EPERM (got " + JSON.stringify([archLk.error, archCallsLk, rmBusyLk.ok, rmBusyLk.error]) + ")");
     // L3 — the lock's note is written into place with the lock (no empty-lock window); a noteless lock older than a few
     // seconds (left by a killed process) is stale, a fresh one is still respected.
     const nlFLk = S.createFeature(rmPLk, "Noteless", ["core"]);
