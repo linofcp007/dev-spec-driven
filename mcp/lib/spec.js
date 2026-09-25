@@ -110,29 +110,89 @@ function sleepSync(ms) {
 // LOCK_WAIT_MS before answering a localized "busy" error. A lock left by a crashed process is reclaimed: its pid is
 // gone (same host), or it is older than LOCK_STALE_MS (LOCK_MAX_HOLD_MS while its holder still runs). Re-entrant in
 // one process. Where the lock can't be created at all (a read-only folder) the operation runs unlocked, as before.
+// Every acquisition writes a random `token` into the lock's note: a stale lock is removed only while the file there is
+// still the one judged stale (reclaimStaleLock), and a holder removes only the lock carrying its own token (releaseLock).
+// Both used to unlink whatever sat at the path: a waiter whose stale verdict came from a lock released a moment earlier
+// (a failed stat read as "stale", or a pid probe answering ESRCH for the holder that had just finished) deleted the NEXT
+// holder's fresh lock, two processes ran the read-modify-write at once, and ticks / evidence / backlog items were lost
+// while every call answered ok.
 const LOCK_FILE = ".lock";
 const LOCK_WAIT_MS = 10000;
 const LOCK_STALE_MS = 2 * 60 * 1000;
 const LOCK_MAX_HOLD_MS = 10 * 60 * 1000;
-const HELD_LOCKS = new Set();
-function lockIsStale(lock) {
-  let st;
-  try { st = fs.statSync(lock); } catch { return true; } // gone meanwhile: just retry the create
-  const age = Date.now() - st.mtimeMs;
+const LOCK_RECLAIM_SUFFIX = ".reclaim"; // `<lock>.reclaim`: held (O_EXCL) for the few microseconds of one reclaim
+const LOCK_RECLAIM_STALE_MS = 30 * 1000; // a reclaim guard this old was left by a process that died holding it
+const HELD_LOCKS = new Map(); // lock key → this process's acquisition { token, ino, mtimeMs } (re-entrant, and what release checks)
+// The lock file as it is now: its note (raw text, null when it can't be read — a directory, a file being deleted) and
+// the stat that identifies it. null: gone, or it changed while being read (the caller just retries).
+function lockSnapshot(lock) {
+  let st, raw = null, st2;
+  try { st = fs.statSync(lock); } catch { return null; }
+  try { raw = fs.readFileSync(lock, "utf8"); } catch { /* a directory, being deleted, not ours */ }
+  try { st2 = fs.statSync(lock); } catch { return null; }
+  if (st2.ino !== st.ino || st2.mtimeMs !== st.mtimeMs || st2.size !== st.size) return null; // replaced / rewritten meanwhile
+  return { raw, ino: st.ino, mtimeMs: st.mtimeMs, size: st.size };
+}
+const sameLockSnapshot = (a, b) => !!a && !!b && a.raw === b.raw && a.ino === b.ino && a.mtimeMs === b.mtimeMs && a.size === b.size;
+// → the snapshot of a lock judged stale, or null: held by a live process, still being written — or gone / unreadable
+// meanwhile, which is never "stale" (the lock was just released, or Windows is still deleting it): the caller retries
+// the create instead of unlinking a path another process may have locked in between.
+function staleLock(lock) {
+  const snap = lockSnapshot(lock);
+  if (!snap) return null;
+  const age = Date.now() - snap.mtimeMs;
   let info = null;
-  try { info = JSON.parse(fs.readFileSync(lock, "utf8")); } catch { /* being written, or not ours */ }
+  try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
+  let stale = age > LOCK_STALE_MS;
   if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
     try {
       process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
-      return age > LOCK_MAX_HOLD_MS;
+      stale = age > LOCK_MAX_HOLD_MS;
     } catch (e) {
-      if (e.code === "ESRCH") return true; // its holder is gone
+      if (e.code === "ESRCH") stale = true; // its holder is gone (this very note: reclaimStaleLock re-checks it)
     }
   }
-  return age > LOCK_STALE_MS;
+  return stale ? snap : null;
 }
-// → fn()'s result, or opts.onBusy() when the lock stayed held for opts.waitMs (default: DEV_SPEC_LOCK_WAIT_MS from the
-// environment when it is an integer ≥ 0 — a slow network file system may want more — else LOCK_WAIT_MS).
+// Remove the stale lock `snap` describes — atomically with respect to every other waiter: under `<lock>.reclaim` (O_EXCL),
+// and only while the file at the path is still that same lock (note + stat). → "removed" (retry the create at once) |
+// "changed" (another process took it over or reclaimed it first) | "busy" (another waiter is reclaiming it) | "failed"
+// (it can't be removed: a handle without delete sharing, a read-only folder, a directory named .lock) — all but
+// "removed" wait like a held lock, so an undeletable one ends in the busy answer at the deadline, never a spin.
+function reclaimStaleLock(lock, snap) {
+  const guard = lock + LOCK_RECLAIM_SUFFIX;
+  let gfd;
+  try {
+    gfd = fs.openSync(guard, "wx");
+  } catch (e) {
+    if (e.code !== "EEXIST") return "failed";
+    // A guard is held for microseconds: an old one was left by a process that died holding it — cleared for the next try.
+    try { if (Date.now() - fs.statSync(guard).mtimeMs > LOCK_RECLAIM_STALE_MS) fs.unlinkSync(guard); } catch { /* gone, or not removable */ }
+    return "busy";
+  }
+  try {
+    try { fs.closeSync(gfd); } catch { /* ignore */ }
+    if (!sameLockSnapshot(lockSnapshot(lock), snap)) return "changed";
+    try { fs.unlinkSync(lock); return "removed"; } catch { return "failed"; }
+  } finally {
+    try { fs.unlinkSync(guard); } catch { /* ignore */ }
+  }
+}
+// Remove `lock` only when it is this acquisition's own (`mine`: its note's token — or, when the note could not be
+// written, the file's identity): one taken over meanwhile (reclaimed after LOCK_MAX_HOLD_MS, or created at a folder's
+// old path after the folder moved) belongs to its new holder.
+function releaseLock(lock, mine) {
+  if (!mine) return;
+  const now = lockSnapshot(lock);
+  if (!now) return;
+  let info = null;
+  try { info = JSON.parse(now.raw); } catch { /* no note */ }
+  const own = mine.token ? isObj(info) && info.token === mine.token : now.size === 0 && now.ino === mine.ino && now.mtimeMs === mine.mtimeMs;
+  if (own) try { fs.unlinkSync(lock); } catch { /* ignore */ }
+}
+// → fn()'s result, or opts.onBusy({ stuck }) when the lock stayed held for opts.waitMs (default: DEV_SPEC_LOCK_WAIT_MS from
+// the environment when it is an integer ≥ 0 — a slow network file system may want more — else LOCK_WAIT_MS). `stuck`:
+// the lock was stale but could not be removed (the busy error then says so — delete it by hand).
 function lockWaitMs() {
   const v = String(process.env.DEV_SPEC_LOCK_WAIT_MS || "").trim();
   return /^\d{1,7}$/.test(v) ? Number(v) : LOCK_WAIT_MS;
@@ -148,31 +208,40 @@ function withLockFile(lock, fn, opts = {}) {
   let fd = null;
   let delay = 5;
   let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
+  let stuck = false; // the last stale lock seen could not be removed
   while (fd === null) {
     try {
       fd = fs.openSync(lock, "wx");
     } catch (e) {
       if (e.code === "EEXIST") {
         denied = 0;
-        if (lockIsStale(lock)) {
-          try { fs.unlinkSync(lock); } catch { /* another waiter reclaimed it first */ }
-          continue;
-        }
+        const snap = staleLock(lock);
+        if (snap) {
+          const r = reclaimStaleLock(lock, snap);
+          if (r === "removed") { stuck = false; continue; } // retry the create at once
+          stuck = r === "failed";
+        } else stuck = false;
+        // Otherwise it waits like a held lock — a stale lock that can't be removed included: the deadline and the sleep
+        // below always run (a `continue` here spun at 100% CPU forever on an undeletable one, freezing the MCP server).
       } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
         /* transient on Windows: retry below */
       } else {
         return fn(); // no lock possible here (missing or read-only folder, odd file system): unlocked, as before
       }
-      if (Date.now() >= deadline) return opts.onBusy ? opts.onBusy() : { ok: false, busy: true };
+      if (Date.now() >= deadline) return opts.onBusy ? opts.onBusy({ stuck }) : { ok: false, busy: true, ...(stuck ? { stuck: true } : {}) };
       sleepSync(delay);
       delay = Math.min(delay * 2, 50);
     }
   }
+  const mine = { token: require("crypto").randomBytes(12).toString("hex"), ino: null, mtimeMs: null };
   try {
-    fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString() }));
-  } catch { /* the lock holds without its note */ }
+    fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token }));
+  } catch {
+    mine.token = null; // the lock holds without its note: release recognises it by its identity instead
+  }
+  try { const st = fs.fstatSync(fd); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
   try { fs.closeSync(fd); } catch { /* ignore */ }
-  HELD_LOCKS.add(key);
+  HELD_LOCKS.set(key, mine);
   try {
     // Anything read before the lock may predate another process's write: the whole read cache (a feature's files), or
     // only what opts.forget names (the roadmap lock: roadmap.json).
@@ -180,7 +249,7 @@ function withLockFile(lock, fn, opts = {}) {
     return fn();
   } finally {
     HELD_LOCKS.delete(key);
-    try { fs.unlinkSync(lock); } catch { /* ignore */ }
+    releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
   }
 }
 // A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
@@ -192,12 +261,17 @@ function featureLocked(fn, when) {
     if (when && !when(args)) return fn.apply(this, args);
     const f = existingFeature(projectDir, name);
     if (!f.ok) return fn.apply(this, args);
-    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: () => featureBusyResult(projectDir, f.slug) });
+    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b) });
   };
   Object.defineProperty(run, "name", { value: fn.name });
   return run;
 }
-const featureBusyResult = (projectDir, slug, rel) => ({ ok: false, busy: true, error: errs(projectDir, slug).featureBusy(slug, rel) });
+// The localized busy answer; b.stuck (a stale lock that could not be removed) → says so and names the file to delete.
+const featureBusyResult = (projectDir, slug, rel, b) => {
+  const E = errs(projectDir, slug);
+  return b && b.stuck ? { ok: false, busy: true, stuck: true, error: E.lockStuck(rel || `.specs/${slug}/${LOCK_FILE}`) }
+    : { ok: false, busy: true, error: E.featureBusy(slug, rel) };
+};
 // A feature folder that moves or goes (rename / archive / restore / remove) under the lock its mutators hold: it waits for
 // a running tick, approval or track change to finish (or answers busy) instead of moving the folder away mid-write — the
 // writer's next write (writeFileAtomic → ensureDir) recreated a zombie .specs/<old>/ beside the moved spec, and progress
@@ -205,25 +279,20 @@ const featureBusyResult = (projectDir, slug, rel) => ({ ok: false, busy: true, e
 // once the whole operation is done (left there, it kept the renamed / archived feature "busy" for as long as its holder
 // ran). A folder is never moved while another process holds its lock.
 function withMoveLock(projectDir, dir, slug, rel, fn) {
+  const oldKey = readCacheKey(path.join(dir, LOCK_FILE));
   return withFeatureLock(dir, () => {
+    const mine = HELD_LOCKS.get(oldKey); // undefined when no lock could be taken here (run unlocked): nothing to release
     let moved = null;
     try {
       // Held at its new place from the move on (re-entrant there too, like the old one).
-      return fn((to) => { moved = to; HELD_LOCKS.add(readCacheKey(path.join(to, LOCK_FILE))); });
+      return fn((to) => { moved = to; if (mine) HELD_LOCKS.set(readCacheKey(path.join(to, LOCK_FILE)), mine); });
     } finally {
       if (moved) {
         HELD_LOCKS.delete(readCacheKey(path.join(moved, LOCK_FILE)));
-        releaseMovedLock(moved);
+        releaseLock(path.join(moved, LOCK_FILE), mine); // the lock this process carried there — only its own token
       }
     }
-  }, { onBusy: () => featureBusyResult(projectDir, slug, rel) });
-}
-// The lock this process carried into `dir` by moving its folder: removed — only when it is this process's own.
-function releaseMovedLock(dir) {
-  const lock = path.join(dir, LOCK_FILE);
-  let info = null;
-  try { info = JSON.parse(fs.readFileSync(lock, "utf8")); } catch { return; }
-  if (isObj(info) && info.pid === process.pid && info.host === require("os").hostname()) try { fs.unlinkSync(lock); } catch { /* ignore */ }
+  }, { onBusy: (b) => featureBusyResult(projectDir, slug, rel, b) });
 }
 // fs.renameSync of a folder, retried briefly on Windows: a scanner, an indexer or a lock waiter reading a file inside
 // answers EPERM / EACCES / EBUSY for a moment (writeFileAtomic's rule).
@@ -244,10 +313,13 @@ function renameDirSync(from, to) {
 // back: the last writer won, silently dropping the other's dependency (a blocked feature then read as ready), backlog item
 // or meta.guard while both answered ok. Lock order: a feature lock first, then this one — never the other way round.
 const ROADMAP_LOCK_FILE = ".roadmap.lock";
-const roadmapBusyResult = (projectDir) => ({ ok: false, busy: true, error: i18n.msg(projectLang(projectDir)).err.roadmapBusy });
+const roadmapBusyResult = (projectDir, b) => {
+  const E = i18n.msg(projectLang(projectDir)).err;
+  return b && b.stuck ? { ok: false, busy: true, stuck: true, error: E.lockStuck(".specs/" + ROADMAP_LOCK_FILE) } : { ok: false, busy: true, error: E.roadmapBusy };
+};
 function withRoadmapLock(projectDir, fn, onBusy) {
   return withLockFile(path.join(specsRoot(projectDir), ROADMAP_LOCK_FILE), fn,
-    { onBusy: onBusy || (() => roadmapBusyResult(projectDir)), forget: () => forgetCached(roadmapPath(projectDir)) });
+    { onBusy: onBusy || ((b) => roadmapBusyResult(projectDir, b)), forget: () => forgetCached(roadmapPath(projectDir)) });
 }
 
 // JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
@@ -1134,8 +1206,8 @@ function briefSteering(root, tracks, implementsList) {
   // the project → its project-relative path, outside → nothing); a folder also matches "dir/**".
   const pdir = path.dirname(path.resolve(root));
   const targets = (implementsList || []).map((r) => {
-    const p = implementsPath(String(r).trim().replace(/^`+|`+$/g, ""));
-    if (!path.isAbsolute(p)) return p.replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+    const p = implementsRel(r);
+    if (!path.isAbsolute(p)) return p;
     const abs = path.resolve(p);
     return abs !== pdir && isInsideDir(pdir, abs) ? toPosix(path.relative(pdir, abs)) : "";
   }).filter(Boolean);
@@ -1734,16 +1806,21 @@ function parallelBatch(tasksText, max, tracks) {
   const first = blocks[i0];
   const pick = (b) => ({ number: b.number, text: b.text, implements: taskMarkers(b).implements });
   const batch = [pick(first)];
-  const files = new Set(batch[0].implements);
-  if (!first.parallel || !files.size || isPromptTask(first, taskMarkers(first), tracks || [])) return batch;
+  // Compared as files (implementsKey: anchors, backticks, ./ and case where the file system folds it dropped) — the raw
+  // spellings `src/payment.js:10`, `src/payment.js#L50` and `./src/payment.js` sent three parallel implementers to one
+  // file. A folder overlaps every file under it.
+  const keys = (list) => list.map(implementsKey).filter(Boolean);
+  const files = keys(batch[0].implements);
+  const overlaps = (k) => files.some((f) => f === k || k.startsWith(f + "/") || f.startsWith(k + "/"));
+  if (!first.parallel || !files.length || isPromptTask(first, taskMarkers(first), tracks || [])) return batch;
   for (let i = i0 + 1; i < blocks.length && batch.length < cap; i++) {
     const b = blocks[i];
     if (b.done) continue;
     if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint) break;
     if (isPromptTask(b, taskMarkers(b), tracks || [])) break;
-    const imp = taskMarkers(b).implements;
-    if (!imp.length || imp.some((p) => files.has(p))) break;
-    imp.forEach((p) => files.add(p));
+    const imp = keys(taskMarkers(b).implements);
+    if (!imp.length || imp.some(overlaps)) break;
+    files.push(...imp);
     batch.push(pick(b));
   }
   return batch;
@@ -3275,7 +3352,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
 
   // Design sections that mention the task's IDs or files, plus the track sections its markers touch.
   const sections = designSections(readIfExists(path.join(dir, "design.md")) || "");
-  const needles = [...acIds, ...testIds, ...mk.implements, ...mk.implements.map((f) => path.basename(f)).filter((b) => b.length >= 5)];
+  // The files as the design spells them: `src/payment.js:10` / `#L10` / backticks never appear there (implementsRel, the
+  // way briefSteering reads them) — the raw spelling left the design section out.
+  const impFiles = mk.implements.map(implementsRel).filter(Boolean);
+  const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   const want = (s) => {
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
@@ -4260,7 +4340,7 @@ function metricsLines(r) {
 
 // Drop a feature slug from roadmap.json: its own entry and any dependsOn that referenced it.
 function pruneRoadmapRefs(projectDir, slug, renameTo) {
-  return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo), () => { throw new Error(roadmapBusyResult(projectDir).error); });
+  return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo), (b) => { throw new Error(roadmapBusyResult(projectDir, b).error); });
 }
 function pruneRoadmapRefsLocked(projectDir, slug, renameTo) {
   const rm = readRoadmap(projectDir);
@@ -4609,17 +4689,31 @@ function scaffoldTestPlan(dir, name, lng, tracks) {
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
 // tasks.md already holds it (its heading, in any language). Its _Requirements:_ cite the track's template ACs
-// (US-1.AC-6 / US-1.AC-9), which a feature escalated later may not define: keep the IDs requirements.md
-// has, else leave a placeholder — a phantom ID would read as a typo in trace_check.
+// (US-1.AC-5 / US-1.AC-6 for +saas, US-1.AC-7…9 for +ai): an ID is kept only when requirements.md defines it AS that
+// track's criterion (trackAcIds), else a placeholder. A feature escalated later numbers its own criteria: its US-1.AC-5
+// ("a coupon shows the discount line") is not tenant isolation — kept by number, the template's tenant-isolation /
+// load-test tasks "covered" it and trace_check passed with a real criterion no task implements. A phantom ID (one the
+// feature doesn't define) would read as a typo in trace_check.
 function trackTaskBlock(tr, tasksText, reqText, lng) {
   const T = i18n.msg(lng).tracks;
   if (!T.taskBlock(tr, 1) || trackTaskHeading(tr, tasksText)) return null;
   const start = Math.max(0, ...parseTasks(tasksText).map((t) => t.number)) + 1;
-  const known = requirementAcIds(reqText || "");
+  const known = trackAcIds(reqText || "", tr);
   return T.taskBlock(tr, start).replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
     const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => known.has(id));
     return "_Requirements: " + (keep.length ? keep.join(", ") : T.acPlaceholder(tr)) + "_";
   });
+}
+// The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
+// template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
+function trackAcIds(reqText, tr) {
+  const out = new Set();
+  const marker = TRACK_MARKER[tr];
+  if (!marker || !reqText) return out;
+  const inSection = inactiveMarkerLines(reqText, VALID_TRACKS.filter((t) => t !== tr)); // exactly that track's sections
+  const m = marker.toLowerCase();
+  for (const [id, e] of acIndex(reqText)) if (inSection.has(e.line - 1) || e.text.toLowerCase().includes(m)) out.add(id);
+  return out;
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
 const normTaskHeading = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -5035,7 +5129,9 @@ function nextAction(projectDir, name) {
   // checks of phases it hasn't reached ("Fix blocking checks (saas-sections, traceability)"):
   // (1) the first chain artifact still missing / a template → fill it; (2) an artifact changed since its approval →
   // re-review; (3) failing checks of the CURRENT phase (or an earlier one) → fix; (4) the first pending approval —
-  // or, when the approve gate would refuse it, what it fails on; (5) the next task; (6) all tasks done → spec_finish.
+  // or, when the approve gate would refuse it, what it fails on; (5) the next task; (6) all tasks done → a ticked task
+  // without passing evidence → verify it (spec_finish would refuse), else drift since a finish → decide, else
+  // spec_finish (again, when its baseline is stale) or finished.
   const open = chainArtifacts(dir, tracks, st.kind || "feature").map((a) => artifactReport(dir, a.file, tracks)).find((r) => r.state !== "filled");
   const cur = PHASE_INDEX[phase] || 0;
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && (CHECK_PHASE[c.id] || 0) <= cur) : [];
@@ -5093,28 +5189,48 @@ function nextAction(projectDir, name) {
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
       : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
-    const stale = step === "finish" ? staleFinish(projectDir, st, activeText || "") : null;
-    if (stale) {
-      // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
-      // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
-      // "finish"; staleBaseline says why.
-      staleBaseline = stale;
-      recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, featureLang(projectDir, slug)));
-    } else if (step === "finish" && isObj(st.finished) && isObj(st.finished.files)) {
-      // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again — a re-finish would
-      // silently replace a drifted baseline. Drift since then → decide (change-management §7); else the sign-off, if
-      // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
-      const root = path.resolve(projectDir);
-      const dr = baselineDrift(root, realRootOf(root), st.finished);
-      const day = typeof st.finished.at === "string" ? st.finished.at.slice(0, 10) : "?";
-      const total = Object.keys(st.finished.files).length;
-      finishedDrift = { finishedAt: typeof st.finished.at === "string" ? st.finished.at : null, files: total, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
-      if (dr.drifted) {
+    if (step === "finish") {
+      const lng = featureLang(projectDir, slug);
+      const stale = staleFinish(projectDir, st, activeText || "");
+      const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
+      // The recorded files are hashed whether or not the baseline is stale: a stale baseline (a change request, a
+      // re-approval, a new implementing file under a folder _Implements:_ names) still records them, and a re-finish would
+      // accept their drift. Skipping the hash when stale hid a changed file behind "finish it again" — adding one more file
+      // made the drift warning go away.
+      let dr = null;
+      if (fin) {
+        const root = path.resolve(projectDir);
+        dr = baselineDrift(root, realRootOf(root), fin);
+        finishedDrift = { finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
+      }
+      if (stale) staleBaseline = stale;
+      const day = fin && typeof fin.at === "string" ? fin.at.slice(0, 10) : "?";
+      // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
+      // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
+      // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
+      const vs = verificationStatus(projectDir, slug, dir);
+      if (vs.unverified.length) {
+        step = "verify";
+        const n = vs.unverified[0];
+        const blk = taskBlocks(activeText || "").find((b) => b.number === n && b.done);
+        const runnable = !!blk && taskMarkers(blk).verify.some((c) => !/^\[.*\]$/.test(c.trim())); // what `done --run` would run
+        recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
+      } else if (dr && dr.drifted) {
+        // Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it
+        // also needs finishing again, after that decision.
         step = "drift";
-        recommendation = nx.drifted(slug, day, dr.changed.length + dr.missing.length + dr.nowPresent.length, total, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
-      } else {
+        recommendation = nx.drifted(slug, day, dr.changed.length + dr.missing.length + dr.nowPresent.length, finishedDrift.files, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
+        if (stale) recommendation += " " + nx.driftedStale(staleFinishText(stale, lng));
+      } else if (stale) {
+        // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
+        // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
+        // "finish"; staleBaseline says why.
+        recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, lng));
+      } else if (fin) {
+        // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if
+        // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
         step = "finished";
-        recommendation = nx.finished(slug, day, total, !approvals.execution || executionSignOffStale(st));
+        recommendation = nx.finished(slug, day, finishedDrift.files, !approvals.execution || executionSignOffStale(st));
       }
     }
   }
@@ -6773,9 +6889,10 @@ function catalogData(projectDir) {
     });
     let fin = isObj(s.state.finished) && typeof s.state.finished.at === "string" ? s.state.finished.at : null;
     const arch = isObj(s.state.archived) && typeof s.state.archived.at === "string" ? s.state.archived.at : null;
-    // Finished = complete with a CURRENT finish baseline: one changed since (staleFinish, state only — this runs on every
-    // refresh) reads as complete until it is finished again.
-    if (fin && !s.archived && s.phase === "complete" && staleFinish(projectDir, s.state, "", { newFiles: false })) fin = null;
+    // Finished = complete with a CURRENT finish baseline and every tick verified: one changed since (staleFinish, state
+    // only — this runs on every refresh), or with a ticked task whose latest run failed / whose _Verify:_ never ran
+    // (verificationStatus — spec_finish refuses it), reads as complete until it is finished (verified) again.
+    if (fin && !s.archived && s.phase === "complete" && (staleFinish(projectDir, s.state, "", { newFiles: false }) || verificationStatus(projectDir, s.slug, s.dir).unverified.length)) fin = null;
     const status = s.archived ? "archived" : s.phase === "complete" ? (fin ? "finished" : "complete") : "active";
     const f = { feature: s.slug, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
     if (fin) f.finishedAt = fin;
@@ -7084,11 +7201,13 @@ function staleFinishText(stale, lang) {
   return parts.join("; ");
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
-// present since the finish baseline. Only the recorded files are hashed. "Finished" is the catalog's definition —
-// phase complete AND a CURRENT baseline: a baselined feature whose tasks are open again (append_tasks after finish) is
+// present since the finish baseline. Only the recorded files are hashed. "Finished" here is phase complete AND a
+// baseline (the catalog also needs it current and every tick verified): a baselined feature whose tasks are open again (append_tasks after finish) is
 // `reopened`, listed apart and not hashed until it is finished again; one whose tasks are done again but changed since
-// the finish (staleFinish) is `stale` — listed apart with why, not hashed (verdict `stale` unless something drifted or a
-// state file failed): finish it again. A state file that can't be read is an error (verdict `error` unless something
+// the finish (staleFinish) is `stale` — listed apart with why (verdict `stale` unless something drifted or a state file
+// failed): finish it again. Its recorded files are still hashed: one that drifted puts the feature in `features` too
+// (`stale: true`) and in `drifted` (verdict `drift`) — a stale baseline never hides a changed file (adding one file
+// under a folder _Implements:_ names made the drift of another go unreported), and a re-finish would accept it. A state file that can't be read is an error (verdict `error` unless something
 // drifted; a named feature that can't be read at all → ok:false), never "clean".
 // opts.maxFiles / opts.maxBytes bound the work (SessionStart): over budget, nothing is hashed and the result says
 // `skipped`. opts.activeOnly leaves archived features out (the SessionStart line is about the work in .specs/).
@@ -7106,7 +7225,7 @@ function drift(projectDir, name, opts = {}) {
   const withBase = [];
   const unbaselined = [];
   const reopened = [];
-  const stale = []; // [{ feature, archived, finishedAt, since, newFiles, why }] — finished again needed (staleFinish)
+  const stale = []; // [{ feature, archived, finishedAt, since, newFiles, why, drifted? }] — finished again needed (staleFinish)
   const errors = [];
   let lang = projectLang(projectDir);
   for (const s of sources) {
@@ -7119,8 +7238,9 @@ function drift(projectDir, name, opts = {}) {
     // Budgeted (SessionStart): the state-only check — no _Implements:_ walk before the hashing budget is even known.
     const budgeted = opts.maxFiles != null || opts.maxBytes != null;
     const sf = staleFinish(projectDir, st, budgeted ? "" : activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", tracks), { newFiles: !budgeted });
-    if (sf) { stale.push({ feature: s.slug, archived: s.archived, ...sf }); continue; }
-    withBase.push({ s, fin: st.finished });
+    const staleEntry = sf ? { feature: s.slug, archived: s.archived, ...sf } : null;
+    if (staleEntry) stale.push(staleEntry);
+    withBase.push({ s, fin: st.finished, staleEntry });
   }
   if (named && errors.length && errors.length === sources.length) return { ok: false, error: errors[0].error, errors };
   const res = { ok: true, lang, features: [], drifted: [], unbaselined, reopened, stale, verdict: errors.length ? "error" : "clean" };
@@ -7140,11 +7260,16 @@ function drift(projectDir, name, opts = {}) {
     return false;
   };
   if (over()) return { ...res, skipped: true, recordedFiles: recorded, verdict: "skipped" };
-  for (const { s, fin } of withBase) {
+  for (const { s, fin, staleEntry } of withBase) {
     const { unchanged, changed, missing, nowPresent, ignored } = baselineDrift(root, rootReal, fin);
     const d = { feature: s.slug, archived: s.archived, finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length,
       unchanged, changed, missing, nowPresent, drifted: changed.length + missing.length + nowPresent.length > 0 };
     if (ignored.length) d.ignored = ignored;
+    if (staleEntry) {
+      staleEntry.drifted = d.drifted;
+      if (!d.drifted) continue; // nothing recorded changed: listed in `stale` only (finish it again)
+      d.stale = true;
+    }
     res.features.push(d);
     if (d.drifted) res.drifted.push(s.slug);
   }
@@ -7796,6 +7921,11 @@ function globFolderNames(g) {
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
 const implementsPath = (ref) => String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
+// One _Implements:_ reference as every reader spells the file: backticks, a line anchor (:12 / #L12), a leading ./ and a
+// trailing / dropped, forward slashes. implementsKey: the same, case-folded where the file system folds case — so
+// `src/payment.js:10`, `./src/payment.js#L50` and `SRC/Payment.js` (on Windows / macOS) compare as one file.
+const implementsRel = (ref) => implementsPath(String(ref).trim().replace(/^`+|`+$/g, "")).replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+const implementsKey = (ref) => (FOLD_CASE ? implementsRel(ref).toLowerCase() : implementsRel(ref));
 function implementsTargets(root, ref, code, fold) {
   const p = implementsPath(ref);
   if (!p) return [];
@@ -8472,8 +8602,16 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
 // AC IDs the imported requirements define, and each _Makes green:_ names the planned tests covering the task's kept ACs
 // — else a placeholder (trackTaskBlock's rule). The template's own US-1.AC-3 / US-2.AC-1 / T-05 read as typos in
 // trace_check on a freshly imported feature. Headings and task lines scope the ACs a _Makes green:_ line looks at.
-function fitTemplateTasks(tasksText, known, planText, lng) {
+// A +saas / +ai track block (its template heading, any language) keeps only the IDs the import defines AS that track's
+// criteria (trackAcIds): the template's US-1.AC-5…9 are its own track criteria, and the import's criteria of those
+// numbers are unrelated ones — kept by number, tenant isolation / load test / the prompt task "covered" a coupon or a
+// checkout criterion (and "made green" its unit test) and trace_check passed with nothing implementing it.
+function fitTemplateTasks(tasksText, reqText, planText, lng) {
   const I = i18n.msg(lng).importSpec;
+  const T = i18n.msg(lng).tracks;
+  const known = requirementAcIds(reqText || "");
+  const trackKnown = { saas: trackAcIds(reqText || "", "saas"), ai: trackAcIds(reqText || "", "ai") };
+  const trackHeads = ["saas", "ai"].map((tr) => [tr, trackTaskHeadings(tr)]);
   const testsFor = new Map(); // AC → the planned T-IDs covering it, in plan order
   for (const [tid, r] of testIndex(planText || "")) {
     for (const ac of extractAcIds(r.row)) {
@@ -8482,13 +8620,19 @@ function fitTemplateTasks(tasksText, known, planText, lng) {
     }
   }
   let acs = [];
+  let section = null; // the track whose template task block the current heading opens, else null
   return String(tasksText).split("\n").map((line) => {
+    if (/^\s*#{1,6}\s/.test(line)) {
+      const hit = trackHeads.find(([, heads]) => heads.has(normTaskHeading(line.trim())));
+      section = hit ? hit[0] : null;
+    }
     if (/^\s*#{1,6}\s/.test(line) || /^\s*[-*+]\s+\[[ xX-]\]/.test(line)) acs = [];
+    const fits = section ? trackKnown[section] : known;
     return line
       .replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
-        const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => known.has(id));
+        const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
         acs = acs.concat(keep);
-        return "_Requirements: " + (keep.length ? keep.join(", ") : I.taskAcPlaceholder) + "_";
+        return "_Requirements: " + (keep.length ? keep.join(", ") : section ? T.acPlaceholder(section) : I.taskAcPlaceholder) + "_";
       })
       .replace(/_Makes green:\s*([^_\n]+)_/g, () => {
         const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
@@ -8623,7 +8767,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     const tp = path.join(cr.dir, "tasks.md");
     const cur = readIfExists(tp);
     if (cur != null) {
-      const fitted = fitTemplateTasks(cur, requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || ""), readIfExists(path.join(cr.dir, "test-plan.md")), lng);
+      const fitted = fitTemplateTasks(cur, readIfExists(path.join(cr.dir, "requirements.md")) || "", readIfExists(path.join(cr.dir, "test-plan.md")), lng);
       if (fitted !== cur) writeFileAtomic(tp, fitted);
     }
   }

@@ -112,13 +112,15 @@ reports per finished feature the files **changed**, **missing**, or **now presen
 baseline are listed as `unbaselined`, finished features whose tasks were reopened as `reopened`, and finished features
 that changed since the finish and are done again as `stale` (a change request or a re-approval after the finish —
 the converge pass's `spec_append_tasks`, a reopened change request — or an `_Implements:_` file the baseline never
-recorded: the old baseline no longer covers them). The SessionStart hook prints one line
+recorded: the old baseline no longer covers them — their recorded files are still hashed, and one that drifted
+lists the feature as drifted too: a stale baseline never hides a changed file). The SessionStart hook prints one line
 per drifted active feature (bounded; `dev-spec drift` checks on demand). Decide per feature: the spec is now wrong
 → `spec_impact` / a new feature with `_Supersedes:_`; the code is wrong → fix it (`/spec-bugfix`); harmless →
 accept and re-run `spec_finish {write: true}` for a fresh baseline (its `baseline.replaced` names the drift it
 accepted — a re-finish never erases it silently). `spec_next_action` on a finished feature answers `drift` (with the
-files) or `finished` (asking for the `execution` sign-off while it is missing) — never "close it with spec_finish"
-again. After a change request or follow-up tasks (§4, the converge pass) are done, it answers `finish` again with
+files — also on a stale baseline: decide first, then finish again) or `finished` (asking for the `execution` sign-off
+while it is missing) — never "close it with spec_finish" again; and `verify` first while a ticked task's latest run
+failed or its runnable `_Verify:_` never ran (`dev-spec done <f> <n> --run`), which spec_finish refuses. After a change request or follow-up tasks (§4, the converge pass) are done, it answers `finish` again with
 `staleBaseline` {finishedAt, since, newFiles}: re-run `spec_finish {write: true}` (a fresh readiness report, merge
 summary and baseline that includes the new files), then the `execution` sign-off again — one given before the change
 is asked for again.

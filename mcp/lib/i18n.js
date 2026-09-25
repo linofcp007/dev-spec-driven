@@ -1937,6 +1937,7 @@ const MSG = {
       taskNotFound: (n) => `Task ${n} not found in tasks.md`,
       featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
+      lockStuck: (rel) => `A stale dev-spec lock (${rel}) could not be removed — the file (or a folder of that name) is held open by another program, read-only, or not a file. Nothing was changed. Delete ${rel} by hand (check its permissions), then retry.`,
       numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
@@ -2029,7 +2030,11 @@ const MSG = {
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (dev-spec drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` + (signOff ? ` Sign it off: /approve ${slug} execution.` : ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`),
-      refinish: (slug, day, why) => `'${slug}' was finished on ${day}, but it changed since (${why}) and its tasks are done again — finish it again: /spec-finish ${slug} (spec_finish {write: true}) refreshes the readiness report, the merge summary and the drift baseline; then sign it off again: /approve ${slug} execution.`,
+      refinish: (slug, day, why) => `'${slug}' was finished on ${day}, but it changed since (${why}) and all its tasks are done — finish it again: /spec-finish ${slug} (spec_finish {write: true}) refreshes the readiness report, the merge summary and the drift baseline; then sign it off again: /approve ${slug} execution.`,
+      driftedStale: (why) => `It also changed since that finish (${why}): whichever you decide, finish it again afterwards — /spec-finish (spec_finish {write: true}) records the new baseline.`,
+      verify: (slug, list, n, runnable) => `All tasks are ticked, but not all are verified: ${list} — /spec-finish and the execution sign-off refuse until each has a passing run. ` +
+        (runnable ? `Re-run task ${n}'s _Verify:_ command and record the result: dev-spec done ${slug} ${n} --run` : `Record a passing run for task ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<command>" --exit 0)`) +
+        "; a failing run means the code needs fixing first.",
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)"),
@@ -2715,6 +2720,7 @@ const MSG = {
       taskNotFound: (n) => `Tarefa ${n} não encontrada em tasks.md`,
       featureBusy: (slug, rel) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (${rel || `.specs/${slug}/.lock`}) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
       roadmapBusy: "Outro processo dev-spec está a atualizar o .specs/roadmap.json neste momento (.specs/.roadmap.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.",
+      lockStuck: (rel) => `Um lock dev-spec abandonado (${rel}) não pôde ser removido — o ficheiro (ou uma pasta com esse nome) está aberto noutro programa, é só de leitura ou não é um ficheiro. Nada foi alterado. Apaga ${rel} à mão (verifica as permissões) e tenta de novo.`,
       numberInt: "o número tem de ser um inteiro",
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
@@ -2811,7 +2817,11 @@ const MSG = {
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` + (signOff ? ` Falta a aprovação final: /approve ${slug} execution.` : ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`),
-      refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão de novo feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
+      refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão todas feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
+      driftedStale: (why) => `Também mudou desde esse fecho (${why}): decidas o que decidires, volta a fechá-la depois — /spec-finish (spec_finish {write: true}) regista a baseline nova.`,
+      verify: (slug, list, n, runnable) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — o /spec-finish e a aprovação final recusam até cada uma ter uma execução com sucesso. ` +
+        (runnable ? `Volta a correr o comando _Verify:_ da tarefa ${n} e regista o resultado: dev-spec done ${slug} ${n} --run` : `Regista uma execução com sucesso da tarefa ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
+        "; uma execução que falha quer dizer que o código tem de ser corrigido primeiro.",
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(não especificado)"),
@@ -3447,6 +3457,7 @@ const MSG = {
       taskNotFound: (n) => `Tarea ${n} no encontrada en tasks.md`,
       featureBusy: (slug, rel) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (${rel || `.specs/${slug}/.lock`}) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
       roadmapBusy: "Otro proceso de dev-spec está actualizando .specs/roadmap.json en este momento (.specs/.roadmap.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.",
+      lockStuck: (rel) => `Un bloqueo de dev-spec abandonado (${rel}) no se ha podido eliminar — el archivo (o una carpeta con ese nombre) está abierto en otro programa, es de solo lectura o no es un archivo. No se ha cambiado nada. Borra ${rel} a mano (revisa sus permisos) y vuelve a intentarlo.`,
       numberInt: "el número debe ser un entero",
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
@@ -3543,7 +3554,11 @@ const MSG = {
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (dev-spec drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` + (signOff ? ` Falta la aprobación final: /approve ${slug} execution.` : ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`),
-      refinish: (slug, day, why) => `'${slug}' se cerró el ${day}, pero cambió desde entonces (${why}) y sus tareas vuelven a estar hechas — ciérrala de nuevo: /spec-finish ${slug} (spec_finish {write: true}) renueva el informe de preparación, el resumen del merge y la línea base de drift; después vuelve a dar la aprobación final: /approve ${slug} execution.`,
+      refinish: (slug, day, why) => `'${slug}' se cerró el ${day}, pero cambió desde entonces (${why}) y todas sus tareas están hechas — ciérrala de nuevo: /spec-finish ${slug} (spec_finish {write: true}) renueva el informe de preparación, el resumen del merge y la línea base de drift; después vuelve a dar la aprobación final: /approve ${slug} execution.`,
+      driftedStale: (why) => `También cambió desde ese cierre (${why}): decidas lo que decidas, vuelve a cerrarla después — /spec-finish (spec_finish {write: true}) registra la línea base nueva.`,
+      verify: (slug, list, n, runnable) => `Todas las tareas están marcadas, pero no todas están verificadas: ${list} — /spec-finish y la aprobación final se niegan hasta que cada una tenga una ejecución correcta. ` +
+        (runnable ? `Vuelve a ejecutar el comando _Verify:_ de la tarea ${n} y registra el resultado: dev-spec done ${slug} ${n} --run` : `Registra una ejecución correcta de la tarea ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
+        "; una ejecución que falla significa que primero hay que corregir el código.",
     },
     clarify: {
       resolveMarker: (mk) => "Resuelve [NEEDS CLARIFICATION]: " + (mk || "(sin especificar)"),

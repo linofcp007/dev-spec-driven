@@ -199,6 +199,14 @@ const dBad = run(["done", "pay", "", "--run", "--project", vp]);
 ok(dBad.code === 1 && !/^\$ /m.test(dBad.out), "done with a non-integer task number fails BEFORE running any command");
 run(["done", "pay", "2", "--evidence", "manual check", "--project", vp]);
 ok(/parallel batch: #3 \[src\/a\.js\]\s+#4 \[src\/b\.js\]/.test(run(["next", "pay", "--batch", "--project", vp]).out), "next --batch lists the [P] tasks that can run in parallel");
+// An anchored _Implements:_ (path:12 / #L12) names the same file as its bare path: a shared file ends the batch (= MCP).
+run(["create", "Anchor", "core", "--project", vp]);
+fs.writeFileSync(path.join(vp, ".specs", "anchor", "tasks.md"), "- [ ] 1. [US1][P] a\n  - _Implements: src/payment.js:10_\n- [ ] 2. [US1][P] b\n  - _Implements: src/payment.js#L50_\n");
+const anB = run(["next", "anchor", "--batch", "--project", vp]);
+let anBJ = null;
+try { anBJ = JSON.parse(run(["next", "anchor", "--batch", "--json", "--project", vp]).out); } catch { /* invalid JSON */ }
+ok(anB.code === 0 && /Next → #1/.test(anB.out) && !/#2 \[/.test(anB.out) && anBJ && anBJ.batch.map((b) => b.number).join() === "1",
+  "next --batch: `src/payment.js:10` and `src/payment.js#L50` are one file — task 2 never joins the batch (got " + JSON.stringify(anB.out.slice(0, 160)) + ")");
 const bfx = run(["bugfix", "Login Loop", "--summary", "bounce to /login", "--project", vp]);
 ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-loop", "bug.md")), "bugfix scaffolds the systematic-debugging flow");
 const fin = run(["finish", "login-loop", "--project", vp]);
@@ -1133,11 +1141,30 @@ const done5 = run(["done", "login-loop", "5", "--run", "--project", w10f]);
 const naSt10 = run(["next-action", "login-loop", "--project", w10f]);
 fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
 const drSt10 = run(["drift", "login-loop", "--project", w10f]);
-ok(apT10.code === 0 && done5.code === 0 && /was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and its tasks are done again — finish it again/.test(naSt10.out) &&
+ok(apT10.code === 0 && done5.code === 0 && /was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again/.test(naSt10.out) &&
   !/Nothing left to do/.test(naSt10.out) && drSt10.code === 1 && /↻ login-loop: changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js; its baseline no longer covers it: finish it again \(dev-spec finish login-loop --write\)/.test(drSt10.out) &&
   !/✓ login-loop/.test(drSt10.out),
   "after append-tasks + re-approval + done, next-action asks to finish again and drift exits 1 with the stale baseline (never '✓ unchanged' while audit.js is unhashed) (got " +
   JSON.stringify([apT10.code, done5.code, naSt10.out.slice(0, 160), drSt10.code, drSt10.out.slice(0, 160)]) + ")");
+// The stale baseline still hashes its recorded files: src/auth.js changed → next-action asks for the drift decision (then
+// finish again) and drift lists the changed file — it said only "finish it again" and never named auth.js.
+fs.writeFileSync(path.join(w10f, "src", "auth.js"), "changed by another feature\n");
+const naSD10 = run(["next-action", "login-loop", "--project", w10f]);
+const drSD10 = run(["drift", "login-loop", "--project", w10f]);
+ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(dev-spec drift login-loop\)\. Decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
+  drSD10.code === 1 && /⚠ login-loop: 1 of 1 implementing file\(s\) changed since finish/.test(drSD10.out) && /changed: src\/auth\.js/.test(drSD10.out) && /↻ login-loop: changed since finish/.test(drSD10.out),
+  "a stale baseline whose recorded file changed: next-action → the drift decision + finish again; drift names the file and the stale baseline (got " + JSON.stringify([naSD10.out.slice(0, 120), drSD10.out.slice(0, 160)]) + ")");
+fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");
+// Every task ticked, but task 5's latest run failed: next-action names it and how to re-verify (--json = spec_next_action)
+// — it said "close the feature with /spec-finish", which then refused.
+const fail5 = run(["done", "login-loop", "5", "--evidence", "1 failing", "--exit", "1", "--cmd", "node -e process.exit(1)", "--project", w10f]);
+const naV10 = run(["next-action", "login-loop", "--project", w10f]);
+let naVJ10 = null;
+try { naVJ10 = JSON.parse(run(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+ok(fail5.code === 1 && /→ All tasks are ticked, but not all are verified: #5 \(latest run failed\)/.test(naV10.out) && /dev-spec done login-loop 5 --run/.test(naV10.out) &&
+  !/close the feature|Nothing left to do/.test(naV10.out) && naVJ10 && naVJ10.step === "verify" && JSON.stringify(naVJ10) === JSON.stringify(S10.nextAction(w10f, "login-loop")) &&
+  run(["finish", "login-loop", "--project", w10f]).code === 1,
+  "next-action on a feature whose latest run failed: 'verify' naming #5 and `done --run` (never 'close the feature'); finish refuses too (got " + JSON.stringify(naV10.out.slice(0, 140)) + ")");
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");
@@ -1381,6 +1408,21 @@ if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-proc
     bl14r.code === 1 && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(bl14r.out) && kept14 && rnFree14.code === 0 && !fs.existsSync(path.join(k14, ".specs", "sprint", ".lock")) && !fs.existsSync(kDir14),
     "feature rename / create on a held feature lock and backlog add on a held roadmap lock: exit 1, busy, nothing changed; once free the rename moves the folder and leaves no .lock (got " +
     JSON.stringify([rn14.code, rn14.out.slice(0, 80), cr14.code, cr14.out.slice(0, 80), bl14r.code, bl14r.out.slice(0, 80), rnFree14.code, rnFree14.out.slice(0, 80)]) + ")");
+  // A stale lock that can't be removed (a folder named .lock, an hour old): done answers the stuck-lock error at the
+  // deadline (exit 1, --json {busy, stuck}) — it spun at 100% CPU forever. The same as spec_complete_task.
+  const sLock14 = path.join(k14, ".specs", "sprint", ".lock");
+  fs.mkdirSync(path.join(sLock14, "x"), { recursive: true });
+  const hourAgo14 = new Date(Date.now() - 3600e3);
+  fs.utimesSync(sLock14, hourAgo14, hourAgo14);
+  const stuckRun = (args) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", timeout: 15000, env: { ...process.env, SPEC_PROJECT_DIR: tmp, DEV_SPEC_LOCK_WAIT_MS: "200" } }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
+  const stuck14 = stuckRun(["done", "sprint", "2", "--project", k14]);
+  const stuckJ14 = stuckRun(["done", "sprint", "2", "--json", "--project", k14]);
+  let sj14 = {};
+  try { sj14 = JSON.parse(stuckJ14.stdout); } catch { /* stays {} */ }
+  ok(stuck14.code === 1 && /A stale dev-spec lock \(\.specs\/sprint\/\.lock\) could not be removed .* Delete \.specs\/sprint\/\.lock by hand/.test(stuck14.out) &&
+    stuckJ14.code === 1 && sj14.busy === true && sj14.stuck === true && /- \[ \] 2\./.test(fs.readFileSync(path.join(k14, ".specs", "sprint", "tasks.md"), "utf8")),
+    "done on a stale lock that can't be removed (a folder named .lock): exit 1 with the localized 'delete it by hand' error (--json {busy, stuck}) within DEV_SPEC_LOCK_WAIT_MS, nothing ticked (got " +
+    JSON.stringify([stuck14.code, stuck14.out.slice(0, 90), stuckJ14.code]) + ")");
 }
 
 if (inSection("wp15")) { // 1.13 batch 6 — examples/README.md's "Verify it yourself" outputs are what the CLI prints on a fresh copy

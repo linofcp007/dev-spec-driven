@@ -890,6 +890,28 @@ function endRun() {
   const aiF = S.createFeature(vDir, "Prompty", ["ai"]);
   fs.writeFileSync(path.join(aiF.dir, "tasks.md"), "- [ ] 1. [US1][P] a\n  - _Implements: src/a.js_\n- [ ] 2. [US1][P] tune prompt\n  - _Implements: prompts/v2.md_\n");
   ok(S.nextTask(vDir, "prompty", { batch: true }).batch.length === 1, "+ai prompt tasks never join a parallel batch");
+  // _Implements: path:12 / #L12 (read by trace_check) name the same file as the bare path: a shared file ends the batch —
+  // the raw spellings sent parallel implementers to one file — and the brief finds the design section that names it.
+  const anF = S.createFeature(vDir, "Anchors", ["core"]);
+  fs.writeFileSync(path.join(anF.dir, "design.md"), "# Design: Anchors\n\n## Payment module\nThe charge flow lives in payment.js.\n\n## Other\nNothing here.\n");
+  const anTasks = (a, b, c) => fs.writeFileSync(path.join(anF.dir, "tasks.md"), `## Phase: Core\n- [ ] 1. [US1][P] a\n  - _Implements: ${a}_\n- [ ] 2. [US1][P] b\n  - _Implements: ${b}_\n` +
+    `- [ ] 3. [US1][P] c\n  - _Implements: ${c}_\n`);
+  const anBatch = () => S.nextTask(vDir, "anchors", { batch: true, max: 3 }).batch.map((b) => b.number).join();
+  anTasks("src/payment.js:10", "src/payment.js#L50", "./src/payment.js");
+  const anB1 = anBatch();
+  anTasks("src/payment.js", "`./src/payment.js`", "src/other.js");
+  const anB2 = anBatch();
+  anTasks("src/pay/", "src/pay/a.js", "src/other.js");
+  const anB3 = anBatch();
+  anTasks("src/a.js", "src/b.js#L3", "src/c.js:9");
+  const anB4 = anBatch();
+  const anSecs = ["src/payment.js", "src/payment.js:10", "src/payment.js#L10", "`src/payment.js`"].map((ref) => {
+    anTasks(ref, "src/b.js", "src/c.js");
+    return S.taskBrief(vDir, "anchors", 1).designSections.map((s) => s.title || s).join("|");
+  });
+  ok(anB1 === "1" && anB2 === "1" && anB3 === "1" && anB4 === "1,2,3" && anSecs.every((s) => s === "Payment module"),
+    "parallel batch: `path:10`, `path#L50`, `./path`, backticked and a folder vs a file under it are one file (batch ends); disjoint anchored files still batch; the brief's design section is found with any spelling (got " +
+    JSON.stringify([anB1, anB2, anB3, anB4, anSecs]) + ")");
   const bfx2 = S.createFeature(vDir, "Pay Bug", undefined, "charge fails", undefined, "en", "bugfix");
   S.addTrack(vDir, "pay-bug", "saas");
   const bfxDoc = S.specDoctor(vDir, "pay-bug");
@@ -2660,6 +2682,27 @@ function endRun() {
       !ti1.imported.includes("test-plan.md") && ti1.files.includes("test-plan.md"),
       "spec_import +tdd: the test plan covers the imported ACs only (with or without a source tasks.md); a kept scaffold tasks.md cites only imported ACs / their tests, else a localized placeholder — trace passes, doctor's traceability doesn't fail (got " +
       JSON.stringify([planCovers("tdd-login"), tiTr1.verdict, tiTr2.verdict, tiDoc2 && tiDoc2.status]) + ")");
+    // The kept scaffold's +saas / +ai track tasks cite the TEMPLATE's own track criteria (US-1.AC-5…9): an import numbers
+    // its own criteria, and its AC-5 / AC-6 / AC-7 / AC-8 (coupon, checkout, save, share) are no tenant isolation, load test
+    // or prompt — kept by number, trace_check passed with those criteria implemented by nothing. Now a track placeholder.
+    const cartCrit = ["the shopper adds an item", "the shopper removes an item", "the cart is empty", "the shopper opens the cart", "a coupon is applied",
+      "the shopper clicks checkout", "the shopper saves the cart", "the shopper shares the cart"];
+    w6(im, ".kiro/specs/cart/requirements.md", "### Requirement 1\n\n**User Story:** As a shopper, I want a cart, so that I can buy.\n\n#### Acceptance Criteria\n\n" +
+      cartCrit.map((c, i) => `${i + 1}. WHEN ${c} THEN the system SHALL update the cart view ${i + 1}`).join("\n") + "\n");
+    const cartSa = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/cart", { name: "Cart Saas", tracks: "tdd,saas" }));
+    const cartAi = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/cart", { name: "Cart Ai", tracks: "tdd,ai" }));
+    const cartSaT = cartSa.ok ? r6(im, ".specs", "cart-saas", "tasks.md") : "";
+    const cartAiT = cartAi.ok ? r6(im, ".specs", "cart-ai", "tasks.md") : "";
+    // Only the bracketed core placeholders get real tasks (AC-1…4), the scaffold's track tasks are kept as they are.
+    const realCore = (t) => t.split("\n## ").map((sec, i) => (i && /^(?:Story US-1 — (?:Observability & Scale|AI))/.test(sec) ? sec : sec.replace(/_Requirements: [^_\n]*_/g, "_Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_"))).join("\n## ");
+    fs.writeFileSync(path.join(im, ".specs", "cart-saas", "tasks.md"), realCore(cartSaT));
+    const cartTr = safe6(() => S.traceCheck(im, "cart-saas"));
+    ok(cartSa.ok && cartAi.ok && !/Enforce tenant isolation[^\n]*\n  - _Requirements: US-1\.AC-5_/.test(cartSaT) && !/Load test[^\n]*\n  - _Requirements: US-1\.AC-6_/.test(cartSaT) &&
+      /Enforce tenant isolation[^\n]*\n  - _Requirements: \[the \+saas criterion this task proves\]_\n  - _Makes green: \[the planned test this task makes green\]_/.test(cartSaT) &&
+      /Prompt v1 \+ eval harness wiring[^\n]*\n  - _Requirements: \[the \+ai criterion this task proves\]_/.test(cartAiT) && !/_Makes green: T-0[5-8]/.test(cartSaT + cartAiT) &&
+      cartTr.ok && cartTr.verdict !== "pass" && ["US-1.AC-5", "US-1.AC-6", "US-1.AC-7", "US-1.AC-8"].every((id) => cartTr.uncoveredByTasks.includes(id)),
+      "spec_import +saas / +ai (8 criteria, no tasks.md): the kept track tasks cite a track placeholder, never the import's unrelated US-1.AC-5…8 — trace_check reports them uncovered (got " +
+      JSON.stringify([cartTr.verdict, cartTr.uncoveredByTasks]) + ")");
     let linked = false;
     try { fs.symlinkSync(outDir, path.join(im, "linked-spec"), "junction"); linked = true; } catch { /* no symlink rights: skip */ }
     const kLink = linked ? safe6(() => S.importSpec(im, "kiro", "linked-spec", { name: "via-link" })) : { ok: false, error: "outside the project (skipped)" };
@@ -4235,16 +4278,28 @@ function endRun() {
     fs.writeFileSync(path.join(w10d, "src", "audit.js"), "audit\n");
     const apT10 = S.approvePhase(w10d, "login-loop", "tasks");
     [5, 6].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    // src/auth.js (recorded by the last finish as "a\nc\n") was reworked above: a stale baseline still hashes its recorded
+    // files — the drift and its decision come first (it said only "finish it again", and the re-finish accepted the drift).
+    const naSD10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
+    const drSD10 = S.drift(w10d, "login-loop");
+    ok(naSD10.step === "drift" && naSD10.staleBaseline && naSD10.staleBaseline.newFiles.join() === "src/audit.js" && naSD10.drift && naSD10.drift.changed.join() === "src/auth.js" &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(dev-spec drift login-loop\)\. Decide: /.test(naSD10.recommendation) &&
+      /It also changed since that finish \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\): whichever you decide, finish it again afterwards/.test(naSD10.recommendation) &&
+      drSD10.verdict === "drift" && drSD10.drifted.join() === "login-loop" && drSD10.features.length === 1 && drSD10.features[0].stale === true && drSD10.features[0].changed.join() === "src/auth.js" &&
+      drSD10.stale.length === 1 && drSD10.stale[0].drifted === true && / {2}⚠ login-loop: 1 implementing file\(s\) changed since finish/.test(hook10(w10d)),
+      "a stale baseline (tasks re-approved, a new _Implements:_ file) whose recorded src/auth.js also changed: next_action → drift (the decision, then finish again; drift + staleBaseline), spec_drift → drift (features[].stale, stale[].drifted), SessionStart agrees (got " +
+      JSON.stringify([naSD10.step, naSD10.drift && naSD10.drift.changed, drSD10.verdict, drSD10.features.map((f) => f.feature)]) + ")");
+    fs.writeFileSync(path.join(w10d, "src", "auth.js"), "a\nc\n"); // back to what the baseline recorded: only stale now
     const naS10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drS10 = S.drift(w10d, "login-loop");
     const catS10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
     ok(apT10.ok && naS10.step === "finish" && naS10.staleBaseline && naS10.staleBaseline.newFiles.join() === "src/audit.js" &&
       naS10.staleBaseline.since.some((x) => x.kind === "approval" && x.phase === "tasks") && !/Nothing left to do/.test(naS10.recommendation) &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and its tasks are done again — finish it again: \/spec-finish login-loop/.test(naS10.recommendation) &&
-      JSON.stringify(naS10) === JSON.stringify(S.nextAction(w10d, "login-loop")) &&
-      drS10.verdict === "stale" && drS10.features.length === 0 && drS10.stale.map((x) => x.feature).join() === "login-loop" && drS10.stale[0].newFiles.join() === "src/audit.js" &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again: \/spec-finish login-loop/.test(naS10.recommendation) &&
+      JSON.stringify(naS10) === JSON.stringify(S.nextAction(w10d, "login-loop")) && naS10.drift && naS10.drift.drifted === false &&
+      drS10.verdict === "stale" && drS10.features.length === 0 && drS10.stale.map((x) => x.feature).join() === "login-loop" && drS10.stale[0].newFiles.join() === "src/audit.js" && drS10.stale[0].drifted === false &&
       catS10.status === "complete" && catS10.finishedAt === undefined,
-      "a finished feature changed since (tasks re-approved, a new _Implements:_ file) and done again: next_action → finish again (staleBaseline {since, newFiles}; MCP = engine), drift → `stale`, the catalog → complete (got " +
+      "a finished feature changed since (tasks re-approved, a new _Implements:_ file) and done again: next_action → finish again (staleBaseline {since, newFiles}, drift clean; MCP = engine), drift → `stale`, the catalog → complete (got " +
       JSON.stringify([naS10.step, naS10.staleBaseline, drS10.verdict, catS10.status]) + ")");
     const reFin10 = S.finishFeature(w10d, "login-loop", { write: true });
     const naR10 = S.nextAction(w10d, "login-loop");
@@ -4263,6 +4318,41 @@ function endRun() {
       /mudou desde então \(x\)/.test(S.msg("pt").next.refinish("f", "2026-01-01", "x")) && /cambió desde entonces \(x\)/.test(S.msg("es").next.refinish("f", "2026-01-01", "x")) &&
       /pedido de alteração/.test(S.msg("pt").drift.staleWhy.changeRequests("#1")) && /solicitud de cambio/.test(S.msg("es").drift.staleWhy.changeRequests("#1")),
       "a change request recorded after the finish makes the baseline stale too (next_action names it); the re-finish messages exist in PT and ES");
+    // A baseline made stale ONLY by a new file under a folder _Implements:_ names (no spec change) never hides the drift of
+    // a recorded file: next_action asks for the decision (it said "finish it again" and the re-finish accepted the drift),
+    // spec_drift names the file (it said `stale` with features []).
+    const yTs10 = path.join(w10d, "src", "lib", "y.ts"), zTs10 = path.join(w10d, "src", "lib", "z.ts");
+    const y0 = fs.readFileSync(yTs10, "utf8");
+    fs.writeFileSync(yTs10, "rewritten by another change\n");
+    fs.writeFileSync(zTs10, "helper\n");
+    const naNF10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
+    const drNF10 = S.drift(w10d, "login-loop");
+    ok(naNF10.step === "drift" && naNF10.drift.changed.join() === "src/lib/y.ts" && naNF10.staleBaseline && naNF10.staleBaseline.since.length === 0 &&
+      naNF10.staleBaseline.newFiles.join() === "src/lib/z.ts" && /changed since: src\/lib\/y\.ts \(dev-spec drift login-loop\)\. Decide: /.test(naNF10.recommendation) &&
+      /It also changed since that finish \(1 implementing file\(s\) not in the baseline: src\/lib\/z\.ts\)/.test(naNF10.recommendation) &&
+      drNF10.verdict === "drift" && drNF10.features.length === 1 && drNF10.features[0].changed.join() === "src/lib/y.ts" && drNF10.features[0].stale === true && drNF10.stale[0].drifted === true &&
+      /Também mudou desde esse fecho \(x\)/.test(S.msg("pt").next.driftedStale("x")) && /También cambió desde ese cierre \(x\)/.test(S.msg("es").next.driftedStale("x")),
+      "a new file under an implemented folder (stale, no spec change) plus a changed recorded file: next_action → drift with the decision + finish again, spec_drift → drift naming it (PT/ES localized) (got " +
+      JSON.stringify([naNF10.step, naNF10.drift && naNF10.drift.changed, drNF10.verdict, drNF10.features.map((f) => f.changed)]) + ")");
+    fs.writeFileSync(yTs10, y0);
+    fs.unlinkSync(zTs10);
+    // Every task ticked but the latest run of task 4 failed: spec_finish and the execution sign-off refuse — next_action
+    // names the task and how to re-verify it (it said "finished — nothing left to do", the catalog ✅ finished).
+    const failRun10 = S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 1, summary: "1 failing" });
+    const naV10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
+    const finV10 = S.finishFeature(w10d, "login-loop");
+    const catV10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
+    ok(failRun10.ok === false && naV10.step === "verify" && /^All tasks are ticked, but not all are verified: #4 \(latest run failed\) — \/spec-finish and the execution sign-off refuse/.test(naV10.recommendation) &&
+      /dev-spec done login-loop 4 --run/.test(naV10.recommendation) && !/Nothing left to do|close the feature|Sign it off/.test(naV10.recommendation) && naV10.drift && naV10.drift.drifted === false &&
+      finV10.readyToFinish === false && finV10.unverified.join() === "4" && catV10.status === "complete" && catV10.finishedAt === undefined &&
+      /nem todas estão verificadas: #1/.test(S.msg("pt").next.verify("f", "#1", 1, true)) && /no todas están verificadas: #1/.test(S.msg("es").next.verify("f", "#1", 1, false)) &&
+      /spec_complete_task \{name: "f", number: 2/.test(S.msg("en").next.verify("f", "#2", 2, false)),
+      "a finished feature whose task's latest run failed: next_action → verify (names #4 and `done --run`, never 'nothing left to do'), finish not ready, the catalog → complete; PT/ES localized (got " +
+      JSON.stringify([failRun10.ok, naV10.step, naV10.recommendation.slice(0, 90), finV10.readyToFinish, catV10.status]) + ")");
+    S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    const naV10b = S.nextAction(w10d, "login-loop");
+    ok(naV10b.step === "finished" && /Nothing left to do here/.test(naV10b.recommendation) && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
+      "a passing re-run: next_action → finished (nothing left), the catalog → finished again");
 
     // PT / ES chrome.
     const w10pt = path.join(tmp, "proj-wp10-pt");
@@ -4864,6 +4954,32 @@ function endRun() {
     ok(dt12.ok && dt12.addedTracks.join() === "saas,tdd" && !/_Requirements:[^_\n]*US-1\.AC-[56]/.test(dTasks12) && dTasks12.includes("[the +saas criterion this task proves]") &&
       !dPlan12.includes("US-1.AC-5") && !dPlan12.includes("US-1.AC-6"),
       "add_track saas,tdd: US-1.AC-5 only in a _Supersedes:_ marker and US-1.AC-6 only in a fence get no +saas task IDs and no test-plan row");
+    // ...and a feature's OWN US-1.AC-5 / AC-6 are not the template's +saas criteria unless they are written as such (under a
+    // [SaaS] heading or carrying the marker): kept by number, the appended tenant-isolation / load-test tasks "covered" a
+    // coupon and a checkout criterion — trace_check went from 2 uncovered to pass. A real [SaaS] criterion is still cited.
+    const own12 = path.join(tmp, "proj-wp12-own-ac5");
+    S.initProject(own12, ["core"], "en");
+    const ownf12 = S.createFeature(own12, "Shop", ["core"]);
+    const ownAc12 = (n, t) => `${n}. **US-1.AC-${n}** — WHEN ${t} THE SYSTEM SHALL update the cart view`;
+    fs.writeFileSync(path.join(ownf12.dir, "requirements.md"), ["# Feature: Shop", "", "## Summary", "X.", "", "### US-1 (P1)", "", "#### Acceptance Criteria (EARS)",
+      ownAc12(1, "an item is added"), ownAc12(2, "an item is removed"), ownAc12(3, "the cart is emptied"), ownAc12(4, "the cart opens"), ownAc12(5, "a coupon is applied"), ownAc12(6, "checkout is clicked"), ""].join("\n"));
+    fs.writeFileSync(path.join(ownf12.dir, "tasks.md"), "# Tasks\n\n## Phase: Core\n- [ ] 1. [US1] Cart basics\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_\n");
+    const ownBefore12 = S.traceCheck(own12, "shop").uncoveredByTasks.join();
+    const ownAdd12 = S.addTrack(own12, "shop", "saas");
+    const ownTr12 = S.traceCheck(own12, "shop");
+    const ownTasks12 = fs.readFileSync(path.join(ownf12.dir, "tasks.md"), "utf8");
+    const real12 = path.join(tmp, "proj-wp12-real-saas-ac");
+    S.initProject(real12, ["core"], "en");
+    const realf12 = S.createFeature(real12, "Tenants", ["core"]);
+    fs.writeFileSync(path.join(realf12.dir, "requirements.md"), ["# Feature: Tenants", "", "## Summary", "X.", "", "### US-1 (P1)", "", "#### Acceptance Criteria (EARS)",
+      ownAc12(1, "an item is added"), "", "#### [SaaS] Acceptance Criteria (EARS)", "5. **US-1.AC-5** — WHEN a user of tenant A reads data THE SYSTEM SHALL NOT return tenant B's records", ""].join("\n"));
+    S.addTrack(real12, "tenants", "saas");
+    const realTasks12 = fs.readFileSync(path.join(realf12.dir, "tasks.md"), "utf8");
+    ok(ownBefore12 === "US-1.AC-5,US-1.AC-6" && ownAdd12.ok && ownTr12.uncoveredByTasks.join() === "US-1.AC-5,US-1.AC-6" && !/_Requirements:[^_\n]*US-1\.AC-[56]/.test(ownTasks12) &&
+      (ownTasks12.match(/\[the \+saas criterion this task proves\]/g) || []).length === 3 &&
+      /Enforce tenant isolation[^\n]*\n  - _Requirements: US-1\.AC-5_/.test(realTasks12) && /Load test[^\n]*\n  - _Requirements: \[the \+saas criterion this task proves\]_/.test(realTasks12),
+      "add_track saas on a feature whose own US-1.AC-5 / AC-6 are unrelated: the appended tasks cite the +saas placeholder and trace_check still reports both uncovered; a [SaaS]-headed US-1.AC-5 is cited (got " +
+      JSON.stringify([ownBefore12, ownTr12.uncoveredByTasks]) + ")");
 
     // (e) spec_create on an EXISTING feature adding +tdd with +saas / +ai plans exactly what add_track plans: the requirements
     // predate those tracks, so no template row for US-1.AC-5…AC-9 (they don't exist). The same through the MCP tool, and via
@@ -5275,6 +5391,55 @@ function endRun() {
       dead14.ok && deadGone14 && freshOther14 === "busy" && oldOther14.ok && oldGone14 && nested14 === true && !fs.existsSync(lock14),
       "feature lock: a live holder → the mutator waits DEV_SPEC_LOCK_WAIT_MS, then a localized busy error (PT) with nothing ticked or recorded; a dead holder's lock and an old foreign one are reclaimed; a fresh foreign one (or one naming this pid that this process does not hold) is respected; re-entrant (got " +
       JSON.stringify([busy14.ok, busy14.busy, (busy14.error || "").slice(0, 40), busyUntouched14, ownPidFile14, dead14.ok, deadGone14, freshOther14, oldOther14.ok, oldGone14, nested14]) + ")");
+    // Mutual exclusion under contention: 4 processes × 200 increments of one counter under withFeatureLock. A waiter whose
+    // stat of a just-released lock failed read it as stale and deleted the NEXT holder's fresh lock (and a holder's release
+    // deleted whatever lock sat there): two holders at once, increments lost while every call answered ok (≈570/600, 183/600).
+    const c14 = fs.mkdtempSync(path.join(tmp, "lock-counter-"));
+    const cFile14 = path.join(c14, "counter.txt");
+    fs.writeFileSync(cFile14, "0");
+    const counter14 = (startAt) => new Promise((resolve) => {
+      const code = `const S=require(${JSON.stringify(specJs)});const fs=require("fs");const f=${JSON.stringify(cFile14)};` +
+        `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,Math.max(0,${startAt}-Date.now()));` +
+        `let ok=0;for(let i=0;i<200;i++)if(S.withFeatureLock(${JSON.stringify(c14)},()=>{fs.writeFileSync(f,String(Number(fs.readFileSync(f,"utf8"))+1));return true;},{waitMs:30000,onBusy:()=>false})===true)ok++;` +
+        `process.stdout.write(String(ok));`;
+      let out = "";
+      const kid = spawn(process.execPath, ["-e", code], { stdio: ["ignore", "pipe", "inherit"] });
+      kid.stdout.on("data", (d) => (out += d));
+      kid.on("close", () => resolve(Number(out)));
+    });
+    const cStart14 = Date.now() + 600;
+    const cOks14 = await Promise.all([0, 1, 2, 3].map(() => counter14(cStart14)));
+    const cVal14 = Number(fs.readFileSync(cFile14, "utf8"));
+    ok(cOks14.every((n) => n === 200) && cVal14 === 800 && fs.readdirSync(c14).join() === "counter.txt",
+      "feature lock under contention: 4 processes × 200 locked increments end at exactly 800, every call ran, no .lock / .lock.reclaim left (got " + cVal14 + ", oks " + cOks14.join("/") + ")");
+    // A holder releases only ITS lock: one taken over meanwhile (here: replaced by another process's note) is left alone.
+    const tk14 = fs.mkdtempSync(path.join(tmp, "lock-takeover-"));
+    const tkNote14 = JSON.stringify({ pid: 1, host: "other-host", at: new Date().toISOString(), token: "theirs" });
+    const tkRan14 = S.withFeatureLock(tk14, () => { fs.writeFileSync(path.join(tk14, ".lock"), tkNote14); return "ran"; }, { waitMs: 30, onBusy: () => "busy" });
+    const tkKept14 = fs.existsSync(path.join(tk14, ".lock")) && fs.readFileSync(path.join(tk14, ".lock"), "utf8") === tkNote14;
+    // A stale lock that can't be removed (a folder named .lock, an hour old): the busy answer at the deadline — it spun at
+    // 100% CPU forever (no deadline check, no sleep), freezing the whole MCP server. Localized, and it says to delete it.
+    const u14 = path.join(tmp, "proj-wp14-stuck");
+    S.initProject(u14, ["core"], "pt");
+    const uf14 = S.createFeature(u14, "Presa", ["core"]);
+    fs.writeFileSync(path.join(uf14.dir, "tasks.md"), "- [ ] 1. a\n");
+    const uLock14 = path.join(uf14.dir, ".lock");
+    fs.mkdirSync(path.join(uLock14, "x"), { recursive: true });
+    const hourAgo14 = new Date(Date.now() - 3600e3);
+    fs.utimesSync(uLock14, hourAgo14, hourAgo14);
+    const uKid14 = spawnSync(process.execPath, ["-e", `const S=require(${JSON.stringify(specJs)});process.stdout.write(JSON.stringify(S.completeTask(${JSON.stringify(u14)},"presa",1)))`],
+      { encoding: "utf8", timeout: 15000, env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: "300" } });
+    let uRes14 = {};
+    try { uRes14 = JSON.parse(uKid14.stdout); } catch { /* stays {} */ }
+    const uT0 = Date.now();
+    const uDirect14 = S.withFeatureLock(uf14.dir, () => "ran", { waitMs: 200, onBusy: (b) => b });
+    const uMs14 = Date.now() - uT0;
+    ok(tkRan14 === "ran" && tkKept14 && uKid14.status === 0 && uRes14.ok === false && uRes14.busy === true && uRes14.stuck === true &&
+      /Um lock dev-spec abandonado \(\.specs\/presa\/\.lock\) não pôde ser removido/.test(uRes14.error || "") && /- \[ \] 1\./.test(fs.readFileSync(path.join(uf14.dir, "tasks.md"), "utf8")) &&
+      uDirect14 && uDirect14.stuck === true && uMs14 < 3000 && !fs.existsSync(uLock14 + ".reclaim") &&
+      ["en", "pt", "es"].every((l) => S.msg(l).err.lockStuck(".specs/f/.lock").includes(".specs/f/.lock")),
+      "a lock taken over is never deleted by its old holder; a stale lock that can't be removed (a folder named .lock) → busy + stuck with a localized 'delete it by hand' error within DEV_SPEC_LOCK_WAIT_MS (nothing ticked, no spin), EN/PT/ES (got " +
+      JSON.stringify([tkRan14, tkKept14, uKid14.status, uKid14.signal, uRes14.stuck, (uRes14.error || "").slice(0, 50), uMs14]) + ")");
     const l14 = ["en", "pt", "es"].map((l) => [S.msg(l).args.network("\\\\h\\s"), S.msg(l).err.featureBusy("f")]);
     ok(l14.every(([n, b]) => typeof n === "string" && n.includes("\\\\h\\s") && typeof b === "string" && b.includes(".specs/f/.lock")) &&
       /pasta local/.test(l14[1][0]) && /carpeta local/.test(l14[2][0]) && /Outro processo dev-spec/.test(l14[1][1]) && /Otro proceso de dev-spec/.test(l14[2][1]),

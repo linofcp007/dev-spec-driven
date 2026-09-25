@@ -164,7 +164,8 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
 
 1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next open task
    plus the following open `[P]` tasks **of the same section** whose `_Implements:_` files are declared
-   and disjoint (max 3 by default). No `_Implements:_`, a shared file, a non-`[P]` task or a section
+   and disjoint (max 3 by default). No `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js`
+   are one file; a folder shares every file under it), a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
 2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
    worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own

@@ -59,7 +59,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
 | `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones |
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `write` also records the drift baseline |
-| `spec_next_action` | "You are here → do this next", in the chain's order: fill → re-review → fix → approve → implement → finish (then finished / drift) |
+| `spec_next_action` | "You are here → do this next", in the chain's order: fill → re-review → fix → approve → implement → verify → finish (then finished / drift) |
 | `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot |
 | `spec_impact` | What an edit after approval touches (changed ACs, sections, tasks → tasks, tests, design); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`) |
@@ -96,8 +96,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **A template is not content.** `doctor` has a `placeholders` check (it fails for the current and
   earlier phases), a fresh feature starts at phase `requirements`, and `ears_validate` reports a
   `placeholder` code.
-- **`next_action` follows the chain:** fill → re-review → fix → approve → implement → finish. It never
-  recommends an approval the gate would refuse; it names what the gate fails on instead. On +tdd / +ai, Phase 4
+- **`next_action` follows the chain:** fill → re-review → fix → approve → implement → verify → finish. It never
+  recommends an approval the gate would refuse; it names what the gate fails on instead — nor `spec_finish` while a
+  ticked task is unverified (`verify` names it and its `dev-spec done <f> <n> --run`). On +tdd / +ai, Phase 4
   (failing tests / eval harness, `approve <f> tests`) is a gate it asks for before any task is implemented.
 - **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
   command, exit code and output summary, and refuses the tick on a failure. A task with a runnable
@@ -286,7 +287,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
 | `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes |
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `write` regista também a baseline de drift |
-| `spec_next_action` | "Estás aqui → faz isto a seguir", pela ordem da cadeia: preencher → rever → corrigir → aprovar → implementar → fechar (depois fechada / deriva) |
+| `spec_next_action` | "Estás aqui → faz isto a seguir", pela ordem da cadeia: preencher → rever → corrigir → aprovar → implementar → verificar → fechar (depois fechada / deriva) |
 | `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot |
 | `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, tarefas alteradas → tarefas, testes, design); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`) |
@@ -322,8 +323,9 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
 - **Um template não é conteúdo.** O `doctor` tem a verificação `placeholders` (falha na fase atual e nas
   anteriores), uma funcionalidade nova começa na fase `requirements` e o `ears_validate` reporta o código
   `placeholder`.
-- **O `next_action` segue a cadeia:** preencher → rever → corrigir → aprovar → implementar → fechar. Nunca
-  recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha. Em +tdd / +ai, a Fase 4
+- **O `next_action` segue a cadeia:** preencher → rever → corrigir → aprovar → implementar → verificar → fechar. Nunca
+  recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha — nem o `spec_finish` enquanto houver
+  uma tarefa marcada por verificar (o passo `verify` nomeia-a com o seu `dev-spec done <f> <n> --run`). Em +tdd / +ai, a Fase 4
   (testes a falhar / harness de evals, `approve <f> tests`) é um gate que pede antes de implementar qualquer tarefa.
 - **Evidência antes de afirmações.** As tarefas declaram `_Verify: <comando>_`; `spec_complete_task` regista
   o comando, o código de saída e um resumo, e recusa a marcação quando falha. Uma tarefa com um `_Verify:_`
@@ -513,7 +515,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
 | `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes |
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `write` registra también la línea base de drift |
-| `spec_next_action` | "Estás aquí → haz esto a continuación", en el orden de la cadena: completar → revisar → corregir → aprobar → implementar → cerrar (después cerrada / deriva) |
+| `spec_next_action` | "Estás aquí → haz esto a continuación", en el orden de la cadena: completar → revisar → corregir → aprobar → implementar → verificar → cerrar (después cerrada / deriva) |
 | `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot |
 | `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, tareas cambiadas → tareas, pruebas, diseño); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`) |
@@ -551,8 +553,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Una plantilla no es contenido.** El `doctor` tiene la comprobación `placeholders` (falla en la fase
   actual y en las anteriores), una función nueva empieza en la fase `requirements` y `ears_validate` informa
   del código `placeholder`.
-- **`next_action` sigue la cadena:** completar → revisar → corregir → aprobar → implementar → cerrar. Nunca
-  recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla. En +tdd / +ai, la Fase 4
+- **`next_action` sigue la cadena:** completar → revisar → corregir → aprobar → implementar → verificar → cerrar. Nunca
+  recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla — ni `spec_finish` mientras haya
+  una tarea marcada sin verificar (el paso `verify` la nombra con su `dev-spec done <f> <n> --run`). En +tdd / +ai, la Fase 4
   (pruebas en rojo / harness de evals, `approve <f> tests`) es un gate que pide antes de implementar ninguna tarea.
 - **Evidencia antes que afirmaciones.** Las tareas declaran `_Verify: <comando>_`; `spec_complete_task`
   registra el comando, el código de salida y un resumen, y rechaza la marca si falla. Una tarea con un

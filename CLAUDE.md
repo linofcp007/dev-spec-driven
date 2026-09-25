@@ -219,7 +219,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   artifact changed since ITS approval; `impact` when a snapshot exists) → `fix` (failing checks of the
   current or an earlier phase, via `CHECK_PHASE`; or the approve gate's refusal of the next pending phase —
   `refusedGate` — so it never recommends an approval that would be refused) → `approve` → `implement` →
-  `finish` (or `tasks` when there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`
+  `verify` (all ticked, but `verificationStatus()` lists an unverified task — spec_finish and the execution gate refuse
+  it; it looped "close the feature" / "finished — nothing left" → refused → the same) → `finish` (or `tasks` when
+  there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`
   exists (finish `{write}` recorded it), `finish` becomes `finished` (asks for the `execution` sign-off while it is
   missing) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
   nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
@@ -227,7 +229,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   (`staleFinish()`) once a change request or a re-approval of another phase is newer than `finished.at`, or an active
   task's `_Implements:_` file isn't in it: then the step stays `finish` (re-run spec_finish `{write}`) with
   `staleBaseline` {finishedAt, since, newFiles} — it said "finished — nothing left to do" on the old baseline — and an
-  execution sign-off older than such a change is asked for again (`executionSignOffStale()`).
+  execution sign-off older than such a change is asked for again (`executionSignOffStale()`). The recorded files are
+  hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
+  before any re-baseline.
 - **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates.
   `warnings` (EC/NFR/SC, planned-not-in-code) never block.
@@ -306,6 +310,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks.
   `spec_import` re-plans after writing the imported requirements (createFeature scaffolded from the template ones) and
   fits a kept scaffold tasks.md with `fitTemplateTasks()` (known ACs only, `_Makes green:_` = the tests covering them).
+  A +saas / +ai track block (there and in `trackTaskBlock()`, spec_add_track) keeps an ID only when `trackAcIds()` finds it
+  defined AS that track's criterion (under a `[SaaS]`/`[AI]` heading or carrying the marker) — the template's
+  US-1.AC-5…9 are its own track criteria; kept by number, they bound tenant isolation / load test / the prompt task to
+  an import's unrelated AC-5…8 and trace_check passed with those criteria implemented by nothing.
 - **A file date is never a finish blocker** (`changedSinceApproval(…, {detail: true})` → `{changed, byDate,
   untracked}`): a clone, checkout, copy or unzip resets every mtime. A pre-1.11 approval (no fingerprint) still shows a
   newer phase file in next_action / doctor / roadmap (1.12 parity), but spec_finish only warns about it. A 1.12 bugfix
@@ -329,8 +337,12 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
   only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
-  `reopened`, one changed since its finish (`staleFinish()`) is `stale` (not hashed, verdict `stale`, CLI exit 1 —
-  finish it again; the catalog calls it `complete`), an unreadable state is verdict `error` — never "clean".
+  `reopened`, one changed since its finish (`staleFinish()`) is `stale` (verdict `stale`, CLI exit 1 — finish it
+  again; the catalog calls it `complete`) but its recorded files are STILL hashed: one that drifted puts it in
+  `features` (`stale: true`) and `drifted` (verdict `drift`) — a stale baseline must never hide a changed file
+  (a new file under an implemented folder used to make another file's drift vanish, and the re-finish accepted it).
+  An unreadable state is verdict `error` — never "clean". The catalog's `finished` also needs every tick verified
+  (`verificationStatus`).
   SessionStart adds one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
 - **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
   BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
@@ -387,15 +399,23 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `finishFeature` with `write`, and `createFeature` re-run on an EXISTING feature (it adds tracks through
   `applyTracks`, spec_add_track's path — a NEW feature has no folder to lock). Two MCP servers (or MCP + `dev-spec done`)
   on one feature each read tasks.md + `.state.json`, wrote the whole file back and the last writer won — ticks and
-  evidence were lost while both answered ok. The lock is `.specs/<feature>/.lock` (O_EXCL, holds `{pid, host, at}`),
-  re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
+  evidence were lost while both answered ok. The lock is `.specs/<feature>/.lock` (O_EXCL, holds `{pid, host, at,
+  token}`), re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
   `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A dead holder's lock (same host)
-  is reclaimed at once, any other after 2 min (10 min while its pid still runs). Where no lock file can be created
-  (read-only folder) the op runs unlocked. **Folder moves** — `manageFeature` rename / archive / remove, and restore
+  is reclaimed at once, any other after 2 min (10 min while its pid still runs). **Mutual exclusion rules** (each one
+  lost updates under contention while every call answered ok): a lock that can't be stat'ed is NEVER stale (it was
+  just released — retry the create); a stale lock is removed only by `reclaimStaleLock()` — under `<lock>.reclaim`
+  (O_EXCL) and only while the file is still the one judged stale (`lockSnapshot`: note + ino/mtime/size), so a
+  waiter can't delete the NEXT holder's fresh lock; a holder releases only the lock carrying ITS token
+  (`releaseLock`, also after a folder move). A stale lock that can't be removed (a handle without delete sharing, a
+  read-only folder, a directory named `.lock`) waits like a held one and ends in `{busy, stuck: true}`
+  (`err.lockStuck`, "delete it by hand") — never a `continue` that skips the deadline and the sleep (it spun at 100%
+  CPU forever and froze the MCP server). A multi-process counter test guards all of this. Where no lock file can be
+  created (read-only folder) the op runs unlocked. **Folder moves** — `manageFeature` rename / archive / remove, and restore
   (on `.specs/_archive/<slug>/.lock`) — run under `withMoveLock`: never while another process holds the lock (it moved
   the folder away mid-write: the writer's next `writeFileAtomic` recreated a zombie `.specs/<old>/`, and ticks landed
   in one folder, the spec in the other); the lock file travels with the folder and is released at the NEW place
-  (`releaseMovedLock` — left there it kept the renamed feature "busy" while its holder lived). Folders move through
+  (`releaseLock` with the acquisition's token — left there it kept the renamed feature "busy" while its holder lived). Folders move through
   `renameDirSync` (Windows EPERM retry). **`roadmap.json`** read-modify-writes (depend, backlog add/rm, `pruneBacklog`,
   `pruneRoadmapRefs`, restore, init `--lang`/`--guard`, roadmap `--lang`) hold `.specs/.roadmap.lock`
   (`withRoadmapLock`, `err.roadmapBusy`; it forgets only roadmap.json from the read cache). Lock order: a feature lock,
@@ -467,6 +487,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
   feature, active or archived. Every reader resolves a reference through `implementsPath()` (`:12` / `#L12` anchors
   dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing).
+  Comparisons go through `implementsRel()` (+ backticks, `./`, trailing `/`) / `implementsKey()` (+ FOLD_CASE):
+  `next --batch` (a shared file — or a folder and a file under it — ends the batch) and the brief's design sections.
 - **`earsValidate` is criterion-based, never line-based.** EARS phrasing (`ENQUANTO … QUANDO … O
   SISTEMA DEVE …`) wraps past one line, and markdown list items continue across lines (indented or
   lazy). `criterionBlocks()` folds physical lines into logical criteria FIRST — bounded by blank
@@ -588,9 +610,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(720 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(729 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 242 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 246 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

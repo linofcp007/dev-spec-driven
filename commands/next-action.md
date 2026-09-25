@@ -21,11 +21,16 @@ in the spec chain's order, and names it in `step`:
    executing or complete, e.g. an upgraded 1.12 one, it is worded as a sign-off for the tests that exist: T-IDs in test
    names, the eval baseline recorded), and on a bugfix the `design` approval of `bug.md`;
 5. **implement** — the next open task;
-6. **finish** — every task done → `/spec-finish` (**tasks** instead when no tasks exist yet). Once
+6. **verify** — every task is ticked, but one is not verified (its latest run failed, or its runnable `_Verify:_`
+   has only a note, stale or shared-number evidence): `/spec-finish` and the `execution` sign-off would refuse. The
+   recommendation names each task with its reason — re-run its `_Verify:_` with `dev-spec done <feature> <n> --run`
+   (a failing run means fixing the code first);
+7. **finish** — every task done and verified → `/spec-finish` (**tasks** instead when no tasks exist yet). Once
    `spec_finish {write: true}` has recorded the finish: **finished** (the `execution` sign-off, `/approve <feature>
    execution`, while it is missing — else nothing left) or **drift** — implementing files changed since the finish
    (`drift` lists them): decide with the user — the spec is now wrong → `/spec-impact`; the code is wrong → fix it;
-   harmless → re-run `/spec-finish` for a fresh baseline.
+   harmless → re-run `/spec-finish` for a fresh baseline. A finished feature that changed since (`staleBaseline`)
+   answers **finish** again — or **drift** first when one of its recorded files changed: decide, then finish again.
 
 Report: the feature's tracks, phase, doctor verdict, whether the gates are met (`gatesOk`), anything in
 `changedSinceApproval`, and the recommended next action — then offer to do it. Never skip a step to reach a

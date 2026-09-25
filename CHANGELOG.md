@@ -87,7 +87,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   gap (it is the plan: `plannedImplFiles`); at a drive root (`subst Q:\`) every `_Implements:_` path read as
   outside the project. `_Implements: src/app.js:12_` / `src/app.js#L12` named the file for coverage and the drift
   baseline but a missing one for trace_check (doctor and `spec_finish` failed "files that don't exist"); every reader
-  now drops the anchor. EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
+  now drops the anchor — `next --batch` too (`src/pay.js:10`, `src/pay.js#L50` and `./src/pay.js` went to three
+  parallel implementers as three files; a folder now also overlaps the files under it) and the brief's design
+  sections (the raw spelling found none). EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
   template criterion linted clean (new `placeholder` code). A stray unclosed `<!--` above the criteria hid every AC
   from the EARS linter (0 criteria, verdict pass — so the requirements approval passed a criterion with no modal verb)
   while trace_check counted them all; a marker that never closes is now plain text there and in placeholder
@@ -150,7 +152,15 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   there (left behind, it kept the renamed feature "busy"). `roadmap.json`'s read-modify-writes (depend, backlog, the
   prunes of create / archive / rename / remove / restore, init `--lang` / `--guard`, roadmap `--lang`) hold
   `.specs/.roadmap.lock`: two processes adding backlog items at once kept about half of them, and a dependency could
-  vanish (its feature then read as unblocked). When a generated file couldn't be replaced
+  vanish (its feature then read as unblocked). The lock itself guarantees one holder at a time: a waiter that found a
+  just-released lock gone read it as stale and deleted the NEXT holder's fresh lock (and a holder's release deleted
+  whatever lock sat at the path), so under contention two processes ran the read-modify-write at once — 80 parallel
+  `dev-spec done` calls all answered ok and kept 49–71 ticks. A lock that can't be stat'ed is never stale, a stale
+  lock is removed only under a `<lock>.reclaim` guard while it is still the lock judged stale, and a holder removes
+  only the lock carrying its own token. A stale lock that can't be removed (held open without delete sharing by a
+  scanner or sync client, a read-only folder, a folder named `.lock`) spun at 100% CPU with no deadline and froze
+  the MCP server; it now waits like a held lock and answers `busy` + `stuck` with a localized "delete it by hand"
+  error. When a generated file couldn't be replaced
   (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
   `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is
   retried). A BOM-only re-save ("UTF-8 with BOM", Windows PowerShell 5.1) of an approved artifact counted as
@@ -185,7 +195,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   from its own AC IDs (one generic row each). `spec_import` with +tdd still planned the template's rows (it scaffolded
   before writing the imported requirements): trace said "(typos?)" on a fresh import and doctor failed traceability
   once real tasks were imported. It now plans the imported ACs too, and the scaffold tasks.md it keeps when the source
-  has none cites only imported ACs and the tests covering them — else a localized placeholder.
+  has none cites only imported ACs and the tests covering them — else a localized placeholder. Its +saas / +ai track
+  tasks (and the ones `spec_add_track` appends) cite a criterion only when requirements.md defines it AS that track's
+  (under a `[SaaS]` / `[AI]` heading or carrying the marker): kept by number, tenant isolation / load test / the
+  prompt task "covered" an import's unrelated US-1.AC-5…8 (a coupon, a checkout) and trace_check passed with those
+  criteria implemented by nothing.
 - **Bugfix root-cause task.** Ticking the root-cause task while bug.md → Root Cause is still empty stays allowed (it
   is the task that writes it) but returns `rootCausePending: true` with a note, and a later task's refusal no longer
   says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES). A Reproduction or
@@ -210,7 +224,14 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   implementing file was never hashed), the catalog called it finished and the old execution sign-off still counted.
   `spec_next_action` now answers `finish` again with `staleBaseline` {finishedAt, since, newFiles}, `spec_drift` lists
   it as `stale` (verdict `stale`, CLI exit 1), the catalog shows it as complete, and an execution sign-off older than
-  the change is asked for again.
+  the change is asked for again. A stale baseline still hashes the files it recorded: adding a file under an
+  implemented folder made a changed recorded file vanish from next_action ("finish it again") and `spec_drift`, and
+  the re-finish accepted it — now next_action answers `drift` (the decision, then finish again) with `staleBaseline`
+  and `drift`, and `spec_drift` lists the feature as drifted (`stale: true`, verdict `drift`), like SessionStart.
+  With every task ticked but one unverified (its latest run failed, a note on a runnable `_Verify:_`), next_action
+  said "close the feature with /spec-finish" — or "finished, nothing left to do" — while spec_finish and the
+  execution sign-off refused, and the catalog showed ✅ finished; it now answers `verify`, naming each task with its
+  reason and how to record a passing run (`dev-spec done <f> <n> --run`), and the catalog calls it complete.
 - **Eval sets.** The harness's dry run said "sets are valid" for items a live run then paid a model call for and
   failed: an unknown grader type, a missing `id` / `input` / `expect`, a non-object item, a regex that doesn't
   compile, `judge` without a rubric, `contains` / `equals` / `regex` without a value. Every item is validated — the
@@ -328,7 +349,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 720 assertions (was 181), `node cli/test-cli.js` 242 (was 53); the tool count is
+- `node mcp/test.js` 729 assertions (was 181), `node cli/test-cli.js` 246 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

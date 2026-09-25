@@ -53,7 +53,7 @@ dev-spec doctor <feature>                      # health-check → ready to advan
 dev-spec ears <feature|file.md>                # lint EARS (SHALL/DEVE/DEBE, IDs, vague words, placeholders); --text "…" or - (stdin) for a snippet
 dev-spec trace <feature> [--code]              # AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs, EC/NFR/SC warnings); --code finds T-IDs in test files
 dev-spec next <feature> [--batch]              # next task (--batch: + the [P] tasks that can run beside it)
-dev-spec next-action <feature>                 # "you are here → do this next": fill → re-review → fix → approve → implement → finish
+dev-spec next-action <feature>                 # "you are here → do this next": fill → re-review → fix → approve → implement → verify → finish
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
 dev-spec approve <feature> <phase> [--force]   # record an approval gate — refused while that phase's checks fail
