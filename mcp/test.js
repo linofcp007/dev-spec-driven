@@ -144,7 +144,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length >= 23, "tools/list returns at least the 23 v1.12 tools (got " + list.result.tools.length + ")"); // exact count restored at release
+  ok(list.result.tools.length === 29, "tools/list returns 29 tools (got " + list.result.tools.length + ")");
 
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;

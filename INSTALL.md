@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 29 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 35 commands, the 3 agents, and
-the `spec-driven` MCP server load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 42 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (29 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell
@@ -69,7 +69,7 @@ You don't need Claude to test the server — run the bundled smoke test:
 node "$plugin\mcp\test.js"
 ```
 
-Expected tail: `181 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `53 passed, 0 failed`.)
+Expected tail: `617 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `198 passed, 0 failed`.)
 
 To watch the raw protocol, you can pipe a request in by hand:
 
@@ -108,8 +108,22 @@ validate the plugin through its `plugin.json`.
 
 **Hooks** load automatically with the plugin from the standard `hooks/hooks.json` (the manifest must
 NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): saving a
-`requirements.md` lints EARS, saving a `tasks.md` checks traceability, and session start prints
-feature status. To turn them off, disable the plugin (or empty `hooks/hooks.json`).
+`requirements.md` lints EARS (and reports template placeholders), saving a `tasks.md` checks
+traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
+prints feature status plus one line per finished feature whose files drifted since `/spec-finish`. To
+turn them off, disable the plugin (or empty `hooks/hooks.json`).
+
+**Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
+it on for a project, asks for confirmation before Claude writes or edits a code file outside `.specs/`
+while no feature has approved, unfinished tasks. It stays silent when the guard is off and never blocks
+on its own errors:
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-guard, or spec_init {guard: true}; --guard off to disable
+```
+
+The setting lives in `.specs/roadmap.json` (`meta.guard`). Only Claude Code runs the hook; other tools
+store the setting but don't enforce it.
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the

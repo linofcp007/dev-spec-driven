@@ -17,7 +17,7 @@ no API key.
 2. **(Optional) Verify it runs** — no dependencies required:
 
    ```bash
-   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # 181 assertions, exits 0 on success
+   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # 617 assertions, exits 0 on success
    ```
 
 3. **Register the server** with your MCP client. For **Cline**, add this to
@@ -40,10 +40,10 @@ no API key.
 
    ```bash
    node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config generic
-   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | all
+   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
-4. **Reload the MCP client.** The server advertises **23 tools** over stdio — `spec_init`,
+4. **Reload the MCP client.** The server advertises **29 tools** over stdio — `spec_init`,
    `spec_classify`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`, `spec_roadmap`,
    and more — for spec-driven development (EARS requirements → design → traceable tasks →
    approval-gated execution).
