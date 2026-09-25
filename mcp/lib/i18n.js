@@ -1929,6 +1929,30 @@ const MSG = {
     },
 
     // @wp WP1 msg-en >>>
+    // Evidence gate (spec_complete_task / doctor / spec_finish). Reason codes stay English-stable.
+    evidenceGate: {
+      noContent: "Evidence needs a command (with its exit code) or a summary — an exit code alone proves nothing.",
+      stateShape: (rel, field) => `${rel} has an unexpected shape ('${field}' must be an object) — fix it by hand; refusing to overwrite it.`,
+      manualOnRunnable: (n, slug) => `Task ${n}: a note was recorded, but its _Verify:_ command was not run — it stays unverified until a passing run is recorded: dev-spec done ${slug} ${n} --run`,
+      failedRun: (n, code, slug, runnable) => `Task ${n}: its latest recorded run failed (exit ${code}) — a note doesn't change that; it stays unverified until a passing run ` +
+        (runnable ? `of its _Verify:_ command is recorded: dev-spec done ${slug} ${n} --run` : "(a command with exit code 0) is recorded."),
+      duplicateNumber: (n) => `Task ${n}: another task also uses number ${n} and the recorded evidence is that task's — this one stays unverified; renumber the tasks, then record its own evidence.`,
+      staleEvidence: (n, slug, runnable) => `Task ${n}: the recorded evidence is for another task or an earlier _Verify:_ command — it stays unverified until its own ` +
+        (runnable ? `run is recorded: dev-spec done ${slug} ${n} --run` : "evidence is recorded."),
+      reason: { "no-evidence": "no evidence", "failed-run": "latest run failed", "manual-note-on-runnable-verify": "note only, _Verify:_ command not run", "duplicate-number": "number shared with another task",
+        "stale-evidence": "evidence is for another task or _Verify:_ command" },
+      duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
+    },
+    // CLI `done` human output.
+    taskDone: {
+      done: (n, verified, done, total) => `Task ${n} done${verified ? " (verified)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `Task ${n} was already done${verified ? " (verified)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  next → #${n} ${text}`,
+      allDone: "  — all done ✓",
+      numberInt: "task number must be an integer",
+      noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
+      shellHint: "Hint: this ran under the default Windows shell (cmd.exe). If the _Verify:_ command uses POSIX shell syntax, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
+    },
     // @wp WP1 <<<
 
     // @wp WP2 msg-en >>>
@@ -2137,6 +2161,28 @@ const MSG = {
     },
 
     // @wp WP1 msg-pt >>>
+    evidenceGate: {
+      noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
+      stateShape: (rel, field) => `${rel} tem uma estrutura inesperada ('${field}' tem de ser um objeto) — corrige-o à mão; não o vou sobrescrever.`,
+      manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
+      failedRun: (n, code, slug, runnable) => `Tarefa ${n}: a última execução registada falhou (exit ${code}) — uma nota não muda isso; continua não verificada até se registar uma execução com sucesso ` +
+        (runnable ? `do comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(um comando com exit code 0)."),
+      duplicateNumber: (n) => `Tarefa ${n}: outra tarefa também usa o número ${n} e a evidência registada é dessa — esta continua não verificada; renumera as tarefas e depois regista a evidência desta.`,
+      staleEvidence: (n, slug, runnable) => `Tarefa ${n}: a evidência registada é de outra tarefa ou de um comando _Verify:_ anterior — continua não verificada até se registar ` +
+        (runnable ? `uma execução desta: dev-spec done ${slug} ${n} --run` : "a evidência desta."),
+      reason: { "no-evidence": "sem evidência", "failed-run": "a última execução falhou", "manual-note-on-runnable-verify": "só uma nota, comando _Verify:_ por correr", "duplicate-number": "número partilhado com outra tarefa",
+        "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_" },
+      duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
+    },
+    taskDone: {
+      done: (n, verified, done, total) => `Tarefa ${n} feita${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `A tarefa ${n} já estava feita${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  próxima → #${n} ${text}`,
+      allDone: "  — tudo feito ✓",
+      numberInt: "o número da tarefa tem de ser um inteiro",
+      noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
+      shellHint: "Dica: isto correu na shell por omissão do Windows (cmd.exe). Se o comando _Verify:_ usa sintaxe de shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
+    },
     // @wp WP1 <<<
 
     // @wp WP2 msg-pt >>>
@@ -2345,6 +2391,28 @@ const MSG = {
     },
 
     // @wp WP1 msg-es >>>
+    evidenceGate: {
+      noContent: "La evidencia necesita un comando (con su exit code) o un resumen — un exit code solo no prueba nada.",
+      stateShape: (rel, field) => `${rel} tiene una estructura inesperada ('${field}' debe ser un objeto) — corrígelo a mano; no se sobrescribirá.`,
+      manualOnRunnable: (n, slug) => `Tarea ${n}: se registró una nota, pero su comando _Verify:_ no se ejecutó — sigue sin verificar hasta que se registre una ejecución correcta: dev-spec done ${slug} ${n} --run`,
+      failedRun: (n, code, slug, runnable) => `Tarea ${n}: su última ejecución registrada falló (exit ${code}) — una nota no cambia eso; sigue sin verificar hasta que se registre una ejecución correcta ` +
+        (runnable ? `de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(un comando con exit code 0)."),
+      duplicateNumber: (n) => `Tarea ${n}: otra tarea también usa el número ${n} y la evidencia registrada es de esa — esta sigue sin verificar; renumera las tareas y luego registra la evidencia de esta.`,
+      staleEvidence: (n, slug, runnable) => `Tarea ${n}: la evidencia registrada es de otra tarea o de un comando _Verify:_ anterior — sigue sin verificar hasta que se registre ` +
+        (runnable ? `una ejecución de esta: dev-spec done ${slug} ${n} --run` : "la evidencia de esta."),
+      reason: { "no-evidence": "sin evidencia", "failed-run": "la última ejecución falló", "manual-note-on-runnable-verify": "solo una nota, comando _Verify:_ sin ejecutar", "duplicate-number": "número compartido con otra tarea",
+        "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_" },
+      duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
+    },
+    taskDone: {
+      done: (n, verified, done, total) => `Tarea ${n} hecha${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `La tarea ${n} ya estaba hecha${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  siguiente → #${n} ${text}`,
+      allDone: "  — todo hecho ✓",
+      numberInt: "el número de tarea debe ser un entero",
+      noRunnable: (n) => `la tarea ${n} no tiene un marcador _Verify: <comando>_ ejecutable`,
+      shellHint: "Consejo: esto se ejecutó con la shell predeterminada de Windows (cmd.exe). Si el comando _Verify:_ usa sintaxis de shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
+    },
     // @wp WP1 <<<
 
     // @wp WP2 msg-es >>>

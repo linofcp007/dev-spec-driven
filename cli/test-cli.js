@@ -143,6 +143,89 @@ const fin = run(["finish", "login-loop", "--project", vp]);
 ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
 
 // @wp WP1 cli-tests >>>
+// 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
+const w1p = path.join(tmp, "wp1-proj");
+const w1Read = (f) => fs.readFileSync(path.join(w1p, ".specs", f, "tasks.md"), "utf8");
+run(["create", "Dup", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "dup", "tasks.md"),
+  "- [x] 3. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(7)\"_\n");
+const w1Dup = run(["done", "dup", "3", "--run", "--project", w1p]);
+ok(w1Dup.code === 1 && /process\.exit\(7\)/.test(w1Dup.out) && !/process\.exit\(0\)/.test(w1Dup.out) && /- \[ \] 3\. b/.test(w1Read("dup")) &&
+  JSON.parse(fs.readFileSync(path.join(w1p, ".specs", "dup", ".state.json"), "utf8")).evidence["3"].exitCode === 7,
+  "done --run on a duplicated number runs the _Verify:_ of the task it would tick (exit 7 → recorded, stays open, exit 1)");
+ok((process.platform === "win32") === /--shell bash/.test(w1Dup.out), "a failure under the default shell prints the --shell bash hint on Windows (only there)");
+run(["create", "Pad", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");
+const w1P1 = run(["done", "pad", "01", "--run", "--project", w1p]);
+const w1P2 = run(["done", "pad", "2", "--project", w1p]);
+ok(w1P1.code === 0 && /Task 1 done \(verified\)\. 1\/3/.test(w1P1.out) && w1P2.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Third/.test(w1P2.out) &&
+  /- \[x\] 01\. First\n[\s\S]*- \[x\] 02\. Second/.test(w1Read("pad")), "done finds zero-padded tasks ('01' with --run, and 2 for '02.')");
+const w1Exit = run(["done", "pad", "3", "--exit", "0", "--project", w1p]);
+ok(w1Exit.code === 1 && /exit code alone/.test(w1Exit.out) && /- \[ \] 03\. Third/.test(w1Read("pad")), "done --exit 0 alone (no --cmd, no --evidence) is rejected and ticks nothing");
+run(["create", "Sh", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "sh", "tasks.md"), "- [ ] 1. t\n  - _Verify: node -e \"process.exit(0)\"_\n");
+const w1Sh = run(["done", "sh", "1", "--run", "--shell", "no-such-shell-dsd", "--project", w1p]);
+ok(w1Sh.code === 1 && /no-such-shell-dsd/.test(w1Sh.out) && !/--shell bash/.test(w1Sh.out) && /- \[ \] 1\. t/.test(w1Read("sh")),
+  "--shell takes a value: the run uses that shell (a missing one fails, leaves the task open, no default-shell hint)");
+const realShell = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "/bin/sh";
+const w1Env = spawnSync(process.execPath, [CLI, "done", "sh", "1", "--run", "--shell", realShell, "--json", "--project", w1p], { encoding: "utf8", env: { ...process.env, DEV_SPEC_SHELL: "no-such-shell-dsd" } });
+const w1EnvOnly = spawnSync(process.execPath, [CLI, "done", "sh", "1", "--run", "--project", w1p], { encoding: "utf8", env: { ...process.env, DEV_SPEC_SHELL: "no-such-shell-dsd" } });
+let w1Json = null;
+try { w1Json = JSON.parse(w1Env.stdout); } catch { /* not one JSON document */ }
+ok(w1EnvOnly.status === 1 && /no-such-shell-dsd/.test(w1EnvOnly.stdout + w1EnvOnly.stderr) && w1Env.status === 0 && w1Json && w1Json.verified === true,
+  "DEV_SPEC_SHELL picks the shell, --shell beats it; with --json the run log goes to stderr and stdout stays one JSON document");
+run(["create", "Tarefas", "core", "--lang", "pt", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "tarefas", "tasks.md"), "- [ ] 1. um\n- [ ] 2. dois\n");
+const w1Pt = run(["done", "tarefas", "1", "--project", w1p]);
+ok(/Tarefa 1 feita\. 1\/2\s+próxima → #2 dois/.test(w1Pt.out) && /tem de ser um inteiro/.test(run(["done", "tarefas", "x", "--project", w1p]).out) &&
+  /já estava feita/.test(run(["done", "tarefas", "1", "--project", w1p]).out), "done output and refusals follow the feature language (PT)");
+// Review fixes: the second "3." never borrows the first one's passing run; "--exit 0" without --cmd can't clear
+// a recorded failure; a one-line ```code``` span doesn't hide the tasks below it.
+run(["create", "Dup Two", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "dup-two", "tasks.md"),
+  "- [ ] 3. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(7)\"_\n");
+const w1D1 = run(["done", "dup-two", "3", "--run", "--project", w1p]);
+const w1D2 = run(["done", "dup-two", "3", "--project", w1p]);
+const w1DDoc = run(["doctor", "dup-two", "--project", w1p]);
+ok(w1D1.code === 0 && /Task 3 done \(verified\)\. 1\/2/.test(w1D1.out) && w1D2.code === 0 && /Task 3 done\. 2\/2/.test(w1D2.out) && !/\(verified\)/.test(w1D2.out) &&
+  /renumber/.test(w1D2.out) && /verification — .*#3 \(number shared with another task\)/.test(w1DDoc.out),
+  "done on the second '3.' (its exit-7 _Verify:_ never ran) is not '(verified)'; doctor flags it");
+run(["create", "Claim", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "claim", "tasks.md"), "- [ ] 1. docs\n- [ ] 2. x\n");
+const w1C1 = run(["done", "claim", "1", "--cmd", "npm run lint", "--exit", "2", "--evidence", "lint failed", "--project", w1p]);
+const w1C2 = run(["done", "claim", "1", "--evidence", "fixed it", "--exit", "0", "--project", w1p]);
+ok(w1C1.code === 1 && w1C2.code === 0 && /Task 1 done\. 1\/2/.test(w1C2.out) && !/\(verified\)/.test(w1C2.out) && /latest recorded run failed \(exit 2\)/.test(w1C2.out),
+  "--evidence + --exit 0 without --cmd after a failed run ticks but stays unverified (a claimed exit code is not a run)");
+run(["create", "Fence", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "fence", "tasks.md"), "## Phase: Build\n- [x] 1. Wire the CLI\n  ```npm test```\n- [ ] 2. Write docs\n- [ ] 3. Release\n");
+const w1FSt = run(["status", "fence", "--project", w1p]);
+const w1FDone = run(["done", "fence", "2", "--project", w1p]);
+ok(/phase=executing/.test(w1FSt.out) && /1\/3/.test(w1FSt.out) && w1FDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Release/.test(w1FDone.out),
+  "status/done see the tasks below a one-line ```code``` span (not a fence)");
+// Round 2: renumbering a duplicated number can't hand one task's passing run to the other; a copy-paste
+// duplicate (same title, other _Verify:_) can't borrow it either; an inline "<!--" hides no task line.
+run(["create", "Rn", "core", "--project", w1p]);
+const w1RnTasks = path.join(w1p, ".specs", "rn", "tasks.md");
+fs.writeFileSync(w1RnTasks, "- [ ] 3. a\n  - _Verify: node -e \"process.exit(7)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
+const w1Rn = [run(["done", "rn", "3", "--run", "--project", w1p]), run(["done", "rn", "3", "--project", w1p]), run(["done", "rn", "3", "--run", "--project", w1p])];
+fs.writeFileSync(w1RnTasks, fs.readFileSync(w1RnTasks, "utf8").replace("- [x] 3. b", "- [x] 4. b"));
+const w1RnDoc = run(["doctor", "rn", "--project", w1p]);
+ok(w1Rn[0].code === 1 && w1Rn[2].code === 0 && /\(verified\)/.test(w1Rn[2].out) && /verification — .*#3 \(latest run failed\), #4/.test(w1RnDoc.out),
+  "done --run on a duplicated number, then renumbering: #3 keeps its own failed run (never the other task's pass)");
+run(["create", "Copy Dup", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "copy-dup", "tasks.md"),
+  "- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(7)\"_\n");
+const w1Cp1 = run(["done", "copy-dup", "3", "--run", "--project", w1p]);
+const w1Cp2 = run(["done", "copy-dup", "3", "--project", w1p]);
+ok(/Task 3 done \(verified\)\. 1\/2/.test(w1Cp1.out) && /Task 3 done\. 2\/2/.test(w1Cp2.out) && !/\(verified\)/.test(w1Cp2.out) &&
+  /verification — .*#3 \(number shared with another task\)/.test(run(["doctor", "copy-dup", "--project", w1p]).out),
+  "a copy-paste duplicate (same number and title, exit-7 _Verify:_ never run) is not '(verified)'");
+run(["create", "Cm", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "cm", "tasks.md"), "- [x] 1. Strip <!-- markers in the parser\n- [ ] 2. Handle the `-->` closer\n- [ ] 3. Docs\n");
+const w1CmSt = run(["status", "cm", "--project", w1p]);
+const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
+ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
+  "an inline '<!--' in a task's text hides no task below it (status and done agree)");
 // @wp WP1 <<<
 
 // @wp WP2 cli-tests >>>
