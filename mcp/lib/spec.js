@@ -684,7 +684,8 @@ function integrationPlanMd(name, lang) {
   return i18n.integrationPlan(name, lang);
 }
 
-function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
+// opts.brownfield: the feature lands in an existing codebase — also scaffold integration-plan.md.
+function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts = {}) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
@@ -744,6 +745,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
     if (notes.length) res.note = notes.join(" ");
     return res;
   };
+
+  if (opts && opts.brownfield) put("integration-plan.md", integrationPlanMd(name, lng)); // create-only, like every artifact
 
   if (bugfix) {
     put("bug.md", i18n.bugReport({ name, summary }, lng));
@@ -2972,6 +2975,13 @@ function specDoctor(projectDir, name) {
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", fm.evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
 
+  // Brownfield: an integration plan that is still the template (only when the feature has one).
+  const planFile = path.join(dir, "integration-plan.md");
+  if (fs.existsSync(planFile)) {
+    const planFilled = artifactState({ file: planFile }) === "filled";
+    add("integration-plan", planFilled ? "pass" : "warn", planFilled ? fm.brownfield.integrationPlanOk : fm.brownfield.integrationPlanPlaceholder);
+  }
+
   // Approval gates — a real gate, not advice: any artifact that exists but whose phase
   // has not been approved is flagged (warn, so quality fails still dominate the verdict).
   const state = readState(projectDir, name);
@@ -3608,18 +3618,335 @@ function roadmapReport(projectDir, opts = {}) {
 // ---------------------------------------------------------------------------
 
 const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
-const CODE_EXT = new Set([".js", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
-const ENDPOINT_RE = /(?<![\w$.])(app|router|r|fastify|api)\.(get|post|put|patch|delete)\s*\(|@(app|router|blueprint)\.route|@(Get|Post|Put|Patch|Delete|RequestMapping|GetMapping|PostMapping)\b|http\.HandleFunc|def\s+\w+\(request|@RestController/;
+const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
+const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names, test/entrypoint hints)
+const SCAN_READ_BYTES = 200000;
+const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
+const SCAN_LIST_CAP = 100; // entrypoints / migrations listed (env names: twice that)
+const COVERAGE_CAP = 20000; // files walked by coverage()
+// Windows and macOS file systems are case-insensitive: `_Implements: SRC/App.js_` names src/app.js there.
+const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
+const toPosix = (p) => String(p).split(path.sep).join("/");
+
+// Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
+// out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
+function walkProject(root, cap, onFile) {
+  let total = 0;
+  const stack = [root];
+  while (stack.length && total < cap) {
+    const d = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const dirs = [];
+    for (const e of entries) {
+      if (total >= cap) break;
+      if (e.isDirectory() && e.name.startsWith(".")) continue; // hidden dirs: VCS, tool caches, worktrees
+      if (SCAN_IGNORE.has(e.name)) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) { dirs.push(full); continue; }
+      if (!e.isFile()) continue;
+      total++;
+      onFile(toPosix(path.relative(root, full)), full, e.name);
+    }
+    for (let i = dirs.length - 1; i >= 0; i--) stack.push(dirs[i]);
+  }
+  return { total, truncated: total >= cap };
+}
+
+// Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage.
+const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e"]);
+// Only the conventions: foo.test.ts / foo.spec.js, test_x.py / x_test.py / tests.py, x_test.go, x_spec.rb, FooTest(s).java|cs…,
+// FooSpec.kt, test-x.js. A module that merely ends in "spec" (dev-spec.js, lib/spec.js) is code.
+const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py)$|_test\.(?:go|py)$|_spec\.rb$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|Spec\.kt$/;
+function isTestFile(rel) {
+  const parts = rel.split("/");
+  const name = parts.pop();
+  return parts.some((p) => TEST_DIRS.has(p.toLowerCase())) || RE_TEST_NAME.test(name);
+}
+
+// --- routes (method + path + file:line), one matcher set per framework family --------------------------------
+const JS_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const FRONTEND_EXT = new Set([".jsx", ".tsx"]); // `api.get('/users')` there is a client call, not a route
+// Express / Koa router / Fastify / Hono: <owner>.<verb>('/path' — only owners that name a server or router
+// (axios.get('/x') and map.get('k') are not routes), and the path must start with '/' (app.get('env') reads a setting).
+const JS_ROUTE_OWNERS = new Set(["app", "router", "r", "route", "routes", "server", "fastify", "api", "hono", "koa", "instance"]);
+const RE_JS_OWNER_SUFFIX = /(?:Router|Routes|App|Server|router|routes|app|server)$/;
+const RE_JS_ROUTE = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|options|head|all)\s*\(\s*(['"`])(\/[^'"`]*|\*)\3/g;
+const RE_JS_ROUTE_CHAIN = /[\w$)\]]\s*\.\s*route\s*\(\s*(['"`])(\/[^'"`]*)\1\s*\)/; // router.route('/x').get(…).post(…)
+const RE_JS_CHAIN_VERB = /\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/g;
+const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|koa-router|fastify|hono)(?:\/[^'"]*)?['"]/;
+const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2)?\s*\)/g;
+const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})?\s*\)/;
+const RE_NEXT_APP = /(?:^|\/)app\/((?:[^/]+\/)*)route\.[cm]?[jt]sx?$/; // Next.js app router: app/**/route.ts
+const RE_NEXT_PAGES = /(?:^|\/)pages\/api\/(.+)\.[cm]?[jt]sx?$/;
+const RE_NEXT_EXPORT = /^\s*export\s+(?:async\s+)?(?:function\s+|const\s+)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/;
+// Flask / FastAPI decorators (@app.route('/x', methods=[…]), @bp.get, @router.post) + APIRouter/Blueprint prefixes.
+const RE_PY_ROUTE = /^\s*@\s*([A-Za-z_]\w*)\.(route|get|post|put|patch|delete|options|head|api_route|websocket)\s*\(\s*(?:(?:path|rule)\s*=\s*)?[rRuUbBfF]{0,2}(['"])([^'"]*)\3(.*)$/;
+const RE_PY_METHODS = /methods\s*=\s*[[(]([^\])]*)[\])]/;
+// Decorator owners that name an app/router (@mock.patch("mod.fn") is not a PATCH route) — plus any name the file
+// assigns from FastAPI()/Flask()/APIRouter()/Blueprint().
+const PY_ROUTE_OWNERS = new Set(["app", "api", "application", "router", "routes", "route", "bp", "blueprint", "web", "server", "admin", "v1", "v2"]);
+const RE_PY_OWNER_SUFFIX = /(?:_app|_api|_router|_routes|_bp|_blueprint|App|Api|Router|Routes|Bp|Blueprint)$/;
+const RE_PY_APP_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:FastAPI|Flask|APIRouter|Blueprint|Quart|Sanic|Starlette)\s*\(/;
+const RE_PY_PREFIX_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:APIRouter|Blueprint)\s*\((.*)$/;
+const RE_PY_PREFIX_ARG = /\b(?:prefix|url_prefix)\s*=\s*[rRuU]?(['"])([^'"]*)\1/;
+const RE_PY_WEB_IMPORT = /^\s*(?:from|import)\s+(fastapi|flask|django)\b/m;
+const RE_DJANGO_ROUTE = /(?<![\w.])(?:path|re_path|url)\s*\(\s*[rRuU]?(['"])([^'"]*)\1/g;
+const RE_SPRING = /@(Get|Post|Put|Patch|Delete|Request)Mapping\b(?:\s*\(([^)]*)\))?/g;
+const RE_ASP_ATTR = /\[\s*(?:[\w.]+\s*,\s*)*Http(Get|Post|Put|Patch|Delete|Head|Options)\s*(?:\(\s*(?:template\s*:\s*)?"([^"]*)"[^)]*\))?/g;
+const RE_ASP_ROUTE_ATTR = /\[\s*Route\s*\(\s*"([^"]*)"\s*\)/;
+const RE_ASP_MAP = /\.Map(Get|Post|Put|Patch|Delete)?\s*\(\s*"([^"]*)"/g;
+const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*\(?\s*(['"])([^'"]+)\2/;
+const RE_RAILS_RES = /^\s*(resources|resource)\s*\(?\s*:(\w+)/;
+const RE_LARAVEL = /Route::(get|post|put|patch|delete|options|any|match|resource|apiResource)\s*\(\s*(?:\[[^\]]*\]\s*,\s*)?(['"])([^'"]+)\2/g;
+const RE_LARAVEL_CHAIN = /->\s*(get|post|put|patch|delete|options|any)\s*\(\s*(['"])([^'"]*)\2/g; // routes/*.php only
+const RE_SYMFONY = /#\[\s*Route\s*\(\s*(?:path\s*:\s*)?(['"])([^'"]+)\1(.*)$/; // the rest of the line holds methods: [...]
+const RE_GO_HANDLE = /(?<![\w.])(\w+)\.(?:HandleFunc|Handle)\s*\(\s*"([^"]+)"/g;
+const RE_GO_UPPER = /(?<![\w.])(\w+)\.(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|Any)\s*\(\s*"(\/[^"]*)"/g; // gin / echo
+const RE_GO_TITLE = /(?<![\w.])(\w+)\.(Get|Post|Put|Patch|Delete|Options|Head)\s*\(\s*"(\/[^"]*)"/g; // chi / fiber
+const GO_CLIENTS = new Set(["http", "client", "httpClient", "resty"]); // http.Get("/x") is a client call
+const RE_SLASH_COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*(?:\s|\/|$))/;
+const RE_HASH_COMMENT_LINE = /^\s*#(?!\[)/;
+// Labels that don't name one framework: kept on the route, never listed under `frameworks`.
+const AMBIGUOUS_FRAMEWORK = new Set(["node", "python", "gin/echo", "chi/fiber"]);
+
+function normRoutePath(p) {
+  const s = String(p == null ? "" : p).trim();
+  if (!s) return "/";
+  return /^[/^*]/.test(s) ? s : "/" + s; // Django regexes (^…$) and wildcards stay as written
+}
+function joinRoute(prefix, sub) {
+  const a = String(prefix || "").trim().replace(/\/+$/, "");
+  const b = String(sub || "").trim().replace(/^\/+/, "");
+  return normRoutePath(a ? (b ? a + "/" + b : a) : b);
+}
+function springPaths(args) {
+  if (!args || !args.trim()) return [""];
+  const named = args.match(/\b(?:value|path)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"[^"]*")/);
+  const lead = args.match(/^\s*(\{[^}]*\}|\[[^\]]*\]|"[^"]*")/);
+  const src = named ? named[1] : lead ? lead[1] : "";
+  const lits = [...src.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+  return lits.length ? lits : [""];
+}
+
+// The routes one (non-test) source file declares: [{ method, path, file, line, framework }].
+function scanRoutes(rel, text) {
+  const out = [];
+  const ext = path.extname(rel).toLowerCase();
+  const base = rel.split("/").pop();
+  // A trailing " // …" comment is dropped too (a URL's "://" has no space before it).
+  const lines = text.split(/\r?\n/).map((l) => (ext === ".py" || ext === ".rb" ? l : l.replace(/\s\/\/\s.*$/, "")));
+  const add = (method, p, i, framework) => out.push({ method: String(method).toUpperCase(), path: normRoutePath(p), file: rel, line: i + 1, framework });
+  const each = (re, line, fn) => { re.lastIndex = 0; let m; while ((m = re.exec(line)) !== null) fn(m); };
+  // A comment line documents a route, it doesn't declare one ("# @app.get('/x')", "// app.get('/x')"); a PHP #[Route] attribute is
+  // code. One huge line is bundled code: nothing to learn, and slow to scan.
+  const hashComments = ext === ".py" || ext === ".rb" || ext === ".php";
+  const skipLine = (l) => l.length > 4000 || RE_SLASH_COMMENT_LINE.test(l) || (hashComments && RE_HASH_COMMENT_LINE.test(l));
+
+  if (JS_EXT.has(ext)) {
+    const app = rel.match(RE_NEXT_APP);
+    if (app) {
+      const route = "/" + app[1].split("/").filter((s) => s && !/^\(.*\)$/.test(s) && !s.startsWith("@")).join("/");
+      lines.forEach((l, i) => { const m = l.match(RE_NEXT_EXPORT); if (m) add(m[1], route, i, "next.js"); });
+    }
+    const pages = rel.match(RE_NEXT_PAGES);
+    if (pages) {
+      const i = lines.findIndex((l) => /^\s*export\s+default\b/.test(l));
+      if (i !== -1) add("ANY", "/api/" + pages[1].replace(/(?:^|\/)index$/, ""), i, "next.js");
+    }
+    const imp = text.match(RE_JS_IMPORT);
+    const jsFw = imp ? ({ "@koa/router": "koa", "koa-router": "koa" }[imp[1]] || imp[1]) : "node";
+    const nest = /@Controller\s*\(|@nestjs\//.test(text);
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      if (nest) {
+        const c = l.match(RE_NEST_CTRL);
+        if (c) prefix = c[2] != null ? c[2] : c[4] != null ? c[4] : "";
+        each(RE_NEST_ROUTE, l, (m) => add(m[1], joinRoute(prefix, m[3] || ""), i, "nestjs"));
+      }
+      each(RE_JS_ROUTE, l, (m) => {
+        if (!JS_ROUTE_OWNERS.has(m[1]) && !RE_JS_OWNER_SUFFIX.test(m[1])) return;
+        if (m[1] === "api" && FRONTEND_EXT.has(ext)) return;
+        add(m[2], m[4], i, m[1] === "fastify" ? "fastify" : jsFw);
+      });
+      const ch = l.match(RE_JS_ROUTE_CHAIN);
+      if (ch) {
+        const verbs = [...l.slice(ch.index + ch[0].length).matchAll(RE_JS_CHAIN_VERB)].map((v) => v[1]);
+        for (let j = i + 1; j < Math.min(lines.length, i + 12) && /^\s*\./.test(lines[j]); j++) {
+          const v = lines[j].match(/^\s*\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/);
+          if (v) verbs.push(v[1]);
+        }
+        verbs.forEach((v) => add(v, ch[2], i, jsFw));
+      }
+    });
+  } else if (ext === ".py") {
+    const imp = text.match(RE_PY_WEB_IMPORT);
+    const pyFw = imp && imp[1] !== "django" ? imp[1] : null;
+    const prefixes = new Map();
+    const owners = new Set(lines.map((l) => (l.match(RE_PY_APP_DEF) || [])[1]).filter(Boolean));
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      const d = l.match(RE_PY_PREFIX_DEF);
+      if (d) { const pm = d[2].match(RE_PY_PREFIX_ARG); if (pm) prefixes.set(d[1], pm[2]); }
+      const m = l.match(RE_PY_ROUTE);
+      if (!m) return;
+      const [, owner, verb, , p, rest] = m;
+      if (!owners.has(owner) && !PY_ROUTE_OWNERS.has(owner) && !RE_PY_OWNER_SUFFIX.test(owner)) return;
+      const fw = pyFw || (verb === "route" ? "flask" : "python");
+      const full = joinRoute(prefixes.get(owner) || "", p);
+      if (verb === "route" || verb === "api_route") {
+        const mm = rest.match(RE_PY_METHODS);
+        const methods = mm ? [...mm[1].matchAll(/['"](\w+)['"]/g)].map((x) => x[1]) : [];
+        (methods.length ? methods : [verb === "route" ? "GET" : "ANY"]).forEach((x) => add(x, full, i, fw));
+      } else add(verb === "websocket" ? "WS" : verb, full, i, fw);
+    });
+    if (base === "urls.py" || /from\s+django\.(?:urls|conf\.urls)\s+import/.test(text)) {
+      lines.forEach((l, i) => { if (!skipLine(l)) each(RE_DJANGO_ROUTE, l, (m) => add("ANY", m[2], i, "django")); });
+    }
+  } else if (ext === ".java" || ext === ".kt") {
+    const classLine = lines.findIndex((l) => /\b(?:class|interface)\s+[A-Z]\w*/.test(l));
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_SPRING, l, (m) => {
+        const paths = springPaths(m[2]);
+        if (classLine !== -1 && i < classLine) { prefix = paths[0]; return; } // class-level mapping = prefix
+        const methods = m[1] === "Request" ? [...(m[2] || "").matchAll(/RequestMethod\.(\w+)/g)].map((x) => x[1]) : [m[1]];
+        (methods.length ? methods : ["ANY"]).forEach((mt) => paths.forEach((p) => add(mt, joinRoute(prefix, p), i, "spring")));
+      });
+    });
+  } else if (ext === ".cs") {
+    const classLine = lines.findIndex((l) => /\bclass\s+\w+/.test(l));
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      const r = l.match(RE_ASP_ROUTE_ATTR);
+      if (r && (classLine === -1 || i < classLine)) prefix = r[1]; // [Route("api/[controller]")] on the controller
+      each(RE_ASP_ATTR, l, (m) => add(m[1], joinRoute(prefix, m[2] || ""), i, "aspnet"));
+      each(RE_ASP_MAP, l, (m) => add(m[1] || "ANY", m[2], i, "aspnet")); // minimal APIs: app.MapGet("/x", …)
+    });
+  } else if (ext === ".rb") {
+    const rails = /(?:^|\/)routes\.rb$|(?:^|\/)config\/routes\//.test(rel);
+    const sinatra = /require\s+['"]sinatra/.test(text);
+    if (rails || sinatra) {
+      lines.forEach((l, i) => {
+        if (skipLine(l)) return;
+        const v = l.match(RE_RUBY_VERB);
+        if (v) add(v[1] === "match" ? "ANY" : v[1], v[3], i, rails ? "rails" : "sinatra");
+        const res = rails && l.match(RE_RAILS_RES);
+        if (res) add(res[1] === "resources" ? "RESOURCES" : "RESOURCE", res[2], i, "rails");
+      });
+    }
+  } else if (ext === ".php") {
+    const routeFile = /(?:^|\/)routes\//.test(rel);
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_LARAVEL, l, (m) => add(/resource/i.test(m[1]) ? "RESOURCE" : m[1] === "any" || m[1] === "match" ? "ANY" : m[1], m[3], i, "laravel"));
+      if (routeFile) each(RE_LARAVEL_CHAIN, l, (m) => add(m[1] === "any" ? "ANY" : m[1], m[3], i, "laravel"));
+      const sy = l.match(RE_SYMFONY);
+      if (sy) {
+        const mm = sy[3].match(/methods\s*:\s*\[([^\]]*)\]/);
+        const methods = mm ? [...mm[1].matchAll(/['"](\w+)['"]/g)].map((x) => x[1]) : [];
+        (methods.length ? methods : ["ANY"]).forEach((x) => add(x, sy[2], i, "symfony"));
+      }
+    });
+  } else if (ext === ".go") {
+    const fwUpper = /labstack\/echo/.test(text) ? "echo" : /gin-gonic\/gin/.test(text) ? "gin" : "gin/echo";
+    const fwTitle = /gofiber\/fiber/.test(text) ? "fiber" : /go-chi\/chi/.test(text) ? "chi" : "chi/fiber";
+    const fwHandle = /gorilla\/mux/.test(text) ? "gorilla/mux" : "net/http";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_GO_HANDLE, l, (m) => {
+        const pm = m[2].match(/^([A-Z]+)\s+(\S+)$/); // Go 1.22 patterns: HandleFunc("GET /x", …)
+        add(pm ? pm[1] : (l.match(/\.Methods\(\s*"(\w+)"/) || [])[1] || "ANY", pm ? pm[2] : m[2], i, fwHandle);
+      });
+      each(RE_GO_UPPER, l, (m) => add(m[2] === "Any" ? "ANY" : m[2], m[3], i, fwUpper));
+      each(RE_GO_TITLE, l, (m) => { if (!GO_CLIENTS.has(m[1])) add(m[2], m[3], i, fwTitle); });
+    });
+  }
+  return out;
+}
+
+// Environment variable NAMES the code reads — never a value. `.env` itself is never opened; only example files.
+const RE_ENV_READS = [
+  /process\.env\.([A-Za-z_][A-Za-z0-9_]*)/g,
+  /process\.env\[\s*['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]\s*\]/g,
+  /import\.meta\.env\.([A-Za-z_][A-Za-z0-9_]*)/g,
+  /(?:Deno|Bun)\.env\.get\(\s*['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]/g,
+  /\bos\.environ\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /\b(?:os\.)?environ\.get\(\s*['"]([A-Za-z_]\w*)['"]/g,
+  /\bgetenv\(\s*['"]([A-Za-z_]\w*)['"]/g, // Python os.getenv, PHP / C getenv
+  /\bENV\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /\bENV\.fetch\(\s*['"]([A-Za-z_]\w*)['"]/g,
+  /\bSystem\.getenv\(\s*"([A-Za-z_]\w*)"\s*\)/g,
+  /\bos\.(?:Getenv|LookupEnv)\(\s*"([A-Za-z_]\w*)"\s*\)/g,
+  /\bEnvironment\.GetEnvironmentVariable\(\s*"([A-Za-z_]\w*)"/g,
+  /\$_ENV\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /(?<![\w>$:])env\(\s*['"]([A-Z_][A-Z0-9_]*)['"]/g, // Laravel env('APP_KEY') — upper-case names only
+  /\benv::var(?:_os)?\(\s*"([A-Za-z_]\w*)"/g, // Rust
+];
+const ENV_EXAMPLE_FILES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist", ".env.defaults", "env.example", "example.env", "sample.env"]);
+function envNamesIn(text, into) {
+  for (const re of RE_ENV_READS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) into.add(m[1]);
+  }
+}
+
+// Migrations and schema files: anything under a migrations/migrate/alembic folder, *.sql, *.prisma, db/schema.rb.
+const MIGRATION_DIRS = new Set(["migrations", "migrate", "migration", "alembic"]);
+function isMigrationFile(dirsLc, name, ext) {
+  if (ext === ".sql" || ext === ".prisma") return true;
+  if (name === "schema.rb" && dirsLc[dirsLc.length - 1] === "db") return true;
+  if (!dirsLc.some((d) => MIGRATION_DIRS.has(d))) return false;
+  return !/^(?:__init__\.py|readme(?:\.\w+)?|\.gitkeep|\.keep)$/i.test(name) && ![".md", ".txt", ".pyc", ".mako"].includes(ext);
+}
+
+// Entrypoints recognised by name and place.
+const PY_ENTRY = new Set(["main.py", "app.py", "manage.py", "wsgi.py", "asgi.py", "__main__.py", "run.py", "server.py"]);
+const NODE_ROOT_ENTRY = new Set(["index.js", "server.js", "app.js", "main.js", "index.mjs", "server.mjs", "index.ts", "server.ts", "app.ts", "main.ts"]);
+function entryKind(rel, name, depth) {
+  if (PY_ENTRY.has(name) && depth <= 2) return "python";
+  if (name === "main.go" && (depth === 0 || /(?:^|\/)cmd\/[^/]+\/main\.go$/.test(rel))) return "go main";
+  if (name === "Program.cs") return ".NET Program.cs";
+  if (/(?:^|\/)src\/main\.rs$/.test(rel) || /(?:^|\/)src\/bin\/[^/]+\.rs$/.test(rel)) return "rust main";
+  if (name === "config.ru" && depth === 0) return "rack";
+  if (name === "artisan" && depth === 0) return "laravel artisan";
+  if (/^(?:[^/]+\/)?public\/index\.php$/.test(rel)) return "php front controller";
+  if (NODE_ROOT_ENTRY.has(name) && depth === 0) return "node";
+  return null;
+}
+const normEntry = (p) => String(p).trim().replace(/\\/g, "/").replace(/^\.\//, "");
+
+const NODE_FRAMEWORKS = { express: "express", koa: "koa", "@koa/router": "koa", "koa-router": "koa", fastify: "fastify", hono: "hono", "@nestjs/core": "nestjs", next: "next.js", "@hapi/hapi": "hapi", restify: "restify" };
+const NODE_TEST_RUNNERS = { jest: "jest", vitest: "vitest", mocha: "mocha", ava: "ava", jasmine: "jasmine", tap: "tap", "@playwright/test": "playwright", cypress: "cypress", uvu: "uvu" };
 
 function scanCodebase(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const cap = opts.cap || 5000;
+  const lang = projectLang(projectDir);
+  const B = i18n.msg(lang).brownfield;
   const byExt = {};
   const topDirs = [];
-  let total = 0;
-  let endpoints = 0;
-  const endpointSamples = [];
-  let scannedForEndpoints = 0;
+  const routes = [];
+  let routeTotal = 0;
+  const routeFiles = new Set();
+  const env = new Set();
+  const envFiles = [];
+  const migrations = [];
+  const entrypoints = [];
+  const testFws = new Set();
+  const frameworks = new Set();
+  const csproj = [];
+  let testFiles = 0;
+  let read = 0;
+  let readCapped = false;
+  let pytestConfig = false;
+  let phpunitConfig = false;
+  const addEntry = (file, kind) => { if (!entrypoints.some((e) => e.file === file && e.kind === kind)) entrypoints.push({ file, kind }); };
 
   // top-level dirs (candidate modules)
   try {
@@ -3628,96 +3955,813 @@ function scanCodebase(projectDir, opts = {}) {
     }
   } catch {}
 
-  // bounded recursive walk
-  const stack = [root];
-  while (stack.length && total < cap) {
-    const d = stack.pop();
-    let entries = [];
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      if (total >= cap) break;
-      if (e.isDirectory() && e.name.startsWith(".")) continue; // hidden dirs: VCS, tool caches, worktrees
-      if (SCAN_IGNORE.has(e.name)) continue;
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) { stack.push(full); continue; }
-      total++;
-      const ext = path.extname(e.name).toLowerCase();
-      byExt[ext] = (byExt[ext] || 0) + 1;
-      if (CODE_EXT.has(ext) && scannedForEndpoints < 1200) {
-        scannedForEndpoints++;
-        try {
-          const txt = fs.readFileSync(full, "utf8").slice(0, 200000);
-          if (ENDPOINT_RE.test(txt)) {
-            endpoints++;
-            if (endpointSamples.length < 25) endpointSamples.push(path.relative(root, full));
-          }
-        } catch {}
-      }
-    }
-  }
-
-  // stack detection from manifests
-  const stackHints = [];
+  // Root manifests: stack, frameworks, test runners, package.json entrypoints.
   const has = (f) => fs.existsSync(path.join(root, f));
+  const text = (f) => { try { return fs.readFileSync(path.join(root, f), "utf8").slice(0, SCAN_READ_BYTES); } catch { return ""; } };
+  const stackHints = [];
   if (has("package.json")) {
     try {
-      const pj = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-      const deps = Object.keys({ ...(pj.dependencies || {}), ...(pj.devDependencies || {}) });
+      const pj = JSON.parse(text("package.json").replace(/^\uFEFF/, ""));
+      const all = { ...(pj.dependencies || {}), ...(pj.devDependencies || {}) };
+      const deps = Object.keys(all);
       stackHints.push("node (" + deps.slice(0, 12).join(", ") + (deps.length > 12 ? ", …" : "") + ")");
+      deps.forEach((d) => {
+        if (Object.prototype.hasOwnProperty.call(NODE_FRAMEWORKS, d)) frameworks.add(NODE_FRAMEWORKS[d]);
+        if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
+      });
+      const scripts = isObj(pj.scripts) ? pj.scripts : {};
+      if (typeof scripts.test === "string" && /\bnode\s+(?:[^|&;]*\s)?--test\b/.test(scripts.test)) testFws.add("node:test");
+      if (typeof pj.main === "string" && pj.main.trim()) addEntry(normEntry(pj.main), "package.json main");
+      if (typeof pj.bin === "string" && pj.bin.trim()) addEntry(normEntry(pj.bin), "package.json bin");
+      else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addEntry(normEntry(v), "package.json bin"));
+      if (typeof scripts.start === "string" && scripts.start.trim()) {
+        const m = scripts.start.match(/(?:^|\s)(?:node|nodemon|ts-node|tsx|bun(?:\s+run)?|deno\s+run)\s+(?:--?[\w-]+(?:=\S+)?\s+)*([^\s&|;]+\.[cm]?[jt]s)\b/);
+        addEntry(m ? normEntry(m[1]) : scripts.start.trim(), "npm start");
+      }
     } catch { stackHints.push("node"); }
   }
-  if (has("requirements.txt") || has("pyproject.toml") || has("setup.py")) stackHints.push("python");
+  const pyManifest = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile"].filter(has).map(text).join("\n").toLowerCase();
+  const hasPyManifest = has("requirements.txt") || has("pyproject.toml") || has("setup.py");
+  for (const fw of ["fastapi", "flask", "django"]) if (new RegExp("\\b" + fw + "\\b").test(pyManifest)) frameworks.add(fw);
+  if (/\bpytest\b/.test(pyManifest)) testFws.add("pytest");
+  const goMod = has("go.mod") ? text("go.mod") : "";
+  [["gin-gonic/gin", "gin"], ["labstack/echo", "echo"], ["go-chi/chi", "chi"], ["gofiber/fiber", "fiber"], ["gorilla/mux", "gorilla/mux"]].forEach(([k, v]) => { if (goMod.includes(k)) frameworks.add(v); });
+  const jvm = ["pom.xml", "build.gradle", "build.gradle.kts"].filter(has).map(text).join("\n").toLowerCase();
+  if (/spring-boot/.test(jvm)) frameworks.add("spring");
+  [["junit", "junit"], ["testng", "testng"], ["kotest", "kotest"]].forEach(([k, v]) => { if (jvm.includes(k)) testFws.add(v); });
+  const gemfile = has("Gemfile") ? text("Gemfile") : "";
+  if (/['"]rails['"]/.test(gemfile)) frameworks.add("rails");
+  if (/['"]sinatra['"]/.test(gemfile)) frameworks.add("sinatra");
+  [["rspec", "rspec"], ["minitest", "minitest"]].forEach(([k, v]) => { if (gemfile.includes(k)) testFws.add(v); });
+  const composer = has("composer.json") ? text("composer.json") : "";
+  [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
+  [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
+  const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
+  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^\\s*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); });
+
+  // bounded recursive walk
+  const walk = walkProject(root, cap, (rel, full, name) => {
+    const ext = path.extname(name).toLowerCase();
+    byExt[ext] = (byExt[ext] || 0) + 1;
+    const parts = rel.split("/");
+    const dirsLc = parts.slice(0, -1).map((p) => p.toLowerCase());
+    if (isMigrationFile(dirsLc, name, ext)) migrations.push(rel);
+    if (ENV_EXAMPLE_FILES.has(name)) {
+      envFiles.push(rel);
+      try {
+        for (const l of fs.readFileSync(full, "utf8").slice(0, 50000).split(/\r?\n/)) {
+          const m = l.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+          if (m) env.add(m[1]);
+        }
+      } catch {}
+    }
+    const kind = entryKind(rel, name, parts.length - 1);
+    if (kind) addEntry(rel, kind);
+    if (name === "conftest.py" || name === "pytest.ini") pytestConfig = true;
+    if (/^phpunit\.xml(?:\.dist)?$/.test(name)) phpunitConfig = true;
+    if (ext === ".csproj" && csproj.length < 20) csproj.push(full);
+    if (!CODE_EXT.has(ext)) return;
+    const test = isTestFile(rel);
+    if (test) {
+      testFiles++;
+      if (/_test\.go$/.test(name)) testFws.add("go test");
+      if (/_spec\.rb$/.test(name)) testFws.add("rspec");
+    }
+    if (read >= SCAN_READ_CAP) { readCapped = true; return; }
+    read++;
+    let txt;
+    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
+    envNamesIn(txt, env);
+    if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
+    if (test) {
+      // The runner a test file imports (the manifests above only cover declared dependencies).
+      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^\s*(?:import|from)\s+pytest\b/m, "pytest"],
+        [/^\s*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
+        .forEach(([re, fw]) => { if (re.test(txt)) testFws.add(fw); });
+      return; // tests call routes (supertest's api.get('/x')), they don't declare them
+    }
+    if (ext === ".py") { const im = txt.match(RE_PY_WEB_IMPORT); if (im) frameworks.add(im[1]); } // FastAPI/Flask without a manifest
+    if (/@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
+    else if (ext === ".java" && /\bstatic\s+void\s+main\s*\(/.test(txt)) addEntry(rel, "java main");
+    else if (ext === ".kt" && /^\s*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main");
+    const found = scanRoutes(rel, txt);
+    if (!found.length) return;
+    routeFiles.add(rel);
+    routeTotal += found.length;
+    for (const r of found) {
+      if (!AMBIGUOUS_FRAMEWORK.has(r.framework)) frameworks.add(r.framework);
+      if (routes.length < SCAN_ROUTE_CAP) routes.push(r);
+    }
+  });
+  for (const f of csproj) {
+    let t = "";
+    try { t = fs.readFileSync(f, "utf8").slice(0, SCAN_READ_BYTES).toLowerCase(); } catch {}
+    if (/microsoft\.net\.sdk\.web|microsoft\.aspnetcore/.test(t)) frameworks.add("aspnet");
+    [["xunit", "xunit"], ["nunit", "nunit"], ["mstest", "mstest"]].forEach(([k, v]) => { if (t.includes(k)) testFws.add(v); });
+  }
+  if (pytestConfig) testFws.add("pytest");
+  if (phpunitConfig) testFws.add("phpunit");
+
+  // Stack from manifests; Python also from imports (FastAPI/Flask apps often ship without a manifest).
+  const pyFw = ["fastapi", "flask", "django"].filter((f) => frameworks.has(f));
+  if (hasPyManifest || pyFw.length) stackHints.push("python" + (pyFw.length ? " (" + pyFw.join(", ") + ")" : ""));
   if (has("go.mod")) stackHints.push("go");
   if (has("Cargo.toml")) stackHints.push("rust");
   if (has("composer.json")) stackHints.push("php");
-  if (has("pom.xml") || has("build.gradle")) stackHints.push("java/jvm");
+  if (has("pom.xml") || has("build.gradle") || has("build.gradle.kts")) stackHints.push("java/jvm");
   if (has("Gemfile")) stackHints.push("ruby");
+  if (csproj.length) stackHints.push(".net");
 
   const extList = Object.entries(byExt).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => (k || "(none)") + ":" + v);
-  return {
+  const envList = [...env].sort();
+  const res = {
     ok: true,
     root,
-    filesScanned: total,
-    truncated: total >= cap,
+    filesScanned: walk.total,
+    truncated: walk.truncated,
     topLevelDirs: topDirs.sort(),
     byExtension: extList,
     stack: stackHints,
-    candidateEndpoints: endpoints,
-    endpointSamples,
-    note: i18n.msg(projectLang(projectDir)).notes.scan,
+    frameworks: [...frameworks].sort(),
+    candidateEndpoints: routeTotal, // ROUTES found (before 1.13: files that matched)
+    endpointFiles: routeFiles.size,
+    endpointSamples: [...routeFiles].slice(0, 25), // forward-slash paths of files that declare routes
+    routes,
+    routesTruncated: routeTotal > routes.length,
+    testFrameworks: [...testFws].sort(),
+    testFiles,
+    entrypoints: entrypoints.slice(0, SCAN_LIST_CAP),
+    envVars: envList.slice(0, SCAN_LIST_CAP * 2),
+    envVarsTotal: envList.length,
+    envFiles,
+    migrations: migrations.slice(0, SCAN_LIST_CAP),
+    migrationsTotal: migrations.length,
+    migrationDirs: [...new Set(migrations.map((m) => (m.includes("/") ? m.slice(0, m.lastIndexOf("/")) : ".")))].slice(0, SCAN_LIST_CAP),
+    codeFilesRead: read,
+    readCapped,
+    note: i18n.msg(lang).notes.scan,
+  };
+  if (res.routesTruncated) res.routesNote = B.routesTruncated(routes.length, routeTotal);
+  if (readCapped) res.readNote = B.readCapped(SCAN_READ_CAP);
+  return res;
+}
+
+// _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments stripped, the path
+// runs to the LAST underscore before whitespace, comma/semicolon lists, backticks dropped).
+function implementsRefs(tasksText) {
+  const out = [];
+  const re = /_Implements:\s*(.+?)_(?=\s|$)/g;
+  const t = stripHtmlComments(tasksText || "");
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+  }
+  return out;
+}
+function globRe(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        i++;
+        if (glob[i + 1] === "/") { i++; re += "(?:.*/)?"; } else re += ".*";
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp("^" + re + "$");
+}
+// The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
+// glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
+function implementsTargets(root, ref, code, fold) {
+  const p = String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
+  if (!p) return [];
+  if (/[*?]/.test(p)) {
+    const re = globRe(fold(p.replace(/^\.\//, "")));
+    return [...code.keys()].filter((k) => re.test(k));
+  }
+  const abs = path.resolve(root, p);
+  if (abs === root || !abs.startsWith(root + path.sep)) return []; // the whole project, or outside it: never counted
+  const rel = fold(toPosix(path.relative(root, abs)));
+  if (code.has(rel)) return [rel];
+  return [...code.keys()].filter((k) => k.startsWith(rel + "/"));
+}
+
+// Spec coverage: the share of code files (CODE_EXT, tests apart) named in any _Implements:_ marker of any
+// feature — active or archived — with a per-top-level-folder breakdown. Compatible fields, meaning since 1.13:
+// coveragePercent = covered code files / code files (was: top-level folders whose NAME matched a feature slug);
+// modulesTotal = top-level folders holding code ("." = the root); documented / undocumented = those folders
+// with at least one / no covered file (undocumented is also returned as uncoveredFolders); features = the
+// active features (unchanged).
+function coverage(projectDir) {
+  const root = path.resolve(projectDir);
+  const specs = specsRoot(root);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const active = listFeatures(projectDir).features.map((f) => f.name);
+  const archiveDir = path.join(specs, "_archive");
+  const archived = safeReaddir(archiveDir).filter((n) => { try { return fs.statSync(path.join(archiveDir, n)).isDirectory(); } catch { return false; } }).sort();
+  const sources = active.map((n) => ({ feature: n, archived: false, dir: path.join(specs, n) }))
+    .concat(archived.map((n) => ({ feature: n, archived: true, dir: path.join(archiveDir, n) })));
+
+  const code = new Map(); // fold(rel) → rel
+  let testFiles = 0;
+  const walk = walkProject(root, COVERAGE_CAP, (rel, full, name) => {
+    if (!CODE_EXT.has(path.extname(name).toLowerCase())) return;
+    if (isTestFile(rel)) testFiles++;
+    else code.set(fold(rel), rel);
+  });
+
+  const covered = new Set();
+  const byFeature = [];
+  const unmatched = [];
+  for (const s of sources) {
+    const refs = implementsRefs(readIfExists(path.join(s.dir, "tasks.md")));
+    const mine = new Set();
+    for (const ref of refs) {
+      const hits = implementsTargets(root, ref, code, fold);
+      if (!hits.length && unmatched.length < 50) unmatched.push({ feature: s.feature, ref });
+      hits.forEach((k) => { mine.add(k); covered.add(k); });
+    }
+    if (refs.length) byFeature.push({ feature: s.feature, archived: s.archived, refs: refs.length, files: mine.size });
+  }
+
+  const folders = new Map();
+  for (const [k, rel] of code) {
+    const top = rel.includes("/") ? rel.slice(0, rel.indexOf("/")) : ".";
+    const f = folders.get(top) || { folder: top, files: 0, covered: 0 };
+    f.files++;
+    if (covered.has(k)) f.covered++;
+    folders.set(top, f);
+  }
+  const byFolder = [...folders.values()].sort((a, b) => (a.folder < b.folder ? -1 : a.folder > b.folder ? 1 : 0))
+    .map((f) => ({ ...f, percent: Math.round((f.covered / f.files) * 100) }));
+  const documented = byFolder.filter((f) => f.covered > 0).map((f) => f.folder);
+  const undocumented = byFolder.filter((f) => f.covered === 0).map((f) => f.folder);
+  return {
+    ok: true,
+    coveragePercent: code.size ? Math.round((covered.size / code.size) * 100) : 0,
+    codeFiles: code.size,
+    coveredFiles: covered.size,
+    testFiles,
+    modulesTotal: byFolder.length,
+    documented,
+    undocumented,
+    uncoveredFolders: undocumented.slice(),
+    byFolder,
+    uncoveredSample: [...code].filter(([k]) => !covered.has(k)).map(([, rel]) => rel).sort().slice(0, 25),
+    features: active,
+    archivedFeatures: archived,
+    byFeature,
+    unmatchedImplements: unmatched,
+    truncated: walk.truncated,
+    note: i18n.msg(projectLang(projectDir)).notes.coverage,
   };
 }
 
-function coverage(projectDir) {
-  const root = path.resolve(projectDir);
-  let topLevelDirs = [];
-  try {
-    topLevelDirs = fs.readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !SCAN_IGNORE.has(e.name) && !e.name.startsWith("."))
-      .map((e) => e.name);
-  } catch { /* unreadable root → 0 modules */ }
-  const features = listFeatures(projectDir).features.map((f) => f.name);
-  // Slug segments, singularized ("payments" ≈ "payment").
-  const segs = (s) => slugify(s).split("-").filter(Boolean).map((w) => (w.length > 3 ? w.replace(/s$/, "") : w));
-  const contains = (a, b) => b.length > 0 && a.some((_, i) => b.every((w, j) => a[i + j] === w));
-  const featSegs = features.map(segs);
-  const modules = topLevelDirs.filter((d) => !["public", "static", "assets", "docs", "doc", "test", "tests", "scripts", "bin", "config", "migrations"].includes(d));
-  const documented = [];
-  const undocumented = [];
-  for (const m of modules) {
-    const ms = segs(m);
-    const hit = featSegs.some((fs_) => contains(fs_, ms) || contains(ms, fs_));
-    (hit ? documented : undocumented).push(m);
+// ---------------------------------------------------------------------------
+// spec_import — a spec written for another tool (Kiro · spec-kit · OpenSpec) becomes a NEW dev-spec feature
+// ---------------------------------------------------------------------------
+// Read-only on the source (never modified), inside the project only, and never over an existing feature: the
+// feature is scaffolded by createFeature, then requirements.md / design.md / tasks.md are replaced by the
+// imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
+// where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
+
+const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec" };
+const IMPORT_ALIASES = { speckit: "spec-kit", spec_kit: "spec-kit", "github-spec-kit": "spec-kit", "open-spec": "openspec" };
+const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+function isInsideDir(root, p) {
+  const f = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const r = f(root.endsWith(path.sep) ? root : root + path.sep);
+  return f(p) === f(root) || f(p).startsWith(r);
+}
+
+// Headings outside fenced code: [{ i, level, text }].
+function mdHeadings(lines) {
+  return headingIndex(lines).map((i) => {
+    const m = lines[i].match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    return { i, level: m[1].length, text: m[2].trim() };
+  });
+}
+// The lines under heading hs[k], up to the next heading of the same or a higher level.
+function mdBody(lines, hs, k) {
+  const h = hs[k];
+  const next = hs.slice(k + 1).find((x) => x.level <= h.level);
+  return lines.slice(h.i + 1, next ? next.i : lines.length);
+}
+// First paragraph of prose (no headings, lists, quotes, tables or metadata), whitespace-folded.
+function firstParagraph(lines) {
+  const out = [];
+  for (const l of lines) {
+    const t = l.trim();
+    if (!t) { if (out.length) break; continue; }
+    if (/^(?:#|[-*+]\s|\d+[.)]\s|>|\||```|~~~|---)/.test(t) || /^\*\*[^*]+\*\*:?/.test(t)) { if (out.length) break; continue; }
+    out.push(t);
   }
-  const pct = modules.length ? Math.round((documented.length / modules.length) * 100) : 0;
+  return out.join(" ").trim() || null;
+}
+// List items of a body: [{ n (printed number or null), text (continuation lines folded) }].
+function mdListItems(lines, numberedOnly) {
+  const items = [];
+  let cur = null;
+  let fence = null;
+  for (const l of lines) {
+    const f = l.match(RE_FENCE);
+    if (fence) { if (f && l.trim().startsWith(fence)) fence = null; cur = null; continue; }
+    if (f) { fence = f[1]; cur = null; continue; }
+    const m = l.match(numberedOnly ? /^\s*(\d+)[.)]\s+(.*)$/ : /^\s*(?:(\d+)[.)]|[-*+])\s+(.*)$/);
+    if (m) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim() }; items.push(cur); continue; }
+    if (!l.trim() || /^\s*#/.test(l)) { cur = null; continue; }
+    if (cur && /^\s+\S/.test(l) && !/^\s*[-*+]\s/.test(l)) cur.text += " " + l.trim();
+  }
+  return items;
+}
+const trimClause = (s) => String(s || "").trim().replace(/[\s,.;:]+$/, "");
+// Prose lines as written (trailing spaces dropped), blank runs folded, no blank edges.
+function tidyLines(lines) {
+  const out = [];
+  for (const l of lines.map((x) => x.replace(/\s+$/, ""))) if (l || (out.length && out[out.length - 1])) out.push(l);
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
+const lcFirst = (s) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+const IRREGULAR_VERBS = new Map([["is", "be"], ["are", "be"], ["has", "have"], ["does", "do"], ["goes", "go"]]);
+function baseVerb(v) {
+  const w = v.toLowerCase();
+  if (IRREGULAR_VERBS.has(w)) return IRREGULAR_VERBS.get(w);
+  if (/[^aeiou]ies$/.test(w)) return w.slice(0, -3) + "y";
+  if (/(?:ss|sh|ch|x|z|o)es$/.test(w)) return w.slice(0, -2);
+  if (/[^s]s$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+// A THEN clause as an EARS response. Already modal ("the API SHALL return 401") → kept. English "the system
+// returns X" → THE SYSTEM SHALL return X; anything else → THE SYSTEM SHALL ensure that <clause> (PT/ES likewise,
+// with 'garantir que' / 'garantizar que' — no verb guessing there).
+function earsThen(clause, lng, E) {
+  const c = trimClause(clause);
+  if (!c) return null;
+  if (RE_MODAL.test(c)) return c;
+  if (lng === "en") {
+    let m = c.match(/^(?:the\s+)?system\s+(?:should|must|will|shall)\s+(not\s+)?(.+)$/i);
+    if (m) return E.shall + " " + (m[1] ? E.not + " " : "") + m[2];
+    m = c.match(/^(?:the\s+)?system\s+(?:does\s+not|doesn't|never)\s+(.+)$/i);
+    if (m) return E.shall + " " + E.not + " " + m[1];
+    // Only a verb-shaped word ("returns", "is", "stores"): "the system administrator approves" / "the system status is
+    // green" name something else — those take the 'ensure that' form below.
+    m = c.match(/^(?:the\s+)?system\s+([a-z]+)\b(.*)$/i);
+    if (m && (IRREGULAR_VERBS.has(m[1].toLowerCase()) || /(?:[^aeiou]ies|(?:ss|sh|ch|x|z|o)es|[^usi]s)$/i.test(m[1]))) return E.shall + " " + baseVerb(m[1]) + m[2];
+  }
+  return E.ensure + " " + lcFirst(c);
+}
+// { given, when, then } → "WHILE <given>, WHEN <when>, THE SYSTEM SHALL …" (null without a THEN).
+function earsFromClauses(cl, lng) {
+  const E = i18n.msg(lng).importSpec.ears;
+  const then = earsThen(cl.then, lng, E);
+  if (!then) return null;
+  return [cl.given ? E.while + " " + trimClause(cl.given) + "," : null, cl.when ? E.when + " " + trimClause(cl.when) + "," : null, then].filter(Boolean).join(" ");
+}
+// Given/When/Then prose (spec-kit scenarios; Gherkin keywords in EN/PT/ES) → EARS, in the scenario's language.
+const GWT = [
+  ["en", /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i],
+  ["pt", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:quando\s+(.+?)\s*,?\s+)?ent[ãa]o\s+(.+)$/i],
+  ["es", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:cuando\s+(.+?)\s*,?\s+)?entonces\s+(.+)$/i],
+];
+function earsFromGwt(text) {
+  const t = String(text).replace(/\*\*|__/g, "").trim();
+  if (RE_MODAL.test(t) && RE_EARS_KEYWORD.test(t)) return t;
+  for (const [lng, re] of GWT) {
+    const m = t.match(re);
+    if (m && (m[1] || m[2])) return earsFromClauses({ given: m[1], when: m[2], then: m[3] }, lng);
+  }
+  return null;
+}
+// A Kiro criterion is usually EARS already ("WHEN … THEN the system SHALL …") — kept verbatim; a WHEN/IF … THEN
+// without SHALL gets its response rewritten.
+function earsFromKiro(text) {
+  const t = String(text).trim();
+  if (RE_MODAL.test(t)) return t;
+  const m = t.match(/^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i);
+  if (!m) return null;
+  const E = i18n.msg("en").importSpec.ears;
+  const then = earsThen(m[3], "en", E);
+  const kw = m[1].toUpperCase();
+  return kw === "IF" ? `${E.if} ${trimClause(m[2])}, ${E.then} ${then}` : `${E[kw.toLowerCase()]} ${trimClause(m[2])}, ${then}`;
+}
+function titleFromStory(prose) {
+  const m = prose.join(" ").match(/\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i);
+  return m ? shortTitle(m[1].charAt(0).toUpperCase() + m[1].slice(1), 60) : null;
+}
+function newImportModel() {
+  return { title: null, summary: null, nameHint: null, stories: [], extra: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
+}
+
+// Kiro: .kiro/specs/<name>/ — requirements.md (### Requirement N, **User Story:**, #### Acceptance Criteria with
+// numbered WHEN/THEN/SHALL items), design.md, tasks.md (- [ ] 1. / 2.1 with _Requirements: 1.1, 2.3_).
+function parseKiro(dir, read, W) {
+  const req = read(path.join(dir, "requirements.md"));
+  const des = read(path.join(dir, "design.md"));
+  const tasks = read(path.join(dir, "tasks.md"));
+  if (req == null && tasks == null) return null;
+  const model = newImportModel();
+  model.nameHint = path.basename(dir);
+  if (req != null) {
+    const lines = stripHtmlComments(req).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const h1 = hs.find((h) => h.level === 1);
+    model.title = h1 && !/^requirements?(?:\s+document)?$/i.test(h1.text) ? h1.text : null;
+    const introK = hs.findIndex((h) => /^introduction\b/i.test(h.text));
+    model.summary = introK !== -1 ? firstParagraph(mdBody(lines, hs, introK)) : firstParagraph(lines.slice(h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i));
+    hs.forEach((h, k) => {
+      const m = h.text.match(/^requirement\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i);
+      if (!m) return;
+      const body = mdBody(lines, hs, k);
+      // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the numbered criteria.
+      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
+      const proseLines = tidyLines((acAt === -1 ? body : body.slice(0, acAt)).filter((l) => !/^\s*#/.test(l) && (acAt !== -1 || !/^\s*\d+[.)]\s/.test(l))));
+      const items = mdListItems(acAt === -1 ? body : body.slice(acAt + 1), true);
+      model.stories.push({
+        printed: +m[1], key: `Requirement ${m[1]}`, title: m[2].trim() || titleFromStory(proseLines) || `Requirement ${m[1]}`, priority: null,
+        prose: proseLines, quote: [],
+        criteria: items.map((it, j) => ({ key: `${m[1]}.${it.n != null ? it.n : j + 1}`, raw: it.text, ears: earsFromKiro(it.text) })),
+      });
+    });
+    if (!model.stories.length) model.warnings.push(W.wNoRequirements("requirements.md"));
+    // Other top-level sections (Glossary, non-functional notes…) travel verbatim.
+    hs.forEach((h, k) => {
+      if (h.level === 2 && !/^(?:introduction|requirements)\b/i.test(h.text)) model.extra.push({ heading: "## " + h.text, lines: mdBody(lines, hs, k) });
+    });
+  }
+  if (des != null) model.design = { text: des, file: "design.md" };
+  else model.warnings.push(W.wNoDesign("design.md"));
+  if (tasks != null) model.tasks = { text: tasks, file: "tasks.md" };
+  else model.warnings.push(W.wNoTasks);
+  return model;
+}
+
+// spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
+// Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
+const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
+function parseSpecKit(dir, read, W) {
+  const spec = read(path.join(dir, "spec.md"));
+  const plan = read(path.join(dir, "plan.md"));
+  const tasks = read(path.join(dir, "tasks.md"));
+  if (spec == null && tasks == null) return null;
+  const model = newImportModel();
+  model.nameHint = path.basename(dir).replace(/^\d+[-_]/, "") || path.basename(dir);
+  const norm = (t) => t.replace(/\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "").trim();
+  if (spec != null) {
+    const lines = stripHtmlComments(spec).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const h1 = hs.find((h) => h.level === 1);
+    if (h1) model.title = h1.text.replace(/^feature specification:\s*/i, "").trim() || null;
+    const input = spec.match(/^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im);
+    model.summary = input && input[1].trim() && !/\$ARGUMENTS/.test(input[1]) ? input[1].trim() : null;
+    const storyFrom = (body, printed, title, priority) => {
+      const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*:?\s*$/i.test(l));
+      const scen = mdListItems(at === -1 ? body : body.slice(at + 1), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
+      const prose = tidyLines((at === -1 ? body.filter((l) => !/^\s*\d+[.)]\s/.test(l)) : body.slice(0, at)).filter((l) => !/^\s*(?:-{3,}|\*{3,})\s*$/.test(l)));
+      model.stories.push({
+        printed, key: `User Story ${printed}`, title, priority, prose, quote: [],
+        criteria: scen.map((it, j) => ({ key: `User Story ${printed} / Scenario ${j + 1}`, raw: it.text, ears: earsFromGwt(it.text) })),
+      });
+    };
+    hs.forEach((h, k) => {
+      const m = h.text.match(/^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu);
+      if (m) storyFrom(mdBody(lines, hs, k), +m[1], m[2].trim() || `User Story ${m[1]}`, m[3] ? m[3].toUpperCase() : null);
+    });
+    if (!model.stories.length) { // older template: one "Primary User Story" + "Acceptance Scenarios"
+      const pk = hs.findIndex((h) => /^primary user story/i.test(h.text));
+      const ak = hs.findIndex((h) => /^acceptance scenarios/i.test(h.text));
+      if (ak !== -1) {
+        const prose = pk !== -1 ? mdBody(lines, hs, pk) : [];
+        storyFrom([...prose, "**Acceptance Scenarios**:", ...mdBody(lines, hs, ak)], 1, titleFromStory(prose) || model.title || "User Story 1", null);
+      }
+    }
+    if (!model.stories.length) model.warnings.push(W.wNoRequirements("spec.md"));
+    const section = (re, key) => {
+      const k = hs.findIndex((h) => h.level > 1 && re.test(norm(h.text)));
+      if (k !== -1) model.extra.push({ key, lines: mdBody(lines, hs, k).filter((l) => !/^\s*#{1,6}\s+measurable outcomes/i.test(l)) });
+    };
+    section(/^functional requirements$/i, "functional");
+    section(/^key entities$/i, "entities");
+    section(/^success criteria$/i, "success");
+    section(/^edge cases$/i, "edge");
+    hs.forEach((h, k) => {
+      const t = norm(h.text);
+      if (h.level === 2 && !/^(?:user scenarios|requirements$|success criteria)/i.test(t) && !SPECKIT_GUIDANCE.test(t)) model.extra.push({ heading: "## " + t, lines: mdBody(lines, hs, k) });
+    });
+    for (const x of model.extra) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
+  }
+  if (plan != null) model.design = { text: plan, file: "plan.md" };
+  else model.warnings.push(W.wNoDesign("plan.md"));
+  if (tasks != null) model.tasks = { text: tasks, file: "tasks.md" };
+  else model.warnings.push(W.wNoTasks);
+  model.skipped = ["research.md", "data-model.md", "quickstart.md", "contracts"].filter((x) => fs.existsSync(path.join(dir, x)));
+  return model;
+}
+
+// OpenSpec: a capability (openspec/specs/<capability>/spec.md) or a change (openspec/changes/<id>/ — proposal.md,
+// tasks.md, design.md, specs/<capability>/spec.md with ADDED/MODIFIED/REMOVED/RENAMED Requirements).
+function parseOpenSpec(dir, read, W) {
+  const walkSpecs = (d, depth, out) => {
+    if (depth > 4) return out;
+    for (const n of safeReaddir(d).sort()) {
+      const p = path.join(d, n);
+      let st;
+      try { st = fs.lstatSync(p); } catch { continue; }
+      if (st.isDirectory()) walkSpecs(p, depth + 1, out);
+      else if (n === "spec.md" && st.isFile()) out.push(p);
+    }
+    return out;
+  };
+  const model = newImportModel();
+  model.nameHint = path.basename(dir);
+  let specFiles;
+  let tasks = null;
+  let proposal = null;
+  if (fs.existsSync(path.join(dir, "spec.md"))) specFiles = [path.join(dir, "spec.md")];
+  else if (fs.existsSync(path.join(dir, "proposal.md")) || fs.existsSync(path.join(dir, "specs")) || fs.existsSync(path.join(dir, "tasks.md"))) {
+    specFiles = walkSpecs(path.join(dir, "specs"), 0, []);
+    tasks = read(path.join(dir, "tasks.md"));
+    proposal = read(path.join(dir, "proposal.md"));
+  } else specFiles = walkSpecs(dir, 0, []); // a folder of capabilities
+  const texts = specFiles.map((f) => ({ file: f, cap: path.basename(path.dirname(f)), text: read(f) })).filter((x) => x.text != null);
+  if (!texts.length && tasks == null && proposal == null) return null;
+  if (proposal != null) {
+    const lines = stripHtmlComments(proposal).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const why = hs.findIndex((h) => /^why\b/i.test(h.text));
+    model.summary = why !== -1 ? firstParagraph(mdBody(lines, hs, why)) : firstParagraph(lines);
+    hs.forEach((h, k) => { if (h.level === 2 && !/^why\b/i.test(h.text)) model.extra.push({ heading: "## " + h.text, lines: mdBody(lines, hs, k) }); });
+  }
+  for (const { cap, text } of texts) {
+    const lines = stripHtmlComments(text).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const h1 = hs.find((h) => h.level === 1);
+    if (!model.title && h1) model.title = h1.text.replace(/\s+specification$/i, "").trim() || null;
+    const purpose = hs.findIndex((h) => /^purpose\b/i.test(h.text));
+    if (!model.summary && purpose !== -1) model.summary = firstParagraph(mdBody(lines, hs, purpose));
+    let section = "";
+    hs.forEach((h, k) => {
+      if (h.level <= 2) section = h.text;
+      if (/^renamed\b/i.test(section) && h.level <= 2) {
+        const body = mdBody(lines, hs, k).join("\n");
+        const froms = [...body.matchAll(/FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
+        const tos = [...body.matchAll(/TO:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
+        froms.forEach((f, i) => model.warnings.push(W.wRenamed(f, tos[i] || "?")));
+      }
+      const m = h.text.match(/^requirement:\s*(.+)$/i);
+      if (!m) return;
+      const name = m[1].trim();
+      if (/^removed\b/i.test(section)) { model.warnings.push(W.wRemoved(name)); return; }
+      const body = mdBody(lines, hs, k);
+      const sub = mdHeadings(body);
+      const firstScenario = sub.find((s) => /^scenario:/i.test(s.text));
+      const statement = body.slice(0, firstScenario ? firstScenario.i : body.length).filter((l) => l.trim() && !/^\s*#/.test(l)).map((l) => l.trim());
+      const criteria = [];
+      sub.forEach((s, j) => {
+        const sm = s.text.match(/^scenario:\s*(.+)$/i);
+        if (!sm) return;
+        const cl = { given: "", when: "", then: "" };
+        let last = null;
+        const rawParts = [];
+        for (const l of mdBody(body, sub, j)) {
+          const b = l.match(/^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i);
+          if (!b) continue;
+          rawParts.push(b[1].toUpperCase() + " " + b[2].trim());
+          const kw = b[1].toLowerCase();
+          if (kw === "and" || kw === "but") { if (last) cl[last] += " and " + trimClause(b[2]); continue; }
+          cl[kw] = cl[kw] ? cl[kw] + " and " + trimClause(b[2]) : trimClause(b[2]);
+          last = kw;
+        }
+        const raw = rawParts.join(" ") || sm[1].trim();
+        criteria.push({ key: `${cap}: ${name} / Scenario: ${sm[1].trim()}`, raw, ears: rawParts.length ? earsFromClauses(cl, "en") : null });
+      });
+      model.stories.push({ printed: null, key: `${cap}: Requirement: ${name}`, title: name + (/^modified\b/i.test(section) ? " " + W.modified : ""), priority: null, prose: [], quote: statement, criteria });
+    });
+  }
+  if (!model.stories.length && texts.length) model.warnings.push(W.wNoRequirements(texts.map((x) => toPosix(path.relative(dir, x.file))).join(", ")));
+  const des = read(path.join(dir, "design.md"));
+  if (des != null) model.design = { text: des, file: "design.md" };
+  if (tasks != null) model.tasks = { text: tasks, file: "tasks.md" };
+  else model.warnings.push(W.wNoTasks);
+  return model;
+}
+
+// tasks.md of any of the three tools → dev-spec tasks: every checkbox (outside code fences and HTML comments)
+// that is not a parent of numbered sub-tasks becomes `- [x|space] N.` numbered 1…K in order, keeping its
+// checkbox state, its [P]/[USn] tags and its indented sub-lines; a Kiro/OpenSpec parent ("2." with "2.1", "2.2")
+// becomes a `## <its title>` phase heading. _Requirements:_ references are rewritten through `refs`.
+function importTasks(text, refs, name, lng, W, mapping, warnings) {
+  const L = i18n.msg(lng).importSpec;
+  const src = String(text).replace(/^\uFEFF/, "").split(/\r?\n/);
+  const items = [];
+  let fence = null;
+  let fenceOwner = null; // a fenced block indented under a task stays in that task's body
+  let inComment = false;
+  let cur = null;
+  const opensComment = (l) => l.includes("<!--") && !l.slice(l.lastIndexOf("<!--")).includes("-->");
+  src.forEach((l, i) => {
+    if (inComment) { if (l.includes("-->")) inComment = false; cur = null; return; }
+    const f = l.match(RE_FENCE);
+    if (fence) {
+      if (fenceOwner) fenceOwner.body.push(i);
+      if (f && l.trim().startsWith(fence)) { fence = null; fenceOwner = null; }
+      return;
+    }
+    if (f) {
+      fence = f[1];
+      fenceOwner = cur && indentOf(l) > cur.indent ? cur : null;
+      if (fenceOwner) cur.body.push(i);
+      else cur = null;
+      return;
+    }
+    const m = l.match(/^(\s*)[-*+]\s+\[([ xX])\](\*)?\s+(.*)$/);
+    if (m) {
+      const rest = m[4];
+      const idm = rest.match(/^(T\d+)\b[.:]?\s*(.*)$/) || rest.match(/^(\d+(?:\.\d+)*)\.?(?=\s)\s*(.*)$/);
+      cur = { i, indent: m[1].length, done: m[2] !== " ", optional: !!m[3], id: idm ? idm[1] : null, text: idm ? idm[2] : rest, body: [] };
+      items.push(cur);
+    } else if (cur && l.trim() && indentOf(l) > cur.indent) cur.body.push(i);
+    else if (l.trim()) cur = null;
+    if (opensComment(l)) { inComment = true; cur = null; } // a task line that opens a comment is still a task
+  });
+  const isParent = (it) => it.id && /^\d+$/.test(it.id) && items.some((o) => o !== it && o.id && o.id.startsWith(it.id + "."));
+  const byLine = new Map(items.map((it) => [it.i, it]));
+  const bodyOf = new Map();
+  items.forEach((it) => it.body.forEach((b) => bodyOf.set(b, it)));
+  let n = 0;
+  let anyRefs = false;
+  const rewrite = (line, taskNo) => line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, (all, list) => {
+    anyRefs = true;
+    const outIds = [];
+    for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
+      const hit = refs(ref);
+      if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
+      else { outIds.push(ref); warnings.push(W.wUnknownRef(taskNo, ref)); }
+    }
+    return "_Requirements: " + outIds.join(", ") + "_";
+  });
+  const out = [L.tasksTitle(name), "", "{{NOTE}}", ""];
+  let seen = false;
+  src.forEach((l, i) => {
+    if (!seen && /^#\s/.test(l)) { seen = true; return; } // the source's title — ours replaces it
+    if (l.trim()) seen = true;
+    const it = byLine.get(i);
+    if (it) {
+      if (isParent(it)) { out.push(`## ${rewrite(it.text, it.id)}`); return; } // its sub-tasks are the tasks now
+      n++;
+      if (it.id) mapping["task " + it.id] = "task " + n;
+      it.no = n;
+      out.push(`- [${it.done ? "x" : " "}] ${n}. ${rewrite(it.text, n)}${it.optional ? " " + L.optional : ""}`);
+      return;
+    }
+    const owner = bodyOf.get(i);
+    if (owner && !isParent(owner)) {
+      const body = l.slice(Math.min(owner.indent, indentOf(l)));
+      out.push(/^\s{2}/.test(body) ? rewrite(body, owner.no) : "  " + rewrite(body.trimStart(), owner.no));
+      return;
+    }
+    out.push(owner ? rewrite(l, owner.id) : l);
+  });
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
+}
+
+function importSpec(projectDir, tool, source, opts = {}) {
+  const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
+  const W = i18n.msg(lang0).importSpec;
+  const key = String(tool == null ? "" : tool).trim().toLowerCase();
+  const t = own(IMPORT_TOOLS, key) ? key : own(IMPORT_ALIASES, key) ? IMPORT_ALIASES[key] : null;
+  if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
+  if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired };
+  const root = path.resolve(projectDir);
+  const abs = path.resolve(root, String(source).trim());
+  const shown = String(source).trim();
+  // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out).
+  if (!isInsideDir(root, abs)) return { ok: false, error: W.outside(shown) };
+  if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
+  let realRoot, realSrc;
+  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
+  if (!isInsideDir(realRoot, realSrc)) return { ok: false, error: W.outside(shown) };
+  const dir = fs.statSync(realSrc).isDirectory() ? realSrc : path.dirname(realSrc);
+  const rel = toPosix(path.relative(realRoot, dir)) || ".";
+  const readWarnings = [];
+  const read = (file) => {
+    try {
+      if (!fs.existsSync(file)) return null;
+      const real = fs.realpathSync.native(file);
+      if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
+      if (!fs.statSync(real).isFile()) return null;
+      return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+    } catch { return null; }
+  };
+  const model = (t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec)(dir, read, W);
+  if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
+
+  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
+  const f = resolveFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
+  const pt = parseTracks(opts.tracks);
+  if (pt.unknown.length) return { ok: false, error: unknownTracksError(lang0, pt.unknown) };
+  // Tracks: explicit, else classified from the requirements-level text (not design/tasks — "data model" is not +ai).
+  const evidence = [model.title, model.summary, ...model.stories.flatMap((s) => [s.title, ...s.prose, ...s.quote, ...s.criteria.map((c) => c.raw)]),
+    ...model.extra.flatMap((x) => x.lines)].filter(Boolean).join("\n");
+  const cls = classify(evidence, { name, lang: opts.lang });
+  const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang);
+  if (!cr.ok) return cr;
+  const lng = cr.lang;
+  const L = i18n.msg(lng).importSpec;
+  const warnings = [...readWarnings, ...model.warnings];
+  const note = L.note(IMPORT_TOOLS[t], rel, new Date().toISOString().slice(0, 10));
+  const mapping = {};
+
+  // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
+  const printed = model.stories.map((s) => s.printed);
+  const keepNumbers = printed.every((p) => Number.isInteger(p) && p > 0) && new Set(printed).size === printed.length;
+  const acOf = new Map(); // story number → its AC IDs
+  const critMap = new Map(); // source criterion key → new AC ID
+  const notEars = [];
+  const noCriteria = [];
+  const req = [L.featureTitle(name), "", note, "", L.summary, model.summary || L.summaryPlaceholder, "", L.stories];
+  model.stories.forEach((s, idx) => {
+    const n = keepNumbers ? s.printed : idx + 1;
+    mapping[s.key] = "US-" + n;
+    req.push("", L.story(n, s.priority, s.title));
+    if (s.prose.length) req.push(...s.prose);
+    if (s.quote.length) req.push(...s.quote.map((q) => "> " + q));
+    req.push("", L.criteria);
+    const ids = [];
+    s.criteria.forEach((c, j) => {
+      const id = `US-${n}.AC-${j + 1}`;
+      ids.push(id);
+      mapping[c.key] = id;
+      critMap.set(c.key, id);
+      if (!c.ears) notEars.push(id);
+      req.push(`${j + 1}. **${id}** — ${c.ears || c.raw + " " + L.notEars}`);
+      if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-->/g, "—>")));
+    });
+    if (!s.criteria.length) { req.push(L.noCriteria); noCriteria.push("US-" + n); }
+    acOf.set(n, ids);
+  });
+  for (const x of model.extra) {
+    req.push("", x.heading || L[x.key], ...x.lines.map((l) => l.replace(/\s+$/, "")));
+  }
+  Object.assign(mapping, model.mapping);
+  if (notEars.length) warnings.push(W.wNotEars(notEars.join(", ")));
+  if (noCriteria.length) warnings.push(W.wNoCriteria(noCriteria.join(", ")));
+
+  const written = [];
+  const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
+  put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+
+  if (model.design) {
+    const dl = model.design.text.replace(/^\uFEFF/, "").split(/\r?\n/);
+    const h1 = dl.findIndex((l) => /^#\s/.test(l));
+    const body = (h1 !== -1 && dl.slice(0, h1).every((l) => !l.trim()) ? dl.slice(h1 + 1) : dl).join("\n").trim();
+    // The active tracks' mandatory sections, unless the imported design already has them.
+    const blocks = cr.tracks.filter((x) => x !== "core").filter((x) => (x === "tdd" ? !RE_TESTABILITY.test(body) : !headingHasMarker(body, TRACK_MARKER[x])))
+      .map((x) => trackDesignBlock(x, lng)).join("");
+    put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", body, blocks].join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+  }
+
+  if (model.tasks) {
+    // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
+    // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
+    const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
+    const refs = (ref) => {
+      if (/^US-\d+\.AC-\d+$/.test(ref) || /^(?:FR|SC|NFR|EC)-\d+$/.test(ref)) return [ref];
+      if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];
+      const whole = ref.match(/^(?:requirement\s+|user story\s+|US-?)?(\d+)$/i);
+      if (whole) { const sn = storyNo(+whole[1]); if (sn != null && acOf.get(sn).length) return acOf.get(sn); }
+      return null;
+    };
+    const tk = importTasks(model.tasks.text, refs, name, lng, W, mapping, warnings);
+    put("tasks.md", tk.text.replace("{{NOTE}}", () => note)); // a function: a '$' in the folder name is not a pattern
+    if (!tk.anyRefs && tk.count && acOf.size) warnings.push(W.wNoRefs);
+  }
+  // Provenance on the scaffolded classification too (it was generated from the imported text).
+  const clsFile = path.join(cr.dir, "classification.md");
+  const clsText = readIfExists(clsFile);
+  if (clsText != null) put("classification.md", clsText.replace(/^(#\s[^\n]*\n)/, (h1) => `${h1}\n${note}\n`));
+  if (model.skipped.length) warnings.push(W.wSkipped(model.skipped.join(", ")));
+  maybeRefreshRoadmap(projectDir);
   return {
     ok: true,
-    coveragePercent: pct,
-    modulesTotal: modules.length,
-    documented,
-    undocumented,
-    features,
-    note: i18n.msg(projectLang(projectDir)).notes.coverage,
+    feature: cr.slug,
+    dir: cr.dir,
+    tool: t,
+    toolName: IMPORT_TOOLS[t],
+    source: rel,
+    tracks: cr.tracks,
+    label: cr.label,
+    lang: lng,
+    files: cr.created.slice(),
+    imported: written,
+    mapping,
+    warnings,
   };
 }
 
@@ -3858,6 +4902,8 @@ module.exports = {
   // @wp WP5 <<<
 
   // @wp WP6 exports >>>
+  importSpec,
+  isTestFile,
   // @wp WP6 <<<
 
   // @wp WP7 exports >>>

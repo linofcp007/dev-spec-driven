@@ -464,6 +464,81 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP5 <<<
 
 // @wp WP6 cli-tests >>>
+{ // 1.13 WP6 — scan sections, coverage by _Implements:_, import (Kiro · spec-kit · OpenSpec), create --brownfield (own block scope)
+  const w6 = path.join(tmp, "wp6-proj");
+  const put = (rel, s) => { const p = path.join(w6, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  run(["init", "core", "--project", w6]);
+  put("package.json", JSON.stringify({ name: "x", main: "src/server.js", devDependencies: { jest: "^29" } }));
+  put("src/server.js", "const app = require('express')();\napp.get('/health', h);\napp.post('/orders', h);\nconst p = process.env.PORT;\n");
+  put("src/server.test.js", "test('x', () => {});\n");
+  put("api/main.py", "from fastapi import FastAPI\napp = FastAPI()\n@app.get(\"/items\")\ndef items(): ...\n");
+  put("migrations/001_init.sql", "create table t (id int);\n");
+  put(".env", "LEAKED_NAME=do-not-print\n");
+  const sc = run(["scan", "--project", w6, w6]);
+  ok(sc.code === 0 && /endpoints: 3 route\(s\) in 2 file\(s\)/.test(sc.out) && /GET\s+\/health\s+\(src\/server\.js:2\)/.test(sc.out) && /GET\s+\/items\s+\(api\/main\.py:3\)/.test(sc.out) &&
+    /frameworks: .*fastapi/.test(sc.out) && /tests: 1 file\(s\) · frameworks: jest/.test(sc.out) && /entrypoints: src\/server\.js \(package\.json main\)/.test(sc.out) &&
+    /env vars \(names only\): PORT/.test(sc.out) && /migrations\/schema: 1 file\(s\) — migrations/.test(sc.out) && !/LEAKED_NAME|do-not-print/.test(sc.out),
+    "scan prints routes (method path file:line), frameworks, tests, entrypoints, env var names (never .env) and migrations");
+  let scJ = null;
+  try { scJ = JSON.parse(run(["scan", "--json", "--project", w6, w6]).out); } catch { /* invalid JSON */ }
+  ok(scJ && scJ.candidateEndpoints === 3 && scJ.routes.length === 3 && scJ.routes.every((r) => r.method && r.path && r.file && r.line), "scan --json returns the routes structured (same result as spec_scan)");
+  const ptScan = path.join(tmp, "wp6-pt");
+  run(["init", "core", "--lang", "pt", "--project", ptScan]);
+  fs.mkdirSync(path.join(ptScan, "src"), { recursive: true });
+  fs.writeFileSync(path.join(ptScan, "src", "index.js"), "app.get('/x', h);\n");
+  const ptOut = run(["scan", "--project", ptScan, ptScan]).out;
+  ok(/endpoints: 1 rota\(s\) em 1 ficheiro\(s\)/.test(ptOut) && /pontos de entrada:/.test(ptOut) && /variáveis de ambiente \(só nomes\): nenhum/.test(ptOut), "scan sections are localized (PT)");
+
+  // coverage: code files named in _Implements:_, per folder
+  run(["create", "Orders", "core", "--project", w6]);
+  fs.writeFileSync(path.join(w6, ".specs", "orders", "tasks.md"), "- [ ] 1. orders endpoint\n  - _Implements: src/server.js_\n");
+  const cov = run(["coverage", "--project", w6]);
+  ok(cov.code === 0 && /Spec coverage: 50%  \(1\/2 code files named in _Implements:_\)/.test(cov.out) && /test files \(reported apart, not counted\): 1/.test(cov.out) &&
+    /src\/\s+1\/1\s+100%/.test(cov.out) && /uncovered folders: api/.test(cov.out), "coverage prints the % of code files named in _Implements:_, per folder, and the uncovered folders");
+  const ptCov = run(["coverage", "--project", ptScan]).out;
+  ok(/Cobertura de specs: 0%  \(0\/1 ficheiros de código nomeados em _Implements:_\)/.test(ptCov) && /src\/\s+0\/1\s+0%/.test(ptCov) && /pastas sem cobertura: src/.test(ptCov),
+    "coverage output is localized (PT)");
+
+  // import: Kiro (auto tracks), spec-kit (--name --tracks --lang), OpenSpec; refusals
+  put(".kiro/specs/login/requirements.md", "# Requirements Document\n\n## Introduction\nSign in.\n\n## Requirements\n\n### Requirement 1\n\n**User Story:** As a user, I want to sign in, so that I see my data.\n\n#### Acceptance Criteria\n\n1. WHEN a user submits valid credentials THEN the system SHALL create a session\n2. WHEN the password is wrong THEN the system shows an error\n");
+  put(".kiro/specs/login/tasks.md", "# Implementation Plan\n\n- [x] 1. Session store\n  - _Requirements: 1.1_\n- [ ] 2. Error message\n  - _Requirements: 1.2_\n");
+  const kiroSrc = fs.readFileSync(path.join(w6, ".kiro/specs/login/tasks.md"), "utf8");
+  const ki = run(["import", "kiro", ".kiro/specs/login", "--project", w6]);
+  const kiTasks = fs.existsSync(path.join(w6, ".specs", "login", "tasks.md")) ? fs.readFileSync(path.join(w6, ".specs", "login", "tasks.md"), "utf8") : "";
+  ok(ki.code === 0 && /Imported Kiro \.kiro\/specs\/login → feature 'login' \[core \+tdd\] \(en\)/.test(ki.out) && /mapping: \d+ ID\(s\) — Requirement 1 → US-1, 1\.1 → US-1\.AC-1/.test(ki.out) &&
+    /- \[x\] 1\. Session store\n  - _Requirements: US-1\.AC-1_/.test(kiTasks) && /- \[ \] 2\. Error message\n  - _Requirements: US-1\.AC-2_/.test(kiTasks) &&
+    fs.readFileSync(path.join(w6, ".kiro/specs/login/tasks.md"), "utf8") === kiroSrc, "import kiro: new feature, IDs mapped, _Requirements:_ rewritten, checkbox state kept, source untouched");
+  ok(run(["ears", "login", "--project", w6]).code === 0 && /US-1\.AC-2\*\* — WHEN the password is wrong, THE SYSTEM SHALL show an error/.test(fs.readFileSync(path.join(w6, ".specs", "login", "requirements.md"), "utf8")),
+    "import kiro: the imported requirements pass `ears` (WHEN…THEN without SHALL rewritten)");
+  put("specs/002-albums/spec.md", "# Feature Specification: Albums\n\n## User Scenarios & Testing\n\n### User Story 1 - Create albums (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they create an album, **Then** the album is listed\n\n## Success Criteria\n\n- **SC-001**: 90% create an album in under 1 minute\n");
+  put("specs/002-albums/tasks.md", "# Tasks: Albums\n\n## Phase 1\n\n- [ ] T001 [P] [US1] Album model\n");
+  const skJ = (() => { try { return JSON.parse(run(["import", "spec-kit", "specs/002-albums", "--name", "Photo Albums", "--tracks", "saas", "--lang", "es", "--json", "--project", w6]).out); } catch { return null; } })();
+  ok(skJ && skJ.ok && skJ.feature === "photo-albums" && skJ.label === "core +saas" && skJ.lang === "es" && skJ.mapping["User Story 1 / Scenario 1"] === "US-1.AC-1" && skJ.mapping["task T001"] === "task 1" &&
+    /- \[ \] 1\. \[P\] \[US1\] Album model/.test(fs.readFileSync(path.join(w6, ".specs", "photo-albums", "tasks.md"), "utf8")) &&
+    /^> Importado de spec-kit `specs\/002-albums` el /m.test(fs.readFileSync(path.join(w6, ".specs", "photo-albums", "requirements.md"), "utf8")),
+    "import spec-kit --name --tracks --lang --json: same result shape as spec_import (feature, mapping, warnings), tags kept, ES note");
+  put("openspec/specs/billing/spec.md", "# Billing Specification\n\n## Purpose\nInvoices.\n\n## Requirements\n### Requirement: Invoice\nThe system SHALL issue invoices.\n\n#### Scenario: Monthly\n- **WHEN** a month ends\n- **THEN** an invoice is issued\n");
+  const osI = run(["import", "openspec", "openspec/specs/billing", "--project", w6]);
+  ok(osI.code === 0 && /feature 'billing'/.test(osI.out) && /US-1\.AC-1\*\* — WHEN a month ends, THE SYSTEM SHALL ensure that an invoice is issued/.test(fs.readFileSync(path.join(w6, ".specs", "billing", "requirements.md"), "utf8")),
+    "import openspec: requirement/scenario → US-1.AC-1 as an EARS criterion");
+  const again = run(["import", "kiro", ".kiro/specs/login", "--project", w6]);
+  const outside = run(["import", "kiro", "../wp6-pt", "--project", w6]);
+  const badTool = run(["import", "notion", ".kiro/specs/login", "--project", w6]);
+  const usage = run(["import", "kiro", "--project", w6]);
+  ok(again.code === 1 && /already exists/.test(again.out) && outside.code === 1 && /outside the project/.test(outside.out) && badTool.code === 1 && /Unknown spec format 'notion'\. Known: kiro, spec-kit, openspec/.test(badTool.out) &&
+    usage.code === 1 && /usage: dev-spec import/.test(usage.out), "import refusals exit 1: existing feature, path outside the project, unknown format, missing path");
+
+  // create --brownfield → integration-plan.md; doctor warns while it is the template
+  const bf = run(["create", "Old Billing", "core", "--brownfield", "--project", w6]);
+  ok(bf.code === 0 && /integration-plan\.md/.test(bf.out) && fs.existsSync(path.join(w6, ".specs", "old-billing", "integration-plan.md")) &&
+    /▲ integration-plan — integration-plan\.md is still the template/.test(run(["doctor", "old-billing", "--project", w6]).out) &&
+    !fs.existsSync(path.join(w6, ".specs", "orders", "integration-plan.md")), "create --brownfield scaffolds integration-plan.md and doctor warns while it is the template");
+
+  const help6 = run(["help"]).out;
+  const lines6 = help6.split("\n");
+  const covAt = lines6.findIndex((l) => /^\s+coverage\s/.test(l));
+  ok(/^\s+import <kiro\|spec-kit\|openspec> <path>/.test(lines6[covAt + 1] || "") && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
+}
 // @wp WP6 <<<
 
 // @wp WP7 cli-tests >>>

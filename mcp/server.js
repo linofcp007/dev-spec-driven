@@ -69,6 +69,7 @@ const TOOLS = [
         summary: { type: "string", description: "Optional one-line feature summary." },
         kind: { type: "string", enum: ["feature", "bugfix"], description: "'bugfix' scaffolds the systematic-debugging flow instead: bug.md (reproduction · root cause · fix), a one-story requirements.md (IF…THEN), a regression test plan and the fixed task order (reproduce → root cause → failing regression test → fix → verify). Always +tdd." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
+        brownfield: { type: "boolean", description: "The feature lands in an EXISTING codebase: also scaffold integration-plan.md (integration points · required modifications · sequencing · risks · affected files). Create-only; doctor warns while it is still the template." },
         projectDir: { type: "string" },
       },
       required: ["name"],
@@ -158,12 +159,12 @@ const TOOLS = [
   },
   {
     name: "spec_scan",
-    description: "Brownfield: heuristic local scan of an EXISTING codebase (no model, no cost) — file inventory by extension, top-level modules, detected stack (from manifests), and candidate HTTP endpoints. The agent interprets this to infer steering/constitution and reverse-engineer specs.",
+    description: "Brownfield: heuristic, bounded, read-only scan of an EXISTING codebase (no model, no cost) — file inventory by extension, top-level modules, stack + web frameworks (manifests; FastAPI/Flask/Django also from imports), HTTP ROUTES with method + path + file:line (Express/Koa/Fastify/Hono, NestJS, Next.js, Flask, FastAPI, Django, Spring, ASP.NET, Rails/Sinatra, Laravel/Symfony, Go net/http/gin/echo/chi/fiber; listed up to a cap, `candidateEndpoints` counts every route), test frameworks + test-file count, entrypoints, environment variable NAMES the code reads (never values; .env itself is never read — only .env.example-style files), and migration/schema files. The agent interprets this to infer steering/constitution and reverse-engineer specs.",
     inputSchema: { type: "object", properties: { projectDir: { type: "string" }, cap: { type: "integer", minimum: 1, description: "Max files to scan (default 5000)." } } },
   },
   {
     name: "spec_coverage",
-    description: "Brownfield: estimate how much of the codebase has specs — maps top-level code modules to documented features by name and reports a coverage % plus the undocumented modules.",
+    description: "Brownfield: how much of the codebase is covered by specs — the share of code files (test files reported apart) named in any `_Implements:_` marker (a file, a folder or a glob) of any feature, active or archived, with a per-top-level-folder breakdown (`byFolder`), the uncovered folders, per-feature counts and the _Implements:_ entries that name no code file. `coveragePercent` = covered code files / code files; `documented`/`undocumented` = folders with at least one / no covered file.",
     inputSchema: { type: "object", properties: { projectDir: { type: "string" } } },
   },
   {
@@ -194,6 +195,23 @@ const TOOLS = [
   // @wp WP5 <<<
 
   // @wp WP6 tools >>>
+  {
+    name: "spec_import",
+    description:
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source files are only read, never modified). `tool`: 'kiro' (.kiro/specs/<name>/ — requirements.md '### Requirement N' + numbered WHEN/THEN/SHALL criteria, design.md, tasks.md with _Requirements: 1.1, 2.3_), 'spec-kit' (specs/<nnn-name>/ — spec.md user stories + Given/When/Then acceptance scenarios + FR-xxx/SC-xxx, plan.md → design.md, tasks.md 'T001 [P] [US1] …'), or 'openspec' (openspec/specs/<capability>/spec.md '### Requirement:' + '#### Scenario:', or a change folder openspec/changes/<id>/). Requirement/story N criterion/scenario M → US-N.AC-M; each scenario becomes ONE EARS criterion (WHEN … THE SYSTEM SHALL …) where possible, else its text is kept with [NEEDS CLARIFICATION]; Kiro _Requirements:_ references are rewritten; tasks are renumbered 1…K keeping checkbox state and [P]/[USn] tags; SC-/FR- IDs stay. Every generated artifact carries an 'Imported from <tool> <path> on <date>' note. `path` must resolve inside the project. Tracks: `tracks`, else auto-classified from the imported requirements. Returns {feature, files, mapping: {oldId: newId}, warnings}.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec"], description: "The format of the source spec." },
+        path: { type: "string", description: "The spec's folder (or a file inside it), relative to the project root or absolute — it must be inside the project." },
+        name: { type: "string", description: "Feature name (default: the source folder's name; spec-kit's number prefix is dropped). An existing feature with that slug is an error." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
+        lang: { type: "string", enum: ["en", "pt", "es"], description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
+        projectDir: { type: "string" },
+      },
+      required: ["tool", "path"],
+    },
+  },
   // @wp WP6 <<<
 
   // @wp WP7 tools >>>
@@ -231,7 +249,7 @@ function runTool(name, args) {
     case "spec_create": {
       // No tracks → the engine keeps an existing feature's tracks, or classifies a new one (same as the CLI).
       const cls = spec.classify(args.summary || "", { name: args.name, lang: args.lang });
-      return spec.createFeature(pdir, args.name, args.tracks, args.summary, cls, args.lang, args.kind);
+      return spec.createFeature(pdir, args.name, args.tracks, args.summary, cls, args.lang, args.kind, { brownfield: args.brownfield === true });
     }
     case "spec_list":
       return spec.listFeatures(pdir);
@@ -278,6 +296,8 @@ function runTool(name, args) {
     // @wp WP5 <<<
 
     // @wp WP6 dispatch >>>
+    case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`)
+      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang });
     // @wp WP6 <<<
 
     // @wp WP7 dispatch >>>
