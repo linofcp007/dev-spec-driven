@@ -628,7 +628,7 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(739 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(740 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
 `node cli/test-cli.js` adds 249 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

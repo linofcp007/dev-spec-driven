@@ -195,6 +195,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   reason (they still said it showed a count); README, AGENTS.md, tooling-reference and `dev-spec help` say `reopen`
   never unticks a removed criterion's tasks (`retire` lists them); `/approve` and the `spec_approve` description put a
   test-plan row citing an undefined AC under the test-plan gate, where it is checked (they listed it under tasks).
+  tooling-reference says `dev-spec drift` also exits 1 on a stale baseline or an unreadable state, as the CLI help,
+  AGENTS.md and `/spec-drift` do (it said only on drift).
 - **Planning gates and test-plan rows.** At the requirements and design gates `spec_doctor` failed `traceability`
   on the untouched tasks.md / test-plan.md template ("tasks reference unknown ACs (typos?): US-1.AC-3…") for any
   feature whose ACs aren't the template's — while the same report called that file a later phase's template, "not
@@ -377,7 +379,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 739 assertions (was 181), `node cli/test-cli.js` 249 (was 53); the tool count is
+- `node mcp/test.js` 740 assertions (was 181), `node cli/test-cli.js` 249 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

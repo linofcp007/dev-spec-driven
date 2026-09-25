@@ -5812,6 +5812,15 @@ function endRun() {
   ok(!/23 v1\.12 tools|does not yet require newer ones/.test(docsClaude) &&
     /README tool tables \(EN\/PT\/ES — `mcp\/test\.js` builds the expected set from the live `tools\/list`: a missing or phantom row in any language fails the suite\)/.test(docsClaude),
     "CLAUDE.md 'When extending': the README tool-table test requires every live tool (built from tools/list), not the 23 v1.12 tools");
+  // tooling-reference said "`drift` (drift) exit 1" — the CLI's drift also exits 1 on a stale baseline (the feature changed
+  // since its finish: finish it again, nothing drifted) and on an unreadable .state.json. Every surface documenting drift's
+  // exit code names the stale baseline; none says drift alone.
+  const docsDriftExit = [["tooling-reference.md", docsRef("tooling-reference.md"), /`drift` \(drift, a stale baseline or an unreadable state\) exit 1/],
+    ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-drift.md", docsRead("commands", "spec-drift.md"), /exit 1 on drift or a stale baseline/],
+    ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/dev-spec.js", docsRead("cli", "dev-spec.js"), /\(exit 1 on drift or a stale baseline\)/],
+    ["CLAUDE.md", docsClaude, /`drift` \(drift, a stale baseline or an error\)/]];
+  const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f);
+  ok(!docsDriftBad.length, "every surface documenting drift's exit code (tooling-reference, AGENTS.md, /spec-drift, change-management, CLI help, CLAUDE.md) says a stale baseline exits 1 too, never 'drift (drift)' alone (bad: " + docsDriftBad.join(", ") + ")");
   const docsInstall =docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
   ok(!/Copy-Item -Recurse/.test(docsInstall) && /\/plugin marketplace add <path-to-your-clone>/.test(docsInstall) && /dev-spec-driven@dev-spec-driven-marketplace/.test(docsInstall) &&
     [docsInstall, docsContrib].every((t) => /claude plugin validate [^\n]*plugin\.json/.test(t) && /claude plugin validate (?:\.|"\$plugin")[\s`]/.test(t)) &&

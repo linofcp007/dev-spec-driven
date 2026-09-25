@@ -47,8 +47,8 @@ input schema (a wrong type or unknown value is refused with a clear message).
 result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it);
 `--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which
-`evals` forwards. `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift) exit 1, so they are
-scriptable.
+`evals` forwards. `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
+unreadable state) exit 1, so they are scriptable.
 
 ```
 classify "<description>" [--name n]      init [tracks...] [--lang] [--guard on|off]
