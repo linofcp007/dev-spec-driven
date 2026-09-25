@@ -1415,14 +1415,19 @@ function extractTestIds(text) {
   return ids;
 }
 
-function traceCheck(projectDir, name) {
+// opts.code: also scan the project's TEST files for T-IDs / AC IDs (result.code — see traceTestCode). opts.scan: a
+// scanTestCode() result to reuse instead of walking again (doctor / finish share one walk per call).
+function traceCheck(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
-  const reqs = stripHtmlComments(readIfExists(path.join(dir, "requirements.md")) || "");
-  const tasks = stripHtmlComments(readIfExists(path.join(dir, "tasks.md")) || "");
-  const testPlan = stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || "");
+  const rawReqs = readIfExists(path.join(dir, "requirements.md")) || "";
+  const rawTasks = readIfExists(path.join(dir, "tasks.md")) || "";
+  const rawPlan = readIfExists(path.join(dir, "test-plan.md")) || "";
+  const reqs = stripHtmlComments(rawReqs);
+  const tasks = stripHtmlComments(rawTasks);
+  const testPlan = stripHtmlComments(rawPlan);
   const tracks = detectTracks(dir);
 
   const requiredAcs = extractAcIds(reqs);
@@ -1446,7 +1451,7 @@ function traceCheck(projectDir, name) {
   const outOfRoot = new Set();
   const absent = implFiles.filter((f) => {
     const abs = path.resolve(projRoot, f);
-    const inRoot = abs === projRoot || abs.startsWith(projRoot + path.sep);
+    const inRoot = withinRoot(projRoot, abs); // a drive root (C:\) already ends in a separator
     if (!inRoot) outOfRoot.add(f);
     return !inRoot || !fs.existsSync(abs);
   });
@@ -1457,7 +1462,8 @@ function traceCheck(projectDir, name) {
   const unq = (p) => p.trim().replace(/^`|`$/g, "");
   const openOnly = new Set();
   const claimed = new Set();
-  for (const b of taskBlocks(readIfExists(path.join(dir, "tasks.md")) || "")) {
+  const blocks = taskBlocks(rawTasks);
+  for (const b of blocks) {
     for (const p of taskMarkers(b).implements.map(unq)) {
       if (!b.done && !claimed.has(p)) openOnly.add(p);
       if (b.done) { claimed.add(p); openOnly.delete(p); }
@@ -1501,6 +1507,12 @@ function traceCheck(projectDir, name) {
     (result.uncoveredByTests ? result.uncoveredByTests.length : 0) +
     (result.phantomTestsInTasks ? result.phantomTestsInTasks.length : 0);
   result.verdict = gaps === 0 ? "pass" : "gaps-found";
+
+  // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
+  // requirements.md and, with opts.code, the T-IDs of the project's test code.
+  Object.assign(result, traceSecondary(dir, rawReqs, blocks, rawPlan));
+  if (opts.code) result.code = traceTestCode(projectDir, testPlan, requiredAcs, opts.scan);
+  result.warnings = traceWarnings(result);
   return result;
 }
 
@@ -1508,7 +1520,8 @@ function traceCheck(projectDir, name) {
 // list them ALL — a hand-picked subset used to print "gaps-found" with nothing under it (phantom T-IDs,
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles"]); // planned = an OPEN task's file, not written yet
+// planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"]);
 const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 function traceGaps(tr) {
   const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
@@ -1521,6 +1534,163 @@ function traceGaps(tr) {
 function traceGapLines(tr, lang) {
   const T = i18n.msg(lang).traceGapText;
   return traceGaps(tr).map((g) => T.gap(T.kinds[g.kind] || g.kind, g.items.join(", ")));
+}
+
+// ---------------------------------------------------------------------------
+// Deep traceability: secondary IDs (EC / NFR / SC) and T-IDs in test code — warnings only
+// ---------------------------------------------------------------------------
+
+// trace_check `warnings` — ONE shape, the one traceGaps() returns: [{ kind, items: [id, …] }], only the non-empty
+// kinds, in this order. The secondary kinds are also top-level arrays (always present); the code kinds live in
+// result.code (present with opts.code). None of them changes the verdict.
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "plannedNotInCode", "inCodeNotInPlan"];
+const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
+function traceWarnings(tr) {
+  const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
+  for (const k of TRACE_SECONDARY_KINDS) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
+}
+// The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).
+function traceWarningLines(tr, lang, kinds) {
+  const T = i18n.msg(lang).traceGapText;
+  const K = i18n.msg(lang).deepTrace.kinds;
+  const list = Array.isArray(tr && tr.warnings) ? tr.warnings : traceWarnings(tr);
+  return list.filter((w) => !kinds || kinds.includes(w.kind)).map((w) => T.gap(K[w.kind] || w.kind, w.items.join(", ")));
+}
+
+// Secondary IDs — edge cases (EC-1), non-functional requirements (NFR-1), success criteria (SC-001) — compared by
+// prefix + NUMBER (SC-1 names SC-001) and reported as written. The leading guard keeps DESC-1 / SPEC-2 out.
+const RE_SECONDARY_ID = /(?<![A-Za-z0-9])(EC|NFR|SC)-(\d+)/g;
+const RE_SECONDARY_ID_LINE = /(?<![A-Za-z0-9])(?:EC|NFR|SC)-\d+/;
+const idKey = (prefix, num) => prefix + "-" + parseInt(num, 10);
+function secondaryIds(text) { // → Map(key → first spelling)
+  const out = new Map();
+  for (const m of String(text || "").matchAll(RE_SECONDARY_ID)) {
+    const k = idKey(m[1], m[2]);
+    if (!out.has(k)) out.set(k, m[0]);
+  }
+  return out;
+}
+// requirements.md → { defined: Map(key → id) — IDs with a REAL definition, in document order; all: Set(key) — every ID
+// written, template or not }. A unit that still holds a template placeholder ("- **SC-001** — [e.g., 90% of users …]")
+// doesn't define its IDs yet: an untouched scaffold row is never "uncovered". Units are criterionBlocks' logical items
+// (wrapped list items folded; comments and fenced code skipped) plus the table rows, headings and quotes it keeps apart.
+function secondaryDefinitions(reqText) {
+  const { cleaned, blocks } = criterionBlocks(reqText || "");
+  const units = blocks.map((b) => ({ line: b.line, text: b.text }))
+    .concat(cleaned.filter((c) => /^[|#>]/.test(c.text)))
+    .sort((a, b) => a.line - b.line);
+  const defined = new Map();
+  const all = new Set();
+  for (const u of units) {
+    const ids = secondaryIds(u.text);
+    if (!ids.size) continue;
+    const real = !placeholderReport(u.text).length;
+    for (const [k, id] of ids) {
+      all.add(k);
+      if (real && !defined.has(k)) defined.set(k, id);
+    }
+  }
+  return { defined, all };
+}
+// EC / NFR are covered by a task (its text or any sub-line, _Requirements:_ included) or a test-plan row (a T-ID's row);
+// SC by a test-plan row or a real (non-template) line of quickstart.md. phantomSecondary = IDs the tasks / test plan
+// cite that requirements.md never writes.
+function traceSecondary(dir, reqText, blocks, planText) {
+  const { defined, all } = secondaryDefinitions(reqText);
+  const inTasks = secondaryIds(blocks.map((b) => [b.text, ...b.body].join("\n")).join("\n"));
+  const inPlan = secondaryIds([...testIndex(planText).values()].map((r) => r.row).join("\n"));
+  const inQuickstart = secondaryIds(realLines(readIfExists(path.join(dir, "quickstart.md")) || "", RE_SECONDARY_ID_LINE).join("\n"));
+  const out = { uncoveredEdgeCases: [], uncoveredNfr: [], uncoveredSuccessCriteria: [], phantomSecondary: [] };
+  for (const [k, id] of defined) {
+    const prefix = k.slice(0, k.indexOf("-"));
+    if (prefix === "SC") { if (!inPlan.has(k) && !inQuickstart.has(k)) out.uncoveredSuccessCriteria.push(id); }
+    else if (!inTasks.has(k) && !inPlan.has(k)) (prefix === "EC" ? out.uncoveredEdgeCases : out.uncoveredNfr).push(id);
+  }
+  const cited = new Map(inTasks);
+  for (const [k, id] of inPlan) if (!cited.has(k)) cited.set(k, id);
+  for (const [k, id] of cited) if (!all.has(k)) out.phantomSecondary.push(id);
+  return out;
+}
+
+// T-IDs as test code writes them: "T-01" anywhere (a test title, DisplayName, a comment), test_T01 / testT01 / TestT01
+// (pytest, JUnit, Go) and a leading T01_ method name (C# / Java). A bare "T1" is not one — generic type parameters
+// (Func<T1, T2>) would read as tests. Group 1/2/3 = the number as written.
+const RE_CODE_TID = /(?<![A-Za-z0-9])T-(\d+)|(?<![A-Za-z0-9])[Tt]est_?[Tt](\d+)(?![0-9])|(?<![A-Za-z0-9_])T(\d{2,})_(?=[A-Za-z])/g;
+const CODE_TRACE_CAP = 5000; // files walked
+const CODE_TRACE_READ_CAP = 1500; // test files read
+const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still counts)
+const tKey = (num) => "T-" + parseInt(num, 10);
+// One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
+// files (isTestFile: test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs …),
+// collecting the T-IDs and AC IDs they name. Project-level (not per feature), so doctor / finish reuse it.
+// → { tids: Map(key → { id, files }), acs: Map(acId → files), scanned, truncated }
+function scanTestCode(projectDir) {
+  const root = path.resolve(projectDir);
+  const tids = new Map();
+  const acs = new Map();
+  let scanned = 0;
+  let readCapped = false;
+  const note = (map, key, id, rel) => {
+    if (!map.has(key)) map.set(key, { id, files: [] });
+    const e = map.get(key);
+    if (!e.files.includes(rel)) e.files.push(rel);
+  };
+  const walk = walkProject(root, CODE_TRACE_CAP, (rel, full, name) => {
+    if (!CODE_EXT.has(path.extname(name).toLowerCase()) || !isTestFile(rel)) return;
+    if (scanned >= CODE_TRACE_READ_CAP) { readCapped = true; return; }
+    let txt;
+    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
+    scanned++;
+    for (const m of txt.matchAll(RE_CODE_TID)) {
+      const num = m[1] || m[2] || m[3];
+      note(tids, tKey(num), "T-" + num, rel);
+    }
+    for (const id of extractAcIds(txt)) note(acs, id, id, rel);
+  });
+  return { tids, acs, scanned, truncated: walk.truncated || readCapped };
+}
+// Every T-ID any feature's test plan lists (archived features too — their tests may still be in the tree), by key.
+function allPlannedTestKeys(projectDir) {
+  const root = specsRoot(projectDir);
+  const keys = new Set();
+  const dirs = safeReaddir(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !RESERVED_SLUGS.has(n.toLowerCase())).map((n) => path.join(root, n))
+    .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
+  for (const d of dirs) {
+    const plan = readIfExists(path.join(d, "test-plan.md"));
+    if (plan != null) for (const id of extractTestIds(stripHtmlComments(plan))) keys.add(tKey(id.slice(2)));
+  }
+  return keys;
+}
+// trace_check {code: true}: this feature's plan against the test code.
+//   testsInCode       { T-ID: [test files …] } — every T-ID found, keyed by this plan's spelling when it plans that number
+//   plannedNotInCode  this plan's T-IDs that no test file names
+//   inCodeNotInPlan   T-IDs in test code that NO feature's test plan lists (another feature's T-01 is not this one's gap)
+//   acsInTests        this feature's AC IDs that test code names
+//   planned           how many T-IDs this plan lists
+//   scanned / truncated  test files read · the walk or the read hit its cap
+function traceTestCode(projectDir, planText, requiredAcs, scan) {
+  const s = scan || scanTestCode(projectDir);
+  const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
+  const everyPlan = allPlannedTestKeys(projectDir);
+  const testsInCode = {};
+  for (const [k, e] of s.tids) testsInCode[planned.get(k) || e.id] = e.files.slice(0, CODE_TRACE_FILES_PER_ID);
+  return {
+    planned: planned.size,
+    testsInCode,
+    plannedNotInCode: [...planned].filter(([k]) => !s.tids.has(k)).map(([, id]) => id),
+    inCodeNotInPlan: [...s.tids].filter(([k]) => !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
+    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id)),
+    scanned: s.scanned,
+    truncated: s.truncated,
+  };
+}
+
+// Is `p` the root itself or inside it? path.relative, not `root + sep`: a drive root (C:\, or Q:\ from subst) already
+// ends in a separator, and another drive comes back absolute.
+function withinRoot(root, p) {
+  const rel = path.relative(root, p);
+  return rel === "" || (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel));
 }
 
 // ---------------------------------------------------------------------------
@@ -2215,7 +2385,12 @@ function finishFeature(projectDir, name, opts = {}) {
   const tracks = detectTracks(dir);
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
-  const doc = specDoctor(projectDir, slug);
+  // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
+  // One walk of the test code (only when an active +tdd plan has T-IDs), shared with doctor's tests-in-code check.
+  const scan = tracks.includes("tdd") && extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
+  const tr = traceCheck(projectDir, slug, scan ? { code: true, scan } : {});
+  const warnings = tr.ok ? traceWarningLines(tr, lng, [...TRACE_SECONDARY_KINDS, "plannedNotInCode"]) : [];
+  const doc = specDoctor(projectDir, slug, { scan });
   const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
   const blocks = taskBlocks(tasksText);
   const open = blocks.filter((b) => !b.done).map((b) => b.number);
@@ -2300,6 +2475,7 @@ function finishFeature(projectDir, name, opts = {}) {
     readyToFinish: ready,
     message: ready ? F.ready(slug) : F.notReady(slug),
     blockers,
+    warnings, // localized lines; readyToFinish ignores them
     openTasks: open,
     unverified: vs.unverified,
     pendingGates,
@@ -3487,7 +3663,8 @@ const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|
 // The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
 const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
 
-function specDoctor(projectDir, name) {
+// opts.scan: a scanTestCode() result to reuse for the tests-in-code check (spec_finish walks the project once).
+function specDoctor(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir, root } = f;
@@ -3568,13 +3745,33 @@ function specDoctor(projectDir, name) {
   if (tracks.includes("tdd")) add("test-plan", fs.existsSync(path.join(dir, "test-plan.md")) ? "pass" : "warn", "");
   if (tracks.includes("ai")) add("eval-plan", fs.existsSync(path.join(dir, "eval-plan.md")) ? "pass" : "warn", "");
 
-  // Traceability
-  const tr = traceCheck(projectDir, name);
+  // Traceability. Done tasks that claim `_Makes green:_` T-IDs (+tdd active) → the test code is scanned too (once per call).
+  const greenDone = new Set();
+  for (const b of tracks.includes("tdd") ? taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks)) : []) {
+    if (b.done) for (const id of extractTestIds(taskMarkers(b)["makes green"].join(" "))) greenDone.add(id);
+  }
+  const tr = traceCheck(projectDir, name, greenDone.size ? { code: true, scan: opts.scan } : {});
   if (tr.ok) {
     // Name every failing kind with its IDs (the old counters read "=0" for kinds they didn't count).
     const gapLines = traceGapLines(tr, featureLang(projectDir, name));
     add("traceability", tr.verdict === "pass" ? "pass" : "fail",
       tr.verdict === "pass" ? [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; ") : gapLines.join("; ") || tr.verdict);
+    // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
+    const D = fm.deepTrace;
+    const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
+    const secDefined = secondaryDefinitions(readIfExists(path.join(dir, "requirements.md")) || "").defined.size;
+    if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
+    // T-IDs made green by DONE tasks must be named by some test file (planned ones only — a phantom T-ID is a trace
+    // gap already). Open tasks' tests may legitimately not exist yet.
+    if (tr.code) {
+      const key = (id) => tKey(id.slice(2)); // T-1 in a task names T-01 in the plan
+      const planKeys = new Set([...extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || ""))].map(key));
+      const notInCode = new Set(tr.code.plannedNotInCode.map(key));
+      const claimed = [...greenDone].filter((id) => planKeys.has(key(id)));
+      const missing = claimed.filter((id) => notInCode.has(key(id)));
+      const tail = tr.code.truncated ? " (" + D.truncated + ")" : "";
+      if (claimed.length) add("tests-in-code", missing.length ? "warn" : "pass", (missing.length ? D.testsInCodeMissing(missing.join(", ")) : D.testsInCodeOk(claimed.length)) + tail);
+    }
   }
 
   // Verification evidence: ticked tasks without a passing run (a _Verify:_ command that was never run,
@@ -5793,6 +5990,9 @@ module.exports = {
   // @wp WP8 <<<
 
   // @wp WP9 exports >>>
+  traceWarningLines, // trace_check warnings (EC/NFR/SC, tests in code) as localized lines — CLI, hook, finish
+  scanTestCode, // the bounded walk over test files that trace_check {code: true} reads
+  withinRoot, // "inside the project root?" that also holds at a drive root (C:\)
   // @wp WP9 <<<
 
   // @wp WP10 exports >>>

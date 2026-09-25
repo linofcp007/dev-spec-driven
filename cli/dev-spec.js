@@ -21,7 +21,8 @@
  *   list                               List features + phase + progress
  *   status [feature]                   Status of one feature (or all)
  *   doctor <feature>                   Health-check → ready to advance?
- *   trace <feature>                    Traceability AC↔task↔test↔code (every gap listed)
+ *   trace <feature> [--code]           Traceability AC↔task↔test↔code (every gap listed; EC/NFR/SC warnings;
+ *                                      --code also scans test files for the T-IDs they name)
  *   clarify <feature>                  Surface ambiguities/gaps in requirements
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
@@ -260,16 +261,18 @@ function main() {
     }
 
     case "trace": {
-      if (!pos[0]) die("usage: dev-spec trace <feature>");
-      const r = spec.traceCheck(projectDir, pos[0]);
+      if (!pos[0]) die("usage: dev-spec trace <feature> [--code]");
+      const r = spec.traceCheck(projectDir, pos[0], { code: flags.code === true || flags.code === "true" }); // = trace_check {code}
       if (!r.ok) die(r.error);
-      if (r.verdict !== "pass") process.exitCode = 1; // scriptable: gaps → non-zero
+      if (r.verdict !== "pass") process.exitCode = 1; // scriptable: gaps → non-zero (warnings never change it)
       const lang = spec.featureLang(projectDir, r.feature);
       const T = cliText(lang);
       return out(r, (r) => {
         console.log(T.traceHead(r.feature, T.word(r.verdict), r.totalAcs, r.coveredByTasks));
         // Every gap kind the engine reports, with its IDs — never "gaps-found" with nothing listed.
         spec.traceGapLines(r, lang).forEach((l) => console.log("  " + l));
+        spec.traceWarningLines(r, lang).forEach((l) => console.log("  ▲ " + l));
+        if (r.code) console.log(spec.msg(lang).deepTrace.codeSummary(r.code.planned - r.code.plannedNotInCode.length, r.code.planned, r.code.scanned, r.code.truncated));
       });
     }
 
@@ -313,6 +316,7 @@ function main() {
       return out(r, (r) => {
         console.log(r.message);
         r.blockers.forEach((b) => console.log("  ✗ " + b));
+        (r.warnings || []).forEach((w) => console.log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
         console.log("\n" + r.checks.map((c) => "  [ ] " + c).join("\n"));
         if (r.wrote) console.log(T.mergeSummaryAt(r.paths.summary));
         if (r.mergeSummary != null) console.log("\n# " + r.mergeTitle + "\n\n" + r.mergeSummary);
@@ -707,7 +711,8 @@ function helpText() {
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)
   doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)
-  trace <feature>                 Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs) — lists every gap
+  trace <feature> [--code]        Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs) — lists every gap,
+                                  then the EC/NFR/SC warnings; --code also scans test files for the T-IDs they name
   clarify <feature>               Surface ambiguities/gaps in requirements before design
   ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})

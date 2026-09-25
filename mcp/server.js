@@ -124,8 +124,8 @@ const TOOLS = [
   },
   {
     name: "trace_check",
-    description: "Verify traceability for a feature, both directions: every AC ID in requirements.md should be referenced by ≥1 task (and, on +tdd, by the test plan; every planned T-ID should map to a task). Also flags phantom AC/T IDs referenced in tasks that don't exist (typos). Reports gaps.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: { type: "string" } }, required: ["name"] },
+    description: "Verify traceability for a feature, both directions: every AC ID in requirements.md should be referenced by ≥1 task (and, on +tdd, by the test plan; every planned T-ID should map to a task). Also flags phantom AC/T IDs referenced in tasks that don't exist (typos). Reports gaps (these decide `verdict`). WARNINGS (never the verdict) trace the secondary IDs of requirements.md: edge cases EC-n and NFR-n need a task or a test-plan row, success criteria SC-nnn a test-plan row or quickstart.md (uncoveredEdgeCases / uncoveredNfr / uncoveredSuccessCriteria / phantomSecondary; untouched template rows don't count) — all listed in `warnings` as [{kind, items}]. With `code: true` it also scans the project's test files (bounded, read-only) for T-IDs and AC IDs: `code` = {planned, testsInCode, plannedNotInCode, inCodeNotInPlan (in no feature's plan), acsInTests, scanned, truncated} — plannedNotInCode / inCodeNotInPlan are warnings too.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, code: { type: "boolean", description: "Also scan test files (test/spec/__tests__ folders, *.test.*, test_*.py, *_test.go, *Test.java, *Tests.cs …) for the T-IDs they name — put the T-ID in the test name: test(\"T-01 …\"), def test_T01_…, func TestT01…, [Fact(DisplayName=\"T-01 …\")] (CLI: --code)." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
     name: "spec_doctor",
@@ -296,7 +296,7 @@ function runTool(name, args) {
     case "ears_validate":
       return !args.text && args.name ? spec.earsFeature(pdir, args.name) : spec.earsValidate(args.text, args.lang || spec.projectLang(pdir));
     case "trace_check":
-      return spec.traceCheck(pdir, args.name);
+      return spec.traceCheck(pdir, args.name, { code: args.code === true }); // same call as `dev-spec trace <f> --code`
     case "spec_doctor":
       return spec.specDoctor(pdir, args.name);
     case "spec_approve":

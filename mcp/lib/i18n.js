@@ -16,7 +16,8 @@
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
- *   ```typescript fences, and the eval-harness headings `## System` / `## User Template`.
+ *   ```typescript fences, the eval-harness headings `## System` / `## User Template`, and the test-plan
+ *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
  * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS) and RE_* matchers in spec.js.
@@ -46,15 +47,16 @@ function templateTests(tracks) {
 function greenLine(green, ...acs) {
   return green ? "\n  - _Makes green: " + acs.map((ac) => green[ac]).join(", ") + "_" : "";
 }
-// The test-plan matrix rows of the template ACs — row(testId, layer, description, acId, file) formats one per language,
-// L holds that language's layer names and descriptions.
+// The test-plan matrix rows of the template ACs — row(testId, layer, kind, description, acId, file) formats one per
+// language, L holds that language's layer names and descriptions. Kind stays English-stable (example | property): the
+// ubiquitous AC-4 ("always-true property") and tenant isolation ("never") are invariants, the event-driven ones examples.
 function templateTestRows(tracks, row, L) {
   const T = templateTests(tracks);
-  const r = (ac, layer, desc, file) => row(T[ac], layer, desc, ac, file);
+  const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
   const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
-    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/..."),
+    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
     r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
-  if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/..."), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
+  if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/...", "property"), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
   if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
     r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
   return rows.join("\n");
@@ -440,10 +442,14 @@ ${a.summary || "[one line: the bug being fixed]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
-| T-01 | [unit/integration] | regression — reproduces the bug (red before the fix) | US-1.AC-1 | \`[path]\` |
-| T-02 | [unit/integration] | neighbouring behavior still works | US-1.AC-2 | \`[path]\` |
+<!-- Kind: example (one concrete input → expected output) or property (an invariant over generated inputs — e.g.
+     "every input outside the bug's condition behaves as before" guards US-1.AC-2 well). Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|
+| T-01 | [unit/integration] | example | regression — reproduces the bug (red before the fix) | US-1.AC-1, SC-001 | \`[path]\` |
+| T-02 | [unit/integration] | example | neighbouring behavior still works | US-1.AC-2 | \`[path]\` |
 `;
     },
 
@@ -473,7 +479,7 @@ ${a.summary || "[one line: the bug being fixed]"}
     },
 
     testPlan(name, tracks) {
-      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
           tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
           golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" });
@@ -488,8 +494,14 @@ ${a.summary || "[one line: the bug being fixed]"}
 
 ## Traceability Matrix
 
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
+<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
+     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
+     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
+     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|
 ${rows}
 
 ## Coverage Check
@@ -995,10 +1007,14 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
-|---------|--------|-----------|----------------|----------|
-| T-01 | [unit/integração] | regressão — reproduz o bug (vermelho antes da correção) | US-1.AC-1 | \`[caminho]\` |
-| T-02 | [unit/integração] | o comportamento vizinho continua a funcionar | US-1.AC-2 | \`[caminho]\` |
+<!-- Tipo: example (uma entrada concreta → resultado esperado) ou property (uma invariante sobre entradas geradas — p. ex.
+     "toda a entrada fora da condição do bug comporta-se como antes" protege bem o US-1.AC-2). Os valores ficam example / property.
+     Põe o Test ID no nome do teste (test("T-01 …"), def test_T01_…) para o trace_check {code: true} o encontrar. -->
+
+| Test ID | Camada | Tipo | Descrição | Cobre (AC IDs) | Ficheiro |
+|---------|--------|------|-----------|----------------|----------|
+| T-01 | [unit/integração] | example | regressão — reproduz o bug (vermelho antes da correção) | US-1.AC-1, SC-001 | \`[caminho]\` |
+| T-02 | [unit/integração] | example | o comportamento vizinho continua a funcionar | US-1.AC-2 | \`[caminho]\` |
 `;
     },
 
@@ -1028,7 +1044,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
     },
 
     testPlan(name, tracks) {
-      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
           tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
           golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" });
@@ -1043,8 +1059,14 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 
 ## Matriz de Rastreabilidade
 
-| Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
-|---------|--------|-----------|----------------|----------|
+<!-- Tipo — example: uma entrada concreta → resultado esperado; o padrão para critérios por evento (QUANDO …, SE … ENTÃO).
+     property: uma invariante verificada sobre muitas entradas geradas (fast-check, Hypothesis, jqwik, gopter, FsCheck); usa-o
+     em critérios ubíquos (O SISTEMA DEVE sempre …), critérios ENQUANTO (por estado) e em qualquer regra "nunca / para todo" —
+     isolamento de inquilinos, um round-trip codificar → descodificar, totais que batem sempre certo. Os valores ficam example / property.
+     Põe o Test ID no nome do teste (test("T-01 …"), def test_T01_…) para o trace_check {code: true} o encontrar. -->
+
+| Test ID | Camada | Tipo | Descrição | Cobre (AC IDs) | Ficheiro |
+|---------|--------|------|-----------|----------------|----------|
 ${rows}
 
 ## Verificação de Cobertura
@@ -1550,10 +1572,14 @@ ${a.summary || "[una línea: el bug a corregir]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Capa | Descripción | Cubre (AC IDs) | Fichero |
-|---------|------|-------------|----------------|---------|
-| T-01 | [unit/integración] | regresión — reproduce el bug (rojo antes de la corrección) | US-1.AC-1 | \`[ruta]\` |
-| T-02 | [unit/integración] | el comportamiento vecino sigue funcionando | US-1.AC-2 | \`[ruta]\` |
+<!-- Tipo: example (una entrada concreta → resultado esperado) o property (una invariante sobre entradas generadas — p. ej.
+     "toda entrada fuera de la condición del bug se comporta como antes" protege bien US-1.AC-2). Los valores quedan example / property.
+     Pon el Test ID en el nombre de la prueba (test("T-01 …"), def test_T01_…) para que trace_check {code: true} lo encuentre. -->
+
+| Test ID | Capa | Tipo | Descripción | Cubre (AC IDs) | Fichero |
+|---------|------|------|-------------|----------------|---------|
+| T-01 | [unit/integración] | example | regresión — reproduce el bug (rojo antes de la corrección) | US-1.AC-1, SC-001 | \`[ruta]\` |
+| T-02 | [unit/integración] | example | el comportamiento vecino sigue funcionando | US-1.AC-2 | \`[ruta]\` |
 `;
     },
 
@@ -1583,7 +1609,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
     },
 
     testPlan(name, tracks) {
-      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
           tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
           golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" });
@@ -1598,8 +1624,14 @@ ${a.summary || "[una línea: el bug a corregir]"}
 
 ## Matriz de Trazabilidad
 
-| Test ID | Capa | Descripción | Cubre (AC IDs) | Archivo |
-|---------|------|-------------|----------------|---------|
+<!-- Tipo — example: una entrada concreta → resultado esperado; lo habitual para criterios por evento (CUANDO …, SI … ENTONCES).
+     property: una invariante comprobada sobre muchas entradas generadas (fast-check, Hypothesis, jqwik, gopter, FsCheck); úsalo
+     en criterios ubicuos (EL SISTEMA DEBE siempre …), criterios MIENTRAS (por estado) y cualquier regla "nunca / para todo" —
+     aislamiento entre inquilinos, un round-trip codificar → decodificar, totales que siempre cuadran. Los valores quedan example / property.
+     Pon el Test ID en el nombre de la prueba (test("T-01 …"), def test_T01_…) para que trace_check {code: true} lo encuentre. -->
+
+| Test ID | Capa | Tipo | Descripción | Cubre (AC IDs) | Archivo |
+|---------|------|------|-------------|----------------|---------|
 ${rows}
 
 ## Verificación de Cobertura
@@ -2329,6 +2361,23 @@ const MSG = {
     // @wp WP8 <<<
 
     // @wp WP9 msg-en >>>
+    // Deep traceability (trace_check warnings, doctor secondary-trace / tests-in-code, finish, hook). Never blocking.
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "edge cases (EC) that no task or test covers",
+        uncoveredNfr: "non-functional requirements (NFR) that no task or test covers",
+        uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
+        phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
+        plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
+        inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
+      },
+      secondaryOk: (n) => `all ${n} EC/NFR/SC IDs covered`,
+      testsInCodeOk: (n) => `every planned T-ID made green by a done task is named in a test file (${n})`,
+      testsInCodeMissing: (list) => `made green by done tasks, but no test file names them: ${list} — put the T-ID in the test name (test("T-01 …"), def test_T01_…)`,
+      truncated: "the test-file scan stopped at its cap — some files were not read",
+      codeSummary: (found, planned, scanned, truncated) => `  tests in code: ${found}/${planned} planned T-ID(s) named in ${scanned} test file(s)` + (truncated ? " (scan truncated at its cap)" : ""),
+      warningsHead: "Warnings (not blocking):",
+    },
     // @wp WP9 <<<
 
     // @wp WP10 msg-en >>>
@@ -2815,6 +2864,22 @@ const MSG = {
     // @wp WP8 <<<
 
     // @wp WP9 msg-pt >>>
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "casos limite (EC) sem tarefa nem teste que os cubra",
+        uncoveredNfr: "requisitos não funcionais (NFR) sem tarefa nem teste que os cubra",
+        uncoveredSuccessCriteria: "critérios de sucesso (SC) sem teste nem passo do quickstart que os verifique",
+        phantomSecondary: "tarefas / plano de testes citam IDs EC/NFR/SC desconhecidos (gralhas?)",
+        plannedNotInCode: "testes planeados que nenhum ficheiro de teste nomeia (põe o T-ID no nome do teste)",
+        inCodeNotInPlan: "T-IDs no código de teste que nenhum plano de testes lista",
+      },
+      secondaryOk: (n) => `todos os ${n} IDs EC/NFR/SC cobertos`,
+      testsInCodeOk: (n) => `cada T-ID planeado que uma tarefa feita põe a verde aparece num ficheiro de teste (${n})`,
+      testsInCodeMissing: (list) => `postos a verde por tarefas feitas, mas nenhum ficheiro de teste os nomeia: ${list} — põe o T-ID no nome do teste (test("T-01 …"), def test_T01_…)`,
+      truncated: "a pesquisa de ficheiros de teste parou no limite — alguns ficheiros não foram lidos",
+      codeSummary: (found, planned, scanned, truncated) => `  testes no código: ${found}/${planned} T-ID(s) planeado(s) nomeado(s) em ${scanned} ficheiro(s) de teste` + (truncated ? " (pesquisa truncada no limite)" : ""),
+      warningsHead: "Avisos (não bloqueiam):",
+    },
     // @wp WP9 <<<
 
     // @wp WP10 msg-pt >>>
@@ -3301,6 +3366,22 @@ const MSG = {
     // @wp WP8 <<<
 
     // @wp WP9 msg-es >>>
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "casos límite (EC) sin tarea ni prueba que los cubra",
+        uncoveredNfr: "requisitos no funcionales (NFR) sin tarea ni prueba que los cubra",
+        uncoveredSuccessCriteria: "criterios de éxito (SC) sin prueba ni paso del quickstart que los verifique",
+        phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
+        plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
+        inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",
+      },
+      secondaryOk: (n) => `los ${n} IDs EC/NFR/SC cubiertos`,
+      testsInCodeOk: (n) => `cada T-ID planificado que una tarea hecha pone en verde aparece en un fichero de prueba (${n})`,
+      testsInCodeMissing: (list) => `puestos en verde por tareas hechas, pero ningún fichero de prueba los nombra: ${list} — pon el T-ID en el nombre de la prueba (test("T-01 …"), def test_T01_…)`,
+      truncated: "la búsqueda de ficheros de prueba se detuvo en el límite — algunos ficheros no se leyeron",
+      codeSummary: (found, planned, scanned, truncated) => `  pruebas en el código: ${found}/${planned} T-ID(s) planificado(s) nombrado(s) en ${scanned} fichero(s) de prueba` + (truncated ? " (búsqueda truncada en el límite)" : ""),
+      warningsHead: "Avisos (no bloquean):",
+    },
     // @wp WP9 <<<
 
     // @wp WP10 msg-es >>>

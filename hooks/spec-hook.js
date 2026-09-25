@@ -141,9 +141,13 @@ function main(raw) {
         const tr = spec.traceCheck(pdir, feature);
         if (!tr.ok) process.exit(0);
         // Every gap kind the engine reports, with its IDs (a hand-picked subset used to leave an empty "- ").
-        const parts = spec.traceGapLines(tr, spec.featureLang(pdir, feature));
-        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n"));
-        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")));
+        const lang = spec.featureLang(pdir, feature);
+        const parts = spec.traceGapLines(tr, lang);
+        // Then the warnings (uncovered / phantom EC·NFR·SC) — listed, never blocking. No test-code scan here: hooks stay fast.
+        const warns = spec.traceWarningLines(tr, lang);
+        const warnText = warns.length ? "\n" + spec.msg(lang).deepTrace.warningsHead + "\n" + warns.map((w) => "  ▲ " + w).join("\n") : "";
+        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText);
+        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText);
       }
     } catch {
       process.exit(0);

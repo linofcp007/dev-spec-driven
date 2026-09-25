@@ -2582,6 +2582,167 @@ function payload(res) {
   // @wp WP8 <<<
 
   // @wp WP9 tests >>>
+  { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
+    const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
+    const w9f = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const kinds9 = (tr) => (tr.warnings || []).map((w) => w.kind + "=" + w.items.join("+")).join(" ");
+    const w9 = path.join(tmp, "proj-wp9");
+    S.initProject(w9, ["tdd"]);
+
+    // B. A fresh scaffold (every track, EN/PT/ES) and a fresh bugfix raise no secondary warning: the template SC-001 /
+    // EC-1 / NFR-1 rows are placeholders, and the bugfix's real SC-001 is covered by its regression row T-01.
+    const fresh9 = [["Fresh all", ["tdd", "saas", "ai"], "en"], ["Fresco", ["tdd"], "pt"], ["Fresca", ["tdd", "saas"], "es"]]
+      .map(([n, t, l]) => S.traceCheck(w9, S.createFeature(w9, n, t, undefined, undefined, l).slug));
+    const bugs9 = ["en", "pt", "es"].map((l) => S.traceCheck(w9, S.createFeature(w9, "Bug " + l, ["tdd"], undefined, undefined, l, "bugfix").slug));
+    ok(fresh9.concat(bugs9).every((tr) => tr.ok && tr.verdict === "pass" && Array.isArray(tr.warnings) && tr.warnings.length === 0 &&
+      ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"].every((k) => Array.isArray(tr[k]) && tr[k].length === 0) && tr.code === undefined),
+      "fresh scaffolds (EN/PT/ES, all tracks) and fresh bugfixes: no EC/NFR/SC warning — template rows don't count, the bugfix's SC-001 is covered by T-01");
+
+    // Secondary IDs: EC/NFR need a task or a test-plan row, SC a test-plan row or a real quickstart line.
+    const d9 = S.createFeature(w9, "Deep", ["tdd"]);
+    w9f(d9.dir, "requirements.md", ["# Feature: Deep", "", "## Summary", "Sessions expire and refresh.", "", "## User Stories", "",
+      "### US-1 (P1 — MVP): Sessions", "**As a** user, **I want** sessions, **so that** I stay signed in.", "",
+      "#### Acceptance Criteria (EARS)", "1. **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL reject it with 401.", "",
+      "## Success Criteria", "- **SC-001** — 99% of refreshes succeed within 300 ms.", "- **SC-002** — zero sessions outlive their expiry.",
+      "- **SC-003** — support tickets about logouts drop by 50%.", "- **SC-004** — [e.g., 90% of users complete [task] in under [N] seconds]", "",
+      "## Edge Cases & Error Handling", "- **EC-1** — a clock skew of 5 s: the token is still accepted.", "- **EC-2** — a revoked refresh token",
+      "  is rejected with 401 (wrapped onto a second line).", "", "## Non-Functional Requirements", "- **NFR-1** — p95 refresh latency ≤ 300 ms.",
+      "- **NFR-2** — [measurable performance / security / accessibility constraint]", "", "<!-- - **EC-5** — an example in a comment is not a definition -->", ""].join("\n"));
+    w9f(d9.dir, "tasks.md", ["# Tasks: Deep", "", "## Phase: Build", "- [ ] 1. [US1] Reject expired tokens (keeps EC-1 in mind)",
+      "  - _Requirements: US-1.AC-1, NFR-2_", "  - _Makes green: T-01_", "- [ ] 2. [US1] Cover the skew window", "  - _Requirements: US-1.AC-1, EC-9_", ""].join("\n"));
+    w9f(d9.dir, "test-plan.md", ["# Test Plan: Deep", "", "| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |", "|---|---|---|---|---|---|",
+      "| T-01 | unit | example | expired token rejected | US-1.AC-1, SC-001 | `tests/unit/session.test.js` |",
+      "| T-02 | unit | property | refresh stays in budget | US-1.AC-1, NFR-1, NFR-7 | `tests/unit/perf.test.js` |", "",
+      "## Coverage Check", "- EC-2 — not tested yet (a gap note is not a test row).", ""].join("\n"));
+    w9f(d9.dir, "quickstart.md", "# Quickstart: Deep\n\n3. **Expect:** no session outlives its expiry (SC-2).\n4. **Expect:** [observable result tied to SC-003]\n");
+    const t9 = S.traceCheck(w9, "deep");
+    ok(t9.ok && t9.verdict === "pass" && t9.uncoveredEdgeCases.join() === "EC-2" && t9.uncoveredNfr.length === 0 && t9.uncoveredSuccessCriteria.join() === "SC-003" &&
+      t9.phantomSecondary.join() === "EC-9,NFR-7" && kinds9(t9) === "uncoveredEdgeCases=EC-2 uncoveredSuccessCriteria=SC-003 phantomSecondary=EC-9+NFR-7",
+      "trace_check: EC-2 (a gap note isn't a test row) and SC-003 (only on a template quickstart line) are uncovered; SC-2 names SC-002; EC-9 / NFR-7 are phantom; the verdict stays pass (got " + kinds9(t9) + ")");
+    ok(!S.traceGaps(t9).some((g) => /Edge|Nfr|Success|Secondary|warnings/.test(g.kind)) && S.traceGapLines(t9, "en").every((l) => !/EC-|SC-|NFR-/.test(l)),
+      "the secondary warnings are never trace gaps (traceGaps / traceGapLines skip them and the `warnings` field)");
+    ok(!t9.phantomSecondary.includes("NFR-2") && !t9.uncoveredNfr.includes("NFR-2") && !t9.uncoveredSuccessCriteria.includes("SC-004") && !t9.uncoveredEdgeCases.includes("EC-5"),
+      "a template-only ID (NFR-2, SC-004) is defined but never uncovered; an ID inside an HTML comment (EC-5) is not defined");
+    const m9 = await call9({ name: "Deep", projectDir: w9 });
+    const m9c = await call9({ name: "Deep", projectDir: w9, code: false });
+    ok(kinds9(m9) === kinds9(t9) && m9.verdict === "pass" && m9.code === undefined && m9c.code === undefined,
+      "MCP trace_check returns the same warnings as the engine; without code: true there is no `code` field");
+
+    // doctor: a secondary-trace WARN (traceability still passes); finish lists them as warnings, never blockers.
+    const doc9 = S.specDoctor(w9, "deep");
+    const sec9 = doc9.checks.find((c) => c.id === "secondary-trace");
+    ok(sec9 && sec9.status === "warn" && /edge cases \(EC\) that no task or test covers: EC-2/.test(sec9.detail) && /SC-003/.test(sec9.detail) && /EC-9, NFR-7/.test(sec9.detail) &&
+      doc9.checks.find((c) => c.id === "traceability").status === "pass" && !doc9.checks.some((c) => c.id === "tests-in-code"),
+      "doctor: secondary-trace is a warn naming each kind with its IDs; traceability passes; no tests-in-code check without done _Makes green:_ tasks");
+    const fin9 = S.finishFeature(w9, "deep");
+    ok(Array.isArray(fin9.warnings) && fin9.warnings.some((w) => /EC-2/.test(w)) && fin9.warnings.some((w) => /EC-9, NFR-7/.test(w)) &&
+      !fin9.blockers.some((b) => /EC-|SC-|NFR-/.test(b)), "spec_finish lists the EC/NFR/SC findings under warnings — never as blockers");
+    const clean9 = S.specDoctor(w9, "fresh-all");
+    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings;
+    ok(!clean9.checks.some((c) => c.id === "secondary-trace") && cleanFin9.length === 1 && /^planned tests that no test file names \(put the T-ID in the test name\): T-01, T-02, .*T-10$/.test(cleanFin9[0]),
+      "no secondary IDs written yet → no secondary-trace check and no EC/NFR/SC finish warning (only: no test file names the planned T-IDs yet)");
+    // Hook on tasks.md: the warnings follow the trace line, under their own heading.
+    const hk9 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(d9.dir, "tasks.md") } }), encoding: "utf8" });
+    let hk9t = "";
+    try { hk9t = JSON.parse(hk9.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
+    ok(/Traceability: all 1 ACs covered by tasks/.test(hk9t) && /Warnings \(not blocking\):\n  ▲ edge cases \(EC\) that no task or test covers: EC-2/.test(hk9t) && /▲ tasks \/ test plan cite unknown EC\/NFR\/SC IDs \(typos\?\): EC-9, NFR-7/.test(hk9t),
+      "tasks.md hook: the EC/NFR/SC warnings are listed after the trace line (got " + JSON.stringify(hk9t) + ")");
+    // Covering EC-2 in a task and SC-003 in the plan clears them; the doctor check then passes.
+    fs.appendFileSync(path.join(d9.dir, "tasks.md"), "- [ ] 3. [US1] Reject revoked refresh tokens\n  - _Requirements: US-1.AC-1, EC-2_\n");
+    fs.appendFileSync(path.join(d9.dir, "test-plan.md"), "\n| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n| T-03 | e2e | example | logout tickets | SC-003 | `tests/e2e/x.spec.ts` |\n");
+    fs.writeFileSync(path.join(d9.dir, "tasks.md"), fs.readFileSync(path.join(d9.dir, "tasks.md"), "utf8").replace(", EC-9", ""));
+    fs.writeFileSync(path.join(d9.dir, "test-plan.md"), fs.readFileSync(path.join(d9.dir, "test-plan.md"), "utf8").replace(", NFR-7", ""));
+    const doc9b = S.specDoctor(w9, "deep");
+    ok(S.traceCheck(w9, "deep").warnings.length === 0 && doc9b.checks.find((c) => c.id === "secondary-trace").status === "pass" &&
+      /all 6 EC\/NFR\/SC IDs covered/.test(doc9b.checks.find((c) => c.id === "secondary-trace").detail),
+      "once every real EC/NFR/SC is covered, trace has no warnings and secondary-trace passes (6 real IDs; the template ones don't count)");
+
+    // PT feature: localized warning lines in doctor / finish / the engine helper; markers stay English-stable.
+    const p9 = S.createFeature(w9, "Sessões", ["tdd"], undefined, undefined, "pt");
+    fs.appendFileSync(path.join(p9.dir, "requirements.md"), "\n## Requisitos Extra\n- **EC-7** — relógio adiantado 5 s: o token continua aceite.\n");
+    const pdoc9 = S.specDoctor(w9, "sessoes").checks.find((c) => c.id === "secondary-trace");
+    ok(pdoc9 && pdoc9.status === "warn" && /casos limite \(EC\) sem tarefa nem teste que os cubra: EC-7/.test(pdoc9.detail) &&
+      S.finishFeature(w9, "sessoes").warnings.some((w) => /^casos limite \(EC\) sem tarefa nem teste que os cubra: EC-7$/.test(w)) &&
+      S.traceWarningLines(S.traceCheck(w9, "sessoes"), "es").join() === "casos límite (EC) sin tarea ni prueba que los cubra: EC-7",
+      "PT feature: secondary-trace / finish warnings in Portuguese (and traceWarningLines localizes to ES on request)");
+
+    // I. Property-based test plans: a Kind column (example | property, English-stable) with the T-ID still the FIRST
+    // cell — the brief quotes the row under its header; the ubiquitous AC-4 and tenant isolation are properties.
+    const plan9 = (slug) => fs.readFileSync(path.join(w9, ".specs", slug, "test-plan.md"), "utf8");
+    ok(/\| Test ID \| Layer \| Kind \| Description \| Covers \(AC IDs\) \| File \|/.test(plan9("fresh-all")) && /\| T-04 \| unit \| property \| \[always-true property\] \| US-1\.AC-4 \|/.test(plan9("fresh-all")) &&
+      /\| T-06 \| integration \| property \| tenant A never reads/.test(plan9("fresh-all")) && /\| T-01 \| unit \| example \|/.test(plan9("fresh-all")) &&
+      /\| Test ID \| Camada \| Tipo \| Descrição \|/.test(plan9("fresco")) && /\| T-04 \| unit \| property \|/.test(plan9("fresco")) &&
+      /\| Test ID \| Capa \| Tipo \| Descripción \|/.test(plan9("fresca")) && /\| T-06 \| integración \| property \|/.test(plan9("fresca")) &&
+      ["fresh-all", "fresco", "fresca"].every((s) => /<!--[\s\S]*property[\s\S]*fast-check, Hypothesis, jqwik, gopter, FsCheck[\s\S]*T-01[\s\S]*-->/.test(plan9(s))),
+      "feature test plans (EN/PT/ES) carry a Kind/Tipo column after Layer, T-ID first; AC-4 and tenant isolation are property rows; the guidance comment names the libraries");
+    ok(["bug-en", "bug-pt", "bug-es"].every((s) => /\| Test ID \| (Layer|Camada|Capa) \| (Kind|Tipo) \|/.test(plan9(s)) && /\| T-01 \| [^|]+ \| example \| [^|]+ \| US-1\.AC-1, SC-001 \|/.test(plan9(s))),
+      "bugfix test plans (EN/PT/ES) carry the Kind column and the regression row T-01 covers SC-001");
+    const br9 = S.taskBrief(w9, "fresh-all", 3);
+    ok(br9.ok && br9.tests.length === 3 && br9.tests[0].row.startsWith("| T-01 | unit | example |") && br9.brief.includes("| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---------|-------|------|") &&
+      S.traceCheck(w9, "fresh-all").plannedTests === 10,
+      "the brief still resolves each T-ID to its row (T-ID in the first cell) and quotes it under the Kind header; trace counts every planned test");
+
+    // Drive root: withinRoot (used by trace_check's _Implements:_ clamp) holds at C:\ or / — `root + sep` did not.
+    const drive9 = path.parse(tmp).root;
+    ok(S.withinRoot(drive9, path.join(drive9, "src", "a.js")) && S.withinRoot(drive9, drive9) && !S.withinRoot(path.join(drive9, "proj"), path.join(drive9, "projX", "a.js")) &&
+      !S.withinRoot(path.join(drive9, "proj"), path.join(drive9, "a.js")) && S.withinRoot(path.join(drive9, "proj"), path.join(drive9, "proj", "..cache", "a.js")),
+      "withinRoot: a drive root contains its files; a sibling with the same prefix and the parent are outside; a '..cache' folder is inside");
+
+    // C. T-IDs in test code — one test file per language family, in a small project of its own.
+    const c9 = path.join(tmp, "proj-wp9-code");
+    S.initProject(c9, ["tdd"]);
+    const cf9 = S.createFeature(c9, "Coded", ["tdd"]);
+    w9f(cf9.dir, "requirements.md", "# Feature: Coded\n\n## User Stories\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL reject it.\n2. **US-1.AC-2** — WHEN a key rotates THE SYSTEM SHALL keep old tokens valid for 60 s.\n");
+    w9f(cf9.dir, "test-plan.md", "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07"].map((t) => `| ${t} | unit | example | x | US-1.AC-1, US-1.AC-2 | \`x\` |`).join("\n") + "\n");
+    w9f(cf9.dir, "tasks.md", "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Reject expired tokens\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01, T-07_\n" +
+      "- [ ] 2. [US1] Rotate keys\n  - _Requirements: US-1.AC-2_\n  - _Makes green: T-02, T-03, T-04, T-05, T-06_\n");
+    const of9 = S.createFeature(c9, "Other", ["tdd"]);
+    w9f(of9.dir, "test-plan.md", "| Test ID | Covers |\n|---|---|\n| T-09 | US-1.AC-1 |\n");
+    w9f(c9, "tests/unit/login.test.js", "const { test } = require(\"node:test\");\ntest(\"T-01 rejects an expired token (US-1.AC-1)\", () => {});\n// GPT-4 and UTF-8 are not test IDs\n");
+    w9f(c9, "tests/test_login.py", "def test_T02_lockout():\n    assert True\n");
+    w9f(c9, "pkg/auth/login_test.go", "package auth\n\nimport \"testing\"\n\nfunc TestT03Refresh(t *testing.T) {}\n");
+    w9f(c9, "src/test/java/com/acme/LoginTest.java", "class LoginTest {\n  @Test @DisplayName(\"T-04 rotates keys\")\n  void rotates() {}\n}\n");
+    w9f(c9, "tests/LoginTests.cs", "public class LoginTests {\n  [Fact(DisplayName = \"T-05 audit\")]\n  public void Audit() {}\n  [Fact]\n  public void T06_Revokes() {}\n  Func<T7, T8> f;\n}\n");
+    w9f(c9, "tests/other.test.js", "test(\"T-42 an orphan\", () => {});\ntest(\"T-09 belongs to Other\", () => {});\n");
+    w9f(c9, "src/app.js", "// T-07 named in source code, not in a test\n");
+    w9f(c9, "node_modules/pkg/x.test.js", "test(\"T-07 vendored\", () => {});\n");
+    const ct9 = S.traceCheck(c9, "coded", { code: true });
+    const code9 = ct9.code || {};
+    const tic9 = code9.testsInCode || {};
+    ok(ct9.ok && JSON.stringify(Object.keys(tic9).sort()) === JSON.stringify(["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-09", "T-42"]) &&
+      tic9["T-01"].join() === "tests/unit/login.test.js" && tic9["T-02"].join() === "tests/test_login.py" && tic9["T-03"].join() === "pkg/auth/login_test.go" &&
+      tic9["T-04"].join() === "src/test/java/com/acme/LoginTest.java" && tic9["T-05"].join() === "tests/LoginTests.cs" && tic9["T-06"].join() === "tests/LoginTests.cs",
+      "trace_check {code: true}: T-IDs found per language family — test(\"T-01 …\"), def test_T02_, func TestT03, @DisplayName(\"T-04 …\"), DisplayName=\"T-05 …\", T06_ (got " + JSON.stringify(tic9) + ")");
+    ok(code9.plannedNotInCode.join() === "T-07" && code9.inCodeNotInPlan.join() === "T-42" && code9.acsInTests.join() === "US-1.AC-1" && code9.scanned === 6 &&
+      code9.truncated === false && code9.planned === 7 && kinds9(ct9) === "plannedNotInCode=T-07 inCodeNotInPlan=T-42" && ct9.verdict === "pass",
+      "T-07 (only in source code and node_modules) is planned-not-in-code; T-42 is in no feature's plan while Other's T-09 isn't reported; Func<T7, T8> / GPT-4 are not IDs; 6 test files read");
+    const mc9 = await call9({ name: "Coded", projectDir: c9, code: true });
+    ok(mc9.ok && JSON.stringify(mc9.code) === JSON.stringify(code9) && kinds9(mc9) === kinds9(ct9), "MCP trace_check {code: true} returns the same code block as the engine");
+    // doctor: the done task claims T-01 and T-07 → tests-in-code warns about T-07 only (open tasks' tests may not exist yet).
+    const cdoc9 = S.specDoctor(c9, "coded").checks.find((c) => c.id === "tests-in-code");
+    const cfin9 = S.finishFeature(c9, "coded");
+    ok(cdoc9 && cdoc9.status === "warn" && /no test file names them: T-07 — put the T-ID in the test name/.test(cdoc9.detail) && !/T-0[2-6]/.test(cdoc9.detail) &&
+      cfin9.warnings.some((w) => /^planned tests that no test file names \(put the T-ID in the test name\): T-07$/.test(w)) && !cfin9.warnings.some((w) => /T-42/.test(w)) &&
+      !cfin9.blockers.some((b) => /T-07/.test(b)),
+      "doctor tests-in-code warns about the done task's T-07 only; spec_finish lists plannedNotInCode as a warning (not T-42, never a blocker)");
+    w9f(c9, "tests/unit/rotate.test.js", "test(\"T-07 keeps old tokens for 60 s\", () => {});\n");
+    const cdoc9b = S.specDoctor(c9, "coded").checks.find((c) => c.id === "tests-in-code");
+    ok(cdoc9b && cdoc9b.status === "pass" && /\(2\)/.test(cdoc9b.detail) && S.traceCheck(c9, "coded", { code: true }).code.plannedNotInCode.length === 0,
+      "with a test named T-07 the tests-in-code check passes (both claimed T-IDs found)");
+    // The scan is bounded and never enters .specs/, node_modules/ or hidden folders.
+    const sc9 = S.scanTestCode(c9);
+    ok(sc9.scanned === 7 && !sc9.truncated && ![...sc9.tids.values()].some((e) => e.files.some((f) => /node_modules|\.specs|src\/app\.js/.test(f))),
+      "scanTestCode reads only test files (node_modules/, .specs/ and source files skipped)");
+    // +tdd removed: its test plan is inactive — no tests-in-code check and no planned-not-in-code finish warning.
+    const u9 = S.createFeature(c9, "Untested", ["tdd"]);
+    w9f(u9.dir, "tasks.md", "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-11_\n");
+    w9f(u9.dir, "test-plan.md", "| Test ID | Kind | Covers |\n|---|---|---|\n| T-11 | example | US-1.AC-1 |\n");
+    const u9Before = S.specDoctor(c9, "untested").checks.some((c) => c.id === "tests-in-code") && S.finishFeature(c9, "untested").warnings.some((w) => /^planned tests/.test(w));
+    S.addTrack(c9, "untested", "tdd", { remove: true });
+    ok(u9Before && !S.specDoctor(c9, "untested").checks.some((c) => c.id === "tests-in-code") && !S.finishFeature(c9, "untested").warnings.some((w) => /^planned tests/.test(w)),
+      "after add_track --remove tdd the inactive test plan raises no tests-in-code check and no planned-not-in-code finish warning");
+  }
   // @wp WP9 <<<
 
   // @wp WP10 tests >>>
