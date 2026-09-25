@@ -972,6 +972,15 @@ function payload(res) {
   const keys = S.createFeature(w2, "Keys", ["core"]);
   fs.writeFileSync(path.join(keys.dir, "requirements.md"), "# Feature: Keys\n\n## Summary\nList API keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a tenant has no keys THE SYSTEM SHALL return `[]`.\n");
   ok(S.statusFeature(w2, keys.slug).phase === "design", "an AC that returns `[]` does not send a filled feature back to 'requirements'");
+  // inline code is code even when it is bracketed words; only the templates' own `[path]`/`[caminho]`/`[ruta]` open up
+  const words = S.placeholderReport("xUnit `[Fact]` · `[Authorize]` · Cargo `[dependencies]` · ini `[database]` · regex `[aeiou]` · `[Serializable]` `[HttpGet]`; PT `[caminho]`, ES `[ruta]`").map((x) => x.text);
+  ok(words.join("|") === "[caminho]|[ruta]", "placeholderReport: C# attributes, TOML/INI tables and regex classes in code spans are code; PT `[caminho]` / ES `[ruta]` still are placeholders (got " + words.join("|") + ")");
+  const auth = S.createFeature(w2, "Auth keys", ["core"]);
+  fs.writeFileSync(path.join(auth.dir, "requirements.md"), "# Feature: Auth keys\n\n## Summary\nOnly callers passing the `[Authorize]` filter may list keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin lists keys THE SYSTEM SHALL return them.\n");
+  fs.writeFileSync(path.join(auth.dir, "design.md"), "# Design: Auth keys\n\n## Overview\nA GET endpoint on KeysController.\n");
+  ok(S.artifactState({ file: path.join(auth.dir, "requirements.md") }) === "filled" && S.statusFeature(w2, auth.slug).phase === "design" &&
+    S.roadmap(w2).features.find((x) => x.name === auth.slug).percent === 16,
+    "an `[Authorize]` code span leaves requirements.md 'filled': phase 'design' (16%), not back at 'requirements'");
 
   // a NEW bugfix given extra tracks gets them — the same command twice gives the same track set
   const bf1 = S.createFeature(w2, "Login crash", ["saas"], "crash", undefined, "en", "bugfix");
@@ -991,6 +1000,20 @@ function payload(res) {
   fillNs("test-plan.md", (s) => s.replace(/\[unit\/integration\]/g, "unit").replace(/`\[path\]`/g, "`test/session.test.js`"));
   ok(ns0 === "requirements" && ns1 === "test-plan" && S.statusFeature(w2, ns.slug).phase === "tasks-ready" && S.roadmap(w2).features.find((x) => x.name === ns.slug).percent === 30,
     "bugfix phase: fresh → requirements, requirements filled → test-plan, test plan filled → tasks-ready (30%) with the steps kept verbatim");
+  // the same bugfix planned with +saas, then +saas removed: its design.md held only the track's sections — out of the chain
+  const nsS = S.createFeature(w2, "Null session saas", ["saas"], "crash on login", undefined, "en", "bugfix");
+  for (const rel of ["requirements.md", "test-plan.md"]) fs.copyFileSync(path.join(ns.dir, rel), path.join(nsS.dir, rel));
+  const nsS0 = S.statusFeature(w2, nsS.slug).phase;
+  S.removeTrack(w2, nsS.slug, "saas");
+  const nsS1 = S.statusFeature(w2, nsS.slug);
+  ok(nsS0 === "design" && nsS1.phase === "tasks-ready" && nsS1.tracks === "core +tdd" && S.roadmap(w2).features.find((x) => x.name === nsS.slug).percent === 30 &&
+    fs.existsSync(path.join(nsS.dir, "design.md")),
+    "a bugfix planned with +saas waits on its [SaaS] design sections; once +saas is removed it reaches tasks-ready (30%) like a plain bugfix (design.md kept)");
+  // …but a regular feature whose design.md is only headings is still in 'design' (+tdd: a wrong skip would say 'test-plan')
+  const hd = S.createFeature(w2, "Headings only", ["tdd"]);
+  fs.writeFileSync(path.join(hd.dir, "requirements.md"), "## Summary\nX.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL answer.\n");
+  fs.writeFileSync(path.join(hd.dir, "design.md"), "# Design: Headings only\n\n## Overview\n");
+  ok(S.statusFeature(w2, hd.slug).phase === "design", "only a bugfix drops a headings-only design.md from the chain; a feature's stays open at 'design'");
 
   // localized removal / create-on-existing messages (PT, ES)
   const ptRel = S.createFeature(ptW2, "Relatórios", ["saas"]);
@@ -1034,9 +1057,14 @@ function payload(res) {
     st7.phase === "complete" && !S.finishFeature(w2, chat.slug).blockers.some((b) => /open tasks/.test(b)) && ct7.next === null && ct7.done === ct7.total &&
     S.roadmap(w2).features.find((x) => x.name === chat.slug).percent === 100,
     "after add_track --remove the track's template tasks stop counting (next_task, status, complete_task, finish, roadmap)");
+  const br7 = S.taskBrief(w2, chat.slug);
+  const br7n = S.taskBrief(w2, chat.slug, aiNums7[0]);
+  ok(br7.ok && br7.task === null && br7.note === "All tasks are done — nothing to brief." && br7n.ok && br7n.task.number === aiNums7[0],
+    "spec_task_brief with no number agrees with next_task (removed track's block is not 'next'); an explicit number still reaches it");
   S.addTrack(w2, chat.slug, "ai");
-  ok(S.nextTask(w2, chat.slug).next.number === aiNums7[0] && (fs.readFileSync(t7, "utf8").match(/## Story US-1 — AI/g) || []).length === 1,
-    "re-adding the track brings its task block back into play (never appended twice)");
+  ok(S.nextTask(w2, chat.slug).next.number === aiNums7[0] && (fs.readFileSync(t7, "utf8").match(/## Story US-1 — AI/g) || []).length === 1 &&
+    S.taskBrief(w2, chat.slug).task.number === aiNums7[0],
+    "re-adding the track brings its task block back into play (next_task and brief; never appended twice)");
 
   // prototype keys never produce a did-you-mean
   const ctor = S.createFeature(w2, "Ctor", ["constructor"]);

@@ -885,9 +885,13 @@ function detectPhase(dir, tracks) {
   if (anyDone) return "executing";
   // Planning: the EARLIEST artifact of the chain that is still a template (artifactState). design.md is judged
   // on its active part — a removed track's [SaaS]/[AI] sections keep their TODOs, and they are inactive.
+  // A bugfix has no design of its own (bug.md takes its place): its design.md exists only for a track's sections,
+  // so once that track is removed and nothing active is left, the file is out of the chain — not a phase forever open.
+  const activeDesignText = () => activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks);
+  const bugfix = (readJson(statePath(dir)).data || {}).kind === "bugfix";
   const chain = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]]
-    .filter(([ph, f]) => phaseActive(ph, tracks) && has(f));
-  const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesign(readIfExists(path.join(dir, f)) || "", tracks) } : { file: path.join(dir, f) });
+    .filter(([ph, f]) => phaseActive(ph, tracks) && has(f) && !(f === "design.md" && bugfix && headingsOnly(activeDesignText())));
+  const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesignText() } : { file: path.join(dir, f) });
   const open = chain.find(([, f]) => stateOf(f) !== "filled");
   // A scaffold whose tasks are ALL still placeholders / template track tasks hasn't been broken into tasks yet.
   // One real task wins over an unfilled chain (the task-driven model); the verbatim bugfix steps only count
@@ -1603,7 +1607,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
 
   let block;
   if (number == null || number === "") {
-    block = blocks.find((b) => !b.done);
+    // "The next task" is next_task's: a removed track's block is inactive, never served as next. An explicit
+    // number still reaches the whole file (like complete_task).
+    block = taskBlocks(activeTasks(tasksText, tracks)).find((b) => !b.done);
     if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone };
   } else {
     const n = parseInt(number, 10);
@@ -2371,9 +2377,18 @@ function sectionState(design, sections, marker) {
 const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*[,;/]?\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
-// A code span unwrapped as a placeholder: bracketed WORDS only (the bugfix test plan's `[path]` / `[caminho]` /
-// `[ruta]`). Literals stay code: `[]`, `["read", "write"]`, `[0, 1]`, `[chunk:ID]`, a regex class `[a-z]`.
-const RE_CODE_PLACEHOLDER = /^\s*\[\s*\p{L}{2,}(?:[\s/-]+\p{L}{2,})*\s*\]\s*$/u;
+// The code spans a template itself leaves as placeholders — exactly the bugfix test plan's `[path]` / `[caminho]` /
+// `[ruta]`, read from the templates (every language). Any other span is code, even bracketed words: C# attributes
+// `[Authorize]` `[Fact]`, TOML/INI tables `[dependencies]`, a regex class `[aeiou]`, literals `[]` `["a"]` `[0, 1]`.
+let CODE_PLACEHOLDERS = null;
+function codePlaceholderSet() {
+  if (CODE_PLACEHOLDERS) return CODE_PLACEHOLDERS;
+  const set = new Set();
+  for (const l of i18n.LANGS) {
+    for (const m of i18n.bugTestPlan("x", l).matchAll(/`([^`\n]+)`/g)) if (/^\[[^\]]+\]$/.test(m[1].trim())) set.add(m[1].trim());
+  }
+  return (CODE_PLACEHOLDERS = set);
+}
 // A list or interval of numbers (`score in [0, 1]`) — the templates' numeric placeholders are single values
 // (`[85]%`, `$[0.03]`).
 const RE_NUMBER_LIST = /^\s*[-+]?\d+(?:\.\d+)?(?:\s*[,;]\s*[-+]?\d+(?:\.\d+)?)+\s*$/;
@@ -2381,14 +2396,15 @@ const RE_NUMBER_LIST = /^\s*[-+]?\d+(?:\.\d+)?(?:\s*[,;]\s*[-+]?\d+(?:\.\d+)?)+\
 // [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
 // kind 'bracket' | 'todo'):
 //   • bracketed prose: `[trigger]`, `[1-2 sentences: what this does and why it matters]`, `[N]`, `$[0.03]`,
-//     an empty `[]` / `[ ]` slot, and a code span that is nothing but bracketed words (`` `[path]` ``);
+//     an empty `[]` / `[ ]` slot, and the templates' own code-span slots (`` `[path]` `` / `[caminho]` / `[ruta]`);
 //   • the `> **TODO**` sentinel line.
 // NOT placeholders: links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is
 // defined), footnotes `[^1]`, callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`,
 // the English-stable tags ([US1] [P] [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1],
 // [T-01]…), indexing glued to a word (`x[0]`), escaped `\[`, [NEEDS CLARIFICATION] (clarificationMarkers
 // tracks those), number lists / intervals `[0, 1]`, every other code span (literals such as `` `[]` `` or
-// `` `["a"]` ``), and anything inside HTML comments or fenced code. Language-agnostic, so EN/PT/ES templates
+// `` `["a"]` ``, attributes / TOML tables such as `` `[Authorize]` `` `` `[dependencies]` ``), and anything
+// inside HTML comments or fenced code. Language-agnostic, so EN/PT/ES templates
 // behave the same.
 function placeholderReport(text) {
   const lines = String(text || "").split(/\r?\n/);
@@ -2423,9 +2439,9 @@ function placeholderReport(text) {
 }
 
 function bracketPlaceholders(line, refs) {
-  // Code is opaque — except a span that is only bracketed words (RE_CODE_PLACEHOLDER), unwrapped and scanned.
+  // Code is opaque — except a template's own code-span slot (codePlaceholderSet), unwrapped and scanned.
   const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
-    RE_CODE_PLACEHOLDER.test(body) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
+    codePlaceholderSet().has(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const found = [];
   const box = s.match(RE_LIST_CHECKBOX);
   const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
@@ -2477,8 +2493,12 @@ function artifactState(input, opts = {}) {
   const squash = (x) => String(x).replace(/\s+/g, "");
   const templates = opts.template == null ? [] : [].concat(opts.template);
   if (templates.some((tpl) => squash(tpl) === squash(text))) return "placeholder";
-  if (!stripHtmlComments(text).split(/\r?\n/).some((l) => l.trim() && !/^#{1,6}(\s|$)/.test(l.trim()))) return "placeholder";
+  if (headingsOnly(text)) return "placeholder";
   return placeholderReport(text).length ? "placeholder" : "filled";
+}
+// Nothing beyond headings once HTML comments are set aside (a skeleton, or what's left after inactive sections go).
+function headingsOnly(text) {
+  return !stripHtmlComments(text).split(/\r?\n/).some((l) => l.trim() && !/^#{1,6}(\s|$)/.test(l.trim()));
 }
 
 // Multilingual heading matchers for the doctor / clarify checks.

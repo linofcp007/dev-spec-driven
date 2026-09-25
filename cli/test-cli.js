@@ -180,6 +180,19 @@ ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /ro
   const bug1 = run(["bugfix", "Login crash", "saas", "--project", w2]).out;
   const bug2 = run(["bugfix", "Login crash", "saas", "--project", w2]).out;
   ok(/\[core \+tdd \+saas\]/.test(bug1) && /\[core \+tdd \+saas\]/.test(bug2) && !/already existed/.test(bug2), "bugfix with a track gives the same track set on both runs");
+  // `brief` (default: next open) agrees with `next` once a removed track's task block is all that's left open
+  run(["create", "Chat", "ai", "--project", w2]);
+  const chatTasks = path.join(w2, ".specs", "chat", "tasks.md");
+  const chatRaw = fs.readFileSync(chatTasks, "utf8");
+  const aiBlock = chatRaw.split("## Story US-1 — AI")[1].split(/\n## /)[0];
+  const aiNums = [...aiBlock.matchAll(/- \[ \] (\d+)\./g)].map((m) => +m[1]);
+  fs.writeFileSync(chatTasks, chatRaw.replace(/- \[ \] (\d+)\./g, (m, n) => (aiNums.includes(+n) ? m : `- [x] ${n}.`)));
+  run(["add-track", "chat", "ai", "--remove", "--project", w2]);
+  const chatBrief = run(["brief", "chat", "--project", w2]);
+  const chatBriefN = run(["brief", "chat", String(aiNums[0]), "--project", w2]);
+  ok(aiNums.length > 0 && /All tasks done/.test(run(["next", "chat", "--project", w2]).out) && chatBrief.code === 0 && /All tasks are done — nothing to brief\./.test(chatBrief.out) &&
+    chatBriefN.code === 0 && new RegExp("task " + aiNums[0]).test(chatBriefN.out),
+    "after add-track --remove, `brief` (no number) says all done like `next`; `brief <n>` still reaches the inactive task");
 }
 // @wp WP2 <<<
 
