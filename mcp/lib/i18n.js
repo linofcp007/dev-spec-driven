@@ -3377,7 +3377,7 @@ const MSG = {
       },
       secondaryOk: (n) => `los ${n} IDs EC/NFR/SC cubiertos`,
       testsInCodeOk: (n) => `cada T-ID planificado que una tarea hecha pone en verde aparece en un fichero de prueba (${n})`,
-      testsInCodeMissing: (list) => `puestos en verde por tareas hechas, pero ningún fichero de prueba los nombra: ${list} — pon el T-ID en el nombre de la prueba (test("T-01 …"), def test_T01_…), en el archivo que indica la columna Archivo del plan`,
+      testsInCodeMissing: (list) => `puestos en verde por tareas hechas, pero ningún fichero de prueba los nombra: ${list} — pon el T-ID en el nombre de la prueba (test("T-01 …"), def test_T01_…), en el archivo que indica la columna Archivo (o Fichero) del plan`,
       truncated: "la búsqueda de ficheros de prueba se detuvo en el límite — algunos ficheros no se leyeron",
       codeSummary: (found, planned, scanned, truncated) => `  pruebas en el código: ${found}/${planned} T-ID(s) planificado(s) nombrado(s) en ${scanned} fichero(s) de prueba` + (truncated ? " (búsqueda truncada en el límite)" : ""),
       warningsHead: "Avisos (no bloquean):",

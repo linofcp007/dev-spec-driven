@@ -2855,6 +2855,27 @@ function payload(res) {
     ok(fpc9.plannedNotInCode.join() === "T-01" && JSON.stringify(fpc9.testsInCode).indexOf("T-01") === -1 &&
       /no ficheiro que a coluna Ficheiro do plano indica/.test(S.msg("pt").deepTrace.testsInCodeMissing("T-01")),
       "PT: a concrete Ficheiro cell scopes T-01 too (Alpha's / Beta's T-01 tests don't satisfy it); the PT advice names the Ficheiro column");
+
+    // Round 2: the File cell matches whole path segments at the end of the test's path — a bare file name and a path
+    // relative to a monorepo package satisfy the T-ID; a partial name doesn't; a file the scan never reads scopes nothing.
+    const sx9 = fx9("suffix");
+    const sxl9 = S.createFeature(sx9, "Login", ["tdd"]);
+    w9f(sxl9.dir, "requirements.md", REQ9);
+    w9f(sxl9.dir, "tasks.md", DONE9("T-01, T-02, T-03, T-04"));
+    w9f(sxl9.dir, "test-plan.md", TPH9 + "| T-01 | unit | example | x | US-1.AC-1 | `login.test.ts` |\n| T-02 | unit | example | x | US-1.AC-1 | `tests/unit/session.test.ts` |\n" +
+      "| T-03 | unit | example | x | US-1.AC-1 | `token.test.ts` |\n| T-04 | load | example | x | US-1.AC-1 | `tests/load/checkout-load.md` |\n");
+    w9f(sx9, "src/auth/login.test.ts", "test(\"T-01 rejects an expired token\", () => {});\n");
+    w9f(sx9, "packages/api/tests/unit/session.test.ts", "test(\"T-02 keeps the session\", () => {});\n");
+    w9f(sx9, "src/auth/oldtoken.test.ts", "test(\"T-03 not this one\", () => {});\n");
+    w9f(sx9, "tests/load/checkout.k6.js", "// T-04 load test\n");
+    const sxc9 = S.traceCheck(sx9, "login", { code: true }).code;
+    const sxd9 = S.specDoctor(sx9, "login").checks.find((c) => c.id === "tests-in-code");
+    ok(sxc9.testsInCode["T-01"].join() === "src/auth/login.test.ts" && sxc9.testsInCode["T-02"].join() === "packages/api/tests/unit/session.test.ts" &&
+      sxc9.testsInCode["T-04"].join() === "tests/load/checkout.k6.js" && sxc9.plannedNotInCode.join() === "T-03" && sxd9.status === "warn" && /: T-03 — /.test(sxd9.detail),
+      "a bare file name and a package-relative File cell satisfy T-01 / T-02; `token.test.ts` doesn't match oldtoken.test.ts; a .md under tests/ scopes nothing (got " + JSON.stringify(sxc9) + ")");
+    ok(/columna Archivo \(o Fichero\) del plan/.test(S.msg("es").deepTrace.testsInCodeMissing("T-01")) &&
+      /\| Fichero \|/.test(fs.readFileSync(path.join(S.createFeature(sx9, "Fallo", ["tdd"], undefined, undefined, "es", "bugfix").dir, "test-plan.md"), "utf8")),
+      "ES advice names both spellings of the column (the ES bugfix plan says Fichero, the feature plan Archivo)");
   }
   // @wp WP9 <<<
 

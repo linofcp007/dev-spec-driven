@@ -1735,9 +1735,27 @@ function pathUnder(rel, p) {
   const q = fold(p).replace(/\/+$/, "");
   return q !== "" && (r === q || r.startsWith(q + "/"));
 }
+// Does the File cell path `p` name `rel`? People write the cell from the project root, from the feature folder, from a
+// monorepo package (`tests/unit/login.test.ts` for packages/api/tests/unit/login.test.ts) or as a bare file name
+// (`login.test.ts`), so `p` matches whole path segments at the END of `rel` (a file) or inside it (a folder) — never a
+// partial segment: `tests/beta.test.js` doesn't name tests/alpha.test.js, nor `beta.test.js` alphabeta.test.js.
+function pathNames(rel, p) {
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const r = "/" + fold(rel);
+  const q = fold(p).replace(/\/+$/, "");
+  return q !== "" && (r.endsWith("/" + q) || r.includes("/" + q + "/"));
+}
+// A File cell path the test-code scan can find a T-ID in: a folder (`tests/auth/`, no extension) or a file the scan reads.
+// `tests/load/checkout-load.md` sits under a test dir but is never read, so scoping to it would warn forever.
+function scannableTestPath(t) {
+  if (t.endsWith("/")) return true;
+  const ext = path.posix.extname(t).toLowerCase();
+  return ext === "" || CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext);
+}
 // key(T-ID) → [test paths] its plan rows' File column names — only CONCRETE test paths (a test file or a folder under a
 // test dir: `tests/unit/login.test.ts`, `tests/auth/`); a template slot (`[path]`, `tests/unit/...`), a non-test artifact
-// (`load-test.md`, `evals/golden.json`) or a missing column scopes nothing. `::test_x`, `#L3` and `:12` suffixes are cut.
+// (`load-test.md`, `evals/golden.json`, `tests/load/plan.md`) or a missing column scopes nothing. `::test_x`, `#L3` and
+// `:12` suffixes are cut.
 function planFileScopes(planText) {
   const scopes = new Map();
   for (const e of testPlanEntries(planText)) {
@@ -1748,7 +1766,7 @@ function planFileScopes(planText) {
     const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
     const paths = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
       .map((t) => t.replace(/\\/g, "/").replace(/::.*$/, "").replace(/#.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/^(?:\.\/)+/, "").replace(/^\/+/, ""))
-      .filter((t) => t && !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t) && isTestCodePath(t));
+      .filter((t) => t && !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t) && isTestCodePath(t) && scannableTestPath(t));
     if (!paths.length) continue;
     for (const id of e.ids) {
       const k = tKey(id.slice(2));
@@ -1759,9 +1777,9 @@ function planFileScopes(planText) {
 }
 // trace_check {code: true}: this feature's plan against the test code. T-IDs restart at T-01 in every plan, so a file
 // counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/; and a planned T-ID whose plan row's File
-// column names a concrete test path counts only in that file / under that folder (relative to the project root or to
-// the feature folder) — otherwise another feature's test with the same number would pass it. Without a File path the
-// match is by number across the project.
+// column names a concrete test path counts only in that file / under that folder (pathNames: written from the project
+// root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
+// number would pass it. Without a File path the match is by number across the project.
 //   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
 //   plannedNotInCode  this plan's T-IDs that no counting test file names
 //   inCodeNotInPlan   T-IDs in test code that NO feature's test plan lists (another feature's T-01 is not this one's gap)
@@ -1776,7 +1794,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   const mine = (rel) => !pathUnder(rel, specsRel) || pathUnder(rel, own);
   const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
   const scopes = planFileScopes(planText);
-  const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathUnder(rel, p) || pathUnder(rel, own + "/" + p));
+  const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathNames(rel, p));
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
   const found = new Set();

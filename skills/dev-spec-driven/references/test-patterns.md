@@ -106,11 +106,14 @@ Put the test plan's T-ID at the start of each test's name. `trace_check {code: t
   too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
   is bounded (the result says `truncated` when it stopped at its cap).
 - T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
-  names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`, relative to the
-  project root or to the feature folder), only that file — or a file under that folder — can satisfy
-  the T-ID. While the cell is still a template slot (`[path]`, `tests/unit/...`) the match is by number
-  across the project, so another feature's `T-01` test would pass this one. A test under **another**
-  feature's `.specs/<feature>/tests/` never counts for this one.
+  names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`), only that file — or a
+  file under that folder — can satisfy the T-ID. Write the path from the project root, from the feature
+  folder, from a monorepo package (`tests/unit/login.test.ts` matches
+  `packages/api/tests/unit/login.test.ts`) or as a bare file name (`login.test.ts`); it matches whole
+  path segments, so `tests/beta.test.js` never matches `tests/alpha.test.js`. While the cell is still a
+  template slot (`[path]`, `tests/unit/...`), or names a file the scan doesn't read (a `.md` load-test
+  plan), the match is by number across the project, so another feature's `T-01` test would pass this
+  one. A test under **another** feature's `.specs/<feature>/tests/` never counts for this one.
 - `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
   (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
 

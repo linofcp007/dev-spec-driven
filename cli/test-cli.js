@@ -776,6 +776,16 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   ok(ck9 && ck9.code.testsInCode["T-01"].join() === ".specs/clock/tests/unit/clock.test.js" && ck9.code.plannedNotInCode.join() === "T-02" && !ck9.code.inCodeNotInPlan.includes("T-2") &&
     /▲ tests-in-code — made green by done tasks, but no test file names them: T-02 — [^\n]*File column/.test(ckd9.out),
     "trace --code reads .specs/clock/tests/, scopes T-01 to its File cell and ignores test_t2_…; doctor warns about T-02 only (got " + JSON.stringify(ck9 && ck9.code) + ")");
+  // Round 2: a bare file name in the File cell matches the test wherever it sits (whole path segments at the end).
+  run(["create", "Badge", "tdd", "--project", w9]);
+  put9(".specs/badge/requirements.md", "# Feature: Badge\n\n## User Stories\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user logs in THE SYSTEM SHALL show a badge.\n");
+  put9(".specs/badge/tasks.md", "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Badge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+  put9(".specs/badge/test-plan.md", "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | shows | US-1.AC-1 | `badge.test.js` |\n");
+  put9("src/badge/badge.test.js", "test(\"T-01 shows a badge\", () => {});\n");
+  const bg9 = run(["trace", "badge", "--code", "--project", w9]);
+  const bgd9 = run(["doctor", "badge", "--project", w9]);
+  ok(/tests in code: 1\/1 planned/.test(bg9.out) && !/planned tests that no test file names/.test(bg9.out) && /✓ tests-in-code/.test(bgd9.out),
+    "trace --code / doctor: a bare file name File cell (`badge.test.js`) is satisfied by src/badge/badge.test.js (got " + bg9.out + ")");
 }
 // @wp WP9 <<<
 
