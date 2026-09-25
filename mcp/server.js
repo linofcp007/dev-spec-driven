@@ -33,12 +33,13 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). Idempotent — never overwrites existing files.",
+      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). `guard` turns the opt-in guard mode on/off (roadmap.json meta.guard; with or without tracks): while on, the plugin's PreToolUse hook ASKS before Write/Edit on a code file outside .specs/ unless some feature has approved, unfinished tasks. The result always reports the current `guard` state. Idempotent — never overwrites existing files.",
     inputSchema: {
       type: "object",
       properties: {
         tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Tracks in use across the project. 'core' is always included." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
+        guard: { type: "boolean", description: "Guard mode (opt-in): true = code edits ask for confirmation while no feature has approved, unfinished tasks; false = off. Omit to leave it unchanged (CLI: --guard on|off)." },
         projectDir: { type: "string", description: "Project root. Defaults to SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd." },
       },
     },
@@ -139,8 +140,8 @@ const TOOLS = [
   },
   {
     name: "steering_scaffold",
-    description: "Create a single steering file from its template (constitution.md, product.md, tech.md, structure.md, testing-standards.md, scale.md, observability.md, cost.md, ai-strategy.md), in `lang` (en/pt/es; defaults to the project language). Idempotent.",
-    inputSchema: { type: "object", properties: { file: { type: "string" }, lang: { type: "string", enum: ["en", "pt", "es"] }, projectDir: { type: "string" } }, required: ["file"] },
+    description: "Create a single steering file from its template (constitution.md, product.md, tech.md, structure.md, testing-standards.md, scale.md, observability.md, cost.md, ai-strategy.md) — or a CUSTOM scoped steering file for any other name matching ^[a-z0-9][a-z0-9-]{0,62}\\.md$ (not a Windows device name such as nul.md/com1.md, not a JavaScript built-in): a stub with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern: \"src/api/**\"` — a glob with ** * ? {a,b}, or a list) plus short guidance. spec_task_brief includes `always` files, `fileMatch` files whose pattern matches one of the task's _Implements:_ paths (their body quoted, front matter stripped), and lists `manual` ones as available on request; spec_doctor warns about steering files still holding template placeholders. In `lang` (en/pt/es; defaults to the project language). Idempotent — never overwrites.",
+    inputSchema: { type: "object", properties: { file: { type: "string", description: "A known template name, or a custom name like api-conventions.md." }, lang: { type: "string", enum: ["en", "pt", "es"] }, projectDir: { type: "string" } }, required: ["file"] },
   },
   {
     name: "spec_roadmap",
@@ -312,8 +313,8 @@ function runTool(name, args) {
   }
   const pdir = spec.resolveProjectDir(args.projectDir);
   switch (name) {
-    case "spec_init":
-      return spec.initProject(pdir, args.tracks, args.lang);
+    case "spec_init": // guard: boolean → roadmap.json meta.guard (undefined leaves it unchanged; same call as `init --guard`)
+      return spec.initProject(pdir, args.tracks, args.lang, { guard: args.guard });
     case "spec_classify":
       return spec.classify(args.description, { name: args.name, lang: args.lang });
     case "spec_create": {

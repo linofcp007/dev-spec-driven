@@ -6,8 +6,9 @@
  *
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
- *     when a `.specs/.../tasks.md` is saved, run a traceability check. Surfaces gaps in
- *     the moment, with zero CI and zero cost.
+ *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
+ *     is saved, run its mandatory checks for the active tracks. Surfaces gaps in the moment, with
+ *     zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
  *
@@ -158,6 +159,14 @@ function main(raw) {
         const warnText = warns.length ? "\n" + spec.msg(lang).deepTrace.warningsHead + "\n" + warns.map((w) => "  ▲ " + w).join("\n") : "";
         if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText);
         return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText);
+      }
+
+      if (base === "design.md") {
+        // The design's mandatory checks for the feature's ACTIVE tracks ([SaaS]/[AI] sections, Constitution Check,
+        // placeholders) — one file, string checks only, in the feature's language.
+        // Not an active feature's design (an archived one, steering/design.md): fall through to the roadmap note.
+        const d = spec.designSaveCheck(pdir, feature);
+        if (d.ok) return emit("PostToolUse", d.text);
       }
     } catch {
       process.exit(0);

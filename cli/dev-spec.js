@@ -13,8 +13,10 @@
  *
  * Commands:
  *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
- *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default)
- *   steering <file> [--lang]            Create one steering file from its template
+ *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
+ *                                      --guard on|off → guard mode: code edits ask while no approved tasks)
+ *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
+ *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
@@ -139,6 +141,7 @@ VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|tasks
 // @wp WP10 <<<
 
 // @wp WP11 value-flags >>>
+VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
 // @wp WP11 <<<
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
@@ -216,9 +219,20 @@ function main() {
 
     case "init": {
       const tr = withTracksFlag(pos);
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang);
+      // --guard on|off = spec_init {guard: true|false}; absent leaves the guard as it is.
+      let guard;
+      if (flags.guard !== undefined) {
+        const g = String(flags.guard).trim().toLowerCase();
+        if (["on", "true", "yes", "1"].includes(g)) guard = true;
+        else if (["off", "false", "no", "0"].includes(g)) guard = false;
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
+      }
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard });
       if (r.ok === false) die(r.error); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
-      return out(r, (r) => console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", "))));
+      return out(r, (r) => {
+        console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
+        if (r.guardNote) console.log("  " + r.guardNote);
+      });
     }
 
     case "bugfix":
@@ -333,8 +347,9 @@ function main() {
     }
 
     case "steering": {
-      // dev-spec steering <file> [--lang] — one steering file from its template (same as steering_scaffold)
-      if (!pos[0]) die("usage: dev-spec steering <constitution.md|product.md|tech.md|…> [--lang en|pt|es]");
+      // dev-spec steering <file> [--lang] — one steering file from its template, or a custom scoped one with front
+      // matter (inclusion: always|fileMatch|manual) for any other safe name (same as steering_scaffold)
+      if (!pos[0]) die("usage: dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|es]");
       const r = spec.scaffoldSteeringFile(projectDir, pos[0], flags.lang);
       if (!r.ok) die(r.error);
       const T = cliText(flags.lang || spec.projectLang(projectDir)); // the language the file was written in
@@ -769,7 +784,9 @@ function helpText() {
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai), multilingual
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
-  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …)
+                                  --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
+  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
+                                  name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
