@@ -7,17 +7,59 @@
  * and asserts the results. Run: `node mcp/test.js`
  */
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+
+// Speed: the 1.13 sections (the WP1…WP12 blocks below) don't depend on each other nor on the rest — each works in its
+// own project folders — so the suite runs every section in a child process of this file (MCP_TEST_SECTION=<name>),
+// each with its own server and temp dir, all at once, and prints their output in order with one total. "main" is
+// everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12"];
+const SECTION = process.env.MCP_TEST_SECTION || "";
+if (!SECTION) {
+  const runSection = (name) => new Promise((resolve) => {
+    let out = "";
+    const kid = spawn(process.execPath, [__filename], { env: { ...process.env, MCP_TEST_SECTION: name }, stdio: ["ignore", "pipe", "pipe"] });
+    kid.stdout.on("data", (d) => (out += d));
+    kid.stderr.on("data", (d) => (out += d));
+    kid.on("error", (e) => resolve({ name, out: out + "\n" + e.message, code: 1 }));
+    kid.on("close", (code) => resolve({ name, out, code }));
+  });
+  // At most one section per CPU at a time (each also runs its own server); results keep the section order.
+  const all = new Array(SECTIONS.length);
+  let nextIdx = 0;
+  const worker = () => (nextIdx >= SECTIONS.length ? Promise.resolve() : ((i) => runSection(SECTIONS[i]).then((r) => { all[i] = r; return worker(); }))(nextIdx++));
+  Promise.all(Array.from({ length: Math.max(2, Math.min(SECTIONS.length, os.cpus().length || 2)) }, worker)).then(() => {
+    let passed = 0, failed = 0;
+    for (const r of all) {
+      const m = r.out.match(/\n(\d+) passed, (\d+) failed\s*$/);
+      process.stdout.write(r.out.replace(/\n\d+ passed, \d+ failed\s*$/, "\n"));
+      if (m) { passed += +m[1]; failed += +m[2]; }
+      // A section that died (or never printed its total) fails the suite — never let it drain to exit 0.
+      if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
+    }
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  });
+  return; // CommonJS module scope: the parent only dispatches
+}
+if (!SECTIONS.includes(SECTION)) {
+  console.log(`unknown MCP_TEST_SECTION '${SECTION}' (known: ${SECTIONS.join(", ")})\n\n0 passed, 1 failed`);
+  process.exit(1);
+}
+const S = require("./lib/spec.js");
+const root = path.join(__dirname, "..");
 
 const SERVER = path.join(__dirname, "server.js");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
 
 let pass = 0,
   fail = 0;
+let muted = SECTION !== "main"; // a section child runs the handshake silently (main counts those assertions)
 function ok(cond, label) {
+  if (muted) return;
   if (cond) {
     pass++;
     console.log("  ok   - " + label);
@@ -86,6 +128,14 @@ function notify(method, params) {
 function payload(res) {
   return JSON.parse(res.result.content[0].text);
 }
+// The end of a run (main's own end is at the bottom of the file): stop the server, print the total, clean up.
+function endRun() {
+  finished = true;
+  child.stdin.end();
+  console.log(`\n${pass} passed, ${fail} failed`);
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  process.exit(fail ? 1 : 0);
+}
 
 (async () => {
   const init = await rpc("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
@@ -95,6 +145,13 @@ function payload(res) {
   const list = await rpc("tools/list", {});
   ok(list.result.tools.length >= 23, "tools/list returns at least the 23 v1.12 tools (got " + list.result.tools.length + ")"); // exact count restored at release
 
+  if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
+    muted = false;
+    const sections = { wp1: sectionWp1, wp2: sectionWp2, wp3: sectionWp3, wp4: sectionWp4, wp5: sectionWp5, wp6: sectionWp6, wp7: sectionWp7, wp8: sectionWp8,
+      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12 };
+    await sections[SECTION]();
+    return endRun();
+  }
   const cls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Stripe billing webhook for multi-tenant SaaS that also summarizes invoices with an LLM" } }));
   ok(cls.tracks.includes("tdd") && cls.tracks.includes("saas") && cls.tracks.includes("ai"), "classify detects tdd+saas+ai (" + cls.label + ")");
 
@@ -436,7 +493,6 @@ function payload(res) {
     "+ai task with _Affects evals:_ is flagged inlineOnly (prompt loop); a deterministic +ai task is not");
 
   // T-10: the hook ignores the execution workspace (no roadmap churn, no context spam).
-  const { spawnSync } = require("child_process");
   const hk = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], {
     input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(exDir, "ledger.md") } }),
     encoding: "utf8",
@@ -444,16 +500,14 @@ function payload(res) {
   ok(hk.status === 0 && hk.stdout.trim() === "", "PostToolUse hook stays silent for files under .specs/<feature>/.execution/");
 
   // US-2: the protocol ships with the plugin and the skill routes to it.
-  const root = path.join(__dirname, "..");
-  const skillMd = fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
+  const skillMd =fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
   ok(fs.existsSync(path.join(root, "skills", "dev-spec-driven", "references", "subagent-execution.md")) &&
     fs.existsSync(path.join(root, "agents", "spec-implementer.md")) && fs.existsSync(path.join(root, "agents", "spec-reviewer.md")) &&
     /subagent-execution\.md/.test(skillMd) && /spec_task_brief/.test(skillMd),
     "subagent protocol + agents ship with the plugin and SKILL.md routes Phase 6 to them");
 
   // --- v1.11 review fixes: each assertion reproduces a finding from the full plugin review ---
-  const S = require("./lib/spec.js");
-  const rDir = path.join(tmp, "proj-review");
+  const rDir =path.join(tmp, "proj-review");
   const rSpecs = path.join(rDir, ".specs");
   S.initProject(rDir, ["tdd"], "en");
   S.createFeature(rDir, "Billing", ["core"]);
@@ -815,6 +869,7 @@ function payload(res) {
     "merge title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
 
   // @wp WP1 tests >>>
+  async function sectionWp1() {
   // --- 1.13 WP1: ONE task scanner, numeric task numbers, one duplicate resolver, the evidence gate ---
   const w1 = path.join(tmp, "proj-wp1");
   const w1f = S.createFeature(w1, "Scan", ["core"]);
@@ -1029,10 +1084,11 @@ function payload(res) {
   const engineFiles = ["mcp/lib/spec.js", "mcp/lib/i18n.js", "mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
     .map((f) => path.join(__dirname, "..", f)).filter((f) => fs.existsSync(f));
   ok(engineFiles.length >= 4 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files");
+  }
   // @wp WP1 <<<
 
   // @wp WP2 tests >>>
-  { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
+  async function sectionWp2() { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
   const w2s = path.join(w2, ".specs");
   S.initProject(w2, ["core"], "en");
@@ -1119,7 +1175,8 @@ function payload(res) {
   S.removeTrack(w2, "ai-gone", "ai");
   ok(!S.specDoctor(w2, "ai-gone").pendingGates.includes("eval-plan") && !/eval-plan/.test(S.nextAction(w2, "ai-gone").recommendation) && fs.existsSync(path.join(aiRm.dir, "eval-plan.md")),
     "an inactive track's artifact is no longer an approval gate (doctor, next_action) — and it is still on disk");
-  const vBug = path.join(tmp, "proj-v112");
+  const vBug = path.join(tmp, "proj-wp2-bug"); // this section's own bugfix (the sections run in parallel, apart from main's)
+  S.createFeature(vBug, "Login Loop", undefined, "users bounce back to /login", undefined, "en", "bugfix");
   ok(S.addTrack(w2, "invoice-export", "core", { remove: true }).ok === false && /core/.test(S.addTrack(w2, "invoice-export", "core", { remove: true }).error) &&
     S.removeTrack(vBug, "login-loop", "tdd").ok === false && /bugfix/i.test(S.removeTrack(vBug, "login-loop", "tdd").error),
     "'core' can't be removed; a bugfix can't drop +tdd");
@@ -1184,7 +1241,11 @@ function payload(res) {
   // (10) status reports present AND filled, agreeing with doctor
   const st10 = S.statusFeature(w2, fr[0].slug);
   const doc10 = S.specDoctor(w2, fr[0].slug).checks.find((c) => c.id === "saas-sections");
-  ok(st10.scaleSections.every((s) => s.present && s.filled === false) && doc10.status === "fail" && S.statusFeature(fDir, "tpl").scaleSections.every((s) => s.filled),
+  // The filled reference template, in this section's own project (the sections run in parallel, apart from main's fixtures).
+  const tplDir = path.join(tmp, "proj-wp2-tpl");
+  const tplF = S.createFeature(tplDir, "Tpl", ["saas"]);
+  fs.copyFileSync(path.join(root, "skills", "dev-spec-driven", "references", "scale-design-template.md"), path.join(tplF.dir, "design.md"));
+  ok(st10.scaleSections.every((s) => s.present && s.filled === false) && doc10.status === "fail" && S.statusFeature(tplDir, "tpl").scaleSections.every((s) => s.filled),
     "status scaleSections carry present + filled (fresh: present, unfilled — same as doctor; the filled template: all filled)");
 
   // (11) creating a feature removes its backlog entry
@@ -1339,7 +1400,7 @@ function payload(res) {
   // @wp WP2 <<<
 
   // @wp WP3 tests >>>
-  { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
+  async function sectionWp3() { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const errText = (res) => { try { return JSON.parse(res.result.content[0].text).error || ""; } catch { return res.result.content[0].text; } };
     const body = (res) => { try { return payload(res); } catch { return { ok: false, error: res.result.content[0].text }; } };
@@ -1563,6 +1624,7 @@ function payload(res) {
   // @wp WP3 <<<
 
   // @wp WP4 tests >>>
+  async function sectionWp4() {
   // --- 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, destructive ops confirmed, localized phases ---
   const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
   const w4 = path.join(tmp, "proj-wp4");
@@ -1608,6 +1670,8 @@ function payload(res) {
   // spec_backlog rm: an unknown name is an error, not a silent ok.
   const blMiss = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "rm", name: "nope", projectDir: w4 } });
   S.backlog(w4, "add", "SSO");
+  const ptProj = path.join(tmp, "proj-wp4-pt"); // this section's own PT project (the sections run in parallel, apart from main's)
+  S.initProject(ptProj, [], "pt");
   ok(blMiss.result.isError === true && /not in the backlog/.test(payload(blMiss).error) && S.backlog(w4, "rm", "sso").ok === true && S.backlog(w4, "list").backlog.length === 0 &&
     /não está no backlog/.test(S.backlog(ptProj, "rm", "x").error), "backlog rm: unknown name → localized error (isError); a listed name (any case) is removed");
 
@@ -1655,14 +1719,17 @@ function payload(res) {
     "remove preview with a broken roadmap.json returns the roadmap error (no needsConfirm), like the confirmed call");
 
   // spec_finish includeBody with write (the CLI's --include-body maps to it); classify reports its language.
-  const finBody = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", write: true, includeBody: true, projectDir: vDir } }));
+  const finDir = path.join(tmp, "proj-wp4-finish"); // this section's own bugfix (the sections run in parallel, apart from main's)
+  S.createFeature(finDir, "Login Loop", undefined, "users bounce back to /login", undefined, "en", "bugfix");
+  const finBody = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", write: true, includeBody: true, projectDir: finDir } }));
   ok(finBody.wrote === true && /## Summary/.test(finBody.mergeSummary), "spec_finish write + includeBody returns the merge summary too");
   ok(S.classify("Webhook de faturação com resumo por um LLM").lang === "pt" && S.classify("x", { lang: "es" }).lang === "es",
     "classify returns the language its notes/reasoning are in");
+  }
   // @wp WP4 <<<
 
   // @wp WP5 tests >>>
-  { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
+  async function sectionWp5() { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
     S.initProject(w5, ["core"], "en");
     const read5 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
@@ -1972,7 +2039,7 @@ function payload(res) {
   // @wp WP5 <<<
 
   // @wp WP6 tests >>>
-  { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
+  async function sectionWp6() { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
     const safe6 = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
     const w6 = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -2337,7 +2404,7 @@ function payload(res) {
 
   // @wp WP7 tests >>>
   // --- 1.13 WP7: spec_append_tasks (converge) — appended tasks work end to end, all-or-nothing, line-exact ---
-  {
+  async function sectionWp7() {
     const call7 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const w7 = path.join(tmp, "proj-wp7");
     S.initProject(w7, ["tdd"]);
@@ -2580,7 +2647,7 @@ function payload(res) {
 
   // @wp WP8 tests >>>
   // --- 1.13 WP8: change requests (approval history + snapshots, spec_impact, reopen) + metrics & retro ---
-  {
+  async function sectionWp8() {
     const call8 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const w8 = path.join(tmp, "proj-wp8");
     S.initProject(w8, ["tdd"]);
@@ -2975,7 +3042,7 @@ function payload(res) {
   // @wp WP8 <<<
 
   // @wp WP9 tests >>>
-  { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
+  async function sectionWp9() { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
     const w9f = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
     const kinds9 = (tr) => (tr.warnings || []).map((w) => w.kind + "=" + w.items.join("+")).join(" ");
@@ -3274,7 +3341,7 @@ function payload(res) {
 
   // @wp WP10 tests >>>
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
-  {
+  async function sectionWp10() {
     const call10 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const { spawnSync: spawn10 } = require("child_process");
     const hook10 = (dir) => spawn10(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout;
@@ -3585,7 +3652,7 @@ function payload(res) {
 
   // @wp WP11 tests >>>
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
-  {
+  async function sectionWp11() {
     const call11 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
     const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
     const specHookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
@@ -3865,7 +3932,7 @@ function payload(res) {
     const dzArch = runPost(path.join(e11, ".specs", "_archive", "old-design", "design.md"));
     ok(/^Roadmap updated → \d+%/.test(dzArch) && !/Design check/.test(dzArch), "hook on an ARCHIVED feature's design.md → the roadmap note, as before (no design check, not silent)");
   }
-  {
+  async function sectionWp12() {
     // --- 1.13 WP12: secondary IDs in append_tasks, fenced/commented IDs in trace, _Implements:_ globs, SPECS.md from the
     // hook, bugfix impact via bug.md, legacy bugfix approvals, and the per-call read cache ---
     const call12 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
