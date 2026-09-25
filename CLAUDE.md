@@ -217,9 +217,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
-  `duplicate-number` · `stale-evidence`. The only RETURNED field carrying them is `spec_complete_task`'s
-  `unverifiedReason` (set only for a task with a runnable `_Verify:_` or recorded evidence); callers branch on
-  it, never on the localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and
+  `duplicate-number` · `stale-evidence`. They are RETURNED in `spec_complete_task`'s `unverifiedReason` (set
+  only for a task with a runnable `_Verify:_` or recorded evidence) and in `spec_impact`'s per-task `evidence`
+  (`impacted[].tasks[]`, `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on
+  these, never on the localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and
   `spec_finish` render it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and the
   ROADMAP.md attention line only counts unverified tasks per feature.
 - **Record shape** (`.state.json → evidence[<n>]`): the latest run `{command, exitCode, summary, at}` plus
@@ -410,8 +411,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
 - **Returned text is localized, structured fields are not.** Engine errors (`errs()`), EARS issue
   `msg`, classifier `notes`/`reasoning`, doctor section names, CLI output, hook and pre-commit lines all go
-  through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code`, evidence `unverifiedReason`, doctor
-  check `id`, next_action `step` — never regex a `msg`.
+  through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code`, evidence `unverifiedReason` (and
+  `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` — never regex a `msg`.
 - **Classifier language guess** (`guessLang`): STRONG PT/ES markers (weight 2: `não`, `uma`, `-ção`,
   `ñ`…) and WEAK ones (weight 1: `de`, `por`, `com`…) must beat the English function-word count —
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.
