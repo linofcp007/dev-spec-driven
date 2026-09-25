@@ -109,7 +109,7 @@ const TOOLS = [
     name: "spec_finish",
     description:
       "Close a feature (finishing-a-development-branch): readiness report — doctor blocking checks, open tasks, tasks ticked without verification evidence, phases awaiting approval — plus the track-gated checks only a fresh run or a human can confirm (full suite green; +saas load test + observability; +ai cost + safety; bugfix: no longer reproduces), and a merge title + summary GENERATED FROM THE SPEC CHAIN (summary, root cause/fix for bugfixes, ACs, tasks with their evidence, tests, checks, spec files) to use as the merge commit message. `readyToFinish` is true only with zero blockers. With `write: true` the summary is written to .specs/<feature>/.execution/merge-summary.md (content omitted unless includeBody). Integration is LOCAL: the human picks merge locally or keep the branch — no pull requests, no CI. It never merges, pushes or approves by itself.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean" }, includeBody: { type: "boolean" }, projectDir: { type: "string" } }, required: ["name"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
@@ -143,7 +143,7 @@ const TOOLS = [
   },
   {
     name: "spec_roadmap",
-    description: "Show the multi-feature roadmap: each feature's tracks, phase, completion % (planning phases up to 30%, then driven by the fraction of tasks done), declared dependencies, blocked status (a dep is met when that feature is 100%), plus overall % and any circular dependency. With `write: true`, (re)generates the always-current overview: `.specs/ROADMAP.md` by default (Markdown, keeps the Mermaid dependency graph — git/PR-friendly) — and also a self-contained brand-styled `.specs/ROADMAP.html` (light/dark toggle, offline) when `html: true`. Pass `lang` ('en'/'pt'/'es') to localize the roadmap chrome only (stored as meta.roadmapLang for auto-refresh; the project language is unchanged). `html: true` implies writing. A same-named file that dev-spec did not generate is never overwritten. Reads .specs/roadmap.json + the feature folders.",
+    description: "Show the multi-feature roadmap: each feature's tracks, phase, completion % (planning phases up to 30%, then driven by the fraction of tasks done), declared dependencies, blocked status (a dep is met when that feature is 100%), plus overall % and any circular dependency. With `write: true`, (re)generates the always-current overview: `.specs/ROADMAP.md` by default (Markdown, keeps the Mermaid dependency graph — git-friendly) — and also a self-contained brand-styled `.specs/ROADMAP.html` (light/dark toggle, offline) when `html: true`. Pass `lang` ('en'/'pt'/'es') to localize the roadmap chrome only (stored as meta.roadmapLang for auto-refresh; the project language is unchanged). `html: true` implies writing. A same-named file that dev-spec did not generate is never overwritten — the result is then an error naming it (`errors`), with `wrote` listing only what was written. Reads .specs/roadmap.json + the feature folders.",
     inputSchema: { type: "object", properties: { projectDir: { type: "string" }, write: { type: "boolean", description: "(Re)write .specs/ROADMAP.md (default format)." }, html: { type: "boolean", description: "Also (re)write the brand-styled .specs/ROADMAP.html." }, lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the roadmap chrome." } } },
   },
   {
@@ -186,8 +186,8 @@ const TOOLS = [
   {
     name: "spec_feature",
     description:
-      "Manage a feature's lifecycle: remove (delete its `.specs/<slug>/` folder), archive (move it to `.specs/_archive/<slug>/`, out of the active roadmap), or rename (slug + folder + roadmap.json key, with all dependsOn references updated). All actions keep roadmap.json dependencies consistent and regenerate the roadmap. 'remove' is destructive - prefer 'archive'.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, projectDir: { type: "string" } }, required: ["action", "name"] },
+      "Manage a feature's lifecycle: remove (delete its `.specs/<slug>/` folder), archive (move it to `.specs/_archive/<slug>/`, out of the active roadmap), or rename (slug + folder + roadmap.json key, with all dependsOn references updated). All actions keep roadmap.json dependencies consistent and regenerate the roadmap. 'remove' is destructive and needs `confirm: true` - without it nothing is deleted and the result (an error with needsConfirm) lists what would be; prefer 'archive'.",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, confirm: { type: "boolean", description: "Must be true for action 'remove' (deletion is permanent). Ignored by archive/rename." }, projectDir: { type: "string" } }, required: ["action", "name"] },
   },
 
   // @wp WP5 tools >>>
@@ -255,24 +255,8 @@ function runTool(name, args) {
       return spec.approvePhase(pdir, args.name, args.phase, args.by);
     case "steering_scaffold":
       return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
-    case "spec_roadmap": {
-      const rm = spec.roadmap(pdir);
-      if (args.write || args.html) { // html:true implies writing (same as the CLI's --html)
-        const wrote = [];
-        const m = spec.writeRoadmapMd(pdir, args.lang);
-        // A refused write (broken/wrong-shaped roadmap.json, hand-written ROADMAP.md) is an error, exactly as
-        // the CLI exits 1 on it — it used to vanish into ok:true, wrote:[].
-        if (!m.ok) return m;
-        wrote.push(m.file);
-        if (args.html) {
-          const h = spec.writeRoadmapHtml(pdir, args.lang);
-          if (h.ok) wrote.push(h.file);
-          else rm.warnings = [h.error]; // non-fatal, like the CLI (which prints it on stderr), but never silent
-        }
-        rm.wrote = wrote;
-      }
-      return rm;
-    }
+    case "spec_roadmap": // html:true implies writing; a failed write is an error (same engine call as the CLI)
+      return spec.roadmapReport(pdir, { write: args.write, html: args.html, lang: args.lang });
     case "spec_backlog":
       return spec.backlog(pdir, args.action, args.name, args.note);
     case "spec_depend":
@@ -288,7 +272,7 @@ function runTool(name, args) {
     case "spec_add_track":
       return spec.addTrack(pdir, args.name, args.track, { remove: !!args.remove });
     case "spec_feature":
-      return spec.manageFeature(pdir, args.action, args.name, args.newName);
+      return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true });
 
     // @wp WP5 dispatch >>>
     // @wp WP5 <<<

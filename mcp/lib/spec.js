@@ -528,6 +528,7 @@ function classify(description, opts = {}) {
     note: notes.length ? notes.join(" ") : null,
     notes,
     mode: opts.mode || "spec",
+    lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
     reasoning: buildReasoning(tracks, signals, confidence, negated, C),
   };
 }
@@ -1415,6 +1416,25 @@ function traceCheck(projectDir, name) {
     (result.phantomTestsInTasks ? result.phantomTestsInTasks.length : 0);
   result.verdict = gaps === 0 ? "pass" : "gaps-found";
   return result;
+}
+
+// Every non-empty gap list of a trace_check result, in a stable order, so the CLI, the hook and doctor
+// list them ALL — a hand-picked subset used to print "gaps-found" with nothing under it (phantom T-IDs,
+// missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
+// informational here.
+const TRACE_INFO_FIELDS = new Set(["implementsFiles"]);
+const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
+function traceGaps(tr) {
+  const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
+  return Object.keys(tr || {})
+    .filter((k) => Array.isArray(tr[k]) && tr[k].length && !TRACE_INFO_FIELDS.has(k))
+    .sort((a, b) => rank(a) - rank(b))
+    .map((k) => ({ kind: k, items: tr[k].map((x) => (typeof x === "string" ? x : (x && x.id) || JSON.stringify(x))) }));
+}
+// The same gaps as localized "label: ID, ID" lines.
+function traceGapLines(tr, lang) {
+  const T = i18n.msg(lang).traceGapText;
+  return traceGaps(tr).map((g) => T.gap(T.kinds[g.kind] || g.kind, g.items.join(", ")));
 }
 
 // ---------------------------------------------------------------------------
@@ -2311,10 +2331,40 @@ function renameFeature(projectDir, name, newName) {
   return { ok: true, action: "rename", from: oldSlug, to: newSlug };
 }
 
-function manageFeature(projectDir, action, name, arg) {
+// What `remove` would delete, returned INSTEAD of deleting when the caller hasn't confirmed.
+function removePreview(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
+  let files = 0;
+  const walk = (d) => safeReaddir(d).forEach((e) => {
+    const p = path.join(d, e);
+    let st;
+    // lstat, never stat: a symlink/junction is ONE entry, as for fs.rmSync — following it would count files
+    // outside the feature (that the delete never touches) and recurse forever through a link loop.
+    try { st = fs.lstatSync(p); } catch { return; }
+    if (st.isDirectory() && !st.isSymbolicLink()) walk(p); else files++;
+  });
+  walk(f.dir);
+  return {
+    ok: false,
+    needsConfirm: true,
+    action: "remove",
+    feature: f.slug,
+    wouldDelete: { dir: f.dir, files, entries: safeReaddir(f.dir).sort() },
+    error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirm(f.slug, files),
+  };
+}
+
+function manageFeature(projectDir, action, name, arg, opts = {}) {
   switch (String(action || "").toLowerCase()) {
     case "remove":
     case "delete":
+      // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
+      // nothing is deleted and the caller gets what WOULD be.
+      if (opts.confirm !== true) return removePreview(projectDir, name);
       return removeFeature(projectDir, name);
     case "archive":
       return archiveFeature(projectDir, name);
@@ -2906,9 +2956,10 @@ function specDoctor(projectDir, name) {
   // Traceability
   const tr = traceCheck(projectDir, name);
   if (tr.ok) {
+    // Name every failing kind with its IDs (the old counters read "=0" for kinds they didn't count).
+    const gapLines = traceGapLines(tr, featureLang(projectDir, name));
     add("traceability", tr.verdict === "pass" ? "pass" : "fail",
-      `uncoveredByTasks=${tr.uncoveredByTasks.length}, phantomAcs=${tr.phantomAcsInTasks.length}` +
-      (tr.uncoveredByTests ? `, uncoveredByTests=${tr.uncoveredByTests.length}` : ""));
+      tr.verdict === "pass" ? [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; ") : gapLines.join("; ") || tr.verdict);
   }
 
   // Verification evidence: ticked tasks without a passing run (a _Verify:_ command that was never run,
@@ -3183,10 +3234,17 @@ function addBacklog(projectDir, name, note) {
 }
 
 function removeBacklog(projectDir, name) {
+  const nm = String(name || "").trim();
+  if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   const rm = readRoadmap(projectDir);
-  rm.backlog = (rm.backlog || []).filter((b) => b.name.toLowerCase() !== String(name || "").toLowerCase());
+  const before = rm.backlog || [];
+  // A name that isn't there is an error, not a silent "ok" (a typo must not read as removed).
+  if (!before.some((b) => b.name.toLowerCase() === nm.toLowerCase())) {
+    return { ok: false, error: i18n.msg(projectLang(projectDir)).featureOps.backlogNotFound(nm, before.map((b) => b.name).join(", ")) };
+  }
+  rm.backlog = before.filter((b) => b.name.toLowerCase() !== nm.toLowerCase());
   writeRoadmap(projectDir, rm);
   maybeRefreshRoadmap(projectDir);
   return { ok: true, backlog: rm.backlog };
@@ -3518,6 +3576,33 @@ function maybeRefreshRoadmap(projectDir) {
   }
 }
 
+// spec_roadmap as ONE operation for the MCP tool and the CLI: the roadmap view plus, with write/html, the
+// generated files. A write that fails (a hand-written ROADMAP.md, no .specs/) makes the result an error
+// naming it — never `wrote: []` reported as success.
+function roadmapReport(projectDir, opts = {}) {
+  const write = !!(opts.write || opts.html); // html implies writing
+  const wrote = [];
+  const errors = [];
+  const warnings = [];
+  if (write) {
+    const m = writeRoadmapMd(projectDir, opts.lang);
+    if (m.ok) wrote.push(m.file); else errors.push(m.error);
+    if (opts.html) { // independent files: a refused ROADMAP.md is an error, a skipped hand-written ROADMAP.html a warning
+      const h = writeRoadmapHtml(projectDir, opts.lang);
+      if (h.ok) wrote.push(h.file); else warnings.push(h.error);
+    }
+  }
+  const rm = roadmap(projectDir);
+  if (write) rm.wrote = wrote;
+  if (warnings.length) rm.warnings = warnings;
+  if (errors.length) {
+    rm.ok = false;
+    rm.error = errors.join(" ");
+    rm.errors = errors;
+  }
+  return rm;
+}
+
 // ---------------------------------------------------------------------------
 // Brownfield: heuristic local codebase scan + spec coverage (no model, no cost)
 // ---------------------------------------------------------------------------
@@ -3764,6 +3849,9 @@ module.exports = {
   // @wp WP3 <<<
 
   // @wp WP4 exports >>>
+  traceGaps,
+  traceGapLines,
+  roadmapReport,
   // @wp WP4 <<<
 
   // @wp WP5 exports >>>

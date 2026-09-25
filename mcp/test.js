@@ -314,7 +314,7 @@ function payload(res) {
   ok(arch.ok && fs.existsSync(path.join(tmp, ".specs", "_archive", "renamed-feature")), "spec_feature archive moves to .specs/_archive/");
   const listAfter = payload(await rpc("tools/call", { name: "spec_list", arguments: {} }));
   ok(!listAfter.features.some((f) => f.name === "renamed-feature" || f.name === "_archive"), "archived feature (and _archive) are hidden from spec_list");
-  const rmRes = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "Escala PT" } }));
+  const rmRes = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "Escala PT", confirm: true } })); // 1.13: remove needs confirm
   ok(rmRes.ok && !fs.existsSync(path.join(tmp, ".specs", "escala-pt")), "spec_feature remove deletes the folder");
 
   // --- trilingual: project language cascades to steering + generated artifacts (PT) ---
@@ -1548,6 +1548,102 @@ function payload(res) {
   // @wp WP3 <<<
 
   // @wp WP4 tests >>>
+  // --- 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, destructive ops confirmed, localized phases ---
+  const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+  const w4 = path.join(tmp, "proj-wp4");
+  S.initProject(w4, ["tdd"], "en");
+  const w4f = S.createFeature(w4, "Gaps", ["tdd"]);
+  fs.writeFileSync(path.join(w4f.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n2. **US-1.AC-2** — WHEN c THE SYSTEM SHALL d\n");
+  fs.writeFileSync(path.join(w4f.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2 |\n");
+  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-99_\n  - _Implements: src/nope.js_\n");
+  const w4kinds = S.traceGaps(S.traceCheck(w4, "gaps")).map((g) => g.kind).join(",");
+  ok(w4kinds === "phantomTestsInTasks,testsNotMappedToTasks,missingImplFiles", "traceGaps lists every non-empty gap kind in a stable order (got " + w4kinds + ")");
+  const w4doc = S.specDoctor(w4, "gaps").checks.find((c) => c.id === "traceability");
+  ok(w4doc.status === "fail" && /unknown tests \(typos\?\): T-99/.test(w4doc.detail) && /T-02/.test(w4doc.detail) && /src\/nope\.js/.test(w4doc.detail) && !/=0/.test(w4doc.detail),
+    "doctor's traceability detail names each failing kind with its IDs (no '=0' counters while failing)");
+  const w4pt = S.createFeature(w4, "Lacunas", ["tdd"], undefined, undefined, "pt");
+  ["requirements.md", "test-plan.md", "tasks.md"].forEach((x) => fs.copyFileSync(path.join(w4f.dir, x), path.join(w4pt.dir, x)));
+  ok(/testes desconhecidos \(erros de escrita\?\): T-99/.test(S.specDoctor(w4, "lacunas").checks.find((c) => c.id === "traceability").detail),
+    "doctor's traceability detail is localized (PT)");
+  // The hook used to print "Traceability gaps in <f>:" and an empty "- " when the only gap was a missing file.
+  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n  - _Implements: src/nope.js_\n");
+  const hkTr = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
+  const hkTrTxt = JSON.parse(hkTr.stdout).hookSpecificOutput.additionalContext;
+  ok(/Traceability gaps in gaps/.test(hkTrTxt) && /_Implements:_ files that don't exist: src\/nope\.js/.test(hkTrTxt) && !/^\s*-\s*$/m.test(hkTrTxt),
+    "PostToolUse trace message lists the gap it found (missing _Implements:_ file), never an empty '- '");
+  const esW4 = path.join(tmp, "proj-wp4-es");
+  S.initProject(esW4, [], "es");
+  const esW4f = S.createFeature(esW4, "Pagos", ["core"]);
+  fs.writeFileSync(path.join(esW4f.dir, "tasks.md"), "- [x] 1. a\n- [ ] 2. b\n");
+  const hkEs = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: esW4 } });
+  ok(/en ejecución \(1\/2 tareas\)/.test(hkEs.stdout) && !/executing/.test(hkEs.stdout), "SessionStart phase names are localized (ES 'en ejecución')");
+
+  // spec_roadmap: a failed write is an error with the reason (the CLI already exited 1), not wrote:[] + success.
+  const handW4 = path.join(tmp, "proj-wp4-hand");
+  S.createFeature(handW4, "Thing", ["core"]);
+  fs.writeFileSync(path.join(handW4, ".specs", "ROADMAP.md"), "# Mine\n");
+  const rmFail = await rpc("tools/call", { name: "spec_roadmap", arguments: { write: true, html: true, projectDir: handW4 } });
+  const rmFailP = payload(rmFail);
+  ok(rmFail.result.isError === true && rmFailP.ok === false && rmFailP.errors.length === 1 && /ROADMAP\.md/.test(rmFailP.error) &&
+    rmFailP.wrote.length === 1 && /ROADMAP\.html$/.test(rmFailP.wrote[0]) && rmFailP.features.length === 1 && fs.readFileSync(path.join(handW4, ".specs", "ROADMAP.md"), "utf8") === "# Mine\n",
+    "spec_roadmap: a hand-written ROADMAP.md is left alone AND reported (isError, errors, wrote lists only ROADMAP.html)");
+  const rmToolDesc = list.result.tools.find((t) => t.name === "spec_roadmap").description;
+  ok(/git-friendly/.test(rmToolDesc) && !/PR-friendly/.test(rmToolDesc), "spec_roadmap description says git-friendly (no PR wording)");
+
+  // spec_backlog rm: an unknown name is an error, not a silent ok.
+  const blMiss = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "rm", name: "nope", projectDir: w4 } });
+  S.backlog(w4, "add", "SSO");
+  ok(blMiss.result.isError === true && /not in the backlog/.test(payload(blMiss).error) && S.backlog(w4, "rm", "sso").ok === true && S.backlog(w4, "list").backlog.length === 0 &&
+    /não está no backlog/.test(S.backlog(ptProj, "rm", "x").error), "backlog rm: unknown name → localized error (isError); a listed name (any case) is removed");
+
+  // spec_feature remove needs confirm:true — without it nothing is deleted and the result says what would be.
+  const fTool = list.result.tools.find((t) => t.name === "spec_feature");
+  const noConf = await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "gaps", projectDir: w4 } });
+  const noConfP = payload(noConf);
+  const falseConf = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "gaps", confirm: false, projectDir: w4 } }));
+  ok(fTool.inputSchema.properties.confirm.type === "boolean" && !fTool.inputSchema.required.includes("confirm") && noConf.result.isError === true &&
+    noConfP.needsConfirm === true && noConfP.wouldDelete.files >= 4 && noConfP.wouldDelete.entries.includes("tasks.md") && /confirm: true/.test(noConfP.error) &&
+    falseConf.needsConfirm === true && fs.existsSync(w4f.dir), "spec_feature remove without confirm:true deletes nothing and reports what it would delete");
+  const yesConf = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "gaps", confirm: true, projectDir: w4 } }));
+  ok(yesConf.ok === true && !fs.existsSync(w4f.dir) && /Remover 'lacunas'/.test(S.manageFeature(w4, "remove", "lacunas").error),
+    "spec_feature remove with confirm:true deletes; the confirmation message is in the feature's language (PT)");
+  // The remove preview counts a symlink/junction as ONE entry (like fs.rmSync) — it used to follow it, counting
+  // files outside the feature and recursing through a link loop.
+  const lnkF = S.createFeature(w4, "Linky", ["core"]);
+  const lnkOut = path.join(w4, "outside");
+  fs.mkdirSync(lnkOut, { recursive: true });
+  for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(lnkOut, "f" + i + ".txt"), "x");
+  let linked = true;
+  try {
+    fs.symlinkSync(lnkOut, path.join(lnkF.dir, "linked"), "junction"); // junction: no admin rights needed on Windows
+    fs.symlinkSync(path.join(w4, ".specs"), path.join(lnkF.dir, "loop"), "junction");
+  } catch { linked = false; }
+  if (linked) {
+    const realFiles = fs.readdirSync(lnkF.dir).length; // flat folder: every entry is a file or a link
+    const lnkPrev = S.manageFeature(w4, "remove", "linky");
+    const lnkDel = S.manageFeature(w4, "remove", "linky", undefined, { confirm: true });
+    ok(lnkPrev.needsConfirm === true && lnkPrev.wouldDelete.files === realFiles && lnkDel.ok === true && !fs.existsSync(lnkF.dir) &&
+      fs.readdirSync(lnkOut).length === 30 && fs.existsSync(path.join(w4, ".specs")),
+      "remove preview does not follow symlinks/junctions (got " + lnkPrev.wouldDelete.files + " of " + realFiles + "); the delete leaves the link targets alone");
+  } else ok(true, "remove preview vs symlinks: skipped (links not creatable here)");
+  // With an unreadable roadmap.json the preview returns the same error the confirmed remove would — it used to
+  // list what "would" be deleted and ask for confirm:true, then the confirmed call refused.
+  const badRmDir = path.join(w4, "bad-roadmap");
+  S.initProject(badRmDir, ["core"]);
+  const badRmF = S.createFeature(badRmDir, "Delta", ["core"]);
+  fs.writeFileSync(path.join(badRmDir, ".specs", "roadmap.json"), "{broken");
+  const badPrev = S.manageFeature(badRmDir, "remove", "delta");
+  const badConf = S.manageFeature(badRmDir, "remove", "delta", undefined, { confirm: true });
+  const badPrevMcp = await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "delta", projectDir: badRmDir } });
+  ok(badPrev.ok === false && !badPrev.needsConfirm && !badPrev.wouldDelete && /roadmap\.json/.test(badPrev.error) && badPrev.error === badConf.error &&
+    badPrevMcp.result.isError === true && !payload(badPrevMcp).needsConfirm && fs.existsSync(badRmF.dir),
+    "remove preview with a broken roadmap.json returns the roadmap error (no needsConfirm), like the confirmed call");
+
+  // spec_finish includeBody with write (the CLI's --include-body maps to it); classify reports its language.
+  const finBody = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", write: true, includeBody: true, projectDir: vDir } }));
+  ok(finBody.wrote === true && /## Summary/.test(finBody.mergeSummary), "spec_finish write + includeBody returns the merge summary too");
+  ok(S.classify("Webhook de faturação com resumo por um LLM").lang === "pt" && S.classify("x", { lang: "es" }).lang === "es",
+    "classify returns the language its notes/reasoning are in");
   // @wp WP4 <<<
 
   // @wp WP5 tests >>>
