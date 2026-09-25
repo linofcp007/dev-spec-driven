@@ -659,10 +659,13 @@ function payload(res) {
 
   // Parity / robustness
   const covDir = path.join(tmp, "proj-cov");
-  ["build-tools", "happy-path-tests", "auth", "payments"].forEach((d) => fs.mkdirSync(path.join(covDir, d), { recursive: true }));
+  ["build-tools/x.js", "happy-path-tests/y.js", "auth/login.js", "payments/pay.js"].forEach((f) => { fs.mkdirSync(path.dirname(path.join(covDir, f)), { recursive: true }); fs.writeFileSync(path.join(covDir, f), "x"); });
   ["ui", "app", "user-auth", "payment"].forEach((n) => S.createFeature(covDir, n, ["core"]));
+  fs.writeFileSync(path.join(covDir, ".specs", "user-auth", "tasks.md"), "- [ ] 1. a\n  - _Implements: auth/login.js_\n");
   const covSeg = S.coverage(covDir);
-  ok(covSeg.documented.sort().join(",") === "auth,payments" && covSeg.undocumented.includes("build-tools"), "coverage matches whole slug segments (ui ≠ build-tools)");
+  // 1.13: coverage counts code files named in _Implements:_ — a folder whose NAME matches a feature is no longer "documented".
+  ok(covSeg.documented.join(",") === "auth" && covSeg.undocumented.includes("payments") && covSeg.undocumented.includes("build-tools") && covSeg.coveragePercent === 25,
+    "coverage counts files named in _Implements:_ ('payments' ≈ feature 'payment' by name alone is not covered)");
   ok(S.resolveProjectDir("${CLAUDE_PROJECT_DIR}") !== path.resolve("${CLAUDE_PROJECT_DIR}"), "an unexpanded ${VAR} projectDir is ignored, not created as a folder");
   const autoCreate = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "LLM Summaries", projectDir: path.join(tmp, "proj-auto") } }));
   ok(autoCreate.ok && autoCreate.tracks.includes("ai"), "MCP spec_create without tracks auto-classifies (same as the CLI)");
@@ -1969,6 +1972,367 @@ function payload(res) {
   // @wp WP5 <<<
 
   // @wp WP6 tests >>>
+  { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
+    const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
+    const safe6 = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
+    const w6 = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const r6 = (root, ...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+
+    // 1. scan: routes with method + path + file:line for every framework family, counted as ROUTES.
+    const sc = path.join(tmp, "proj-wp6-scan");
+    w6(sc, "package.json", JSON.stringify({ name: "shop", main: "src/server.js", scripts: { start: "node src/server.js" }, dependencies: { express: "^4" }, devDependencies: { jest: "^29" } }));
+    w6(sc, "src/server.js", ["const express = require('express');", "const app = express();", "const router = express.Router();",
+      "app.get('/health', (req, res) => res.send('ok'));", "router.post('/orders', createOrder);", "router.route('/orders/:id')", "  .get(getOrder)", "  .delete(deleteOrder);",
+      "const port = process.env.PORT || 3000; const db = process.env['DB_URL'];", "axios.get('/api/external'); cache.get('/k'); app.get('env');",
+      "// app.get('/commented', h);", "/* router.post('/commented', h) */", "const home = 'https://x.dev'; // app.get('/commented', h)"].join("\n"));
+    w6(sc, "src/f.js", "const fastify = require('fastify')();\nfastify.get('/f', h);\n");
+    w6(sc, "src/h.ts", "import { Hono } from 'hono';\nconst app = new Hono();\napp.post('/h', (c) => c.text('ok'));\n");
+    w6(sc, "src/k.js", "const Router = require('@koa/router');\nconst router = new Router();\nrouter.put('/koa', h);\n");
+    w6(sc, "cmd/chi/main.go", "package main\nimport \"github.com/go-chi/chi/v5\"\nfunc main() {\n  r := chi.NewRouter()\n  r.Get(\"/chi\", h)\n}\n");
+    w6(sc, "src/Controller/HomeController.php","<?php\nclass HomeController {\n  #[Route('/home', methods: ['GET'])]\n  public function home() {}\n  # Route::get('/commented', h);\n}\n");
+    w6(sc, "src/server.test.js", "const request = require('supertest');\nrequest(app).get('/health');\napi.get('/from-a-test');\n");
+    w6(sc, "src/users.controller.ts", "import { Controller, Get, Post } from '@nestjs/common';\n@Controller('users')\nexport class UsersController {\n  @Get(':id')\n  find() {}\n  @Post()\n  create() {}\n}\n");
+    w6(sc, "src/app/api/items/route.ts", "export async function GET() {}\nexport async function POST() {}\n");
+    w6(sc, "api/main.py", "from fastapi import FastAPI, APIRouter\napp = FastAPI()\nrouter = APIRouter(prefix=\"/v1\")\n@app.get(\"/items/{item_id}\")\ndef read(item_id): ...\n@router.post(\"/users\")\ndef mk(): ...\nimport os\nKEY = os.getenv('SECRET_KEY')\nTOKEN = os.environ['API_TOKEN']\n");
+    w6(sc, "web/app.py", "from flask import Flask, Blueprint\napp = Flask(__name__)\nbp = Blueprint('p', __name__, url_prefix='/me')\n@app.route('/login', methods=['GET', 'POST'])\ndef login(): ...\n@bp.get('/profile')\ndef profile(): ...\n");
+    w6(sc, "shop/urls.py", "from django.urls import path\nurlpatterns = [\n    path('cart/', views.cart),\n]\n");
+    w6(sc, "web/helpers.py", "from unittest import mock\n@mock.patch(\"svc.client\")\ndef stubbed(): ...\n@lru_cache.get(\"/cached\")\ndef c(): ...\n");
+    w6(sc, "svc/src/main/java/com/x/OrderController.java", "package com.x;\n@RestController\n@RequestMapping(\"/api\")\npublic class OrderController {\n  @GetMapping(\"/orders\")\n  List<Order> all() { return null; }\n  @PostMapping(value = \"/orders\", produces = \"application/json\")\n  Order add() { String h = System.getenv(\"JAVA_OPTS\"); return null; }\n  @RequestMapping(value = \"/orders/{id}\", method = RequestMethod.PUT)\n  Order put() { return null; }\n}\n");
+    w6(sc, "net/Controllers/ItemsController.cs", "[ApiController]\n[Route(\"api/[controller]\")]\npublic class ItemsController : ControllerBase {\n  [HttpGet(\"{id}\")]\n  public IActionResult Get(int id) => Ok();\n}\n");
+    w6(sc, "net/Program.cs", "var app = builder.Build();\napp.MapGet(\"/ping\", () => \"pong\");\nvar x = Environment.GetEnvironmentVariable(\"ASPNET_ENV\");\n");
+    w6(sc, "config/routes.rb", "Rails.application.routes.draw do\n  get '/about', to: 'pages#about'\n  resources :orders\nend\n");
+    w6(sc, "routes/web.php", "<?php\nRoute::get('/dashboard', [D::class, 'index']);\nRoute::middleware('auth')->post('/posts', [P::class, 'store']);\n$k = env('APP_KEY');\n");
+    w6(sc, "cmd/api/main.go", "package main\nimport (\"net/http\"; \"os\"; \"github.com/gin-gonic/gin\")\nfunc main() {\n  http.HandleFunc(\"/healthz\", h)\n  r := gin.Default()\n  r.GET(\"/v1/users\", h)\n  http.Get(\"/not-a-route\")\n  _ = os.Getenv(\"GO_ENV\")\n}\n");
+    w6(sc, "tests/test_api.py", "import pytest\ndef test_x(): pass\n");
+    w6(sc, ".env.example", "# comment\nSTRIPE_KEY=\nexport MAIL_FROM=noreply@example.com\n");
+    w6(sc, ".env", "SECRET_IN_DOTENV=supersecret\n");
+    w6(sc, "db/migrate/20240101_create_users.rb", "class CreateUsers < ActiveRecord::Migration[7.0]; end\n");
+    w6(sc, "prisma/schema.prisma", "model User { id Int @id }\n");
+    w6(sc, "migrations/001_init.sql", "create table t (id int);\n");
+    w6(sc, "alembic/versions/abc_init.py", "def upgrade(): pass\n");
+    const scan6 = safe6(() => S.scanCodebase(sc));
+    const routeKeys = (scan6.routes || []).map((r) => `${r.method} ${r.path} ${r.file}:${r.line}`);
+    const wantRoutes = ["GET /health src/server.js:4", "POST /orders src/server.js:5", "GET /orders/:id src/server.js:6", "DELETE /orders/:id src/server.js:6",
+      "GET /users/:id src/users.controller.ts:4", "POST /users src/users.controller.ts:6", "GET /api/items src/app/api/items/route.ts:1",
+      "GET /items/{item_id} api/main.py:4", "POST /v1/users api/main.py:6", "GET /login web/app.py:4", "POST /login web/app.py:4", "GET /me/profile web/app.py:6",
+      "ANY /cart/ shop/urls.py:3", "GET /api/orders svc/src/main/java/com/x/OrderController.java:5", "POST /api/orders svc/src/main/java/com/x/OrderController.java:7",
+      "GET /api/[controller]/{id} net/Controllers/ItemsController.cs:4", "GET /ping net/Program.cs:2", "GET /about config/routes.rb:2", "RESOURCES /orders config/routes.rb:3",
+      "GET /dashboard routes/web.php:2", "POST /posts routes/web.php:3", "GET /home src/Controller/HomeController.php:3", "ANY /healthz cmd/api/main.go:4", "GET /v1/users cmd/api/main.go:6",
+      "GET /f src/f.js:2", "POST /h src/h.ts:3", "PUT /koa src/k.js:3", "GET /chi cmd/chi/main.go:5", "PUT /api/orders/{id} svc/src/main/java/com/x/OrderController.java:9"];
+    ok(scan6.ok && wantRoutes.every((k) => routeKeys.includes(k)) && scan6.candidateEndpoints === 30 && scan6.candidateEndpoints === scan6.routes.length && scan6.endpointFiles === 17,
+      "scan lists routes with method + path + file:line for Express/NestJS/Next/FastAPI/Flask/Django/Spring/ASP.NET/Rails/Laravel/Go, and counts ROUTES (missing: " +
+      wantRoutes.filter((k) => !routeKeys.includes(k)).join(" | ") + ")");
+    ok(!routeKeys.some((k) => /\/api\/external|\/k |not-a-route|from-a-test| env |helpers\.py|commented/.test(k)) && (scan6.routes || []).every((r) => !/\\/.test(r.file)) && (scan6.endpointSamples || []).every((f) => !/\\/.test(f)),
+      "scan: client calls (axios.get, http.Get, cache.get, app.get('env')), @mock.patch decorators, commented-out routes and test files are not routes; every path uses forward slashes");
+    ok((scan6.frameworks || []).includes("fastapi") && scan6.frameworks.includes("flask") && scan6.frameworks.includes("nestjs") && scan6.frameworks.includes("spring") && ["fastify", "hono", "koa", "chi", "gin", "laravel", "symfony", "rails", "aspnet", "django", "next.js"].every((x) => scan6.frameworks.includes(x)) &&
+      scan6.stack.some((s) => /^python \(fastapi, flask, django\)$/.test(s)), "scan detects FastAPI/Flask/Django from imports without a Python manifest (frameworks + stack)");
+    ok(scan6.testFiles === 2 && scan6.testFrameworks.includes("jest") && scan6.testFrameworks.includes("pytest"), "scan reports the test-file count and the test frameworks (package.json + imports)");
+    const entries = (scan6.entrypoints || []).map((e) => e.file + " (" + e.kind + ")");
+    ok(["src/server.js (package.json main)", "src/server.js (npm start)", "api/main.py (python)", "cmd/api/main.go (go main)", "net/Program.cs (.NET Program.cs)"].every((e) => entries.includes(e)),
+      "scan lists entrypoints (package.json main + scripts.start, main.py, cmd/*/main.go, Program.cs) — got " + entries.join(", "));
+    const scanJson = JSON.stringify(scan6);
+    ok(["PORT", "DB_URL", "SECRET_KEY", "API_TOKEN", "JAVA_OPTS", "ASPNET_ENV", "APP_KEY", "GO_ENV", "STRIPE_KEY", "MAIL_FROM"].every((n) => scan6.envVars.includes(n)) &&
+      !scanJson.includes("SECRET_IN_DOTENV") && !scanJson.includes("supersecret") && !scanJson.includes("noreply@example.com") && scan6.envFiles.join() === ".env.example",
+      "scan collects environment variable NAMES (code + .env.example) — never a value, and never reads .env");
+    ok(scan6.migrationsTotal === 4 && ["alembic/versions/abc_init.py", "db/migrate/20240101_create_users.rb", "migrations/001_init.sql", "prisma/schema.prisma"].every((m) => scan6.migrations.includes(m)),
+      "scan lists migration/schema files (migrations/, db/migrate, alembic/, *.sql, schema.prisma)");
+    w6(sc, "gen/many.js", Array.from({ length: 230 }, (_, i) => `app.get('/r${i}', h);`).join("\n"));
+    const scanCap = safe6(() => S.scanCodebase(sc));
+    ok(scanCap.candidateEndpoints === 260 && scanCap.routes.length === 200 && scanCap.routesTruncated === true && /200 of 260/.test(scanCap.routesNote || ""),
+      "scan caps the listed routes at 200 with a truncation note, and still counts all of them");
+    const scanMcp = await call6("spec_scan", { projectDir: sc });
+    ok(!scanMcp.isError && scanMcp.body.candidateEndpoints === 260 && Array.isArray(scanMcp.body.routes) && scanMcp.body.routes[0].line > 0, "MCP spec_scan returns the routes structured");
+    fs.rmSync(path.join(sc, "gen"), { recursive: true, force: true });
+
+    // 2. coverage: files named in any _Implements:_ (active + archived features), per folder; the repro src/ layout is no longer 0%.
+    const cv = path.join(tmp, "proj-wp6-cov");
+    ["src/routes/orders.js", "src/routes/users.js", "src/lib/db.js", "lib/x.py", "index.js", "src/routes/orders.test.js", "tests/test_x.py", "README.md"].forEach((f) => w6(cv, f, "x"));
+    const cvA = S.createFeature(cv, "Orders", ["core"]);
+    fs.writeFileSync(path.join(cvA.dir, "tasks.md"), "- [ ] 1. a\n  - _Implements: src/routes/orders.js, `src/nope.js`, ../outside.js_\n<!-- _Implements: src/lib/db.js_ -->\n");
+    const cvB = S.createFeature(cv, "Legacy", ["core"]);
+    fs.writeFileSync(path.join(cvB.dir, "tasks.md"), "- [x] 1. b\n  - _Implements: lib/_\n");
+    S.manageFeature(cv, "archive", "legacy");
+    const cov6 = safe6(() => S.coverage(cv));
+    const folderOf = (n) => (cov6.byFolder || []).find((f) => f.folder === n) || {};
+    ok(cov6.coveragePercent === 40 && cov6.codeFiles === 5 && cov6.coveredFiles === 2 && cov6.testFiles === 2 && folderOf("src").files === 3 && folderOf("src").covered === 1 &&
+      folderOf("lib").percent === 100 && cov6.documented.join() === "lib,src" && cov6.undocumented.join() === "." && cov6.uncoveredFolders.join() === "." && cov6.modulesTotal === 3,
+      "coverage = code files named in _Implements:_ (40%: src/routes/orders.js + the archived feature's lib/), per folder, tests apart");
+    ok(cov6.archivedFeatures.join() === "legacy" && cov6.features.join() === "orders" && cov6.byFeature.find((b) => b.feature === "legacy").archived === true &&
+      cov6.unmatchedImplements.map((u) => u.ref).join() === "src/nope.js,../outside.js" && !cov6.uncoveredSample.includes("src/routes/orders.js"),
+      "coverage reads archived features too, ignores commented markers, never counts a path outside the project, and lists _Implements:_ entries that name no code file");
+    const testNames = ["src/a.test.js", "src/a.spec.ts", "tests/x.js", "__tests__/a.js", "test_x.py", "pkg/x_test.go", "spec/models/user_spec.rb", "src/test/java/FooTest.java", "UserSpec.kt", "mcp/test.js"];
+    const codeNames = ["cli/dev-spec.js", "mcp/lib/spec.js", "src/latest.js", "src/contest.py", "src/specs.js", "src/attest.js"];
+    ok(testNames.every((f) => S.isTestFile(f)) && !codeNames.some((f) => S.isTestFile(f)),
+      "test files follow the naming conventions (foo.test.js, test_x.py, x_test.go, FooTest.java…); dev-spec.js / lib/spec.js are code");
+    fs.writeFileSync(path.join(cvA.dir, "tasks.md"), "- [ ] 1. a\n  - _Implements: src/routes/*.js_\n");
+    const covGlob = await call6("spec_coverage", { projectDir: cv });
+    ok(!covGlob.isError && covGlob.body.coveredFiles === 3 && covGlob.body.coveragePercent === 60, "coverage: a glob in _Implements:_ (src/routes/*.js) names every matching file (MCP spec_coverage)");
+
+    // 3. spec_import — Kiro.
+    const im = path.join(tmp, "proj-wp6-import");
+    S.initProject(im, ["core"], "en");
+    w6(im, ".kiro/specs/user-auth/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Users sign in with email and password to reach their account.", "",
+      "## Requirements", "", "### Requirement 1", "", "**User Story:** As a user, I want to sign in with my email, so that I can reach my account.", "", "#### Acceptance Criteria", "",
+      "1. WHEN a user submits valid credentials THEN the system SHALL create a session", "2. IF the password is wrong THEN the system SHALL show an error and keep the form", "",
+      "### Requirement 2", "", "**User Story:** As an admin, I want to lock accounts, so that abuse stops.", "", "#### Acceptance Criteria", "",
+      "1. WHEN an admin locks an account THEN the system rejects its sign-ins", "2. The lock is audited", ""].join("\n"));
+    w6(im, ".kiro/specs/user-auth/design.md", "# Design Document\n\n## Overview\nSession cookies, bcrypt.\n");
+    w6(im, ".kiro/specs/user-auth/tasks.md", ["# Implementation Plan", "", "- [x] 1. Set up the auth module", "  - Create folders", "  - _Requirements: 1.1_", "",
+      "- [ ] 2. Implement sign-in", "- [x] 2.1 Password check", "  - _Requirements: 1.1, 1.2_", "- [ ] 2.2 Lockout", "  - _Requirements: 2.1, 2.2, 9.9_", "",
+      "- [ ]* 3. Write e2e tests", "  - _Requirements: 2_", ""].join("\n"));
+    const kiroSrc = ["requirements.md", "design.md", "tasks.md"].map((f) => r6(im, ".kiro", "specs", "user-auth", f));
+    const kiro = await call6("spec_import", { tool: "kiro", path: ".kiro/specs/user-auth", projectDir: im });
+    const kb = kiro.body;
+    const kReq = kb.ok ? r6(im, ".specs", "user-auth", "requirements.md") : "";
+    const kTasks = kb.ok ? r6(im, ".specs", "user-auth", "tasks.md") : "";
+    ok(!kiro.isError && kb.feature === "user-auth" && kb.mapping["1.1"] === "US-1.AC-1" && kb.mapping["1.2"] === "US-1.AC-2" && kb.mapping["2.2"] === "US-2.AC-2" && kb.mapping["Requirement 2"] === "US-2" &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN a user submits valid credentials THEN the system SHALL create a session/.test(kReq),
+      "spec_import kiro: Requirement N criterion M → US-N.AC-M (EARS criteria kept verbatim), mapping returned");
+    ok(/- \[x\] 1\. Set up the auth module\n  - Create folders\n  - _Requirements: US-1\.AC-1_/.test(kTasks) && /## Implement sign-in\n- \[x\] 2\. Password check\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_/.test(kTasks) &&
+      /- \[ \] 3\. Lockout\n  - _Requirements: US-2\.AC-1, US-2\.AC-2, 9\.9_/.test(kTasks) && /- \[ \] 4\. Write e2e tests \(optional\)\n  - _Requirements: US-2\.AC-1, US-2\.AC-2_/.test(kTasks) &&
+      kb.mapping["task 2.1"] === "task 2" && kb.warnings.some((x) => /'9\.9'/.test(x)),
+      "spec_import kiro: _Requirements:_ rewritten (a whole requirement expands to its ACs; an unknown ref is kept + reported), sub-tasks numbered, checkbox state kept");
+    const kEars = safe6(() => S.earsFeature(im, "user-auth"));
+    const kErrLines = (kEars.issues || []).filter((x) => x.severity === "error").map((x) => x.text);
+    ok(/US-2\.AC-1\*\* — WHEN an admin locks an account, THE SYSTEM SHALL reject its sign-ins/.test(kReq) && kErrLines.length === 1 && /US-2\.AC-2.*The lock is audited \[NEEDS CLARIFICATION/.test(kErrLines[0]) &&
+      kb.warnings.some((x) => /US-2\.AC-2/.test(x)), "spec_import kiro: WHEN…THEN without SHALL becomes EARS; an unconvertible criterion keeps its text + [NEEDS CLARIFICATION] (the only EARS error)");
+    const kNote = /^> Imported from Kiro `\.kiro\/specs\/user-auth` on \d{4}-\d{2}-\d{2}\.$/m;
+    ok(["requirements.md", "design.md", "tasks.md", "classification.md"].every((f) => kNote.test(r6(im, ".specs", "user-auth", f))) && /## Overview\nSession cookies, bcrypt\./.test(r6(im, ".specs", "user-auth", "design.md")) &&
+      kb.tracks.includes("tdd") && /## Testability Notes/.test(r6(im, ".specs", "user-auth", "design.md")),
+      "spec_import: every generated artifact carries 'Imported from <tool> <path> on <date>'; the design is imported (+ the active tracks' sections); tracks auto-classified (+tdd)");
+    ok(["requirements.md", "design.md", "tasks.md"].every((f, i) => r6(im, ".kiro", "specs", "user-auth", f) === kiroSrc[i]), "spec_import never modifies the source files");
+    const kAgain = await call6("spec_import", { tool: "kiro", path: ".kiro/specs/user-auth", projectDir: im });
+    ok(kAgain.isError && /already exists/.test(kAgain.body.error) && r6(im, ".specs", "user-auth", "requirements.md") === kReq, "spec_import refuses an existing feature (nothing overwritten)");
+    const outDir = path.join(tmp, "wp6-outside");
+    w6(outDir, "requirements.md", "### Requirement 1\n#### Acceptance Criteria\n1. WHEN x THEN the system SHALL y\n");
+    const kOut = await call6("spec_import", { tool: "kiro", path: "../wp6-outside", projectDir: im });
+    const kAbs = safe6(() => S.importSpec(im, "kiro", outDir, { name: "outside-abs" }));
+    ok(kOut.isError && /outside the project/.test(kOut.body.error) && !kAbs.ok && /outside the project/.test(kAbs.error) && !fs.existsSync(path.join(im, ".specs", "wp6-outside")) && !fs.existsSync(path.join(im, ".specs", "outside-abs")),
+      "spec_import refuses a source outside the project (relative ../ and absolute), creating nothing");
+    w6(im, ".kiro/specs/cost$1/requirements.md", "## Requirements\n\n### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN a refund is requested THEN the system administrator approves it\n2. WHEN a refund is paid THEN the system sends a receipt\n");
+    const kDollar = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/cost$1", { name: "Refunds" }));
+    const kdReq = kDollar.ok ? r6(im, ".specs", "refunds", "requirements.md") : "";
+    ok(kDollar.ok && kdReq.includes("> Imported from Kiro `.kiro/specs/cost$1` on ") && r6(im, ".specs", "refunds", "classification.md").includes("`.kiro/specs/cost$1`") &&
+      /US-1\.AC-1\*\* — WHEN a refund is requested, THE SYSTEM SHALL ensure that the system administrator approves it/.test(kdReq) &&
+      /US-1\.AC-2\*\* — WHEN a refund is paid, THE SYSTEM SHALL send a receipt/.test(kdReq),
+      "spec_import: a '$' in the source path is written literally; 'the system <noun>' is not read as a verb ('ensure that'), 'the system sends' → SHALL send");
+    w6(im, ".kiro/specs/bold-ac/requirements.md", "### Requirement 1: Export\n\n**Acceptance Criteria:**\n\n1. WHEN a user exports THEN the system SHALL send a CSV\n");
+    const kBold = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/bold-ac"));
+    ok(kBold.ok && kBold.mapping["1.1"] === "US-1.AC-1" && /### US-1: Export/.test(r6(im, ".specs", "bold-ac", "requirements.md")) && kBold.warnings.some((x) => /tasks\.md/.test(x)),
+      "spec_import kiro: a bold **Acceptance Criteria:** label and a titled '### Requirement 1: Export' are read too; a missing tasks.md is reported");
+    let linked = false;
+    try { fs.symlinkSync(outDir, path.join(im, "linked-spec"), "junction"); linked = true; } catch { /* no symlink rights: skip */ }
+    const kLink = linked ? safe6(() => S.importSpec(im, "kiro", "linked-spec", { name: "via-link" })) : { ok: false, error: "outside the project (skipped)" };
+    ok(!kLink.ok && /outside the project/.test(kLink.error) && !fs.existsSync(path.join(im, ".specs", "via-link")), "spec_import refuses a link inside the project that points outside it" + (linked ? "" : " (link not creatable here — skipped)"));
+    const kBad = [await call6("spec_import", { tool: "notion", path: ".kiro/specs/user-auth", projectDir: im }), await call6("spec_import", { tool: "kiro", projectDir: im }),
+      await call6("spec_import", { tool: "kiro", path: ".kiro", name: "Nothing Here", projectDir: im }), await call6("spec_import", { tool: "kiro", path: ".kiro/specs/user-auth", name: "Typo", tracks: ["sass"], projectDir: im })];
+    ok(kBad.every((r) => r.isError) && /Invalid argument|one of/.test(kBad[0].body.error) && /Missing required argument\(s\): path/.test(kBad[1].body.error) && /No Kiro spec files found/.test(kBad[2].body.error) &&
+      /did you mean 'saas'/.test(kBad[3].body.error) && !fs.existsSync(path.join(im, ".specs", "typo")), "spec_import errors: unknown tool, missing path, nothing to import, unknown track (did-you-mean) — nothing created");
+
+    // spec-kit
+    w6(im, "specs/001-photo-albums/spec.md", ["# Feature Specification: Photo Albums", "", "**Feature Branch**: `001-photo-albums`", "**Input**: User description: \"Organize photos into albums by date\"", "",
+      "## User Scenarios & Testing *(mandatory)*", "", "### User Story 1 - Create albums (Priority: P1)", "", "A user groups photos into albums.", "", "**Independent Test**: create an album and see it listed.", "",
+      "**Acceptance Scenarios**:", "", "1. **Given** a user with photos, **When** they create an album named Trip, **Then** the album Trip is listed",
+      "2. **Given** an album, **When** the user renames it, **Then** the system shows the new name", "", "---", "", "### User Story 2 - Share albums (Priority: P2)", "", "**Acceptance Scenarios**:", "",
+      "1. **When** the owner shares an album, **Then** the invitee can view it", "", "### Edge Cases", "", "- What happens when an album is empty?", "",
+      "## Requirements *(mandatory)*", "", "### Functional Requirements", "", "- **FR-001**: System MUST let users create albums", "- **FR-002**: System MUST keep photo order", "",
+      "## Success Criteria *(mandatory)*", "", "### Measurable Outcomes", "", "- **SC-001**: 90% of users create an album in under 1 minute", ""].join("\n"));
+    w6(im, "specs/001-photo-albums/plan.md", "# Implementation Plan: Photo Albums\n\n## Summary\nSQLite + Vite.\n\n## Constitution Check\n- [x] Simplicity\n");
+    w6(im, "specs/001-photo-albums/tasks.md", ["# Tasks: Photo Albums", "", "## Phase 1: Setup", "", "- [x] T001 Create project structure", "- [ ] T002 [P] Configure linting", "",
+      "## Phase 3: User Story 1 - Create albums (Priority: P1)", "", "- [ ] T010 [P] [US1] Album model in src/models/album.ts", "- [ ] T011 [US1] Album service", "",
+      "**Checkpoint**: User Story 1 works on its own", ""].join("\n"));
+    w6(im, "specs/001-photo-albums/research.md", "# Research\n");
+    const sk = safe6(() => S.importSpec(im, "spec-kit", "specs/001-photo-albums", { tracks: "saas" }));
+    const skReq = sk.ok ? r6(im, ".specs", "photo-albums", "requirements.md") : "";
+    const skTasks = sk.ok ? r6(im, ".specs", "photo-albums", "tasks.md") : "";
+    ok(sk.ok && sk.feature === "photo-albums" && sk.mapping["User Story 1 / Scenario 2"] === "US-1.AC-2" && sk.mapping["User Story 2"] === "US-2" && sk.mapping["SC-001"] === "SC-001" && sk.mapping["FR-002"] === "FR-002" &&
+      /### US-1 \(P1\): Create albums/.test(skReq) && /1\. \*\*US-1\.AC-1\*\* — WHILE a user with photos, WHEN they create an album named Trip, THE SYSTEM SHALL ensure that the album Trip is listed/.test(skReq) &&
+      /2\. \*\*US-1\.AC-2\*\* — WHILE an album, WHEN the user renames it, THE SYSTEM SHALL show the new name/.test(skReq) && /- \*\*FR-001\*\*: System MUST let users create albums/.test(skReq) &&
+      /## Success Criteria\n[\s\S]*- \*\*SC-001\*\*: 90%/.test(skReq), "spec_import spec-kit: scenario M of story N → US-N.AC-M as one EARS criterion; FR-/SC- lines kept with their IDs; priority kept");
+    ok(/- \[x\] 1\. Create project structure/.test(skTasks) && /- \[ \] 2\. \[P\] Configure linting/.test(skTasks) && /- \[ \] 3\. \[P\] \[US1\] Album model in src\/models\/album\.ts/.test(skTasks) &&
+      /\*\*Checkpoint\*\*: User Story 1 works on its own/.test(skTasks) && sk.mapping["task T010"] === "task 3" && S.parseTasks(skTasks).find((t) => t.number === 3).story === "US1" &&
+      S.parseTasks(skTasks).find((t) => t.number === 3).parallel === true, "spec_import spec-kit: T001… → numbered tasks keeping checkbox state, [P]/[USn] tags and checkpoints");
+    const skEars = safe6(() => S.earsFeature(im, "photo-albums"));
+    ok(skEars.verdict === "pass" && skEars.summary.criteriaDetected === 3 && sk.label === "core +saas" && /## \[SaaS\] Performance Budget/.test(r6(im, ".specs", "photo-albums", "design.md")) &&
+      /## Constitution Check/.test(r6(im, ".specs", "photo-albums", "design.md")) && sk.warnings.some((x) => /research\.md/.test(x)),
+      "spec_import spec-kit: the imported requirements pass ears_validate; explicit tracks honoured; plan.md becomes design.md (+ the [SaaS] sections); un-imported files reported");
+
+    // OpenSpec: a capability and a change folder (PT artifacts).
+    w6(im, "openspec/specs/auth/spec.md", ["# Auth Specification", "", "## Purpose", "Authentication and session management.", "", "## Requirements", "### Requirement: User Authentication",
+      "The system SHALL issue a JWT on successful login.", "", "#### Scenario: Valid credentials", "- **WHEN** a user submits valid credentials", "- **THEN** a JWT is returned",
+      "- **AND** the token expires in 24 hours", "", "#### Scenario: Invalid credentials", "- **WHEN** credentials are invalid", "- **THEN** the system returns 401", "",
+      "### Requirement: Logout", "Users can end a session.", "", "#### Scenario: Logout", "- **GIVEN** a signed-in user", "- **WHEN** they log out", "- **THEN** the session is revoked", ""].join("\n"));
+    w6(im, "openspec/changes/add-2fa/proposal.md", "# Change: Add 2FA\n\n## Why\nAccounts need a second factor.\n\n## What Changes\n- Add OTP\n");
+    w6(im, "openspec/changes/add-2fa/tasks.md", "## 1. Implementation\n- [ ] 1.1 Add OTP secret to user model\n- [x] 1.2 Verify OTP on login\n\n## 2. Docs\n- [ ] 2.1 Document 2FA\n");
+    w6(im, "openspec/changes/add-2fa/specs/auth/spec.md", ["## ADDED Requirements", "### Requirement: Two-Factor Authentication", "The system MUST require a second factor.", "",
+      "#### Scenario: OTP required", "- **WHEN** a user with 2FA logs in", "- **THEN** an OTP challenge is shown", "", "## MODIFIED Requirements", "### Requirement: User Authentication",
+      "#### Scenario: Valid credentials and OTP", "- **WHEN** credentials and OTP are valid", "- **THEN** the system SHALL issue a JWT", "",
+      "## REMOVED Requirements", "### Requirement: Remember Me", "**Reason**: replaced by 2FA", ""].join("\n"));
+    const os1 = safe6(() => S.importSpec(im, "openspec", "openspec/specs/auth/spec.md", { name: "Auth" }));
+    const osReq = os1.ok ? r6(im, ".specs", "auth", "requirements.md") : "";
+    ok(os1.ok && os1.mapping["auth: Requirement: Logout"] === "US-2" && os1.mapping["auth: User Authentication / Scenario: Invalid credentials"] === "US-1.AC-2" &&
+      /US-1\.AC-1\*\* — WHEN a user submits valid credentials, THE SYSTEM SHALL ensure that a JWT is returned and the token expires in 24 hours/.test(osReq) &&
+      /US-1\.AC-2\*\* — WHEN credentials are invalid, THE SYSTEM SHALL return 401/.test(osReq) && /US-2\.AC-1\*\* — WHILE a signed-in user, WHEN they log out, THE SYSTEM SHALL ensure that the session is revoked/.test(osReq) &&
+      /^> The system SHALL issue a JWT on successful login\.$/m.test(osReq) && /## Summary\nAuthentication and session management\./.test(osReq) && S.earsFeature(im, "auth").verdict === "pass" &&
+      os1.warnings.some((x) => /tasks\.md/.test(x)), "spec_import openspec capability: requirement N scenario M → US-N.AC-M, WHEN/THEN/AND (+GIVEN) → EARS that passes ears_validate");
+    const os2 = await call6("spec_import", { tool: "openspec", path: "openspec/changes/add-2fa", lang: "pt", projectDir: im });
+    const os2Req = os2.body.ok ? r6(im, ".specs", "add-2fa", "requirements.md") : "";
+    const os2Tasks = os2.body.ok ? r6(im, ".specs", "add-2fa", "tasks.md") : "";
+    ok(!os2.isError && os2.body.lang === "pt" && /^> Importado de OpenSpec `openspec\/changes\/add-2fa` em /m.test(os2Req) && /## Histórias de Utilizador/.test(os2Req) && /#### Critérios de Aceitação \(EARS\)/.test(os2Req) &&
+      /### US-2: User Authentication \(modificado\)/.test(os2Req) && /US-2\.AC-1\*\* — WHEN credentials and OTP are valid, the system SHALL issue a JWT/.test(os2Req) && !/Remember Me/.test(os2Req) &&
+      os2.body.warnings.some((x) => /REMOVED.*Remember Me/.test(x)) && /## Resumo\nAccounts need a second factor\./.test(os2Req) &&
+      /## 1\. Implementation\n- \[ \] 1\. Add OTP secret to user model\n- \[x\] 2\. Verify OTP on login/.test(os2Tasks) && /- \[ \] 3\. Document 2FA/.test(os2Tasks) && os2.body.mapping["task 2.1"] === "task 3" &&
+      S.earsFeature(im, "add-2fa").verdict === "pass", "spec_import openspec change: ADDED + MODIFIED imported (REMOVED reported), proposal Why → summary, 1.1-style tasks renumbered, PT artifact text");
+
+    // 4. integration-plan.md: spec_create {brownfield:true} scaffolds it (create-only); doctor warns while it is the template.
+    const bf = await call6("spec_create", { name: "Legacy Billing", tracks: ["core"], brownfield: true, projectDir: im });
+    const planPath = path.join(im, ".specs", "legacy-billing", "integration-plan.md");
+    const docCheck = () => (S.specDoctor(im, "legacy-billing").checks || []).find((c) => c.id === "integration-plan");
+    const before = docCheck();
+    fs.writeFileSync(planPath, "# Integration Plan: Legacy Billing\n\n## Integration Points\n- billing/invoice.js (new hook)\n\n## Risks & Mitigations\n- Double charge: idempotency key.\n");
+    const again = S.createFeature(im, "Legacy Billing", undefined, undefined, undefined, undefined, undefined, { brownfield: true });
+    const after = docCheck();
+    ok(!bf.isError && bf.body.created.includes("integration-plan.md") && before && before.status === "warn" && /template/.test(before.detail) && after && after.status === "pass" &&
+      again.skipped.includes("integration-plan.md") && /idempotency key/.test(fs.readFileSync(planPath, "utf8")) && !(S.specDoctor(im, "auth").checks || []).some((c) => c.id === "integration-plan"),
+      "spec_create brownfield:true scaffolds integration-plan.md (never overwritten); doctor 'integration-plan' warns while it is the template, passes once filled, is absent without the file");
+    const ptBf = path.join(tmp, "proj-wp6-pt");
+    S.initProject(ptBf, ["core"], "pt");
+    S.createFeature(ptBf, "Faturas Antigas", ["core"], undefined, undefined, undefined, undefined, { brownfield: true });
+    ok(/## Pontos de Integração/.test(r6(ptBf, ".specs", "faturas-antigas", "integration-plan.md")) && /ainda é o template/.test(S.specDoctor(ptBf, "faturas-antigas").checks.find((c) => c.id === "integration-plan").detail),
+      "integration-plan.md and its doctor check follow the feature language (PT)");
+
+    // 5. Review round: HTTP client calls are not routes; wrapped decorators/annotations are.
+    const sc2 = path.join(tmp, "proj-wp6-scan2");
+    w6(sc2, "package.json", JSON.stringify({ name: "front", dependencies: { vue: "^3", axios: "^1" } }));
+    w6(sc2, "src/http.js", "import axios from 'axios';\nconst instance = axios.create({ baseURL: 'https://api.example.com' });\nexport const me = () => instance.get('/user');\nexport const upd = (b) => instance.put('/user', b);\n");
+    w6(sc2, "src/client.ts", "import ky from 'ky';\nconst api = ky.create({prefixUrl: '/api'});\nexport const list = () => api.get('/orders').json();\n");
+    w6(sc2, "src/services/users.ts", "import axios from 'axios'; const api = axios.create({ baseURL: '/api' }); export const listUsers = () => api.get('/users'); export const delUser = (id) => api.delete('/users/' + id);\n");
+    w6(sc2, "server/proxy.js", "const express = require('express');\nconst axios = require('axios');\nconst app = express();\napp.get('/proxy', h);\nconst api = axios.create();\napi.get('/not-a-route');\n");
+    w6(sc2, "server/plugin.js", "module.exports = async function (api) {\n  api.get('/plugin-route', h);\n};\n");
+    w6(sc2, "app/main.py", "from fastapi import FastAPI\napp = FastAPI()\n@app.get(\n    \"/multi\",\n    response_model=Item,\n)\ndef m(): ...\n@app.route(\n    \"/login\",\n    methods=[\"GET\", \"POST\"],\n)\ndef login(): ...\n@app.get(\"/one\")\ndef one(): ...\n");
+    w6(sc2, "svc/Ctl.java", "@RestController\n@RequestMapping(\n    \"/api\"\n)\npublic class Ctl {\n  @GetMapping(\n      value = \"/wrapped\",\n      produces = \"application/json\")\n  String w() { return null; }\n}\n");
+    const scan2 = safe6(() => S.scanCodebase(sc2));
+    const rk2 = (scan2.routes || []).map((r) => `${r.method} ${r.path} ${r.file}:${r.line}`);
+    const want2 = ["GET /proxy server/proxy.js:4", "GET /plugin-route server/plugin.js:2", "GET /multi app/main.py:3", "GET /login app/main.py:8", "POST /login app/main.py:8", "GET /one app/main.py:13", "GET /api/wrapped svc/Ctl.java:6"];
+    ok(want2.every((k) => rk2.includes(k)) && scan2.candidateEndpoints === 7,
+      "scan: a Black-wrapped @app.get(\\n \"/x\",…) and a multi-line @GetMapping(value = …) are routes, reported on the decorator's line (got " + rk2.join(" | ") + ")");
+    ok(!rk2.some((k) => /\/user |\/users|\/orders|not-a-route/.test(k)),
+      "scan: calls on an HTTP client (axios.create() instance, ky api) in .js/.ts service files are not routes; an `api` parameter in a plain module still is");
+
+    // Review round: coverage separates missing targets from existing test / non-code ones, and works at a drive root.
+    const cv2 = path.join(tmp, "proj-wp6-cov2");
+    ["tests/orders.test.js", "src/routes/orders.js", "README.md", "dist/bundle.js"].forEach((f) => w6(cv2, f, "x"));
+    const cv2f = S.createFeature(cv2, "Orders", ["tdd"]);
+    fs.writeFileSync(path.join(cv2f.dir, "tasks.md"), "- [ ] 1. t\n  - _Implements: tests/orders.test.js_\n- [ ] 2. i\n  - _Implements: src/routes/orders.js, README.md, dist/bundle.js, docs/*.md, src/gone.js_\n");
+    const cov2 = safe6(() => S.coverage(cv2));
+    ok(cov2.coveragePercent === 100 && (cov2.unmatchedImplements || []).map((u) => u.ref).join() === "docs/*.md,src/gone.js" &&
+      (cov2.nonCodeImplements || []).map((u) => u.ref).join() === "tests/orders.test.js,README.md,dist/bundle.js",
+      "coverage: only _Implements:_ entries naming nothing on disk are unmatched; an existing test / doc / build file is listed apart (nonCodeImplements)");
+    const driveRoot = path.parse(tmp).root; // C:\ or / — already ends in a separator
+    ok(safe6(() => S.implementsTargets(driveRoot, "src/a.js", new Map([["src/a.js", "src/a.js"]]), (s) => s)).join() === "src/a.js",
+      "coverage: an _Implements:_ target resolves when the project root is a drive root (subst Q:\\)");
+
+    // Review round: tool names are exact on both surfaces (the MCP enum), no aliases or case folding.
+    const aliasMcp = await call6("spec_import", { tool: "speckit", path: "specs/001-photo-albums", name: "Alias MCP", projectDir: im });
+    const aliasEng = [safe6(() => S.importSpec(im, "speckit", "specs/001-photo-albums", { name: "Alias One" })), safe6(() => S.importSpec(im, "Kiro", ".kiro/specs/user-auth", { name: "Alias Two" }))];
+    ok(aliasMcp.isError && aliasEng.every((r) => !r.ok && /Unknown spec format/.test(r.error)) && !["alias-mcp", "alias-one", "alias-two"].some((s) => fs.existsSync(path.join(im, ".specs", s))),
+      "spec_import: 'speckit' / 'Kiro' are refused by the engine exactly like the MCP schema refuses them (CLI = MCP)");
+
+    // Review round: Kiro in-progress `[-]`, a stand-alone task after a parent group, a reference no task owns.
+    w6(im, ".kiro/specs/todo/requirements.md", "## Requirements\n\n### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN a todo is added THEN the system SHALL store it\n2. WHEN a todo is edited THEN the system SHALL save it\n3. WHEN the app restarts THEN the system SHALL reload todos\n");
+    w6(im, ".kiro/specs/todo/tasks.md", "- [ ] 1. Set up\n- [ ] 2. Implement todo model\n  - [x] 2.1 Create Todo type\n    - _Requirements: 1.1, 1.2_\n  - [-] 2.2 Add persistence\n    - _Requirements: 1.3_\n- [ ]* 3. Optional: audit export\n\nNotes: _Requirements: 1.2, 7.7_\n<!-- _Requirements: 8.8_ -->\n");
+    const todo = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/todo"));
+    const todoTasks = todo.ok ? r6(im, ".specs", "todo", "tasks.md") : "";
+    ok(todo.ok && todo.mapping["task 2.2"] === "task 3" && /- \[ \] 3\. Add persistence\n  - _Requirements: US-1\.AC-3_/.test(todoTasks) && !/\[-\]/.test(todoTasks) &&
+      (S.traceCheck(im, "todo").uncoveredByTasks || ["?"]).length === 0,
+      "spec_import kiro: an in-progress `[-]` task is a task (open), its _Requirements:_ rewritten — trace_check covers its AC");
+    ok(/- \[ \] 1\. Set up\n\n## Implement todo model\n- \[x\] 2\. Create Todo type/.test(todoTasks) && /\n\n## Other tasks\n- \[ \] 4\. Optional: audit export \(optional\)/.test(todoTasks) &&
+      /"\*\*Phase:\*\* Other tasks|\*\*Phase:\*\* Other tasks/.test(JSON.stringify(safe6(() => S.taskBrief(im, "todo", 4)))),
+      "spec_import: a stand-alone task after a parent's phase heading gets a neutral '## Other tasks' heading (its brief no longer names the parent's phase)");
+    ok(/^Notes: _Requirements: US-1\.AC-2, 7\.7_$/m.test(todoTasks) && todo.warnings.some((x) => /line 9: .*'7\.7'/.test(x)) && /<!-- _Requirements: 8\.8_ -->/.test(todoTasks) && !todo.warnings.some((x) => /8\.8/.test(x)),
+      "spec_import: a _Requirements:_ reference no task owns is rewritten too (unknown ones reported by line); one inside an HTML comment is left alone");
+
+    // Review round: no source requirement text is dropped (wrapped/bulleted criteria, notes, NFR sub-sections, Purpose, Constraints).
+    w6(im, ".kiro/specs/wrap/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Exports for users.", "", "Second intro paragraph WRAPINTRO.", "", "## Requirements", "",
+      "### Requirement 1", "", "**User Story:** As a user, I want exports, so that I keep my data.", "", "#### Acceptance Criteria", "",
+      "1. WHEN a user requests an export of all their photos and albums", "THEN the system SHALL produce a zip archive within 60 seconds", "",
+      "Note: exports older than 7 days are deleted.", "", "### Requirement 2", "", "#### Acceptance Criteria", "",
+      "- WHEN a user clicks save THEN the system SHALL persist the draft", "- IF the save fails THEN the system SHALL show a retry banner", "",
+      "### Non-Functional Requirements", "", "- The export endpoint SHALL be rate-limited to 10 req/min", ""].join("\n"));
+    const wrap = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/wrap"));
+    const wrapReq = wrap.ok ? r6(im, ".specs", "wrap", "requirements.md") : "";
+    const wrapEars = safe6(() => S.earsFeature(im, "wrap"));
+    ok(wrap.ok && /US-1\.AC-1\*\* — WHEN a user requests an export of all their photos and albums THEN the system SHALL produce a zip archive within 60 seconds/.test(wrapReq) &&
+      /AC-1\*\*[^\n]*\n\nNote: exports older than 7 days are deleted\.\n\n### US-2/.test(wrapReq) && !wrap.warnings.some((x) => /not converted to EARS/.test(x)),
+      "spec_import kiro: a criterion wrapped onto an unindented THEN line stays whole; a note after the criteria follows them verbatim");
+    ok(wrap.mapping["2.1"] === "US-2.AC-1" && /US-2\.AC-1\*\* — WHEN a user clicks save THEN the system SHALL persist the draft/.test(wrapReq) && /US-2\.AC-2\*\* — IF the save fails/.test(wrapReq) &&
+      /## Non-Functional Requirements\n- The export endpoint SHALL be rate-limited to 10 req\/min/.test(wrapReq) && /## Introduction\nSecond intro paragraph WRAPINTRO\./.test(wrapReq) &&
+      wrap.warnings.some((x) => /carried over verbatim.*Introduction.*Non-Functional Requirements/.test(x)) && Array.isArray(wrapEars.issues) && !wrapEars.issues.some((x) => x.severity === "error"),
+      "spec_import kiro: bulleted criteria are criteria; a ### Non-Functional Requirements section and the rest of the introduction are carried verbatim and named in a warning; no EARS error");
+    w6(im, "specs/003-nfr/spec.md", "# Feature Specification: NFR\n\n## User Scenarios & Testing\n\n### User Story 1 - Export (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they export, **Then** the system sends a zip\n\nThe zip is named after the account (SKNOTE).\n\n## Requirements\n\n### Functional Requirements\n\n- **FR-001**: System MUST export\n\n### Non-Functional Requirements\n\n- **NFR-001**: exports finish in 60 s (UNIQUEMARKER1)\n");
+    const skn = safe6(() => S.importSpec(im, "spec-kit", "specs/003-nfr"));
+    const sknReq = skn.ok ? r6(im, ".specs", "nfr", "requirements.md") : "";
+    ok(skn.ok && /## Non-Functional Requirements\n- \*\*NFR-001\*\*: exports finish in 60 s \(UNIQUEMARKER1\)/.test(sknReq) && /US-1\.AC-1\*\*[^\n]*\n(?:[^\n]*\n)?\nThe zip is named after the account \(SKNOTE\)\./.test(sknReq) &&
+      skn.warnings.some((x) => /carried over verbatim.*Non-Functional Requirements/.test(x)),
+      "spec_import spec-kit: an unrecognised ### section (NFR-001) and text after the scenarios are carried verbatim");
+    w6(im, "openspec/specs/export/spec.md", "# Export Specification\n\n## Purpose\nExports.\n\nSecond purpose paragraph UNIQUEMARKER2.\n\n## Requirements\n### Requirement: Zip\nThe system SHALL zip exports.\n\n#### Scenario: Long form\n- **WHEN** a user submits a very long export form that\n  spans several lines\n- **THEN** the archive is produced\n\n## Constraints\n- UNIQUEMARKER3\n");
+    const osx = safe6(() => S.importSpec(im, "openspec", "openspec/specs/export"));
+    const osxReq = osx.ok ? r6(im, ".specs", "export", "requirements.md") : "";
+    ok(osx.ok && /## Purpose\nSecond purpose paragraph UNIQUEMARKER2\./.test(osxReq) && /## Constraints\n- UNIQUEMARKER3/.test(osxReq) &&
+      /US-1\.AC-1\*\* — WHEN a user submits a very long export form that spans several lines, THE SYSTEM SHALL ensure that the archive is produced/.test(osxReq) &&
+      osx.warnings.some((x) => /carried over verbatim.*Purpose.*Constraints/.test(x)),
+      "spec_import openspec: every Purpose paragraph and other ## sections are carried; a wrapped WHEN clause stays whole");
+
+    // Review round: a flat tasks.md is imported in linear time (the parent lookup was quadratic).
+    w6(im, ".kiro/specs/flat/requirements.md", "### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN x happens THEN the system SHALL do y\n");
+    w6(im, ".kiro/specs/flat/tasks.md", Array.from({ length: 20000 }, (_, i) => `- [ ] ${i + 1}. T\n  - _Requirements: 1.1_`).join("\n") + "\n");
+    const t0flat = Date.now();
+    const flat = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/flat"));
+    const flatMs = Date.now() - t0flat;
+    ok(flat.ok && flat.mapping["task 20000"] === "task 20000" && flatMs < 6000, "spec_import: a flat 20 000-task tasks.md imports in linear time (" + flatMs + " ms; was ~11 s)");
+
+    // Review round 2: a ## section WRAPPING requirements/stories carries only what is left around them (no second copy).
+    w6(im, ".kiro/specs/wrapped-h2/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Login stuff.", "", "## Functional Requirements", "", "Core flows (FRINTRO).", "",
+      "### Requirement 1: Login", "", "#### Acceptance Criteria", "", "1. WHEN a user logs in THEN the system SHALL create a session", "",
+      "## Non-Functional Requirements", "", "### Requirement 2: Speed", "", "#### Acceptance Criteria", "", "1. WHEN a page loads THEN the system SHALL respond within 200 ms", ""].join("\n"));
+    const wh = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/wrapped-h2"));
+    const whReq = wh.ok ? r6(im, ".specs", "wrapped-h2", "requirements.md") : "";
+    const whEars = safe6(() => S.earsFeature(im, "wrapped-h2"));
+    ok(wh.ok && wh.mapping["1.1"] === "US-1.AC-1" && wh.mapping["2.1"] === "US-2.AC-1" && (whReq.match(/create a session/g) || []).length === 1 && (whReq.match(/within 200 ms/g) || []).length === 1 &&
+      !/### Requirement \d/.test(whReq) && !/## Non-Functional Requirements/.test(whReq) && /## Functional Requirements\n\nCore flows \(FRINTRO\)\./.test(whReq) &&
+      Array.isArray(whEars.issues) && whEars.issues.length === 0,
+      "spec_import kiro: '### Requirement N' under a '## Functional/Non-Functional Requirements' is imported once (no verbatim copy, no no-id warnings); the wrapper's own prose is still carried");
+    w6(im, "specs/004-board/spec.md", "# Feature Specification: Board\n\n## User Stories\n\n### User Story 1 - See board (Priority: P1)\n\nAs a user I want to see the board.\n\n**Acceptance Scenarios**:\n\n1. **Given** a board, **When** I open it, **Then** the system shows the columns\n");
+    const skw = safe6(() => S.importSpec(im, "spec-kit", "specs/004-board"));
+    const skwReq = skw.ok ? r6(im, ".specs", "board", "requirements.md") : "";
+    ok(skw.ok && skw.mapping["User Story 1 / Scenario 1"] === "US-1.AC-1" && (skwReq.match(/^## User Stories$/gm) || []).length === 1 && !/### User Story 1 - See board/.test(skwReq) &&
+      (skwReq.match(/As a user I want to see the board/g) || []).length === 1 && S.earsFeature(im, "board").verdict === "pass",
+      "spec_import spec-kit: stories under a '## User Stories' wrapper are imported once (one ## User Stories heading, no raw copy)");
+
+    // Review round 2: an unknown reference on a Kiro PARENT (now a phase heading, its number reused) is reported by line.
+    w6(im, ".kiro/specs/parent-ref/requirements.md", "## Requirements\n\n### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN a THEN the system SHALL b\n2. WHEN c THEN the system SHALL d\n3. WHEN e THEN the system SHALL f\n");
+    w6(im, ".kiro/specs/parent-ref/tasks.md", "- [ ] 1. Set up\n  - _Requirements: 1.3_\n- [ ] 2. Implement login\n  - Parent notes\n  - _Requirements: 1.1, 9.9_\n  - [ ] 2.1 Form\n    - _Requirements: 1.1_\n  - [ ] 2.2 Session\n    - _Requirements: 1.2_\n- [ ] 3. Deploy _Requirements: 8.8_\n  - [ ] 3.1 Ship\n");
+    const pr = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/parent-ref"));
+    const prTasks = pr.ok ? r6(im, ".specs", "parent-ref", "tasks.md") : "";
+    ok(pr.ok && /## Implement login\n  - Parent notes\n  - _Requirements: US-1\.AC-1, 9\.9_\n- \[ \] 2\. Form/.test(prTasks) &&
+      pr.warnings.some((x) => /^tasks\.md line 5: _Requirements:_ reference '9\.9'/.test(x)) && pr.warnings.some((x) => /^tasks\.md line 10: _Requirements:_ reference '8\.8'/.test(x)) &&
+      !pr.warnings.some((x) => /^task \d+: .*'(?:9\.9|8\.8)'/.test(x)),
+      "spec_import kiro: an unknown _Requirements:_ reference in a parent task's heading or own body is reported by source line, never as 'task <old number>' (got " + pr.warnings.join(" | ") + ")");
+
+    // Review round 2: a Black-wrapped APIRouter(prefix=…)/Blueprint(url_prefix=…) and a Prettier-wrapped router.post(\n "/x", …).
+    const sc3 = path.join(tmp, "proj-wp6-scan3");
+    w6(sc3, "app/items.py", "from fastapi import APIRouter\n\nrouter = APIRouter(\n    prefix=\"/items\",\n    tags=[\"items\"],\n    dependencies=[Depends(get_token)],\n)\n\n\n@router.get(\"/{item_id}\")\ndef read(item_id: int): ...\n");
+    w6(sc3, "app/bp.py", "from flask import Blueprint\nbp = Blueprint(\n    \"orders\",\n    __name__,\n    url_prefix=\"/orders\",\n)\n@bp.get(\"/<int:id>\")\ndef g(id): ...\n");
+    w6(sc3, "app/users.py", "from fastapi import APIRouter\nrouter = APIRouter(prefix=\"/users\", tags=[\"users\"])\n@router.get(\"/{user_id}\")\ndef u(user_id): ...\n");
+    w6(sc3, "src/routes/orders.js", "const express = require(\"express\");\nconst router = express.Router();\n\nrouter.post(\n  \"/orders/:orderId/items\",\n  requireAuth,\n  validateBody(itemSchema),\n  async (req, res) => {\n    router.get(\"/inner\", h);\n    res.json({});\n  }\n);\nrouter.get(\"/orders\", list);\nrouter.put(\n  handlerPath,\n  h\n);\n");
+    w6(sc3, "src/services/api.js", "import axios from 'axios';\nconst api = axios.create();\nexport const list = () => api.get(\n  '/users'\n);\n");
+    const scan3 = safe6(() => S.scanCodebase(sc3));
+    const rk3 = (scan3.routes || []).map((r) => `${r.method} ${r.path} ${r.file}:${r.line}`);
+    const want3 = ["GET /items/{item_id} app/items.py:10", "GET /orders/<int:id> app/bp.py:7", "GET /users/{user_id} app/users.py:3",
+      "POST /orders/:orderId/items src/routes/orders.js:4", "GET /inner src/routes/orders.js:9", "GET /orders src/routes/orders.js:13"];
+    ok(want3.every((k) => rk3.includes(k)) && scan3.candidateEndpoints === 6 && !rk3.some((k) => /\/users src\/services|\/item_id\} app\/items\.py|^GET \/<int:id>/.test(k)),
+      "scan: a wrapped APIRouter(\\n prefix=…)/Blueprint(\\n url_prefix=…) prefixes its routes; a Prettier-wrapped router.post(\\n \"/x\", …) is a route on the call's line, counted once; a wrapped client call is not (got " + rk3.join(" | ") + ")");
+  }
   // @wp WP6 <<<
 
   // @wp WP7 tests >>>

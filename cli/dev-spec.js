@@ -15,7 +15,8 @@
  *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default)
  *   steering <file> [--lang]            Create one steering file from its template
- *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang)
+ *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
+ *                                      --brownfield → + integration-plan.md)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
  *   list                               List features + phase + progress
  *   status [feature]                   Status of one feature (or all)
@@ -35,8 +36,9 @@
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
- *   scan [path] [--cap N]              Brownfield: inventory an existing codebase
- *   coverage                           Brownfield: % of code modules with specs
+ *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
+ *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
+ *   import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec as a NEW feature
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
  *   mcp-config [client]                Print ready MCP config (claude-desktop|claude-code|
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
@@ -105,6 +107,12 @@ function readStdin(cb) {
 // @wp WP5 <<<
 
 // @wp WP6 value-flags >>>
+VALUE_FLAGS.add("tracks"); // --tracks tdd,saas = the MCP `tracks` argument (import, create/bugfix, init, add-track)
+// A value flag takes ONE token: `--tracks saas ai` leaves "ai" positional, so every command that takes tracks
+// merges the flag with its positional tracks (parseTracks splits "tdd,saas") — none may drop it silently.
+function withTracksFlag(list) {
+  return typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list;
+}
 // @wp WP6 <<<
 
 // @wp WP7 value-flags >>>
@@ -196,7 +204,8 @@ function main() {
     }
 
     case "init": {
-      const r = spec.initProject(projectDir, pos.length ? pos : ["core"], flags.lang);
+      const tr = withTracksFlag(pos);
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang);
       if (r.ok === false) die(r.error); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", "))));
     }
@@ -206,8 +215,10 @@ function main() {
       if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
       const name = pos[0];
       const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
-      const tracks = pos.slice(1).length ? pos.slice(1) : undefined; // none → engine: keep existing / classify new
-      const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind);
+      const tr = withTracksFlag(pos.slice(1));
+      const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
+      const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
+        { brownfield: flags.brownfield === true || flags.brownfield === "true" }); // = spec_create {brownfield}
       if (!r.ok) die(r.error);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -457,21 +468,37 @@ function main() {
       const root = pos[0] ? path.resolve(pos[0]) : projectDir;
       const r = spec.scanCodebase(root, { cap: flags.cap ? parseInt(flags.cap, 10) : undefined });
       const T = cliText(spec.projectLang(root)); // same language as the engine's note
+      const B = spec.msg(spec.projectLang(root)).brownfield;
       return out(r, (r) => {
         console.log(T.scanHead(r.root, r.truncated));
         console.log(T.scanFiles(r.filesScanned, r.stack.join(" · ")));
         console.log(T.scanDirs(r.topLevelDirs.join(", ")));
         console.log(T.scanExt(r.byExtension.join("  ")));
-        console.log(T.scanEndpoints(r.candidateEndpoints, r.endpointSamples.slice(0, 5).join(", ")));
+        if (r.frameworks.length) console.log(B.frameworks(r.frameworks.join(", ")));
+        console.log(T.scanEndpoints(r.candidateEndpoints, r.endpointFiles));
+        r.routes.slice(0, 15).forEach((x) => console.log(B.routeLine(x.method, x.path, x.file + ":" + x.line)));
+        if (r.candidateEndpoints > 15) console.log(B.moreRoutes(r.candidateEndpoints - 15));
+        if (r.routesNote) console.log("    " + r.routesNote);
+        console.log(B.tests(r.testFiles, r.testFrameworks.join(", ") || B.none));
+        console.log(B.entrypoints(r.entrypoints.map((e) => e.file + " (" + e.kind + ")").join(", ") || B.none));
+        console.log(B.env(r.envVars.slice(0, 20).join(", ") || B.none, Math.max(0, r.envVarsTotal - 20)));
+        console.log(B.migrations(r.migrationsTotal, r.migrationDirs.join(", ")));
+        if (r.readNote) console.log("  " + r.readNote);
       });
     }
 
     case "coverage": {
       const r = spec.coverage(projectDir);
       const T = projectText();
+      const B = spec.msg(spec.projectLang(projectDir)).brownfield;
+      const folder = (x) => (x === "." ? B.root : x);
       return out(r, (r) => {
-        console.log(T.coverage(r.coveragePercent, r.documented.length, r.modulesTotal));
-        if (r.undocumented.length) console.log(T.undocumented(r.undocumented.join(", ")));
+        console.log(T.coverage(r.coveragePercent, r.coveredFiles, r.codeFiles));
+        if (r.testFiles) console.log(B.coverageTests(r.testFiles));
+        r.byFolder.slice(0, 30).forEach((f) => console.log(B.coverageFolder(f.folder === "." ? B.root : f.folder + "/", f.covered, f.files, f.percent)));
+        if (r.undocumented.length) console.log(T.undocumented(r.undocumented.map(folder).join(", ")));
+        if (r.unmatchedImplements.length) console.log(B.coverageUnmatched(r.unmatchedImplements.map((u) => u.ref).join(", ")));
+        if (r.nonCodeImplements.length) console.log(B.coverageNonCode(r.nonCodeImplements.map((u) => u.ref).join(", ")));
       });
     }
 
@@ -500,9 +527,10 @@ function main() {
     }
 
     case "add-track": {
-      if (!pos[0] || !pos[1]) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
+      const tr = withTracksFlag(pos.slice(1));
+      if (!pos[0] || !tr.length) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
-      const r = spec.addTrack(projectDir, pos[0], pos.slice(1), { remove: !!flags.remove });
+      const r = spec.addTrack(projectDir, pos[0], tr, { remove: !!flags.remove });
       if (!r.ok) die(r.error);
       return out(r, (r) => {
         console.log("'" + r.feature + "' now [" + r.tracks + "]");
@@ -577,6 +605,21 @@ function main() {
     // @wp WP5 <<<
 
     // @wp WP6 commands >>>
+    case "import": {
+      // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
+      // spec_import: <path> resolves against the project root and must stay inside it.
+      if (!pos[0] || !pos[1]) die("usage: dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai]");
+      const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => {
+        const B = spec.msg(r.lang).importSpec;
+        console.log(B.done(r.toolName, r.source, r.feature, r.label, r.lang));
+        console.log("  " + r.files.join(", "));
+        const ids = Object.entries(r.mapping);
+        console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+        r.warnings.forEach((w) => console.log("  ⚠ " + w));
+      });
+    }
     // @wp WP6 <<<
 
     // @wp WP7 commands >>>
@@ -619,6 +662,7 @@ function helpText() {
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
+                                  --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)
@@ -644,8 +688,11 @@ function helpText() {
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
   backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
-  scan [path]                     Brownfield: inventory an existing codebase (stack, modules, endpoints)
-  coverage                        Brownfield: % of code modules with specs
+  scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
+                                  tests, entrypoints, env var names, migrations)
+  coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
+  import <kiro|spec-kit|openspec> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|es · --tracks tdd,saas,ai
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
@@ -654,6 +701,7 @@ function helpText() {
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
+         --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
