@@ -303,6 +303,12 @@ scores per set → fails below threshold); the bundled local harness runs with `
 API key; `--dry-run` offline). Establish and record the baseline. Commit
 `test(feature): eval harness + baseline (golden 73%, adversarial 96%)`.
 
+**The gate is tracked:** once the test plan (+tdd) or eval plan (+ai) exists, phase `tests` is pending —
+`/next-action` asks for it (after the test/eval plan approval, before the tasks approval) and never recommends
+implementing until the user signs it off with `/approve <feature> tests`; `gatesOk` and `spec_finish` count it.
+The engine can't see the tests run: present the red/green counts (and `trace_check {code: true}`) before asking.
+A bugfix has no Phase 4 gate — its failing regression test is one of its tasks.
+
 ---
 
 ## Phase 5: Tasks (`/createTask`)
@@ -407,8 +413,9 @@ test/eval state) · "pause" (stop after current task).
 Before advancing a phase, run `/spec-doctor` (the `spec_doctor` tool): EARS lint, template placeholders,
 traceability (+ EC/NFR/SC warnings), steering (present and filled), design + Mermaid + Constitution Check
 section, per-track mandatory sections present AND filled (no leftover `TODO` sentinel), verification evidence,
-duplicate task numbers, artifacts changed since their approval, and the **approval gates** (`gatesOk`,
-`pendingGates`, forced approvals) → a `readyToAdvance` verdict.
+duplicate task numbers, artifacts changed since their approval, `_Supersedes:_` references that resolve to nothing,
+and the **approval gates** (`gatesOk`, `pendingGates` — every phase whose artifact exists, a bugfix's `design` on
+`bug.md`, and Phase 4 `tests` on +tdd/+ai — forced approvals) → a `readyToAdvance` verdict.
 `--deep` adds a semantic review by the `dev-spec-driven:spec-critic` agent (completeness,
 contradictions, ambiguity, testability, scope, YAGNI) — what structural checks can't see. When the user
 signs off, record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval

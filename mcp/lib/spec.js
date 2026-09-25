@@ -1325,7 +1325,15 @@ function headingHasMarker(md, marker) {
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
 function phaseActive(phase, tracks) {
-  return phase === "test-plan" ? tracks.includes("tdd") : phase === "eval-plan" ? tracks.includes("ai") : true;
+  return phase === "test-plan" ? tracks.includes("tdd") : phase === "eval-plan" ? tracks.includes("ai")
+    : phase === "tests" ? tracks.includes("tdd") || tracks.includes("ai") : true;
+}
+// Phase 4 — the hard gate (failing tests on +tdd, the eval harness + baseline on +ai), approved before any
+// implementation. It has no artifact of its own, so it is due once the plan it implements exists (test-plan.md /
+// eval-plan.md of an active track) — never for a bugfix, whose failing regression test is one of its tasks.
+function testsGateDue(dir, tracks, kind) {
+  if (kind === "bugfix" || !phaseActive("tests", tracks)) return false;
+  return (tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md"))) || (tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md")));
 }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
@@ -1703,6 +1711,15 @@ const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
+// closerBelow(lines)[i] — does a "-->" appear on a line AFTER line i? A "<!--" that never closes is plain text, as
+// stripHtmlComments (trace_check, requirementAcIds) and scanTaskLines read it: one stray marker must not hide every
+// criterion / placeholder below it (EARS saw 0 criteria and passed while trace_check counted them all).
+function closerBelow(lines) {
+  const out = new Array(lines.length).fill(false);
+  for (let i = lines.length - 2; i >= 0; i--) out[i] = out[i + 1] || lines[i + 1].includes("-->");
+  return out;
+}
+
 // Strip HTML comments (possibly multi-line) so template guidance doesn't count as real content,
 // then fold the surviving lines into criterion blocks.
 function criterionBlocks(text) {
@@ -1718,7 +1735,9 @@ function criterionBlocks(text) {
     cur = null;
   };
 
-  text.split(/\r?\n/).forEach((raw, i) => {
+  const all = text.split(/\r?\n/);
+  const closes = closerBelow(all);
+  all.forEach((raw, i) => {
     const ln = i + 1;
     let line = raw;
     if (inComment) {
@@ -1729,7 +1748,7 @@ function criterionBlocks(text) {
     }
     line = line.replace(/<!--.*?-->/g, "");
     const openIdx = line.indexOf("<!--");
-    if (openIdx !== -1) {
+    if (openIdx !== -1 && closes[i]) {
       inComment = true;
       line = line.slice(0, openIdx);
     }
@@ -3922,11 +3941,105 @@ function renameFeature(projectDir, name, newName) {
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // Every other reference to the feature follows it — planned while the old folder still resolves, written after the move.
+  const plan = renamePlan(projectDir, oldDir, oldSlug, newSlug);
+  if (plan.error) return { ok: false, error: plan.error };
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.renameSync(oldDir, newDir);
   pruneRoadmapRefs(projectDir, oldSlug, newSlug);
+  for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
+  for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, action: "rename", from: oldSlug, to: newSlug };
+  const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
+  const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
+  const fm = i18n.msg(featureLang(projectDir, newSlug));
+  const notes = [];
+  if (plan.supersedes.length) {
+    res.supersedesUpdated = plan.supersedes.map((s) => ({ feature: s.feature, archived: s.archived, refs: s.refs }));
+    notes.push(fm.supersedes.renamed(plan.supersedes.map((s) => `${where(s)} (${s.refs})`).join(", ")));
+  }
+  if (plan.records.length) {
+    res.archiveRecordsUpdated = plan.records.map((r) => r.feature);
+    notes.push(fm.restore.renamedRecords(plan.records.map((r) => r.feature).join(", ")));
+  }
+  if (notes.length) res.note = notes.join(" · ");
+  return res;
+}
+
+// What a rename rewrites besides roadmap.json, computed BEFORE the folder moves (the old slug must still resolve):
+//   • `_Supersedes: <old>/US-n.AC-m_` in every OTHER feature's requirements.md (active and archived) → the new slug, so
+//     the living catalog keeps striking the replaced ACs through (they turned phantom, and the auto-refreshed SPECS.md
+//     listed the old and the new behaviour as current). Only real markers, never one in a comment or fenced code; the
+//     edit is content, so an approved requirements.md shows as changed-since-approval (re-review, then re-approve).
+//   • archived features' .state.json `archived` record (entry.dependsOn, dependents[].feature / .dependsOn) → the new
+//     slug, so restore puts the dependency back instead of reporting the renamed feature as gone. A state file that
+//     can't be read and names the old slug refuses the rename — never rewritten, never silently left stale.
+// → { supersedes: [{ feature, archived, file, text, refs }], records: [{ feature, file, state }] } or { error }.
+function renamePlan(projectDir, oldDir, oldSlug, newSlug) {
+  const oldKey = dirKey(oldDir);
+  const supersedes = [];
+  const records = [];
+  for (const fd of featureDirs(projectDir)) {
+    if (dirKey(fd.dir) === oldKey) continue;
+    const reqFile = path.join(fd.dir, "requirements.md");
+    const raw = readIfExists(reqFile);
+    if (raw != null && /_Supersedes:/i.test(raw)) {
+      const upd = renameSupersedesRefs(projectDir, fd.dir, raw, oldKey, newSlug);
+      if (upd.refs) supersedes.push({ feature: fd.slug, archived: fd.archived, file: reqFile, text: upd.text, refs: upd.refs });
+    }
+    if (!fd.archived) continue;
+    const sf = statePath(fd.dir);
+    if (!fs.existsSync(sf)) continue;
+    const st = stateFromFile(projectDir, sf);
+    if (st.invalid) {
+      if ((readIfExists(sf) || "").includes(JSON.stringify(oldSlug))) return { error: st.invalid };
+      continue;
+    }
+    const rec = isObj(st.archived) ? st.archived : null;
+    if (!rec) continue;
+    let changed = false;
+    const swap = (list) => {
+      if (!Array.isArray(list) || !list.includes(oldSlug)) return list;
+      changed = true;
+      return list.map((d) => (d === oldSlug ? newSlug : d));
+    };
+    if (isObj(rec.entry) && Array.isArray(rec.entry.dependsOn)) rec.entry.dependsOn = swap(rec.entry.dependsOn);
+    for (const d of Array.isArray(rec.dependents) ? rec.dependents : []) {
+      if (!isObj(d)) continue;
+      if (d.feature === oldSlug) { d.feature = newSlug; changed = true; }
+      if (Array.isArray(d.dependsOn)) d.dependsOn = swap(d.dependsOn);
+    }
+    if (changed) records.push({ feature: fd.slug, file: sf, state: st });
+  }
+  return { supersedes, records };
+}
+// requirements.md text with every real `_Supersedes:_` reference that resolves to the renamed folder (resolveSupersedes'
+// rule: of the other folders the name reaches, the first holding the AC, else the first) pointed at `newSlug`.
+function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
+  const visible = new Map(criterionBlocks(raw).cleaned.map((c) => [c.line, c.text]));
+  const fromKey = dirKey(fromDir);
+  const acs = new Map();
+  const acsOf = (dir) => {
+    if (!acs.has(dir)) acs.set(dir, acIndex(readIfExists(path.join(dir, "requirements.md")) || ""));
+    return acs.get(dir);
+  };
+  const hitsOld = (name, ac) => {
+    const targets = locateFeatures(projectDir, name).filter((t) => dirKey(t.dir) !== fromKey);
+    if (!targets.some((t) => dirKey(t.dir) === oldKey)) return false;
+    return dirKey((targets.find((t) => acsOf(t.dir).has(ac)) || targets[0]).dir) === oldKey;
+  };
+  let refs = 0;
+  const text = raw.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), (whole, value, offset) => {
+    const line = (raw.slice(0, offset).match(/\n/g) || []).length + 1;
+    if (!(visible.get(line) || "").includes("_Supersedes:")) return whole; // inside a comment or fenced code: no marker
+    const nv = value.replace(/(^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
+      if (!hitsOld(name.trim(), ac)) return t;
+      refs++;
+      return sep + lead + newSlug + slash + ac;
+    });
+    return nv === value ? whole : whole.slice(0, whole.length - 1 - value.length) + nv + "_";
+  });
+  return { text, refs };
 }
 
 // What `remove` would delete, returned INSTEAD of deleting when the caller hasn't confirmed.
@@ -4493,8 +4606,12 @@ function nextAction(projectDir, name) {
   const pending = (doc.pendingGates || [])[0];
   // doctor already ran the approve gate's own checks for this pending phase (nextGate).
   const refused = doc.nextGate && doc.nextGate.phase === pending && doc.nextGate.failing.length ? doc.nextGate.failing : null;
-  const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements, design: nx.approveDesign,
-    "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan, tasks: nx.approveTasks };
+  // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
+  const plans = [tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md")), tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"))];
+  const testsWhat = plans[0] && plans[1] ? "both" : plans[1] ? "ai" : "tdd";
+  const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements,
+    design: st.kind === "bugfix" ? nx.approveBugDesign : nx.approveDesign, "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan,
+    tests: (s) => nx.approveTests(s, testsWhat), tasks: nx.approveTasks };
   let step;
   let recommendation;
   let gateFix = false;
@@ -4643,6 +4760,9 @@ function sectionState(design, sections, marker) {
 // backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
 const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
+// The core-only Signals answer scaffolds before 1.13 wrote in brackets (`- [none beyond core]`, PT/ES): the tool's own
+// final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
+const RE_LEGACY_ANSWER = /^\s*(?:none beyond core|nenhum além de core|ninguno además de core)\s*$/i;
 const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
 // The code spans a template itself leaves as placeholders — exactly the bugfix test plan's `[path]` / `[caminho]` /
 // `[ruta]`, read from the templates (every language). Any other span is code, even bracketed words: C# attributes
@@ -4704,7 +4824,7 @@ function templateEnumerationSet() {
 // defined), footnotes `[^1]`, callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`,
 // the English-stable tags ([US1] [P] [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1],
 // [T-01]…), indexing glued to a word (`x[0]`), escaped `\[`, [NEEDS CLARIFICATION] (clarificationMarkers
-// tracks those), number lists / intervals `[0, 1]`, every other code span (literals such as `` `[]` `` or
+// tracks those), the pre-1.13 core-only answer `[none beyond core]` (PT/ES too), number lists / intervals `[0, 1]`, every other code span (literals such as `` `[]` `` or
 // `` `["a"]` ``, attributes / TOML tables such as `` `[Authorize]` `` `` `[dependencies]` ``), and anything
 // inside HTML comments or fenced code. Language-agnostic, so EN/PT/ES templates
 // behave the same.
@@ -4715,6 +4835,7 @@ function placeholderReport(text) {
   const visible = []; // [lineNo, content] outside comments and fences
   let inComment = false;
   let fence = null;
+  const closes = closerBelow(lines); // a "<!--" that never closes is text — it hides no placeholder below it
   lines.forEach((raw, i) => {
     let line = raw;
     if (inComment) {
@@ -4725,7 +4846,7 @@ function placeholderReport(text) {
     }
     line = line.replace(/<!--.*?-->/g, "");
     const open = line.indexOf("<!--");
-    if (open !== -1) { inComment = true; line = line.slice(0, open); }
+    if (open !== -1 && closes[i]) { inComment = true; line = line.slice(0, open); }
     const fm = line.match(RE_FENCE);
     if (fence) { if (fm && line.trim().startsWith(fence)) fence = null; return; }
     if (fm) { fence = fm[1]; return; }
@@ -4766,7 +4887,7 @@ function bracketPlaceholders(line, refs) {
     const rawInner = line.slice(i + 1, j); // code spans intact (the blanking above keeps every column)
     let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
       (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) ||
+      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
       (isEnumeration(rawInner) && !templateEnumerationSet().has(enumKey(rawInner)));
     let end = j;
     if (after === "[") { // reference link [x][y]: both halves are syntax
@@ -5138,6 +5259,10 @@ function specDoctor(projectDir, name, opts = {}) {
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
     const secDefined = secondaryDefinitions(readIfExists(path.join(dir, "requirements.md")) || "").defined.size;
     if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
+    // `_Supersedes:_` references that resolve to nothing (a typo, a removed feature): trace_check's warnings, surfaced
+    // here too — until fixed, the living catalog shows the AC they meant to replace as current. Never a fail.
+    const supLines = supersedesWarnings(tr, lng);
+    if (supLines.length) add("supersedes", "warn", supLines.join("; "));
     // T-IDs made green by DONE tasks must be named by some test file (planned ones only — a phantom T-ID is a trace
     // gap already). Open tasks' tests may legitimately not exist yet.
     if (tr.code) {
@@ -5172,15 +5297,11 @@ function specDoctor(projectDir, name, opts = {}) {
   // has not been approved is flagged (warn, so quality fails still dominate the verdict).
   const state = readState(projectDir, name);
   const approvals = state.approvals || {};
-  const GATE_PHASES = [
-    ["classification", "classification.md"],
-    ["requirements", "requirements.md"],
-    ["design", "design.md"],
-    ["test-plan", "test-plan.md"],
-    ["eval-plan", "eval-plan.md"],
-    ["tasks", "tasks.md"],
-  ];
-  const pendingGates = GATE_PHASES.filter(([ph, file]) => phaseActive(ph, tracks) && fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
+  // In the chain's order (PHASES). A phase is pending once the artifact it signs off exists — phaseFile(), so a
+  // bugfix's design gate is due on bug.md (its Root Cause) — or, for `tests` (Phase 4, no artifact), once
+  // testsGateDue() says the plan it implements exists.
+  const gateDue = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
+  const pendingGates = PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && gateDue(ph) && !approvals[ph]);
   // A forced approval (approve --force over failing checks) is recorded, but it stays visible here as a warn.
   const forcedGates = PHASES.filter((ph) => phaseActive(ph, tracks) && approvals[ph] && approvals[ph].forced);
   // The first pending gate — the one next_action recommends — run through the approve gate itself, which is stricter

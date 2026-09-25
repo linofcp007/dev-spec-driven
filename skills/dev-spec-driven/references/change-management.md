@@ -83,7 +83,9 @@ with the English-stable marker:
 
 The marker sits on the criterion's line, a sub-line under it, or its table row, and may list several
 `<feature>/US-n.AC-m` references. `trace_check` reports references that resolve to nothing as
-`phantomSupersedes` warnings. The catalog shows the old criterion as superseded, naming its replacement.
+`phantomSupersedes` warnings (`spec_doctor`: the `supersedes` warning). The catalog shows the old criterion as
+superseded, naming its replacement. `spec_feature rename` rewrites the markers that name the renamed feature, in
+active and archived features alike.
 
 ## 6. The living catalog — `.specs/SPECS.md`
 

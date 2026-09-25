@@ -329,6 +329,15 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Approvals record a content fingerprint** of the phase's artifact (`artifactFingerprint`; tasks.md
   with checkboxes normalized). `next_action` compares each artifact with ITS OWN approval — ticking a
   task is progress, not a spec edit.
+- **Pending gates walk `PHASES` in order** (`specDoctor` → `pendingGates`, which next_action / finish / gatesOk read):
+  a phase is due once the file `phaseFile(ph, kind)` names exists — a bugfix's `design` gate is `bug.md` (it used to
+  look for design.md, so it was never asked for) — and Phase 4 `tests` (no artifact) via `testsGateDue()`: +tdd with
+  test-plan.md or +ai with eval-plan.md, never a bugfix (its failing regression test is a task). `phaseActive('tests')`
+  is tdd||ai. Approving `tests` still runs no checks (the engine can't see tests run).
+- **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
+  written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
+  and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
+  archived state file that names the old slug refuses the rename.
 - **EARS context**: the loose heuristics (numbered item that "reads like" a requirement, lowercase
   `deve/debe`) apply only under an Acceptance Criteria heading or in heading-less snippets; elsewhere a
   criterion needs SHALL / capitalised DEVE·DEBE / "sistema deve", a stable ID or a CAPITALISED EARS
@@ -376,7 +385,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template
-  examples inside comments.
+  examples inside comments. A `<!--` that never closes is plain text everywhere — `stripHtmlComments` (closed only),
+  `scanTaskLines`, and `criterionBlocks` / `placeholderReport` via `closerBelow()`: a stray marker used to hide every
+  criterion below it (EARS 0 criteria → pass, the requirements approval passed) while trace_check counted them.
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
   code spans don't count. `parseTasks()` is its line-only projection (its shape is public through

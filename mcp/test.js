@@ -232,6 +232,13 @@ function endRun() {
   const commented = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
     "1. **US-1.AC-1** — IF the token expired, THEN\n<!-- reviewer: check this -->\n   THE SYSTEM SHALL return HTTP 401" } }));
   ok(commented.summary.criteriaDetected === 1 && commented.verdict === "pass", "a comment-only line does not split a criterion");
+  // A "<!--" that never closes is plain text (as trace_check and the task scanner read it): it hides no criterion below it.
+  const unclosed = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "## Acceptance Criteria\n<!-- TODO: revisit wording\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n2. **US-1.AC-2** — passwords are stored hashed, fast and secure.\n" } }));
+  const closedLater = S.earsValidate("## Acceptance Criteria\n<!-- note\n1. **US-1.AC-9** — hidden\n-->\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n");
+  ok(unclosed.summary.criteriaDetected === 2 && unclosed.verdict === "fail" && unclosed.issues.some((i) => i.code === "no-modal" && i.line === 4) &&
+    closedLater.summary.criteriaDetected === 1 && closedLater.verdict === "pass",
+    "an unclosed '<!--' hides no criterion: both ACs are linted and the no-modal one fails; a comment that closes later still hides its body (got " + unclosed.summary.criteriaDetected + ")");
   const vagueWrap = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
     "1. **US-1.AC-1** — WHEN a page loads,\n   THE SYSTEM SHALL render it fast" } }));
   ok((vagueWrap.issues.find((i) => /Vague/.test(i.msg)) || {}).line === 1, "a vague term on a continuation line is reported at the criterion's start line");
@@ -814,6 +821,16 @@ function endRun() {
   [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
+  // A bugfix has no design.md: its design gate signs off bug.md (Root Cause) and is pending all the same — asked for
+  // by next_action (never skipped to "implement"/"finish"), counted in gatesOk, blocking spec_finish. No Phase 4 gate:
+  // the bugfix's failing regression test is one of its tasks.
+  const llDoc = S.specDoctor(vDir, "login-loop");
+  const llNext = S.nextAction(vDir, "login-loop");
+  const llFin = S.finishFeature(vDir, "login-loop");
+  ok(llDoc.pendingGates.join() === "design" && llDoc.gatesOk === false && llNext.step === "approve" && /bug\.md/.test(llNext.recommendation) &&
+    /\/approve login-loop design/.test(llNext.recommendation) && llFin.readyToFinish === false && llFin.blockers.some((b) => /design/.test(b)),
+    "bugfix: the design gate (bug.md) is pending until approved — next_action asks for it, gatesOk is false, finish is blocked (got " + llDoc.pendingGates.join() + " / " + llNext.step + ")");
+  S.approvePhase(vDir, "login-loop", "design");
   const ready = S.finishFeature(vDir, "login-loop", { write: true });
   const prFile = fs.readFileSync(ready.paths.summary, "utf8");
   ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
@@ -1812,6 +1829,16 @@ function endRun() {
     const hk2 = hookReq(path.join(f1h.dir, "requirements.md"));
     ok(/Template placeholders: 1 left in requirements\.md \(L4 \[1-2 sentences: what this does\]\)/.test(hk1) && !/all clean/.test(hk1) && /all clean ✓/.test(hk2),
       "PostToolUse on requirements.md: a placeholder outside any criterion still stops 'all clean' (count + line, localized); clean once filled");
+    // A stray, never-closed "<!--" above the criteria: the requirements approve gate still sees (and refuses) the broken
+    // AC below it, and a placeholder below it is still a placeholder — EARS used to see 0 criteria and pass.
+    const f1u = S.createFeature(w5, "Unclosed gate", ["core"]);
+    write5(f1u, "requirements.md", REQ.replace("#### Acceptance Criteria (EARS)\n1.", "#### Acceptance Criteria (EARS)\n<!-- TODO: revisit wording\n1.")
+      .replace("4. **US-1.AC-4** — THE SYSTEM SHALL name files invoices-YYYY-MM.csv.", "4. **US-1.AC-4** — passwords are stored hashed, fast and secure."));
+    const ap1u = S.approvePhase(w5, f1u.slug, "requirements");
+    const ph1u = S.placeholderReport("# x\n<!-- stray\n- [trigger]\n");
+    ok(ap1u.ok === false && ap1u.failing.includes("ears") && chk(S.specDoctor(w5, f1u.slug), "ears").status === "fail" &&
+      S.traceCheck(w5, f1u.slug).totalAcs === 5 && ph1u.length === 1 && ph1u[0].text === "[trigger]" && ph1u[0].line === 3,
+      "an unclosed '<!--' above the ACs: approve requirements is refused on 'ears' (doctor ears fails; trace still counts 5 ACs); a placeholder below a stray marker is still reported");
 
     // (2) approve gate: refused while the phase's checks fail; force records forced + failing ids; nothing to approve = error
     const f2 = S.createFeature(w5, "Approve gate", ["core"]);
@@ -1831,6 +1858,21 @@ function endRun() {
     ok(noEval.ok === false && noEval.nothingToApprove && /Nothing to approve: 'eval-plan'/.test(noEval.error) && noPlan.ok === false && /test-plan\.md/.test(noPlan.error) &&
       !stateOf(f2).approvals["eval-plan"], "approving a phase with no artifact (eval-plan without +ai, test-plan without +tdd) is an error even with force");
     ok(S.approvePhase(w5, f2.slug, "execution").ok && S.approvePhase(w5, f2.slug, "tests").ok, "tests / execution have no artifact of their own — approved without checks");
+    // A core-only classification.md: the Signals line is the tool's own final answer ("- none beyond core", no brackets)
+    // — filling the real slots (Blast Radius, Compliance) is enough to approve it; a pre-1.13 file's bracketed
+    // "- [none beyond core]" is no placeholder either (EN/PT/ES).
+    const coreOnly = [["en", "none beyond core"], ["pt", "nenhum além de core"], ["es", "ninguno además de core"]].map(([lng, phrase]) => {
+      const d = path.join(tmp, "proj-core-only-" + lng);
+      const fc = S.createFeature(d, "Stock alerts", ["core"], "Alert when stock is low", undefined, lng);
+      const file = path.join(fc.dir, "classification.md");
+      const raw = fs.readFileSync(file, "utf8");
+      fs.writeFileSync(file, raw.split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+      const fresh = raw.includes("\n- " + phrase + "\n") && S.approvePhase(d, fc.slug, "classification").ok;
+      fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("- " + phrase, "- [" + phrase + "]"));
+      const legacy = S.approvePhase(d, fc.slug, "classification");
+      return fresh && legacy.ok && !S.featurePlaceholders(d, fc.slug, "classification.md").items.length ? "ok" : lng + ":" + (legacy.error || "fresh");
+    });
+    ok(coreOnly.join() === "ok,ok,ok", "a core-only classification approves once its real slots are filled — '- none beyond core' (and a legacy '[none beyond core]') is no placeholder, EN/PT/ES (got " + coreOnly.join() + ")");
     const apD = S.approvePhase(w5, f2.slug, "design");
     write5(f2, "design.md", DESIGN.replace("- [x] Principle 1 — complies\n", ""));
     const apD2 = S.approvePhase(w5, f2.slug, "design");
@@ -1936,6 +1978,30 @@ function endRun() {
     const n6f = S.nextAction(w5, f6c.slug);
     ok(n6e.step === "implement" && /#1/.test(n6e.recommendation) && n6f.step === "finish" && /\/spec-finish order-core \(spec_finish\)/.test(n6f.recommendation),
       "next_action: approvals done → implement the next task; all tasks done → spec_finish / /spec-finish by name");
+    // Phase 4 is the hard gate (+tdd): once test-plan.md exists, `tests` is pending — after test-plan, before tasks — so
+    // next_action asks for the failing tests (/writeTests) and never jumps to "implement"; gatesOk and finish count it.
+    // A core feature (order-core above) has no Phase 4.
+    const f6t = S.createFeature(w5, "Order tdd", ["tdd"]);
+    write5(f6t, "classification.md", read5(f6t, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(f6t, "requirements.md", REQ);
+    write5(f6t, "design.md", DESIGN);
+    const acs6t = ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"];
+    write5(f6t, "test-plan.md", "# Test Plan\n\n| Test ID | Covers |\n|---|---|\n" + acs6t.map((ac, i) => `| T-0${i + 1} | ${ac} |`).join("\n") + "\n");
+    write5(f6t, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: " + acs6t.join(", ") + "_\n  - _Makes green: T-01, T-02, T-03, T-04, T-05_\n");
+    ["classification", "requirements", "design", "test-plan"].forEach((p) => S.approvePhase(w5, f6t.slug, p));
+    const d6t = S.specDoctor(w5, f6t.slug);
+    const n6t = S.nextAction(w5, f6t.slug);
+    const ap6t = S.approvePhase(w5, f6t.slug, "tasks");
+    const n6t2 = S.nextAction(w5, f6t.slug);
+    const fin6t = S.finishFeature(w5, f6t.slug);
+    S.approvePhase(w5, f6t.slug, "tests");
+    const n6t3 = S.nextAction(w5, f6t.slug);
+    ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "approve" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
+      /\/writeTests order-tdd/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) &&
+      ap6t.ok && n6t2.step === "approve" && n6t2.pendingGates.join() === "tests" && fin6t.blockers.some((b) => /tests/.test(b)) &&
+      n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
+      /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")) && /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
+      "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, finish is blocked; approved → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
     ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
 
     // (7) clarify: IF…THEN per criterion, natural rate-limit wording, grouped placeholders; the classifier
@@ -3515,6 +3581,49 @@ function endRun() {
       /the archive record's entry\.dependsOn \(unexpected shape — left out\)/.test(recR.note),
       "restore of a hand-edited archive record: a wrong-shape dependsOn / dependents is left out and reported — roadmap.json stays valid, later mutators still work");
 
+    // A rename keeps every cross-feature reference: `_Supersedes:_` markers in other features (active AND archived —
+    // never a commented example) follow the new slug, so the auto-refreshed SPECS.md still strikes the replaced AC
+    // through; archived features' archive records follow it too, so restore puts the dependency back (it used to say
+    // the renamed feature "no longer exists"). Both directions of the archive record.
+    const w10r = path.join(tmp, "proj-wp10-rename");
+    S.initProject(w10r, ["core"]);
+    ["User Login", "Account Lockout", "Old Lockout", "Auth", "Billing", "Ledger", "Invoices"].forEach((n) => S.createFeature(w10r, n, ["core"]));
+    req10(w10r, "user-login", "1. **US-1.AC-1** — WHEN a user logs in THE SYSTEM SHALL open the dashboard\n2. **US-1.AC-2** — WHEN x THE SYSTEM SHALL y\n" +
+      "3. **US-1.AC-3** — IF three failed attempts occur THEN THE SYSTEM SHALL lock the account for 5 minutes\n");
+    req10(w10r, "account-lockout", "1. **US-1.AC-1** — IF five failed attempts occur THEN THE SYSTEM SHALL lock the account for 15 minutes _Supersedes: user-login/US-1.AC-3_\n\n" +
+      "<!-- e.g. _Supersedes: user-login/US-1.AC-2_ -->\n");
+    req10(w10r, "old-lockout", "1. **US-1.AC-1** — WHEN q THE SYSTEM SHALL r _Supersedes: `user-login/US-1.AC-2`, User Login/US-1.AC-1_\n");
+    S.manageFeature(w10r, "archive", "old-lockout");
+    S.setDependency(w10r, "billing", ["auth"]);
+    S.manageFeature(w10r, "archive", "auth");
+    S.setDependency(w10r, "invoices", ["ledger"]);
+    S.manageFeature(w10r, "archive", "invoices");
+    S.catalog(w10r, { write: true });
+    const specsMdR = () => fs.readFileSync(path.join(w10r, ".specs", "SPECS.md"), "utf8");
+    const struckBefore = (specsMdR().match(/~~/g) || []).length;
+    const ren10 = (await call10("spec_feature", { action: "rename", name: "user-login", newName: "auth-login", projectDir: w10r })).p;
+    const lockReq = fs.readFileSync(path.join(w10r, ".specs", "account-lockout", "requirements.md"), "utf8");
+    const oldReq = fs.readFileSync(path.join(w10r, ".specs", "_archive", "old-lockout", "requirements.md"), "utf8");
+    const trLock = S.traceCheck(w10r, "account-lockout");
+    ok(ren10.ok && struckBefore > 0 && (specsMdR().match(/~~/g) || []).length === struckBefore && /_Supersedes: auth-login\/US-1\.AC-3_/.test(lockReq) &&
+      /<!-- e\.g\. _Supersedes: user-login\/US-1\.AC-2_ -->/.test(lockReq) && /_Supersedes: `auth-login\/US-1\.AC-2`, auth-login\/US-1\.AC-1_/.test(oldReq) &&
+      trLock.phantomSupersedes.length === 0 && trLock.supersedes.map((s) => s.feature + "/" + s.ac).join() === "auth-login/US-1.AC-3" &&
+      ren10.supersedesUpdated.map((s) => (s.archived ? "_archive/" : "") + s.feature + ":" + s.refs).join() === "account-lockout:1,_archive/old-lockout:2" &&
+      /_Supersedes:_ references to it now use the new name, in: account-lockout \(1\), _archive\/old-lockout \(2\)/.test(ren10.note),
+      "rename rewrites _Supersedes:_ references to the old slug in active and archived features (not a commented example); SPECS.md still strikes the AC through (got " + JSON.stringify(ren10.supersedesUpdated) + ")");
+    S.manageFeature(w10r, "rename", "billing", "payments");
+    S.manageFeature(w10r, "rename", "ledger", "books");
+    const restA = S.manageFeature(w10r, "restore", "auth");
+    const restI = S.manageFeature(w10r, "restore", "invoices");
+    const rm10r = S.readRoadmap(w10r).features;
+    ok(restA.ok && restA.skipped.length === 0 && restA.restored.dependents.join() === "payments" && rm10r.payments.dependsOn.join() === "auth" &&
+      restI.ok && restI.skipped.length === 0 && restI.restored.dependsOn.join() === "books" && rm10r.invoices.dependsOn.join() === "books",
+      "archive → rename the other feature → restore puts the dependency back under the new name (dependent and dependency sides)");
+    // A phantom _Supersedes:_ (a typo, a removed feature) is a doctor warning too — where users look.
+    req10(w10r, "account-lockout", "1. **US-1.AC-1** — IF five failed attempts occur THEN THE SYSTEM SHALL lock the account _Supersedes: nowhere/US-1.AC-3_\n");
+    const supChk = S.specDoctor(w10r, "account-lockout").checks.find((c) => c.id === "supersedes");
+    ok(supChk && supChk.status === "warn" && /nowhere\/US-1\.AC-3.*no such feature/.test(supChk.detail), "doctor warns on a phantom _Supersedes:_ reference (check 'supersedes')");
+
     // _Supersedes:_ edge cases: punctuation after the marker (`…_.`, `(…_)`), a table-row criterion, an unterminated
     // marker, a case-different folder — the foreign ID never becomes one of the feature's own ACs.
     const w10x = path.join(tmp, "proj-wp10-sup");
@@ -3600,7 +3709,7 @@ function endRun() {
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
     [1, 2, 3].forEach((n) => S.completeTask(w10d, "login-loop", n));
     S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
-    ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(w10d, "login-loop", p));
+    ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w10d, "login-loop", p));
     S.createFeature(w10d, "Draft", ["core"]);
     const bfState = () => JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
     const fin0 = S.finishFeature(w10d, "login-loop");
@@ -4072,7 +4181,7 @@ function endRun() {
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
     [1, 2, 3].forEach((n) => S.completeTask(fz12, "login-loop", n));
     S.completeTask(fz12, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
-    ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
+    ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
     const fin12 = S.finishFeature(fz12, "login-loop", { write: true });
     const fst12 = JSON.parse(fs.readFileSync(path.join(fb12.dir, ".state.json"), "utf8"));
     ok(fin12.readyToFinish && fin12.baseline && fin12.baseline.recorded && Object.keys(fst12.finished.files).join() === "src/auth.js,src/lib/x.ts,src/lib/y.ts" && S.drift(fz12).verdict === "clean",

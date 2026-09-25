@@ -38,7 +38,17 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[id, amount_cents, issued_at]`, `[GET | POST]` — only the templates' own, like `[factories, fixtures, seeds]`,
   stay placeholders), so an approved 1.12 spec with bracketed lists stays finishable; its ID-list check is
   linear (a long space-separated ID list in one bracket used to freeze the server); and it treats the
-  scaffold's verbatim +saas/+ai tasks as real tasks.
+  scaffold's verbatim +saas/+ai tasks as real tasks. A core-only feature's Signals line is written as
+  `- none beyond core` (PT/ES too) — in brackets, the gate refused every core-only classification (created or
+  imported) on the tool's own answer — and a pre-1.13 `[none beyond core]` is not a placeholder either.
+- **Gates next_action follows.** SKILL.md calls Phase 4 (failing tests / eval harness) the hard gate, yet no
+  surface ever asked for it: on a +tdd feature `next_action` went from the tasks approval straight to "Implement
+  task #1" with `gatesOk: true`. Phase `tests` is now pending on a +tdd / +ai feature once its test or eval plan
+  exists — `next_action` asks for it (`/writeTests`, then `/approve <f> tests`) before any task, and `gatesOk` /
+  `spec_finish` count it (never for a bugfix: its failing regression test is a task). A bugfix's design gate
+  (bug.md — Reproduction + Root Cause) was never pending either, because `pendingGates` looked for a design.md:
+  it wasn't asked for, finish didn't need it and a later root-cause edit went unnoticed. It is now due on bug.md,
+  like approve, impact and changed-since-approval already read it.
 - **Task scanner.** Tasks inside HTML comments or fenced code were counted and ticked, `complete` ticked
   the first regex match in the file, `01.` wasn't task 1, and a stray unclosed `<!--` or fence hid every
   task below it (the feature could read as complete). One comment- and fence-aware scanner now serves
@@ -61,7 +71,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **Traceability, EARS, clarify.** An OPEN task's `_Implements:_` file that isn't written yet was a
   gap (it is the plan: `plannedImplFiles`); at a drive root (`subst Q:\`) every `_Implements:_` path read as
   outside the project. EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
-  template criterion linted clean (new `placeholder` code). `clarify` finds IF…THEN per criterion, keeps
+  template criterion linted clean (new `placeholder` code). A stray unclosed `<!--` above the criteria hid every AC
+  from the EARS linter (0 criteria, verdict pass — so the requirements approval passed a criterion with no modal verb)
+  while trace_check counted them all; a marker that never closes is now plain text there and in placeholder
+  detection, as it already was for tasks. `clarify` finds IF…THEN per criterion, keeps
   real line numbers after multi-line comments and groups placeholder questions. The classifier negates
   across filler words ("sem uso de IA") while PT "no uso do LLM" stays em+o. Every template AC now has a
   task and a test row, so a fresh scaffold traces clean once filled.
@@ -116,7 +129,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   hash of its `_Implements:_` files; drift reports what changed, went missing or appeared since then, and
   SessionStart adds one line per drifted feature.
 - **`spec_feature restore`** (`dev-spec feature restore`): archive now records the roadmap entry and the
-  dependencies it prunes; restore puts the feature and them back.
+  dependencies it prunes; restore puts the feature and them back. `rename` now follows every reference to the old
+  slug — archived features' archive records (restore used to drop the edge as "no longer exists") and
+  `_Supersedes:_` markers in other features' requirements.md, active and archived (the auto-refreshed SPECS.md
+  un-struck the replaced ACs); the result lists what it rewrote. Doctor warns (`supersedes`) on a `_Supersedes:_`
+  reference that resolves to nothing.
 - **Guard mode** (`spec_init {guard}`, `dev-spec init --guard on|off`, `/spec-guard`): an opt-in
   PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
   while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
@@ -152,6 +169,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **`dev-spec depend <feature>` with no dependencies only shows them** — it used to clear the list. Use
   `--clear` (MCP `dependsOn: []`); `--add` / `--rm` (MCP `add` / `remove`) edit it incrementally.
 - **A fresh feature starts at phase `requirements`** (8%) until its artifacts hold real content.
+- **Two more pending gates.** A +tdd / +ai feature now has a pending `tests` approval (Phase 4) and a bugfix a
+  pending `design` approval (bug.md): in-flight features show them in doctor / next_action and can't finish until
+  `approve <f> tests` / `approve <f> design`.
+- **Renaming a feature edits other features' requirements.md** when they `_Supersedes:_` its ACs; an approved one
+  then shows as changed-since-approval (re-review, re-approve).
 - **A note no longer verifies a task with a runnable `_Verify:_`** — record the command and its exit code
   (`dev-spec done <f> <n> --run`).
 - **Track input is validated**: an unknown track name is an error with a did-you-mean instead of being
@@ -163,7 +185,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 617 assertions (was 181), `node cli/test-cli.js` 198 (was 53); the tool count is
+- `node mcp/test.js` 657 assertions (was 181), `node cli/test-cli.js` 206 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

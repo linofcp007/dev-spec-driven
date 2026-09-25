@@ -16,7 +16,9 @@ in the spec chain's order, and names it in `step`:
    snapshot, `impact` names the `spec_impact` phases to run first (`/spec-impact`);
 3. **fix** — failing checks of the current phase (or an earlier one); also when the next pending approval would
    be refused (`refusedGate` lists its failing check ids);
-4. **approve** — the first pending approval whose gate would pass;
+4. **approve** — the first pending approval whose gate would pass — on +tdd / +ai that includes Phase 4 (`tests`:
+   write the failing tests / eval harness with `/writeTests`, then `/approve <feature> tests`), and on a bugfix the
+   `design` approval of `bug.md`;
 5. **implement** — the next open task;
 6. **finish** — every task done → `/spec-finish` (**tasks** instead when no tasks exist yet).
 

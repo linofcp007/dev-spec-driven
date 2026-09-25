@@ -19,9 +19,11 @@ The engine enforces it at every step, not only in doctor:
 
 - **Approvals.** A bugfix has no design of its own: `bug.md` stands in for it. The **requirements** gate checks
   `bug.md → Reproduction`; the **design** approval signs off `bug.md` (and any track sections in `design.md`) and
-  is refused until `Root Cause` is filled. Its snapshot and fingerprint are `bug.md`'s, so an edit to the root
-  cause after approval shows up as `changed-since-approval` and in `spec_impact --phase design` (sections keyed
-  `bug.md: Root Cause`).
+  is refused until `Root Cause` is filled. It is pending like any other gate (`pendingGates` looks for `bug.md`,
+  not a `design.md`), so `spec_next_action` asks for it, `gatesOk` counts it and `spec_finish` blocks without it.
+  Its snapshot and fingerprint are `bug.md`'s, so an edit to the root cause after approval shows up as
+  `changed-since-approval` and in `spec_impact --phase design` (sections keyed `bug.md: Root Cause`). A bugfix has
+  no Phase 4 (`tests`) gate: its failing regression test is task 3.
 - **Execution gate.** While `Root Cause` is unfilled, `spec_complete_task` (and `dev-spec done --run`, which then
   runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
   test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the

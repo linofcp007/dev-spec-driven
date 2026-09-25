@@ -572,6 +572,20 @@ if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --f
   fs.writeFileSync(path.join(w5, ".specs", "plan", "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/not-yet.js_\n");
   const trP = run(["trace", "plan", "--project", w5]);
   ok(trP.code === 0 && /verdict=pass/.test(trP.out) && !/src\/not-yet\.js/.test(trP.out), "trace: an open task's not-yet-written _Implements:_ file is no gap (exit 0)");
+  // A core-only feature: the Signals line is the tool's answer ("- none beyond core"), so filling Blast Radius and
+  // Compliance is enough — approve classification exits 0 (1.13 used to refuse it on its own "[none beyond core]").
+  run(["create", "Stock alerts", "--summary", "Alert when stock is low", "--project", w5]);
+  const clsFile = path.join(w5, ".specs", "stock-alerts", "classification.md");
+  fs.writeFileSync(clsFile, fs.readFileSync(clsFile, "utf8").replace(/^\[What breaks[^\n]*\]$/m, "A missed alert delays a restock by a day; recoverable.").replace(/^\[GDPR \| PCI[^\n]*\]$/m, "none"));
+  const clsAp = run(["approve", "stock-alerts", "classification", "--project", w5]);
+  ok(/^- none beyond core$/m.test(fs.readFileSync(clsFile, "utf8")) && clsAp.code === 0 && /Approved 'classification' for stock-alerts ✓/.test(clsAp.out),
+    "approve classification of a core-only feature with its real slots filled exits 0 ('- none beyond core' is no placeholder)");
+  // The gates next-action / doctor / finish follow: a bugfix's design gate is due on bug.md; +tdd adds Phase 4 (`tests`).
+  run(["create", "Tdd gate", "tdd", "--project", w5]);
+  let docCrash = null, docTdd = null;
+  try { docCrash = JSON.parse(run(["doctor", "crash", "--json", "--project", w5]).out); docTdd = JSON.parse(run(["doctor", "tdd-gate", "--json", "--project", w5]).out); } catch { /* invalid JSON */ }
+  ok(docCrash && docCrash.pendingGates.join() === "requirements,design,test-plan,tasks" && docTdd && docTdd.pendingGates.join() === "classification,requirements,design,test-plan,tests,tasks",
+    "doctor --json: a bugfix's design gate (bug.md) and a +tdd feature's Phase 4 gate (tests) are pending like the MCP (got " + (docCrash ? docCrash.pendingGates.join() : "?") + " / " + (docTdd ? docTdd.pendingGates.join() : "?") + ")");
 }
 
 if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_, import (Kiro · spec-kit · OpenSpec), create --brownfield (own block scope)
@@ -973,6 +987,17 @@ ok(rest10.code === 0 && /Restored 'billing' from \.specs\/_archive\/ ✓/.test(r
   "feature restore brings an archived feature back with the dependsOn references archive pruned");
 const rest2 = r10(["feature", "restore", "billing"]);
 ok(rest2.code === 1 && /Nothing is archived as 'billing'/.test(rest2.out) && /restore/.test(r10(["feature"]).out), "feature restore of nothing archived exits 1; the usage names restore");
+// archive → rename the dependent → restore: the dependency comes back under the new name (rename prints what it updated).
+const w10rn = path.join(tmp, "wp10-rename");
+run(["init", "core", "--project", w10rn]);
+["Auth", "Billing"].forEach((n) => run(["create", n, "core", "--project", w10rn]));
+run(["depend", "billing", "auth", "--project", w10rn]);
+run(["feature", "archive", "auth", "--project", w10rn]);
+const ren10c = run(["feature", "rename", "billing", "payments", "--project", w10rn]);
+const rest10c = run(["feature", "restore", "auth", "--project", w10rn]);
+ok(ren10c.code === 0 && /Renamed 'billing' → 'payments' ✓\n {2}archive records updated to the new name .*: auth/.test(ren10c.out) && rest10c.code === 0 && !/Not restored/.test(rest10c.out) &&
+  JSON.parse(fs.readFileSync(path.join(w10rn, ".specs", "roadmap.json"), "utf8")).features.payments.dependsOn.join() === "auth",
+  "feature rename updates archived features' records (and says so) — restore then puts payments → auth back");
 
 // drift: no baseline yet → a note, exit 0; a baseline + an edited implementing file → exit 1 with the file named.
 const dr10 = r10(["drift"]);
@@ -1013,7 +1038,7 @@ fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens
   ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
 [1, 2, 3].forEach((n) => S10.completeTask(w10f, "login-loop", n));
 S10.completeTask(w10f, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
-["requirements", "test-plan", "tasks"].forEach((p) => S10.approvePhase(w10f, "login-loop", p));
+["requirements", "design", "test-plan", "tasks"].forEach((p) => S10.approvePhase(w10f, "login-loop", p));
 const fin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
 const fin10State = JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
 ok(fin10.code === 0 && /Drift baseline recorded: 1 implementing file\(s\)/.test(fin10.out) && Object.keys(fin10State.finished.files).join() === "src/auth.js" &&

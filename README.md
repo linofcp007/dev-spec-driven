@@ -96,7 +96,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   earlier phases), a fresh feature starts at phase `requirements`, and `ears_validate` reports a
   `placeholder` code.
 - **`next_action` follows the chain:** fill → re-review → fix → approve → implement → finish. It never
-  recommends an approval the gate would refuse; it names what the gate fails on instead.
+  recommends an approval the gate would refuse; it names what the gate fails on instead. On +tdd / +ai, Phase 4
+  (failing tests / eval harness, `approve <f> tests`) is a gate it asks for before any task is implemented.
 - **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
   command, exit code and output summary, and refuses the tick on a failure. A task with a runnable
   `_Verify:_` counts as verified only with the command and exit code 0 — a text note ticks it but leaves
@@ -319,7 +320,8 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   anteriores), uma funcionalidade nova começa na fase `requirements` e o `ears_validate` reporta o código
   `placeholder`.
 - **O `next_action` segue a cadeia:** preencher → rever → corrigir → aprovar → implementar → fechar. Nunca
-  recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha.
+  recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha. Em +tdd / +ai, a Fase 4
+  (testes a falhar / harness de evals, `approve <f> tests`) é um gate que pede antes de implementar qualquer tarefa.
 - **Evidência antes de afirmações.** As tarefas declaram `_Verify: <comando>_`; `spec_complete_task` regista
   o comando, o código de saída e um resumo, e recusa a marcação quando falha. Uma tarefa com um `_Verify:_`
   executável só fica verificada com o comando e o código de saída 0 — uma nota de texto marca-a, mas deixa-a
@@ -545,7 +547,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   actual y en las anteriores), una función nueva empieza en la fase `requirements` y `ears_validate` informa
   del código `placeholder`.
 - **`next_action` sigue la cadena:** completar → revisar → corregir → aprobar → implementar → cerrar. Nunca
-  recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla.
+  recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla. En +tdd / +ai, la Fase 4
+  (pruebas en rojo / harness de evals, `approve <f> tests`) es un gate que pide antes de implementar ninguna tarea.
 - **Evidencia antes que afirmaciones.** Las tareas declaran `_Verify: <comando>_`; `spec_complete_task`
   registra el comando, el código de salida y un resumen, y rechaza la marca si falla. Una tarea con un
   `_Verify:_` ejecutable solo queda verificada con el comando y el código de salida 0 — una nota de texto la

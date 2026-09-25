@@ -18,12 +18,13 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   a bugfix's `root-cause`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,
-  `secondary-trace` (EC / NFR / SC IDs no task or test covers), `tests-in-code` (T-IDs made green by done tasks that
+  `secondary-trace` (EC / NFR / SC IDs no task or test covers), `supersedes` (`_Supersedes:_` references that resolve
+  to nothing — the catalog shows the AC they meant to replace as current), `tests-in-code` (T-IDs made green by done tasks that
   no test file names), `verification` (ticked tasks without a passing run — the reason per task: no evidence,
   note on a runnable `_Verify:_`, failed run, stale evidence, duplicate number), `duplicate-tasks`,
   `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve),
-  `approval-gates` (pending phases, the gate the next approval would fail, forced approvals), a bugfix's
-  `reproduction`.
+  `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai — the gate the
+  next approval would fail, forced approvals), a bugfix's `reproduction`.
 
 List exactly what to fix before advancing, then the warnings worth acting on. `nextGate` says whether the next
 pending approval would pass (`/approve` refuses while its checks fail).

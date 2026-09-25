@@ -24,9 +24,9 @@ when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the us
 
 ## Preconditions (check before Task 1)
 
-1. `spec_doctor <feature>` → `readyToAdvance: true` and the **tasks** phase approved (`gatesOk`). On
-   +tdd, Phase 4 (failing tests) is approved too — implementers make planned tests green, they don't
-   write the test plan.
+1. `spec_doctor <feature>` → `readyToAdvance: true` and every gate approved (`gatesOk` — the **tasks** phase
+   and, on +tdd / +ai, Phase 4 `tests`: the failing tests are written and approved — implementers make planned
+   tests green, they don't write the test plan).
 2. **Not on the default branch** without the user's explicit consent — create a feature branch (or a
    worktree) first.
 3. `trace_check <feature>` passes — phantom AC/T references become `unresolved` in every brief and

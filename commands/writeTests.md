@@ -19,4 +19,9 @@ no plan has (`inCodeNotInPlan`). Commit `test(<feature>): scaffold failing tests
 **+ai:** Write the deterministic tests (validation, schema, rate limiting, logging, fallback, cost
 circuit breaker) AND implement the runnable eval harness; establish and record the baseline scores.
 
-**No implementation code is written until this gate is approved.**
+**No implementation code is written until this gate is approved.** Present the counts (N written, N red, 0 green,
+0 erroring; the `trace_check {code: true}` result) and, when the user signs off, record it with `spec_approve
+{name, phase: "tests"}` (CLI `dev-spec approve <feature> tests`). The engine tracks this gate: on a +tdd / +ai
+feature with a test or eval plan, `tests` stays in `pendingGates` (so `gatesOk` is false, `spec_next_action` asks
+for it instead of the next task, and `spec_finish` blocks) until it is approved. A bugfix has no Phase 4 gate — its
+failing regression test is one of its tasks.

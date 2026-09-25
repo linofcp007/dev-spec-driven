@@ -15,7 +15,11 @@ Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
 - **restore** — move `.specs/_archive/<slug>/` back and put back its roadmap entry and the `dependsOn` references
   archive pruned — only for features that still exist (and never one that would now close a cycle); the rest are
   listed in `skipped`. An error when an active feature already has that slug or nothing is archived under the name.
-- **rename** — change the slug + folder + `roadmap.json` key, updating every `dependsOn` reference to it.
+- **rename** — change the slug + folder + `roadmap.json` key, updating every reference to it: `dependsOn` lists,
+  `_Supersedes: <old>/US-n.AC-m_` markers in other features' requirements.md (active and archived — never an example
+  in a comment or fenced code; an approved requirements.md then shows as changed-since-approval, re-approve it) and
+  archived features' archive records (so restore brings their dependencies back). The result lists them
+  (`supersedesUpdated`, `archiveRecordsUpdated`, `note`).
 - **remove** — permanently delete the feature's folder. **Destructive**: without `confirm: true` (CLI `--yes`)
   nothing is deleted and the result lists what would be (`needsConfirm`). Show that list to the user and pass
   `confirm: true` only after they confirm (or were explicit) — suggest archive instead.

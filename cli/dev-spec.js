@@ -572,7 +572,10 @@ function main() {
       }
       if (!r.ok) die(r.error);
       return out(r, (r) => {
-        if (r.action === "rename") console.log(T.renamed(r.from, r.to));
+        if (r.action === "rename") {
+          console.log(T.renamed(r.from, r.to));
+          if (r.note) console.log("  " + r.note); // _Supersedes:_ references / archive records that follow the new name
+        }
         else if (r.action === "archive") console.log(T.archived(r.feature, String(r.dest).replace(/\\/g, "/")));
         else if (r.action === "restore") {
           const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language

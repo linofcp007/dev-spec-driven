@@ -76,7 +76,7 @@ const BUILD = {
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [none beyond core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
       return (
 `# Classification: ${a.name}
 
@@ -645,7 +645,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[sinal]"} — [porque se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [nenhum além de core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- nenhum além de core";
       return (
 `# Classificação: ${a.name}
 
@@ -1210,7 +1210,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[señal]"} — [por qué se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [ninguno además de core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- ninguno además de core";
       return (
 `# Clasificación: ${a.name}
 
@@ -2009,6 +2009,8 @@ const MSG = {
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Review & approve the test plan — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Review & approve the eval plan — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Review & approve bug.md (Reproduction + Root Cause — a bugfix's design) — /approve ${slug} design.`,
+      approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /writeTests ${slug}; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
@@ -2511,6 +2513,7 @@ const MSG = {
     // `_Supersedes:_` references trace_check can't resolve — warnings, never an AC gap (reason codes stay English).
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (on ${by})` : ""} — ${reason}`,
+      renamed: (list) => `_Supersedes:_ references to it now use the new name, in: ${list}`,
       reason: { "bad-ref": "not <feature>/US-n.AC-m", "unknown-feature": "no such feature (active or archived)", "unknown-ac": "that feature has no such AC", self: "a feature can't supersede its own AC", unterminated: "the marker is never closed — end it with an underscore: _Supersedes: <feature>/US-n.AC-m_" },
     },
     restore: {
@@ -2523,6 +2526,7 @@ const MSG = {
       skipRecord: (field, reason) => `the archive record's ${field} (${reason})`,
       skipped: (list) => `Not restored: ${list}.`,
       reason: { gone: "no longer exists", cycle: "would close a dependency cycle", invalid: "unexpected shape — left out" },
+      renamedRecords: (list) => `archive records updated to the new name (restore puts their dependencies back): ${list}`,
     },
     drift: {
       none: "No finished feature has a drift baseline yet — spec_finish {write: true} (dev-spec finish <feature> --write) records one when a feature is ready to finish.",
@@ -2716,6 +2720,8 @@ const MSG = {
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Revê e aprova o plano de testes — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revê e aprova o plano de evals — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Revê e aprova o bug.md (Reprodução + Causa Raiz — o design de um bugfix) — /approve ${slug} design.`,
+      approveTests: (slug, what) => `Fase 4, o gate rígido: ${({ tdd: "escreve todos os testes planeados e confirma que cada um falha pela razão certa", ai: "escreve os testes determinísticos e o harness de evals, e regista a baseline", both: "escreve todos os testes planeados (cada um a falhar pela razão certa) e o harness de evals, e regista a baseline" })[what]} — /writeTests ${slug}; nenhum código de implementação antes disso. Depois aprova — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
@@ -3172,6 +3178,7 @@ const MSG = {
     },
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (em ${by})` : ""} — ${reason}`,
+      renamed: (list) => `as referências _Supersedes:_ a ela passam a usar o nome novo, em: ${list}`,
       reason: { "bad-ref": "não está no formato <feature>/US-n.AC-m", "unknown-feature": "essa feature não existe (ativa ou arquivada)", "unknown-ac": "essa feature não tem esse critério", self: "uma feature não pode substituir um critério seu", unterminated: "o marcador nunca é fechado — termina-o com um underscore: _Supersedes: <feature>/US-n.AC-m_" },
     },
     restore: {
@@ -3184,6 +3191,7 @@ const MSG = {
       skipRecord: (field, reason) => `o campo ${field} do registo de arquivo (${reason})`,
       skipped: (list) => `Não restaurado: ${list}.`,
       reason: { gone: "já não existe", cycle: "fecharia um ciclo de dependências", invalid: "formato inesperado — deixado de fora" },
+      renamedRecords: (list) => `registos de arquivo atualizados para o nome novo (o restore repõe as suas dependências): ${list}`,
     },
     drift: {
       none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (dev-spec finish <feature> --write) regista uma quando a feature está pronta para fechar.",
@@ -3374,6 +3382,8 @@ const MSG = {
       approveTasks: (slug) => `Revisa y aprueba el desglose de tareas — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Revisa y aprueba el plan de pruebas — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revisa y aprueba el plan de evals — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Revisa y aprueba bug.md (Reproducción + Causa Raíz — el diseño de un bugfix) — /approve ${slug} design.`,
+      approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /writeTests ${slug}; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
@@ -3830,6 +3840,7 @@ const MSG = {
     },
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (en ${by})` : ""} — ${reason}`,
+      renamed: (list) => `las referencias _Supersedes:_ a ella usan ahora el nombre nuevo, en: ${list}`,
       reason: { "bad-ref": "no tiene el formato <función>/US-n.AC-m", "unknown-feature": "esa función no existe (activa o archivada)", "unknown-ac": "esa función no tiene ese criterio", self: "una función no puede sustituir un criterio propio", unterminated: "el marcador nunca se cierra — termínalo con un guion bajo: _Supersedes: <función>/US-n.AC-m_" },
     },
     restore: {
@@ -3842,6 +3853,7 @@ const MSG = {
       skipRecord: (field, reason) => `el campo ${field} del registro de archivado (${reason})`,
       skipped: (list) => `No restaurado: ${list}.`,
       reason: { gone: "ya no existe", cycle: "cerraría un ciclo de dependencias", invalid: "formato inesperado — se omite" },
+      renamedRecords: (list) => `registros de archivo actualizados al nombre nuevo (restore repone sus dependencias): ${list}`,
     },
     drift: {
       none: "Ninguna función cerrada tiene todavía una línea base de drift — spec_finish {write: true} (dev-spec finish <función> --write) registra una cuando la función está lista para cerrar.",

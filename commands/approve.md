@@ -16,7 +16,9 @@ check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `succ
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
 `saas-sections` / `ai-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
 `bug.md`); test-plan: `placeholders`, `traceability`; eval-plan: `placeholders`; tasks: `placeholders`,
-`traceability`. On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
+`traceability`; tests (the Phase 4 sign-off — failing tests / eval harness written and red) and execution have no
+checks. `tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
+`gatesOk` stays false and `spec_next_action` asks for it until it is approved. On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
 
 `force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only
 when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —

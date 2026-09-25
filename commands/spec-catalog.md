@@ -19,5 +19,7 @@ feature. A criterion a later feature replaced is shown as **superseded**, naming
 **Superseding a criterion.** When a new feature changes behaviour an older feature specified, mark the NEW
 criterion with the English-stable marker `_Supersedes: <feature>/US-n.AC-m[, …]_` (on the criterion's line, a
 sub-line under it, or its table row), e.g. `1. **US-1.AC-2** — WHEN … THE SYSTEM SHALL … _Supersedes: login/US-2.AC-3_`.
-`trace_check` reports markers that resolve to nothing as `phantomSupersedes` warnings — fix the reference.
+`trace_check` reports markers that resolve to nothing as `phantomSupersedes` warnings (and `spec_doctor` as its
+`supersedes` warning) — fix the reference. Renaming a feature (`spec_feature rename`) rewrites the markers that
+name it.
 Respond in the user's language (EN/PT/ES).
