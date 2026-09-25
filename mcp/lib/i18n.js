@@ -2335,6 +2335,43 @@ const MSG = {
     // @wp WP10 <<<
 
     // @wp WP11 msg-en >>>
+    // Guard mode (hooks/guard-hook.js, PreToolUse · spec_init {guard} · `dev-spec init --guard on|off`).
+    guardMode: {
+      ask: (pending) => "dev-spec guard: no approved tasks cover code changes right now — approve a feature's tasks (spec_approve) or confirm to proceed." +
+        (pending ? ` Features with tasks awaiting approval: ${pending}.` : "") + " (Guard mode is on — dev-spec init --guard off disables it.)",
+      forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
+      on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard).",
+      off: "Guard mode OFF — code edits are not gated.",
+      badValue: (v) => `--guard takes on or off (got '${v}').`,
+    },
+    // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
+    scopedSteering: {
+      customHint: "— or a custom scoped steering file: lowercase letters, digits and '-', ending in .md (e.g. api-conventions.md).",
+      reservedName: (file) => `'${file}' is a reserved name (a Windows device name or a JavaScript built-in) — pick another steering file name.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Scoped steering. The front matter decides when spec_task_brief includes this file:\n" +
+        "     inclusion: always    → in every task brief\n" +
+        "     inclusion: fileMatch → only for tasks whose _Implements:_ paths match fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; a list is allowed: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → never automatically; briefs list it as available on request\n" +
+        "     Replace the example pattern and the bracketed lines below. -->\n\n" +
+        "## Rules\n- [A rule every file matching the pattern must follow.]\n\n## Examples\n- [A short example — or a pointer to a file that shows the pattern.]\n",
+      placeholders: (list) => `still template placeholders: ${list}`,
+      scoped: "Scoped steering (fileMatch — matches this task's files):",
+      manual: "Available on request (manual steering):",
+    },
+    // PostToolUse hook: design.md saved → its mandatory checks for the ACTIVE tracks.
+    designSaveCheck: {
+      head: (slug, tracks) => `Design check on design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Design check [${tracks}]: mandatory sections${constitution ? " and the Constitution Check" : ""} filled, no template placeholders ✓`,
+      sections: (marker, list) => `${marker} sections: ${list}`,
+      constitution: {
+        missing: "Constitution Check: missing — add the section and check each principle of steering/constitution.md",
+        unfilled: "Constitution Check: not filled in",
+      },
+      placeholders: (n, list) => `${n} template placeholder(s) left: ${list}`,
+      hint: (slug) => `Fill them before approving the design — details: /spec-doctor ${slug}.`,
+    },
     // @wp WP11 <<<
   },
 
@@ -2821,6 +2858,40 @@ const MSG = {
     // @wp WP10 <<<
 
     // @wp WP11 msg-pt >>>
+    guardMode: {
+      ask: (pending) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
+        (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
+      forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
+      on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard).",
+      off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
+      badValue: (v) => `--guard aceita on ou off (recebido '${v}').`,
+    },
+    scopedSteering: {
+      customHint: "— ou um ficheiro de steering próprio, com âmbito: letras minúsculas, algarismos e '-', a terminar em .md (ex.: api-conventions.md).",
+      reservedName: (file) => `'${file}' é um nome reservado (um nome de dispositivo do Windows ou um membro nativo do JavaScript) — escolhe outro nome para o ficheiro de steering.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Steering com âmbito. O front matter decide quando o spec_task_brief inclui este ficheiro:\n" +
+        "     inclusion: always    → em todos os briefs de tarefa\n" +
+        "     inclusion: fileMatch → só nas tarefas cujos caminhos _Implements:_ correspondem ao fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; aceita uma lista: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → nunca automaticamente; os briefs listam-no como disponível a pedido\n" +
+        "     Substitui o padrão de exemplo e as linhas entre parênteses retos abaixo. -->\n\n" +
+        "## Regras\n- [Uma regra que todos os ficheiros que correspondem ao padrão têm de seguir.]\n\n## Exemplos\n- [Um exemplo curto — ou uma referência a um ficheiro que mostre o padrão.]\n",
+      placeholders: (list) => `ainda com placeholders do template: ${list}`,
+      scoped: "Steering com âmbito (fileMatch — corresponde aos ficheiros desta tarefa):",
+      manual: "Disponível a pedido (steering manual):",
+    },
+    designSaveCheck: {
+      head: (slug, tracks) => `Verificação do design em design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Verificação do design [${tracks}]: secções obrigatórias${constitution ? " e Verificação da Constituição" : ""} preenchidas, sem placeholders do template ✓`,
+      sections: (marker, list) => `secções ${marker}: ${list}`,
+      constitution: {
+        missing: "Verificação da Constituição: em falta — acrescenta a secção e verifica cada princípio de steering/constitution.md",
+        unfilled: "Verificação da Constituição: por preencher",
+      },
+      placeholders: (n, list) => `${n} placeholder(s) do template por substituir: ${list}`,
+      hint: (slug) => `Preenche-os antes de aprovar o design — detalhes: /spec-doctor ${slug}.`,
+    },
     // @wp WP11 <<<
   },
 
@@ -3307,6 +3378,40 @@ const MSG = {
     // @wp WP10 <<<
 
     // @wp WP11 msg-es >>>
+    guardMode: {
+      ask: (pending) => "dev-spec guard: ninguna tarea aprobada cubre cambios de código ahora mismo — aprueba las tareas de una función (spec_approve) o confirma para continuar." +
+        (pending ? ` Funciones con tareas pendientes de aprobación: ${pending}.` : "") + " (El modo guardia está activado — dev-spec init --guard off lo desactiva.)",
+      forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
+      on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard).",
+      off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
+      badValue: (v) => `--guard admite on u off (recibido '${v}').`,
+    },
+    scopedSteering: {
+      customHint: "— o un fichero de steering propio, con alcance: letras minúsculas, dígitos y '-', terminado en .md (p. ej. api-conventions.md).",
+      reservedName: (file) => `'${file}' es un nombre reservado (un nombre de dispositivo de Windows o un miembro nativo de JavaScript) — elige otro nombre para el fichero de steering.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Steering con alcance. El front matter decide cuándo spec_task_brief incluye este fichero:\n" +
+        "     inclusion: always    → en todos los briefs de tarea\n" +
+        "     inclusion: fileMatch → solo en las tareas cuyas rutas _Implements:_ coinciden con fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; admite una lista: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → nunca automáticamente; los briefs lo listan como disponible bajo petición\n" +
+        "     Sustituye el patrón de ejemplo y las líneas entre corchetes de abajo. -->\n\n" +
+        "## Reglas\n- [Una regla que todo fichero que coincida con el patrón debe seguir.]\n\n## Ejemplos\n- [Un ejemplo breve — o una referencia a un fichero que muestre el patrón.]\n",
+      placeholders: (list) => `aún con placeholders de la plantilla: ${list}`,
+      scoped: "Steering con alcance (fileMatch — coincide con los ficheros de esta tarea):",
+      manual: "Disponible bajo petición (steering manual):",
+    },
+    designSaveCheck: {
+      head: (slug, tracks) => `Verificación del diseño en design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Verificación del diseño [${tracks}]: secciones obligatorias${constitution ? " y Verificación de la Constitución" : ""} rellenadas, sin placeholders de la plantilla ✓`,
+      sections: (marker, list) => `secciones ${marker}: ${list}`,
+      constitution: {
+        missing: "Verificación de la Constitución: falta — añade la sección y verifica cada principio de steering/constitution.md",
+        unfilled: "Verificación de la Constitución: sin rellenar",
+      },
+      placeholders: (n, list) => `${n} placeholder(s) de la plantilla por sustituir: ${list}`,
+      hint: (slug) => `Rellénalos antes de aprobar el diseño — detalles: /spec-doctor ${slug}.`,
+    },
     // @wp WP11 <<<
   },
 };
@@ -3539,11 +3644,18 @@ function renderBrief(d, lang) {
   }
 
   const constraints = d.globalConstraints || [];
-  if (constraints.length || d.steering.length) {
+  const scoped = d.steeringScoped || []; // fileMatch steering matching this task's files, quoted (front matter stripped)
+  const manual = d.steeringManual || [];
+  if (constraints.length || d.steering.length || manual.length) {
     push("", t.steering);
     if (constraints.length) push(t.constraintsIntro, ...constraints);
     if (constraints.length && d.steering.length) push("");
     if (d.steering.length) push(t.steeringRead + " " + d.steering.map((p) => "`" + p + "`").join(", "));
+    const S = MSG[normalizeLang(lang)].scopedSteering;
+    // Quoted as a blockquote: the file's own headings can't break the brief's outline.
+    if (scoped.length) push("", S.scoped);
+    scoped.forEach((s) => push("", `**\`${s.path}\`** (fileMatch: ${s.patterns.map((p) => "`" + p + "`").join(", ")})`, ...s.body.split(/\r?\n/).map((l) => (l ? "> " + l : ">"))));
+    if (manual.length) push("", S.manual + " " + manual.map((p) => "`" + p + "`").join(", "));
   }
 
   if (d.unresolved.acs.length || d.unresolved.tests.length) {

@@ -2588,6 +2588,226 @@ function payload(res) {
   // @wp WP10 <<<
 
   // @wp WP11 tests >>>
+  // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
+  {
+    const call11 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    const specHookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    // The test runner may itself run inside Claude Code: never let its CLAUDE_PROJECT_DIR leak into the hook.
+    const runGuard = (input, env) => spawnSync(process.execPath, [guardJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) } });
+    const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+    const asked = (r) => { try { const j = JSON.parse(r.stdout); return j.hookSpecificOutput && j.hookSpecificOutput.hookEventName === "PreToolUse" && j.hookSpecificOutput.permissionDecision === "ask" ? j.hookSpecificOutput.permissionDecisionReason : null; } catch { return null; } };
+    const silent = (r) => r.status === 0 && r.stdout === "";
+    const writeState = (dir, st) => fs.writeFileSync(path.join(dir, ".state.json"), JSON.stringify(st, null, 2));
+
+    // (F1) spec_init {guard}: with or without tracks, idempotent, always reports the current state; the CLI's value.
+    const g = path.join(tmp, "proj-wp11-guard");
+    const gi1 = await call11("spec_init", { guard: true, projectDir: g });
+    const rmFile = path.join(g, ".specs", "roadmap.json");
+    const rm1 = fs.readFileSync(rmFile, "utf8");
+    const gi2 = await call11("spec_init", { tracks: ["tdd"], guard: true, projectDir: g });
+    const gi3 = await call11("spec_init", { tracks: ["tdd"], projectDir: g });
+    ok(!gi1.isError && gi1.p.guard === true && /Guard mode ON/.test(gi1.p.guardNote) && JSON.parse(rm1).meta.guard === true &&
+      gi2.p.guard === true && fs.readFileSync(rmFile, "utf8") === rm1 && gi2.p.created.includes("testing-standards.md") && gi3.p.guard === true && gi3.p.guardNote === undefined,
+      "spec_init {guard: true} sets roadmap.json meta.guard (no tracks needed); again with tracks → unchanged file; without guard → reports the current state, no note");
+    const gBad = await call11("spec_init", { guard: "yes", projectDir: g });
+    const gOff = await call11("spec_init", { guard: false, projectDir: g });
+    ok(gBad.isError && /guard must be a boolean/.test(gBad.p.error) && gOff.p.guard === false && /Guard mode OFF/.test(gOff.p.guardNote) && S.readRoadmap(g).meta.guard === false,
+      "spec_init {guard: 'yes'} is an argument error (boolean); {guard: false} turns it off");
+    const gBroken = path.join(tmp, "proj-wp11-broken");
+    fs.mkdirSync(path.join(gBroken, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(gBroken, ".specs", "roadmap.json"), "{ nope");
+    const gBr = S.initProject(gBroken, ["core"], undefined, { guard: true });
+    ok(gBr.ok === false && /not valid JSON/.test(gBr.error) && !fs.existsSync(path.join(gBroken, ".specs", "steering")) && fs.readFileSync(path.join(gBroken, ".specs", "roadmap.json"), "utf8") === "{ nope",
+      "spec_init {guard} on a broken roadmap.json refuses before creating anything (the file is left as it was)");
+
+    // (F2) the PreToolUse hook with realistic payloads.
+    const gFeat = S.createFeature(g, "Billing", ["tdd"]);
+    const code = path.join(g, "src", "billing.ts");
+    ok(silent(runGuard(pre(g, "Write", { file_path: code, content: "x" }))), "guard OFF (meta.guard false) → the hook prints nothing and exits 0");
+    S.initProject(g, ["core"], undefined, { guard: true });
+    const askW = runGuard(pre(g, "Write", { file_path: code, content: "export const x = 1;" }));
+    const askReason = asked(askW);
+    let oneJson = false;
+    try { oneJson = typeof JSON.parse(askW.stdout) === "object" && !/\n./.test(askW.stdout.trim()); } catch { /* not one JSON object */ }
+    ok(askW.status === 0 && oneJson && /no approved tasks cover code changes right now/.test(askReason) && /spec_approve/.test(askReason) && /billing/.test(askReason),
+      "guard ON + no approved tasks + a code file → exactly one JSON object: permissionDecision 'ask' with the localized reason (names the feature awaiting approval)");
+    ok(asked(runGuard(pre(g, "Edit", { file_path: "src/billing.ts", old_string: "a", new_string: "b" }))) &&
+      asked(runGuard(pre(g, "NotebookEdit", { notebook_path: path.join(g, "nb", "explore.ipynb"), new_source: "x" }))) && S.guardCheck(g, "lib/x.py", g).decision === "ask",
+      "Edit with a path relative to cwd and NotebookEdit (notebook_path) are guarded too");
+    ok(silent(runGuard(pre(g, "Write", { file_path: path.join(gFeat.dir, "design.md") }))) && silent(runGuard(pre(g, "Write", { file_path: path.join(g, "README.md") }))) &&
+      S.guardCheck(g, path.join(g, "config", "app.json")).why === "not-code" && S.guardCheck(g, path.join(tmp, "elsewhere", "x.ts")).why === "outside" &&
+      S.guardCheck(g, path.join(g, "src", ".specs", "x.ts")).why === "specs",
+      "guard ON: files inside .specs/, non-code files and files outside the project pass silently");
+    const hookEnv = runGuard({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: code } }, { CLAUDE_PROJECT_DIR: g });
+    ok(!!asked(hookEnv), "without a payload cwd the project comes from CLAUDE_PROJECT_DIR");
+    // Approved + unfinished tasks cover code changes; a forced approval covers them too, but says so.
+    writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    ok(silent(runGuard(pre(g, "Write", { file_path: code }))), "guard ON + a feature with approved, unfinished tasks → silent (allowed)");
+    writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true, failing: ["placeholders"] } } });
+    const forcedOut = runGuard(pre(g, "Write", { file_path: code }));
+    let forcedJ = {};
+    try { forcedJ = JSON.parse(forcedOut.stdout); } catch { /* none */ }
+    ok(forcedOut.status === 0 && !asked(forcedOut) && !forcedJ.hookSpecificOutput && /FORCED tasks approval \(billing\)/.test(forcedJ.systemMessage || ""),
+      "a FORCED tasks approval still counts (no ask) — the hook mentions it in a systemMessage, never a permission decision");
+    fs.writeFileSync(path.join(gFeat.dir, "tasks.md"), fs.readFileSync(path.join(gFeat.dir, "tasks.md"), "utf8").replace(/- \[ \]/g, "- [x]"));
+    writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    const gc1 = S.guardCheck(g, code);
+    ok(gc1.decision === "ask" && gc1.why === "no-approved-tasks" && gc1.pending.length === 0 && /no approved tasks cover/.test(gc1.reason) && !/awaiting approval/.test(gc1.reason),
+      "approved tasks that are all done no longer cover code changes → ask");
+    const gArch = S.createFeature(g, "Old Work", ["core"]);
+    writeState(gArch.dir, { ...S.readState(g, "old-work"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    const gc2 = S.guardCheck(g, code);
+    S.manageFeature(g, "archive", "old-work");
+    ok(gc2.decision === "allow" && gc2.covering.join() === "old-work" && S.guardCheck(g, code).decision === "ask",
+      "an archived feature's approved tasks don't cover code changes (only non-archived features count)");
+    ok(silent(runGuard("not json at all")) && silent(runGuard({ hook_event_name: "PreToolUse", cwd: g, tool_input: { file_path: 42 } })), "a non-JSON payload or a non-string path → silent exit 0");
+    fs.writeFileSync(rmFile, "{ broken json");
+    ok(silent(runGuard(pre(g, "Write", { file_path: code }))) && S.guardCheck(g, code).decision === "allow" && S.guardEnabled(g) === false,
+      "a broken roadmap.json → silent exit 0 (the guard never blocks on its own errors)");
+    const gPt = path.join(tmp, "proj-wp11-guard-pt");
+    S.initProject(gPt, ["core"], "pt", { guard: true });
+    S.createFeature(gPt, "Pagamentos", ["core"]);
+    ok(/nenhuma tarefa aprovada cobre alterações de código/.test(asked(runGuard(pre(gPt, "Write", { file_path: path.join(gPt, "app.py") }))) || ""),
+      "the ask reason is in the PROJECT language (PT)");
+    const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const preCfg = (hooksCfg.PreToolUse || [])[0] || {};
+    ok(preCfg.matcher === "Write|Edit|MultiEdit|NotebookEdit" && preCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js"' && preCfg.hooks[0].timeout === 10 &&
+      hooksCfg.PostToolUse && hooksCfg.SessionStart && !fs.readFileSync(guardJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "hooks.json wires the guard as PreToolUse (Write|Edit|MultiEdit|NotebookEdit, timeout 10) beside the existing hooks; no literal BOM in guard-hook.js");
+
+    // (H3) zero-dep glob + Kiro-compatible front matter.
+    const globCases = [["src/api/**", "src/api/users.ts", true], ["src/api/**", "src/apix/users.ts", false], ["src/api/**", "src/lib/x.ts", false],
+      ["**/*.ts", "a.ts", true], ["**/*.ts", "a/b/c.ts", true], ["**/*.ts", "a/b/c.tsx", false], ["src/*.js", "src/a.js", true], ["src/*.js", "src/a/b.js", false],
+      ["src/?.js", "src/a.js", true], ["src/?.js", "src/ab.js", false], ["src/**/*.{ts,tsx}", "src/a/b.tsx", true], ["src/**/*.{ts,tsx}", "src/a/b.js", false],
+      ["{src,lib}/**", "lib/x/y.js", true], ["src/{a,b/{c,d}}/*.js", "src/b/d/x.js", true], ["src/{a,b/{c,d}}/*.js", "src/b/e/x.js", false],
+      ["src/{a/x.js", "src/{a/x.js", true], ["./src/**", "src/x.js", true], ["src\\api\\**", "src/api/x.js", true], ["src/**/test.js", "src/test.js", true],
+      ["src/a.js", "src/a.js", true], ["src/a.js", "src/aXjs", false], ["", "src/a.js", false]];
+    const globBad = globCases.filter(([gp, fp, want]) => S.steeringGlobMatch(gp, fp) !== want).map(([gp, fp]) => gp + " ~ " + fp);
+    ok(globBad.length === 0, "steeringGlobMatch: ** · * · ? · {a,b} (nested, unbalanced = literal) · ./ and backslashes normalized (wrong: " + globBad.join(" | ") + ")");
+    const fmA = S.steeringFrontMatter("\uFEFF---\r\ninclusion: fileMatch\r\nfileMatchPattern: [\"src/api/**\", 'lib/{a,b}/**'] # two\r\n---\r\n# Body\r\ntext");
+    const fmB = S.steeringFrontMatter("---\n# a comment\ninclusion: \"manual\" # why\nfileMatchPattern:\n  - \"a/**\"\n  - b/**\n---\n\nbody");
+    const fmC = S.steeringFrontMatter("---\ntitle: x\n---\nb");
+    const fmD = S.steeringFrontMatter("# Plain\n---\ninclusion: manual\n---\n");
+    const fmE = S.steeringFrontMatter("---\nSome intro prose under a rule.\n\n---\n# Title\n");
+    ok(fmA.frontMatter && fmA.inclusion === "fileMatch" && fmA.patterns.join("|") === "src/api/**|lib/{a,b}/**" && fmA.body === "# Body\ntext" &&
+      fmB.inclusion === "manual" && fmB.patterns.join("|") === "a/**|b/**" && fmB.body === "body" && fmC.inclusion === "always" &&
+      S.steeringFrontMatter("---\ninclusion: auto\n---\nx").inclusion === "manual" && !fmD.frontMatter && fmD.inclusion === null && fmD.body.startsWith("# Plain") &&
+      !fmE.frontMatter && fmE.body.startsWith("---\nSome intro") && !S.steeringFrontMatter("---\n# Heading\n---\ntext").frontMatter,
+      "steeringFrontMatter: CRLF + BOM + quoted list (a comma inside {…} doesn't split), YAML '- item' lists, comments; no inclusion → always; unknown (auto) → manual; front matter only at the top, and only YAML-looking (a '---' rule over prose is not)");
+
+    // (H3) spec_task_brief: default files, always, fileMatch on _Implements:_ (quoted, front matter stripped), manual listed.
+    const b11 = path.join(tmp, "proj-wp11-brief");
+    S.initProject(b11, ["core"], "en");
+    const bf = S.createFeature(b11, "Api", ["core"]);
+    const stDir = path.join(b11, ".specs", "steering");
+    fs.writeFileSync(path.join(stDir, "api-rules.md"), "\uFEFF---\r\ninclusion: fileMatch\r\nfileMatchPattern: [\"src/api/**\", 'src/routes/*.{ts,js}']\r\n---\r\n# API rules\r\n\r\n- Every handler validates its input with zod.\r\n");
+    fs.writeFileSync(path.join(stDir, "ui-rules.md"), "---\ninclusion: fileMatch\nfileMatchPattern: \"src/ui/**\"\n---\n# UI\n- Use the design tokens.\n");
+    fs.writeFileSync(path.join(stDir, "security.md"), "---\ninclusion: always\n---\n# Security\n- No secrets in logs.\n");
+    fs.writeFileSync(path.join(stDir, "release.md"), "---\ninclusion: manual\n---\n# Release\n- Tag every release.\n");
+    fs.writeFileSync(path.join(stDir, "notes.md"), "# Notes (no front matter, not a default file)\n- stays out\n");
+    fs.writeFileSync(path.join(stDir, "tech.md"), "---\ninclusion: manual\n---\n# Tech\n- Node 20\n");
+    S.scaffoldSteeringFile(b11, "api-todo.md"); // the custom stub: fileMatch src/api/** but still placeholders
+    fs.writeFileSync(path.join(bf.dir, "tasks.md"), "- [ ] 1. [US1] Add the users endpoint\n  - _Implements: src/api/users.ts, ./src/routes/index.js_\n- [ ] 2. [US1] Docs\n  - _Implements: docs/guide.md_\n");
+    const br1 = (await call11("spec_task_brief", { name: "api", number: 1, projectDir: b11 })).p;
+    const inc = (b) => b.steering.included.map((s) => s.file.replace(".specs/steering/", "") + ":" + s.inclusion).join(",");
+    const apiRow = br1.steering.included.find((s) => /api-rules/.test(s.file)) || {};
+    const todoRow = br1.steering.included.find((s) => /api-todo/.test(s.file)) || {};
+    ok(inc(br1) === "constitution.md:always,structure.md:always,api-rules.md:fileMatch,api-todo.md:fileMatch,security.md:always" &&
+      br1.steering.manual.join() === ".specs/steering/tech.md,.specs/steering/release.md" &&
+      apiRow.matched.join() === "src/api/users.ts,src/routes/index.js" && apiRow.quoted === true && todoRow.quoted === false,
+      "task brief steering: defaults without front matter = always, tech.md with 'manual' drops out, fileMatch included only when an _Implements:_ path matches, always included, manual listed; no-front-matter extras stay out (got " + inc(br1) + ")");
+    const brText = br1.brief.split("## Global constraints")[1] || "";
+    ok(/Read before coding: .*`\.specs\/steering\/api-rules\.md`.*`\.specs\/steering\/security\.md`/.test(brText) &&
+      /Scoped steering \(fileMatch — matches this task's files\):/.test(brText) && /> - Every handler validates its input with zod\./.test(brText) &&
+      !/inclusion:|fileMatchPattern:/.test(br1.brief) && !/A rule every file matching/.test(br1.brief) && /Available on request \(manual steering\): `\.specs\/steering\/tech\.md`, `\.specs\/steering\/release\.md`/.test(brText),
+      "the brief quotes the matching fileMatch file with its front matter stripped (a placeholder-only stub is listed, never quoted) and lists manual files as available on request");
+    const br2 = S.taskBrief(b11, "api", 2);
+    ok(inc(br2) === "constitution.md:always,structure.md:always,security.md:always" && !/Scoped steering/.test(br2.brief),
+      "a task whose files match no pattern gets no fileMatch steering");
+
+    // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
+    const c11 = path.join(tmp, "proj-wp11-custom");
+    const cs1 = (await call11("steering_scaffold", { file: "api-conventions.md", projectDir: c11 })).p;
+    const csText = fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8");
+    const csFm = S.steeringFrontMatter(csText);
+    const cs2 = (await call11("steering_scaffold", { file: "api-conventions.md", projectDir: c11 })).p;
+    const csPt = (await call11("steering_scaffold", { file: "regras-ui.md", lang: "pt", projectDir: c11 })).p;
+    const csPtText = fs.readFileSync(path.join(c11, ".specs", "steering", "regras-ui.md"), "utf8");
+    const csKnown = (await call11("steering_scaffold", { file: "scale.md", projectDir: c11 })).p;
+    ok(cs1.ok && cs1.created && cs1.custom === true && csFm.inclusion === "fileMatch" && csFm.patterns.join() === "src/api/**" && /^# Api Conventions$/m.test(csText) &&
+      S.artifactState({ text: csFm.body }) === "placeholder" && cs2.ok && cs2.created === false && fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8") === csText &&
+      csPt.custom && /^## Regras$/m.test(csPtText) && /Steering com âmbito/.test(csPtText) && csKnown.custom === undefined && /# Scale Targets/.test(fs.readFileSync(csKnown.file, "utf8")),
+      "steering_scaffold: a custom name → a localized stub with front matter (inclusion: fileMatch + example pattern), never overwritten; known names keep their templates");
+    const rejects = [];
+    for (const nm of ["nul.md", "com1.md", "constructor.md", "../evil.md", "a/b.md", "a\\b.md", "Api.md", "-lead.md", "notes.txt", "x".repeat(64) + ".md", "__proto__", "toString"]) {
+      const r = await call11("steering_scaffold", { file: nm, projectDir: c11 });
+      if (!(r.isError && r.p.ok === false)) rejects.push(nm);
+    }
+    const nulErr = (await call11("steering_scaffold", { file: "nul.md", projectDir: c11 })).p.error;
+    const badErr = (await call11("steering_scaffold", { file: "Api.md", projectDir: c11 })).p.error;
+    const longOk = (await call11("steering_scaffold", { file: "x".repeat(63) + ".md", projectDir: c11 })).p;
+    ok(rejects.length === 0 && /reserved name/.test(nulErr) && /Unknown steering file 'Api\.md'/.test(badErr) && /custom scoped steering file/.test(badErr) && longOk.ok && longOk.custom &&
+      !fs.readdirSync(path.join(c11, ".specs", "steering")).some((n) => ["nul.md", "com1.md", "constructor.md", "Api.md", "-lead.md", "notes.txt"].includes(n)) && !fs.existsSync(path.join(c11, ".specs", "evil.md")),
+      "custom steering names are refused when unsafe: device names (nul/com1), prototype keys, separators/'..', uppercase, a leading '-', non-.md, > 63 chars (rejected: " + rejects.join(", ") + ")");
+
+    // (H5) doctor: the steering check warns about steering files still holding template placeholders.
+    const docSt = (dir, name) => S.specDoctor(dir, name).checks.find((c) => c.id === "steering");
+    const d11 = path.join(tmp, "proj-wp11-doctor");
+    S.initProject(d11, ["saas"], "en");
+    S.createFeature(d11, "Dash", ["saas"]);
+    const ds1 = docSt(d11, "dash");
+    ok(ds1.status === "warn" && /still template placeholders: /.test(ds1.detail) && /constitution\.md \(\d+\)/.test(ds1.detail) && /observability\.md(?! \()/.test(ds1.detail),
+      "doctor steering: fresh stubs → warn naming each placeholder-only file (count; a verbatim template without brackets is named too)");
+    const dSt = path.join(d11, ".specs", "steering");
+    for (const n of fs.readdirSync(dSt)) fs.writeFileSync(path.join(dSt, n), "# " + n + "\n\n- A real, project-specific rule.\n");
+    const ds2 = docSt(d11, "dash");
+    S.scaffoldSteeringFile(d11, "api-rules.md");
+    fs.unlinkSync(path.join(dSt, "tech.md"));
+    const ds3 = docSt(d11, "dash");
+    ok(ds2.status === "pass" && ds2.detail === "core steering present (incl. constitution)" && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
+      "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported");
+    const d11pt = path.join(tmp, "proj-wp11-doctor-pt");
+    S.initProject(d11pt, ["core"], "pt");
+    S.createFeature(d11pt, "Painel", ["core"]);
+    ok(/ainda com placeholders do template: .*constitution\.md/.test(docSt(d11pt, "painel").detail), "the doctor steering detail is localized (PT)");
+
+    // (D4) PostToolUse: saving design.md runs its mandatory checks for the ACTIVE tracks (EN + PT).
+    const runPost = (file) => { const r = spawnSync(process.execPath, [specHookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8" });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const e11 = path.join(tmp, "proj-wp11-design");
+    S.initProject(e11, ["saas"], "en");
+    const ef = S.createFeature(e11, "Metrics", ["saas"]);
+    const dz1 = runPost(path.join(ef.dir, "design.md"));
+    ok(/^Design check on design\.md \(metrics \[core \+saas\]\):/.test(dz1) && /\[SaaS\] sections: Performance Budget:unfilled; Scale Design:unfilled/.test(dz1) &&
+      /Constitution Check: not filled in/.test(dz1) && /\d+ template placeholder\(s\) left: L\d+ /.test(dz1) && /\/spec-doctor metrics/.test(dz1) && !/Roadmap updated/.test(dz1),
+      "hook on design.md (EN template): unfilled [SaaS] sections, the Constitution Check and the placeholders, with a doctor hint");
+    const cleanDesign = "# Design: Metrics\n\n## Overview\nPush counters to Prometheus.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n## Constitution Check\n- Principle 1: idempotent writes — respected.\n\n" +
+      ["Performance Budget", "Scale Design", "Multi-tenancy", "Observability", "Cost Envelope"].map((s) => `## [SaaS] ${s}\nConcrete content for ${s}.\n`).join("\n");
+    fs.writeFileSync(path.join(ef.dir, "design.md"), cleanDesign);
+    const dz2 = runPost(path.join(ef.dir, "design.md"));
+    fs.writeFileSync(path.join(ef.dir, "design.md"), cleanDesign.replace(/## Constitution Check\n[^\n]*\n/, ""));
+    const dz3 = runPost(path.join(ef.dir, "design.md"));
+    ok(dz2 === "Design check [core +saas]: mandatory sections and the Constitution Check filled, no template placeholders ✓" &&
+      /Constitution Check: missing/.test(dz3) && !/\[SaaS\] sections/.test(dz3), "a filled design → one clean line; without the Constitution Check section → 'missing'");
+    fs.writeFileSync(path.join(ef.dir, "design.md"), cleanDesign.replace("Concrete content for Observability.", "> **TODO** fill me"));
+    const dzTodo = S.designSaveCheck(e11, "metrics");
+    S.addTrack(e11, "metrics", "saas", { remove: true });
+    const dzOff = S.designSaveCheck(e11, "metrics");
+    ok(dzTodo.sections.length === 1 && dzTodo.sections[0].sections.map((s) => s.section + ":" + s.status).join() === "Observability:unfilled" && dzOff.ok && dzOff.sections.length === 0 && dzOff.clean,
+      "designSaveCheck follows the ACTIVE tracks: a TODO sentinel marks [SaaS] Observability unfilled; once +saas is removed its sections (and TODO) are not required");
+    const ptF = S.createFeature(e11, "Faturação", ["saas"], undefined, undefined, "pt");
+    const dzPt = runPost(path.join(ptF.dir, "design.md"));
+    ok(/^Verificação do design em design\.md \(faturacao \[core \+saas\]\):/.test(dzPt) && /secções \[SaaS\]: Orçamento de Desempenho:por preencher/.test(dzPt) &&
+      /Verificação da Constituição: por preencher/.test(dzPt) && /placeholder\(s\) do template por substituir/.test(dzPt) && /Preenche-os antes de aprovar o design/.test(dzPt),
+      "hook on design.md is localized in the feature's language (PT)");
+    const bugF = S.createFeature(e11, "Crash On Save", ["tdd"], undefined, undefined, undefined, "bugfix");
+    fs.writeFileSync(path.join(bugF.dir, "design.md"), "# Design: Crash On Save\n\n## Notes\nThe fix stays inside the save handler.\n");
+    const dzBug = S.designSaveCheck(e11, "crash-on-save");
+    ok(dzBug.ok && dzBug.kind === "bugfix" && dzBug.constitution === null && dzBug.clean && dzBug.text === "Design check [core +tdd]: mandatory sections filled, no template placeholders ✓",
+      "a bugfix's design.md is not asked for a Constitution Check (bug.md's Root Cause replaces the design)");
+  }
   // @wp WP11 <<<
 
   // @wp DOCS tests >>>

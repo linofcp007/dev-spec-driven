@@ -6,8 +6,9 @@
  *
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
- *     when a `.specs/.../tasks.md` is saved, run a traceability check. Surfaces gaps in
- *     the moment, with zero CI and zero cost.
+ *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
+ *     is saved, run its mandatory checks for the active tracks. Surfaces gaps in the moment, with
+ *     zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project.
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
@@ -144,6 +145,14 @@ function main(raw) {
         const parts = spec.traceGapLines(tr, spec.featureLang(pdir, feature));
         if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n"));
         return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")));
+      }
+
+      if (base === "design.md") {
+        // The design's mandatory checks for the feature's ACTIVE tracks ([SaaS]/[AI] sections, Constitution Check,
+        // placeholders) — one file, string checks only, in the feature's language.
+        const d = spec.designSaveCheck(pdir, feature);
+        if (!d.ok) process.exit(0);
+        return emit("PostToolUse", d.text);
       }
     } catch {
       process.exit(0);

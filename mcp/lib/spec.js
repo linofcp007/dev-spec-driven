@@ -577,18 +577,22 @@ function steeringFilesForTracks(tracks) {
 
 // Steering stub CONTENT lives in i18n.js (EN/PT/ES); filenames stay constant here.
 
-function initProject(projectDir, tracks, lang) {
+function initProject(projectDir, tracks, lang, opts = {}) {
   const pt = parseTracks(tracks);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
-  ensureDir(steering);
-  // Seed/refresh the project language (single source of truth) if one was requested.
-  if (lang) {
+  // Both writes go to roadmap.json: refuse on a broken one before creating anything.
+  const setsGuard = typeof opts.guard === "boolean";
+  if (lang || setsGuard) {
     const bad = roadmapError(projectDir);
     if (bad) return { ok: false, error: bad };
-    setRoadmapLang(projectDir, lang);
   }
+  ensureDir(steering);
+  // Seed/refresh the project language (single source of truth) if one was requested.
+  if (lang) setRoadmapLang(projectDir, lang);
+  // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
+  if (setsGuard) setGuard(projectDir, opts.guard);
   const lng = projectLang(projectDir);
   const wanted = steeringFilesForTracks(pt.tracks);
   const created = [];
@@ -598,26 +602,303 @@ function initProject(projectDir, tracks, lang) {
     if (writeIfAbsent(path.join(steering, f), stub)) created.push(f);
     else skipped.push(f);
   }
-  return {
+  const res = {
     specsDir: root,
     steeringDir: steering,
     lang: lng,
     created,
     skipped,
     note: i18n.msg(lng).initNote,
+    guard: guardEnabled(projectDir), // the CURRENT guard state, whether or not this call changed it
   };
+  if (setsGuard) res.guardNote = i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  return res;
 }
 
 function scaffoldSteeringFile(projectDir, fileName, lang) {
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
   const lng = normalizeLang(lang || projectLang(projectDir));
-  const stub = i18n.steeringStub(fileName, lng);
+  let stub = i18n.steeringStub(fileName, lng);
+  let custom = false;
   if (!stub) {
-    return { ok: false, error: i18n.msg(lng).err.unknownSteering(fileName, i18n.steeringKnownFiles().join(", ")) };
+    // Not a known template: a CUSTOM scoped steering file (Kiro-style front matter) when the name is safe.
+    const bad = customSteeringError(fileName, lng);
+    if (bad) return { ok: false, error: bad };
+    stub = customSteeringStub(fileName, lng);
+    custom = true;
   }
   const created = writeIfAbsent(path.join(steering, fileName), stub);
-  return { ok: true, file: path.join(steering, fileName), created };
+  const res = { ok: true, file: path.join(steering, fileName), created };
+  if (custom) res.custom = true;
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Scoped steering (Kiro inclusion modes) · guard mode · the design.md save check
+// ---------------------------------------------------------------------------
+
+// A custom steering file name: one lowercase .md file straight under .specs/steering/ — no separators, no Windows
+// device name (`nul.md` is unusable there), no Object.prototype key (every lookup on these names stays own-key).
+const RE_CUSTOM_STEERING = /^[a-z0-9][a-z0-9-]{0,62}\.md$/;
+const PROTO_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype).map((k) => k.toLowerCase()));
+function customSteeringError(fileName, lng) {
+  const fm = i18n.msg(lng);
+  const unknown = () => fm.err.unknownSteering(fileName, i18n.steeringKnownFiles().join(", ")) + " " + fm.scopedSteering.customHint;
+  if (typeof fileName !== "string" || !RE_CUSTOM_STEERING.test(fileName)) return unknown();
+  const stem = fileName.slice(0, -3);
+  if (RE_WIN_RESERVED.test(stem) || PROTO_KEYS.has(stem)) return fm.scopedSteering.reservedName(fileName);
+  return null;
+}
+// "api-conventions.md" → "Api Conventions" (the stub's title; the file name is the user's, not localized).
+function customSteeringStub(fileName, lng) {
+  const title = fileName.slice(0, -3).split("-").filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+  return i18n.msg(lng).scopedSteering.customStub(title, "src/api/**");
+}
+
+// Front matter of a steering file (Kiro-compatible keys):
+//   ---
+//   inclusion: always | fileMatch | manual
+//   fileMatchPattern: "src/api/**"        (or a list: ["a/**", "b/**"], or YAML "- a/**" lines)
+//   ---
+// CRLF, a BOM, quotes and `#` comment lines are tolerated. → { frontMatter, inclusion, patterns, body } — body is
+// the text AFTER the front matter (the whole text when there is none). No front matter → inclusion null (the caller
+// decides: the brief's default files count as `always`). Front matter without `inclusion` → `always` (Kiro's
+// default); an unknown mode (Kiro's `auto` included) → `manual`: never injected silently, listed as available.
+function steeringFrontMatter(text) {
+  const raw = String(text == null ? "" : text).replace(/^\uFEFF/, "");
+  const lines = raw.split(/\r?\n/);
+  const none = { frontMatter: false, inclusion: null, patterns: [], body: raw };
+  if (!/^---[ \t]*$/.test(lines[0] || "")) return none;
+  let end = -1;
+  for (let i = 1; i < lines.length && i < 100; i++) if (/^(?:---|\.\.\.)[ \t]*$/.test(lines[i])) { end = i; break; }
+  if (end === -1) return none;
+  // Only YAML-looking lines (key: value, "- item", comments, blanks) and at least one key: a document that merely
+  // opens with a '---' rule and has another one further down is prose, not front matter.
+  const inner = lines.slice(1, end);
+  const isKey = (l) => /^\s*[A-Za-z_][\w-]*\s*:/.test(l);
+  if (!inner.some(isKey) || !inner.every((l) => /^\s*(?:#.*)?$/.test(l) || isKey(l) || /^\s*-\s+\S/.test(l))) return none;
+  // 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
+  const unquote = (v) => {
+    const s = String(v).trim();
+    const q = s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/);
+    return (q ? q[2] : s.replace(/\s+#.*$/, "")).trim();
+  };
+  // "[a, 'b', "{c,d}/**"]" → items; commas inside quotes or {braces} don't split.
+  const values = (v) => {
+    const s = String(v).trim().replace(/^(\[.*\])\s+#.*$/, "$1");
+    if (!(s.startsWith("[") && s.endsWith("]"))) return [unquote(s)].filter(Boolean);
+    const out = [];
+    let cur = "", q = null, depth = 0;
+    for (const c of s.slice(1, -1)) {
+      if (q) { if (c === q) q = null; cur += c; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === "{") depth++;
+      else if (c === "}" && depth) depth--;
+      else if (c === "," && !depth) { out.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    out.push(cur);
+    return out.map(unquote).filter(Boolean);
+  };
+  let inclusion = null;
+  const patterns = [];
+  let inList = false; // under "fileMatchPattern:" with an empty value → YAML "- item" lines follow
+  for (const line of lines.slice(1, end)) {
+    if (/^\s*(?:#|$)/.test(line)) continue;
+    const item = inList && line.match(/^\s*-\s+(.*)$/);
+    if (item) { patterns.push(...values(item[1])); continue; }
+    inList = false;
+    const kv = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    if (!kv) continue;
+    const key = kv[1].toLowerCase();
+    if (key === "inclusion") {
+      const v = unquote(kv[2]).toLowerCase();
+      inclusion = v === "always" ? "always" : v === "filematch" ? "fileMatch" : "manual";
+    } else if (key === "filematchpattern" || key === "filematchpatterns") {
+      if (kv[2].trim()) patterns.push(...values(kv[2]));
+      else inList = true;
+    }
+  }
+  return { frontMatter: true, inclusion: inclusion || "always", patterns: [...new Set(patterns)], body: lines.slice(end + 1).join("\n").replace(/^\s*\n/, "") };
+}
+
+// Zero-dep glob for fileMatchPattern: `**` (any depth, none included), `*` and `?` (inside one segment), `{a,b}`
+// (nested allowed; unbalanced braces are literal). Forward slashes; a leading "./" is ignored on both sides;
+// case-insensitive where the filesystem folds case (Windows, macOS).
+function steeringGlobMatch(pattern, file) {
+  const norm = (s) => String(s == null ? "" : s).trim().replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+  const g = norm(pattern);
+  const p = norm(file);
+  if (!g || !p) return false;
+  let depth = 0;
+  let balanced = true;
+  for (const c of g) { if (c === "{") depth++; else if (c === "}" && --depth < 0) { balanced = false; break; } }
+  if (depth !== 0) balanced = false;
+  let re = "";
+  depth = 0;
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === "*") {
+      if (g[i + 1] === "*") {
+        while (g[i + 1] === "*") i++;
+        if (g[i + 1] === "/") { i++; re += "(?:.*/)?"; } else re += ".*";
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else if (balanced && c === "{") { depth++; re += "(?:"; }
+    else if (balanced && c === "}") { depth--; re += ")"; }
+    else if (balanced && c === "," && depth) re += "|";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  try {
+    return new RegExp("^" + re + "$", FOLD_CASE ? "i" : "").test(p);
+  } catch {
+    return false;
+  }
+}
+
+const BRIEF_STEERING_BUDGET = 3000; // chars of scoped (fileMatch) steering quoted into one brief
+// The steering a task brief carries. Default files (constitution/tech/structure + the active tracks' files) count
+// as `always` while they have no front matter — the pre-1.13 behaviour; with front matter every file follows its
+// own mode: `always` → listed, `fileMatch` → listed when a pattern matches one of the task's _Implements:_ paths
+// (and its body quoted, front matter stripped, when it holds real content and fits the budget), `manual` (or a
+// fileMatch without a pattern) → listed as available on request. Other files without front matter stay out.
+function briefSteering(root, tracks, implementsList) {
+  const dir = path.join(root, "steering");
+  const defaults = ["constitution.md", "tech.md", "structure.md"]
+    .concat(tracks.includes("tdd") ? ["testing-standards.md"] : [])
+    .concat(tracks.includes("saas") ? ["scale.md", "observability.md", "cost.md"] : [])
+    .concat(tracks.includes("ai") ? ["ai-strategy.md"] : []);
+  const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
+  const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
+  // _Implements:_ paths as the coverage reading has them (anchors dropped); a folder also matches "dir/**".
+  const targets = (implementsList || []).map((r) => implementsPath(r).replace(/^(?:\.\/)+/, "").replace(/\/+$/, "")).filter(Boolean);
+  const included = [];
+  const manual = [];
+  let budget = BRIEF_STEERING_BUDGET;
+  for (const name of ordered) {
+    const text = readIfExists(path.join(dir, name));
+    if (text == null) continue; // a directory named *.md, an unreadable file
+    const fm = steeringFrontMatter(text);
+    const inclusion = fm.frontMatter ? fm.inclusion : defaults.includes(name) ? "always" : null;
+    if (inclusion === "always") included.push({ name, inclusion });
+    else if (inclusion === "fileMatch" && fm.patterns.length) {
+      const matched = targets.filter((t) => fm.patterns.some((p) => steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/")));
+      if (!matched.length) continue;
+      const body = fm.body.trim();
+      // Template guidance quoted into a brief would read as a binding rule: only real content is quoted.
+      const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
+      if (quote) budget -= body.length;
+      included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });
+    } else if (inclusion === "manual" || inclusion === "fileMatch") manual.push(name);
+  }
+  return { dir, included, manual };
+}
+
+// Steering files still holding template placeholders (their body — front matter set aside — is a template: a
+// bracketed placeholder or `> **TODO**` left, headings only, or a known stub verbatim in any language).
+function steeringPlaceholders(root) {
+  const dir = path.join(root, "steering");
+  const out = [];
+  for (const name of safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort()) {
+    const text = readIfExists(path.join(dir, name));
+    if (text == null) continue;
+    const body = steeringFrontMatter(text).body;
+    const templates = i18n.LANGS.map((l) => i18n.steeringStub(name, l)).filter(Boolean);
+    if (artifactState({ text: body }, { template: templates }) === "placeholder") out.push({ file: name, placeholders: placeholderReport(body).length });
+  }
+  return out;
+}
+
+// roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse).
+function guardEnabled(projectDir) {
+  const l = loadRoadmap(projectDir);
+  return !l.parseError && isObj(l.rm.meta) && l.rm.meta.guard === true;
+}
+
+// The guard's decision for ONE code edit (hooks/guard-hook.js). Cheap by design — it runs before every Write/Edit
+// while the guard is on: roadmap.json plus each feature's .state.json and tasks.md, never a repo walk.
+//   allow: guard off · the file is outside the project · inside .specs/ · not code (CODE_EXT; notebooks count as
+//          code — NotebookEdit only edits them) · some non-archived feature has an approved tasks phase and open
+//          tasks (a FORCED approval still counts, with a `note` saying so);
+//   ask:   otherwise, with a localized `reason` (project language).
+function guardCheck(projectDir, filePath, cwd) {
+  const pdir = path.resolve(projectDir);
+  if (!guardEnabled(pdir)) return { guard: false, decision: "allow", why: "off" };
+  const G = i18n.msg(projectLang(pdir)).guardMode;
+  const allow = (why, extra) => Object.assign({ guard: true, decision: "allow", why }, extra);
+  if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
+  const abs = path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath);
+  if (!isInsideDir(pdir, abs)) return allow("outside");
+  if (toPosix(path.relative(pdir, abs)).split("/").includes(".specs")) return allow("specs");
+  const ext = path.extname(abs).toLowerCase();
+  if (!CODE_EXT.has(ext) && ext !== ".ipynb") return allow("not-code");
+  const root = specsRoot(pdir);
+  const covering = [], forced = [], pending = [];
+  for (const name of safeReaddir(root).sort()) {
+    if (!isFeatureFolder(name, root)) continue; // _archive, steering, dot folders are not features
+    const dir = path.join(root, name);
+    const tasksText = readIfExists(path.join(dir, "tasks.md"));
+    if (tasksText == null) continue;
+    if (!parseTasks(activeTasks(tasksText, detectTracks(dir))).some((t) => !t.done)) continue; // complete (or no tasks)
+    const st = readJson(statePath(dir)).data;
+    const ap = isObj(st) && isObj(st.approvals) ? st.approvals.tasks : null;
+    if (!ap) pending.push(name);
+    else if (isObj(ap) && ap.forced) forced.push(name);
+    else covering.push(name);
+  }
+  if (covering.length) return allow("approved", { covering });
+  if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
+  const shown = pending.slice(0, 3).join(", ") + (pending.length > 3 ? ", …" : "");
+  return { guard: true, decision: "ask", why: "no-approved-tasks", pending, reason: G.ask(shown) };
+}
+
+// What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
+// tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
+// replaces the design) and template placeholders — as structured fields plus a short localized `text`.
+function designSaveCheck(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const design = readIfExists(path.join(f.dir, "design.md"));
+  const lng = featureLang(projectDir, f.slug);
+  const fm = i18n.msg(lng);
+  const D = fm.designSaveCheck;
+  if (design == null) return { ok: false, error: fm.doctor.designMissing };
+  const tracks = detectTracks(f.dir);
+  const kind = readState(projectDir, f.slug).kind || "feature";
+  const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
+  const sections = [];
+  for (const [tr, secs, marker] of [["saas", SAAS_SECTIONS, "[SaaS]"], ["ai", AI_SECTIONS, "[AI]"]]) {
+    if (!tracks.includes(tr)) continue;
+    const bad = sectionState(design, secs, marker).filter((s) => s.status !== "filled");
+    if (bad.length) sections.push({ track: tr, marker, sections: bad });
+  }
+  let constitution = null; // null = not checked (bugfix)
+  if (kind !== "bugfix") {
+    const active = activeDesign(design, tracks);
+    constitution = extractSection(active, CONSTITUTION_SYN) == null ? "missing" : sectionFilled(active, CONSTITUTION_SYN) ? "filled" : "unfilled";
+  }
+  const placeholders = artifactReport(f.dir, "design.md", tracks, design).items;
+  const clean = !sections.length && constitution !== "missing" && constitution !== "unfilled" && !placeholders.length;
+  const lines = [];
+  sections.forEach((s) => lines.push("  - " + D.sections(s.marker, s.sections.map(label).join("; "))));
+  if (constitution === "missing" || constitution === "unfilled") lines.push("  - " + D.constitution[constitution]);
+  if (placeholders.length) {
+    const short = (t) => (t.length > 40 ? t.slice(0, 39) + "…" : t);
+    lines.push("  - " + D.placeholders(placeholders.length, placeholders.slice(0, 3).map((p) => `L${p.line} ${short(p.text)}`).join(", ") +
+      (placeholders.length > 3 ? ", " + fm.gates.more(placeholders.length - 3) : "")));
+  }
+  const text = clean ? D.clean(trackLabel(tracks), constitution != null) : [D.head(f.slug, trackLabel(tracks)), ...lines, D.hint(f.slug)].join("\n");
+  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, placeholders, clean, text };
+}
+
+// roadmap.json meta.guard ← on (spec_init {guard} / `dev-spec init --guard on|off`). No write when unchanged.
+function setGuard(projectDir, on) {
+  const rm = readRoadmap(projectDir);
+  if (isObj(rm.meta) && rm.meta.guard === on) return;
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  rm.meta.guard = on;
+  writeRoadmap(projectDir, rm);
 }
 
 // ---------------------------------------------------------------------------
@@ -2100,11 +2381,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     else omitted.push(s.title);
   }
 
-  const steeringWanted = ["constitution.md", "tech.md", "structure.md"]
-    .concat(tracks.includes("tdd") ? ["testing-standards.md"] : [])
-    .concat(tracks.includes("saas") ? ["scale.md", "observability.md", "cost.md"] : [])
-    .concat(tracks.includes("ai") ? ["ai-strategy.md"] : []);
-  const steering = steeringWanted.map((f) => path.join(root, "steering", f)).filter((p) => fs.existsSync(p)).map(rel);
+  // Steering: the default files (as before) + front-matter scoped ones (always / fileMatch on _Implements:_ paths).
+  const steer = briefSteering(root, tracks, mk.implements);
+  const steering = steer.included.map((s) => rel(path.join(steer.dir, s.name)));
 
   const paths = {
     dir: exDir,
@@ -2129,6 +2408,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
     steering,
+    steeringScoped: steer.included.filter((s) => s.body).map((s) => ({ path: rel(path.join(steer.dir, s.name)), patterns: s.patterns, body: s.body })),
+    steeringManual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     verify: mk.verify,
     globalConstraints: globalConstraints(tasksText),
     reportPath: rel(paths.report),
@@ -2159,6 +2440,12 @@ function taskBrief(projectDir, name, number, opts = {}) {
     verify: mk.verify,
     unresolved,
     designSections: included.map((s) => s.title),
+    // which steering the brief carries and why (inclusion mode; the patterns/paths that matched a fileMatch file)
+    steering: {
+      included: steer.included.map((s) => Object.assign({ file: rel(path.join(steer.dir, s.name)), inclusion: s.inclusion },
+        s.inclusion === "fileMatch" ? { patterns: s.patterns, matched: s.matched, quoted: !!s.body } : {})),
+      manual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
+    },
     paths,
     wrote: write,
   };
@@ -3504,7 +3791,11 @@ function specDoctor(projectDir, name) {
   const steeringDir = path.join(root, "steering");
   const coreSteering = ["constitution.md", "product.md", "tech.md", "structure.md"];
   const missingSteering = coreSteering.filter((f) => !fs.existsSync(path.join(steeringDir, f)));
-  add("steering", missingSteering.length ? "warn" : "pass", missingSteering.length ? m.steeringMissing(missingSteering.join(", ")) : m.steeringOk);
+  // Present is not enough: a steering file that is still its template steers nothing (named, with its count).
+  const stubSteering = steeringPlaceholders(root);
+  const steeringIssues = [missingSteering.length ? m.steeringMissing(missingSteering.join(", ")) : null,
+    stubSteering.length ? fm.scopedSteering.placeholders(stubSteering.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
+  add("steering", steeringIssues.length ? "warn" : "pass", steeringIssues.join("; ") || m.steeringOk);
 
   // Requirements + EARS
   const reqs = readIfExists(path.join(dir, "requirements.md"));
@@ -5799,5 +6090,10 @@ module.exports = {
   // @wp WP10 <<<
 
   // @wp WP11 exports >>>
+  steeringFrontMatter, // scoped steering: Kiro-compatible front matter (inclusion / fileMatchPattern)
+  steeringGlobMatch,
+  guardEnabled, // guard mode (roadmap.json meta.guard) — hooks/guard-hook.js
+  guardCheck,
+  designSaveCheck, // the PostToolUse design.md save check
   // @wp WP11 <<<
 };
