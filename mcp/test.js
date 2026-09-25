@@ -870,10 +870,11 @@ function payload(res) {
   // `rules <tool>` copies these files verbatim and makes only a BARE `cli/dev-spec.js` absolute, so the note must
   // stay true in the generated copy (no "relative to the clone") and no path may carry a prefix like `<clone>/`.
   ok(docsRules.every(([f, tool]) => { const t = docsRead(f); return /^> Paths in this file point into the dev-spec-driven clone\. `node cli\/dev-spec\.js rules /m.test(t) &&
-    !/relative to the dev-spec-driven clone/.test(t) && !/[\w./<>-]cli\/dev-spec\.js/.test(t) && t.includes("cli/dev-spec.js rules " + tool) && /no pull requests/i.test(t); }) &&
+    !/relative to the dev-spec-driven clone/.test(t) && !/[\w./<>-]cli\/dev-spec\.js/.test(t) && t.includes("cli/dev-spec.js rules " + tool) && /no pull requests/i.test(t) &&
+    !/\b(?:[Tt]he|[Tt]his|[Oo]ur) repo(?:sitory)?\b/.test(t); }) &&
     !/(?<!skills\/dev-spec-driven\/)references\//.test(docsAgents) && ["next-action", "add-track", "feature", "backlog", "rules"].every((c) => new RegExp("^dev-spec " + c + " ", "m").test(docsAgents)) &&
     /rules <tool>/.test(docsRead("INTEGRATIONS.md")) && /ABSOLUTE\/PATH\/TO/.test(docsRead("INTEGRATIONS.md")) && !/Pre-filled config files/.test(docsRead("INTEGRATIONS.md")),
-    "rule files + AGENTS.md: a note that survives `rules <tool>`, bare CLI paths, no pull requests; AGENTS.md paths prefixed + CLI list complete; INTEGRATIONS admits the placeholder");
+    "rule files + AGENTS.md: a note that survives `rules <tool>`, bare CLI paths, no pull requests, no text about 'the repo' (false in the copy); AGENTS.md paths prefixed + CLI list complete; INTEGRATIONS admits the placeholder");
   const docsIntegr = docsRead("INTEGRATIONS.md");
   ok(["mkdir -p .cursor/rules && node", "mkdir -p .windsurf/rules && node", "mkdir -p .github && node", "New-Item -ItemType Directory -Force .cursor\\rules",
     "cmd /c 'node \"<PLUGIN>\\cli\\dev-spec.js\" rules cursor > .cursor\\rules\\dev-spec-driven.mdc'"].every((s) => docsIntegr.includes(s)) &&
@@ -936,12 +937,19 @@ function payload(res) {
   // or the European-Portuguese contraction em+o ("o delta de eval no PR" = IN the PR). So a plural is always a
   // negation, but a singular `no PR`/`no CI` only after punctuation or at a line start; right after a word it
   // reads as PT and is flagged (write "…, no CI" or use never/without). never/not/without/sem/sin/nunca/nem/
-  // ni/não may sit up to 3 words before the noun ("never run in CI", "not in the PR", "never open a PR").
-  const negTail = String.raw`(?:\s*(?:,|or|and|nor|ou|o|e|y)\s*(?:no\s+)?(?:paid\s+)?CI\b)?`;
-  const negations = [String.raw`\bno\s+(?:PRs|pull requests)\b`, String.raw`(?<![A-Za-zÀ-ÿ0-9_]\s*)\bno\s+(?:paid\s+)?(?:PR|pull request|CI)\b`,
-    String.raw`\b(?:not|never|without|sem|sin|nunca|nem|ni|não|neither|nor)(?:\s+[A-Za-zÀ-ÿ0-9'’-]+){0,3}?\s+(?:PRs?|pull requests?|CI)\b`]
-    .map((r) => new RegExp(r + negTail, "gi"));
+  // ni/não may sit up to 3 words before the noun ("never run in CI", "not in the PR", "never open a PR") — but
+  // no window word may invert it ("never skip opening a PR", "never bypass the CI gate" steer), and a window
+  // never swallows "CI gate" ("merge without the CI gate" steers too).
+  const negWord = String.raw`(?:\s+(?!(?:skip|bypass|forg[eo]t|ignor|omit|avoid|disabl|remov|circumvent|unless|until|before|without|salt[aeo]|esquec|olvid|evit|desativ|desactiv|contorn|antes))[A-Za-zÀ-ÿ0-9'’-]+)`;
+  const negWindow = String.raw`\b(?:not|never|without|sem|sin|nunca|nem|ni|não|neither|nor)${negWord}{0,3}?\s+(?:PRs?|pull requests?|CI(?!\s+gate))\b`;
+  const negTail = (no) => String.raw`(?:\s*(?:,|or|and|nor|ou|o|e|y)\s*${no ? String.raw`(?:no\s+)?` : ""}(?:paid\s+)?CI\b)?`;
+  const negations = [String.raw`\bno\s+(?:PRs|pull requests)\b`, String.raw`(?<![A-Za-zÀ-ÿ0-9_]\s*)\bno\s+(?:paid\s+)?(?:PR|pull request|CI)\b`, negWindow]
+    .map((r) => new RegExp(r + negTail(true), "gi"));
   const dropNegations = (t) => negations.reduce((s, re) => s.replace(re, ""), t);
+  // PT prose (README's `## Português` block) is read as PT: there `no` is always em+o, so only the window negates
+  // (PT negates with não/sem/nem) and a sentence-initial "No PR, inclui…" / "Depois, no CI, …" steers.
+  const ptNegation = new RegExp(negWindow + negTail(false), "gi");
+  const ptNoRe = /(?<![\p{L}\p{N}_])[Nn]os?\s+(?:PRs?|[Pp]ull [Rr]equests?|CI)\b/u;
   const PR = "(?:PR|[Pp]ull [Rr]equest)";
   const steersRe = new RegExp([
     String.raw`\b(?:[Oo]pen|[Cc]reate|[Ss]ubmit|[Rr]aise|[Ff]ile)(?:s|ed|ing)?\b[^.\n]{0,20}?\b${PR}s?\b`,
@@ -952,19 +960,29 @@ function payload(res) {
     String.raw`\b[Pp]ush(?:es|ing)? and open`, String.raw`\bCI gate`, String.raw`\b[Ii]n (?:the |your |a |our )?CI\b`, String.raw`\b[Oo]n CI\b`,
     String.raw`\b[Ee]n (?:el |la )?CI\b`,
   ].join("|"));
-  const steersToPr = proseFiles.filter((p) => steersRe.test(dropNegations(fs.readFileSync(p, "utf8"))));
+  const steers = (t, pt) => { const u = pt ? t.replace(ptNegation, "") : dropNegations(t); return steersRe.test(u) || (!!pt && ptNoRe.test(u)); };
+  const readmePath = path.join(root, "README.md");
+  const proseParts = proseFiles.map((p) => { const t = fs.readFileSync(p, "utf8"); const m = p === readmePath && t.match(/\n## Português\r?\n([\s\S]*?)\r?\n## Español\r?\n/);
+    return m ? [p, t.replace(m[1], ""), m[1]] : [p, t, ""]; });
+  const readmePt = (proseParts.find(([p]) => p === readmePath) || [])[2] || "";
+  const steersToPr = proseParts.filter(([, t, pt]) => steers(t) || steers(pt, true)).map(([p]) => p);
   const guardMissed = ["in the PR", "Prompt PRs are blocked", "git/PR-friendly", "Open a pull request", "push and open one", "on every PR", "a CI gate", "runs in CI",
     "Põe o delta de eval no PR.", "Os testes de carga correm no CI.", "Incluye el delta de evals en el PR.", "Depois, abrir o PR com o resumo.", "comenta nos PRs",
     "Then create a pull request with the summary.", "Push the branch and open a new PR.", "Run the load test in your CI pipeline.", "Every pull request must include evals.",
-    "Fix: PR #1234 adds index."].filter((s) => !steersRe.test(dropNegations(s)));
+    "Fix: PR #1234 adds index.", "Never skip the CI gate.", "Do not skip the CI gate before merging.", "Never bypass the CI gate.", "Never skip opening a PR.",
+    "Never forget to open a PR.", "Never merge without the CI gate.", "Never merge before opening a PR."].filter((s) => !steers(s))
+    .concat(["No PR, inclui o delta de evals.", "Depois, no PR, inclui o delta de evals.", "No CI corre a suite completa.", "Quando terminares: no PR, cola o resumo.",
+      "Nos PRs, cola o resumo."].filter((s) => !steers(s, true)));
   const guardFlagged = ["no PR or CI needed", "no pull requests, no CI", "never open a PR", "without a PR", "sem PR", "sin PR", "no PRs or CI", "locally, not in CI",
     "/prReview", "comments on PRs", "Evals are never run in CI.", "Keep the summary local, not in the PR.", "Do not create a pull request.", "(no CI, no extra service)",
     "Automatización local, no CI", "Automação local, não CI", "sem pull requests, sem CI", "No PR needed.", "merge locally; no PRs",
-    "**No GitHub Actions / no paid CI / no pull requests**", "a PRD", "the CIA"].filter((s) => steersRe.test(dropNegations(s)));
+    "**No GitHub Actions / no paid CI / no pull requests**", "a PRD", "the CIA"].filter((s) => steers(s))
+    .concat(["sem pull requests, sem CI", "Automação local, não CI", "Nunca abras um PR.", "sem PR nem CI", "Tudo local: sem GitHub Actions, sem CI pago, sem pull requests.",
+      "Nota: o PRD e a CIA."].filter((s) => steers(s, true)));
   ok(guardMissed.length === 0 && guardFlagged.length === 0,
     "the PR/CI guard catches EN/PT/ES steering and allows negations (missed: " + guardMissed.join(" | ") + "; wrongly flagged: " + guardFlagged.join(" | ") + ")");
-  ok(steersToPr.length === 0 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
-    "no command/skill/agent text steers toward PRs or CI (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
+  ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
+    "no command/skill/agent text steers toward PRs or CI; README's PT block is read as PT (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
