@@ -306,6 +306,8 @@ API key; `--dry-run` offline). Establish and record the baseline. Commit
 **The gate is tracked:** once the test plan (+tdd) or eval plan (+ai) exists, phase `tests` is pending —
 `/next-action` asks for it (after the test/eval plan approval, before the tasks approval) and never recommends
 implementing until the user signs it off with `/approve <feature> tests`; `gatesOk` and `spec_finish` count it.
+On a feature whose tasks are already ticked (an upgraded 1.12 feature) it asks for the same gate as a sign-off for
+the tests that exist — each planned T-ID in its test name, the eval baseline recorded — not for failing tests first.
 The approval checks the phase's output: +tdd every planned T-ID named by a test file (`tests-in-code`), +ai an
 `evals/golden.json` of the feature's own (`eval-sets`) — refused otherwise unless the user forces it.
 The engine can't see the tests run: present the red/green counts (and `trace_check {code: true}`) before asking.

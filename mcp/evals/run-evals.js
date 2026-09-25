@@ -22,11 +22,13 @@
  *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
  *   --max-items=<N>      grade at most N items per set (an integer >= 1; default 200) — anything else exits 2
+ *   Switches (--dry-run, --set-baseline, --require-live) follow the CLI's rule: --flag, or --flag=true|false
+ *   (1/0, yes/no, on/off); any other value exits 2.
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
  * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
- * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items, --require-live
- * without a key).
+ * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items or switch value,
+ * --require-live without a key).
  * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
@@ -54,6 +56,21 @@ function parseArgs(argv) {
     else out.flags[key] = true;
   }
   return out;
+}
+
+// Boolean switches — the CLI's rule (normalizeBoolFlags): `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets
+// it explicitly, any other `=value` is a usage error. They are read with `=== true`, never by truthiness: the string
+// "false" is truthy, so `--set-baseline=false` overwrote evals/baseline.json and `--dry-run=false` dry-ran.
+const BOOL_FLAGS = ["dry-run", "set-baseline", "require-live"];
+function badBoolFlag(flags) {
+  for (const k of BOOL_FLAGS) {
+    if (typeof flags[k] !== "string") continue;
+    const v = flags[k].trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
+    else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
+    else return k;
+  }
+  return null;
 }
 
 function readJson(file) {
@@ -218,14 +235,22 @@ async function main() {
     }
     maxItems = Number(v);
   }
+  // --dry-run / --set-baseline / --require-live: true|false (1/0, yes/no, on/off) or a usage error, before anything runs.
+  const badBool = badBoolFlag(flags);
+  if (badBool) {
+    const A = spec.msg(spec.featureLang(projectDir, slug)).args;
+    console.error(A.invalid(A.item("--" + badBool, A.type.boolean, JSON.stringify(flags[badBool]))));
+    process.exit(2);
+  }
+  const on = (k) => flags[k] === true;
 
   const model = flags.model || DEFAULT_MODEL;
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
-  if (flags["require-live"] && !hasKey && !flags["dry-run"]) {
+  if (on("require-live") && !hasKey && !on("dry-run")) {
     console.error(T.requireLive);
     process.exit(2);
   }
-  const dryRun = !!flags["dry-run"] || !hasKey;
+  const dryRun = on("dry-run") || !hasKey;
   const doJudge = !dryRun;
 
   // System prompt
@@ -350,7 +375,7 @@ async function main() {
         }
       }
     }
-    if (flags["set-baseline"]) {
+    if (on("set-baseline")) {
       fs.writeFileSync(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
       console.log(T.baselineWritten(path.relative(projectDir, baselineFile)));
     }

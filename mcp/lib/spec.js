@@ -2191,16 +2191,22 @@ function traceCheck(projectDir, name, opts = {}) {
   const outOfRoot = new Set();
   const unresolvedImplGlobs = [];
   const absent = implFiles.filter((f) => {
+    // The file a reference names, as coverage / the drift baseline / the brief's steering read it (implementsPath):
+    // a `path/to/file.js:12` or `#L12` anchor is dropped — resolving the raw spelling failed doctor and finish with
+    // "files that don't exist" for a file coverage counted (on NTFS `app.js:1` even names an alternate data stream).
+    // Reported with the spelling the task wrote. An anchor with no path names nothing: missing.
+    const p = implementsPath(f);
+    if (!p) return true;
     // A glob (`src/api/**`, `lib/*.js`) is present once it matches a file — coverage()'s glob, walked from its literal
     // folders only. One that would leave the project is out of root like any such path. A walk that hit its cap before
     // any match proves nothing (the file may sit past the cap): never a missing-file gap — a warning (unresolvedImplGlobs).
-    if (isImplementsGlob(f)) {
-      const g = globFiles(projRoot, f, { first: true, cap: opts.globCap });
+    if (isImplementsGlob(p)) {
+      const g = globFiles(projRoot, p, { first: true, cap: opts.globCap });
       if (g.outside) outOfRoot.add(f);
       if (!g.files.length && g.truncated) { unresolvedImplGlobs.push(f); return false; }
       return !g.files.length;
     }
-    const abs = path.resolve(projRoot, f);
+    const abs = path.resolve(projRoot, p);
     const inRoot = withinRoot(projRoot, abs); // a drive root (C:\) already ends in a separator
     if (!inRoot) outOfRoot.add(f);
     return !inRoot || !fs.existsSync(abs);
@@ -3231,7 +3237,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const reqText = readIfExists(path.join(dir, "requirements.md")) || "";
   const planText = readIfExists(path.join(dir, "test-plan.md")) || "";
   const mk = taskMarkers(block);
-  const blockText = [block.text, ...block.body].join("\n");
+  // The task's OWN text — fenced code under it is an example (taskProse): its AC/T IDs are never the task's (they gave the
+  // brief a foreign AC, flipped the loop to tdd for the example's T-ID and reported it unresolved, while trace_check read
+  // the same criterion as uncovered). The rendered brief still shows the whole body.
+  const blockText = taskProse(block).join("\n");
   // A bugfix task carries the bug itself: bug.md's Reproduction and Root Cause (null while still unwritten).
   let bug = null;
   const kind = readState(projectDir, slug).kind;
@@ -5036,9 +5045,13 @@ function nextAction(projectDir, name) {
   // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
   const plans = [tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md")), tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"))];
   const testsWhat = plans[0] && plans[1] ? "both" : plans[1] ? "ai" : "tdd";
+  // Once tasks are ticked (executing / complete — e.g. a 1.12 feature, which had no tests gate) the code exists: "write
+  // every test and confirm it fails … no implementation code until then" is impossible. The gate is then a sign-off for
+  // the tests that exist (T-IDs in test names, the feature's own eval set + baseline) — the same gate, reworded.
+  const testsSignOff = phase === "executing" || phase === "complete";
   const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements,
     design: st.kind === "bugfix" ? nx.approveBugDesign : nx.approveDesign, "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan,
-    tests: (s) => nx.approveTests(s, testsWhat), tasks: nx.approveTasks };
+    tests: (s) => (testsSignOff ? nx.signOffTests(s, testsWhat) : nx.approveTests(s, testsWhat)), tasks: nx.approveTasks };
   let step;
   let recommendation;
   let gateFix = false;
@@ -8455,6 +8468,35 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
 }
 
+// The scaffold's template tasks.md that spec_import keeps when the source has none: each _Requirements:_ keeps only the
+// AC IDs the imported requirements define, and each _Makes green:_ names the planned tests covering the task's kept ACs
+// — else a placeholder (trackTaskBlock's rule). The template's own US-1.AC-3 / US-2.AC-1 / T-05 read as typos in
+// trace_check on a freshly imported feature. Headings and task lines scope the ACs a _Makes green:_ line looks at.
+function fitTemplateTasks(tasksText, known, planText, lng) {
+  const I = i18n.msg(lng).importSpec;
+  const testsFor = new Map(); // AC → the planned T-IDs covering it, in plan order
+  for (const [tid, r] of testIndex(planText || "")) {
+    for (const ac of extractAcIds(r.row)) {
+      if (!testsFor.has(ac)) testsFor.set(ac, []);
+      testsFor.get(ac).push(tid);
+    }
+  }
+  let acs = [];
+  return String(tasksText).split("\n").map((line) => {
+    if (/^\s*#{1,6}\s/.test(line) || /^\s*[-*+]\s+\[[ xX-]\]/.test(line)) acs = [];
+    return line
+      .replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
+        const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => known.has(id));
+        acs = acs.concat(keep);
+        return "_Requirements: " + (keep.length ? keep.join(", ") : I.taskAcPlaceholder) + "_";
+      })
+      .replace(/_Makes green:\s*([^_\n]+)_/g, () => {
+        const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
+        return "_Makes green: " + (ids.length ? ids.join(", ") : I.taskTestPlaceholder) + "_";
+      });
+  }).join("\n");
+}
+
 function importSpec(projectDir, tool, source, opts = {}) {
   const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
@@ -8546,6 +8588,11 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const written = [];
   const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
   put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+  // createFeature scaffolded the +tdd test plan from the TEMPLATE requirements (the imported ones weren't written yet):
+  // its T-01…T-05 rows covered US-1.AC-3 / US-1.AC-4 / US-2.AC-1 the feature doesn't have — "(typos?)" in trace_check,
+  // and a doctor FAIL once real tasks were imported. Re-planned from the imported ACs: the plan `spec_add_track tdd`
+  // gives this feature (scaffoldTestPlan — one generic row per AC). Scaffold output, not imported text (not in `imported`).
+  if (cr.created.includes("test-plan.md")) writeFileAtomic(path.join(cr.dir, "test-plan.md"), scaffoldTestPlan(cr.dir, name, lng, cr.tracks));
 
   if (model.design) {
     const dl = model.design.text.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -8571,6 +8618,14 @@ function importSpec(projectDir, tool, source, opts = {}) {
     const tk = importTasks(model.tasks.text, refs, name, lng, W, mapping, warnings);
     put("tasks.md", tk.text.replace("{{NOTE}}", () => note)); // a function: a '$' in the folder name is not a pattern
     if (!tk.anyRefs && tk.count && acOf.size) warnings.push(W.wNoRefs);
+  } else if (cr.created.includes("tasks.md")) {
+    // No tasks.md in the source: the scaffold's is kept (wNoTasks) — its template references fitted to the imported spec.
+    const tp = path.join(cr.dir, "tasks.md");
+    const cur = readIfExists(tp);
+    if (cur != null) {
+      const fitted = fitTemplateTasks(cur, requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || ""), readIfExists(path.join(cr.dir, "test-plan.md")), lng);
+      if (fitted !== cur) writeFileAtomic(tp, fitted);
+    }
   }
   // Provenance on the scaffolded classification too (it was generated from the imported text).
   const clsFile = path.join(cr.dir, "classification.md");

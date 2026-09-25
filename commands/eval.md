@@ -19,7 +19,8 @@ It uses the user's own `ANTHROPIC_API_KEY` (no CI, no extra service). Without a 
 contains/equals/regex, a regex that compiles, a rubric for judge) and `evals/thresholds.json` (a number in [0, 1] per
 set); an invalid set — an empty one included (it can't pass what it never graded) — exits 1 naming each bad item,
 and a live run refuses before any model call. `--max-items` caps the items graded per set and must be an integer ≥ 1
-(anything else exits 2). Report the scores
+(anything else exits 2); the switches take `--x` or `--x=true|false` (1/0, yes/no, on/off — any other value exits 2,
+so `--set-baseline=false` never writes a baseline). Report the scores
 per set, the delta vs baseline, and whether each set met its threshold (golden ≥85%, adversarial
 safety 100%, regression 100% by default; override in `evals/thresholds.json`). On the first good
 run, offer to record a baseline with `--set-baseline`. Respond in the user's language.

@@ -28,7 +28,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `spec_impact`, doctor, `spec_finish`, ROADMAP.md): `spec_complete_task` answered `verified: false` with no
   `unverifiedReason` for a task with no runnable `_Verify:_` and nothing recorded while doctor and finish passed
   it — it is now verified with `nothingToVerify: true`, `unverifiedReason` is present whenever `verified` is
-  false, `done` prints no "(verified)" for it and `spec_impact` says "nothing to verify".
+  false, `done` prints no "(verified)" for it and `spec_impact` says "nothing to verify" (the `spec_complete_task` tool description no longer says doctor and finish
+  keep listing such a task).
 - **Placeholder and approve gates.** An untouched scaffold passed `doctor` with `readyToAdvance: true`,
   and `spec_approve` stamped anything. Doctor has a `placeholders` check (fail for the current and earlier
   phases, warn for later ones), the approval runs that phase's checks and refuses while any fails, and
@@ -69,7 +70,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   first OPEN task (doctor warns `duplicate-tasks`), `done --run` runs the `_Verify:_` of the task it
   ticks, and the tick lands on exactly that line (CRLF kept). Markers in a fenced example under a task
   (`_Verify:_`, `_Implements:_`, AC/T IDs) are the example's, never the task's: `done --run` doesn't
-  execute them, and trace_check doesn't count them as coverage or planned files.
+  execute them, trace_check doesn't count them as coverage or planned files, and `spec_task_brief` takes no AC / T-ID
+  from them (the example's IDs gave the brief a foreign criterion and test, the tdd loop and an "unresolved" warning).
 - **Tracks.** A Mermaid node `X[AI]` or prose mentioning `[AI]` switched +ai on (doctor then failed ten
   "missing" AI sections). Tracks are now stored in `.state.json`; older features are detected from real
   headings only. `'tdd,saas'` / `'+saas +ai'` are split, unknown names get a did-you-mean error, and
@@ -83,7 +85,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   is present from one that is filled.
 - **Traceability, EARS, clarify.** An OPEN task's `_Implements:_` file that isn't written yet was a
   gap (it is the plan: `plannedImplFiles`); at a drive root (`subst Q:\`) every `_Implements:_` path read as
-  outside the project. EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
+  outside the project. `_Implements: src/app.js:12_` / `src/app.js#L12` named the file for coverage and the drift
+  baseline but a missing one for trace_check (doctor and `spec_finish` failed "files that don't exist"); every reader
+  now drops the anchor. EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
   template criterion linted clean (new `placeholder` code). A stray unclosed `<!--` above the criteria hid every AC
   from the EARS linter (0 criteria, verdict pass — so the requirements approval passed a criterion with no modal verb)
   while trace_check counted them all; a marker that never closes is now plain text there and in placeholder
@@ -174,7 +178,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   deferred (a warn, "not traced yet"); once it is written they fail as before. `spec_add_track tdd` (and
   `spec_create` +tdd on an existing feature) planned the template's US-1.AC-1…4 / US-2.AC-1 rows for requirements
   that were already written (an import) — a test for a criterion the feature lacks, approvable; the rows now come
-  from its own AC IDs (one generic row each).
+  from its own AC IDs (one generic row each). `spec_import` with +tdd still planned the template's rows (it scaffolded
+  before writing the imported requirements): trace said "(typos?)" on a fresh import and doctor failed traceability
+  once real tasks were imported. It now plans the imported ACs too, and the scaffold tasks.md it keeps when the source
+  has none cites only imported ACs and the tests covering them — else a localized placeholder.
 - **Bugfix root-cause task.** Ticking the root-cause task while bug.md → Root Cause is still empty stays allowed (it
   is the task that writes it) but returns `rootCausePending: true` with a note, and a later task's refusal no longer
   says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES). A Reproduction or
@@ -207,7 +214,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   unparseable `evals/thresholds.json` (or a set threshold outside [0, 1]) is invalid instead of silently ignored.
   A bare, non-numeric, zero or negative `--max-items` graded nothing and scored every set 0/0 = 100% (exit 0, and
   `--set-baseline` wrote a 100% baseline): it must be an integer ≥ 1 (exit 2 otherwise, before any model call), and a
-  set with no items is invalid instead of passing.
+  set with no items is invalid instead of passing. The harness's switches follow the CLI's rule: `--set-baseline=false`
+  (as `dev-spec evals` forwards it) overwrote `evals/baseline.json` and `--dry-run=false` dry-ran — `--dry-run`,
+  `--set-baseline` and `--require-live` take `=true|false` (1/0, yes/no, on/off), any other value exits 2.
 - **Fenced examples in test-plan.md.** A ```fenced``` example row counted as a real one: it covered its AC (trace_check
   and the test-plan approval passed for an AC with no real test row) and planned a T-ID the Phase 4 `tests` gate then
   demanded in the test code. Every reader of test-plan.md's IDs now skips fenced code, like tasks.md and
@@ -290,7 +299,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   pending `design` approval (bug.md): in-flight features show them in doctor / next_action and can't finish until
   `approve <f> tests` / `approve <f> design`. Approving `tests` checks that the planned tests exist in test code
   (+tdd) and that the eval set is the feature's own (+ai); approving `execution` needs a ready `spec_finish` — or
-  `--force`.
+  `--force`. On a feature already executing or complete (an upgraded 1.12 feature), `next_action` words Phase 4 as a
+  sign-off for the tests that exist — name each planned T-ID in its test's name (`test("T-01 …")`), or record the eval
+  baseline — never "write failing tests first, no implementation code until then".
 - **Windows: `done --run` refuses a POSIX-syntax `_Verify:_`** under the default cmd.exe — add `--shell bash` (or
   `DEV_SPEC_SHELL=bash`), or `--shell cmd` to keep cmd.exe.
 - **MCP: an explicit `projectDir` must be a local folder** — a network path (`\\host\share`, `//host/share`) is
@@ -313,7 +324,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 710 assertions (was 181), `node cli/test-cli.js` 240 (was 53); the tool count is
+- `node mcp/test.js` 716 assertions (was 181), `node cli/test-cli.js` 241 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

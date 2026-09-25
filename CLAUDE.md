@@ -278,7 +278,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `body` (the brief shows them) and flags their indices in `bodyCode`; `taskProse()` (text + non-code body)
   is what `taskMarkers()`, the bugfix gate and the secondary trace read, and `tasksProseText()` (the
   scanner's comment/fence-free view) is what `trace_check` and `implementsRefs()` read — so a fenced
-  `_Verify:_` example is never run by `done --run`.
+  `_Verify:_` example is never run by `done --run`. `spec_task_brief` reads its AC / T-IDs (loop, stories, design
+  needles) from `taskProse()` too; only the rendered task block shows the whole body.
 - `verificationStatus()` feeds doctor (`verification`), `ROADMAP.md` attention and `spec_finish` blockers.
 
 ## Change history (1.13)
@@ -303,6 +304,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); on written requirements (add_track tdd, create +tdd on an existing
   feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks.
+  `spec_import` re-plans after writing the imported requirements (createFeature scaffolded from the template ones) and
+  fits a kept scaffold tasks.md with `fitTemplateTasks()` (known ACs only, `_Makes green:_` = the tests covering them).
 - **A file date is never a finish blocker** (`changedSinceApproval(…, {detail: true})` → `{changed, byDate,
   untracked}`): a clone, checkout, copy or unzip resets every mtime. A pre-1.11 approval (no fingerprint) still shows a
   newer phase file in next_action / doctor / roadmap (1.12 parity), but spec_finish only warns about it. A 1.12 bugfix
@@ -418,7 +421,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   is tdd||ai. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every
   planned T-ID named by a test file (trace_check's code scan); +ai `eval-sets` — evals/golden.json is a set of the
   feature's own (not the scaffold's sample, not empty). Nothing to approve on a core-only feature. next_action keeps
-  the Phase 4 wording (`/writeTests`) plus what the gate checks. **Approving `execution`** runs spec_finish's blockers
+  the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
+  e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
+  first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
   (`finishFeature(…, {gateOnly: true})` → stable ids `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
   `tasks`, `open-tasks`, `verification`, `approval-gates`); otherwise only `force` records it. spec_metrics' `finished`
   = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).
@@ -460,7 +465,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **`_Implements:_` of an OPEN task is the plan**: a missing file only named by open tasks is
   `plannedImplFiles`, not a gap; a done task's missing file (or any path outside the project) stays
   `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
-  feature, active or archived.
+  feature, active or archived. Every reader resolves a reference through `implementsPath()` (`:12` / `#L12` anchors
+  dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing).
 - **`earsValidate` is criterion-based, never line-based.** EARS phrasing (`ENQUANTO … QUANDO … O
   SISTEMA DEVE …`) wraps past one line, and markdown list items continue across lines (indented or
   lazy). `criterionBlocks()` folds physical lines into logical criteria FIRST — bounded by blank
@@ -569,6 +575,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`.
+  The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
+  switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
   Numeric flags that MCP bounds (`--cap`, `--max`) go through `intFlag()` (integer ≥ 1). The engine refuses what
   the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix, `backlog` action ∈ add|rm|remove|list.
@@ -580,9 +588,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(710 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(716 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 240 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 241 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

@@ -1470,6 +1470,25 @@ if (inSection("wp16")) { // 1.13 batch 7 — gates at the planning phases, the b
   ok(evMax16.status === 2 && /Invalid argument\(s\): --max-items must be an integer ≥ 1 \(got "0"\)/.test(evMax16.stderr) && !/100\.0%|all sets pass/.test(evMax16.stdout) &&
     !fs.existsSync(path.join(ai16, ".specs", "ticket-summary", "evals", "baseline.json")),
     "evals --max-items 0 (CLI): exit 2 with the argument error — never 0/0 = 100% 'all sets pass', no baseline written");
+  // The switches the CLI forwards follow its own rule (help: "--flag=true|false … anything else is an error"):
+  // --set-baseline=false used to overwrite baseline.json. A fetch stub (NODE_OPTIONS reaches the harness) keeps it offline.
+  const stub16 = path.join(tmp, "stub16-fetch.js");
+  fs.writeFileSync(stub16, "globalThis.fetch = async () => ({ ok: true, json: async () => ({ content: [{ type: 'text', text: 'ok' }], usage: {} }) });\n");
+  const base16 = path.join(ai16, ".specs", "ticket-summary", "evals", "baseline.json");
+  const evSw16 = (args, key) => {
+    const r = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", ...args, "--project", ai16],
+      { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: key, NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
+    r.baseline = fs.existsSync(base16);
+    try { fs.rmSync(base16); } catch {}
+    return r;
+  };
+  const sbF16 = evSw16(["--set-baseline=false"], "dummy"), sbT16 = evSw16(["--set-baseline=true"], "dummy");
+  const drMb16 = evSw16(["--dry-run=maybe"], "dummy"), rlF16 = evSw16(["--require-live=false"], "");
+  ok(/mode: LIVE/.test(sbF16.stdout) && !sbF16.baseline && /mode: LIVE/.test(sbT16.stdout) && sbT16.baseline &&
+    drMb16.status === 2 && /Invalid argument\(s\): --dry-run must be a boolean \(true\/false\) \(got "maybe"\)/.test(drMb16.stderr) &&
+    rlF16.status === 0 && /DRY-RUN/.test(rlF16.stdout),
+    "evals (CLI) switches: --set-baseline=false writes no baseline (=true does), --dry-run=maybe exits 2 with the argument error, --require-live=false without a key dry-runs (got " +
+    JSON.stringify([sbF16, sbT16, drMb16, rlF16].map((r) => [r.status, r.baseline, (r.stderr || "").trim().slice(0, 80)])) + ")");
 
   // bug.md evidence in brackets ([object Object], [A-Z]) is content: doctor documents both sections and approve design passes.
   run(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);

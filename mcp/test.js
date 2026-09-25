@@ -145,6 +145,13 @@ function endRun() {
 
   const list = await rpc("tools/list", {});
   ok(list.result.tools.length === 29, "tools/list returns 29 tools (got " + list.result.tools.length + ")");
+  // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
+  // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
+  const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
+  const ntvSentence = (ctDesc.match(/A task with no runnable _Verify:_ and nothing recorded.*?\)\./) || [""])[0];
+  ok(/nothingToVerify: true/.test(ntvSentence) && /pass it too/.test(ntvSentence) && !/keep listing|counts it/.test(ntvSentence) &&
+    /plus a localized note; doctor, spec_finish and ROADMAP\.md list such an unverified task with its localized reason\./.test(ctDesc),
+    "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
 
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;
@@ -606,6 +613,21 @@ function endRun() {
     "duplicate task numbers tick the next open one; '1.1' is not parsed as task 1");
   const trImpl = S.traceCheck(rDir, "billing");
   ok(trImpl.implementsFiles[0] === "src/user_service.py" && trImpl.missingImplFiles.length === 0, "_Implements: src/user_service.py_ keeps the underscore");
+  // One reading of an _Implements:_ reference: a `:12` / `#L12` anchor names the file (as coverage and the drift baseline
+  // read it) — trace_check resolved the raw string, so doctor and finish failed "files that don't exist" for a file
+  // coverage counted. An anchor-only reference names nothing (missing); the spelling reported is the task's.
+  const anc = S.createFeature(rDir, "Anchors", ["core"]);
+  fs.writeFileSync(path.join(anc.dir, "requirements.md"), "# R\n\n## Acceptance Criteria\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n");
+  fs.writeFileSync(path.join(anc.dir, "tasks.md"), "# T\n\n- [x] 1. Build it _Requirements: US-1.AC-1_\n  - _Implements: src/user_service.py:1_\n" +
+    "- [x] 2. More _Requirements: US-1.AC-1_\n  - _Implements: src/user_service.py#L1-L3, `src/user_service.py:4:2`_\n");
+  const ancTr = S.traceCheck(rDir, "anchors");
+  const ancDoc = S.specDoctor(rDir, "anchors").checks.find((c) => c.id === "traceability");
+  fs.appendFileSync(path.join(anc.dir, "tasks.md"), "- [x] 3. Anchor only _Requirements: US-1.AC-1_\n  - _Implements: #L9_\n");
+  const ancTr2 = S.traceCheck(rDir, "anchors");
+  ok(ancTr.verdict === "pass" && ancTr.missingImplFiles.length === 0 && ancTr.implementsFiles.join() === "src/user_service.py:1,src/user_service.py#L1-L3,src/user_service.py:4:2" &&
+    ancDoc.status === "pass" && ancTr2.missingImplFiles.join() === "#L9",
+    "trace_check reads _Implements: path:12 / path#L12_ as the file (like coverage and the drift baseline): no 'files that don't exist', doctor passes; an anchor alone names nothing (got " +
+    JSON.stringify([ancTr.verdict, ancTr.missingImplFiles, ancDoc.status, ancTr2.missingImplFiles]) + ")");
 
   // next_action: ticking tasks after approval is progress, not a spec change.
   const na2Feat = S.createFeature(rDir, "Flow", ["core"]);
@@ -1084,6 +1106,19 @@ function endRun() {
     fzDone.ok && fzDone.unverifiedReason === undefined && !S.verificationStatus(w1, "fence", fz.dir).unverified.length &&
     !S.finishFeature(w1, "fence").blockers.some((b) => /verification evidence/.test(b)),
     "a fenced example under a task lends it no _Verify:_ / _Implements:_ / AC coverage (brief, trace_check, complete_task, finish) — the brief still shows the example");
+  // …nor AC / T-IDs to its brief: the example's US-2.AC-1 / T-02 / T-99 gave task 1 a foreign criterion and test, flipped
+  // the loop to tdd and reported T-99 unresolved — while trace_check read US-2.AC-1 as uncovered.
+  const fb = S.createFeature(w1, "Fence brief", ["core", "tdd"]);
+  fs.writeFileSync(path.join(fb.dir, "requirements.md"), "# R\n\n## Acceptance Criteria\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n2. **US-2.AC-1** — WHEN a THE SYSTEM SHALL b.\n");
+  fs.writeFileSync(path.join(fb.dir, "test-plan.md"), "# TP\n\n| Test | AC |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-2.AC-1 |\n");
+  fs.writeFileSync(path.join(fb.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n\n- [ ] 1. Write the docs page _Requirements: US-1.AC-1_\n  ```md\n" +
+    "  Example of a task line: - [ ] 7. Foo _Requirements: US-2.AC-1_ _Makes green: T-02_ T-99\n  ```\n");
+  const fbBrief = S.taskBrief(w1, "fence-brief", 1);
+  ok(fbBrief.ok && fbBrief.loop === "core" && fbBrief.acceptanceCriteria.map((a) => a.id).join() === "US-1.AC-1" && fbBrief.tests.length === 0 &&
+    !fbBrief.unresolved.acs.length && !fbBrief.unresolved.tests.length && /Example of a task line/.test(fbBrief.brief) &&
+    S.traceCheck(w1, "fence-brief").uncoveredByTasks.join() === "US-2.AC-1",
+    "spec_task_brief reads AC / T-IDs from the task's own text: a fenced example's IDs add no criterion, no test, no tdd loop, nothing unresolved (got " +
+    JSON.stringify({ loop: fbBrief.loop, acs: (fbBrief.acceptanceCriteria || []).map((a) => a.id), tests: (fbBrief.tests || []).map((t) => t.id), unresolved: fbBrief.unresolved }) + ")");
   // A zero exit code with no command is a claim, not a run: it can't clear a recorded failed run (4d).
   const nr = S.createFeature(w1, "Norun", ["core"]);
   fs.writeFileSync(path.join(nr.dir, "tasks.md"), "- [ ] 1. no verify marker\n- [ ] 2. fresh\n");
@@ -1798,6 +1833,33 @@ function endRun() {
       emptyLive3.status === 1 && /nenhum modelo foi chamado/.test(emptyLive3.stdout) && !/100\.0%|todos os conjuntos passam/.test(emptyLive3.stdout) && !fs.existsSync(path.join(evDir, "baseline.json")),
       "run-evals: a bare / non-numeric / zero / negative --max-items is a usage error (exit 2, localized) before any model call — no 0/0 = 100%, no baseline; an empty set is invalid dry and live (got " +
       JSON.stringify(maxBad3.map((r) => [r.status, r.stderr.trim().slice(0, 60)]).concat([[emptyDry3.status], [emptyLive3.status]])) + ")");
+    // Switches follow the CLI's rule: --x=true|false (1/0, yes/no, on/off), anything else exit 2. They were read by
+    // truthiness — "false" is truthy: --set-baseline=false overwrote baseline.json, --dry-run=false dry-ran,
+    // --require-live=false refused to run. A fetch stub answers "4" so the live path runs offline.
+    fs.writeFileSync(path.join(evDir, "golden.json"), JSON.stringify({ items: [{ id: "g1", input: "Sum 2+2", expect: { type: "contains", value: "4" } }] }));
+    fs.rmSync(path.join(evDir, "adversarial.json"));
+    const okStub = path.join(tmp, "stub-fetch-evals-ok.js"), okMark = path.join(tmp, "fetch-ok-called.txt");
+    fs.writeFileSync(okStub, "globalThis.fetch = async () => { require('fs').appendFileSync(process.env.FETCH_MARK, 'x'); return { ok: true, json: async () => ({ content: [{ type: 'text', text: '4' }], usage: { input_tokens: 1, output_tokens: 1 } }) }; };\n");
+    const baseF = path.join(evDir, "baseline.json");
+    const okEv = (args, key = "dummy") => {
+      try { fs.rmSync(okMark); } catch {}
+      const r = spawnSync(process.execPath, ["-r", okStub, EVALS, "Análise Avançada", "--project", evp, ...args],
+        { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: key, FETCH_MARK: okMark, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+      r.called = fs.existsSync(okMark);
+      r.baseline = fs.existsSync(baseF);
+      try { fs.rmSync(baseF); } catch {}
+      return r;
+    };
+    const sbFalse = okEv(["--set-baseline=false"]), sbZero = okEv(["--set-baseline=0"]), sbYes = okEv(["--dry-run=false", "--set-baseline=yes"]);
+    const drBad = okEv(["--dry-run=maybe"]), sbBad = okEv(["--set-baseline=later"]);
+    const rlFalse = okEv(["--require-live=false"], ""), rlOn = okEv(["--require-live=on"], "");
+    ok(sbFalse.status === 0 && sbFalse.called && !sbFalse.baseline && /REAL/.test(sbFalse.stdout) && sbZero.status === 0 && !sbZero.baseline &&
+      sbYes.status === 0 && sbYes.called && sbYes.baseline && /REAL/.test(sbYes.stdout) &&
+      drBad.status === 2 && /Argumento\(s\) inválido\(s\): --dry-run tem de ser um booleano \(true\/false\) \(recebido: "maybe"\)/.test(drBad.stderr) && !drBad.called &&
+      sbBad.status === 2 && /--set-baseline tem de ser um booleano/.test(sbBad.stderr) && !sbBad.called && !sbBad.baseline &&
+      rlFalse.status === 0 && /DRY-RUN/.test(rlFalse.stdout) && !rlFalse.called && rlOn.status === 2 && /--require-live/.test(rlOn.stderr),
+      "run-evals switches: --set-baseline=false / =0 write no baseline, --dry-run=false with a key runs live, =yes writes it; --dry-run=maybe is a usage error (exit 2, localized) before any call; --require-live=false without a key dry-runs, =on refuses (got " +
+      JSON.stringify([sbFalse, sbZero, sbYes, drBad, sbBad, rlFalse, rlOn].map((r) => [r.status, r.called, r.baseline])) + ")");
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
@@ -2237,6 +2299,32 @@ function endRun() {
       /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")) && /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
       "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, finish is blocked; approved → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
     ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
+    // A feature whose tasks are already ticked (a 1.12 feature upgraded — it had no tests gate — or any executing one):
+    // "write every planned test and confirm each fails … no implementation code until then" is impossible once the code
+    // exists. next_action words the same gate as a sign-off for the existing tests (T-IDs in test names), never /writeTests.
+    const f6l = S.createFeature(w5, "Order legacy", ["tdd"]);
+    write5(f6l, "classification.md", read5(f6l, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(f6l, "requirements.md", REQ);
+    write5(f6l, "design.md", DESIGN);
+    write5(f6l, "test-plan.md", "# Test Plan\n\n| Test ID | Covers |\n|---|---|\n" + acs6t.map((ac, i) => `| T-0${i + 1} | ${ac} |`).join("\n") + "\n");
+    write5(f6l, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: " + acs6t.join(", ") + "_\n  - _Makes green: T-01, T-02, T-03, T-04, T-05_\n" +
+      "- [ ] 2. [US1] Polish it\n  - _Requirements: US-1.AC-1_\n");
+    ["classification", "requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w5, f6l.slug, p));
+    const n6l0 = S.nextAction(w5, f6l.slug); // nothing ticked yet: test-first wording
+    S.completeTask(w5, f6l.slug, 1, "built under 1.12");
+    const n6l1 = S.nextAction(w5, f6l.slug); // executing, no test names the T-IDs: gate refuses → sign-off + what it checks
+    S.completeTask(w5, f6l.slug, 2, "polished");
+    write5(f6l, "tests/unit/order.test.js", ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} builds it", () => {});`).join("\n") + "\n");
+    const n6l2 = S.nextAction(w5, f6l.slug); // complete, tests named: approve (sign-off)
+    ok(/^Phase 4, the hard gate/.test(n6l0.recommendation) &&
+      n6l1.phase === "executing" && n6l1.step === "fix" && n6l1.refusedGate && n6l1.refusedGate.failing.join() === "tests-in-code" &&
+      /^Phase 4 sign-off: the implementation has already started/.test(n6l1.recommendation) && /T-ID in the test's name/.test(n6l1.recommendation) &&
+      /\/approve order-legacy tests/.test(n6l1.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6l1.recommendation) &&
+      n6l2.phase === "complete" && n6l2.step === "approve" && n6l2.pendingGates.join() === "tests" && /^Phase 4 sign-off/.test(n6l2.recommendation) &&
+      ![n6l1, n6l2].some((n) => /no implementation code|confirm each fails|\/writeTests/.test(n.recommendation)) &&
+      /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")) && /línea base \(\/eval x --set-baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
+      "next_action on an executing / complete +tdd feature with `tests` pending: a sign-off for the existing tests (T-IDs in test names, what the gate checks) — never 'write failing tests first, no implementation code' (got " +
+      JSON.stringify([n6l0.step, n6l1.phase, n6l1.step, n6l2.phase, n6l2.step, n6l2.recommendation.slice(0, 40)]) + ")");
     // +ai: the tests gate needs an eval set of the feature's own — the scaffold's sample golden.json is refused (eval-sets).
     const f6a = S.createFeature(w5, "Order ai", ["ai"], undefined, undefined, "pt");
     const aiSample = S.approvePhase(w5, f6a.slug, "tests");
@@ -2547,6 +2635,31 @@ function endRun() {
     const kBold = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/bold-ac"));
     ok(kBold.ok && kBold.mapping["1.1"] === "US-1.AC-1" && /### US-1: Export/.test(r6(im, ".specs", "bold-ac", "requirements.md")) && kBold.warnings.some((x) => /tasks\.md/.test(x)),
       "spec_import kiro: a bold **Acceptance Criteria:** label and a titled '### Requirement 1: Export' are read too; a missing tasks.md is reported");
+    // +tdd import: the test plan was scaffolded from the TEMPLATE requirements (createFeature ran before the imported ones
+    // were written) — T-01…T-05 covering US-1.AC-3 / US-1.AC-4 / US-2.AC-1 the feature lacks: trace "(typos?)", exit 1, and
+    // doctor FAILED traceability once real tasks were imported. The plan now comes from the imported ACs (= add_track tdd);
+    // a kept scaffold tasks.md cites only imported ACs and the tests covering them (else a localized placeholder).
+    const loginReq = "### Requirement 1\n\n**User Story:** As a user, I want to log in, so that I can use the app.\n\n#### Acceptance Criteria\n\n" +
+      "1. WHEN the user submits valid credentials THEN the system SHALL create a session\n2. IF the password is wrong THEN the system SHALL show an error\n";
+    w6(im, ".kiro/specs/tdd-login/requirements.md", loginReq);
+    w6(im, ".kiro/specs/tdd-login-tasks/requirements.md", loginReq);
+    w6(im, ".kiro/specs/tdd-login-tasks/tasks.md", "# Implementation Plan\n\n- [ ] 1. Build login\n  - _Requirements: 1.1, 1.2_\n");
+    const ti1 = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/tdd-login", { tracks: "tdd" }));
+    const ti2 = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/tdd-login-tasks", { tracks: "tdd" }));
+    const ti3 = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/tdd-login", { name: "Login PT", tracks: "tdd", lang: "pt" }));
+    const planCovers = (f) => (r6(im, ".specs", f, "test-plan.md").match(/^\| T-\d+ \|[^\n]*$/gm) || []).map((r) => r.split("|")[1].trim() + "→" + r.split("|")[5].trim()).join();
+    const tiTasks = ti1.ok ? r6(im, ".specs", "tdd-login", "tasks.md") : "";
+    const tiTr1 = safe6(() => S.traceCheck(im, "tdd-login")), tiTr2 = safe6(() => S.traceCheck(im, "tdd-login-tasks"));
+    const tiDoc2 = safe6(() => S.specDoctor(im, "tdd-login-tasks").checks.find((c) => c.id === "traceability"));
+    ok(ti1.ok && ti2.ok && ti3.ok && planCovers("tdd-login") === "T-01→US-1.AC-1,T-02→US-1.AC-2" && planCovers("tdd-login-tasks") === "T-01→US-1.AC-1,T-02→US-1.AC-2" &&
+      !/US-1\.AC-[34]|US-2\.AC-1|T-0[3-5]/.test(tiTasks) && /- \[ \] 3\. \[US1\][^\n]*\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_\n  - _Makes green: T-01, T-02_/.test(tiTasks) &&
+      /_Requirements: \[an imported criterion this task proves\]_\n  - _Makes green: \[the planned test this task makes green\]_/.test(tiTasks) &&
+      /_Requirements: \[um critério importado que esta tarefa prova\]_/.test(r6(im, ".specs", "login-pt", "tasks.md")) &&
+      tiTr1.verdict === "pass" && !tiTr1.phantomAcsInTasks.length && !tiTr1.phantomAcsInTests.length && !tiTr1.phantomTestsInTasks.length &&
+      tiTr2.verdict === "pass" && !tiTr2.phantomAcsInTests.length && tiDoc2.status !== "fail" &&
+      !ti1.imported.includes("test-plan.md") && ti1.files.includes("test-plan.md"),
+      "spec_import +tdd: the test plan covers the imported ACs only (with or without a source tasks.md); a kept scaffold tasks.md cites only imported ACs / their tests, else a localized placeholder — trace passes, doctor's traceability doesn't fail (got " +
+      JSON.stringify([planCovers("tdd-login"), tiTr1.verdict, tiTr2.verdict, tiDoc2 && tiDoc2.status]) + ")");
     let linked = false;
     try { fs.symlinkSync(outDir, path.join(im, "linked-spec"), "junction"); linked = true; } catch { /* no symlink rights: skip */ }
     const kLink = linked ? safe6(() => S.importSpec(im, "kiro", "linked-spec", { name: "via-link" })) : { ok: false, error: "outside the project (skipped)" };
