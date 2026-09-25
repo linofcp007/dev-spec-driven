@@ -1888,6 +1888,7 @@ const MSG = {
     evidence: {
       failed: (n, code) => `Task ${n}: the verification failed (exit ${code}) — not marking it done.`,
       missing: (n, slug) => `Task ${n} has a _Verify:_ command but no evidence was recorded — pass the evidence (command, exit code, summary) or run: dev-spec done ${slug} ${n} --run`,
+      missingManual: (n) => `Task ${n} has no usable evidence recorded — give a summary of how it was checked (a note), or a command with its exit code.`,
       ran: (cmd, code) => `ran: ${cmd} → exit ${code}`,
       failedTicked: (n, code) => `Task ${n} is already ticked, but its re-verification failed (exit ${code}) — recorded; it now counts as unverified until a passing run is recorded.`,
       badExit: (v) => `exitCode must be an integer (got '${v}').`,
@@ -2538,8 +2539,9 @@ const MSG = {
 
     // Guard mode (hooks/guard-hook.js, PreToolUse · spec_init {guard} · `dev-spec init --guard on|off`).
     guardMode: {
-      ask: (pending) => "dev-spec guard: no approved tasks cover code changes right now — approve a feature's tasks (spec_approve) or confirm to proceed." +
-        (pending ? ` Features with tasks awaiting approval: ${pending}.` : "") + " (Guard mode is on — dev-spec init --guard off disables it.)",
+      ask: (pending, stale) => "dev-spec guard: no approved tasks cover code changes right now — approve a feature's tasks (spec_approve) or confirm to proceed." +
+        (pending ? ` Features with tasks awaiting approval: ${pending}.` : "") +
+        (stale ? ` Tasks changed after their approval (review, then re-approve the tasks phase): ${stale}.` : "") + " (Guard mode is on — dev-spec init --guard off disables it.)",
       forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
       on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard).",
       off: "Guard mode OFF — code edits are not gated.",
@@ -2587,6 +2589,7 @@ const MSG = {
     evidence: {
       failed: (n, code) => `Tarefa ${n}: a verificação falhou (exit ${code}) — não a marco como feita.`,
       missing: (n, slug) => `A tarefa ${n} tem um comando _Verify:_ mas não foi registada evidência — passa a evidência (comando, exit code, resumo) ou corre: dev-spec done ${slug} ${n} --run`,
+      missingManual: (n) => `A tarefa ${n} não tem evidência utilizável registada — dá um resumo de como foi verificada (uma nota), ou um comando com o exit code.`,
       ran: (cmd, code) => `corrido: ${cmd} → exit ${code}`,
       failedTicked: (n, code) => `A tarefa ${n} já está marcada, mas a nova verificação falhou (exit ${code}) — ficou registado; passa a contar como não verificada até se registar uma execução com sucesso.`,
       badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
@@ -3196,8 +3199,9 @@ const MSG = {
     },
 
     guardMode: {
-      ask: (pending) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
-        (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
+      ask: (pending, stale) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
+        (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") +
+        (stale ? ` Tarefas alteradas depois da aprovação (revê e volta a aprovar a fase tasks): ${stale}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
       forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
       on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard).",
       off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
@@ -3243,6 +3247,7 @@ const MSG = {
     evidence: {
       failed: (n, code) => `Tarea ${n}: la verificación falló (exit ${code}) — no se marca como hecha.`,
       missing: (n, slug) => `La tarea ${n} tiene un comando _Verify:_ pero no se registró evidencia — pasa la evidencia (comando, exit code, resumen) o ejecuta: dev-spec done ${slug} ${n} --run`,
+      missingManual: (n) => `La tarea ${n} no tiene evidencia utilizable registrada — da un resumen de cómo se comprobó (una nota), o un comando con su exit code.`,
       ran: (cmd, code) => `ejecutado: ${cmd} → exit ${code}`,
       failedTicked: (n, code) => `La tarea ${n} ya está marcada, pero su nueva verificación falló (exit ${code}) — se ha registrado; cuenta como no verificada hasta que se registre una ejecución correcta.`,
       badExit: (v) => `exitCode debe ser un entero (recibido '${v}').`,
@@ -3852,8 +3857,9 @@ const MSG = {
     },
 
     guardMode: {
-      ask: (pending) => "dev-spec guard: ninguna tarea aprobada cubre cambios de código ahora mismo — aprueba las tareas de una función (spec_approve) o confirma para continuar." +
-        (pending ? ` Funciones con tareas pendientes de aprobación: ${pending}.` : "") + " (El modo guardia está activado — dev-spec init --guard off lo desactiva.)",
+      ask: (pending, stale) => "dev-spec guard: ninguna tarea aprobada cubre cambios de código ahora mismo — aprueba las tareas de una función (spec_approve) o confirma para continuar." +
+        (pending ? ` Funciones con tareas pendientes de aprobación: ${pending}.` : "") +
+        (stale ? ` Tareas modificadas después de su aprobación (revísalas y vuelve a aprobar la fase tasks): ${stale}.` : "") + " (El modo guardia está activado — dev-spec init --guard off lo desactiva.)",
       forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
       on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard).",
       off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",

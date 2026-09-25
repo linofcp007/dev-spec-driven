@@ -89,6 +89,19 @@ ok(/## Histórias de Utilizador/.test(ptReqCli) && /O SISTEMA DEVE/.test(ptReqCl
 const esSub = path.join(tmp, "es-cli");
 ok(/\[es\]/.test(run(["init", "tdd", "--lang", "es", "--project", esSub]).out), "init --lang es reports the project language");
 ok(/# Estándares de Pruebas/.test(fs.readFileSync(path.join(esSub, ".specs", "steering", "testing-standards.md"), "utf8")), "init --lang es writes Spanish steering");
+// --lang is the MCP `lang` enum: an unknown value is refused (exit 1, localized, nothing written) — it used to become
+// 'en' and be SAVED (init rewrote the project language); case is folded (PT = pt).
+const esRm = () => JSON.parse(fs.readFileSync(path.join(esSub, ".specs", "roadmap.json"), "utf8"));
+const badInit = run(["init", "--lang", "fr", "--project", esSub]);
+const badCreate = run(["create", "Zed", "--lang=portugues", "--project", esSub]);
+const badRoad = run(["roadmap", "--write", "--lang", "spanish", "--project", esSub]);
+const badSteer = run(["steering", "product2.md", "--lang", "br", "--project", esSub]);
+const upCreate = run(["create", "Yak", "--lang", "PT", "--project", esSub]);
+ok(badInit.code === 1 && /Argumento\(s\) no válido\(s\): --lang debe ser uno de: en, pt, es \(recibido: "fr"\)/.test(badInit.out) && esRm().meta.lang === "es" &&
+  badCreate.code === 1 && !fs.existsSync(path.join(esSub, ".specs", "zed")) && badRoad.code === 1 && !esRm().meta.roadmapLang &&
+  badSteer.code === 1 && !fs.existsSync(path.join(esSub, ".specs", "steering", "product2.md")) &&
+  upCreate.code === 0 && JSON.parse(fs.readFileSync(path.join(esSub, ".specs", "yak", ".state.json"), "utf8")).lang === "pt",
+  "--lang outside en|pt|es is refused before anything is written (init keeps the project language; create/roadmap/steering write nothing); --lang PT = pt (got " + badInit.out.trim() + ")");
 
 // doctor (fresh scaffold not ready)
 const doc = run(["doctor", "Invoice Summary"]);
@@ -224,6 +237,14 @@ fs.writeFileSync(path.join(w1p, ".specs", "tarefas", "tasks.md"), "- [ ] 1. um\n
 const w1Pt = run(["done", "tarefas", "1", "--project", w1p]);
 ok(/Tarefa 1 feita\. 1\/2\s+próxima → #2 dois/.test(w1Pt.out) && /tem de ser um inteiro/.test(run(["done", "tarefas", "x", "--project", w1p]).out) &&
   /já estava feita/.test(run(["done", "tarefas", "1", "--project", w1p]).out), "done output and refusals follow the feature language (PT)");
+// A `_Verify:_` inside a fenced example under a task is documentation, never the task's command: done --run refuses
+// (noRunnable) and runs nothing.
+run(["create", "Fenced", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "fenced", "tasks.md"), "- [ ] 1. Document the task markers in the README\n  ```md\n  - [ ] 9. Example task\n" +
+  "    - _Verify: node -e \"require('fs').writeFileSync('FENCED-VERIFY-RAN.txt','x')\"_\n  ```\n");
+const w1Fence = spawnSync(process.execPath, [CLI, "done", "fenced", "1", "--run", "--project", w1p], { encoding: "utf8", cwd: w1p });
+ok(w1Fence.status === 1 && /task 1 has no runnable _Verify: <command>_ marker/.test(w1Fence.stderr) && !fs.existsSync(path.join(w1p, "FENCED-VERIFY-RAN.txt")) &&
+  /- \[ \] 1\. Document/.test(w1Read("fenced")), "done --run never executes a _Verify:_ from a fenced example under the task (noRunnable, nothing ran, task open)");
 // Review fixes: the second "3." never borrows the first one's passing run; "--exit 0" without --cmd can't clear
 // a recorded failure; a one-line ```code``` span doesn't hide the tasks below it.
 run(["create", "Dup Two", "core", "--project", w1p]);

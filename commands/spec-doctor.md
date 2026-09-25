@@ -12,7 +12,8 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
 
 - **Fails** (block advancing): `ears` errors, `clarifications` still open, `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
-  a `[SaaS]`/`[AI]` section, which the design approval refuses), `traceability` gaps, unfilled `saas-sections` /
+  a `[SaaS]`/`[AI]` section, which the design approval refuses; a written-out list such as `[owner, admin]` is
+  content, not a placeholder), `traceability` gaps, unfilled `saas-sections` /
   `ai-sections` (missing, or the `> **TODO**` sentinel still there / empty body), missing `requirements`/`design`,
   a bugfix's `root-cause`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),

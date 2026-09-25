@@ -33,8 +33,11 @@ BEFORE claiming any status:
   - a summary-only manual attestation ("checked the login page by hand") verifies only a task with **no runnable
     command** (no `_Verify:_`, or a `[bracketed]` manual check);
   - a command without its exit code, a non-integer exit code, or a bare `{exitCode: 0}` with nothing else is
-    **rejected**; "exit 0" without a command is a note, never a run;
-  - a note given after a run is attached to it (`note`) — it never overwrites or clears the run's result.
+    **rejected**; "exit 0" without a command is a note, never a run (a bare `{exitCode: 0}` recorded by v1.12
+    still verifies a task with no runnable command — legacy evidence never leaves a task worse off than none);
+  - a note given after a run is attached to it (`note`) — it never overwrites or clears the run's result;
+  - only the task's own lines count: a `_Verify:_` inside a fenced code example under a task is documentation,
+    never run by `done --run`.
 - **Failed runs.** The latest failed run makes the task unverified — even an already-ticked one (a failed
   re-check is recorded and the task stays ticked but unverified). Only a later **passing** run clears it; a note
   can't paper over it.

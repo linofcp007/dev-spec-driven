@@ -21,7 +21,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`);
   doctor and `spec_finish` list each unverified task with a localized reason, and ROADMAP.md counts them
   per feature. A `.state.json` whose evidence/approvals aren't objects is refused
-  before tasks.md is touched.
+  before tasks.md is touched. A task with no runnable `_Verify:_` stays outside the run gate: a v1.12 bare
+  `{exitCode: 0}` there still verifies (legacy evidence never leaves a task worse off than none), a later
+  note becomes its summary, and the "no evidence" note never claims a `_Verify:_` command it doesn't have.
 - **Placeholder and approve gates.** An untouched scaffold passed `doctor` with `readyToAdvance: true`,
   and `spec_approve` stamped anything. Doctor has a `placeholders` check (fail for the current and earlier
   phases, warn for later ones), the approval runs that phase's checks and refuses while any fails, and
@@ -32,14 +34,19 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   bug.md's Root Cause was written — tasks after the root-cause task are now refused until it is, and the
   template's own "Fix the root cause" task can't open the gate for itself. The requirements.md hook no
   longer says "all clean" while placeholders remain. Placeholder detection leaves code alone
-  (`[Authorize]`, `[dependencies]`, `[]`, `[0, 1]`) and treats the scaffold's verbatim +saas/+ai tasks as
-  real tasks.
+  (`[Authorize]`, `[dependencies]`, `[]`, `[0, 1]`) and written-out enumerations (`[owner, admin]`,
+  `[id, amount_cents, issued_at]`, `[GET | POST]` — only the templates' own, like `[factories, fixtures, seeds]`,
+  stay placeholders), so an approved 1.12 spec with bracketed lists stays finishable; its ID-list check is
+  linear (a long space-separated ID list in one bracket used to freeze the server); and it treats the
+  scaffold's verbatim +saas/+ai tasks as real tasks.
 - **Task scanner.** Tasks inside HTML comments or fenced code were counted and ticked, `complete` ticked
   the first regex match in the file, `01.` wasn't task 1, and a stray unclosed `<!--` or fence hid every
   task below it (the feature could read as complete). One comment- and fence-aware scanner now serves
   status, next, complete, brief and finish; task numbers are numeric; a duplicated number resolves to its
   first OPEN task (doctor warns `duplicate-tasks`), `done --run` runs the `_Verify:_` of the task it
-  ticks, and the tick lands on exactly that line (CRLF kept).
+  ticks, and the tick lands on exactly that line (CRLF kept). Markers in a fenced example under a task
+  (`_Verify:_`, `_Implements:_`, AC/T IDs) are the example's, never the task's: `done --run` doesn't
+  execute them, and trace_check doesn't count them as coverage or planned files.
 - **Tracks.** A Mermaid node `X[AI]` or prose mentioning `[AI]` switched +ai on (doctor then failed ten
   "missing" AI sections). Tracks are now stored in `.state.json`; older features are detected from real
   headings only. `'tdd,saas'` / `'+saas +ai'` are split, unknown names get a did-you-mean error, and
@@ -71,7 +78,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   "gaps-found" with nothing under it); a value flag no longer swallows the next flag; repeated `--add` /
   `--rm` / `--req` are all kept; `--tracks` is merged with positional tracks everywhere; `backlog rm` of an
   unknown name is an error; `ears --text "---"` is a value; approvals default to the same approver on both
-  surfaces.
+  surfaces; `--lang` is checked against `en|pt|es` like the MCP enum (an unknown value such as `fr` became
+  `en` and was saved — `init` rewrote the project language).
 - **Localization.** CLI human output, SessionStart phase names, argument errors and the eval harness speak
   the feature's (or project's) language — EN/PT/ES; `--json` is unchanged.
 - **Pre-commit.** Staged paths with accents (`serviços/.specs/…`) were quoted by git and skipped; names are
@@ -111,7 +119,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   dependencies it prunes; restore puts the feature and them back.
 - **Guard mode** (`spec_init {guard}`, `dev-spec init --guard on|off`, `/spec-guard`): an opt-in
   PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
-  while no feature has approved, unfinished tasks. Silent when off; never blocks on its own errors.
+  while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
+  (appended or edited) covers nothing until re-approved. Silent when off; never blocks on its own errors.
 - **Scoped steering**: Kiro-compatible front matter (`inclusion: always | fileMatch | manual`,
   `fileMatchPattern`), custom steering files via `steering_scaffold` / `dev-spec steering`, per-task
   selection in `spec_task_brief` (matching `fileMatch` bodies quoted), and a doctor warning for steering

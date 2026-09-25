@@ -1007,6 +1007,9 @@ function guardEnabled(projectDir) {
 //          code — NotebookEdit only edits them) · some non-archived feature has an approved tasks phase and open
 //          tasks (a FORCED approval still counts, with a `note` saying so);
 //   ask:   otherwise, with a localized `reason` (project language).
+// An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
+// it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
+// "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts.
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
   if (!guardEnabled(pdir)) return { guard: false, decision: "allow", why: "off" };
@@ -1020,7 +1023,7 @@ function guardCheck(projectDir, filePath, cwd) {
   const ext = path.extname(abs).toLowerCase();
   if (!CODE_EXT.has(ext) && ext !== ".ipynb") return allow("not-code");
   const root = specsRoot(pdir);
-  const covering = [], forced = [], pending = [];
+  const covering = [], forced = [], pending = [], stale = [];
   for (const name of safeReaddir(root).sort()) {
     if (!isFeatureFolder(name, root)) continue; // _archive, steering, dot folders are not features
     const dir = path.join(root, name);
@@ -1030,13 +1033,14 @@ function guardCheck(projectDir, filePath, cwd) {
     const st = readJson(statePath(dir)).data;
     const ap = isObj(st) && isObj(st.approvals) ? st.approvals.tasks : null;
     if (!ap) pending.push(name);
+    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && textFingerprint(tasksText, "tasks") !== ap.fingerprint) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
   }
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
-  const shown = pending.slice(0, 3).join(", ") + (pending.length > 3 ? ", …" : "");
-  return { guard: true, decision: "ask", why: "no-approved-tasks", pending, reason: G.ask(shown) };
+  const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
+  return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
 }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
@@ -1544,7 +1548,7 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 function bugfixGate(dir, kind, blocks, task, lng) {
   if (kind !== "bugfix" || !task || sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
   const writesRootCause = (b) => {
-    const t = [b.text, ...b.body].join(" ");
+    const t = taskProse(b).join(" ");
     const mk = taskMarkers(b);
     return RE_ROOT_CAUSE_TASK.test(t) && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(t) && !mk["makes green"].length && !mk.verify.length;
   };
@@ -1628,7 +1632,7 @@ function completeTask(projectDir, name, number, evidence) {
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
-      : EV.missing(n, f.slug);
+      : runnable ? EV.missing(n, f.slug) : EV.missingManual(n);
   }
   return res;
 }
@@ -1900,7 +1904,7 @@ function traceCheck(projectDir, name, opts = {}) {
   const rawPlan = readIfExists(path.join(dir, "test-plan.md")) || "";
   // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace). An ID
   // that only appears in a fenced code block (an example) is not a required AC either (requirementAcIds).
-  const tasks = stripHtmlComments(rawTasks);
+  const tasks = tasksProseText(rawTasks); // comments out, fenced examples blanked (the task scanner's view)
   const testPlan = stripHtmlComments(rawPlan);
   const tracks = detectTracks(dir);
 
@@ -2086,7 +2090,7 @@ function secondaryDefinitions(reqText) {
 // it is an inactive artifact and must not silence (or raise) anything — the rest of traceCheck reads it only under tdd.
 function traceSecondary(dir, reqText, blocks, planText, tracks) {
   const { defined, all } = secondaryDefinitions(reqText);
-  const inTasks = secondaryIds(blocks.map((b) => [b.text, ...b.body].join("\n")).join("\n"));
+  const inTasks = secondaryIds(blocks.map((b) => taskProse(b).join("\n")).join("\n"));
   const inPlan = tracks.includes("tdd") ? secondaryIds(testPlanEntries(planText).map((e) => e.text).join("\n")) : new Map();
   const inQuickstart = secondaryIds(realLines(readIfExists(path.join(dir, "quickstart.md")) || "", RE_SECONDARY_ID_LINE).join("\n"));
   const out = { uncoveredEdgeCases: [], uncoveredNfr: [], uncoveredSuccessCriteria: [], phantomSecondary: [] };
@@ -2481,7 +2485,7 @@ function taskBlocks(tasksText) {
     if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
   }
   TASK_BLOCKS_MEMO.set(key, blocks);
-  return blocks.map((b) => ({ ...b, body: b.body.slice() }));
+  return blocks.map((b) => ({ ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }));
 }
 function scanTaskBlocks(tasksText) {
   const blocks = [];
@@ -2493,9 +2497,10 @@ function scanTaskBlocks(tasksText) {
   scanTaskLines(tasksText).forEach((ln, i) => {
     const line = ln.vis;
     if (ln.code) {
-      // Fenced code is never a task, heading or checkpoint. Right under a task it stays in its body.
+      // Fenced code is never a task, heading or checkpoint. Right under a task it stays in its body (the brief shows
+      // it) — flagged in bodyCode: an example's _Verify:_ / _Implements:_ / IDs are never the task's own (taskProse).
       if (ln.fenceOpen) owner = cur && line.trim() && (/^\s/.test(line) || !prevBlank) ? cur : null;
-      if (owner && line.trim()) owner.body.push(line.trim());
+      if (owner && line.trim()) { owner.body.push(line.trim()); owner.bodyCode.push(owner.body.length - 1); }
       if (!owner) cur = null;
       prevBlank = !line.trim();
       return;
@@ -2523,6 +2528,7 @@ function scanTaskBlocks(tasksText) {
         story: (lead.match(/\[(US\d+|shared)\]/i) || [])[1] || null,
         text,
         body: [],
+        bodyCode: [], // indices into body of the lines that are fenced code
         phase,
         checkpoint: null,
         line: i, // source line index + checkbox column: completeTask ticks exactly this task
@@ -2553,13 +2559,27 @@ function duplicateTaskNumbers(tasks) {
   return [...dups].sort((a, b) => a - b);
 }
 
+// A task's own lines: its text and the body lines OUTSIDE fenced code. Markers, IDs and the bugfix gate read these —
+// "HTML comments and fenced code never count": a ```md example under a task holding `_Verify: rm -rf dist_` used to
+// become the task's _Verify:_ (and `done --run` executed it). The brief still shows the whole body.
+function taskProse(block) {
+  const code = new Set(block.bodyCode || []);
+  return [block.text, ...block.body.filter((_, k) => !code.has(k))];
+}
+// tasks.md as the task scanner reads it: HTML comments out and fenced code blanked line for line (the same fence
+// rules as taskBlocks — an unclosed fence in a task's body ends with the item). trace_check and implementsRefs read
+// AC/T IDs and _Implements:_ from it, so a fenced example is never coverage nor a planned file.
+function tasksProseText(tasksText) {
+  return scanTaskLines(tasksText).map((l) => (l.code ? "" : l.vis)).join("\n");
+}
+
 // `_Label: value_` markers on the task line or its sub-lines. The value runs to the LAST underscore
 // before whitespace/end, so paths like `src/keys_util.js` survive.
 const RE_TASK_MARKER = /_(Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify):\s*(.+?)_(?=\s|$)/gi;
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify"]); // commas belong to the value
 function taskMarkers(block) {
   const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [] };
-  for (const line of [block.text, ...block.body]) {
+  for (const line of taskProse(block)) {
     let m;
     RE_TASK_MARKER.lastIndex = 0;
     while ((m = RE_TASK_MARKER.exec(line)) !== null) {
@@ -2616,14 +2636,17 @@ function normalizeEvidence(ev) {
 //   duplicate-number · stale-evidence (see taskEvidenceIssue).
 // `runnable` = the task's _Verify:_ is a real command (not a [bracketed placeholder/manual note]): then
 // only {command, exitCode: 0} verifies it. A check with no command may be attested by a summary. An exit
-// code only counts next to the command that produced it (a v1.12 record could hold a bare {exitCode: 0}).
+// code only proves a RUNNABLE _Verify:_ next to the command that produced it (a v1.12 record could hold a bare
+// {exitCode: 0}). A task with no runnable _Verify:_ is outside the run gate — with no record at all it passes —
+// so the v1.12 bare {exitCode: 0} (1.12's "done (verified)") passes there too: legacy evidence must never leave
+// a task worse off than none (it used to block spec_finish, and neither a note nor --run could clear it).
 function evidenceIssue(e, runnable) {
   if (!e || typeof e !== "object" || Array.isArray(e)) return "no-evidence";
   // spec_impact --reopen: the spec this record proved changed — only a new run (or, without a runnable _Verify:_, a new note) clears it.
   if (e.stale === true) return "stale-evidence";
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
-  return (e.command && e.exitCode === 0) || !!e.summary ? null : "no-evidence";
+  return e.exitCode === 0 || !!e.summary ? null : "no-evidence";
 }
 // Evidence is keyed by task NUMBER and stamped with its task: `task` (the text) and `verify` (the task's
 // runnable _Verify:_ command(s) when it was recorded). A stamped record counts only while that _Verify:_ is
@@ -2659,7 +2682,8 @@ function taskEvidenceIssue(evidence, block, dup) {
 }
 // evidence[n] stays the LATEST RUN {command, exitCode, summary, at} (the v1.12 shape) plus `history`, its
 // last EVIDENCE_HISTORY runs (oldest dropped) for pass-rate metrics, and the stamps. A note after a run is
-// attached as `note` — it never overwrites (or clears) the run's result.
+// attached as `note` — it never overwrites (or clears) the run's result. A v1.12 bare {exitCode: 0} (no command)
+// was a claim, not a run: a note after it becomes the record's summary (attaching it as `note` left it unreadable).
 const EVIDENCE_HISTORY = 5;
 const EVIDENCE_OTHERS = 5;
 function recordEvidence(prev, ev, at, stamp) {
@@ -2667,7 +2691,8 @@ function recordEvidence(prev, ev, at, stamp) {
   const pRun = p && p.exitCode != null;
   const stamped = (r) => { const o = { ...r, ...stamp }; if (!stamp.shared) delete o.shared; delete o.others; return o; };
   if (ev.exitCode == null) {
-    const rec = stamped(pRun ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
+    const claim = pRun && p.exitCode === 0 && !p.command; // v1.12 bare exit 0: the note replaces it
+    const rec = stamped(pRun && !claim ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
     if (stamp.verify) return rec; // a note never clears a stale run of a runnable _Verify:_ (only a new run does)
     delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change
     return rec;
@@ -2712,6 +2737,9 @@ function verificationStatus(projectDir, slug, dir) {
     // no command and nothing recorded (for THIS task — a duplicated number's record may be the other's)
     if (!runnable && ownEvidence(evidence, b, dups.has(b.number)) == null) continue;
     const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
+    // Without a runnable _Verify:_ a record that proves nothing is no worse than no record (which passes): only a
+    // failed run, a stale record or another task's record under the number count against it.
+    if (!runnable && reason === "no-evidence") continue;
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
     if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
   }
@@ -3104,9 +3132,10 @@ function finishFeature(projectDir, name, opts = {}) {
     for (const b of blocks) {
       const ev = ownEvidence(vs.evidence, b, dups.has(b.number)); // never the other "N."'s run
       const hasVerify = taskMarkers(b).verify.length > 0;
-      let tail = "";
-      if (ev) tail = " — " + [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") : "", oneLine(ev.summary)].filter(Boolean).join(" · ");
-      else if (hasVerify) tail = " — " + F.noEvidence;
+      // A record with nothing to show (a v1.12 bare {exitCode: 0}) prints its exit code — never a dangling " — ".
+      const shown = ev ? [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") : ev.exitCode != null ? "exit " + ev.exitCode : "",
+        oneLine(ev.summary)].filter(Boolean) : [];
+      const tail = shown.length ? " — " + shown.join(" · ") : hasVerify ? " — " + F.noEvidence : "";
       body.push(`- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}${tail}`);
     }
     body.push("");
@@ -4609,7 +4638,10 @@ function sectionState(design, sections, marker) {
 // ---------------------------------------------------------------------------
 
 // Bracket contents that are never a placeholder: English-stable tags, stable IDs (alone or as a list).
-const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*[,;/]?\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+// The list separator is UNAMBIGUOUS — `\s*(?:[,;/]\s*)?`, never `\s*[,;/]?\s*`: with the separator optional
+// between two `\s*`, every whitespace gap could split two ways and a failing match (`[US-1 US-2 … and more]`)
+// backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
 // The code spans a template itself leaves as placeholders — exactly the bugfix test plan's `[path]` / `[caminho]` /
@@ -4627,6 +4659,41 @@ function codePlaceholderSet() {
 // A list or interval of numbers (`score in [0, 1]`) — the templates' numeric placeholders are single values
 // (`[85]%`, `$[0.03]`).
 const RE_NUMBER_LIST = /^\s*[-+]?\d+(?:\.\d+)?(?:\s*[,;]\s*[-+]?\d+(?:\.\d+)?)+\s*$/;
+// An enumeration a spec writes out — `[owner, admin]`, `[GET | POST]`, `[id, number, amount_cents, issued_at]`,
+// `["read only", "admin"]`, `` [`draft`, `sent`] ``: two or more items split by , ; or |, each ONE token (no inner
+// whitespace) or a quoted / code-span string. That is content, not a slot: bracketed columns, roles or states in a
+// criterion used to fail the placeholder gate of approved 1.12 specs. Prose items ("external services") and an
+// example lead ("e.g., Redis") keep it a placeholder, and so do the templates' own enumerations
+// ([factories, fixtures, seeds], [GDPR | PCI | …]) — templateEnumerationSet(). Every test is linear (no nesting).
+const RE_ENUM_ITEM = /^(?:[^\s[\]"'`]{1,60}|"[^"\n]{0,60}"|'[^'\n]{0,60}'|`[^`\n]{1,60}`)$/;
+const RE_EXAMPLE_LEAD = /^(?:e\.?g\.?|eg|i\.?e\.?|ex\.?:?|p\.\s?ej\.?:?|por ejemplo|por exemplo|for example)$/i;
+function isEnumeration(inner) {
+  const parts = String(inner).split(/[,;|]/).map((p) => p.trim());
+  return parts.length >= 2 && !RE_EXAMPLE_LEAD.test(parts[0]) && parts.every((p) => RE_ENUM_ITEM.test(p));
+}
+const enumKey = (inner) => String(inner).replace(/\s+/g, " ").trim().toLowerCase();
+// The templates' own bracketed enumerations (every builder, every language, every track) — still placeholders
+// wherever they appear verbatim, although they look like a real list.
+let TEMPLATE_ENUMERATIONS = null;
+function templateEnumerationSet() {
+  if (TEMPLATE_ENUMERATIONS) return TEMPLATE_ENUMERATIONS;
+  const set = new Set();
+  const a = { name: "x", tracks: VALID_TRACKS, label: "", slug: "x", kind: "feature", description: "" };
+  const build = [(l) => i18n.classification(a, l), (l) => i18n.requirements(a, l), (l) => i18n.design(a, l), (l) => i18n.tasks(a, l),
+    (l) => i18n.testPlan("x", l, VALID_TRACKS), (l) => i18n.evalPlan("x", l), (l) => i18n.loadTest("x", l), (l) => i18n.quickstart("x", l),
+    (l) => i18n.checklist(a, l), (l) => i18n.integrationPlan("x", l), (l) => i18n.promptStub("x", l), (l) => i18n.bugReport(a, l),
+    (l) => i18n.bugRequirements(a, l), (l) => i18n.bugTestPlan("x", l), (l) => i18n.bugTasks("x", l),
+    ...i18n.steeringKnownFiles().map((f) => (l) => i18n.steeringStub(f, l)), ...["saas", "ai"].map((t) => (l) => i18n.trackDesignBlock(t, l))];
+  for (const l of i18n.LANGS) {
+    for (const fn of build) {
+      let t;
+      try { t = fn(l); } catch { continue; } // a builder's trouble never breaks placeholder detection
+      if (typeof t !== "string") continue;
+      for (const m of t.matchAll(/\[([^[\]\n]*)\]/g)) if (isEnumeration(m[1])) set.add(enumKey(m[1]));
+    }
+  }
+  return (TEMPLATE_ENUMERATIONS = set);
+}
 
 // [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
 // kind 'bracket' | 'todo'):
@@ -4696,9 +4763,11 @@ function bracketPlaceholders(line, refs) {
     const inner = s.slice(i + 1, j);
     const before = i > 0 ? s[i - 1] : "";
     const after = s[j + 1] || "";
+    const rawInner = line.slice(i + 1, j); // code spans intact (the blanking above keeps every column)
     let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
       (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner);
+      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) ||
+      (isEnumeration(rawInner) && !templateEnumerationSet().has(enumKey(rawInner)));
     let end = j;
     if (after === "[") { // reference link [x][y]: both halves are syntax
       const k = groupEnd(j + 1);
@@ -6807,12 +6876,12 @@ function scanCodebase(projectDir, opts = {}) {
   return res;
 }
 
-// _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments stripped, the path
-// runs to the LAST underscore before whitespace, comma/semicolon lists, backticks dropped).
+// _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments and fenced code out, the
+// path runs to the LAST underscore before whitespace, comma/semicolon lists, backticks dropped).
 function implementsRefs(tasksText) {
   const out = [];
   const re = /_Implements:\s*(.+?)_(?=\s|$)/g;
-  const t = stripHtmlComments(tasksText || "");
+  const t = tasksProseText(tasksText || "");
   let m;
   while ((m = re.exec(t)) !== null) {
     m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });

@@ -170,8 +170,19 @@ function mcpConfig(client) {
 }
 
 // ---- dispatch --------------------------------------------------------------
+const CLI_LANGS = ["en", "pt", "es"]; // = the MCP tools' `lang` enum
 function main() {
   if (missingValue) die(projectText().missingValue(missingValue));
+  // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
+  // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
+  if (flags.lang !== undefined) {
+    const l = String(flags.lang).trim().toLowerCase();
+    if (!CLI_LANGS.includes(l)) {
+      const A = spec.msg(spec.projectLang(projectDir)).args;
+      die(A.invalid(A.item("--lang", A.oneOf(CLI_LANGS.join(", ")), JSON.stringify(String(flags.lang)))));
+    }
+    flags.lang = l;
+  }
   switch (cmd) {
     case undefined:
     case "help":

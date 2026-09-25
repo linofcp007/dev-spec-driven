@@ -956,6 +956,24 @@ function endRun() {
   ok(egBad1.ok === false && /'evidence' must be an object/.test(egBad1.error) && egBad2.ok === false && egBad3.ok === false && /'approvals'/.test(egBad3.error) &&
     fs.readFileSync(egTasks, "utf8") === egText, "a .state.json whose evidence/approvals aren't objects → state error, tasks.md untouched");
   fs.writeFileSync(path.join(eg.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {} }));
+  // f. a v1.12 bare {exitCode: 0} on a task with NO _Verify:_ (1.12's `done <f> 1 --exit 0` → "done (verified)") is not
+  // worse than no evidence: it passes doctor/finish, a later note becomes its summary, and the merge summary never ends
+  // in a dangling " — ". Only a runnable _Verify:_ needs a real {command, exitCode: 0}.
+  const lx = S.createFeature(w1, "Legacy exit", ["core"]);
+  fs.writeFileSync(path.join(lx.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n- [x] 1. Build the exporter\n- [x] 2. Document it\n- [ ] 3. Wire the button\n  - _Verify: npm test_\n");
+  fs.writeFileSync(path.join(lx.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {}, evidence: { 1: { exitCode: 0, at: "2026-01-01T00:00:00Z" }, 2: { at: "2026-01-01T00:00:00Z" } } }));
+  const lxVs = S.verificationStatus(w1, "legacy-exit", lx.dir);
+  const lxFin = S.finishFeature(w1, "legacy-exit");
+  const lxTask1 = lxFin.mergeSummary.split("\n").find((l) => / 1\. Build the exporter/.test(l)) || "";
+  const lxOdd = S.completeTask(w1, "legacy-exit", 2); // a record with nothing in it, on a task with no _Verify:_
+  const lxNote = S.completeTask(w1, "legacy-exit", 1, { summary: "exporter checked by hand" });
+  const lxRec = JSON.parse(fs.readFileSync(path.join(lx.dir, ".state.json"), "utf8")).evidence["1"];
+  ok(!lxVs.unverified.includes(1) && !lxFin.unverified.includes(1) && !(lxFin.blockers || []).some((b) => /#1/.test(b)) &&
+    S.specDoctor(w1, "legacy-exit").checks.find((c) => c.id === "verification").status === "pass" &&
+    lxTask1 === "- [x] 1. Build the exporter — exit 0" && !/ — $/m.test(lxFin.mergeSummary) &&
+    lxNote.ok && lxNote.verified === true && lxRec.summary === "exporter checked by hand" && lxRec.note === undefined &&
+    lxOdd.ok && lxOdd.verified === false && lxOdd.unverifiedReason === "no-evidence" && !/_Verify:_/.test(lxOdd.note) && /summary of how it was checked/.test(lxOdd.note),
+    "a v1.12 bare {exitCode: 0} on a task without _Verify:_ verifies (doctor, finish, merge summary 'exit 0'); a note replaces it as the summary; a no-_Verify:_ task's message never claims a _Verify:_ command");
   // 5. what `done --run` records: the count lines a plain tail loses, plus the tail, capped.
   const noisy = ["TAP version 13", "ok 1 - a", "ok 2 - b", "# tests 2", "# pass 2", "# fail 0", ...Array.from({ length: 12 }, (_, i) => "trailing noise line " + i)].join("\n");
   const sumNoisy = S.summarizeRunOutput(noisy);
@@ -993,6 +1011,19 @@ function endRun() {
   const cmList = S.statusFeature(w1, "fence").tasks.list;
   ok(cmList.length === 2 && cmList[0].text === "Detect the `<!--` opener" && cmList[1].text === "Detect the `-->` closer" && S.completeTask(w1, "fence", 2).ok,
     "'<!--' / '-->' inside inline code spans don't form a comment (both tasks keep their full text; task 2 completes)");
+  // Markers inside a fenced example under a task are the example's, never the task's: no _Verify:_ to run (brief,
+  // complete_task, doctor, finish), no _Implements:_ planned file, no AC coverage in trace_check. The brief still shows it.
+  fs.writeFileSync(path.join(fz.dir, "requirements.md"), "# Feature: Fence\n\n## Summary\nDocs.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL answer.\n");
+  fs.writeFileSync(fzTasks, "- [ ] 1. Document the task markers in the README\n  ```md\n  - [ ] 9. Example task\n    - _Requirements: US-1.AC-1_\n    - _Implements: src/example.js_\n" +
+    "    - _Verify: node -e \"require('fs').writeFileSync('FENCED-VERIFY-RAN.txt','x')\"_\n  ```\n**Checkpoint:** docs\n");
+  const fzBrief = S.taskBrief(w1, "fence", 1);
+  const fzTrace = S.traceCheck(w1, "fence");
+  const fzDone = S.completeTask(w1, "fence", 1);
+  ok(fzBrief.ok && fzBrief.verify.length === 0 && fzBrief.implements.length === 0 && /_Verify: node -e/.test(fzBrief.brief) &&
+    fzTrace.coveredByTasks === 0 && fzTrace.uncoveredByTasks.join() === "US-1.AC-1" && fzTrace.implementsFiles.length === 0 && fzTrace.plannedImplFiles.length === 0 &&
+    fzDone.ok && fzDone.unverifiedReason === undefined && !S.verificationStatus(w1, "fence", fz.dir).unverified.length &&
+    !S.finishFeature(w1, "fence").blockers.some((b) => /verification evidence/.test(b)),
+    "a fenced example under a task lends it no _Verify:_ / _Implements:_ / AC coverage (brief, trace_check, complete_task, finish) — the brief still shows the example");
   // A zero exit code with no command is a claim, not a run: it can't clear a recorded failed run (4d).
   const nr = S.createFeature(w1, "Norun", ["core"]);
   fs.writeFileSync(path.join(nr.dir, "tasks.md"), "- [ ] 1. no verify marker\n- [ ] 2. fresh\n");
@@ -1263,6 +1294,24 @@ function endRun() {
   // inline code is code even when it is bracketed words; only the templates' own `[path]`/`[caminho]`/`[ruta]` open up
   const words = S.placeholderReport("xUnit `[Fact]` · `[Authorize]` · Cargo `[dependencies]` · ini `[database]` · regex `[aeiou]` · `[Serializable]` `[HttpGet]`; PT `[caminho]`, ES `[ruta]`").map((x) => x.text);
   ok(words.join("|") === "[caminho]|[ruta]", "placeholderReport: C# attributes, TOML/INI tables and regex classes in code spans are code; PT `[caminho]` / ES `[ruta]` still are placeholders (got " + words.join("|") + ")");
+  // RE_STABLE_BRACKET is linear: a bracket of space-separated IDs followed by a word used to backtrack 2^k (26 IDs ≈ 9 s,
+  // freezing the MCP server and timing the hooks out). 40 single- and double-spaced IDs must take milliseconds.
+  const redosT0 = Date.now();
+  const redos = [S.placeholderReport("[" + "US-1 ".repeat(40) + "x]"), S.placeholderReport("Related: [" + Array.from({ length: 40 }, (_, i) => "US-" + (1 + (i % 3)) + ".AC-" + i).join("  ") + " and follow-ups]")];
+  const redosMs = Date.now() - redosT0;
+  ok(redosMs < 500 && redos.every((r) => r.length === 1) && !S.placeholderReport("[US-1.AC-1 T-01] [US-1.AC-1, T-01] [US-1.AC-1/T-01] [US-1.AC-1T-01]").length,
+    "placeholderReport: 40 space-separated IDs + a word in one bracket is checked in linear time (" + redosMs + " ms) and still flagged; ID lists (space, comma, slash, glued) stay exempt");
+  // A written-out enumeration is content (approved 1.12 specs used them in ACs); the templates' own enumerations stay placeholders.
+  const enums = S.placeholderReport([
+    "1. **US-1.AC-1** — WHEN an admin exports THE SYSTEM SHALL download a CSV with the columns [id, number, amount_cents, issued_at].",
+    "2. **US-1.AC-2** — IF the user's role is not one of [owner, admin] THEN THE SYSTEM SHALL return HTTP 403 for [GET | POST] and [`draft`, `sent`] or [\"read only\", \"admin\"].",
+    "Mocks: [factories, fixtures, seeds] · [GDPR | PCI | HIPAA | SOC2 | none] · [rede, fs, tempo, serviços externos] · [Consultivo | Semi-autónomo | Autónomo]",
+    "Still slots: [e.g., Redis] · [a, b c] · [trigger] · [optional] · [ , ]",
+  ].join("\n")).map((x) => x.line + ":" + x.text);
+  const enumReq = "# Feature: Export\n\n## Summary\nExport invoices.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV with the columns [id, number, amount_cents, issued_at].\n2. **US-1.AC-2** — IF the user's role is not one of [owner, admin] THEN THE SYSTEM SHALL return HTTP 403.\n";
+  ok(enums.join("|") === "3:[factories, fixtures, seeds]|3:[GDPR | PCI | HIPAA | SOC2 | none]|3:[rede, fs, tempo, serviços externos]|3:[Consultivo | Semi-autónomo | Autónomo]|4:[e.g., Redis]|4:[a, b c]|4:[trigger]|4:[optional]|4:[ , ]" &&
+    S.artifactState({ text: enumReq }) === "filled" && !S.earsValidate(enumReq).issues.some((i) => i.code === "placeholder"),
+    "placeholderReport: written-out enumerations ([id, amount_cents], [owner, admin], [GET | POST], code/quoted items) are content — not in the gate, not an EARS 'placeholder' warning; template enumerations, prose items and example leads still are (got " + enums.join("|") + ")");
   const auth = S.createFeature(w2, "Auth keys", ["core"]);
   fs.writeFileSync(path.join(auth.dir, "requirements.md"), "# Feature: Auth keys\n\n## Summary\nOnly callers passing the `[Authorize]` filter may list keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin lists keys THE SYSTEM SHALL return them.\n");
   fs.writeFileSync(path.join(auth.dir, "design.md"), "# Design: Auth keys\n\n## Overview\nA GET endpoint on KeysController.\n");
@@ -3704,6 +3753,25 @@ function endRun() {
     const gc1 = S.guardCheck(g, code);
     ok(gc1.decision === "ask" && gc1.why === "no-approved-tasks" && gc1.pending.length === 0 && /no approved tasks cover/.test(gc1.reason) && !/awaiting approval/.test(gc1.reason),
       "approved tasks that are all done no longer cover code changes → ask");
+    // A STALE tasks approval covers nothing: tasks appended (spec_append_tasks) or edited after it — the approval's
+    // fingerprint no longer matches tasks.md — keep the guard asking until the tasks phase is re-approved. Ticking a
+    // box is progress, not an edit (the fingerprint normalizes checkboxes).
+    const tasksFp = (file) => require("crypto").createHash("sha1").update(fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n").replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2")).digest("hex");
+    const gTasks = path.join(gFeat.dir, "tasks.md");
+    writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", fingerprint: tasksFp(gTasks) } } });
+    const gApp = S.appendTasks(g, "billing", [{ text: "Anything" }]);
+    const gStale = S.guardCheck(g, code);
+    const staleHook = asked(runGuard(pre(g, "Edit", { file_path: code, old_string: "a", new_string: "b" })));
+    writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-02T00:00:00Z", by: "t", fingerprint: tasksFp(gTasks) } } });
+    const gReapproved = S.guardCheck(g, code);
+    const gOpenNum = S.taskBlocks(fs.readFileSync(gTasks, "utf8")).find((b) => !b.done).number;
+    S.completeTask(g, "billing", gOpenNum, { summary: "checked by hand" });
+    fs.appendFileSync(gTasks, "\n- [ ] 99. Rewrite everything\n"); // a hand-added open task on an approved list
+    const gHand = S.guardCheck(g, code);
+    ok(gApp.ok && gApp.needsReapproval === true && gStale.decision === "ask" && gStale.stale.join() === "billing" && gStale.pending.length === 0 &&
+      /Tasks changed after their approval/.test(gStale.reason) && /billing/.test(staleHook || "") &&
+      gReapproved.decision === "allow" && gReapproved.why === "approved" && gHand.decision === "ask" && gHand.stale.join() === "billing",
+      "guard: tasks appended or hand-added after the tasks approval → the stale approval doesn't cover code changes (ask, names it); re-approved → allowed");
     const gArch = S.createFeature(g, "Old Work", ["core"]);
     writeState(gArch.dir, { ...S.readState(g, "old-work"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
     const gc2 = S.guardCheck(g, code);
