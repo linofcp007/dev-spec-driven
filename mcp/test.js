@@ -500,14 +500,14 @@ function endRun() {
   ok(hk.status === 0 && hk.stdout.trim() === "", "PostToolUse hook stays silent for files under .specs/<feature>/.execution/");
 
   // US-2: the protocol ships with the plugin and the skill routes to it.
-  const skillMd =fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
+  const skillMd = fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
   ok(fs.existsSync(path.join(root, "skills", "dev-spec-driven", "references", "subagent-execution.md")) &&
     fs.existsSync(path.join(root, "agents", "spec-implementer.md")) && fs.existsSync(path.join(root, "agents", "spec-reviewer.md")) &&
     /subagent-execution\.md/.test(skillMd) && /spec_task_brief/.test(skillMd),
     "subagent protocol + agents ship with the plugin and SKILL.md routes Phase 6 to them");
 
   // --- v1.11 review fixes: each assertion reproduces a finding from the full plugin review ---
-  const rDir =path.join(tmp, "proj-review");
+  const rDir = path.join(tmp, "proj-review");
   const rSpecs = path.join(rDir, ".specs");
   S.initProject(rDir, ["tdd"], "en");
   S.createFeature(rDir, "Billing", ["core"]);
@@ -3973,6 +3973,13 @@ function endRun() {
     fs.appendFileSync(path.join(l12, "tasks.md"), "- [ ] 4. Example edge\n  - _Requirements: EC-7_\n");
     ok(S.traceCheck(a12, "login").phantomSecondary.join() === "EC-7" && !S.traceCheck(a12, "login").uncoveredEdgeCases.includes("EC-7"),
       "a secondary ID written only in a fenced example is not defined: citing it is a phantom, and it is never 'uncovered'");
+    S.createFeature(a12, "Fenced", ["core"]);
+    fs.writeFileSync(path.join(a12, ".specs", "fenced", "requirements.md"), "## Summary\nX.\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n\n" +
+      "Example:\n```md\n1. **US-1.AC-1** — WHEN c THE SYSTEM SHALL d\n- **SC-001** — 90% of users finish in 1 minute\n```\n");
+    const fdoc12 = S.specDoctor(a12, "fenced").checks;
+    const fchk12 = (id) => (fdoc12.find((c) => c.id === id) || {}).status;
+    ok(fchk12("ac-uniqueness") === "pass" && fchk12("success-criteria") === "warn" && fchk12("priorities") === "pass",
+      "doctor reads requirements.md the same way: an AC repeated in a fenced example is no duplicate definition, an SC only in the example is no success criterion");
 
     // (3) a glob in _Implements:_ resolves against the project (the one glob): present when it matches a file; otherwise the
     // existing rule (done → missing, open → planned); never outside the project.

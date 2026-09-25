@@ -7,8 +7,9 @@
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
  *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
- *     is saved, run its mandatory checks for the active tracks. Surfaces gaps in the moment, with
- *     zero CI and zero cost.
+ *     is saved, run its mandatory checks for the active tracks. Any spec edit also refreshes ROADMAP.md
+ *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
+ *     moment, with zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
  *

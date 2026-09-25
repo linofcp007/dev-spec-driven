@@ -1564,7 +1564,7 @@ function completeTask(projectDir, name, number, evidence) {
     const raw = lines[task.line];
     lines[task.line] = raw.slice(0, task.col) + "x" + raw.slice(task.col + 1);
     updated = lines.join("\n");
-    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+    forgetCached(file); // written in place below: its cached text is dropped
     fs.writeFileSync(file, updated, "utf8");
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
@@ -2917,7 +2917,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // self-ignoring scratch: no repo config needed
     writeIfAbsent(paths.ledger, t.ledgerHeader(slug));    // the ledger is appended by the controller, never reset
-    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+    forgetCached(paths.brief); // written in place below: its cached text is dropped
     fs.writeFileSync(paths.brief, md, "utf8");            // derived artifact: regenerated on every call
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
@@ -3079,7 +3079,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+    forgetCached(summaryPath); // written in place below: its cached text is dropped
     fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
   }
   const ready = blockers.length === 0;
@@ -3803,7 +3803,7 @@ function removeFeature(projectDir, name) {
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
-  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+  invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.rmSync(dir, { recursive: true, force: true });
   pruneRoadmapRefs(projectDir, slug);
   maybeRefreshRoadmap(projectDir);
@@ -3825,7 +3825,7 @@ function archiveFeature(projectDir, name) {
   const dest = path.join(archRoot, slug);
   if (fs.existsSync(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) };
   const record = { at: new Date().toISOString(), ...archiveRecord(readRoadmap(projectDir), slug) };
-  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+  invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.renameSync(dir, dest);
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
@@ -3847,7 +3847,7 @@ function renameFeature(projectDir, name, newName) {
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
-  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+  invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.renameSync(oldDir, newDir);
   pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   maybeRefreshRoadmap(projectDir);
@@ -3948,7 +3948,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, TRACK_MARKER[tr]);
       if (!present) {
-        invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+        forgetCached(designPath); // written in place below: its cached text is dropped
         fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
         note("design.md (+sections)");
       }
@@ -3970,7 +3970,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (tasksText != null) {
       const block = trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng);
       if (block) {
-        invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+        forgetCached(tasksPath); // written in place below: its cached text is dropped
         fs.writeFileSync(tasksPath, tasksText.trimEnd() + "\n" + block, "utf8");
         note("tasks.md (+tasks)");
       }
@@ -4795,9 +4795,10 @@ function changedSinceApproval(dir, approvals, tracks, kind) {
 }
 
 // Success criteria / priorities count once they are REAL: the template's "Priorities: **P1** = …" legend, its
-// "US-1 (P1 — MVP): [Story Title]" and its placeholder SC-001 line must not pass while still template.
+// "US-1 (P1 — MVP): [Story Title]" and its placeholder SC-001 line must not pass while still template — nor a line in a
+// fenced example or an HTML comment.
 function realLines(md, re) {
-  return stripHtmlComments(md || "").split(/\r?\n/).filter((l) => re.test(l) && !placeholderReport(l).length);
+  return stripFencedCode(stripHtmlComments(md || "")).split(/\r?\n/).filter((l) => re.test(l) && !placeholderReport(l).length);
 }
 function hasSuccessCriteria(md) {
   return realLines(md, /(?<![A-Za-z0-9])SC-\d+/).length > 0;
@@ -4806,10 +4807,11 @@ function hasPriority(md) {
   // A line naming P1, P2 AND P3 is the priority legend, not a prioritized story.
   return realLines(md, /(?<![A-Za-z0-9])P1(?![0-9])/).some((l) => !(/(?<![A-Za-z0-9])P2(?![0-9])/.test(l) && /(?<![A-Za-z0-9])P3(?![0-9])/.test(l)));
 }
-// Duplicate AC DEFINITIONS (the ID opening a list item, optionally bold) — "as in US-1.AC-1" is a reference.
+// Duplicate AC DEFINITIONS (the ID opening a list item, optionally bold) — "as in US-1.AC-1" is a reference, and a
+// fenced example is no definition.
 function acDuplicates(md) {
   const seen = new Set(), dups = new Set();
-  for (const mm of stripHtmlComments(md || "").matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
   return [...dups];
 }
 // A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
@@ -6019,7 +6021,7 @@ function restoreFeature(projectDir, name) {
   const st = stateFromFile(projectDir, statePath(from));
   if (st.invalid) return { ok: false, error: st.invalid };
   const R = i18n.msg(normalizeLang(st.lang || projectLang(projectDir))).restore;
-  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
+  invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.renameSync(from, to);
 
   const rec = isObj(st.archived) ? st.archived : null;
