@@ -76,6 +76,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   says fill it → fix what its gate refuses → approve it; the next phase starts only after that approval (a changed
   artifact's re-review still comes first; implement, verify, drift and finish follow). Approving a phase while an
   earlier one is still unapproved is refused (check `phase-order`, naming the earlier phase — EN/PT/ES) unless forced.
+  A finished feature whose `execution` approval exists but predates a later approval or change request (an upgraded
+  1.12 feature after its new tests sign-off) was told the final approval was missing; it is now asked to re-confirm
+  it, naming what came after (EN/PT/ES).
 - **Task scanner.** Tasks inside HTML comments or fenced code were counted and ticked, `complete` ticked
   the first regex match in the file, `01.` wasn't task 1, and a stray unclosed `<!--` or fence hid every
   task below it (the feature could read as complete). One comment- and fence-aware scanner now serves

@@ -32,7 +32,8 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
    (a failing run means fixing the code first);
 6. **finish** — every task done and verified → `/spec-finish` (**tasks** instead when no tasks exist yet). Once
    `spec_finish {write: true}` has recorded the finish: **finished** (the `execution` sign-off, `/approve <feature>
-   execution`, while it is missing — else nothing left) or **drift** — implementing files changed since the finish
+   execution`, while it is missing — or "re-confirm it" when it exists but predates a later approval or change
+   request, which it names — else nothing left) or **drift** — implementing files changed since the finish
    (`drift` lists them): decide with the user — the spec is now wrong → `/spec-impact`; the code is wrong → fix it;
    harmless → re-run `/spec-finish` for a fresh baseline. A finished feature that changed since (`staleBaseline`)
    answers **finish** again — or **drift** first when one of its recorded files changed: decide, then finish again.

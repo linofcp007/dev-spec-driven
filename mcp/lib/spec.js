@@ -5300,7 +5300,11 @@ function nextAction(projectDir, name) {
         // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if
         // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
         step = "finished";
-        recommendation = nx.finished(slug, day, finishedDrift.files, !approvals.execution || executionSignOffStale(st));
+        // No execution approval → sign it off; one that predates a later change (an upgraded feature's new tests sign-off,
+        // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
+        const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
+        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
+        recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
       }
     }
   }
@@ -7462,6 +7466,18 @@ function changesSince(st, t, except) {
 function executionSignOffStale(st) {
   const ex = isObj(st.approvals) && isRecord(st.approvals.execution) ? timeOf(st.approvals.execution.at) : null;
   return ex != null && changesSince(st, ex, "execution").length > 0;
+}
+// What came after the execution sign-off, localized: "the approval of tests and change request #2".
+function signOffWhyText(st, lang) {
+  const W = i18n.msg(lang).next.signOffWhy;
+  const ex = isObj(st.approvals) && isRecord(st.approvals.execution) ? timeOf(st.approvals.execution.at) : null;
+  const since = ex == null ? [] : changesSince(st, ex, "execution");
+  const parts = [];
+  const phases = [...new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase))];
+  if (phases.length) parts.push(W.approvals(phases.join(", ")));
+  const crs = since.filter((x) => x.kind === "change-request").map((x) => "#" + x.n);
+  if (crs.length) parts.push(W.changeRequests(crs.join(", ")));
+  return parts.join(W.join);
 }
 // "change request #2, tasks re-approved, 1 implementing file not in the baseline (src/a.js)" — localized.
 function staleFinishText(stale, lang) {

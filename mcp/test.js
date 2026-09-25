@@ -4446,10 +4446,18 @@ function endRun() {
     const naR10 = S.nextAction(w10d, "login-loop");
     const apR10 = S.approvePhase(w10d, "login-loop", "execution");
     const naR10b = S.nextAction(w10d, "login-loop");
-    ok(reFin10.readyToFinish && Object.keys(bfState().finished.files).includes("src/audit.js") && naR10.step === "finished" && /Sign it off: \/approve login-loop execution\.$/.test(naR10.recommendation) &&
+    // The execution approval EXISTS but predates the change: re-confirm it, naming what came after (EN/PT/ES) — never
+    // "Sign it off" / "Falta a aprovação final" as if there were none.
+    const wOff = S.msg("pt").next.finished("x", "2026-01-02", 1, { at: "2026-01-01", why: "aprovação de tests" });
+    const wOffEs = S.msg("es").next.finished("x", "2026-01-02", 1, { at: "2026-01-01", why: "la aprobación de tests" });
+    ok(reFin10.readyToFinish && Object.keys(bfState().finished.files).includes("src/audit.js") && naR10.step === "finished" &&
+      /Its execution sign-off \(\d{4}-\d\d-\d\d\) predates the approval of tasks — re-confirm it: \/approve login-loop execution\.$/.test(naR10.recommendation) && !/Sign it off/.test(naR10.recommendation) &&
+      /A aprovação final \(execution, 2026-01-01\) foi registada antes destas alterações: aprovação de tests — volta a confirmá-la: \/approve x execution\.$/.test(wOff) && !/Falta a aprovação final/.test(wOff) &&
+      /La aprobación final \(execution, 2026-01-01\) es anterior a la aprobación de tests — vuelve a confirmarla/.test(wOffEs) &&
+      /Falta a aprovação final: \/approve x execution\./.test(S.msg("pt").next.finished("x", "d", 1, {})) &&
       apR10.ok && naR10b.step === "finished" && /Nothing left to do here/.test(naR10b.recommendation) && S.drift(w10d, "login-loop").verdict === "clean" &&
       S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
-      "after the re-finish the baseline records src/audit.js; the execution sign-off older than the change is asked for again, then nothing is left; drift clean, catalog finished");
+      "after the re-finish the baseline records src/audit.js; the execution sign-off older than the change is asked to be RE-CONFIRMED (naming the tasks re-approval; PT/ES too), then nothing is left; drift clean, catalog finished (got " + naR10.recommendation + ")");
     const stC10 = bfState();
     fs.writeFileSync(path.join(bf10.dir, ".state.json"), JSON.stringify({ ...stC10, changes: [...(stC10.changes || []), { at: new Date(Date.now() + 1000).toISOString(), phase: "requirements", reopened: [] }] }, null, 2));
     const naC10 = S.nextAction(w10d, "login-loop");

@@ -2030,7 +2030,12 @@ const MSG = {
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (dev-spec drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
-      finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` + (signOff ? ` Sign it off: /approve ${slug} execution.` : ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`),
+      // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
+      // but predates a later change: re-confirm it — never "sign it off" as if there were none).
+      finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` +
+        (!signOff ? ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`
+          : signOff.why ? ` Its execution sign-off (${signOff.at}) predates ${signOff.why} — re-confirm it: /approve ${slug} execution.` : ` Sign it off: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `the approval of ${list}`, changeRequests: (list) => `change request ${list}`, join: " and " },
       refinish: (slug, day, why) => `'${slug}' was finished on ${day}, but it changed since (${why}) and all its tasks are done — finish it again: /spec-finish ${slug} (spec_finish {write: true}) refreshes the readiness report, the merge summary and the drift baseline; then sign it off again: /approve ${slug} execution.`,
       driftedStale: (why) => `It also changed since that finish (${why}): whichever you decide, finish it again afterwards — /spec-finish (spec_finish {write: true}) records the new baseline.`,
       verify: (slug, list, n, runnable) => `All tasks are ticked, but not all are verified: ${list} — /spec-finish and the execution sign-off refuse until each has a passing run. ` +
@@ -2823,7 +2828,10 @@ const MSG = {
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
-      finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` + (signOff ? ` Falta a aprovação final: /approve ${slug} execution.` : ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`),
+      finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
+        (!signOff ? ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`
+          : signOff.why ? ` A aprovação final (execution, ${signOff.at}) foi registada antes destas alterações: ${signOff.why} — volta a confirmá-la: /approve ${slug} execution.` : ` Falta a aprovação final: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `aprovação de ${list}`, changeRequests: (list) => `pedido de alteração ${list}`, join: "; " },
       refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão todas feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
       driftedStale: (why) => `Também mudou desde esse fecho (${why}): decidas o que decidires, volta a fechá-la depois — /spec-finish (spec_finish {write: true}) regista a baseline nova.`,
       verify: (slug, list, n, runnable) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — o /spec-finish e a aprovação final recusam até cada uma ter uma execução com sucesso. ` +
@@ -3564,7 +3572,10 @@ const MSG = {
       allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (dev-spec drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
-      finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` + (signOff ? ` Falta la aprobación final: /approve ${slug} execution.` : ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`),
+      finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
+        (!signOff ? ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`
+          : signOff.why ? ` La aprobación final (execution, ${signOff.at}) es anterior a ${signOff.why} — vuelve a confirmarla: /approve ${slug} execution.` : ` Falta la aprobación final: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `la aprobación de ${list}`, changeRequests: (list) => `la solicitud de cambio ${list}`, join: " y " },
       refinish: (slug, day, why) => `'${slug}' se cerró el ${day}, pero cambió desde entonces (${why}) y todas sus tareas están hechas — ciérrala de nuevo: /spec-finish ${slug} (spec_finish {write: true}) renueva el informe de preparación, el resumen del merge y la línea base de drift; después vuelve a dar la aprobación final: /approve ${slug} execution.`,
       driftedStale: (why) => `También cambió desde ese cierre (${why}): decidas lo que decidas, vuelve a cerrarla después — /spec-finish (spec_finish {write: true}) registra la línea base nueva.`,
       verify: (slug, list, n, runnable) => `Todas las tareas están marcadas, pero no todas están verificadas: ${list} — /spec-finish y la aprobación final se niegan hasta que cada una tenga una ejecución correcta. ` +
