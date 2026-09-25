@@ -538,6 +538,33 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   const lines6 = help6.split("\n");
   const covAt = lines6.findIndex((l) => /^\s+coverage\s/.test(l));
   ok(/^\s+import <kiro\|spec-kit\|openspec> <path>/.test(lines6[covAt + 1] || "") && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
+
+  // Review round: --tracks is a value flag everywhere, so every command that takes tracks honours it (never dropped).
+  const tk = path.join(tmp, "wp6-tracks");
+  const crT = (() => { try { return JSON.parse(run(["create", "Payments Flow", "--tracks", "tdd,saas", "--json", "--project", tk]).out); } catch { return null; } })();
+  const crT2 = run(["create", "Report page", "--tracks", "saas", "--project", tk]);
+  ok(crT && crT.tracks.join() === "core,tdd,saas" && crT2.code === 0 && /\[core \+saas\]/.test(crT2.out) && fs.existsSync(path.join(tk, ".specs", "report-page", "load-test.md")),
+    "create --tracks tdd,saas / --tracks saas uses those tracks (no silent auto-classify)");
+  const tkInit = path.join(tmp, "wp6-tracks-init");
+  const inT = run(["init", "--tracks", "saas", "ai", "--project", tkInit]);
+  ok(inT.code === 0 && ["scale.md", "observability.md", "cost.md", "ai-strategy.md"].every((f) => fs.existsSync(path.join(tkInit, ".specs", "steering", f))),
+    "init --tracks saas ai scaffolds the steering of BOTH tracks (the flag's value + the positional one)");
+  run(["create", "x", "core", "--project", tk]);
+  const atT = run(["add-track", "x", "--tracks", "ai", "--project", tk]);
+  ok(atT.code === 0 && /'x' now \[core \+ai\]/.test(atT.out), "add-track <feature> --tracks ai adds the track (no usage error)");
+
+  // Review round: import accepts exactly the MCP enum — no aliases, no case folding.
+  const alias1 = run(["import", "speckit", "specs/002-albums", "--name", "Alias CLI", "--project", w6]);
+  const alias2 = run(["import", "Kiro", ".kiro/specs/login", "--name", "Alias CLI2", "--project", w6]);
+  ok(alias1.code === 1 && alias2.code === 1 && /Unknown spec format 'speckit'/.test(alias1.out) && /Unknown spec format 'Kiro'/.test(alias2.out) &&
+    !fs.existsSync(path.join(w6, ".specs", "alias-cli")) && !fs.existsSync(path.join(w6, ".specs", "alias-cli2")), "import speckit / Kiro exit 1 like spec_import over MCP (same accepted values)");
+
+  // Review round: coverage lists a test-file target apart, never as a gap.
+  put("tests/orders.test.js", "test('x', () => {});\n");
+  fs.writeFileSync(path.join(w6, ".specs", "orders", "tasks.md"), "- [ ] 1. orders test\n  - _Implements: tests/orders.test.js_\n- [ ] 2. orders endpoint\n  - _Implements: src/server.js, src/missing.js_\n");
+  const cov2 = run(["coverage", "--project", w6]);
+  ok(cov2.code === 0 && /⚠ _Implements:_ entries that name nothing on disk: src\/missing\.js$/m.test(cov2.out) && /· _Implements:_ entries naming tests or non-code files \(not counted\): tests\/orders\.test\.js/.test(cov2.out),
+    "coverage: a +tdd task naming its (existing) test file is informational; only a missing path is flagged");
 }
 // @wp WP6 <<<
 

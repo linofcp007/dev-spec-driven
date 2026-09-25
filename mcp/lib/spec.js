@@ -3676,6 +3676,12 @@ const RE_JS_ROUTE = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|de
 const RE_JS_ROUTE_CHAIN = /[\w$)\]]\s*\.\s*route\s*\(\s*(['"`])(\/[^'"`]*)\1\s*\)/; // router.route('/x').get(…).post(…)
 const RE_JS_CHAIN_VERB = /\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/g;
 const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|koa-router|fastify|hono)(?:\/[^'"]*)?['"]/;
+// HTTP clients: `const api = axios.create(…); api.get('/users')` in a .js/.ts service file is a CALL, not a route.
+// A name assigned from a client factory is never a route owner; in a file that imports a client and no server
+// framework, the owners that name a client as often as a router (JS_GENERIC_OWNERS) don't count either.
+const RE_JS_CLIENT_IMPORT = /(?:require\s*\(\s*|from\s+)['"](axios|ky|ky-universal|got|node-fetch|cross-fetch|isomorphic-fetch|ofetch|redaxios|wretch|superagent|undici|@angular\/common\/http)(?:\/[^'"]*)?['"]/;
+const RE_JS_CLIENT_DEF = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:axios|ky|got|ofetch|wretch|redaxios|superagent)\s*\.\s*(?:create|extend)\s*\(/g;
+const JS_GENERIC_OWNERS = new Set(["api", "instance", "r", "route", "routes", "server"]);
 const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2)?\s*\)/g;
 const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})?\s*\)/;
 const RE_NEXT_APP = /(?:^|\/)app\/((?:[^/]+\/)*)route\.[cm]?[jt]sx?$/; // Next.js app router: app/**/route.ts
@@ -3710,6 +3716,17 @@ const RE_SLASH_COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*(?:\s|\/|$))/;
 const RE_HASH_COMMENT_LINE = /^\s*#(?!\[)/;
 // Labels that don't name one framework: kept on the route, never listed under `frameworks`.
 const AMBIGUOUS_FRAMEWORK = new Set(["node", "python", "gin/echo", "chi/fiber"]);
+
+// A call split over several lines (a Black-wrapped `@router.get(\n    "/x",\n)`, a multi-line Spring annotation) joined
+// into one, bounded to SCAN_JOIN_LINES continuation lines. Parens are counted naively: route paths hold none.
+const SCAN_JOIN_LINES = 6;
+function joinOpenCall(lines, i) {
+  const depth = (s) => (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+  let s = lines[i];
+  let d = depth(s);
+  for (let j = i + 1; d > 0 && j <= i + SCAN_JOIN_LINES && j < lines.length; j++) { s += " " + lines[j].trim(); d += depth(lines[j]); }
+  return s;
+}
 
 function normRoutePath(p) {
   const s = String(p == null ? "" : p).trim();
@@ -3758,6 +3775,8 @@ function scanRoutes(rel, text) {
     const imp = text.match(RE_JS_IMPORT);
     const jsFw = imp ? ({ "@koa/router": "koa", "koa-router": "koa" }[imp[1]] || imp[1]) : "node";
     const nest = /@Controller\s*\(|@nestjs\//.test(text);
+    const clientOwners = new Set([...text.matchAll(RE_JS_CLIENT_DEF)].map((m) => m[1]));
+    const clientFile = !imp && !nest && RE_JS_CLIENT_IMPORT.test(text);
     let prefix = "";
     lines.forEach((l, i) => {
       if (skipLine(l)) return;
@@ -3769,6 +3788,7 @@ function scanRoutes(rel, text) {
       each(RE_JS_ROUTE, l, (m) => {
         if (!JS_ROUTE_OWNERS.has(m[1]) && !RE_JS_OWNER_SUFFIX.test(m[1])) return;
         if (m[1] === "api" && FRONTEND_EXT.has(ext)) return;
+        if (clientOwners.has(m[1]) || (clientFile && JS_GENERIC_OWNERS.has(m[1]))) return; // an HTTP client's call
         add(m[2], m[4], i, m[1] === "fastify" ? "fastify" : jsFw);
       });
       const ch = l.match(RE_JS_ROUTE_CHAIN);
@@ -3790,7 +3810,8 @@ function scanRoutes(rel, text) {
       if (skipLine(l)) return;
       const d = l.match(RE_PY_PREFIX_DEF);
       if (d) { const pm = d[2].match(RE_PY_PREFIX_ARG); if (pm) prefixes.set(d[1], pm[2]); }
-      const m = l.match(RE_PY_ROUTE);
+      // A wrapped decorator is matched on its joined call and reported on the decorator's line.
+      const m = (/^\s*@\s*[A-Za-z_]\w*\.\w+\s*\(/.test(l) ? joinOpenCall(lines, i) : l).match(RE_PY_ROUTE);
       if (!m) return;
       const [, owner, verb, , p, rest] = m;
       if (!owners.has(owner) && !PY_ROUTE_OWNERS.has(owner) && !RE_PY_OWNER_SUFFIX.test(owner)) return;
@@ -3810,7 +3831,7 @@ function scanRoutes(rel, text) {
     let prefix = "";
     lines.forEach((l, i) => {
       if (skipLine(l)) return;
-      each(RE_SPRING, l, (m) => {
+      each(RE_SPRING, /Mapping\s*\(/.test(l) ? joinOpenCall(lines, i) : l, (m) => {
         const paths = springPaths(m[2]);
         if (classLine !== -1 && i < classLine) { prefix = paths[0]; return; } // class-level mapping = prefix
         const methods = m[1] === "Request" ? [...(m[2] || "").matchAll(/RequestMethod\.(\w+)/g)].map((x) => x[1]) : [m[1]];
@@ -4134,15 +4155,18 @@ function globRe(glob) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
+const implementsPath = (ref) => String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
 function implementsTargets(root, ref, code, fold) {
-  const p = String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
+  const p = implementsPath(ref);
   if (!p) return [];
   if (/[*?]/.test(p)) {
     const re = globRe(fold(p.replace(/^\.\//, "")));
     return [...code.keys()].filter((k) => re.test(k));
   }
   const abs = path.resolve(root, p);
-  if (abs === root || !abs.startsWith(root + path.sep)) return []; // the whole project, or outside it: never counted
+  // The whole project, or outside it: never counted. isInsideDir, not `root + sep`: a drive root (Q:\ from subst)
+  // already ends in a separator.
+  if (abs === root || !isInsideDir(root, abs)) return [];
   const rel = fold(toPosix(path.relative(root, abs)));
   if (code.has(rel)) return [rel];
   return [...code.keys()].filter((k) => k.startsWith(rel + "/"));
@@ -4153,7 +4177,8 @@ function implementsTargets(root, ref, code, fold) {
 // coveragePercent = covered code files / code files (was: top-level folders whose NAME matched a feature slug);
 // modulesTotal = top-level folders holding code ("." = the root); documented / undocumented = those folders
 // with at least one / no covered file (undocumented is also returned as uncoveredFolders); features = the
-// active features (unchanged).
+// active features (unchanged). unmatchedImplements = entries naming nothing on disk (a gap);
+// nonCodeImplements = entries naming an existing test / non-code file (informational, never counted).
 function coverage(projectDir) {
   const root = path.resolve(projectDir);
   const specs = specsRoot(root);
@@ -4165,22 +4190,35 @@ function coverage(projectDir) {
     .concat(archived.map((n) => ({ feature: n, archived: true, dir: path.join(archiveDir, n) })));
 
   const code = new Map(); // fold(rel) → rel
+  const other = new Map(); // every other walked file (tests, docs, config) — an _Implements:_ naming one is not a gap
   let testFiles = 0;
   const walk = walkProject(root, COVERAGE_CAP, (rel, full, name) => {
-    if (!CODE_EXT.has(path.extname(name).toLowerCase())) return;
-    if (isTestFile(rel)) testFiles++;
+    if (!CODE_EXT.has(path.extname(name).toLowerCase())) other.set(fold(rel), rel);
+    else if (isTestFile(rel)) { testFiles++; other.set(fold(rel), rel); }
     else code.set(fold(rel), rel);
   });
 
   const covered = new Set();
   const byFeature = [];
   const unmatched = [];
+  const nonCode = [];
+  const onDisk = (ref) => { // a file/folder the walk skips (dist/, a hidden dir) still exists
+    const p = implementsPath(ref);
+    if (!p || /[*?]/.test(p)) return false;
+    const abs = path.resolve(root, p);
+    return abs !== root && isInsideDir(root, abs) && fs.existsSync(abs);
+  };
   for (const s of sources) {
     const refs = implementsRefs(readIfExists(path.join(s.dir, "tasks.md")));
     const mine = new Set();
     for (const ref of refs) {
       const hits = implementsTargets(root, ref, code, fold);
-      if (!hits.length && unmatched.length < 50) unmatched.push({ feature: s.feature, ref });
+      // No code file: a test / doc / config target that exists is informational (a +tdd task names its test file);
+      // only an entry that names nothing on disk is a gap — the same reading as trace_check.
+      if (!hits.length) {
+        const list = implementsTargets(root, ref, other, fold).length || onDisk(ref) ? nonCode : unmatched;
+        if (list.length < 50) list.push({ feature: s.feature, ref });
+      }
       hits.forEach((k) => { mine.add(k); covered.add(k); });
     }
     if (refs.length) byFeature.push({ feature: s.feature, archived: s.archived, refs: refs.length, files: mine.size });
@@ -4214,6 +4252,7 @@ function coverage(projectDir) {
     archivedFeatures: archived,
     byFeature,
     unmatchedImplements: unmatched,
+    nonCodeImplements: nonCode,
     truncated: walk.truncated,
     note: i18n.msg(projectLang(projectDir)).notes.coverage,
   };
@@ -4228,7 +4267,6 @@ function coverage(projectDir) {
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
 const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec" };
-const IMPORT_ALIASES = { speckit: "spec-kit", spec_kit: "spec-kit", "github-spec-kit": "spec-kit", "open-spec": "openspec" };
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -4245,38 +4283,83 @@ function mdHeadings(lines) {
     return { i, level: m[1].length, text: m[2].trim() };
   });
 }
-// The lines under heading hs[k], up to the next heading of the same or a higher level.
-function mdBody(lines, hs, k) {
+// [lo, hi) of the lines under heading hs[k], up to the next heading of the same or a higher level.
+function mdRange(lines, hs, k) {
   const h = hs[k];
   const next = hs.slice(k + 1).find((x) => x.level <= h.level);
-  return lines.slice(h.i + 1, next ? next.i : lines.length);
+  return [h.i + 1, next ? next.i : lines.length];
 }
-// First paragraph of prose (no headings, lists, quotes, tables or metadata), whitespace-folded.
-function firstParagraph(lines) {
+function mdBody(lines, hs, k) {
+  const [lo, hi] = mdRange(lines, hs, k);
+  return lines.slice(lo, hi);
+}
+// The parsers mark every source line they import; leftoverExtras() carries the rest.
+function markRange(used, lo, hi) {
+  for (let i = lo; i < hi; i++) used.add(i);
+}
+const RE_MD_HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+// First paragraph of prose (no headings, lists, quotes, tables or metadata), whitespace-folded. `at` (optional)
+// collects the offsets of the lines it used.
+function firstParagraph(lines, at) {
   const out = [];
-  for (const l of lines) {
-    const t = l.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
     if (!t) { if (out.length) break; continue; }
     if (/^(?:#|[-*+]\s|\d+[.)]\s|>|\||```|~~~|---)/.test(t) || /^\*\*[^*]+\*\*:?/.test(t)) { if (out.length) break; continue; }
     out.push(t);
+    if (at) at.push(i);
   }
   return out.join(" ").trim() || null;
 }
-// List items of a body: [{ n (printed number or null), text (continuation lines folded) }].
+// List items of a body: [{ n (printed number or null), text (continuation folded), at (offsets of its lines) }].
+// A continuation line is indented OR lazy (CommonMark: an unindented line right after the item's text — a wrapped
+// "THEN the system SHALL …" belongs to its criterion); a more-indented sub-list folds into its item. A blank line,
+// a heading, a quote, a table, a rule or a sibling list that is not ours ends the item.
 function mdListItems(lines, numberedOnly) {
   const items = [];
   let cur = null;
   let fence = null;
-  for (const l of lines) {
+  lines.forEach((l, i) => {
     const f = l.match(RE_FENCE);
-    if (fence) { if (f && l.trim().startsWith(fence)) fence = null; cur = null; continue; }
-    if (f) { fence = f[1]; cur = null; continue; }
+    if (fence) { if (f && l.trim().startsWith(fence)) fence = null; cur = null; return; }
+    if (f) { fence = f[1]; cur = null; return; }
+    const ind = indentOf(l);
     const m = l.match(numberedOnly ? /^\s*(\d+)[.)]\s+(.*)$/ : /^\s*(?:(\d+)[.)]|[-*+])\s+(.*)$/);
-    if (m) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim() }; items.push(cur); continue; }
-    if (!l.trim() || /^\s*#/.test(l)) { cur = null; continue; }
-    if (cur && /^\s+\S/.test(l) && !/^\s*[-*+]\s/.test(l)) cur.text += " " + l.trim();
-  }
-  return items;
+    if (m && (!cur || ind <= cur.indent)) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim(), indent: ind, at: [i] }; items.push(cur); return; }
+    if (!l.trim() || /^\s*(?:#|>|\|)/.test(l) || RE_MD_HR.test(l)) { cur = null; return; }
+    if (!cur) return;
+    if (/^\s*(?:[-*+]|\d+[.)])\s/.test(l) && ind <= cur.indent) { cur = null; return; }
+    cur.text += " " + l.trim();
+    cur.at.push(i);
+  });
+  return items.map(({ n, text, at }) => ({ n, text, at }));
+}
+// What no parser mapped still travels verbatim: the unused lines of one file, grouped under their nearest heading
+// (an unused heading opens its own group and keeps its unused sub-headings inside it) → [{ heading, label, lines }].
+// Nothing is dropped silently — importSpec appends them and names them in a warning. `prefix` names the
+// capability when an OpenSpec import reads several spec.md files.
+function leftoverExtras(lines, hs, used, prefix = "") {
+  const at = new Map(hs.map((h) => [h.i, h]));
+  const out = [];
+  let near = null;
+  let cur = null;
+  lines.forEach((raw, i) => {
+    const h = at.get(i);
+    if (h) {
+      near = h;
+      if (used.has(i)) { cur = null; return; }
+      if (cur && cur.level != null && h.level > cur.level) { cur.lines.push(raw.replace(/\s+$/, "")); return; }
+      cur = { label: prefix + h.text, level: h.level, lines: [] };
+      out.push(cur);
+      return;
+    }
+    if (used.has(i)) return;
+    const l = raw.replace(/\s+$/, "");
+    if (!l.trim() || RE_MD_HR.test(l)) { if (cur) cur.lines.push(""); return; }
+    if (!cur) { cur = { label: near ? prefix + near.text : null, level: null, lines: [] }; out.push(cur); }
+    cur.lines.push(l);
+  });
+  return out.map((b) => ({ heading: b.label != null ? "## " + b.label : null, label: b.label, lines: tidyLines(b.lines) })).filter((b) => b.lines.length);
 }
 const trimClause = (s) => String(s || "").trim().replace(/[\s,.;:]+$/, "");
 // Prose lines as written (trailing spaces dropped), blank runs folded, no blank edges.
@@ -4354,7 +4437,7 @@ function titleFromStory(prose) {
   return m ? shortTitle(m[1].charAt(0).toUpperCase() + m[1].slice(1), 60) : null;
 }
 function newImportModel() {
-  return { title: null, summary: null, nameHint: null, stories: [], extra: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
+  return { title: null, summary: null, nameHint: null, stories: [], extra: [], carried: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
 }
 
 // Kiro: .kiro/specs/<name>/ — requirements.md (### Requirement N, **User Story:**, #### Acceptance Criteria with
@@ -4369,29 +4452,50 @@ function parseKiro(dir, read, W) {
   if (req != null) {
     const lines = stripHtmlComments(req).split(/\r?\n/);
     const hs = mdHeadings(lines);
+    const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
+    if (h1) used.add(h1.i);
     model.title = h1 && !/^requirements?(?:\s+document)?$/i.test(h1.text) ? h1.text : null;
     const introK = hs.findIndex((h) => /^introduction\b/i.test(h.text));
-    model.summary = introK !== -1 ? firstParagraph(mdBody(lines, hs, introK)) : firstParagraph(lines.slice(h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i));
+    if (introK !== -1) used.add(hs[introK].i);
+    const [sLo, sHi] = introK !== -1 ? mdRange(lines, hs, introK) : [h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
+    const sAt = [];
+    model.summary = firstParagraph(lines.slice(sLo, sHi), sAt);
+    sAt.forEach((r) => used.add(sLo + r)); // the rest of the introduction is carried verbatim
     hs.forEach((h, k) => {
+      if (h.level === 2 && /^requirements\b/i.test(h.text)) { used.add(h.i); return; }
       const m = h.text.match(/^requirement\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i);
       if (!m) return;
-      const body = mdBody(lines, hs, k);
-      // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the numbered criteria.
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi); // prose, criteria AND what follows them are all written into the story
+      const body = lines.slice(lo, hi);
+      // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the criteria.
       const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
-      const proseLines = tidyLines((acAt === -1 ? body : body.slice(0, acAt)).filter((l) => !/^\s*#/.test(l) && (acAt !== -1 || !/^\s*\d+[.)]\s/.test(l))));
-      const items = mdListItems(acAt === -1 ? body : body.slice(acAt + 1), true);
+      const off = acAt === -1 ? 0 : acAt + 1;
+      const acBody = body.slice(off);
+      // Numbered criteria (Kiro's form); bulleted ones when there are none — but only under an explicit label, where
+      // a bullet can't be a note in the story's prose.
+      let items = mdListItems(acBody, true);
+      if (!items.length && acAt !== -1) items = mdListItems(acBody, false);
+      const inItem = new Set(items.flatMap((it) => it.at.map((r) => r + off)));
+      const proseLines = tidyLines(body.slice(0, acAt === -1 ? body.length : acAt).filter((l, r) => !inItem.has(r) && !/^\s*#/.test(l)));
+      // Anything under the label that is not a criterion (a note, a sub-heading, a table) follows the criteria.
+      const after = acAt === -1 ? [] : tidyLines(acBody.filter((l, r) => !inItem.has(r + off) && !RE_MD_HR.test(l)));
       model.stories.push({
         printed: +m[1], key: `Requirement ${m[1]}`, title: m[2].trim() || titleFromStory(proseLines) || `Requirement ${m[1]}`, priority: null,
-        prose: proseLines, quote: [],
+        prose: proseLines, quote: [], after,
         criteria: items.map((it, j) => ({ key: `${m[1]}.${it.n != null ? it.n : j + 1}`, raw: it.text, ears: earsFromKiro(it.text) })),
       });
     });
     if (!model.stories.length) model.warnings.push(W.wNoRequirements("requirements.md"));
     // Other top-level sections (Glossary, non-functional notes…) travel verbatim.
     hs.forEach((h, k) => {
-      if (h.level === 2 && !/^(?:introduction|requirements)\b/i.test(h.text)) model.extra.push({ heading: "## " + h.text, lines: mdBody(lines, hs, k) });
+      if (h.level !== 2 || /^(?:introduction|requirements)\b/i.test(h.text) || used.has(h.i)) return;
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi);
+      model.extra.push({ heading: "## " + h.text, lines: lines.slice(lo, hi) });
     });
+    model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. a ### Non-Functional Requirements under ## Requirements
   }
   if (des != null) model.design = { text: des, file: "design.md" };
   else model.warnings.push(W.wNoDesign("design.md"));
@@ -4402,6 +4506,7 @@ function parseKiro(dir, read, W) {
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
+// Template guidance sections (Execution Flow, Quick Guidelines, checklists) are the tool's own, never imported.
 const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
 function parseSpecKit(dir, read, W) {
   const spec = read(path.join(dir, "spec.md"));
@@ -4414,45 +4519,66 @@ function parseSpecKit(dir, read, W) {
   if (spec != null) {
     const lines = stripHtmlComments(spec).split(/\r?\n/);
     const hs = mdHeadings(lines);
+    const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
-    if (h1) model.title = h1.text.replace(/^feature specification:\s*/i, "").trim() || null;
+    if (h1) { used.add(h1.i); model.title = h1.text.replace(/^feature specification:\s*/i, "").trim() || null; }
     const input = spec.match(/^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im);
     model.summary = input && input[1].trim() && !/\$ARGUMENTS/.test(input[1]) ? input[1].trim() : null;
+    // spec-kit's own metadata (branch, date, status; Input is the summary) describes its workflow, not the feature.
+    lines.forEach((l, i) => { if (/^\s*\*\*(?:feature branch|created|status|input)\*\*\s*:/i.test(l)) used.add(i); });
+    // body: the story's lines (all written into it: prose, scenarios, then whatever follows the scenarios).
     const storyFrom = (body, printed, title, priority) => {
       const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*:?\s*$/i.test(l));
-      const scen = mdListItems(at === -1 ? body : body.slice(at + 1), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
-      const prose = tidyLines((at === -1 ? body.filter((l) => !/^\s*\d+[.)]\s/.test(l)) : body.slice(0, at)).filter((l) => !/^\s*(?:-{3,}|\*{3,})\s*$/.test(l)));
+      const off = at === -1 ? 0 : at + 1;
+      const scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
+      const inScen = new Set(scen.flatMap((it) => it.at.map((r) => r + off)));
+      const keep = (l, r) => !inScen.has(r) && !RE_MD_HR.test(l);
+      const prose = tidyLines(body.slice(0, at === -1 ? body.length : at).filter(keep));
+      const after = at === -1 ? [] : tidyLines(body.slice(off).filter((l, r) => keep(l, r + off)));
       model.stories.push({
-        printed, key: `User Story ${printed}`, title, priority, prose, quote: [],
+        printed, key: `User Story ${printed}`, title, priority, prose, quote: [], after,
         criteria: scen.map((it, j) => ({ key: `User Story ${printed} / Scenario ${j + 1}`, raw: it.text, ears: earsFromGwt(it.text) })),
       });
     };
     hs.forEach((h, k) => {
       const m = h.text.match(/^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu);
-      if (m) storyFrom(mdBody(lines, hs, k), +m[1], m[2].trim() || `User Story ${m[1]}`, m[3] ? m[3].toUpperCase() : null);
+      if (!m) return;
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi);
+      storyFrom(lines.slice(lo, hi), +m[1], m[2].trim() || `User Story ${m[1]}`, m[3] ? m[3].toUpperCase() : null);
     });
     if (!model.stories.length) { // older template: one "Primary User Story" + "Acceptance Scenarios"
       const pk = hs.findIndex((h) => /^primary user story/i.test(h.text));
       const ak = hs.findIndex((h) => /^acceptance scenarios/i.test(h.text));
       if (ak !== -1) {
         const prose = pk !== -1 ? mdBody(lines, hs, pk) : [];
+        for (const k of pk !== -1 ? [pk, ak] : [ak]) { used.add(hs[k].i); markRange(used, ...mdRange(lines, hs, k)); }
         storyFrom([...prose, "**Acceptance Scenarios**:", ...mdBody(lines, hs, ak)], 1, titleFromStory(prose) || model.title || "User Story 1", null);
       }
     }
     if (!model.stories.length) model.warnings.push(W.wNoRequirements("spec.md"));
     const section = (re, key) => {
-      const k = hs.findIndex((h) => h.level > 1 && re.test(norm(h.text)));
-      if (k !== -1) model.extra.push({ key, lines: mdBody(lines, hs, k).filter((l) => !/^\s*#{1,6}\s+measurable outcomes/i.test(l)) });
+      const k = hs.findIndex((h) => h.level > 1 && !used.has(h.i) && re.test(norm(h.text)));
+      if (k === -1) return;
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, hs[k].i, hi);
+      model.extra.push({ key, lines: lines.slice(lo, hi).filter((l) => !/^\s*#{1,6}\s+measurable outcomes/i.test(l)) });
     };
     section(/^functional requirements$/i, "functional");
     section(/^key entities$/i, "entities");
     section(/^success criteria$/i, "success");
     section(/^edge cases$/i, "edge");
     hs.forEach((h, k) => {
+      if (h.level !== 2 || used.has(h.i)) return;
       const t = norm(h.text);
-      if (h.level === 2 && !/^(?:user scenarios|requirements$|success criteria)/i.test(t) && !SPECKIT_GUIDANCE.test(t)) model.extra.push({ heading: "## " + t, lines: mdBody(lines, hs, k) });
+      const [lo, hi] = mdRange(lines, hs, k);
+      if (SPECKIT_GUIDANCE.test(t.replace(/^[^\p{L}\p{N}]+/u, ""))) { markRange(used, h.i, hi); return; } // "## ⚡ Quick Guidelines"
+      if (/^(?:user scenarios|requirements$)/i.test(t)) { used.add(h.i); return; } // their sub-sections are read above; the rest is carried
+      markRange(used, h.i, hi);
+      model.extra.push({ heading: "## " + t, lines: lines.slice(lo, hi) });
     });
-    for (const x of model.extra) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
+    model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
+    for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
   }
   if (plan != null) model.design = { text: plan, file: "plan.md" };
   else model.warnings.push(W.wNoDesign("plan.md"));
@@ -4464,6 +4590,7 @@ function parseSpecKit(dir, read, W) {
 
 // OpenSpec: a capability (openspec/specs/<capability>/spec.md) or a change (openspec/changes/<id>/ — proposal.md,
 // tasks.md, design.md, specs/<capability>/spec.md with ADDED/MODIFIED/REMOVED/RENAMED Requirements).
+const RE_OS_CLAUSE = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i;
 function parseOpenSpec(dir, read, W) {
   const walkSpecs = (d, depth, out) => {
     if (depth > 4) return out;
@@ -4492,22 +4619,45 @@ function parseOpenSpec(dir, read, W) {
   if (proposal != null) {
     const lines = stripHtmlComments(proposal).split(/\r?\n/);
     const hs = mdHeadings(lines);
+    const used = new Set();
+    hs.filter((h) => h.level === 1).forEach((h) => used.add(h.i));
     const why = hs.findIndex((h) => /^why\b/i.test(h.text));
-    model.summary = why !== -1 ? firstParagraph(mdBody(lines, hs, why)) : firstParagraph(lines);
-    hs.forEach((h, k) => { if (h.level === 2 && !/^why\b/i.test(h.text)) model.extra.push({ heading: "## " + h.text, lines: mdBody(lines, hs, k) }); });
+    const [sLo, sHi] = why !== -1 ? mdRange(lines, hs, why) : [0, lines.length];
+    if (why !== -1) used.add(hs[why].i);
+    const sAt = [];
+    model.summary = firstParagraph(lines.slice(sLo, sHi), sAt);
+    sAt.forEach((r) => used.add(sLo + r));
+    hs.forEach((h, k) => {
+      if (h.level !== 2 || k === why) return;
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi);
+      model.extra.push({ heading: "## " + h.text, lines: lines.slice(lo, hi) });
+    });
+    model.carried.push(...leftoverExtras(lines, hs, used));
   }
   for (const { cap, text } of texts) {
     const lines = stripHtmlComments(text).split(/\r?\n/);
     const hs = mdHeadings(lines);
+    const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
+    if (h1) used.add(h1.i);
     if (!model.title && h1) model.title = h1.text.replace(/\s+specification$/i, "").trim() || null;
     const purpose = hs.findIndex((h) => /^purpose\b/i.test(h.text));
-    if (!model.summary && purpose !== -1) model.summary = firstParagraph(mdBody(lines, hs, purpose));
+    if (!model.summary && purpose !== -1) { // the rest of Purpose (and every other capability's Purpose) is carried
+      const [lo, hi] = mdRange(lines, hs, purpose);
+      const at = [];
+      model.summary = firstParagraph(lines.slice(lo, hi), at);
+      used.add(hs[purpose].i);
+      at.forEach((r) => used.add(lo + r));
+    }
     let section = "";
     hs.forEach((h, k) => {
       if (h.level <= 2) section = h.text;
+      if (h.level <= 2 && /^(?:(?:added|modified|removed|renamed)\s+)?requirements\b/i.test(h.text)) used.add(h.i);
       if (/^renamed\b/i.test(section) && h.level <= 2) {
-        const body = mdBody(lines, hs, k).join("\n");
+        const [lo, hi] = mdRange(lines, hs, k);
+        markRange(used, lo, hi);
+        const body = lines.slice(lo, hi).join("\n");
         const froms = [...body.matchAll(/FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
         const tos = [...body.matchAll(/TO:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
         froms.forEach((f, i) => model.warnings.push(W.wRenamed(f, tos[i] || "?")));
@@ -4515,32 +4665,56 @@ function parseOpenSpec(dir, read, W) {
       const m = h.text.match(/^requirement:\s*(.+)$/i);
       if (!m) return;
       const name = m[1].trim();
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi);
       if (/^removed\b/i.test(section)) { model.warnings.push(W.wRemoved(name)); return; }
-      const body = mdBody(lines, hs, k);
+      const body = lines.slice(lo, hi);
       const sub = mdHeadings(body);
       const firstScenario = sub.find((s) => /^scenario:/i.test(s.text));
       const statement = body.slice(0, firstScenario ? firstScenario.i : body.length).filter((l) => l.trim() && !/^\s*#/.test(l)).map((l) => l.trim());
       const criteria = [];
-      sub.forEach((s, j) => {
+      const after = [];
+      // Only the sub-headings at the scenarios' level: a deeper one is inside a scenario's body. A non-scenario
+      // sub-section after the scenarios (#### Notes) follows the criteria verbatim.
+      const top = firstScenario ? sub.filter((s) => s.i >= firstScenario.i && s.level <= firstScenario.level) : [];
+      top.forEach((s) => {
+        const sb = mdBody(body, sub, sub.indexOf(s));
         const sm = s.text.match(/^scenario:\s*(.+)$/i);
-        if (!sm) return;
+        if (!sm) { after.push("", body[s.i], ...sb); return; }
         const cl = { given: "", when: "", then: "" };
         let last = null;
+        let open = false; // a clause bullet's wrapped (indented or lazy) continuation extends that clause
         const rawParts = [];
-        for (const l of mdBody(body, sub, j)) {
-          const b = l.match(/^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i);
-          if (!b) continue;
-          rawParts.push(b[1].toUpperCase() + " " + b[2].trim());
-          const kw = b[1].toLowerCase();
-          if (kw === "and" || kw === "but") { if (last) cl[last] += " and " + trimClause(b[2]); continue; }
-          cl[kw] = cl[kw] ? cl[kw] + " and " + trimClause(b[2]) : trimClause(b[2]);
-          last = kw;
+        const other = [];
+        for (const l of sb) {
+          const b = l.match(RE_OS_CLAUSE);
+          if (b) {
+            open = true;
+            rawParts.push(b[1].toUpperCase() + " " + b[2].trim());
+            const kw = b[1].toLowerCase();
+            if (kw === "and" || kw === "but") { if (last) cl[last] += " and " + trimClause(b[2]); continue; }
+            cl[kw] = cl[kw] ? cl[kw] + " and " + trimClause(b[2]) : trimClause(b[2]);
+            last = kw;
+            continue;
+          }
+          if (!l.trim()) { open = false; if (other.length) other.push(""); continue; }
+          if (open && last && !/^\s*(?:[-*+]\s|#|>|\|)/.test(l)) {
+            cl[last] = trimClause(cl[last] + " " + l.trim());
+            rawParts[rawParts.length - 1] += " " + l.trim();
+            continue;
+          }
+          open = false;
+          other.push(l.replace(/\s+$/, ""));
         }
-        const raw = rawParts.join(" ") || sm[1].trim();
-        criteria.push({ key: `${cap}: ${name} / Scenario: ${sm[1].trim()}`, raw, ears: rawParts.length ? earsFromClauses(cl, "en") : null });
+        const prose = tidyLines(other);
+        // A prose-only scenario becomes its criterion's text; prose beside clauses follows the criteria.
+        const raw = rawParts.join(" ") || [sm[1].trim(), prose.join(" ").trim()].filter(Boolean).join(" — ");
+        criteria.push({ key: `${cap}: ${name} / Scenario: ${sm[1].trim()}`, raw, ears: rawParts.length ? earsFromClauses(cl, "en") : prose.length ? earsFromGwt(prose.join(" ")) : null });
+        if (rawParts.length && prose.length) after.push("", ...prose);
       });
-      model.stories.push({ printed: null, key: `${cap}: Requirement: ${name}`, title: name + (/^modified\b/i.test(section) ? " " + W.modified : ""), priority: null, prose: [], quote: statement, criteria });
+      model.stories.push({ printed: null, key: `${cap}: Requirement: ${name}`, title: name + (/^modified\b/i.test(section) ? " " + W.modified : ""), priority: null, prose: [], quote: statement, after: tidyLines(after), criteria });
     });
+    model.carried.push(...leftoverExtras(lines, hs, used, texts.length > 1 ? cap + ": " : "")); // ## Constraints, Purpose's other paragraphs…
   }
   if (!model.stories.length && texts.length) model.warnings.push(W.wNoRequirements(texts.map((x) => toPosix(path.relative(dir, x.file))).join(", ")));
   const des = read(path.join(dir, "design.md"));
@@ -4558,16 +4732,18 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   const L = i18n.msg(lng).importSpec;
   const src = String(text).replace(/^\uFEFF/, "").split(/\r?\n/);
   const items = [];
+  const inert = new Set(); // lines inside a comment or a fence that no task owns: copied, never rewritten
   let fence = null;
   let fenceOwner = null; // a fenced block indented under a task stays in that task's body
   let inComment = false;
   let cur = null;
   const opensComment = (l) => l.includes("<!--") && !l.slice(l.lastIndexOf("<!--")).includes("-->");
   src.forEach((l, i) => {
-    if (inComment) { if (l.includes("-->")) inComment = false; cur = null; return; }
+    if (inComment) { inert.add(i); if (l.includes("-->")) inComment = false; cur = null; return; }
     const f = l.match(RE_FENCE);
     if (fence) {
       if (fenceOwner) fenceOwner.body.push(i);
+      else inert.add(i);
       if (f && l.trim().startsWith(fence)) { fence = null; fenceOwner = null; }
       return;
     }
@@ -4575,56 +4751,66 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
       fence = f[1];
       fenceOwner = cur && indentOf(l) > cur.indent ? cur : null;
       if (fenceOwner) cur.body.push(i);
-      else cur = null;
+      else { inert.add(i); cur = null; }
       return;
     }
-    const m = l.match(/^(\s*)[-*+]\s+\[([ xX])\](\*)?\s+(.*)$/);
+    // Any one-character state is a task: Kiro marks one in progress `[-]` (also `[~]`, `[/]` elsewhere). Only x/X is
+    // done — anything else imports as open, never dropped into the previous task's body.
+    const m = l.match(/^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/);
     if (m) {
       const rest = m[4];
       const idm = rest.match(/^(T\d+)\b[.:]?\s*(.*)$/) || rest.match(/^(\d+(?:\.\d+)*)\.?(?=\s)\s*(.*)$/);
-      cur = { i, indent: m[1].length, done: m[2] !== " ", optional: !!m[3], id: idm ? idm[1] : null, text: idm ? idm[2] : rest, body: [] };
+      cur = { i, indent: m[1].length, done: /[xX]/.test(m[2]), optional: !!m[3], id: idm ? idm[1] : null, text: idm ? idm[2] : rest, body: [] };
       items.push(cur);
     } else if (cur && l.trim() && indentOf(l) > cur.indent) cur.body.push(i);
-    else if (l.trim()) cur = null;
-    if (opensComment(l)) { inComment = true; cur = null; } // a task line that opens a comment is still a task
+    else if (l.trim()) { cur = null; if (/^\s*<!--.*-->\s*$/.test(l)) inert.add(i); }
+    if (opensComment(l)) { inComment = true; cur = null; if (!m) inert.add(i); } // a task line that opens a comment is still a task
   });
-  const isParent = (it) => it.id && /^\d+$/.test(it.id) && items.some((o) => o !== it && o.id && o.id.startsWith(it.id + "."));
+  // Parent ids ("2" when a "2.1" exists), computed once: a per-item scan made a flat 10 000-task file quadratic.
+  const parentIds = new Set(items.filter((o) => o.id && o.id.includes(".")).map((o) => o.id.slice(0, o.id.indexOf("."))));
+  const isParent = (it) => !!it.id && /^\d+$/.test(it.id) && parentIds.has(it.id);
   const byLine = new Map(items.map((it) => [it.i, it]));
   const bodyOf = new Map();
   items.forEach((it) => it.body.forEach((b) => bodyOf.set(b, it)));
   let n = 0;
   let anyRefs = false;
-  const rewrite = (line, taskNo) => line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, (all, list) => {
+  // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
+  const rewrite = (line, taskNo, lineNo) => line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, (all, list) => {
     anyRefs = true;
     const outIds = [];
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
       const hit = refs(ref);
       if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
-      else { outIds.push(ref); warnings.push(W.wUnknownRef(taskNo, ref)); }
+      else { outIds.push(ref); warnings.push(taskNo != null ? W.wUnknownRef(taskNo, ref) : W.wUnknownRefLine(lineNo, ref)); }
     }
     return "_Requirements: " + outIds.join(", ") + "_";
   });
   const out = [L.tasksTitle(name), "", "{{NOTE}}", ""];
+  const heading = (h) => { if (out[out.length - 1].trim()) out.push(""); out.push(h); };
+  let group = null; // the parent task whose `## <title>` phase heading is open
   let seen = false;
   src.forEach((l, i) => {
     if (!seen && /^#\s/.test(l)) { seen = true; return; } // the source's title — ours replaces it
     if (l.trim()) seen = true;
     const it = byLine.get(i);
     if (it) {
-      if (isParent(it)) { out.push(`## ${rewrite(it.text, it.id)}`); return; } // its sub-tasks are the tasks now
+      if (isParent(it)) { heading(`## ${rewrite(it.text, it.id, i + 1)}`); group = it; return; } // its sub-tasks are the tasks now
+      // A stand-alone task after a parent's group is not in that phase: a neutral heading closes it.
+      if (group && it.indent <= group.indent && !(it.id && it.id.startsWith(group.id + "."))) { heading(L.otherTasks); group = null; }
       n++;
       if (it.id) mapping["task " + it.id] = "task " + n;
       it.no = n;
-      out.push(`- [${it.done ? "x" : " "}] ${n}. ${rewrite(it.text, n)}${it.optional ? " " + L.optional : ""}`);
+      out.push(`- [${it.done ? "x" : " "}] ${n}. ${rewrite(it.text, n, i + 1)}${it.optional ? " " + L.optional : ""}`);
       return;
     }
+    if (/^#{1,6}\s/.test(l) && !bodyOf.has(i) && !inert.has(i)) group = null; // the source's own heading opens a new phase
     const owner = bodyOf.get(i);
     if (owner && !isParent(owner)) {
       const body = l.slice(Math.min(owner.indent, indentOf(l)));
-      out.push(/^\s{2}/.test(body) ? rewrite(body, owner.no) : "  " + rewrite(body.trimStart(), owner.no));
+      out.push(/^\s{2}/.test(body) ? rewrite(body, owner.no, i + 1) : "  " + rewrite(body.trimStart(), owner.no, i + 1));
       return;
     }
-    out.push(owner ? rewrite(l, owner.id) : l);
+    out.push(owner ? rewrite(l, owner.id, i + 1) : inert.has(i) ? l : rewrite(l, null, i + 1));
   });
   return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
 }
@@ -4632,8 +4818,9 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
 function importSpec(projectDir, tool, source, opts = {}) {
   const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
-  const key = String(tool == null ? "" : tool).trim().toLowerCase();
-  const t = own(IMPORT_TOOLS, key) ? key : own(IMPORT_ALIASES, key) ? IMPORT_ALIASES[key] : null;
+  // Exact names only — the values spec_import's schema enum allows, so the CLI accepts exactly what MCP does
+  // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
+  const t = typeof tool === "string" && own(IMPORT_TOOLS, tool) ? tool : null;
   if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
   if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired };
   const root = path.resolve(projectDir);
@@ -4704,14 +4891,17 @@ function importSpec(projectDir, tool, source, opts = {}) {
       if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-->/g, "—>")));
     });
     if (!s.criteria.length) { req.push(L.noCriteria); noCriteria.push("US-" + n); }
+    if (s.after && s.after.length) req.push("", ...s.after); // a note after the criteria, a sub-section… verbatim
     acOf.set(n, ids);
   });
-  for (const x of model.extra) {
-    req.push("", x.heading || L[x.key], ...x.lines.map((l) => l.replace(/\s+$/, "")));
+  // The recognised sections, then whatever no parser mapped (carried verbatim — never dropped silently).
+  for (const x of [...model.extra, ...model.carried]) {
+    req.push("", x.heading || L[x.key] || L.importedNotes, ...x.lines.map((l) => l.replace(/\s+$/, "")));
   }
   Object.assign(mapping, model.mapping);
   if (notEars.length) warnings.push(W.wNotEars(notEars.join(", ")));
   if (noCriteria.length) warnings.push(W.wNoCriteria(noCriteria.join(", ")));
+  if (model.carried.length) warnings.push(W.wCarried([...new Set(model.carried.map((x) => x.label || L.importedNotes.replace(/^#+\s*/, "")))].join(", ")));
 
   const written = [];
   const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
@@ -4904,6 +5094,7 @@ module.exports = {
   // @wp WP6 exports >>>
   importSpec,
   isTestFile,
+  implementsTargets,
   // @wp WP6 <<<
 
   // @wp WP7 exports >>>

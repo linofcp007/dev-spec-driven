@@ -106,7 +106,12 @@ function readStdin(cb) {
 // @wp WP5 <<<
 
 // @wp WP6 value-flags >>>
-VALUE_FLAGS.add("tracks"); // import <tool> <path> --tracks tdd,saas (like spec_import {tracks})
+VALUE_FLAGS.add("tracks"); // --tracks tdd,saas = the MCP `tracks` argument (import, create/bugfix, init, add-track)
+// A value flag takes ONE token: `--tracks saas ai` leaves "ai" positional, so every command that takes tracks
+// merges the flag with its positional tracks (parseTracks splits "tdd,saas") — none may drop it silently.
+function withTracksFlag(list) {
+  return typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list;
+}
 // @wp WP6 <<<
 
 // @wp WP7 value-flags >>>
@@ -198,7 +203,8 @@ function main() {
     }
 
     case "init": {
-      const r = spec.initProject(projectDir, pos.length ? pos : ["core"], flags.lang);
+      const tr = withTracksFlag(pos);
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang);
       if (r.ok === false) die(r.error); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", "))));
     }
@@ -208,7 +214,8 @@ function main() {
       if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
       const name = pos[0];
       const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
-      const tracks = pos.slice(1).length ? pos.slice(1) : undefined; // none → engine: keep existing / classify new
+      const tr = withTracksFlag(pos.slice(1));
+      const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: flags.brownfield === true || flags.brownfield === "true" }); // = spec_create {brownfield}
       if (!r.ok) die(r.error);
@@ -485,6 +492,7 @@ function main() {
         r.byFolder.slice(0, 30).forEach((f) => console.log(B.coverageFolder(f.folder === "." ? B.root : f.folder + "/", f.covered, f.files, f.percent)));
         if (r.undocumented.length) console.log(T.undocumented(r.undocumented.map(folder).join(", ")));
         if (r.unmatchedImplements.length) console.log(B.coverageUnmatched(r.unmatchedImplements.map((u) => u.ref).join(", ")));
+        if (r.nonCodeImplements.length) console.log(B.coverageNonCode(r.nonCodeImplements.map((u) => u.ref).join(", ")));
       });
     }
 
@@ -513,9 +521,10 @@ function main() {
     }
 
     case "add-track": {
-      if (!pos[0] || !pos[1]) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
+      const tr = withTracksFlag(pos.slice(1));
+      if (!pos[0] || !tr.length) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
-      const r = spec.addTrack(projectDir, pos[0], pos.slice(1), { remove: !!flags.remove });
+      const r = spec.addTrack(projectDir, pos[0], tr, { remove: !!flags.remove });
       if (!r.ok) die(r.error);
       return out(r, (r) => {
         console.log("'" + r.feature + "' now [" + r.tracks + "]");
@@ -594,7 +603,7 @@ function main() {
       // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
       if (!pos[0] || !pos[1]) die("usage: dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai]");
-      const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: flags.tracks });
+      const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
       if (!r.ok) die(r.error);
       return out(r, (r) => {
         const B = spec.msg(r.lang).importSpec;
@@ -685,7 +694,7 @@ function helpText() {
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME (approve)
-         --brownfield (create)  --name / --tracks (import)
+         --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;

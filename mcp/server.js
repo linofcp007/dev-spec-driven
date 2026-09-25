@@ -164,7 +164,7 @@ const TOOLS = [
   },
   {
     name: "spec_coverage",
-    description: "Brownfield: how much of the codebase is covered by specs — the share of code files (test files reported apart) named in any `_Implements:_` marker (a file, a folder or a glob) of any feature, active or archived, with a per-top-level-folder breakdown (`byFolder`), the uncovered folders, per-feature counts and the _Implements:_ entries that name no code file. `coveragePercent` = covered code files / code files; `documented`/`undocumented` = folders with at least one / no covered file.",
+    description: "Brownfield: how much of the codebase is covered by specs — the share of code files (test files reported apart) named in any `_Implements:_` marker (a file, a folder or a glob) of any feature, active or archived, with a per-top-level-folder breakdown (`byFolder`), the uncovered folders, per-feature counts, the _Implements:_ entries that name nothing on disk (`unmatchedImplements`) and those naming an existing test or non-code file (`nonCodeImplements`, informational). `coveragePercent` = covered code files / code files; `documented`/`undocumented` = folders with at least one / no covered file.",
     inputSchema: { type: "object", properties: { projectDir: { type: "string" } } },
   },
   {

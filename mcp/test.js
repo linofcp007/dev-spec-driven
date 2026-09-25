@@ -1881,6 +1881,96 @@ function payload(res) {
     S.createFeature(ptBf, "Faturas Antigas", ["core"], undefined, undefined, undefined, undefined, { brownfield: true });
     ok(/## Pontos de Integração/.test(r6(ptBf, ".specs", "faturas-antigas", "integration-plan.md")) && /ainda é o template/.test(S.specDoctor(ptBf, "faturas-antigas").checks.find((c) => c.id === "integration-plan").detail),
       "integration-plan.md and its doctor check follow the feature language (PT)");
+
+    // 5. Review round: HTTP client calls are not routes; wrapped decorators/annotations are.
+    const sc2 = path.join(tmp, "proj-wp6-scan2");
+    w6(sc2, "package.json", JSON.stringify({ name: "front", dependencies: { vue: "^3", axios: "^1" } }));
+    w6(sc2, "src/http.js", "import axios from 'axios';\nconst instance = axios.create({ baseURL: 'https://api.example.com' });\nexport const me = () => instance.get('/user');\nexport const upd = (b) => instance.put('/user', b);\n");
+    w6(sc2, "src/client.ts", "import ky from 'ky';\nconst api = ky.create({prefixUrl: '/api'});\nexport const list = () => api.get('/orders').json();\n");
+    w6(sc2, "src/services/users.ts", "import axios from 'axios'; const api = axios.create({ baseURL: '/api' }); export const listUsers = () => api.get('/users'); export const delUser = (id) => api.delete('/users/' + id);\n");
+    w6(sc2, "server/proxy.js", "const express = require('express');\nconst axios = require('axios');\nconst app = express();\napp.get('/proxy', h);\nconst api = axios.create();\napi.get('/not-a-route');\n");
+    w6(sc2, "server/plugin.js", "module.exports = async function (api) {\n  api.get('/plugin-route', h);\n};\n");
+    w6(sc2, "app/main.py", "from fastapi import FastAPI\napp = FastAPI()\n@app.get(\n    \"/multi\",\n    response_model=Item,\n)\ndef m(): ...\n@app.route(\n    \"/login\",\n    methods=[\"GET\", \"POST\"],\n)\ndef login(): ...\n@app.get(\"/one\")\ndef one(): ...\n");
+    w6(sc2, "svc/Ctl.java", "@RestController\n@RequestMapping(\n    \"/api\"\n)\npublic class Ctl {\n  @GetMapping(\n      value = \"/wrapped\",\n      produces = \"application/json\")\n  String w() { return null; }\n}\n");
+    const scan2 = safe6(() => S.scanCodebase(sc2));
+    const rk2 = (scan2.routes || []).map((r) => `${r.method} ${r.path} ${r.file}:${r.line}`);
+    const want2 = ["GET /proxy server/proxy.js:4", "GET /plugin-route server/plugin.js:2", "GET /multi app/main.py:3", "GET /login app/main.py:8", "POST /login app/main.py:8", "GET /one app/main.py:13", "GET /api/wrapped svc/Ctl.java:6"];
+    ok(want2.every((k) => rk2.includes(k)) && scan2.candidateEndpoints === 7,
+      "scan: a Black-wrapped @app.get(\\n \"/x\",…) and a multi-line @GetMapping(value = …) are routes, reported on the decorator's line (got " + rk2.join(" | ") + ")");
+    ok(!rk2.some((k) => /\/user |\/users|\/orders|not-a-route/.test(k)),
+      "scan: calls on an HTTP client (axios.create() instance, ky api) in .js/.ts service files are not routes; an `api` parameter in a plain module still is");
+
+    // Review round: coverage separates missing targets from existing test / non-code ones, and works at a drive root.
+    const cv2 = path.join(tmp, "proj-wp6-cov2");
+    ["tests/orders.test.js", "src/routes/orders.js", "README.md", "dist/bundle.js"].forEach((f) => w6(cv2, f, "x"));
+    const cv2f = S.createFeature(cv2, "Orders", ["tdd"]);
+    fs.writeFileSync(path.join(cv2f.dir, "tasks.md"), "- [ ] 1. t\n  - _Implements: tests/orders.test.js_\n- [ ] 2. i\n  - _Implements: src/routes/orders.js, README.md, dist/bundle.js, docs/*.md, src/gone.js_\n");
+    const cov2 = safe6(() => S.coverage(cv2));
+    ok(cov2.coveragePercent === 100 && (cov2.unmatchedImplements || []).map((u) => u.ref).join() === "docs/*.md,src/gone.js" &&
+      (cov2.nonCodeImplements || []).map((u) => u.ref).join() === "tests/orders.test.js,README.md,dist/bundle.js",
+      "coverage: only _Implements:_ entries naming nothing on disk are unmatched; an existing test / doc / build file is listed apart (nonCodeImplements)");
+    const driveRoot = path.parse(tmp).root; // C:\ or / — already ends in a separator
+    ok(safe6(() => S.implementsTargets(driveRoot, "src/a.js", new Map([["src/a.js", "src/a.js"]]), (s) => s)).join() === "src/a.js",
+      "coverage: an _Implements:_ target resolves when the project root is a drive root (subst Q:\\)");
+
+    // Review round: tool names are exact on both surfaces (the MCP enum), no aliases or case folding.
+    const aliasMcp = await call6("spec_import", { tool: "speckit", path: "specs/001-photo-albums", name: "Alias MCP", projectDir: im });
+    const aliasEng = [safe6(() => S.importSpec(im, "speckit", "specs/001-photo-albums", { name: "Alias One" })), safe6(() => S.importSpec(im, "Kiro", ".kiro/specs/user-auth", { name: "Alias Two" }))];
+    ok(aliasMcp.isError && aliasEng.every((r) => !r.ok && /Unknown spec format/.test(r.error)) && !["alias-mcp", "alias-one", "alias-two"].some((s) => fs.existsSync(path.join(im, ".specs", s))),
+      "spec_import: 'speckit' / 'Kiro' are refused by the engine exactly like the MCP schema refuses them (CLI = MCP)");
+
+    // Review round: Kiro in-progress `[-]`, a stand-alone task after a parent group, a reference no task owns.
+    w6(im, ".kiro/specs/todo/requirements.md", "## Requirements\n\n### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN a todo is added THEN the system SHALL store it\n2. WHEN a todo is edited THEN the system SHALL save it\n3. WHEN the app restarts THEN the system SHALL reload todos\n");
+    w6(im, ".kiro/specs/todo/tasks.md", "- [ ] 1. Set up\n- [ ] 2. Implement todo model\n  - [x] 2.1 Create Todo type\n    - _Requirements: 1.1, 1.2_\n  - [-] 2.2 Add persistence\n    - _Requirements: 1.3_\n- [ ]* 3. Optional: audit export\n\nNotes: _Requirements: 1.2, 7.7_\n<!-- _Requirements: 8.8_ -->\n");
+    const todo = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/todo"));
+    const todoTasks = todo.ok ? r6(im, ".specs", "todo", "tasks.md") : "";
+    ok(todo.ok && todo.mapping["task 2.2"] === "task 3" && /- \[ \] 3\. Add persistence\n  - _Requirements: US-1\.AC-3_/.test(todoTasks) && !/\[-\]/.test(todoTasks) &&
+      (S.traceCheck(im, "todo").uncoveredByTasks || ["?"]).length === 0,
+      "spec_import kiro: an in-progress `[-]` task is a task (open), its _Requirements:_ rewritten — trace_check covers its AC");
+    ok(/- \[ \] 1\. Set up\n\n## Implement todo model\n- \[x\] 2\. Create Todo type/.test(todoTasks) && /\n\n## Other tasks\n- \[ \] 4\. Optional: audit export \(optional\)/.test(todoTasks) &&
+      /"\*\*Phase:\*\* Other tasks|\*\*Phase:\*\* Other tasks/.test(JSON.stringify(safe6(() => S.taskBrief(im, "todo", 4)))),
+      "spec_import: a stand-alone task after a parent's phase heading gets a neutral '## Other tasks' heading (its brief no longer names the parent's phase)");
+    ok(/^Notes: _Requirements: US-1\.AC-2, 7\.7_$/m.test(todoTasks) && todo.warnings.some((x) => /line 9: .*'7\.7'/.test(x)) && /<!-- _Requirements: 8\.8_ -->/.test(todoTasks) && !todo.warnings.some((x) => /8\.8/.test(x)),
+      "spec_import: a _Requirements:_ reference no task owns is rewritten too (unknown ones reported by line); one inside an HTML comment is left alone");
+
+    // Review round: no source requirement text is dropped (wrapped/bulleted criteria, notes, NFR sub-sections, Purpose, Constraints).
+    w6(im, ".kiro/specs/wrap/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Exports for users.", "", "Second intro paragraph WRAPINTRO.", "", "## Requirements", "",
+      "### Requirement 1", "", "**User Story:** As a user, I want exports, so that I keep my data.", "", "#### Acceptance Criteria", "",
+      "1. WHEN a user requests an export of all their photos and albums", "THEN the system SHALL produce a zip archive within 60 seconds", "",
+      "Note: exports older than 7 days are deleted.", "", "### Requirement 2", "", "#### Acceptance Criteria", "",
+      "- WHEN a user clicks save THEN the system SHALL persist the draft", "- IF the save fails THEN the system SHALL show a retry banner", "",
+      "### Non-Functional Requirements", "", "- The export endpoint SHALL be rate-limited to 10 req/min", ""].join("\n"));
+    const wrap = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/wrap"));
+    const wrapReq = wrap.ok ? r6(im, ".specs", "wrap", "requirements.md") : "";
+    const wrapEars = safe6(() => S.earsFeature(im, "wrap"));
+    ok(wrap.ok && /US-1\.AC-1\*\* — WHEN a user requests an export of all their photos and albums THEN the system SHALL produce a zip archive within 60 seconds/.test(wrapReq) &&
+      /AC-1\*\*[^\n]*\n\nNote: exports older than 7 days are deleted\.\n\n### US-2/.test(wrapReq) && !wrap.warnings.some((x) => /not converted to EARS/.test(x)),
+      "spec_import kiro: a criterion wrapped onto an unindented THEN line stays whole; a note after the criteria follows them verbatim");
+    ok(wrap.mapping["2.1"] === "US-2.AC-1" && /US-2\.AC-1\*\* — WHEN a user clicks save THEN the system SHALL persist the draft/.test(wrapReq) && /US-2\.AC-2\*\* — IF the save fails/.test(wrapReq) &&
+      /## Non-Functional Requirements\n- The export endpoint SHALL be rate-limited to 10 req\/min/.test(wrapReq) && /## Introduction\nSecond intro paragraph WRAPINTRO\./.test(wrapReq) &&
+      wrap.warnings.some((x) => /carried over verbatim.*Introduction.*Non-Functional Requirements/.test(x)) && Array.isArray(wrapEars.issues) && !wrapEars.issues.some((x) => x.severity === "error"),
+      "spec_import kiro: bulleted criteria are criteria; a ### Non-Functional Requirements section and the rest of the introduction are carried verbatim and named in a warning; no EARS error");
+    w6(im, "specs/003-nfr/spec.md", "# Feature Specification: NFR\n\n## User Scenarios & Testing\n\n### User Story 1 - Export (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they export, **Then** the system sends a zip\n\nThe zip is named after the account (SKNOTE).\n\n## Requirements\n\n### Functional Requirements\n\n- **FR-001**: System MUST export\n\n### Non-Functional Requirements\n\n- **NFR-001**: exports finish in 60 s (UNIQUEMARKER1)\n");
+    const skn = safe6(() => S.importSpec(im, "spec-kit", "specs/003-nfr"));
+    const sknReq = skn.ok ? r6(im, ".specs", "nfr", "requirements.md") : "";
+    ok(skn.ok && /## Non-Functional Requirements\n- \*\*NFR-001\*\*: exports finish in 60 s \(UNIQUEMARKER1\)/.test(sknReq) && /US-1\.AC-1\*\*[^\n]*\n(?:[^\n]*\n)?\nThe zip is named after the account \(SKNOTE\)\./.test(sknReq) &&
+      skn.warnings.some((x) => /carried over verbatim.*Non-Functional Requirements/.test(x)),
+      "spec_import spec-kit: an unrecognised ### section (NFR-001) and text after the scenarios are carried verbatim");
+    w6(im, "openspec/specs/export/spec.md", "# Export Specification\n\n## Purpose\nExports.\n\nSecond purpose paragraph UNIQUEMARKER2.\n\n## Requirements\n### Requirement: Zip\nThe system SHALL zip exports.\n\n#### Scenario: Long form\n- **WHEN** a user submits a very long export form that\n  spans several lines\n- **THEN** the archive is produced\n\n## Constraints\n- UNIQUEMARKER3\n");
+    const osx = safe6(() => S.importSpec(im, "openspec", "openspec/specs/export"));
+    const osxReq = osx.ok ? r6(im, ".specs", "export", "requirements.md") : "";
+    ok(osx.ok && /## Purpose\nSecond purpose paragraph UNIQUEMARKER2\./.test(osxReq) && /## Constraints\n- UNIQUEMARKER3/.test(osxReq) &&
+      /US-1\.AC-1\*\* — WHEN a user submits a very long export form that spans several lines, THE SYSTEM SHALL ensure that the archive is produced/.test(osxReq) &&
+      osx.warnings.some((x) => /carried over verbatim.*Purpose.*Constraints/.test(x)),
+      "spec_import openspec: every Purpose paragraph and other ## sections are carried; a wrapped WHEN clause stays whole");
+
+    // Review round: a flat tasks.md is imported in linear time (the parent lookup was quadratic).
+    w6(im, ".kiro/specs/flat/requirements.md", "### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN x happens THEN the system SHALL do y\n");
+    w6(im, ".kiro/specs/flat/tasks.md", Array.from({ length: 20000 }, (_, i) => `- [ ] ${i + 1}. T\n  - _Requirements: 1.1_`).join("\n") + "\n");
+    const t0flat = Date.now();
+    const flat = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/flat"));
+    const flatMs = Date.now() - t0flat;
+    ok(flat.ok && flat.mapping["task 20000"] === "task 20000" && flatMs < 6000, "spec_import: a flat 20 000-task tasks.md imports in linear time (" + flatMs + " ms; was ~11 s)");
   }
   // @wp WP6 <<<
 
