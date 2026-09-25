@@ -247,8 +247,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
   `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
   localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and `spec_finish` render
-  it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and the ROADMAP.md attention line only
-  counts unverified tasks per feature.
+  it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and so does the ROADMAP.md/.html
+  "needs attention" line (`roadmapData()` keeps each row's `unverifiedDetail`; the labels follow the roadmap
+  chrome language): `2 task(s) ticked without verification evidence: #1 (latest run failed), #3`.
 - **One verdict: `taskVerification()`** → `{reason, nothingToVerify}` is the ONLY rule behind every `verified`
   (`spec_complete_task`, `spec_status` tasks, `spec_impact` tasks) and every unverified list (doctor, finish,
   ROADMAP.md). A task with no runnable `_Verify:_` and nothing recorded for it (or a record that proves nothing) is
@@ -556,7 +557,7 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(699 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(700 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
 `node cli/test-cli.js` adds 235 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

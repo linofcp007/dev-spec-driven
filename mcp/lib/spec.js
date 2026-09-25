@@ -6069,7 +6069,9 @@ function roadmapData(projectDir) {
     // progress — ⬜ 'not started' only below that; tasks-ready (30%, nothing done) is 📋 planned.
     const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress"
       : f.phase === "tasks-ready" ? "planned" : f.percent > PHASE_PERCENT.requirements ? "inprogress" : "notstarted";
-    const unverified = verificationStatus(projectDir, f.name, dir).unverified.length;
+    // The per-task detail (reason codes), not just a count: the attention line names each task and why, as doctor does.
+    const { unverifiedDetail } = verificationStatus(projectDir, f.name, dir);
+    const unverified = unverifiedDetail.length;
     // What the gates flag, per feature: missing/unfilled mandatory sections, artifacts edited after their approval,
     // the current phase's template placeholders, approvals recorded with --force.
     const st = readJson(statePath(dir)).data; // read-only here: no resolver pass (it re-reads roadmap.json per call)
@@ -6079,7 +6081,7 @@ function roadmapData(projectDir) {
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, sections, changed, placeholders, forced };
+    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -6097,7 +6099,9 @@ function buildAttention(rows, t, lang) {
     if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
     if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
     if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.join(", ")}` });
-    if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}` });
+    // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
+    // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
+    if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}: ${unverifiedLabel({ unverifiedDetail: r.unverifiedDetail || [] }, lang)}` });
   });
   return a;
 }

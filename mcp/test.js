@@ -794,7 +794,7 @@ function endRun() {
   ok(failEv.ok === false && /exit 1/.test(failEv.error) && S.nextTask(vDir, "keys").next.number === 1, "a failed verification refuses the tick (evidence before claims)");
   const noEv = S.completeTask(vDir, "keys", 1);
   ok(noEv.ok && noEv.verified === false && /_Verify:_/.test(noEv.note) && S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "warn" &&
-    /without verification evidence/.test(fs.readFileSync(path.join(vDir, ".specs", "ROADMAP.md"), "utf8")),
+    /^- \*\*keys\*\* — 1 task\(s\) ticked without verification evidence: #1 \(latest run failed\)$/m.test(fs.readFileSync(path.join(vDir, ".specs", "ROADMAP.md"), "utf8")),
     "ticking a _Verify:_ task without evidence warns (result, doctor, roadmap)");
   const backfill = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "keys", number: 1, evidence: { command: "npm test", exitCode: 0, summary: "3/3 passing" }, projectDir: vDir } }));
   const vState = JSON.parse(fs.readFileSync(path.join(vf.dir, ".state.json"), "utf8"));
@@ -951,7 +951,7 @@ function endRun() {
   const eg2Doc = S.specDoctor(w1, "gate").checks.find((c) => c.id === "verification");
   ok(eg2.ok && eg2.verified === false && eg2.unverifiedReason === "failed-run" && egState().evidence["1"].exitCode === 1 && egState().evidence["1"].note === "all green" &&
     eg2Doc.status === "warn" && /#1 \(latest run failed\)/.test(eg2Doc.detail) && S.finishFeature(w1, "gate").blockers.some((b) => /#1 \(latest run failed\)/.test(b)) &&
-    /\*\*gate\*\* — 1 task\(s\) ticked without verification evidence/.test(fs.readFileSync(path.join(w1, ".specs", "ROADMAP.md"), "utf8")),
+    /\*\*gate\*\* — 1 task\(s\) ticked without verification evidence: #1 \(latest run failed\)$/m.test(fs.readFileSync(path.join(w1, ".specs", "ROADMAP.md"), "utf8")),
     "a later summary-only note may tick but never verifies over a failed run (doctor, spec_finish and ROADMAP flag it)");
   const eg3 = S.completeTask(w1, "gate", 1, { command: "npm test", exitCode: 0, summary: "5 passing" });
   ok(eg3.ok && eg3.alreadyDone && eg3.verified === true && egState().evidence["1"].history.map((h) => h.exitCode).join() === "1,0" &&
@@ -1152,6 +1152,38 @@ function endRun() {
   ok(svRenamed === "true,true" && S.statusFeature(w1, "stale").tasks.list[0].verified === false && /#1 \(evidence is for another task or _Verify:_ command\)/.test(svDoc.detail) &&
     svAgain.unverifiedReason === "stale-evidence" && /--run/.test(svAgain.note) && S.statusFeature(w1, "stale").tasks.list[1].verified === true,
     "a title edit keeps the evidence; an edited _Verify:_ command makes it stale-evidence; a v1.12 record without stamps still verifies");
+  // ROADMAP.md "needs attention" names each unverified task and WHY (the per-task reasons doctor/spec_finish give,
+  // localized in the roadmap's language) — it used to print only a count ("5 task(s) ticked without verification evidence").
+  const rsDir = path.join(tmp, "proj-reasons");
+  const rs = S.createFeature(rsDir, "Reasons", ["core"]);
+  const rsTasks = path.join(rs.dir, "tasks.md");
+  fs.writeFileSync(rsTasks, "- [ ] 1. a\n  - _Verify: npm test_\n- [ ] 2. b\n  - _Verify: npm test_\n- [ ] 3. c\n  - _Verify: npm test_\n" +
+    "- [ ] 4. d\n  - _Verify: npm run lint_\n- [ ] 5. e\n  - _Verify: node -e 0_\n- [ ] 5. f\n  - _Verify: node -e 1_\n- [ ] 6. g\n");
+  S.completeTask(rsDir, "reasons", 1, { command: "npm test", exitCode: 1, summary: "1 failing" }); // refused, recorded
+  S.completeTask(rsDir, "reasons", 1, { summary: "fine now" }); // failed-run
+  S.completeTask(rsDir, "reasons", 2, "looks fine"); // manual-note-on-runnable-verify
+  S.completeTask(rsDir, "reasons", 3); // no-evidence
+  S.completeTask(rsDir, "reasons", 4, { command: "npm run lint", exitCode: 0 });
+  S.completeTask(rsDir, "reasons", 5, { command: "node -e 0", exitCode: 0 });
+  S.completeTask(rsDir, "reasons", 5); // the second '5.': duplicate-number
+  S.completeTask(rsDir, "reasons", 6); // no _Verify:_, nothing recorded: nothing to verify — never listed
+  fs.writeFileSync(rsTasks, fs.readFileSync(rsTasks, "utf8").replace("npm run lint", "npm run lint:strict")); // stale-evidence
+  const rsLine = (md) => (md.split("\n").find((l) => l.startsWith("- **reasons** — ") && l.includes(": #1 (")) || "").replace("- **reasons** — ", "");
+  S.writeRoadmapMd(rsDir); // a hand edit of tasks.md refreshes nothing (the hook does that in a session)
+  const rsEn = rsLine(fs.readFileSync(path.join(rsDir, ".specs", "ROADMAP.md"), "utf8"));
+  const rsPt = rsLine(S.renderRoadmapMd(rsDir, "pt"));
+  const rsEs = rsLine(S.renderRoadmapMd(rsDir, "es"));
+  const rsHtml = S.renderRoadmapHtml(rsDir, "en");
+  ok(rsEn === "5 task(s) ticked without verification evidence: #1 (latest run failed), #2 (note only, _Verify:_ command not run), #3, " +
+      "#4 (evidence is for another task or _Verify:_ command), #5 (number shared with another task)" &&
+    rsPt === "5 tarefa(s) marcada(s) sem evidência de verificação: #1 (a última execução falhou), #2 (só uma nota, comando _Verify:_ por correr), #3, " +
+      "#4 (evidência de outra tarefa ou de outro comando _Verify:_), #5 (número partilhado com outra tarefa)" &&
+    rsEs === "5 tarea(s) marcada(s) sin evidencia de verificación: #1 (la última ejecución falló), #2 (solo una nota, comando _Verify:_ sin ejecutar), #3, " +
+      "#4 (evidencia de otra tarea o de otro comando _Verify:_), #5 (número compartido con otra tarea)" &&
+    rsHtml.includes("#1 (latest run failed), #2 (note only, _Verify:_ command not run), #3,") &&
+    S.specDoctor(rsDir, "reasons").checks.find((c) => c.id === "verification").detail === "ticked without verification evidence: " + rsEn.slice(rsEn.indexOf(": ") + 2),
+    "ROADMAP.md / .html 'needs attention' names each unverified task with its localized reason (failed-run, note-only, no-evidence, stale, duplicate) — the same list doctor gives " +
+    `(EN: ${rsEn})`);
   // Scanner: only a "<!--" that starts its line may span lines; an inline one ends with its paragraph (never
   // past the next task line), and a "-->" in a code span or fenced code is not a closer.
   const cmF = S.createFeature(w1, "Cmt", ["core"]);
@@ -3022,8 +3054,9 @@ function endRun() {
     const tv8 = sv8.affectedTasks.find((t) => t.number === 2);
     ok(vd8.includes("#2 (the spec changed since this evidence; spec_impact reopened the task)") && !/evidence is for another task/.test(vd8) && tv8.evidence === "stale-evidence" &&
       tv8.specChanged === true && S.impactLines(sv8).join("\n").includes("#2 [x] the spec changed since this evidence") &&
-      S.finishFeature(w8, "drafts").blockers.some((b) => b.includes("#2 (the spec changed since this evidence")),
-      "evidence staled by a reopen keeps the stale-evidence code but says the spec changed (doctor, impact, finish) — not 'evidence is for another task'");
+      S.finishFeature(w8, "drafts").blockers.some((b) => b.includes("#2 (the spec changed since this evidence")) &&
+      /^- \*\*drafts\*\* — .*#2 \(the spec changed since this evidence; spec_impact reopened the task\)/m.test(S.renderRoadmapMd(w8, "en")),
+      "evidence staled by a reopen keeps the stale-evidence code but says the spec changed (doctor, impact, finish, ROADMAP.md) — not 'evidence is for another task'");
     const re8b = S.completeTask(w8, "drafts", 2, { summary: "re-checked against the new AC-2" });
     ok(re8b.verified === true && !st8().evidence["2"].stale, "a task without a runnable _Verify:_: a new note clears the stale mark");
     const hi8 = S.impactReport(w8, "drafts", {});

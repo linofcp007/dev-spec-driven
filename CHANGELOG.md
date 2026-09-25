@@ -19,8 +19,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   second of two tasks numbered `3.` never borrows the first one's passing run and an edited command's old
   run no longer counts. `spec_complete_task` returns a stable reason code (`unverifiedReason`:
   `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`);
-  doctor and `spec_finish` list each unverified task with a localized reason, and ROADMAP.md counts them
-  per feature. A `.state.json` whose evidence/approvals aren't objects is refused
+  doctor, `spec_finish` and the ROADMAP.md / ROADMAP.html "needs attention" line list each unverified task
+  with a localized reason (`#1 (latest run failed), #3` — the roadmap used to show only a count), the roadmap's
+  in its chrome language. A `.state.json` whose evidence/approvals aren't objects is refused
   before tasks.md is touched. A task with no runnable `_Verify:_` stays outside the run gate: a v1.12 bare
   `{exitCode: 0}` there still verifies (legacy evidence never leaves a task worse off than none) and a later
   note becomes its summary. `verified` is one verdict on every surface (`spec_complete_task`, `spec_status`,
@@ -288,7 +289,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 699 assertions (was 181), `node cli/test-cli.js` 235 (was 53); the tool count is
+- `node mcp/test.js` 700 assertions (was 181), `node cli/test-cli.js` 235 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

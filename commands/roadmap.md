@@ -18,6 +18,7 @@ same-named file dev-spec did not generate is never overwritten — the result is
 Report: each feature's tracks, phase, %, dependencies and whether they're met, blocked features, overall %, and
 any cycle; recommend the next unblocked feature. Relay the **needs attention** items: blocked dependencies, open
 clarifications, unfilled `[SaaS]`/`[AI]` sections, template placeholders in the current phase, artifacts changed
-since their approval, **forced** approvals, and ticked tasks without a passing run. The roadmap is
+since their approval, **forced** approvals, and ticked tasks without a passing run (each task with its reason —
+latest run failed, note only, stale or shared-number evidence). The roadmap is
 auto-generated on every mutation and by a hook, so it's normally already up to date — never hand-edit it.
 Respond in the user's language (EN/PT/ES).
