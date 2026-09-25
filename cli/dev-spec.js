@@ -31,6 +31,8 @@
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
+ *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
+ *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename a feature
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
@@ -116,6 +118,8 @@ function withTracksFlag(list) {
 // @wp WP6 <<<
 
 // @wp WP7 value-flags >>>
+// append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--story US1] [--heading "<phase>"]
+["task", "req", "implements", "verify", "story", "heading"].forEach((k) => VALUE_FLAGS.add(k));
 // @wp WP7 <<<
 
 // @wp WP8 value-flags >>>
@@ -623,6 +627,42 @@ function main() {
     // @wp WP6 <<<
 
     // @wp WP7 commands >>>
+    case "append-tasks": {
+      // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
+      if (!pos[0] || typeof flags.task !== "string") die('usage: dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
+      const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
+      // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a.
+      // Collect every occurrence, walking argv with the parser's own rules (as `depend` does for --add/--rm).
+      const every = (name) => {
+        const vals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = argv[i];
+          if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === name) vals.push(a.slice(a.indexOf("=") + 1)); }
+          else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2)) && argv[i + 1] !== undefined && !/^--[A-Za-z]/.test(argv[i + 1])) { const v = argv[++i]; if (a.slice(2) === name) vals.push(v); }
+        }
+        return vals;
+      };
+      // A second --task is a second task: refused (one per call) rather than merged or dropped.
+      if (every("task").length > 1) die(T.oneTaskPerCall);
+      // Single-valued like over MCP: a second --verify would silently drop the first check (the evidence gate would
+      // never ask for it), a second --story/--heading the first choice — refused, never last-wins.
+      const twice = ["verify", "story", "heading"].find((k) => every(k).length > 1);
+      if (twice) die(T.oneValue(twice));
+      const task = { text: flags.task };
+      const reqs = every("req"), impls = every("implements");
+      if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
+      if (impls.length) task.implements = impls;
+      if (typeof flags.verify === "string") task.verify = flags.verify;
+      if (typeof flags.story === "string") task.story = flags.story;
+      if (flags.parallel != null) task.parallel = flags.parallel === true || flags.parallel === "true";
+      const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => {
+        console.log(T.appended(r.heading, r.headingCreated));
+        r.appended.forEach((t) => console.log("  - [ ] " + t.number + ". " + t.text));
+        if (r.note) console.log("  ⚠ " + r.note);
+      });
+    }
     // @wp WP7 <<<
 
     // @wp WP8 commands >>>
@@ -679,6 +719,8 @@ function helpText() {
                                   (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
   finish <feature> [--write] [--include-body]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary
+  append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
+                                  --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);

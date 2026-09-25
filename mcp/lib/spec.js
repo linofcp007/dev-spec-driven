@@ -1579,6 +1579,7 @@ function scanTaskLines(tasksText) {
   let comment = false;
   for (let i = 0; i < n; i++) {
     const src = lines[i];
+    const inComment = comment; // the line starts inside a multi-line comment (a "<!--" on it is comment text)
     // An open fence never coexists with a comment: neither opens inside the other.
     const fl = !comment && fenceLine(st, lines, i, below);
     if (fl) { out.push({ vis: src, code: true, fenceOpen: fl === "open" }); continue; }
@@ -1609,9 +1610,9 @@ function scanTaskLines(tasksText) {
     }
     const vis = masked.split(COMMENT_MASK).join("");
     const t = masked.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
-    if (!t) { out.push({ vis, code: false, task: null }); continue; }
+    if (!t) { out.push({ vis, code: false, task: null, inComment }); continue; }
     const text = masked.slice(masked.length - t[4].length).split(COMMENT_MASK).join("").trim();
-    out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text } });
+    out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text }, inComment });
   }
   return out;
   // Does a "<!--" on line i that doesn't close on its own line have a closer within its reach?
@@ -2613,31 +2614,38 @@ function trackTaskHeading(tr, tasksText) {
 // read this; completing, tracing and briefing a task read the whole file.
 function activeTasks(tasksText, tracks) {
   if (tasksText == null) return tasksText;
-  const drop = inactiveTaskLines(tasksText, tracks);
-  return drop.size ? tasksText.split(/\r?\n/).filter((_, i) => !drop.has(i)).join("\n") : tasksText;
+  const lines = tasksText.split(/\r?\n/);
+  const drop = inactiveTaskLines(lines, tracks);
+  return drop.size ? lines.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
 }
-// 0-based indices of the lines under the headings `isOff` picks, each up to the next heading of the same or a
-// higher level. The ONE rule behind activeTasks / activeDesign — and the gates, which need the real line numbers.
-function sectionDropLines(lines, isOff) {
+// 0-based line index → the value `owner` returned for the heading that holds it: every line under a heading
+// `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.
+// The ONE rule behind activeTasks / activeDesign, the gates (which need the real line numbers) and
+// spec_append_tasks (which must never land in a section the other tools hide, and names its track).
+function sectionDropLines(lines, owner) {
   const heads = headingIndex(lines);
   const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
-  const drop = new Set();
+  const drop = new Map();
   for (const h of heads) {
-    if (!isOff(lines[h])) continue;
+    const who = owner(lines[h]);
+    if (!who) continue;
     const end = heads.find((x) => x > h && level(x) <= level(h));
-    for (let i = h; i < (end == null ? lines.length : end); i++) drop.add(i);
+    for (let i = h; i < (end == null ? lines.length : end); i++) drop.set(i, who);
   }
   return drop;
 }
-// tasks.md: the template task blocks of tracks that are off (matched by their heading, in any language).
-function inactiveTaskLines(tasksText, tracks) {
-  const wanted = new Set(["saas", "ai"].filter((t) => !tracks.includes(t)).flatMap((t) => [...trackTaskHeadings(t)]));
-  return wanted.size ? sectionDropLines(tasksText.split(/\r?\n/), (l) => wanted.has(normTaskHeading(l))) : new Set();
+// tasks.md (text or lines): the template task blocks of tracks that are off (matched by their heading, in any language).
+function inactiveTaskLines(tasks, tracks) {
+  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => [t, trackTaskHeadings(t)]);
+  if (!off.length) return new Map();
+  const lines = Array.isArray(tasks) ? tasks : String(tasks).split(/\r?\n/);
+  return sectionDropLines(lines, (l) => { const hit = off.find(([, wanted]) => wanted.has(normTaskHeading(l))); return hit && hit[0]; });
 }
 // design.md / requirements.md: the [SaaS] / [AI] headed sections of tracks that are off.
 function inactiveMarkerLines(md, tracks) {
-  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => TRACK_MARKER[t].toLowerCase());
-  return off.length ? sectionDropLines(md.split(/\r?\n/), (l) => off.some((m) => l.toLowerCase().includes(m))) : new Set();
+  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => [t, TRACK_MARKER[t].toLowerCase()]);
+  if (!off.length) return new Map();
+  return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.toLowerCase().includes(m)); return hit && hit[0]; });
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -2733,6 +2741,244 @@ function addTrack(projectDir, name, track, opts = {}) {
 // Convenience for callers that prefer a verb: same as addTrack(..., { remove: true }).
 function removeTrack(projectDir, name, track) {
   return addTrack(projectDir, name, track, { remove: true });
+}
+
+// ---------------------------------------------------------------------------
+// spec_append_tasks — converge: NEW tasks appended to tasks.md (existing tasks are never renumbered or edited)
+// ---------------------------------------------------------------------------
+
+const RE_NEW_TASK_TAGS = /^(?:\[(?:US\d+|shared|P)\]\s*)+/i; // the known-tag run taskBlocks reads
+const RE_THEMATIC_BREAK = /^\s{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/; // '---' / '***' / '___'
+// `npm test` — ONE code span around the whole value (no inner backtick run as long as its fence) — is the command
+// npm test, as taskMarkers reads it. Anything else (`a` && `b`, test -n `echo ok`) is the command itself.
+function unwrapCodeSpan(v) {
+  const m = v.match(/^(`+)(?!`)([\s\S]*[^`])\1$/);
+  if (!m || (m[2].match(/`+/g) || []).some((r) => r.length === m[1].length)) return v;
+  return m[2].trim();
+}
+
+// One task of a spec_append_tasks call → its normalized fields and rendered text/sub-lines, or { error }.
+// `i` is its 1-based position in the call (errors name it).
+function newTaskSpec(t, i, A) {
+  if (!isObj(t)) return { error: A.noText(i) };
+  const folded = typeof t.text === "string" ? t.text.replace(/\s+/g, " ").trim() : "";
+  // Tags typed in the text merge with story/parallel — never "[US1] [US1] …".
+  const lead = (folded.match(RE_NEW_TASK_TAGS) || [""])[0];
+  const text = folded.slice(lead.length).trim();
+  if (!text) return { error: A.noText(i) };
+  let story = t.story != null && String(t.story).trim() ? String(t.story).trim() : (lead.match(/\[(US\d+|shared)\]/i) || [])[1] || null;
+  if (story != null) {
+    const m = story.match(/^(?:US-?(\d+)|(shared))$/i);
+    if (!m) return { error: A.badStory(i, story) };
+    story = m[1] ? "US" + parseInt(m[1], 10) : "shared";
+  }
+  const parallel = typeof t.parallel === "boolean" ? t.parallel : /\[P\]/i.test(lead);
+  const list = (v, sep) => (Array.isArray(v) ? v : v == null ? [] : [v]).flatMap((x) => String(x == null ? "" : x).split(sep)).map((s) => s.trim()).filter(Boolean);
+  // AC IDs are English-stable ("us-1.ac-2" is US-1.AC-2); anything else stays as given and is reported as unknown.
+  const requirements = [...new Set(list(t.requirements, /[,;\s]+/).map((id) => (/^us-\d+\.ac-\d+$/i.test(id) ? id.toUpperCase() : id)))];
+  const files = [];
+  for (const given of list(t.implements, /[,;]/)) {
+    const p = given.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+    // Project-relative only (trace_check resolves them from the project root): no absolute path, drive or URI scheme
+    // (C:, file:), no home in any form (~, ~/x, ~user/x), no '..'.
+    if (!p || p === "." || p.startsWith("/") || p.startsWith("~") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(p) || p.split("/").includes("..")) return { error: A.badPath(i, given) };
+    if (!files.includes(p)) files.push(p);
+  }
+  let verify = null;
+  let stored = null;
+  if (t.verify != null && String(t.verify).trim()) {
+    const v = String(t.verify).trim();
+    if (/[\r\n]/.test(v)) return { error: A.badVerify(i) };
+    verify = unwrapCodeSpan(v) || null; // "` `" is no command
+    // Every reader drops a [bracketed] value as a placeholder: the evidence gate would never apply to it.
+    if (verify && /^\[.*\]$/.test(verify)) return { error: A.placeholderVerify(i, verify) };
+    if (verify) {
+      // taskMarkers strips a leading/trailing backtick run, so a command that starts or ends with one (`make` && x,
+      // test -n `echo ok`) is stored inside a longer code span — it reads back, and runs, exactly as given.
+      const fence = "`".repeat(Math.max(0, ...(verify.match(/`+/g) || []).map((r) => r.length)) + 1);
+      stored = /^`|`$/.test(verify) ? `${fence} ${verify} ${fence}` : verify;
+    }
+  }
+  const tags = (story ? `[${story}]` : "") + (parallel ? "[P]" : "");
+  const lineText = (tags ? tags + " " : "") + text;
+  const body = [];
+  if (requirements.length) body.push(`_Requirements: ${requirements.join(", ")}_`);
+  if (files.length) body.push(`_Implements: ${files.join(", ")}_`);
+  if (stored) body.push(`_Verify: ${stored}_`);
+  // Round trip: the markers must read back exactly as given — a "_ " inside a path or command, a marker typed in
+  // the text… would make trace/brief/complete see something other than what was asked for.
+  const mk = taskMarkers({ text: lineText, body });
+  const same = (a, b) => a.length === b.length && a.every((x, k) => x === b[k]);
+  if (!same(mk.requirements, requirements)) return { error: A.unstorable(i, "_Requirements:_") };
+  if (!same(mk.implements, files)) return { error: A.unstorable(i, "_Implements:_") };
+  if (!same(mk.verify, verify ? [verify] : [])) return { error: A.unstorable(i, "_Verify:_") };
+  return { text, lineText, body, story, parallel, requirements, implements: files, verify, markers: mk };
+}
+
+// spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, story?, parallel?}], heading?}.
+// Tasks are numbered after every number in use and appended under a phase heading: an existing heading with that
+// text (at the end of its phase, before its closing checkpoint) or a new one (default: the localized
+// "Phase: Convergence", with a closing **Checkpoint:**) placed after the last ACTIVE line — never inside a removed
+// track's section. All-or-nothing: an invalid task or an unknown AC writes nothing.
+function appendTasks(projectDir, name, tasks, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const M = i18n.msg(lng);
+  const A = M.appendTasks;
+  const file = path.join(dir, "tasks.md");
+  const raw = readIfExists(file);
+  if (raw == null) return { ok: false, error: M.err.tasksMissing(slug) };
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+
+  const items = [];
+  if (!Array.isArray(tasks) || !tasks.length) return { ok: false, error: A.noTasks };
+  for (let i = 0; i < tasks.length; i++) {
+    const t = newTaskSpec(tasks[i], i + 1, A);
+    if (t.error) return { ok: false, error: t.error };
+    items.push(t);
+  }
+  // Every cited AC must exist — the same index spec_task_brief resolves them with.
+  const cited = [...new Set(items.flatMap((t) => t.requirements))];
+  if (cited.length) {
+    const reqText = readIfExists(path.join(dir, "requirements.md"));
+    if (reqText == null) return { ok: false, error: M.err.requirementsMissing(slug) };
+    const known = acIndex(reqText);
+    const phantom = cited.filter((id) => !known.has(id));
+    if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", ")), phantom };
+  }
+
+  let heading = A.heading;
+  if (opts.heading != null && String(opts.heading).trim()) {
+    const h = String(opts.heading).trim();
+    heading = h.replace(/^#{1,6}(?:\s+|$)/, "").replace(/\s+/g, " ").trim();
+    if (/[\r\n]/.test(h) || !heading) return { ok: false, error: A.badHeading };
+  }
+  // Refused by the SAME test globalConstraints() finds that section with (any heading containing the words), so
+  // appended tasks can never be read into every brief as "binding" constraints.
+  if (RE_GLOBAL_CONSTRAINTS.test(heading)) return { ok: false, error: A.constraintsHeading(heading) };
+  const tracks = detectTracks(dir);
+  const norm = normTaskHeading(heading);
+  // A turned-off track's task heading is hidden wherever it appears (activeTasks matches it by text).
+  const offTrack = ["saas", "ai"].find((t) => !tracks.includes(t) && trackTaskHeadings(t).has(norm));
+  if (offTrack) return { ok: false, error: A.inactiveHeading(heading, "+" + offTrack) };
+
+  // Line-exact editing: split on "\n" only, so every existing line keeps its own ending (CRLF stays CRLF); new
+  // lines take the file's. The BOM stays first. Headings/checkpoints are read as the task tools read them.
+  const bom = raw.startsWith("\uFEFF") ? "\uFEFF" : "";
+  const parts = raw.slice(bom.length).split("\n");
+  const cr = raw.includes("\r\n") ? "\r" : "";
+  const lines = raw.split("\n").map((l) => l.replace(/\r$/, ""));
+  const scan = scanTaskLines(raw);
+  const off = inactiveTaskLines(lines, tracks);
+  const heads = [];
+  scan.forEach((s, i) => { const m = !s.code && s.vis.match(/^(#{1,6})\s+(.*?)\s*$/); if (m) heads.push({ i, level: m[1].length, text: m[2] }); });
+  const lastContent = (from, to, skip) => { for (let i = to - 1; i >= from; i--) if (lines[i].trim() && !(skip && skip.has(i))) return i; return -1; };
+
+  const matches = heads.filter((h) => h.level >= 2 && normTaskHeading(h.text) === norm); // never the H1 title
+  const target = matches.filter((h) => !off.has(h.i)).pop(); // the latest round, when the heading repeats
+  if (!target && matches.length) return { ok: false, error: A.inactiveHeading(matches[0].text, "+" + off.get(matches[0].i)) };
+
+  // Numbered after every number in use — tasks.md's, and any evidence record a removed task left behind (a new
+  // task must never inherit an old run).
+  const before = taskBlocks(raw);
+  const evKeys = Object.keys(isRecord(state.evidence) ? state.evidence : {}).filter((k) => /^\d+$/.test(k)).map(Number);
+  let n = Math.max(0, ...before.map((b) => b.number), ...evKeys);
+  const numbered = items.map((t) => ({ ...t, number: ++n }));
+  const taskLines = numbered.flatMap((t) => [`- [ ] ${t.number}. ${t.lineText}`, ...t.body.map((b) => "  - " + b)]);
+  let at;
+  let insert;
+  let closingCp = null; // the checkpoint the new tasks must read back with when an existing phase is reused
+  if (target) {
+    // End of that phase (up to the next heading of any level — taskBlocks starts a phase at each one). Its closing
+    // **Checkpoint:** is the first one after the phase's LAST task, as taskBlocks reads it: a comment, a '---' or a
+    // note after it doesn't move it, and the new tasks go right before it (so they join that section).
+    const next = heads.find((h) => h.i > target.i);
+    const end = next ? next.i : lines.length;
+    let lastTask = target.i;
+    for (let i = target.i + 1; i < end; i++) if (!scan[i].code && scan[i].task) lastTask = i;
+    let closing = -1;
+    for (let i = lastTask + 1; i < end && closing === -1; i++) if (!scan[i].code && RE_CHECKPOINT.test(scan[i].vis)) closing = i;
+    if (closing !== -1) {
+      closingCp = scan[closing].vis.replace(RE_CHECKPOINT, "").trim();
+    } else {
+      // No checkpoint: the end a reader sees — trailing blank lines, '---' rules and comments that START on their own
+      // line stay after the new tasks. (A comment line without its "<!--", or one that starts inside an open comment
+      // — "<!-- a" … "<!-- b -->" — is the tail of a multi-line one: the tasks go after it, never inside it.)
+      closing = end;
+      while (closing > target.i + 1) {
+        const i = closing - 1;
+        const s = lines[i].trim();
+        const trailer = !s || (!scan[i].code && (RE_THEMATIC_BREAK.test(scan[i].vis) || (!scan[i].vis.trim() && !scan[i].inComment && s.startsWith("<!--"))));
+        if (!trailer) break;
+        closing = i;
+      }
+      // …but never inside the last task's block: a rule right under its line or a sub-line (or an indented one after
+      // a blank) is that task's lazy-continuation body to taskBlocks, and would move into the new task's. Its body
+      // is the next body.length lines a reader sees (the lines between them are blank or comment-only).
+      const last = before.find((b) => b.line === lastTask);
+      let bodyEnd = lastTask;
+      for (let i = lastTask + 1, seen = 0; last && seen < last.body.length && i < end; i++) if (scan[i].vis.trim()) { seen++; bodyEnd = i; }
+      closing = Math.max(closing, bodyEnd + 1);
+    }
+    at = lastContent(target.i, closing) + 1;
+    insert = taskLines;
+  } else {
+    // A new phase after the last active line: a removed track's trailing section stays after it. (On line 0 of a
+    // BOM file the heading would carry the BOM and read as plain text — it starts one line down.)
+    at = lastContent(0, lines.length, off) + 1;
+    insert = [...(at > 0 || bom ? [""] : []), "## " + heading, ...taskLines, "**Checkpoint:** " + A.checkpoint, ...(at < lines.length && lines[at].trim() ? [""] : [])];
+  }
+  const out = parts.slice();
+  const added = insert.map((l) => l + cr);
+  if (at === out.length) {
+    // After a last line with no newline: end that line, and keep "no final newline" at the new end.
+    if (!out[at - 1].endsWith("\r")) out[at - 1] += cr;
+    added[added.length - 1] = insert[insert.length - 1];
+  }
+  out.splice(at, 0, ...added);
+  const updated = bom + out.join("\n");
+
+  // Read the result back with the tools' own scanner: every existing task unchanged, every new task parsed as
+  // written, in its phase, and active (status/next count it). Anything else writes nothing.
+  const after = taskBlocks(updated);
+  const newNums = new Set(numbered.map((t) => t.number));
+  const sig = (b) => JSON.stringify([b.number, b.done, b.text, b.body, b.phase, b.checkpoint]);
+  const kept = after.filter((b) => !newNums.has(b.number));
+  if (kept.length !== before.length || kept.some((b, k) => sig(b) !== sig(before[k]))) return { ok: false, error: A.unsafe(null) };
+  const phase = target ? target.text : heading;
+  const active = new Set(parseTasks(activeTasks(updated, tracks)).map((t) => t.number));
+  const same = (a, b) => a.length === b.length && a.every((x, k) => x === b[k]);
+  for (const t of numbered) {
+    const hits = after.filter((b) => b.number === t.number);
+    const b = hits[0];
+    const mk = b && taskMarkers(b);
+    const fits = hits.length === 1 && !b.done && b.text === t.lineText && b.phase === phase && active.has(t.number) &&
+      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "implements", "verify"].every((k) => same(mk[k], t.markers[k]));
+    if (!fits) return { ok: false, error: A.unsafe(t.number) };
+  }
+
+  writeFileAtomic(file, updated);
+  maybeRefreshRoadmap(projectDir);
+  // New content after an approval of the task breakdown: next_action reports tasks.md as changed-since-approval.
+  const appr = state.approvals.tasks;
+  const needsReapproval = !!appr && (!appr.fingerprint || artifactFingerprint(file, "tasks") !== appr.fingerprint);
+  const now = parseTasks(activeTasks(updated, tracks));
+  const res = {
+    ok: true,
+    feature: slug,
+    lang: lng,
+    heading: phase,
+    headingCreated: !target,
+    appended: numbered.map((t) => ({ number: t.number, text: t.lineText, story: t.story, parallel: t.parallel, requirements: t.requirements, implements: t.implements, verify: t.verify })),
+    total: now.length,
+    remaining: now.filter((t) => !t.done).length,
+    needsReapproval,
+  };
+  if (needsReapproval) res.note = A.reapprove(slug);
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -5540,6 +5786,7 @@ module.exports = {
   // @wp WP6 <<<
 
   // @wp WP7 exports >>>
+  appendTasks, // spec_append_tasks / `dev-spec append-tasks` (converge)
   // @wp WP7 <<<
 
   // @wp WP8 exports >>>

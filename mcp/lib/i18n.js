@@ -2302,6 +2302,27 @@ const MSG = {
     // @wp WP6 <<<
 
     // @wp WP7 msg-en >>>
+    // spec_append_tasks / `dev-spec append-tasks` (converge). Markers, IDs and **Checkpoint:** stay English-stable.
+    appendTasks: {
+      heading: "Phase: Convergence",
+      checkpoint: "the convergence tasks are done and verified — the spec and the code agree again.",
+      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Task ${i}: text is required.`,
+      badStory: (i, v) => `Task ${i}: story must be US<n> (e.g. US1) or shared (got '${v}').`,
+      badPath: (i, p) => `Task ${i}: _Implements:_ paths must be relative to the project root, without '..' (got '${p}').`,
+      badVerify: (i) => `Task ${i}: _Verify:_ must be a single-line command.`,
+      placeholderVerify: (i, v) => `Task ${i}: '${v}' reads as a placeholder, not a command (a _Verify:_ in [brackets] is ignored) — give the real command (for a shell test, 'test …' instead of '[ … ]').`,
+      unstorable: (i, marker) => `Task ${i}: its ${marker} would not read back from tasks.md as given — keep markers out of the task text, ',' and ';' out of paths, and '_ ' out of paths and commands.`,
+      phantom: (list) => `Unknown acceptance criteria (not in requirements.md): ${list}. Nothing was written — fix the IDs or add the criteria first.`,
+      badHeading: "heading must be one line of text.",
+      constraintsHeading: (h) => `'${h}' holds the constraints every task respects, not tasks — pick a phase heading. Nothing was written.`,
+      inactiveHeading: (h, track) => `'${h}' is the task section of the inactive ${track} track — re-add the track or pick another heading. Nothing was written.`,
+      unsafe: (n) => `Couldn't append safely: ${n ? `task ${n} would not read back as written` : "existing tasks would change"} (an unclosed comment or code fence near the end of the phase?). Nothing was written.`,
+      reapprove: (slug) => `tasks.md changed after its approval — review the new tasks, then re-approve: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Appended to tasks.md → '${heading}'${created ? " (new phase)" : ""}:`,
+      oneTaskPerCall: "append-tasks takes one --task per call — run it again for the next task (spec_append_tasks takes a list).",
+      oneValue: (flag) => `append-tasks takes --${flag} once per call — ${flag === "verify" ? "join the checks into one command (a && b)" : "give a single value"}. Nothing was written.`,
+    },
     // @wp WP7 <<<
 
     // @wp WP8 msg-en >>>
@@ -2768,6 +2789,26 @@ const MSG = {
     // @wp WP6 <<<
 
     // @wp WP7 msg-pt >>>
+    appendTasks: {
+      heading: "Fase: Convergência",
+      checkpoint: "as tarefas de convergência estão concluídas e verificadas — a spec e o código voltam a coincidir.",
+      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Tarefa ${i}: o texto é obrigatório.`,
+      badStory: (i, v) => `Tarefa ${i}: story tem de ser US<n> (ex.: US1) ou shared (recebido '${v}').`,
+      badPath: (i, p) => `Tarefa ${i}: os caminhos de _Implements:_ têm de ser relativos à raiz do projeto, sem '..' (recebido '${p}').`,
+      badVerify: (i) => `Tarefa ${i}: _Verify:_ tem de ser um comando numa só linha.`,
+      placeholderVerify: (i, v) => `Tarefa ${i}: '${v}' lê-se como um marcador de posição, não como um comando (um _Verify:_ entre [parênteses retos] é ignorado) — indica o comando real (para um teste de shell, 'test …' em vez de '[ … ]').`,
+      unstorable: (i, marker) => `Tarefa ${i}: o seu ${marker} não seria lido de tasks.md tal como foi dado — mantém os marcadores fora do texto da tarefa, ',' e ';' fora dos caminhos, e '_ ' fora dos caminhos e dos comandos.`,
+      phantom: (list) => `Critérios de aceitação desconhecidos (não estão em requirements.md): ${list}. Nada foi escrito — corrige os IDs ou acrescenta primeiro os critérios.`,
+      badHeading: "o cabeçalho tem de ser uma só linha de texto.",
+      constraintsHeading: (h) => `'${h}' contém as restrições que todas as tarefas respeitam, não tarefas — escolhe um cabeçalho de fase. Nada foi escrito.`,
+      inactiveHeading: (h, track) => `'${h}' é a secção de tarefas do track ${track}, que está inativo — volta a adicionar o track ou escolhe outro cabeçalho. Nada foi escrito.`,
+      unsafe: (n) => `Não foi possível acrescentar com segurança: ${n ? `a tarefa ${n} não seria lida tal como foi escrita` : "as tarefas existentes mudariam"} (um comentário ou bloco de código por fechar perto do fim da fase?). Nada foi escrito.`,
+      reapprove: (slug) => `O tasks.md mudou depois da sua aprovação — revê as novas tarefas e volta a aprovar: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Acrescentado a tasks.md → '${heading}'${created ? " (nova fase)" : ""}:`,
+      oneTaskPerCall: "append-tasks aceita um --task por chamada — volta a corrê-lo para a tarefa seguinte (spec_append_tasks aceita uma lista).",
+      oneValue: (flag) => `append-tasks aceita --${flag} uma só vez por chamada — ${flag === "verify" ? "junta as verificações num só comando (a && b)" : "indica um único valor"}. Nada foi escrito.`,
+    },
     // @wp WP7 <<<
 
     // @wp WP8 msg-pt >>>
@@ -3234,6 +3275,26 @@ const MSG = {
     // @wp WP6 <<<
 
     // @wp WP7 msg-es >>>
+    appendTasks: {
+      heading: "Fase: Convergencia",
+      checkpoint: "las tareas de convergencia están completadas y verificadas — la spec y el código vuelven a coincidir.",
+      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Tarea ${i}: el texto es obligatorio.`,
+      badStory: (i, v) => `Tarea ${i}: story debe ser US<n> (p. ej., US1) o shared (recibido '${v}').`,
+      badPath: (i, p) => `Tarea ${i}: las rutas de _Implements:_ deben ser relativas a la raíz del proyecto, sin '..' (recibido '${p}').`,
+      badVerify: (i) => `Tarea ${i}: _Verify:_ debe ser un comando de una sola línea.`,
+      placeholderVerify: (i, v) => `Tarea ${i}: '${v}' se lee como un marcador de posición, no como un comando (un _Verify:_ entre [corchetes] se ignora) — indica el comando real (para una prueba de shell, 'test …' en lugar de '[ … ]').`,
+      unstorable: (i, marker) => `Tarea ${i}: su ${marker} no se leería desde tasks.md tal como se dio — deja los marcadores fuera del texto de la tarea, ',' y ';' fuera de las rutas, y '_ ' fuera de rutas y comandos.`,
+      phantom: (list) => `Criterios de aceptación desconocidos (no están en requirements.md): ${list}. No se ha escrito nada — corrige los IDs o añade primero los criterios.`,
+      badHeading: "el encabezado debe ser una sola línea de texto.",
+      constraintsHeading: (h) => `'${h}' contiene las restricciones que respetan todas las tareas, no tareas — elige un encabezado de fase. No se ha escrito nada.`,
+      inactiveHeading: (h, track) => `'${h}' es la sección de tareas del track ${track}, que está inactivo — vuelve a añadir el track o elige otro encabezado. No se ha escrito nada.`,
+      unsafe: (n) => `No se pudo añadir con seguridad: ${n ? `la tarea ${n} no se leería tal como se escribió` : "las tareas existentes cambiarían"} (¿un comentario o bloque de código sin cerrar cerca del final de la fase?). No se ha escrito nada.`,
+      reapprove: (slug) => `tasks.md cambió después de su aprobación — revisa las nuevas tareas y vuelve a aprobar: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Añadido a tasks.md → '${heading}'${created ? " (nueva fase)" : ""}:`,
+      oneTaskPerCall: "append-tasks admite un --task por llamada — vuelve a ejecutarlo para la siguiente tarea (spec_append_tasks admite una lista).",
+      oneValue: (flag) => `append-tasks admite --${flag} una sola vez por llamada — ${flag === "verify" ? "une las comprobaciones en un solo comando (a && b)" : "indica un único valor"}. No se ha escrito nada.`,
+    },
     // @wp WP7 <<<
 
     // @wp WP8 msg-es >>>

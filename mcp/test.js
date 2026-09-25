@@ -2336,6 +2336,246 @@ function payload(res) {
   // @wp WP6 <<<
 
   // @wp WP7 tests >>>
+  // --- 1.13 WP7: spec_append_tasks (converge) — appended tasks work end to end, all-or-nothing, line-exact ---
+  {
+    const call7 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
+    const w7 = path.join(tmp, "proj-wp7");
+    S.initProject(w7, ["tdd"]);
+    const cf = S.createFeature(w7, "Converge", ["tdd"]);
+    const cTasks = path.join(cf.dir, "tasks.md");
+    fs.writeFileSync(path.join(cf.dir, "requirements.md"), "# Requirements\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft\n" +
+      "2. **US-1.AC-2** — WHEN the parser meets a BOM THE SYSTEM SHALL skip it\n3. **US-1.AC-3** — WHEN the writer runs THE SYSTEM SHALL keep CRLF endings\n");
+    fs.writeFileSync(path.join(cf.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
+    const cOrig = "# Tasks: Converge\n\n## Global Constraints\n- Node >= 20\n\n## Story US-1 (P1 — MVP)\n- [x] 1. [US1] Core behavior\n  - _Requirements: US-1.AC-1_\n" +
+      "- [x] 2. [US1] Second step\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** US-1 works.\n";
+    fs.writeFileSync(cTasks, cOrig);
+    S.approvePhase(w7, "converge", "tasks", "tester", { force: true }); // template tasks: forced past the (WP5) approve gate
+    const vCmd = 'node -e "process.exit(0)"';
+    const ap = await call7("spec_append_tasks", { name: "converge", projectDir: w7, tasks: [
+      { text: "Skip the BOM in the parser", requirements: ["US-1.AC-2"], implements: ["src\\parser.js"], verify: vCmd, story: "US1", parallel: true },
+      { text: "Keep CRLF in the writer", requirements: ["us-1.ac-3"], implements: ["./src/writer.js"], story: "US1", parallel: true },
+      { text: "[shared] Document the drift" },
+    ] });
+    const cNow = fs.readFileSync(cTasks, "utf8");
+    const cSection = "\n## Phase: Convergence\n- [ ] 3. [US1][P] Skip the BOM in the parser\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/parser.js_\n  - _Verify: " + vCmd + "_\n" +
+      "- [ ] 4. [US1][P] Keep CRLF in the writer\n  - _Requirements: US-1.AC-3_\n  - _Implements: src/writer.js_\n- [ ] 5. [shared] Document the drift\n" +
+      "**Checkpoint:** the convergence tasks are done and verified — the spec and the code agree again.\n";
+    ok(!ap.isError && ap.p.ok && ap.p.headingCreated === true && ap.p.heading === "Phase: Convergence" && ap.p.appended.map((t) => t.number).join() === "3,4,5" && cNow === cOrig + cSection,
+      "spec_append_tasks appends a new 'Phase: Convergence' (max+1 numbering, [USn][P] tags, English-stable markers, forward-slash paths, closing Checkpoint) — existing lines untouched");
+    ok(ap.p.needsReapproval === true && /re-approve: \/approve converge tasks/.test(ap.p.note) && S.nextAction(w7, "converge").changedSinceApproval.includes("tasks.md"),
+      "appending after a tasks approval → needsReapproval + note, and next_action lists tasks.md as changed since approval");
+    const apSt = (await call7("spec_status", { name: "converge", projectDir: w7 })).p;
+    ok(apSt.tasks.total === 5 && apSt.tasks.next.number === 3 && apSt.tasks.list.filter((t) => t.parallel).map((t) => t.number).join() === "3,4" && apSt.tasks.list.find((t) => t.number === 5).story === "shared",
+      "spec_status counts the appended tasks (next = #3, [P] and story read back)");
+    const apNx = (await call7("spec_next_task", { name: "converge", batch: true, projectDir: w7 })).p;
+    ok(apNx.next.number === 3 && JSON.stringify(apNx.batch.map((b) => [b.number, b.implements])) === JSON.stringify([[3, ["src/parser.js"]], [4, ["src/writer.js"]]]),
+      "spec_next_task batch pairs the appended [P] tasks by their disjoint _Implements:_ files (the non-[P] #5 ends it)");
+    const apBr = (await call7("spec_task_brief", { name: "converge", number: 3, projectDir: w7 })).p;
+    ok(apBr.acceptanceCriteria.length === 1 && apBr.acceptanceCriteria[0].id === "US-1.AC-2" && /meets a BOM THE SYSTEM SHALL skip it/.test(apBr.acceptanceCriteria[0].text) &&
+      apBr.verify.join() === vCmd && apBr.unresolved.acs.length === 0 && apBr.task.phase === "Phase: Convergence" && /spec and the code agree again/.test(apBr.task.checkpoint) &&
+      apBr.brief.includes("- `" + vCmd + "`"), "spec_task_brief on an appended task resolves its AC to the EARS text and carries its _Verify:_ command + checkpoint");
+    const apNoEv = (await call7("spec_complete_task", { name: "converge", number: 3, projectDir: w7 })).p;
+    const apEv = (await call7("spec_complete_task", { name: "converge", number: 3, evidence: { command: vCmd, exitCode: 0, summary: "ok" }, projectDir: w7 })).p;
+    const apEv4 = (await call7("spec_complete_task", { name: "converge", number: 4, evidence: { summary: "writer keeps CRLF (checked by hand)" }, projectDir: w7 })).p;
+    const apEv5 = (await call7("spec_complete_task", { name: "converge", number: 5, projectDir: w7 })).p;
+    ok(apNoEv.ok && apNoEv.verified === false && apEv.ok && apEv.alreadyDone && apEv.verified === true && apEv4.verified === true && apEv5.ok && apEv5.done === 5 && apEv5.next === null,
+      "spec_complete_task on appended tasks: the runnable _Verify:_ needs its passing run (back-filled), a manual one takes a note");
+    const apFin = (await call7("spec_finish", { name: "converge", projectDir: w7 })).p;
+    ok(apFin.ok && apFin.openTasks.length === 0 && apFin.unverified.length === 0 && apFin.mergeSummary.includes("- [x] 3. Skip the BOM in the parser — `" + vCmd + "` → exit 0 · ok") &&
+      apFin.mergeSummary.includes("- [x] 5. Document the drift"), "spec_finish lists the appended tasks with their evidence (none open, none unverified)");
+    ok(S.traceCheck(w7, "converge").phantomAcsInTasks.length === 0, "appended _Requirements:_ never introduce a phantom AC in trace_check");
+
+    // Reuse: the default heading again → the same phase, before its closing checkpoint; a custom existing heading too.
+    const beforeReuse = fs.readFileSync(cTasks, "utf8");
+    const ap2 = S.appendTasks(w7, "converge", [{ text: "Follow-up" }]);
+    const ap3 = S.appendTasks(w7, "converge", [{ text: "Story fix", requirements: ["US-1.AC-1"] }], { heading: "## Story US-1 (P1 — MVP)" });
+    const reuseTxt = fs.readFileSync(cTasks, "utf8");
+    const reuseBlocks = S.taskBlocks(reuseTxt);
+    ok(ap2.ok && ap2.headingCreated === false && ap2.appended[0].number === 6 && reuseTxt.includes("- [x] 5. [shared] Document the drift\n- [ ] 6. Follow-up\n**Checkpoint:** the convergence") &&
+      reuseTxt.split("## Phase: Convergence").length === 2, "an existing 'Phase: Convergence' is reused: the task goes at the end of that phase, before its closing checkpoint");
+    ok(ap3.ok && ap3.heading === "Story US-1 (P1 — MVP)" && reuseTxt.includes("  - _Requirements: US-1.AC-1_\n- [ ] 7. Story fix\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** US-1 works.") &&
+      reuseBlocks.find((b) => b.number === 7).checkpoint === "US-1 works." && reuseBlocks.filter((b) => b.number < 6).every((b) => b.done) &&
+      reuseTxt.replace("- [ ] 6. Follow-up\n", "").replace("- [ ] 7. Story fix\n  - _Requirements: US-1.AC-1_\n", "") === beforeReuse,
+      "heading → an existing phase gets the task before ITS checkpoint; nothing else in tasks.md changed");
+
+    // All-or-nothing validation: a phantom AC (with a valid task beside it), bad paths/story/verify/heading write nothing.
+    const frozen = fs.readFileSync(cTasks, "utf8");
+    const ph = await call7("spec_append_tasks", { name: "converge", projectDir: w7, tasks: [{ text: "ok one", requirements: ["US-1.AC-1"] }, { text: "bad", requirements: ["US-1.AC-9", "US-7.AC-1"] }] });
+    ok(ph.isError && ph.p.ok === false && /US-1\.AC-9, US-7\.AC-1/.test(ph.p.error) && /Nothing was written/.test(ph.p.error) && ph.p.phantom.join() === "US-1.AC-9,US-7.AC-1" &&
+      fs.readFileSync(cTasks, "utf8") === frozen, "phantom AC IDs → localized error listing them (isError) and NOTHING is written, not even the valid task");
+    const bads = [
+      [{ text: "x", implements: ["../outside.js"] }], [{ text: "x", implements: ["/etc/passwd"] }], [{ text: "x", implements: ["C:\\repo\\a.js"] }],
+      [{ text: "x", story: "P1" }], [{ text: "x", verify: "npm test\nrm -rf /" }], [{ text: "x", verify: "pytest -k 'a_ b'" }], [{ text: "   " }], [{ text: "[US1][P]" }], [],
+    ].map((t) => S.appendTasks(w7, "converge", t));
+    const badHeads = [S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "Global Constraints" }), S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "a\nb" })];
+    ok(bads.concat(badHeads).every((r) => r.ok === false && r.error) && /relative to the project root, without '\.\.'/.test(bads[0].error) && /relative/.test(bads[1].error) && /relative/.test(bads[2].error) &&
+      /US<n>/.test(bads[3].error) && /single-line/.test(bads[4].error) && /would not read back/.test(bads[5].error) && /text is required/.test(bads[6].error) && /text is required/.test(bads[7].error) &&
+      /at least one task/.test(bads[8].error) && /constraints/.test(badHeads[0].error) && /one line/.test(badHeads[1].error) && fs.readFileSync(cTasks, "utf8") === frozen,
+      "bad paths (.., absolute, drive), story, multi-line/unstorable _Verify:_, empty text, no tasks, a non-phase heading: localized errors, nothing written");
+    const hid = S.appendTasks(w7, "converge", [{ text: "fix <!-- hidden --> parser" }]);
+    ok(hid.ok === false && /task 8 would not read back as written/.test(hid.error) && fs.readFileSync(cTasks, "utf8") === frozen,
+      "a task that would not read back as written (an inline comment hides part of it) is refused — the read-back check writes nothing");
+    const noTasksArg = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: "converge", projectDir: w7 } });
+    const badItem = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: "converge", projectDir: w7, tasks: [{ text: 123 }] } });
+    const apTool = list.result.tools.find((t) => t.name === "spec_append_tasks");
+    ok(apTool && apTool.inputSchema.required.join() === "name,tasks" && apTool.inputSchema.properties.tasks.items.required.join() === "text" &&
+      noTasksArg.result.isError && /Missing required argument\(s\): tasks/.test(payload(noTasksArg).error) && badItem.result.isError && /tasks\[0\]\.text must be a string/.test(payload(badItem).error),
+      "spec_append_tasks is advertised (name + tasks required, items need text) and its arguments are schema-checked");
+
+    // Line endings: CRLF + BOM kept exactly; a CRLF file without a final newline keeps having none.
+    const crF = S.createFeature(w7, "Crlf", ["core"]);
+    const crTasks = path.join(crF.dir, "tasks.md");
+    const BOM7 = String.fromCharCode(0xfeff);
+    const crOrig = BOM7 + "# Tasks: Crlf\r\n\r\n## Phase: Setup\r\n- [ ] 1. [shared] Set up\r\n**Checkpoint:** ready.\r\n";
+    fs.writeFileSync(crTasks, crOrig);
+    const crR = S.appendTasks(w7, "crlf", [{ text: "Converge the setup", implements: ["src/setup.js"] }]);
+    const crNow = fs.readFileSync(crTasks, "utf8");
+    ok(crR.ok && crNow.startsWith(crOrig) && crNow.startsWith(BOM7) && crNow.split(BOM7).length === 2 && !/[^\r]\n/.test(crNow) &&
+      crNow.endsWith("\r\n\r\n## Phase: Convergence\r\n- [ ] 2. Converge the setup\r\n  - _Implements: src/setup.js_\r\n**Checkpoint:** the convergence tasks are done and verified — the spec and the code agree again.\r\n") &&
+      S.completeTask(w7, "crlf", 2).ok && /- \[x\] 2\. Converge the setup\r\n/.test(fs.readFileSync(crTasks, "utf8")),
+      "a CRLF tasks.md with a BOM: every existing byte kept, new lines CRLF, BOM still first — and the appended task can be ticked");
+    fs.writeFileSync(crTasks, "# Tasks: Crlf\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [x] 2. b");
+    const crR2 = S.appendTasks(w7, "crlf", [{ text: "c" }]);
+    ok(crR2.ok && crR2.headingCreated === false && fs.readFileSync(crTasks, "utf8") === "# Tasks: Crlf\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [x] 2. b\r\n- [ ] 3. c",
+      "a CRLF tasks.md with no final newline: the last line is ended with CRLF and the file still has no final newline");
+    fs.writeFileSync(crTasks, BOM7);
+    const crR3 = S.appendTasks(w7, "crlf", [{ text: "first" }]);
+    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 1. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
+      "a BOM-only tasks.md: the new heading starts one line down (a BOM'd first line is not read as a heading)");
+
+    // PT feature: localized default heading, checkpoint and errors; markers stay English-stable.
+    const ptF = S.createFeature(w7, "Convergência", ["core"], undefined, undefined, "pt");
+    S.approvePhase(w7, "convergencia", "tasks", "tester", { force: true });
+    const ptR = await call7("spec_append_tasks", { name: "Convergência", projectDir: w7, tasks: [{ text: "Corrigir o desvio", requirements: ["US-1.AC-2"], verify: "npm test", story: "US1" }] });
+    const ptTxt = fs.readFileSync(path.join(ptF.dir, "tasks.md"), "utf8");
+    const ptPh = S.appendTasks(w7, "convergencia", [{ text: "x", requirements: ["US-3.AC-3"] }]);
+    ok(ptR.p.ok && ptR.p.heading === "Fase: Convergência" && /\n## Fase: Convergência\n- \[ \] \d+\. \[US1\] Corrigir o desvio\n  - _Requirements: US-1\.AC-2_\n  - _Verify: npm test_\n\*\*Checkpoint:\*\* as tarefas de convergência estão concluídas/.test(ptTxt) &&
+      /Critérios de aceitação desconhecidos \(não estão em requirements\.md\): US-3\.AC-3\. Nada foi escrito/.test(ptPh.error) && S.statusFeature(w7, "convergencia").tasks.list.some((t) => t.text === "[US1] Corrigir o desvio") &&
+      ptR.p.needsReapproval === true && /revê as novas tarefas e volta a aprovar: \/approve convergencia tasks/.test(ptR.p.note),
+      "PT feature: 'Fase: Convergência' + PT checkpoint, English-stable markers, PT phantom error and re-approval note; status counts the task");
+    const esF = S.createFeature(w7, "Convergencia ES", ["core"], undefined, undefined, "es");
+    const esR = S.appendTasks(w7, "convergencia-es", [{ text: "Corregir la desviación", story: "US-2" }]);
+    ok(esR.ok && esR.heading === "Fase: Convergencia" && /\n## Fase: Convergencia\n- \[ \] \d+\. \[US2\] Corregir la desviación\n\*\*Checkpoint:\*\* las tareas de convergencia/.test(fs.readFileSync(path.join(esF.dir, "tasks.md"), "utf8")) &&
+      /Tarea 1: story debe ser US<n>/.test(S.appendTasks(w7, "convergencia-es", [{ text: "x", story: "historia" }]).error), "ES feature: 'Fase: Convergencia' + ES checkpoint and errors ('US-2' → [US2])");
+
+    // Removed track: its trailing task section stays after the new phase, and its heading is refused.
+    const rtF = S.createFeature(w7, "Tracked", ["core"]);
+    const rtTasks = path.join(rtF.dir, "tasks.md");
+    S.addTrack(w7, "tracked", "ai");
+    S.addTrack(w7, "tracked", "ai", { remove: true });
+    const rtBefore = fs.readFileSync(rtTasks, "utf8");
+    const rtMax = Math.max(...S.parseTasks(rtBefore).map((t) => t.number));
+    const rtR = S.appendTasks(w7, "tracked", [{ text: "Converge without AI" }]);
+    const rtTxt = fs.readFileSync(rtTasks, "utf8");
+    const rtNew = rtTxt.indexOf("## Phase: Convergence"), rtAi = rtTxt.indexOf("## Story US-1 — AI");
+    const rtSt = S.statusFeature(w7, "tracked");
+    const rtHead = S.appendTasks(w7, "tracked", [{ text: "x" }], { heading: "Story US-1 — AI" });
+    ok(rtR.ok && rtR.appended[0].number === rtMax + 1 && rtNew > 0 && rtAi > rtNew && rtSt.tasks.list.some((t) => t.number === rtMax + 1) &&
+      rtTxt.replace(/\n## Phase: Convergence\n- \[ \] \d+\. Converge without AI\n\*\*Checkpoint:\*\* [^\n]*\n\n/, "\n") === rtBefore &&
+      rtHead.ok === false && /inactive \+ai track/.test(rtHead.error) && fs.readFileSync(rtTasks, "utf8") === rtTxt,
+      "after add_track --remove ai the new phase goes after the last ACTIVE phase (before the inactive AI section), counts in status; the AI heading is refused");
+
+    // A removed task's leftover evidence is never inherited: the new task is numbered past it.
+    const evF = S.createFeature(w7, "Leftover", ["core"]);
+    fs.writeFileSync(path.join(evF.dir, "tasks.md"), "# Tasks\n\n## Phase: Build\n- [x] 1. a\n");
+    const evState = JSON.parse(fs.readFileSync(path.join(evF.dir, ".state.json"), "utf8"));
+    evState.evidence = { "2": { command: "npm test", exitCode: 0, at: "2026-01-01T00:00:00Z", task: "old task", verify: "npm test" } };
+    fs.writeFileSync(path.join(evF.dir, ".state.json"), JSON.stringify(evState));
+    const evR = S.appendTasks(w7, "leftover", [{ text: "new work", verify: "npm test" }]);
+    ok(evR.ok && evR.appended[0].number === 3 && S.statusFeature(w7, "leftover").tasks.list.find((t) => t.number === 3).verified === false,
+      "a number that still has a removed task's evidence is skipped (the new task never inherits that run)");
+  }
+  // --- 1.13 WP7 review fixes: closing checkpoint as a reader sees it, verify/paths/heading read back as given ---
+  {
+    const w7r = path.join(tmp, "proj-wp7-review");
+    S.initProject(w7r, ["core"]);
+    const mk7 = (name, body, lang) => { const f = S.createFeature(w7r, name, ["core"], undefined, undefined, lang); const p = path.join(f.dir, "tasks.md"); fs.writeFileSync(p, body); return p; };
+    // A comment, a '---' or a note after a reused phase's checkpoint: the task still goes BEFORE it (same section,
+    // so next --batch pairs it with #1), and the trailer stays where it was.
+    const trailers = ["<!-- guidance: keep this phase small -->\n", "\n---\n", "Note: ship it after QA.\n"];
+    const cpRes = trailers.map((tr, k) => {
+      const file = mk7("Cp " + k, "# Tasks: f\n\n## Phase: Build\n- [ ] 1. [P] a\n  - _Implements: src/a.js_\n**Checkpoint:** build works.\n" + tr + "\n## Phase: Polish\n- [ ] 2. b\n");
+      const r = S.appendTasks(w7r, "cp-" + k, [{ text: "c", parallel: true, implements: ["src/c.js"] }], { heading: "Phase: Build" });
+      const txt = fs.readFileSync(file, "utf8");
+      const b3 = S.taskBlocks(txt).find((b) => b.number === 3);
+      return r.ok && txt.includes("  - _Implements: src/a.js_\n- [ ] 3. [P] c\n  - _Implements: src/c.js_\n**Checkpoint:** build works.\n" + tr) && b3 && b3.checkpoint === "build works." &&
+        S.nextTask(w7r, "cp-" + k, { batch: true }).batch.map((b) => b.number).join() === "1,3";
+    });
+    ok(cpRes.every(Boolean), "reused phase: a comment / '---' / note after its checkpoint doesn't move it — the task goes before it, keeps that checkpoint and batches with #1");
+    // The tool's own default phase, reused after the user added '---' below it (CRLF file): still before the checkpoint.
+    const dfFile = mk7("Cp default", "# Tasks\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n**Checkpoint:** converged.\r\n\r\n---\r\n");
+    const dfR = S.appendTasks(w7r, "cp-default", [{ text: "b" }]);
+    ok(dfR.ok && dfR.headingCreated === false && fs.readFileSync(dfFile, "utf8") === "# Tasks\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [ ] 2. b\r\n**Checkpoint:** converged.\r\n\r\n---\r\n",
+      "the default 'Phase: Convergence' reused after a '---' was added below it (CRLF): the task lands before its checkpoint, CRLF kept");
+    // No checkpoint: trailing '---' / own-line comments stay after the new task; a multi-line comment's tail is never entered.
+    const ncFile = mk7("No cp", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n\n---\n<!-- keep small -->\n\n## Phase: Ship\n- [ ] 2. b\n");
+    const ncR = S.appendTasks(w7r, "no-cp", [{ text: "c" }], { heading: "Phase: Build" });
+    const mlFile = mk7("Multi", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- guidance\n  more -->\n");
+    const mlR = S.appendTasks(w7r, "multi", [{ text: "c" }], { heading: "Phase: Build" });
+    ok(ncR.ok && fs.readFileSync(ncFile, "utf8").includes("- [ ] 1. a\n- [ ] 3. c\n\n---\n<!-- keep small -->\n") && S.taskBlocks(fs.readFileSync(ncFile, "utf8")).find((b) => b.number === 3).checkpoint === null &&
+      mlR.ok && fs.readFileSync(mlFile, "utf8") === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- guidance\n  more -->\n- [ ] 2. c\n",
+      "a phase without a checkpoint: trailing '---' and own-line comments stay after the new task; a multi-line comment is never split");
+
+    // _Verify:_ is stored so it reads back — and runs — exactly as given: one code span around the whole command is
+    // unwrapped, a command that starts/ends with a backtick is stored inside a longer span, a [placeholder] is refused.
+    const tkFile = mk7("Ticks", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n");
+    const tk = S.appendTasks(w7r, "ticks", [{ text: "subst", verify: "test -n `echo ok`" }, { text: "wrapped", verify: "`npm test`" }, { text: "ends", verify: "`true` && echo `date`" }]);
+    const tkTxt = fs.readFileSync(tkFile, "utf8");
+    ok(tk.ok && JSON.stringify(tk.appended.map((t) => t.verify)) === JSON.stringify(["test -n `echo ok`", "npm test", "`true` && echo `date`"]) &&
+      tkTxt.includes("  - _Verify: `` test -n `echo ok` ``_\n") && tkTxt.includes("  - _Verify: npm test_\n") && tkTxt.includes("  - _Verify: `` `true` && echo `date` ``_\n") &&
+      S.taskBrief(w7r, "ticks", 2).verify.join() === "test -n `echo ok`" && S.taskBrief(w7r, "ticks", 4).verify.join() === "`true` && echo `date`",
+      "a _Verify:_ starting/ending with a backtick (command substitution) reads back as given via task_brief; `npm test` still unwraps");
+    const tkFrozen = fs.readFileSync(tkFile, "utf8");
+    const phV = S.appendTasks(w7r, "ticks", [{ text: "p", verify: "[run tests]" }]);
+    const phV2 = S.appendTasks(w7r, "ticks", [{ text: "p", verify: "`[ -f dist/app.js ]`" }]);
+    mk7("Marcador", "# Tarefas\n\n## Fase 1\n- [ ] 1. a\n", "pt");
+    const phVpt = S.appendTasks(w7r, "marcador", [{ text: "p", verify: "[correr testes]" }]);
+    ok(!phV.ok && /'\[run tests\]' reads as a placeholder/.test(phV.error) && !phV2.ok && /'\[ -f dist\/app\.js \]' reads as a placeholder/.test(phV2.error) &&
+      !phVpt.ok && /lê-se como um marcador de posição/.test(phVpt.error) && fs.readFileSync(tkFile, "utf8") === tkFrozen,
+      "a [bracketed] _Verify:_ (ignored by every reader, so the evidence gate would never apply) is refused, localized — nothing written");
+    // _Implements:_ is project-relative only: URI schemes and home paths in any form are refused; a tilde inside a path is fine.
+    const badP = ["file:///etc/passwd", "~user/x.js", "~", "https://example.com/a.js"].map((p) => S.appendTasks(w7r, "ticks", [{ text: "t", implements: [p] }]));
+    const tildeIn = S.appendTasks(w7r, "ticks", [{ text: "t", implements: ["src/~tmp/x.js"] }]);
+    ok(badP.every((r) => r.ok === false && /relative to the project root/.test(r.error)) && tildeIn.ok && tildeIn.appended[0].implements.join() === "src/~tmp/x.js",
+      "_Implements:_ refuses file:// / https:// and ~user / ~ paths; a '~' inside a relative path is kept");
+    // Any heading globalConstraints() would read as the constraints section is refused (EN/PT/ES substrings).
+    const gcFile = mk7("Gc", "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n");
+    const gcR = ["Global constraints follow-up", "Restrições globais — revisão", "Revisar restricciones globales"].map((h) => S.appendTasks(w7r, "gc", [{ text: "Bump Node floor" }], { heading: h }));
+    ok(gcR.every((r) => r.ok === false && /holds the constraints every task respects/.test(r.error)) && fs.readFileSync(gcFile, "utf8") === "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n" &&
+      !/Bump Node floor/.test(S.taskBrief(w7r, "gc", 1).brief), "a heading containing 'Global constraints' (EN/PT/ES) is refused — appended tasks never become brief constraints");
+  }
+  // --- 1.13 WP7 review round 2: a no-checkpoint phase's trailers never cut into the last task or a comment ---
+  {
+    const w7s = path.join(tmp, "proj-wp7-r2");
+    S.initProject(w7s, ["core"]);
+    // Appends one task to a fresh feature → [result, tasks.md after]; the last task's body must read back unchanged.
+    const r2 = (name, body, opts) => {
+      const f = S.createFeature(w7s, name, ["core"]);
+      const p = path.join(f.dir, "tasks.md");
+      fs.writeFileSync(p, body);
+      const lastBody = JSON.stringify(S.taskBlocks(body).slice(-1)[0].body);
+      const r = S.appendTasks(w7s, S.slugify(name), [{ text: "new" }], opts);
+      const txt = fs.readFileSync(p, "utf8");
+      const kept = JSON.stringify(S.taskBlocks(txt).find((b) => b.number === S.taskBlocks(body).slice(-1)[0].number).body) === lastBody;
+      return { r, txt, kept };
+    };
+    // A rule right under the last task line / sub-line (or an indented one after a blank, or after its fenced body)
+    // is that task's lazy-continuation body: the new task goes after it (round-2 placed it before → refused as unsafe).
+    const bodyRules = [
+      ["Rule task", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n---\n\n## Phase: Ship\n- [ ] 2. b\n", { heading: "Phase: Build" }, "- [ ] 1. a\n---\n- [ ] 3. new\n\n## Phase: Ship\n"],
+      ["Rule sub", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n  - _Implements: src/a.js_\n---\n\n## Phase: Ship\n- [ ] 2. b\n", { heading: "Phase: Build" }, "  - _Implements: src/a.js_\n---\n- [ ] 3. new\n\n## Phase: Ship\n"],
+      ["Rule default", "# Tasks\n\n## Phase: Convergence\n- [ ] 1. a\n***\n", undefined, "## Phase: Convergence\n- [ ] 1. a\n***\n- [ ] 2. new\n"],
+      ["Rule indented", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n\n  ---\n", { heading: "Phase: Build" }, "- [ ] 1. a\n\n  ---\n- [ ] 2. new\n"],
+      ["Rule fence", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n  ```\n  code\n  ```\n---\n", { heading: "Phase: Build" }, "  ```\n  code\n  ```\n---\n- [ ] 2. new\n"],
+    ].map(([name, body, opts, want]) => { const x = r2(name, body, opts); return x.r.ok && x.r.headingCreated === false && x.txt.includes(want) && x.kept; });
+    ok(bodyRules.every(Boolean), "no checkpoint: a '---'/'***' directly under the last task or its sub-line (also indented after a blank, or after a fenced body — incl. the default 'Phase: Convergence') stays its body; the task goes after it");
+    // A line starting with "<!--" inside an open multi-line comment is that comment's tail, not an own-line trailer.
+    const tail = r2("Tail", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- draft:\n  maybe split this\n\n<!-- see notes -->\n", { heading: "Phase: Build" });
+    const tail2 = r2("Tail two", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- a\n<!-- b -->\n\n---\n", { heading: "Phase: Build" });
+    ok(tail.r.ok && tail.txt === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- draft:\n  maybe split this\n\n<!-- see notes -->\n- [ ] 2. new\n" &&
+      tail2.r.ok && tail2.txt === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- a\n<!-- b -->\n- [ ] 2. new\n\n---\n",
+      "no checkpoint: a '<!-- … -->' line that closes an earlier multi-line comment is its tail — the task goes after it, never inside the comment; a later '---' still trails");
+  }
   // @wp WP7 <<<
 
   // @wp WP8 tests >>>
