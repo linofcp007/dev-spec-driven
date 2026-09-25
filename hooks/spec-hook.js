@@ -7,8 +7,9 @@
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
  *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
- *     is saved, run its mandatory checks for the active tracks. Surfaces gaps in the moment, with
- *     zero CI and zero cost.
+ *     is saved, run its mandatory checks for the active tracks. Any spec edit also refreshes ROADMAP.md
+ *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
+ *     moment, with zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
  *
@@ -73,6 +74,12 @@ function findProjectDir(filePath) {
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run the hook
   ran = true;
+  // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
+  // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
+  return spec.withReadCache(() => handle(raw));
+}
+
+function handle(raw) {
   let payload = {};
   try {
     payload = JSON.parse(raw || "{}");
@@ -120,13 +127,22 @@ function main(raw) {
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
+    // The generated files at the .specs/ root (ROADMAP.md/.html, SPECS.md) are outputs, never a reason to refresh.
+    const atRoot = path.resolve(path.dirname(filePath)).toLowerCase() === path.resolve(pdir, ".specs").toLowerCase();
+    const generated = base === "roadmap.md" || base === "roadmap.html" || (atRoot && base === "specs.md");
     let roadmapNote = "";
-    if (base !== "roadmap.md" && base !== "roadmap.html") {
+    if (!generated) {
       try {
         const w = spec.writeRoadmapMd(pdir);
         if (w.ok) roadmapNote = h.roadmapUpdated(w.overallPercent, w.complete, w.total);
       } catch {
         /* best-effort */
+      }
+      // …and the living catalog (.specs/SPECS.md) after a spec artifact changed — only once it exists and carries the
+      // AUTO-GENERATED marker (maybeRefreshCatalog checks both; unchanged content is not rewritten). Steering is not
+      // catalogued. Best-effort, silent.
+      if (!/\/\.specs\/steering\//i.test(fwd)) {
+        try { spec.maybeRefreshCatalog(pdir); } catch { /* best-effort */ }
       }
     }
 

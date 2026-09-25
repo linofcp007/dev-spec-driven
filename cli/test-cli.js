@@ -3,7 +3,8 @@
 
 /**
  * Smoke test for the universal CLI (cli/dev-spec.js). Exercises the subcommands against a
- * throwaway temp project and asserts on output. Run: `node cli/test-cli.js`
+ * throwaway temp project and asserts on output. Run: `node cli/test-cli.js` (its sections run in
+ * parallel child processes — see SECTIONS; `CLI_TEST_SECTION=<name> node cli/test-cli.js` runs one).
  */
 
 const { spawnSync } = require("child_process");
@@ -22,6 +23,49 @@ function run(args) {
   return { out: (r.stdout || "") + (r.stderr || ""), code: r.status };
 }
 
+// Speed: every assertion is a CLI process (~0.15 s each), so one sequential run can't go below ~50 s. The sections
+// below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
+// a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
+// one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12"];
+const SECTION = process.env.CLI_TEST_SECTION || "";
+const inSection = (name) => SECTION === name;
+if (!SECTION) {
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} // the children make their own
+  const { spawn } = require("child_process");
+  const runSection = (name) => new Promise((resolve) => {
+    let out = "";
+    const child = spawn(process.execPath, [__filename], { env: { ...process.env, CLI_TEST_SECTION: name }, stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    child.on("error", (e) => resolve({ name, out: out + "\n" + e.message, code: 1 }));
+    child.on("close", (code) => resolve({ name, out, code }));
+  });
+  // At most one section per CPU at a time; results keep the section order.
+  const all = new Array(SECTIONS.length);
+  let nextIdx = 0;
+  const worker = () => (nextIdx >= SECTIONS.length ? Promise.resolve() : ((i) => runSection(SECTIONS[i]).then((r) => { all[i] = r; return worker(); }))(nextIdx++));
+  Promise.all(Array.from({ length: Math.max(2, Math.min(SECTIONS.length, os.cpus().length || 2)) }, worker)).then(() => {
+    let passed = 0, failed = 0;
+    for (const r of all) {
+      const m = r.out.match(/\n(\d+) passed, (\d+) failed\s*$/);
+      process.stdout.write(r.out.replace(/\n\d+ passed, \d+ failed\s*$/, "\n"));
+      if (m) { passed += +m[1]; failed += +m[2]; }
+      // A section that died (or never printed its total) fails the suite — never let it drain to exit 0.
+      if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
+    }
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  });
+  return; // CommonJS module scope: the parent only dispatches
+}
+if (!SECTIONS.includes(SECTION)) {
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  console.log(`unknown CLI_TEST_SECTION '${SECTION}' (known: ${SECTIONS.join(", ")})\n\n0 passed, 1 failed`);
+  process.exit(1);
+}
+
+if (inSection("main")) {
 // help
 ok(run(["help"]).out.includes("universal spec-driven CLI"), "help prints usage");
 
@@ -141,8 +185,10 @@ const bfx = run(["bugfix", "Login Loop", "--summary", "bounce to /login", "--pro
 ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-loop", "bug.md")), "bugfix scaffolds the systematic-debugging flow");
 const fin = run(["finish", "login-loop", "--project", vp]);
 ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /Root Cause is not filled/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
+} // section main
 
 // @wp WP1 cli-tests >>>
+if (inSection("wp1")) {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
 const w1Read = (f) => fs.readFileSync(path.join(w1p, ".specs", f, "tasks.md"), "utf8");
@@ -226,10 +272,11 @@ const w1CmSt = run(["status", "cm", "--project", w1p]);
 const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
 ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
   "an inline '<!--' in a task's text hides no task below it (status and done agree)");
+} // section wp1
 // @wp WP1 <<<
 
 // @wp WP2 cli-tests >>>
-{ // 1.13 WP2 — track input, add-track --remove, status marks (own block scope)
+if (inSection("wp2")) { // 1.13 WP2 — track input, add-track --remove, status marks (own block scope)
   const w2 = path.join(tmp, "wp2-proj");
   run(["init", "core", "--project", w2]);
   const typo = run(["create", "Typo", "tdd,sass", "--project", w2]);
@@ -280,7 +327,7 @@ ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 
 // @wp WP2 <<<
 
 // @wp WP3 cli-tests >>>
-{ // 1.13 WP3: depend parity with the MCP tool, one default approver, own-key lookups
+if (inSection("wp3")) { // 1.13 WP3: depend parity with the MCP tool, one default approver, own-key lookups
   const dp = path.join(tmp, "wp3-dep");
   ["a", "b", "c"].forEach((n) => run(["create", n, "core", "--project", dp]));
   const depsOfA = () => { try { return JSON.parse(fs.readFileSync(path.join(dp, ".specs", "roadmap.json"), "utf8")).features.a.dependsOn.join(); } catch { return null; } };
@@ -313,6 +360,7 @@ ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 
 // @wp WP3 <<<
 
 // @wp WP4 cli-tests >>>
+if (inSection("wp4")) {
 // 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, confirmations, rules, help, localized output.
 const S4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const runIn = (args, input) => {
@@ -458,10 +506,11 @@ ok(flagsRead.length >= 15 && flagsRead.every((x) => doc4.includes(x)) && ["--by"
   "the header docblock lists every flag the CLI reads (missing: " + flagsRead.filter((x) => !doc4.includes(x)).join(",") + ")");
 ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(x)).every((x) => help4.includes(x)) && /--md/.test(help4) && /alias: na/.test(help4),
   "help mentions every flag it owns plus the --md and na aliases");
+} // section wp4
 // @wp WP4 <<<
 
 // @wp WP5 cli-tests >>>
-{ // 1.13 WP5 — gates on the CLI: approve (refused / --force / nothing to approve), next-action order, bugfix gate, planned files
+if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --force / nothing to approve), next-action order, bugfix gate, planned files
   const w5 = path.join(tmp, "wp5-proj");
   run(["init", "core", "--project", w5]);
   run(["create", "Gate", "core", "--project", w5]);
@@ -515,7 +564,7 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP5 <<<
 
 // @wp WP6 cli-tests >>>
-{ // 1.13 WP6 — scan sections, coverage by _Implements:_, import (Kiro · spec-kit · OpenSpec), create --brownfield (own block scope)
+if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_, import (Kiro · spec-kit · OpenSpec), create --brownfield (own block scope)
   const w6 = path.join(tmp, "wp6-proj");
   const put = (rel, s) => { const p = path.join(w6, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
   run(["init", "core", "--project", w6]);
@@ -621,7 +670,7 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 
 // @wp WP7 cli-tests >>>
 // 1.13 WP7: append-tasks <feature> --task … — one task per call, same engine call as spec_append_tasks.
-{
+if (inSection("wp7")) {
   const S7 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const mk7 = (dir, crlf) => {
     run(["init", "tdd", "--project", dir]);
@@ -721,7 +770,7 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP7 <<<
 
 // @wp WP8 cli-tests >>>
-{ // 1.13 WP8 — change requests (impact / --reopen) and metrics (+ retro.md) on the CLI, EN and PT
+if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and metrics (+ retro.md) on the CLI, EN and PT
   const S8 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const w8 = path.join(tmp, "wp8-proj");
   run(["init", "tdd", "--project", w8]);
@@ -813,7 +862,7 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP8 <<<
 
 // @wp WP9 cli-tests >>>
-{ // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (exit code unchanged); --code scans test files; finish lists warnings ---
+if (inSection("wp9")) { // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (exit code unchanged); --code scans test files; finish lists warnings ---
   const w9 = path.join(tmp, "wp9");
   const put9 = (rel, s) => { const p = path.join(w9, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
   run(["init", "tdd", "--project", w9]);
@@ -879,6 +928,7 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP9 <<<
 
 // @wp WP10 cli-tests >>>
+if (inSection("wp10")) {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
 const S10 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const w10 = path.join(tmp, "wp10-proj");
@@ -1009,11 +1059,12 @@ const hFeat = help10.indexOf("feature <remove|archive|rename|restore>"), hCat = 
 ok(hFeat > 0 && hCat > hFeat && hDrift > hCat && hDrift < help10.indexOf("  roadmap [") && /restore brings an archived feature back/.test(help10) &&
   /rename \| restore a feature/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
   "help and the header docblock list catalog / drift (right after feature) and feature restore");
+} // section wp10
 // @wp WP10 <<<
 
 // @wp WP11 cli-tests >>>
 // 1.13 WP11: init --guard on|off (= spec_init {guard}) and custom scoped steering files (= steering_scaffold).
-{
+if (inSection("wp11")) {
   const S11 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const g11 = path.join(tmp, "wp11-guard");
   const meta = () => JSON.parse(fs.readFileSync(path.join(g11, ".specs", "roadmap.json"), "utf8")).meta || {};
@@ -1048,10 +1099,38 @@ ok(hFeat > 0 && hCat > hFeat && hDrift > hCat && hDrift < help10.indexOf("  road
   ok(/--guard on\|off/.test(help11) && /custom scoped file/.test(help11) && /--guard on\|off/.test(fs.readFileSync(CLI, "utf8").split("*/")[0]),
     "help and the header docblock document init --guard on|off and custom steering files");
 }
+if (inSection("wp12")) { // 1.13 WP12 — append-tasks takes the EC/NFR/SC IDs requirements.md writes; trace resolves _Implements:_ globs (CLI = MCP)
+  const S12 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const p12 = path.join(tmp, "wp12-proj");
+  run(["init", "core", "--project", p12]);
+  run(["create", "Login", "core", "--project", p12]);
+  const f12 = path.join(p12, ".specs", "login");
+  const tasks12 = path.join(f12, "tasks.md");
+  fs.writeFileSync(path.join(f12, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session\n\n" +
+    "## Edge Cases\n- **EC-2** — a locked account is refused.\n\n```md\n- **EC-7** — an example in a fence\n2. **US-1.AC-9** — WHEN x THE SYSTEM SHALL y\n```\n");
+  fs.writeFileSync(tasks12, "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Sessions\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/**/*.js_\n");
+  fs.mkdirSync(path.join(p12, "src", "auth"), { recursive: true });
+  fs.writeFileSync(path.join(p12, "src", "auth", "session.js"), "x\n");
+  const ap12 = run(["append-tasks", "login", "--task", "Lock the account", "--req", "US-1.AC-1,ec-2", "--project", p12]);
+  const bad12 = run(["append-tasks", "login", "--task", "x", "--req", "EC-7", "--project", p12]);
+  ok(ap12.code === 0 && fs.readFileSync(tasks12, "utf8").includes("- [ ] 2. Lock the account\n  - _Requirements: US-1.AC-1, EC-2_\n") &&
+    bad12.code === 1 && /Unknown acceptance criteria \(not in requirements\.md\): EC-7\./.test(bad12.out),
+    "append-tasks --req accepts an EC ID requirements.md writes (ec-2 → EC-2); one written only inside a fenced example is refused (exit 1)");
+  const tr12 = run(["trace", "login", "--project", p12]);
+  ok(tr12.code === 0 && /verdict=pass {2}ACs=1 /.test(tr12.out) && !/src\/\*\*/.test(tr12.out) && !/EC-2/.test(tr12.out),
+    "trace: a glob that matches a file (src/**/*.js) is present, a fenced AC is not required, EC-2 is covered — exit 0");
+  fs.appendFileSync(tasks12, "- [x] 3. [US1] Web\n  - _Implements: web/**/*.ts_\n- [ ] 4. [US1] Jobs\n  - _Implements: jobs/*.js_\n");
+  const tr12b = run(["trace", "login", "--project", p12]);
+  let tr12j = null;
+  try { tr12j = JSON.parse(run(["trace", "login", "--json", "--project", p12]).out); } catch { /* invalid JSON */ }
+  ok(tr12b.code === 1 && /_Implements:_ files that don't exist: web\/\*\*\/\*\.ts$/m.test(tr12b.out) && !/jobs\/\*\.js/.test(tr12b.out) &&
+    tr12j && JSON.stringify(tr12j) === JSON.stringify(S12.traceCheck(p12, "login")) && tr12j.plannedImplFiles.join() === "jobs/*.js",
+    "trace: a done task's glob that matches nothing is a missing file (exit 1); an open task's is planned; --json = trace_check");
+}
 // @wp WP11 <<<
 
 // unknown command errors
-ok(run(["wat"]).code === 1, "unknown command exits non-zero");
+if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
