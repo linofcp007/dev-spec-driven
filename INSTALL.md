@@ -45,17 +45,19 @@ the `spec-driven` MCP server load for that session.
 
 ---
 
-## Option C — Make it always-on for this user
+## Option C — Always-on from your local clone
 
-Copy the plugin into your user plugins directory so it loads automatically:
+Register the clone itself as a local marketplace, then install from it — it loads in every session
+(after pulling new commits, refresh it with `/plugin marketplace update dev-spec-driven-marketplace`):
 
-```powershell
-$dest = "$env:USERPROFILE\.claude\plugins\dev-spec-driven"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item -Recurse -Force "$plugin\*" $dest
+```text
+/plugin marketplace add <path-to-your-clone>
+/plugin install dev-spec-driven@dev-spec-driven-marketplace
 ```
 
-(The GitHub marketplace flow in Option A is the supported path and is recommended over manual copying.)
+(`dev-spec-driven-marketplace` is the `name` in `.claude-plugin/marketplace.json`.) Don't copy the folder
+into `~/.claude/plugins/` by hand: that directory is Claude Code's marketplace cache, not an auto-load
+location, so a manual copy never loads.
 
 ---
 
@@ -92,9 +94,13 @@ to `.specs/` in that project, and **never overwrites** existing files.
 ## Validate the plugin manifest
 
 ```powershell
-claude plugin validate "$plugin"
+claude plugin validate "$plugin\.claude-plugin\plugin.json"   # the plugin (manifest + its components)
+claude plugin validate "$plugin"                               # the marketplace (.claude-plugin/marketplace.json)
 claude plugin details dev-spec-driven
 ```
+
+On the repo root, `validate` checks only the marketplace file (it is present), not the plugin itself —
+validate the plugin through its `plugin.json`.
 
 ---
 
@@ -131,7 +137,11 @@ or generate a config instantly (prints the correct absolute path for your machin
 
 ```powershell
 node "$plugin\cli\dev-spec.js" mcp-config all
+node "$plugin\cli\dev-spec.js" rules cursor    # the workflow rule file for your project (also windsurf|copilot|gemini|agents)
 ```
+
+To save a rule file into your project, use the recipe in INTEGRATIONS.md → *Rule files for your own
+project*. In Windows PowerShell 5.1, a plain `>` writes UTF-16.
 
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
 

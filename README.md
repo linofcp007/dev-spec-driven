@@ -54,6 +54,8 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, section completeness |
 | `spec_next_task` / `spec_complete_task` | Drive execution and tick off tasks — with recorded **verification evidence** (a failed run refuses the tick); `batch` for parallel `[P]` tasks |
 | `spec_finish` | Close a feature: blockers, fresh checks to run, and a merge summary generated from the spec chain |
+| `spec_next_action` | "You are here → do this next" + artifacts changed since their approval |
+| `spec_add_track` / `spec_feature` | Add a track to a feature (additive; `remove:true` takes one off, files kept) / archive · rename · remove it (remove needs `confirm:true`) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); flags phantom refs (typos) |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS + trace + sections + steering) |
@@ -80,7 +82,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 - **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
   command, exit code and output summary, refuses the tick on a failure, and `doctor` / `ROADMAP.md` /
-  `spec_finish` keep flagging tasks ticked without evidence. CLI: `dev-spec done <feature> <n> --run`.
+  `spec_finish` keep flagging tasks ticked without evidence. A task with a runnable `_Verify:_` counts as
+  verified only with the command and exit code 0 — a text note ticks it but leaves it unverified. CLI:
+  `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** (the doctor
   blocks the fix until it's written) → failing regression test → fix → verify.
 - **`/spec-finish`** — what still blocks, the checks to run fresh, and a merge summary built from the
@@ -179,7 +183,10 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
 | `spec_init` / `spec_create` | Cria o steering + a pasta da funcionalidade para os tracks ativos |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas |
-| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas como feitas |
+| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas como feitas — com **evidência de verificação** registada (uma execução falhada recusa a marcação); `batch` para tarefas paralelas `[P]` |
+| `spec_finish` | Fecha uma funcionalidade: bloqueios, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec |
+| `spec_next_action` | "Estás aqui → faz isto a seguir" + artefactos alterados depois da respetiva aprovação |
+| `spec_add_track` / `spec_feature` | Acrescenta um track a uma funcionalidade (aditivo; `remove:true` retira um sem apagar ficheiros) / arquiva · renomeia · remove (remover exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas EN/PT/ES) |
 | `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); deteta referências fantasma |
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS + trace + secções + steering) |
@@ -189,6 +196,31 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente + % de cobertura de specs |
 | `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`) |
+| `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, definição de concluído (a base da execução com subagentes) |
+
+### Execução com subagentes (opcional)
+
+`/executeTask <feature> --subagents` guarda o contexto da sessão principal para a coordenação: por tarefa
+escreve um brief (`spec_task_brief`), despacha o agente **`dev-spec-driven:spec-implementer`** do plugin,
+envia o diff ao agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID + qualidade + verificações do
+track), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
+uma história, para em cada `**Checkpoint:**` para a tua revisão e nunca muda um AC, o design ou um teste sem
+voltar a essa fase. Gasta cerca de 2–3× os tokens da execução inline, por isso compensa em funcionalidades
+com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/subagent-execution.md`.
+
+### Evidência, bugfixes e fecho
+
+- **Evidência antes de afirmações.** As tarefas declaram `_Verify: <comando>_`; `spec_complete_task` regista
+  o comando, o código de saída e um resumo, recusa a marcação quando falha, e `doctor` / `ROADMAP.md` /
+  `spec_finish` continuam a assinalar tarefas marcadas sem evidência. Uma tarefa com um `_Verify:_`
+  executável só fica verificada com o comando e o código de saída 0 — uma nota de texto marca-a, mas deixa-a
+  por verificar. CLI: `dev-spec done <feature> <n> --run`.
+- **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** (o doctor
+  bloqueia a correção até estar escrita) → teste de regressão a falhar → correção → verificação.
+- **`/spec-finish`** — o que ainda bloqueia, as verificações a correr de novo e um resumo de merge construído
+  a partir da spec; depois fazes o merge localmente ou manténs o branch — sem pull requests, sem CI.
+- **`/spec-review-feedback`** — comentários de revisão avaliados contra a spec. **`/spec-doctor --deep`** —
+  o agente `spec-critic` revê o *significado* da spec no respetivo gate.
 
 ### Automação local, não CI
 
@@ -201,8 +233,17 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
 ### Começar rápido
 
+Instala a partir do GitHub (recomendado — funciona em qualquer máquina, sem caminhos para editar):
+
+```text
+/plugin marketplace add linofcp007/dev-spec-driven
+/plugin install dev-spec-driven@dev-spec-driven-marketplace
+```
+
+Ou clona e carrega-o só para uma sessão:
+
 ```bash
-# point --plugin-dir at your local clone of this repo (any path):
+git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
@@ -231,6 +272,7 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 
 ```bash
 node mcp/test.js          # testa o servidor MCP de ponta a ponta (181 asserções)
+node cli/test-cli.js      # testa a CLI universal (53 asserções)
 ```
 
 > Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
@@ -267,7 +309,10 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
 | `spec_init` / `spec_create` | Crea el steering + la carpeta de la función para los tracks activos |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas |
-| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas como hechas |
+| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas como hechas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca); `batch` para tareas paralelas `[P]` |
+| `spec_finish` | Cierra una función: bloqueos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec |
+| `spec_next_action` | "Estás aquí → haz esto a continuación" + artefactos cambiados tras su aprobación |
+| `spec_add_track` / `spec_feature` | Añade un track a una función (aditivo; `remove:true` quita uno sin borrar archivos) / archiva · renombra · elimina (eliminar exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas EN/PT/ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); detecta referencias fantasma |
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS + trace + secciones + steering) |
@@ -277,6 +322,32 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente + % de cobertura de specs |
 | `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`) |
+| `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, definición de terminado (la base de la ejecución con subagentes) |
+
+### Ejecución con subagentes (opcional)
+
+`/executeTask <feature> --subagents` reserva el contexto de la sesión principal para la coordinación: por
+tarea escribe un brief (`spec_task_brief`), despacha el agente **`dev-spec-driven:spec-implementer`** del
+plugin, envía el diff al agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID + calidad +
+comprobaciones del track), hace un ciclo de correcciones de como máximo 5 rondas y solo entonces marca la
+tarea. Avanza solo dentro de una historia, se detiene en cada `**Checkpoint:**` para tu revisión y nunca
+cambia un AC, el diseño o una prueba sin volver a esa fase. Usa unas 2–3× los tokens de la ejecución inline,
+así que compensa en funciones con ~6+ tareas independientes. Protocolo:
+`skills/dev-spec-driven/references/subagent-execution.md`.
+
+### Evidencia, bugfixes y cierre
+
+- **Evidencia antes que afirmaciones.** Las tareas declaran `_Verify: <comando>_`; `spec_complete_task`
+  registra el comando, el código de salida y un resumen, rechaza la marca si falla, y `doctor` /
+  `ROADMAP.md` / `spec_finish` siguen señalando las tareas marcadas sin evidencia. Una tarea con un
+  `_Verify:_` ejecutable solo queda verificada con el comando y el código de salida 0 — una nota de texto la
+  marca, pero la deja sin verificar. CLI: `dev-spec done <feature> <n> --run`.
+- **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** (el doctor
+  bloquea la corrección hasta que esté escrita) → prueba de regresión en rojo → corrección → verificación.
+- **`/spec-finish`** — lo que aún bloquea, las comprobaciones a repetir y un resumen de merge construido desde
+  la spec; después haces el merge en local o conservas la rama — sin pull requests, sin CI.
+- **`/spec-review-feedback`** — comentarios de revisión evaluados contra la spec. **`/spec-doctor --deep`** —
+  el agente `spec-critic` revisa el *significado* de la spec en su gate.
 
 ### Automatización local, no CI
 
@@ -289,8 +360,17 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
 ### Inicio rápido
 
+Instala desde GitHub (recomendado — funciona en cualquier máquina, sin rutas que editar):
+
+```text
+/plugin marketplace add linofcp007/dev-spec-driven
+/plugin install dev-spec-driven@dev-spec-driven-marketplace
+```
+
+O clona y cárgalo solo para una sesión:
+
 ```bash
-# point --plugin-dir at your local clone of this repo (any path):
+git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
@@ -319,6 +399,7 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 
 ```bash
 node mcp/test.js          # prueba el servidor MCP de extremo a extremo (181 aserciones)
+node cli/test-cli.js      # prueba la CLI universal (53 aserciones)
 ```
 
 > Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
@@ -349,7 +430,7 @@ dev-spec-driven/                      ← plugin root
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
-├── integrations/                     ← ready-made, path-filled MCP configs per tool
+├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)
 ├── examples/demo-project/            ← a worked feature (v1.5 shape) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md

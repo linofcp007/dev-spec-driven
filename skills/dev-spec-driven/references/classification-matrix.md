@@ -24,13 +24,22 @@ set determines which artifacts, design sections, and execution loop the feature 
 
 ## Phase 0 decision procedure
 
-1. **Pick the mode.** Casual language ("just", "quick fix", "nothing fancy", single-file, <30 min)
-   → **Vibe** (no artifacts, no tracks — just build it). Otherwise → **Spec**.
+1. **Pick the mode.**
+   - Casual language ("just", "quick fix", "nothing fancy", single-file, <30 min) → **Vibe** (no
+     artifacts, no tracks — just build it).
+   - A contained change to a flow that **already exists** in the repo (a flag, a small endpoint, a
+     one-file behaviour change) → **Bounded** (short design in chat, explicit yes, no artifacts).
+   - A real **defect** (it worked, or is specified to work, and doesn't) → the bugfix flow,
+     **`/spec-bugfix`** (`spec_create {kind: "bugfix"}`: reproduce → root cause → regression test →
+     fix; always `+tdd`). See `bugfix.md`.
+   - Everything else → **Spec**. When torn between two modes, take the heavier one.
 2. **In Spec mode, evaluate each track's signals** (tables below). Any matching signal turns the
    track on.
-3. **Write `classification.md`** recording mode, the active track set, the signals that triggered
-   each, and the blast radius.
-4. **Present for approval.** If the user disagrees, adjust the track set before requirements.
+3. **Present for approval** the mode, the active track set, the signals that triggered each, and the
+   blast radius. If the user disagrees, adjust the track set before requirements.
+4. **After approval**, `spec_init {tracks, lang}` if steering is missing, then
+   `spec_create {name, tracks, lang}` once — it seeds `classification.md` (format below), where you
+   record those decisions.
 
 When unsure whether a track applies, **turn it on**. Over-investing rigor on a feature that turns
 out simple costs a little time; under-investing on a feature that turns out critical costs an
@@ -105,7 +114,7 @@ See `classification-examples-ai.md` for worked AI examples across chatbots, RAG,
 
 | Track set | Artifacts in `.specs/<feature>/` |
 |---|---|
-| `core` | `classification.md`, `requirements.md`, `design.md`, `tasks.md` |
+| `core` | `classification.md`, `requirements.md`, `design.md`, `quickstart.md`, `checklist.md`, `tasks.md` |
 | `core +tdd` | + `test-plan.md`, `tests/` (failing first) |
 | `core +saas` | design gains 5 scale sections; + `load-test.md` (hot path); observability/cost tasks |
 | `core +ai` | design gains 10 AI sections; + `eval-plan.md`, `prompts/`, `evals/` |
@@ -119,9 +128,9 @@ top of the base design. A blank mandatory section is never acceptable — an hon
 because X" is.
 
 **Execution loop is chosen per task by track:**
-- Deterministic task on `+tdd` → red → green → refactor.
-- Generation/prompt task on `+ai` → prompt-iteration loop gated on eval delta.
-- Plain task on `core` only → implement → run existing tests → done.
+- Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
+- Generation/prompt task on `+ai` → prompt-iteration loop gated on eval delta → `spec_complete_task {evidence}`.
+- Plain task on `core` only → implement → run existing tests + its `_Verify:_` → `spec_complete_task {evidence}`.
 - `+saas` hot path → load-test task at the end must pass before "done".
 
 ---
@@ -158,5 +167,6 @@ core [+tdd] [+saas] [+ai]
 [GDPR | PCI | HIPAA | SOC2 | none] — does user PII reach a third party / model provider?
 ```
 
-Present for approval. The track set chosen here drives every later phase. Changing it mid-feature
-is allowed (see "escalation" in the skill) but should be a deliberate, recorded decision.
+The track set chosen here drives every later phase and is stored per feature. Changing it mid-feature
+is allowed — `spec_add_track` (`/add-track`) adds one additively, and `remove: true` (`--remove`)
+takes one off without deleting any file — but it should be a deliberate, recorded decision.

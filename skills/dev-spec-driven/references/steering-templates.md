@@ -29,8 +29,9 @@ feature pulls in that track. Fill them in once, revisit once a quarter.
 ## `constitution.md` (core)
 
 The few non-negotiable principles every feature must obey — kept short, concrete, and testable.
-`spec_doctor` and `/prReview` check designs against it (each design.md carries a **Constitution
-Check** section), and a design that violates a principle is blocked rather than silently shipped.
+Each design.md carries a **Constitution Check** section (`spec_doctor` checks that it is there); whether
+the design honours every principle is judged at the gate by the human and the `spec-critic` agent
+(`/spec-doctor --deep`), and `/prReview` checks the code — a violation is sent back, not shipped.
 Anything that *must* break a principle goes in the design's **Complexity Tracking** table with a
 justification, not into the code unannounced.
 
@@ -38,7 +39,7 @@ justification, not into the code unannounced.
 # Constitution
 
 Non-negotiable principles every feature must obey. Keep these few, concrete, and testable.
-The `doctor` and `/prReview` check work against them; a design that violates a principle is blocked.
+Each design's Constitution Check answers to them; a design that violates a principle goes back for revision.
 
 ## Principles
 1. [e.g., Every write is idempotent or explicitly justified.]

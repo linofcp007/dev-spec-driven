@@ -7,9 +7,11 @@ Use the **dev-spec-driven** skill to drive this feature end-to-end.
 
 Feature / request: $ARGUMENTS
 
-Begin at **Phase 0 (Classification)**: decide Vibe vs Spec mode, then select the composable track
-set (core +tdd? +saas? +ai?). Use the `spec_classify` MCP tool to seed the recommendation, confirm
-against `references/classification-matrix.md`, write `classification.md`, and present the track set
-for approval before moving on. If the user clearly wants Vibe mode, skip the artifacts and just
+Begin at **Phase 0 (Classification)**: decide the mode (Vibe / Bounded / Spec; a real defect goes to
+`/spec-bugfix`), then select the composable track set (core +tdd? +saas? +ai?). Use the
+`spec_classify` MCP tool to seed the recommendation, confirm against
+`references/classification-matrix.md`, and present the track set for approval before moving on. After
+approval: `spec_init {tracks, lang}` if steering is missing, then `spec_create {name, tracks, lang}`
+once (it seeds `classification.md`). If the user clearly wants Vibe mode, skip the artifacts and just
 build it. If a `.specs/<feature>/` already exists, run `spec_status` first and resume from its
 current phase instead of starting over.

@@ -3,8 +3,8 @@
 Thanks for helping improve this plugin. A few hard constraints keep it lightweight and free to run —
 please respect them in every change:
 
-- **No GitHub Actions / no paid CI.** All automation is local (the bundled hooks + MCP server).
-  Never add a `.github/workflows/` directory.
+- **No GitHub Actions / no paid CI / no pull requests.** All automation is local (the bundled hooks +
+  MCP server) and changes are merged locally. Never add a `.github/workflows/` directory.
 - **Zero runtime dependencies.** The MCP server, CLI and all scripts use only Node core (`fs`, `path`,
   `readline`, `child_process`, built-in `fetch`). No `npm install`. Keep it that way.
 - **Specs always live in `.specs/`.**
@@ -23,7 +23,7 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 ```bash
 node mcp/test.js        # MCP server end-to-end (181 assertions)
 node cli/test-cli.js    # universal CLI (53 assertions)
-claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 3   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
+claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
 # or both:
 npm test
 ```
@@ -31,12 +31,15 @@ npm test
 Add an assertion whenever you add a tool or change behavior. Keep the tests dependency-free.
 For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
-## Pull requests
+## Before merging
 
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin wrappers.
 - Update `CHANGELOG.md` and bump the version in `package.json`, `.claude-plugin/plugin.json` **and**
   `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree).
-- Run `claude plugin validate .` and make sure `npm test` is green.
+- Validate both manifests and make sure `npm test` is green:
+  - `claude plugin validate .claude-plugin/plugin.json` — the plugin (manifest + its components);
+  - `claude plugin validate .` — the marketplace (`.claude-plugin/marketplace.json`). Run on the repo
+    root, `validate` only checks the marketplace file when one is present, not the plugin itself.
 - No machine-specific absolute paths in committed files (use `${CLAUDE_PLUGIN_ROOT}`, `${workspaceFolder}`,
   or a relative path; for global tool configs ship a placeholder + point to `dev-spec mcp-config`).
 

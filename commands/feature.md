@@ -11,8 +11,8 @@ Call the `spec_feature` MCP tool (CLI `dev-spec feature <action> <name> [new-nam
 
 - **archive** — move `.specs/<slug>/` to `.specs/_archive/<slug>/`, out of the active roadmap (reversible). **Prefer this** over remove.
 - **rename** — change the slug + folder + `roadmap.json` key, updating every `dependsOn` reference to it.
-- **remove** — permanently delete the feature's folder. **Destructive** — confirm with the user first, and look at the feature before deleting.
+- **remove** — permanently delete the feature's folder. **Destructive** — the tool refuses without `confirm: true` (CLI `--yes`); look at the feature and confirm with the user before passing it.
 
 All three keep `roadmap.json` dependencies consistent and regenerate the roadmap. For **remove**, since
-it's hard to reverse, confirm intent first unless the user was explicit. Report what changed. Respond
+it's hard to reverse, confirm intent first unless the user was explicit — only then pass `confirm: true`. Report what changed. Respond
 in the user's language (EN/PT/ES).

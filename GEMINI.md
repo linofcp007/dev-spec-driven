@@ -1,5 +1,7 @@
 # dev-spec-driven (Gemini instructions)
 
+> Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules gemini` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).
+
 Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
 
 - For non-trivial work, **plan before coding**. Classify the feature into composable tracks —
@@ -10,6 +12,6 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
   If MCP is configured (`~/.gemini/settings.json`), the `spec-driven` server exposes the same tools.
 - Artifacts live under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
   Mandatory +saas/+ai design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
-- **No GitHub Actions / no paid CI** — everything runs locally.
+- **No GitHub Actions / no paid CI / no pull requests** — everything runs locally; integrate by merging locally.
 - **Respond in the user's language** (EN/PT/ES), including artifact prose. EARS keywords work in all
   three (`SHALL`/`DEVE`/`DEBE`).

@@ -2,7 +2,10 @@
 
 This file is the portable version of the dev-spec-driven workflow. Any agent tool that reads an
 instructions file — **Codex CLI, Gemini CLI, Cursor, Windsurf, Copilot, Claude, Zed, Cline, …** —
-can follow it. The full reference lives in `skills/dev-spec-driven/SKILL.md` and `references/`.
+can follow it. The full reference lives in `skills/dev-spec-driven/SKILL.md` and
+`skills/dev-spec-driven/references/`.
+
+> Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules agents` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).
 
 > **Language:** detect the user's language and respond in it (English, Português, Español),
 > including the prose inside generated artifacts. Pass `--lang en|pt|es` to `dev-spec init`
@@ -36,39 +39,45 @@ Do the mechanical steps with the bundled engine instead of hand-editing files. T
 Key operations (CLI form):
 
 ```
-dev-spec classify "<feature description>"     # recommend tracks (multilingual, weighted)
+dev-spec classify "<feature description>" [--name "<feature>"]   # recommend tracks (multilingual, weighted)
 dev-spec init [tracks...] [--lang en|pt|es]    # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …)
 dev-spec create "<name>" [tracks...] [--lang] [--summary "…"]  # scaffold the feature (no tracks → auto-classify; inherits project lang)
 dev-spec status [feature] | list               # progress, phase, tracks
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
-dev-spec ears <feature|file.md>                # lint EARS (SHALL/DEVE/DEBE, IDs, vague words)
+dev-spec ears <feature|file.md>                # lint EARS (SHALL/DEVE/DEBE, IDs, vague words); --text "…" or - (stdin) for a snippet
 dev-spec trace <feature>                       # AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs)
 dev-spec next <feature> [--batch]              # next task (--batch: + the [P] tasks that can run beside it)
+dev-spec next-action <feature>                 # "you are here → do this next" + what changed since approval
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
-dev-spec finish <feature> [--write]            # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
+dev-spec finish <feature> [--write] [--include-body]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, DoD)
 dev-spec approve <feature> <phase>             # record an approval gate
+dev-spec add-track <feature> <track> [--remove]   # add a track (additive, never overwrites); --remove takes one off, files kept
+dev-spec feature <archive|rename|remove> <name> [new-name] [--yes]   # lifecycle; remove is destructive and needs --yes
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
-dev-spec depend <feature> [deps...]            # declare dependencies / order (rejects cycles)
+dev-spec depend <feature> [deps...]            # declare dependencies / order (rejects cycles); --add / --rm <dep>, --clear
+dev-spec backlog [add|rm "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
 dev-spec scan [path]  /  dev-spec coverage     # brownfield: inventory existing code + spec coverage
 dev-spec evals <feature> [--dry-run]           # run local eval harness (+ai; your API key)
 dev-spec mcp-config [client]                   # print MCP config for your tool
+dev-spec rules <cursor|windsurf|copilot|gemini|agents>   # print that tool's rule file with this clone's absolute paths
 ```
 
 ## The pipeline (Spec mode)
 
-For anything beyond a quick fix (Vibe mode = just do it, no artifacts):
+For anything beyond a quick fix (Vibe mode = just do it, no artifacts) or a contained change to an existing
+flow (Bounded mode = a short design in chat and an explicit yes, no artifacts):
 
-0. **Classify** — `dev-spec classify` to seed tracks; confirm against `references/classification-matrix.md`; write `.specs/<feature>/classification.md`. Get user approval of the track set.
-1. **Requirements** — `dev-spec create` scaffolds; write EARS criteria with stable AC IDs; run `dev-spec ears` to lint. Add track-specific ACs (tenant isolation for +saas; quality/safety/cost for +ai). Approve.
+0. **Classify** — `dev-spec classify` to seed tracks; confirm against `skills/dev-spec-driven/references/classification-matrix.md`. Get user approval of the mode and track set (a real defect → `dev-spec bugfix` instead). After approval: `dev-spec init <tracks> --lang <xx>` if `.specs/steering/` is missing, then `dev-spec create "<name>" <tracks> --lang <xx>` once — it seeds `.specs/<feature>/classification.md`, where you record the decision.
+1. **Requirements** — fill the scaffolded `requirements.md`: EARS criteria with stable AC IDs; run `dev-spec ears` to lint and `dev-spec clarify` for gaps. Add track-specific ACs (tenant isolation for +saas; quality/safety/cost for +ai). Approve.
 2. **Design** — base sections + the mandatory sections of the active tracks (5 for +saas, 10 for +ai). The scaffold marks each with a `> **TODO**` sentinel; replace it with real content. No blank mandatory sections. Approve.
 3. **Test/Eval plan** — +tdd: enumerate tests mapped to AC IDs. +ai: golden/adversarial/regression sets + thresholds + baseline. Approve.
 4. **Failing tests / eval harness** — +tdd: write tests, all red for the right reason (hard gate). +ai: deterministic tests + runnable eval harness + baseline. No implementation before this passes.
-5. **Tasks** — ordered, traceable; markers `_Requirements:_` always, `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
-6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs and tests already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` — evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open. Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
+5. **Tasks** — ordered, traceable; markers `_Requirements:_` and `_Verify: <command>_` always (+tdd: the command that runs that task's own tests — the full suite stays red until the last task), `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
+6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs and tests already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` (MCP: `spec_complete_task`) — the only way to tick a task; evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open; for a task whose `_Verify:_` names a runnable command, a text note alone (`--evidence "…"` without `--cmd "…" --exit 0`) ticks it but leaves it unverified (a task with no runnable `_Verify:_` can be attested by that note). Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `skills/dev-spec-driven/references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
 
 At each phase boundary, run `dev-spec doctor <feature>`; only advance when it reports
 `readyToAdvance`. Record sign-off with `dev-spec approve <feature> <phase>`.

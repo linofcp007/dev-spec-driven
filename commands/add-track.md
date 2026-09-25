@@ -14,3 +14,7 @@ track's mandatory `design.md` sections if they aren't already there. Use it when
 needing tests, scale, or AI after it was first created. After running it, report which files were
 added, tell the user to fill the new design sections, then run `spec_doctor` for the feature. Respond
 in the user's language (EN/PT/ES).
+
+To take a track **off** (the feature turned out simpler), pass `remove: true` (CLI `--remove`): the
+track leaves the feature's stored track set, and no file is deleted — clean up leftover artifacts by
+hand only if the user asks.
