@@ -4144,6 +4144,92 @@ function endRun() {
     fs.writeFileSync(t9, fs.readFileSync(t9, "utf8").replace(/- \[ \]/, "- [x]"));
     const st12b = (await call12("spec_status", { name: "feature-9", projectDir: r12 })).p;
     ok(st12b.tasks.done === st12a.tasks.done + 1, "the MCP server keeps no read cache between calls: a hand edit between two spec_status calls is seen by the second");
+
+    // --- WP12 review fixes ---
+    // (a)/(b) an ID that only sits in a fenced TABLE ROW is no requirement: append_tasks refuses it (AC and EC), and an edit
+    // that only touches that row is no change request for spec_impact (added / modified / removed all empty).
+    const x12 = path.join(tmp, "proj-wp12-fenced-rows");
+    S.initProject(x12, ["core"], "en");
+    const xf12 = S.createFeature(x12, "Rows", ["core"]);
+    const xReq12 = ["# Feature: Rows", "", "## Summary", "Sign in.", "", "### US-1 (P1)", "", "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session", "", "Example:", "```md", "| US-1.AC-6 | old example row |", "| EC-5 | old example edge |", "```", "",
+      "## Edge Cases", "- **EC-2** — a locked account is refused.", ""].join("\n");
+    fs.writeFileSync(path.join(xf12.dir, "requirements.md"), xReq12);
+    const xTasks12 = fs.readFileSync(path.join(xf12.dir, "tasks.md"), "utf8");
+    const xa12 = S.appendTasks(x12, "rows", [{ text: "x", requirements: ["US-1.AC-6"] }]);
+    const xb12 = (await call12("spec_append_tasks", { name: "rows", tasks: [{ text: "x", requirements: ["US-1.AC-1", "EC-5"] }], projectDir: x12 }));
+    ok(xa12.ok === false && xa12.phantom.join() === "US-1.AC-6" && xb12.isError && /EC-5/.test(xb12.p.error) && fs.readFileSync(path.join(xf12.dir, "tasks.md"), "utf8") === xTasks12,
+      "spec_append_tasks refuses an AC (US-1.AC-6) and an EC (EC-5) written only in a fenced table row; nothing written");
+    S.approvePhase(x12, "rows", "requirements", undefined, { force: true });
+    fs.writeFileSync(path.join(xf12.dir, "requirements.md"), xReq12.replace("old example row", "new example row").replace("old example edge", "new example edge"));
+    const xi12 = (await call12("spec_impact", { name: "rows", phase: "requirements", projectDir: x12 })).p;
+    ok(xi12.ok && xi12.added.length === 0 && xi12.modified.length === 0 && xi12.removed.length === 0,
+      "spec_impact --phase requirements: an edit that only touches fenced table rows (| US-1.AC-6 |, | EC-5 |) adds, modifies and removes no requirement (got modified=" + (xi12.modified || []).map((m) => m.id).join() + ")");
+
+    // (c) a PostToolUse event with nothing new for the catalog leaves a generated SPECS.md alone (same content, same mtime).
+    fs.rmSync(specsMd12, { force: true });
+    S.catalog(h12, { write: true });
+    const catBefore12 = fs.readFileSync(specsMd12, "utf8");
+    const old12 = new Date(Date.now() - 86400e3);
+    fs.utimesSync(specsMd12, old12, old12);
+    post12(hReq12);
+    const same12 = S.maybeRefreshCatalog(h12);
+    ok(fs.readFileSync(specsMd12, "utf8") === catBefore12 && Math.abs(fs.statSync(specsMd12).mtimeMs - old12.getTime()) < 1000 && same12 === false,
+      "PostToolUse with nothing new leaves the generated SPECS.md untouched (content and mtime); maybeRefreshCatalog → false");
+
+    // (d) add_track reads requirements.md the same way: an AC written only in a `_Supersedes:_` marker (another feature's) or a
+    // fenced example is not this feature's — no +saas test-plan row for it, and the +saas tasks get the placeholder, not its ID.
+    const d12 = path.join(tmp, "proj-wp12-late-track");
+    S.initProject(d12, ["core"], "en");
+    const df12 = S.createFeature(d12, "Late", ["core"]);
+    fs.writeFileSync(path.join(df12.dir, "requirements.md"), ["# Feature: Late", "", "## Summary", "X.", "", "### US-1 (P1)", "", "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session _Supersedes: other/US-1.AC-5_", "", "```md", "- **US-1.AC-6** — WHEN x THE SYSTEM SHALL y", "```", ""].join("\n"));
+    const dt12 = S.addTrack(d12, "late", "saas,tdd");
+    const dTasks12 = fs.readFileSync(path.join(df12.dir, "tasks.md"), "utf8");
+    const dPlan12 = fs.readFileSync(path.join(df12.dir, "test-plan.md"), "utf8");
+    ok(dt12.ok && dt12.addedTracks.join() === "saas,tdd" && !/_Requirements:[^_\n]*US-1\.AC-[56]/.test(dTasks12) && dTasks12.includes("[the +saas criterion this task proves]") &&
+      !dPlan12.includes("US-1.AC-5") && !dPlan12.includes("US-1.AC-6"),
+      "add_track saas,tdd: US-1.AC-5 only in a _Supersedes:_ marker and US-1.AC-6 only in a fence get no +saas task IDs and no test-plan row");
+
+    // An `_Implements:_` glob whose bounded walk stops at its cap before any match proves nothing: never a missing-file gap
+    // (a warning, unresolvedImplGlobs); a glob whose walk ended without a match is still missing; the finish baseline says
+    // its glob list was truncated.
+    const u12 = path.join(tmp, "proj-wp12-glob-cap");
+    S.initProject(u12, ["core"], "en");
+    for (let i = 0; i < 6; i++) put12(u12, "a/f" + i + ".txt", "");
+    put12(u12, "src/login.js", "x\n");
+    const uf12 = S.createFeature(u12, "Cap", ["core"]);
+    fs.writeFileSync(path.join(uf12.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    fs.writeFileSync(path.join(uf12.dir, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: **/login.js, src/*.zz_\n");
+    const uc12 = S.traceCheck(u12, "cap", { globCap: 3 });
+    const uFull12 = S.traceCheck(u12, "cap");
+    ok(uc12.missingImplFiles.join() === "src/*.zz" && uc12.unresolvedImplGlobs.join() === "**/login.js" && uc12.warnings.some((w) => w.kind === "unresolvedImplGlobs" && w.items.join() === "**/login.js") &&
+      !S.traceGaps(uc12).some((g) => g.items.includes("**/login.js")) && S.traceWarningLines(uc12, "en").some((l) => /not fully resolved.*\*\*\/login\.js/.test(l)) &&
+      uFull12.unresolvedImplGlobs.length === 0 && uFull12.missingImplFiles.join() === "src/*.zz" && !uFull12.warnings.some((w) => w.kind === "unresolvedImplGlobs"),
+      "trace_check: a glob walk cut by its cap before a match (**/login.js) is a warning, not a missing file; a completed walk with no match (src/*.zz) stays missing; with the full cap the glob resolves");
+    const fcap12 = S.finishFeature(fz12, "login-loop", { write: true, globCap: 1 });
+    const fcapSt12 = JSON.parse(fs.readFileSync(path.join(fb12.dir, ".state.json"), "utf8"));
+    const fnorm12 = S.finishFeature(fz12, "login-loop", { write: true });
+    const fnormSt12 = JSON.parse(fs.readFileSync(path.join(fb12.dir, ".state.json"), "utf8"));
+    ok(fcap12.readyToFinish && fcap12.baseline.truncated === true && fcapSt12.finished.truncated === true && fnorm12.baseline.recorded && !fnorm12.baseline.truncated && !fnormSt12.finished.truncated &&
+      Object.keys(fnormSt12.finished.files).join() === "src/auth.js,src/lib/x.ts,src/lib/y.ts",
+      "finish {write}: a glob walk cut by its cap marks the drift baseline truncated (result and state); a complete walk does not");
+
+    // A line that STARTS with inline triple-backtick code ("```US-1.AC-1``` is …") is no fence opener (CommonMark: a backtick
+    // fence's info string holds no backtick) — it must not turn the rest of requirements.md into code.
+    const k12 = path.join(tmp, "proj-wp12-inline-ticks");
+    S.initProject(k12, ["core"], "en");
+    const kf12 = S.createFeature(k12, "Ticks", ["core"]);
+    const kReq12 = "# Feature: Ticks\n\n## Summary\nSign-in.\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n```US-1.AC-1``` is how an ID looks.\n" +
+      "1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session\n2. **US-1.AC-2** — WHEN a user signs out THE SYSTEM SHALL end the session\n";
+    fs.writeFileSync(path.join(kf12.dir, "requirements.md"), kReq12);
+    fs.writeFileSync(path.join(kf12.dir, "tasks.md"), "## Phase: Build\n- [ ] 1. [US1] Sessions\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** ok\n");
+    const kt12 = S.traceCheck(k12, "ticks");
+    const ke12 = S.earsValidate(kReq12, "en");
+    const kFenced12 = S.earsValidate("#### Acceptance Criteria (EARS)\n``` md\n1. **US-1.AC-9** — WHEN a THE SYSTEM SHALL b\n```\n1. **US-1.AC-1** — WHEN c THE SYSTEM SHALL d\n", "en");
+    ok(kt12.totalAcs === 2 && kt12.uncoveredByTasks.join() === "US-1.AC-2" && kt12.phantomAcsInTasks.length === 0 && ke12.summary.criteriaDetected === 2 && ke12.verdict === "pass" &&
+      kFenced12.summary.criteriaDetected === 1,
+      "a line starting with inline ```code``` is no fence: trace_check still sees both ACs (US-1.AC-2 uncovered), the EARS lint both criteria; a real ``` md fence still hides its body (got totalAcs=" + kt12.totalAcs + ")");
   }
   // @wp WP11 <<<
 

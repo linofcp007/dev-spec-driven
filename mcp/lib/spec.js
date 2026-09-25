@@ -1637,7 +1637,9 @@ const RE_LIST_ITEM = /^\s*(?:\d+[.)]|[-*+])\s+/; // starts a new criterion block
 const RE_NUMBERED = /^\s*\d+[.)]\s+/; // …and is enumerated, so it may be an AC without a modal verb
 // Block-level constructs that can never be part of a criterion, and end the one in progress.
 const RE_BLOCK_BREAK = /^\s*(?:#{1,6}\s|>|\||(?:-{3,}|={3,}|\*{3,})\s*$)/;
-const RE_FENCE = /^\s*(```+|~~~+)/;
+// A fence opener as CommonMark reads it: a backtick fence's info string holds no backtick — "```US-1.AC-1``` is how
+// an ID looks." is inline code, not a fence that would turn the rest of the file into code (and hide every AC below it).
+const RE_FENCE = /^\s*(`{3,}(?![^`]*`)|~{3,})/;
 const B = "(?<![\\p{L}\\p{N}_])"; // unicode word boundary (before)
 const E = "(?![\\p{L}\\p{N}_])"; // unicode word boundary (after)
 const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
@@ -1849,7 +1851,8 @@ function extractTestIds(text) {
 }
 
 // opts.code: also scan the project's TEST files for T-IDs / AC IDs (result.code — see traceTestCode). opts.scan: a
-// scanTestCode() result to reuse instead of walking again (doctor / finish share one walk per call).
+// scanTestCode() result to reuse instead of walking again (doctor / finish share one walk per call). opts.globCap: files
+// an _Implements:_ glob walk may look at (default COVERAGE_CAP) — engine-internal (tests), never a tool argument.
 function traceCheck(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -1883,12 +1886,15 @@ function traceCheck(projectDir, name, opts = {}) {
   // Clamp to the project root: paths that escape it count as missing without probing arbitrary FS.
   const projRoot = path.resolve(projectDir);
   const outOfRoot = new Set();
+  const unresolvedImplGlobs = [];
   const absent = implFiles.filter((f) => {
     // A glob (`src/api/**`, `lib/*.js`) is present once it matches a file — coverage()'s glob, walked from its literal
-    // folders only. One that would leave the project is out of root like any such path.
+    // folders only. One that would leave the project is out of root like any such path. A walk that hit its cap before
+    // any match proves nothing (the file may sit past the cap): never a missing-file gap — a warning (unresolvedImplGlobs).
     if (isImplementsGlob(f)) {
-      const g = globFiles(projRoot, f, { first: true });
+      const g = globFiles(projRoot, f, { first: true, cap: opts.globCap });
       if (g.outside) outOfRoot.add(f);
+      if (!g.files.length && g.truncated) { unresolvedImplGlobs.push(f); return false; }
       return !g.files.length;
     }
     const abs = path.resolve(projRoot, f);
@@ -1925,6 +1931,7 @@ function traceCheck(projectDir, name, opts = {}) {
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
+    unresolvedImplGlobs, // globs whose bounded walk ended (COVERAGE_CAP) before a match: neither present nor missing
   };
 
   if (tracks.includes("tdd")) {
@@ -1963,7 +1970,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"]);
 const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 function traceGaps(tr) {
   const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
@@ -1984,12 +1991,13 @@ function traceGapLines(tr, lang) {
 
 // trace_check `warnings` — ONE shape, the one traceGaps() returns: [{ kind, items: [id, …] }], only the non-empty
 // kinds, in this order. The secondary kinds are also top-level arrays (always present); the code kinds live in
-// result.code (present with opts.code). None of them changes the verdict.
-const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "plannedNotInCode", "inCodeNotInPlan"];
+// result.code (present with opts.code). None of them changes the verdict. unresolvedImplGlobs (a top-level array too):
+// an _Implements:_ glob whose bounded walk stopped at its cap before any match.
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
 function traceWarnings(tr) {
   const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
-  for (const k of TRACE_SECONDARY_KINDS) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  for (const k of [...TRACE_SECONDARY_KINDS, "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
   return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
 }
 // The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).
@@ -3003,7 +3011,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
   // One walk of the test code (only when an active +tdd plan has T-IDs), shared with doctor's tests-in-code check.
   const scan = tracks.includes("tdd") && extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
-  const tr = traceCheck(projectDir, slug, scan ? { code: true, scan } : {});
+  const tr = traceCheck(projectDir, slug, { ...(scan ? { code: true, scan } : {}), globCap: opts.globCap });
   const warnings = tr.ok ? traceWarningLines(tr, lng, [...TRACE_SECONDARY_KINDS, "plannedNotInCode"]) : [];
   const doc = specDoctor(projectDir, slug, { scan });
   const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
@@ -3084,7 +3092,7 @@ function finishFeature(projectDir, name, opts = {}) {
   }
   const ready = blockers.length === 0;
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
-  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText) : null;
+  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
     ok: true,
     feature: slug,
@@ -6106,7 +6114,7 @@ const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catc
 // every file under a folder, or the files a glob matches now (globFiles — trace_check's reading) — only inside the
 // project, at most BASELINE_CAP.
 const BASELINE_CAP = 500;
-function baselineFiles(projectDir, tasksText) {
+function baselineFiles(projectDir, tasksText, globCap) {
   const root = path.resolve(projectDir);
   const rootReal = realRootOf(root);
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
@@ -6121,7 +6129,9 @@ function baselineFiles(projectDir, tasksText) {
     const p = implementsPath(ref).replace(/^\.\//, "");
     if (!p) continue;
     if (isImplementsGlob(p)) {
-      for (const rel of globFiles(root, p, { cap: BASELINE_CAP * 20 }).files) add(rel);
+      const g = globFiles(root, p, { cap: globCap || BASELINE_CAP * 20 });
+      if (g.truncated) truncated = true; // the walk stopped at its cap: the glob's file list is incomplete
+      for (const rel of g.files) add(rel);
       continue;
     }
     const abs = path.resolve(root, p);
@@ -6132,11 +6142,11 @@ function baselineFiles(projectDir, tasksText) {
   return { files: [...out.values()], truncated };
 }
 // state.finished = { at, files: { '<rel>': sha1 | null } } — latest finish wins.
-function recordFinishBaseline(projectDir, slug, dir, tasksText) {
+function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   const st = readState(projectDir, slug);
   if (st.invalid) return { recorded: false, error: st.invalid };
   const root = path.resolve(projectDir);
-  const { files, truncated } = baselineFiles(root, tasksText);
+  const { files, truncated } = baselineFiles(root, tasksText, globCap);
   const map = {};
   for (const rel of files) map[rel] = fileHash(path.resolve(root, rel));
   const at = new Date().toISOString();
