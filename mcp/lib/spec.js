@@ -3674,6 +3674,11 @@ const JS_ROUTE_OWNERS = new Set(["app", "router", "r", "route", "routes", "serve
 const RE_JS_OWNER_SUFFIX = /(?:Router|Routes|App|Server|router|routes|app|server)$/;
 const RE_JS_ROUTE = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|options|head|all)\s*\(\s*(['"`])(\/[^'"`]*|\*)\3/g;
 const RE_JS_ROUTE_CHAIN = /[\w$)\]]\s*\.\s*route\s*\(\s*(['"`])(\/[^'"`]*)\1\s*\)/; // router.route('/x').get(…).post(…)
+// Prettier puts each argument on its own line when the call head doesn't fit: `router.post(` ends the line and the
+// path opens the next one. Only that leading string literal is joined — the whole call would re-scan the handler
+// body, counting a route declared inside it twice.
+const RE_JS_ROUTE_OPEN = /(?<![\w$.])[A-Za-z_$][\w$]*\s*\.\s*(?:get|post|put|patch|delete|options|head|all)\s*\(\s*$/;
+const RE_JS_LEAD_STRING = /^\s*(['"`])(?:\/[^'"`]*|\*)\1/;
 const RE_JS_CHAIN_VERB = /\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/g;
 const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|koa-router|fastify|hono)(?:\/[^'"]*)?['"]/;
 // HTTP clients: `const api = axios.create(…); api.get('/users')` in a .js/.ts service file is a CALL, not a route.
@@ -3785,7 +3790,14 @@ function scanRoutes(rel, text) {
         if (c) prefix = c[2] != null ? c[2] : c[4] != null ? c[4] : "";
         each(RE_NEST_ROUTE, l, (m) => add(m[1], joinRoute(prefix, m[3] || ""), i, "nestjs"));
       }
-      each(RE_JS_ROUTE, l, (m) => {
+      let jl = l;
+      if (RE_JS_ROUTE_OPEN.test(l)) {
+        let j = i + 1;
+        while (j < lines.length && j <= i + SCAN_JOIN_LINES && !lines[j].trim()) j++;
+        const lead = j < lines.length ? lines[j].match(RE_JS_LEAD_STRING) : null;
+        if (lead) jl = l + " " + lead[0].trim(); // reported on the call's line
+      }
+      each(RE_JS_ROUTE, jl, (m) => {
         if (!JS_ROUTE_OWNERS.has(m[1]) && !RE_JS_OWNER_SUFFIX.test(m[1])) return;
         if (m[1] === "api" && FRONTEND_EXT.has(ext)) return;
         if (clientOwners.has(m[1]) || (clientFile && JS_GENERIC_OWNERS.has(m[1]))) return; // an HTTP client's call
@@ -3808,7 +3820,8 @@ function scanRoutes(rel, text) {
     const owners = new Set(lines.map((l) => (l.match(RE_PY_APP_DEF) || [])[1]).filter(Boolean));
     lines.forEach((l, i) => {
       if (skipLine(l)) return;
-      const d = l.match(RE_PY_PREFIX_DEF);
+      // `router = APIRouter(\n    prefix="/items",\n    tags=[…],\n)` (Black / FastAPI's own docs) holds its prefix below.
+      const d = (RE_PY_PREFIX_DEF.test(l) ? joinOpenCall(lines, i) : l).match(RE_PY_PREFIX_DEF);
       if (d) { const pm = d[2].match(RE_PY_PREFIX_ARG); if (pm) prefixes.set(d[1], pm[2]); }
       // A wrapped decorator is matched on its joined call and reported on the decorator's line.
       const m = (/^\s*@\s*[A-Za-z_]\w*\.\w+\s*\(/.test(l) ? joinOpenCall(lines, i) : l).match(RE_PY_ROUTE);
@@ -4297,6 +4310,11 @@ function mdBody(lines, hs, k) {
 function markRange(used, lo, hi) {
   for (let i = lo; i < hi; i++) used.add(i);
 }
+// The lines of [lo, hi) no parser used: a "## Functional Requirements" wrapping "### Requirement N" (already a
+// story) carries only what is left around it, never a second verbatim copy of the requirement.
+function unusedLines(lines, used, lo, hi) {
+  return lines.slice(lo, hi).filter((_, r) => !used.has(lo + r));
+}
 const RE_MD_HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 // First paragraph of prose (no headings, lists, quotes, tables or metadata), whitespace-folded. `at` (optional)
 // collects the offsets of the lines it used.
@@ -4492,8 +4510,9 @@ function parseKiro(dir, read, W) {
     hs.forEach((h, k) => {
       if (h.level !== 2 || /^(?:introduction|requirements)\b/i.test(h.text) || used.has(h.i)) return;
       const [lo, hi] = mdRange(lines, hs, k);
+      const rest = unusedLines(lines, used, lo, hi);
       markRange(used, h.i, hi);
-      model.extra.push({ heading: "## " + h.text, lines: lines.slice(lo, hi) });
+      if (tidyLines(rest).length) model.extra.push({ heading: "## " + h.text, lines: rest });
     });
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. a ### Non-Functional Requirements under ## Requirements
   }
@@ -4561,8 +4580,9 @@ function parseSpecKit(dir, read, W) {
       const k = hs.findIndex((h) => h.level > 1 && !used.has(h.i) && re.test(norm(h.text)));
       if (k === -1) return;
       const [lo, hi] = mdRange(lines, hs, k);
+      const rest = unusedLines(lines, used, lo, hi);
       markRange(used, hs[k].i, hi);
-      model.extra.push({ key, lines: lines.slice(lo, hi).filter((l) => !/^\s*#{1,6}\s+measurable outcomes/i.test(l)) });
+      model.extra.push({ key, lines: rest.filter((l) => !/^\s*#{1,6}\s+measurable outcomes/i.test(l)) });
     };
     section(/^functional requirements$/i, "functional");
     section(/^key entities$/i, "entities");
@@ -4574,8 +4594,9 @@ function parseSpecKit(dir, read, W) {
       const [lo, hi] = mdRange(lines, hs, k);
       if (SPECKIT_GUIDANCE.test(t.replace(/^[^\p{L}\p{N}]+/u, ""))) { markRange(used, h.i, hi); return; } // "## ⚡ Quick Guidelines"
       if (/^(?:user scenarios|requirements$)/i.test(t)) { used.add(h.i); return; } // their sub-sections are read above; the rest is carried
+      const rest = unusedLines(lines, used, lo, hi); // "## User Stories" wrapping the stories read above
       markRange(used, h.i, hi);
-      model.extra.push({ heading: "## " + t, lines: lines.slice(lo, hi) });
+      if (tidyLines(rest).length) model.extra.push({ heading: "## " + t, lines: rest });
     });
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
@@ -4630,8 +4651,9 @@ function parseOpenSpec(dir, read, W) {
     hs.forEach((h, k) => {
       if (h.level !== 2 || k === why) return;
       const [lo, hi] = mdRange(lines, hs, k);
+      const rest = unusedLines(lines, used, lo, hi); // without a ## Why, the summary paragraph may sit in here
       markRange(used, h.i, hi);
-      model.extra.push({ heading: "## " + h.text, lines: lines.slice(lo, hi) });
+      if (tidyLines(rest).length) model.extra.push({ heading: "## " + h.text, lines: rest });
     });
     model.carried.push(...leftoverExtras(lines, hs, used));
   }
@@ -4794,7 +4816,9 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     if (l.trim()) seen = true;
     const it = byLine.get(i);
     if (it) {
-      if (isParent(it)) { heading(`## ${rewrite(it.text, it.id, i + 1)}`); group = it; return; } // its sub-tasks are the tasks now
+      // Its sub-tasks are the tasks now. No new task is the parent (its old number belongs to another task after
+      // renumbering), so an unknown reference on it — or in its own body below — is reported by line.
+      if (isParent(it)) { heading(`## ${rewrite(it.text, null, i + 1)}`); group = it; return; }
       // A stand-alone task after a parent's group is not in that phase: a neutral heading closes it.
       if (group && it.indent <= group.indent && !(it.id && it.id.startsWith(group.id + "."))) { heading(L.otherTasks); group = null; }
       n++;
@@ -4810,7 +4834,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
       out.push(/^\s{2}/.test(body) ? rewrite(body, owner.no, i + 1) : "  " + rewrite(body.trimStart(), owner.no, i + 1));
       return;
     }
-    out.push(owner ? rewrite(l, owner.id, i + 1) : inert.has(i) ? l : rewrite(l, null, i + 1));
+    out.push(owner || !inert.has(i) ? rewrite(l, null, i + 1) : l); // owner here = a parent (see above)
   });
   return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
 }

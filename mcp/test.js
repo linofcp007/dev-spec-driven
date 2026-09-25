@@ -1971,6 +1971,48 @@ function payload(res) {
     const flat = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/flat"));
     const flatMs = Date.now() - t0flat;
     ok(flat.ok && flat.mapping["task 20000"] === "task 20000" && flatMs < 6000, "spec_import: a flat 20 000-task tasks.md imports in linear time (" + flatMs + " ms; was ~11 s)");
+
+    // Review round 2: a ## section WRAPPING requirements/stories carries only what is left around them (no second copy).
+    w6(im, ".kiro/specs/wrapped-h2/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Login stuff.", "", "## Functional Requirements", "", "Core flows (FRINTRO).", "",
+      "### Requirement 1: Login", "", "#### Acceptance Criteria", "", "1. WHEN a user logs in THEN the system SHALL create a session", "",
+      "## Non-Functional Requirements", "", "### Requirement 2: Speed", "", "#### Acceptance Criteria", "", "1. WHEN a page loads THEN the system SHALL respond within 200 ms", ""].join("\n"));
+    const wh = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/wrapped-h2"));
+    const whReq = wh.ok ? r6(im, ".specs", "wrapped-h2", "requirements.md") : "";
+    const whEars = safe6(() => S.earsFeature(im, "wrapped-h2"));
+    ok(wh.ok && wh.mapping["1.1"] === "US-1.AC-1" && wh.mapping["2.1"] === "US-2.AC-1" && (whReq.match(/create a session/g) || []).length === 1 && (whReq.match(/within 200 ms/g) || []).length === 1 &&
+      !/### Requirement \d/.test(whReq) && !/## Non-Functional Requirements/.test(whReq) && /## Functional Requirements\n\nCore flows \(FRINTRO\)\./.test(whReq) &&
+      Array.isArray(whEars.issues) && whEars.issues.length === 0,
+      "spec_import kiro: '### Requirement N' under a '## Functional/Non-Functional Requirements' is imported once (no verbatim copy, no no-id warnings); the wrapper's own prose is still carried");
+    w6(im, "specs/004-board/spec.md", "# Feature Specification: Board\n\n## User Stories\n\n### User Story 1 - See board (Priority: P1)\n\nAs a user I want to see the board.\n\n**Acceptance Scenarios**:\n\n1. **Given** a board, **When** I open it, **Then** the system shows the columns\n");
+    const skw = safe6(() => S.importSpec(im, "spec-kit", "specs/004-board"));
+    const skwReq = skw.ok ? r6(im, ".specs", "board", "requirements.md") : "";
+    ok(skw.ok && skw.mapping["User Story 1 / Scenario 1"] === "US-1.AC-1" && (skwReq.match(/^## User Stories$/gm) || []).length === 1 && !/### User Story 1 - See board/.test(skwReq) &&
+      (skwReq.match(/As a user I want to see the board/g) || []).length === 1 && S.earsFeature(im, "board").verdict === "pass",
+      "spec_import spec-kit: stories under a '## User Stories' wrapper are imported once (one ## User Stories heading, no raw copy)");
+
+    // Review round 2: an unknown reference on a Kiro PARENT (now a phase heading, its number reused) is reported by line.
+    w6(im, ".kiro/specs/parent-ref/requirements.md", "## Requirements\n\n### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN a THEN the system SHALL b\n2. WHEN c THEN the system SHALL d\n3. WHEN e THEN the system SHALL f\n");
+    w6(im, ".kiro/specs/parent-ref/tasks.md", "- [ ] 1. Set up\n  - _Requirements: 1.3_\n- [ ] 2. Implement login\n  - Parent notes\n  - _Requirements: 1.1, 9.9_\n  - [ ] 2.1 Form\n    - _Requirements: 1.1_\n  - [ ] 2.2 Session\n    - _Requirements: 1.2_\n- [ ] 3. Deploy _Requirements: 8.8_\n  - [ ] 3.1 Ship\n");
+    const pr = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/parent-ref"));
+    const prTasks = pr.ok ? r6(im, ".specs", "parent-ref", "tasks.md") : "";
+    ok(pr.ok && /## Implement login\n  - Parent notes\n  - _Requirements: US-1\.AC-1, 9\.9_\n- \[ \] 2\. Form/.test(prTasks) &&
+      pr.warnings.some((x) => /^tasks\.md line 5: _Requirements:_ reference '9\.9'/.test(x)) && pr.warnings.some((x) => /^tasks\.md line 10: _Requirements:_ reference '8\.8'/.test(x)) &&
+      !pr.warnings.some((x) => /^task \d+: .*'(?:9\.9|8\.8)'/.test(x)),
+      "spec_import kiro: an unknown _Requirements:_ reference in a parent task's heading or own body is reported by source line, never as 'task <old number>' (got " + pr.warnings.join(" | ") + ")");
+
+    // Review round 2: a Black-wrapped APIRouter(prefix=…)/Blueprint(url_prefix=…) and a Prettier-wrapped router.post(\n "/x", …).
+    const sc3 = path.join(tmp, "proj-wp6-scan3");
+    w6(sc3, "app/items.py", "from fastapi import APIRouter\n\nrouter = APIRouter(\n    prefix=\"/items\",\n    tags=[\"items\"],\n    dependencies=[Depends(get_token)],\n)\n\n\n@router.get(\"/{item_id}\")\ndef read(item_id: int): ...\n");
+    w6(sc3, "app/bp.py", "from flask import Blueprint\nbp = Blueprint(\n    \"orders\",\n    __name__,\n    url_prefix=\"/orders\",\n)\n@bp.get(\"/<int:id>\")\ndef g(id): ...\n");
+    w6(sc3, "app/users.py", "from fastapi import APIRouter\nrouter = APIRouter(prefix=\"/users\", tags=[\"users\"])\n@router.get(\"/{user_id}\")\ndef u(user_id): ...\n");
+    w6(sc3, "src/routes/orders.js", "const express = require(\"express\");\nconst router = express.Router();\n\nrouter.post(\n  \"/orders/:orderId/items\",\n  requireAuth,\n  validateBody(itemSchema),\n  async (req, res) => {\n    router.get(\"/inner\", h);\n    res.json({});\n  }\n);\nrouter.get(\"/orders\", list);\nrouter.put(\n  handlerPath,\n  h\n);\n");
+    w6(sc3, "src/services/api.js", "import axios from 'axios';\nconst api = axios.create();\nexport const list = () => api.get(\n  '/users'\n);\n");
+    const scan3 = safe6(() => S.scanCodebase(sc3));
+    const rk3 = (scan3.routes || []).map((r) => `${r.method} ${r.path} ${r.file}:${r.line}`);
+    const want3 = ["GET /items/{item_id} app/items.py:10", "GET /orders/<int:id> app/bp.py:7", "GET /users/{user_id} app/users.py:3",
+      "POST /orders/:orderId/items src/routes/orders.js:4", "GET /inner src/routes/orders.js:9", "GET /orders src/routes/orders.js:13"];
+    ok(want3.every((k) => rk3.includes(k)) && scan3.candidateEndpoints === 6 && !rk3.some((k) => /\/users src\/services|\/item_id\} app\/items\.py|^GET \/<int:id>/.test(k)),
+      "scan: a wrapped APIRouter(\\n prefix=…)/Blueprint(\\n url_prefix=…) prefixes its routes; a Prettier-wrapped router.post(\\n \"/x\", …) is a route on the call's line, counted once; a wrapped client call is not (got " + rk3.join(" | ") + ")");
   }
   // @wp WP6 <<<
 
