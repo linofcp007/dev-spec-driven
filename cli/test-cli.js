@@ -202,6 +202,30 @@ const w1FSt = run(["status", "fence", "--project", w1p]);
 const w1FDone = run(["done", "fence", "2", "--project", w1p]);
 ok(/phase=executing/.test(w1FSt.out) && /1\/3/.test(w1FSt.out) && w1FDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Release/.test(w1FDone.out),
   "status/done see the tasks below a one-line ```code``` span (not a fence)");
+// Round 2: renumbering a duplicated number can't hand one task's passing run to the other; a copy-paste
+// duplicate (same title, other _Verify:_) can't borrow it either; an inline "<!--" hides no task line.
+run(["create", "Rn", "core", "--project", w1p]);
+const w1RnTasks = path.join(w1p, ".specs", "rn", "tasks.md");
+fs.writeFileSync(w1RnTasks, "- [ ] 3. a\n  - _Verify: node -e \"process.exit(7)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
+const w1Rn = [run(["done", "rn", "3", "--run", "--project", w1p]), run(["done", "rn", "3", "--project", w1p]), run(["done", "rn", "3", "--run", "--project", w1p])];
+fs.writeFileSync(w1RnTasks, fs.readFileSync(w1RnTasks, "utf8").replace("- [x] 3. b", "- [x] 4. b"));
+const w1RnDoc = run(["doctor", "rn", "--project", w1p]);
+ok(w1Rn[0].code === 1 && w1Rn[2].code === 0 && /\(verified\)/.test(w1Rn[2].out) && /verification — .*#3 \(latest run failed\), #4/.test(w1RnDoc.out),
+  "done --run on a duplicated number, then renumbering: #3 keeps its own failed run (never the other task's pass)");
+run(["create", "Copy Dup", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "copy-dup", "tasks.md"),
+  "- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(7)\"_\n");
+const w1Cp1 = run(["done", "copy-dup", "3", "--run", "--project", w1p]);
+const w1Cp2 = run(["done", "copy-dup", "3", "--project", w1p]);
+ok(/Task 3 done \(verified\)\. 1\/2/.test(w1Cp1.out) && /Task 3 done\. 2\/2/.test(w1Cp2.out) && !/\(verified\)/.test(w1Cp2.out) &&
+  /verification — .*#3 \(number shared with another task\)/.test(run(["doctor", "copy-dup", "--project", w1p]).out),
+  "a copy-paste duplicate (same number and title, exit-7 _Verify:_ never run) is not '(verified)'");
+run(["create", "Cm", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "cm", "tasks.md"), "- [x] 1. Strip <!-- markers in the parser\n- [ ] 2. Handle the `-->` closer\n- [ ] 3. Docs\n");
+const w1CmSt = run(["status", "cm", "--project", w1p]);
+const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
+ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
+  "an inline '<!--' in a task's text hides no task below it (status and done agree)");
 // @wp WP1 <<<
 
 // @wp WP2 cli-tests >>>
