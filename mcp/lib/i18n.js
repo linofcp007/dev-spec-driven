@@ -1935,7 +1935,8 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n) => `Task ${n} not found in tasks.md`,
-      featureBusy: (slug) => `Another dev-spec process is updating '${slug}' right now (.specs/${slug}/.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
+      featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
+      roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
       numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
@@ -2025,6 +2026,7 @@ const MSG = {
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (dev-spec drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` + (signOff ? ` Sign it off: /approve ${slug} execution.` : ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`),
+      refinish: (slug, day, why) => `'${slug}' was finished on ${day}, but it changed since (${why}) and its tasks are done again — finish it again: /spec-finish ${slug} (spec_finish {write: true}) refreshes the readiness report, the merge summary and the drift baseline; then sign it off again: /approve ${slug} execution.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)"),
@@ -2130,7 +2132,7 @@ const MSG = {
     },
     // mcp/evals/run-evals.js human output (in the feature's language).
     evals: {
-      usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR]",
+      usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No evals/ dir for '${slug}' at ${dir}`,
       requireLive: "eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.",
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
@@ -2141,6 +2143,7 @@ const MSG = {
       noKey: "  (no ANTHROPIC_API_KEY set — running dry. Set it to do a live run.)",
       badJson: (set, err) => `  ✗ ${set}.json — invalid JSON: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' must be an array`,
+      emptySet: (set) => `  ✗ ${set}.json — no items to grade: a set that grades nothing can't pass — add eval items (evals/README.md) or delete the file`,
       badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
       moreBad: (n) => `      … +${n} more invalid item(s)`,
       itemWhy: {
@@ -2600,6 +2603,12 @@ const MSG = {
       nowPresent: (list) => `      now present (missing at finish): ${list}`,
       reopened: (list) => `  · reopened since finish (tasks open again — checked once finished again): ${list}`,
       unbaselined: (list) => `  · no finish baseline yet: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (archived)" : ""}: changed since finish (${d}) — ${why}; its baseline no longer covers it: finish it again (dev-spec finish ${f} --write)`,
+      staleWhy: {
+        changeRequests: (list) => `change request ${list}`,
+        approvals: (list) => `re-approved: ${list}`,
+        newFiles: (n, list) => `${n} implementing file(s) not in the baseline: ${list}`,
+      },
       hookLine: (f, n) => `  ⚠ ${f}: ${n} implementing file(s) changed since finish — run dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Drift baseline recorded: ${n} implementing file(s)${missing ? ` (${missing} missing)` : ""} — dev-spec drift shows what changes after this finish.`,
       baselineReplaced: (n, day, list) => `Replaced the baseline of ${day}, in which ${n} file(s) had drifted: ${list} — the new baseline accepts them as they are now.`,
@@ -2699,7 +2708,8 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarefa ${n} não encontrada em tasks.md`,
-      featureBusy: (slug) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (.specs/${slug}/.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
+      featureBusy: (slug, rel) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (${rel || `.specs/${slug}/.lock`}) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
+      roadmapBusy: "Outro processo dev-spec está a atualizar o .specs/roadmap.json neste momento (.specs/.roadmap.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.",
       numberInt: "o número tem de ser um inteiro",
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
@@ -2795,6 +2805,7 @@ const MSG = {
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` + (signOff ? ` Falta a aprovação final: /approve ${slug} execution.` : ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`),
+      refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão de novo feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(não especificado)"),
@@ -2894,7 +2905,7 @@ const MSG = {
       orderInt: (v) => `order tem de ser um inteiro (recebido: '${v}').`,
     },
     evals: {
-      usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR]",
+      usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `Sem pasta evals/ para '${slug}' em ${dir}`,
       requireLive: "harness de evals: a ANTHROPIC_API_KEY não está definida e foi pedido --require-live — recuso fazer um dry run em alternativa.",
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
@@ -2905,6 +2916,7 @@ const MSG = {
       noKey: "  (ANTHROPIC_API_KEY não definida — a correr a seco. Define-a para uma execução real.)",
       badJson: (set, err) => `  ✗ ${set}.json — JSON inválido: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' tem de ser um array`,
+      emptySet: (set) => `  ✗ ${set}.json — sem itens para avaliar: um conjunto que não avalia nada não pode passar — acrescenta itens de eval (evals/README.md) ou apaga o ficheiro`,
       badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
       moreBad: (n) => `      … +${n} item(s) inválido(s)`,
       itemWhy: {
@@ -3323,6 +3335,12 @@ const MSG = {
       nowPresent: (list) => `      agora presentes (em falta no fecho): ${list}`,
       reopened: (list) => `  · reabertas depois do fecho (há tarefas por fazer — verificadas quando voltarem a fechar): ${list}`,
       unbaselined: (list) => `  · ainda sem baseline de fecho: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (arquivada)" : ""}: mudou desde o fecho (${d}) — ${why}; a baseline já não a cobre: volta a fechá-la (dev-spec finish ${f} --write)`,
+      staleWhy: {
+        changeRequests: (list) => `pedido de alteração ${list}`,
+        approvals: (list) => `reaprovado: ${list}`,
+        newFiles: (n, list) => `${n} ficheiro(s) de implementação fora da baseline: ${list}`,
+      },
       hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
       baselineReplaced: (n, day, list) => `Substituída a baseline de ${day}, na qual ${n} ficheiro(s) tinham mudado: ${list} — a nova baseline aceita-os tal como estão agora.`,
@@ -3419,7 +3437,8 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md no encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md no encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarea ${n} no encontrada en tasks.md`,
-      featureBusy: (slug) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (.specs/${slug}/.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
+      featureBusy: (slug, rel) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (${rel || `.specs/${slug}/.lock`}) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
+      roadmapBusy: "Otro proceso de dev-spec está actualizando .specs/roadmap.json en este momento (.specs/.roadmap.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.",
       numberInt: "el número debe ser un entero",
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
@@ -3515,6 +3534,7 @@ const MSG = {
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (dev-spec drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` + (signOff ? ` Falta la aprobación final: /approve ${slug} execution.` : ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`),
+      refinish: (slug, day, why) => `'${slug}' se cerró el ${day}, pero cambió desde entonces (${why}) y sus tareas vuelven a estar hechas — ciérrala de nuevo: /spec-finish ${slug} (spec_finish {write: true}) renueva el informe de preparación, el resumen del merge y la línea base de drift; después vuelve a dar la aprobación final: /approve ${slug} execution.`,
     },
     clarify: {
       resolveMarker: (mk) => "Resuelve [NEEDS CLARIFICATION]: " + (mk || "(sin especificar)"),
@@ -3614,7 +3634,7 @@ const MSG = {
       orderInt: (v) => `order debe ser un entero (recibido: '${v}').`,
     },
     evals: {
-      usage: "Uso: node run-evals.js <función> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR]",
+      usage: "Uso: node run-evals.js <función> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No hay carpeta evals/ para '${slug}' en ${dir}`,
       requireLive: "harness de evals: ANTHROPIC_API_KEY no está definida y se pidió --require-live — no se hará un dry run en su lugar.",
       header: (slug) => `dev-spec-driven evals — función '${slug}'`,
@@ -3625,6 +3645,7 @@ const MSG = {
       noKey: "  (ANTHROPIC_API_KEY no definida — ejecución en seco. Defínela para una ejecución real.)",
       badJson: (set, err) => `  ✗ ${set}.json — JSON no válido: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' debe ser un array`,
+      emptySet: (set) => `  ✗ ${set}.json — sin elementos que evaluar: un conjunto que no evalúa nada no puede aprobar — añade elementos de eval (evals/README.md) o borra el archivo`,
       badItem: (set, label, why) => `  ✗ ${set}.json — elemento ${label}: ${why}`,
       moreBad: (n) => `      … +${n} elemento(s) no válido(s)`,
       itemWhy: {
@@ -4043,6 +4064,12 @@ const MSG = {
       nowPresent: (list) => `      ahora presentes (ausentes en el cierre): ${list}`,
       reopened: (list) => `  · reabiertas después del cierre (hay tareas pendientes — se comprueban al volver a cerrar): ${list}`,
       unbaselined: (list) => `  · aún sin línea base de cierre: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (archivada)" : ""}: cambió desde el cierre (${d}) — ${why}; su línea base ya no la cubre: ciérrala de nuevo (dev-spec finish ${f} --write)`,
+      staleWhy: {
+        changeRequests: (list) => `solicitud de cambio ${list}`,
+        approvals: (list) => `reaprobado: ${list}`,
+        newFiles: (n, list) => `${n} fichero(s) de implementación fuera de la línea base: ${list}`,
+      },
       hookLine: (f, n) => `  ⚠ ${f}: ${n} fichero(s) de implementación modificado(s) desde el cierre — ejecuta dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Línea base de drift registrada: ${n} fichero(s) de implementación${missing ? ` (${missing} ausente(s))` : ""} — dev-spec drift muestra lo que cambie después de este cierre.`,
       baselineReplaced: (n, day, list) => `Sustituida la línea base del ${day}, en la que ${n} fichero(s) habían cambiado: ${list} — la nueva línea base los acepta tal como están ahora.`,

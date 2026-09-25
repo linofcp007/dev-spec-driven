@@ -28,5 +28,6 @@ Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
   `confirm: true` only after they confirm (or were explicit) — suggest archive instead.
 
 Every action keeps `roadmap.json` dependencies consistent and regenerates the roadmap (and `.specs/SPECS.md`
-when it exists). Report what changed, including any `skipped` references on restore. Respond in the user's
+when it exists). None moves or deletes a folder while another process (another editor, a running `dev-spec`
+command) is updating that feature or `roadmap.json`: it waits, then answers `busy` with nothing changed — retry. Report what changed, including any `skipped` references on restore. Respond in the user's
 language (EN/PT/ES).

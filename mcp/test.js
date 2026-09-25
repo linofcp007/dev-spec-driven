@@ -1782,6 +1782,22 @@ function endRun() {
     ok(evThr1.status === 1 && /✗ thresholds\.json — /.test(evThr1.stdout) && evThr2.status === 1 && /thresholds\.json — tem de ser um objeto/.test(evThr2.stdout) &&
       evThr3.status === 0 && /Dry run concluído/.test(evThr3.stdout),
       "run-evals: an unparseable thresholds.json or a set threshold outside [0, 1] is invalid (exit 1, localized) — never silently ignored; a valid one (extra keys allowed) passes");
+    // --max-items must be an integer ≥ 1 (a bare flag, "abc", 0 or -5 graded nothing and scored 0/0 = 100%: exit 0 and a 100%
+    // baseline) — usage error, exit 2, before any model call; a set with no items is invalid (dry and live), never "passing".
+    const liveEv = (args) => spawnSync(process.execPath, ["-r", stubEv, EVALS, "Análise Avançada", "--project", evp, ...args],
+      { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", FETCH_MARK: markEv, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+    const maxBad3 = [["--max-items"], ["--max-items=abc"], ["--max-items", "0"], ["--max-items=-5", "--set-baseline"]].map(liveEv);
+    const maxOk3 = runEv(["Análise Avançada", "--dry-run", "--max-items", "1", "--project", evp]);
+    fs.writeFileSync(path.join(evDir, "golden.json"), JSON.stringify({ items: [] }));
+    fs.writeFileSync(path.join(evDir, "adversarial.json"), JSON.stringify({ set: "adversarial" }));
+    const emptyDry3 = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    const emptyLive3 = liveEv(["--set-baseline"]);
+    ok(maxBad3.every((r) => r.status === 2 && /Argumento\(s\) inválido\(s\): --max-items tem de ser um inteiro ≥ 1/.test(r.stderr) && !/100\.0%/.test(r.stdout)) && !fs.existsSync(markEv) &&
+      !fs.existsSync(path.join(evDir, "baseline.json")) && maxOk3.status === 0 &&
+      emptyDry3.status === 1 && /✗ golden\.json — sem itens para avaliar/.test(emptyDry3.stdout) && /✗ adversarial\.json — sem itens para avaliar/.test(emptyDry3.stdout) &&
+      emptyLive3.status === 1 && /nenhum modelo foi chamado/.test(emptyLive3.stdout) && !/100\.0%|todos os conjuntos passam/.test(emptyLive3.stdout) && !fs.existsSync(path.join(evDir, "baseline.json")),
+      "run-evals: a bare / non-numeric / zero / negative --max-items is a usage error (exit 2, localized) before any model call — no 0/0 = 100%, no baseline; an empty set is invalid dry and live (got " +
+      JSON.stringify(maxBad3.map((r) => [r.status, r.stderr.trim().slice(0, 60)]).concat([[emptyDry3.status], [emptyLive3.status]])) + ")");
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
@@ -2130,6 +2146,37 @@ function endRun() {
       /A tarefa 3 ainda não pode ser concluída/.test(pt3) && /faz primeiro a tarefa 2/.test(pt3) && /^A tarefa 2 está marcada, mas bug\.md → Causa Raiz continua vazia/.test(pt2.note) &&
       /a tarefa 2 está marcada, mas o que ela entrega é essa secção/.test(S.completeTask(w5pt, f5pt.slug, 3).error),
       "no task mentions the Root Cause → only the first task can be completed; the refusal (and the ticked-root-cause-task note / refusal) is localized (PT)");
+
+    // Quoted evidence in bug.md is content, not a template slot: a Reproduction / Root Cause quoting `[object Object]`, a regex
+    // class `[A-Z]` or a log tag `[WARN]` is documented (doctor, the requirements / design approvals, the root-cause gate,
+    // finish, the placeholders check) — 1.13 reported it "not filled" in every language. The bug report's own slots, and a
+    // section holding nothing but brackets, still count as unfilled.
+    const f5e = S.createFeature(w5, "Profile shows object", undefined, "the header shows object text", undefined, "en", "bugfix");
+    const bugE5 = path.join(f5e.dir, "bug.md");
+    const bugE5Text = fs.readFileSync(bugE5, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\n1. Log in.\n2. Open /profile: the header reads [object Object].")
+      .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so it prints [object Object]; norm() only maps [A-Z]. Log: [WARN] name missing.")
+      .replace("[correct behavior]", "the user's name").replace("[what happens — error message, output, log lines]", "the text [object Object]")
+      .replace("[What changes and why it removes the root cause — one fix, not a bundle.]", "Interpolate user.name, not the user object.");
+    fs.writeFileSync(bugE5, bugE5Text);
+    const docE5 = S.specDoctor(w5, f5e.slug);
+    const stE5 = (id) => (docE5.checks.find((c) => c.id === id) || {}).status;
+    const phE5 = docE5.checks.find((c) => c.id === "placeholders") || { detail: "" };
+    const apE5 = S.approvePhase(w5, f5e.slug, "design");
+    S.completeTask(w5, f5e.slug, 1); S.completeTask(w5, f5e.slug, 2);
+    const c3E5 = S.completeTask(w5, f5e.slug, 3);
+    const finE5 = S.finishFeature(w5, f5e.slug);
+    fs.writeFileSync(bugE5, bugE5Text.replace(/## Root Cause\n[^\n]*/, "## Root Cause\n[the cause, with evidence]"));
+    const onlyE5 = (S.specDoctor(w5, f5e.slug).checks.find((c) => c.id === "root-cause") || {}).status;
+    fs.writeFileSync(bugE5, bugE5Text.replace("the user's name", "[correct behavior]"));
+    const slotE5 = S.featurePlaceholders(w5, f5e.slug, "bug.md").items.map((p) => p.text).join();
+    const f5ept = S.createFeature(w5pt, "Falha acentos", undefined, "x", undefined, "pt", "bugfix");
+    const bugP5 = path.join(f5ept.dir, "bug.md");
+    fs.writeFileSync(bugP5, fs.readFileSync(bugP5, "utf8").replace(/## Causa Raiz\n> \*\*TODO\*\*[^\n]*/, "## Causa Raiz\nnorm() só converte [A-Z] para minúsculas, por isso 'É' não bate certo (auth.js:40)."));
+    const ptE5 = (S.specDoctor(w5pt, f5ept.slug).checks.find((c) => c.id === "root-cause") || {}).status;
+    ok(stE5("reproduction") === "pass" && stE5("root-cause") === "pass" && !/bug\.md/.test(phE5.detail) && apE5.ok && c3E5.ok && !c3E5.gated &&
+      !finE5.blockers.some((b) => /Root Cause/.test(b)) && !finE5.placeholders.includes("bug.md") && onlyE5 === "fail" && slotE5 === "[correct behavior]" && ptE5 === "pass",
+      "bugfix: a Reproduction / Root Cause quoting [object Object], [A-Z], [WARN] is documented (doctor, approve design, the root-cause gate, finish, placeholders; PT too); a bracket-only section and the report's own slots still count as unfilled (got " +
+      JSON.stringify([stE5("reproduction"), stE5("root-cause"), phE5.detail.slice(0, 80), apE5.ok, c3E5.ok, finE5.blockers.slice(0, 2), onlyE5, slotE5, ptE5]) + ")");
 
     // (6) next_action: the chain's order — fill → re-review → current checks → approve → implement → finish
     const f6 = S.createFeature(w5, "Order", ["saas"]);
@@ -4067,6 +4114,42 @@ function endRun() {
     ok(ap10d.ok && drRe.ok && drRe.verdict === "clean" && drRe.reopened.join() === "login-loop" && drRe.drifted.length === 0 && drRe.features.length === 0 &&
       !/⚠/.test(hook10(w10d)) && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "active",
       "a finished feature reworked after finish is `reopened`: not hashed, no drift, no SessionStart line — the catalog calls it active too");
+    // ...and once that work is done again, the OLD baseline no longer speaks for it: the tasks were re-approved after the
+    // finish and a new task implements src/audit.js, which the baseline never recorded. next_action asks to finish AGAIN (it
+    // said "finished — nothing left to do"), drift lists it as `stale` (it said "unchanged", never hashing audit.js), the
+    // catalog calls it complete; after the re-finish the execution sign-off (older than the change) is asked for again.
+    S.appendTasks(w10d, "login-loop", [{ text: "Audit log of logins", requirements: ["US-1.AC-1"], implements: ["src/audit.js"] }]);
+    fs.writeFileSync(path.join(w10d, "src", "audit.js"), "audit\n");
+    const apT10 = S.approvePhase(w10d, "login-loop", "tasks");
+    [5, 6].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    const naS10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
+    const drS10 = S.drift(w10d, "login-loop");
+    const catS10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
+    ok(apT10.ok && naS10.step === "finish" && naS10.staleBaseline && naS10.staleBaseline.newFiles.join() === "src/audit.js" &&
+      naS10.staleBaseline.since.some((x) => x.kind === "approval" && x.phase === "tasks") && !/Nothing left to do/.test(naS10.recommendation) &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and its tasks are done again — finish it again: \/spec-finish login-loop/.test(naS10.recommendation) &&
+      JSON.stringify(naS10) === JSON.stringify(S.nextAction(w10d, "login-loop")) &&
+      drS10.verdict === "stale" && drS10.features.length === 0 && drS10.stale.map((x) => x.feature).join() === "login-loop" && drS10.stale[0].newFiles.join() === "src/audit.js" &&
+      catS10.status === "complete" && catS10.finishedAt === undefined,
+      "a finished feature changed since (tasks re-approved, a new _Implements:_ file) and done again: next_action → finish again (staleBaseline {since, newFiles}; MCP = engine), drift → `stale`, the catalog → complete (got " +
+      JSON.stringify([naS10.step, naS10.staleBaseline, drS10.verdict, catS10.status]) + ")");
+    const reFin10 = S.finishFeature(w10d, "login-loop", { write: true });
+    const naR10 = S.nextAction(w10d, "login-loop");
+    const apR10 = S.approvePhase(w10d, "login-loop", "execution");
+    const naR10b = S.nextAction(w10d, "login-loop");
+    ok(reFin10.readyToFinish && Object.keys(bfState().finished.files).includes("src/audit.js") && naR10.step === "finished" && /Sign it off: \/approve login-loop execution\.$/.test(naR10.recommendation) &&
+      apR10.ok && naR10b.step === "finished" && /Nothing left to do here/.test(naR10b.recommendation) && S.drift(w10d, "login-loop").verdict === "clean" &&
+      S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
+      "after the re-finish the baseline records src/audit.js; the execution sign-off older than the change is asked for again, then nothing is left; drift clean, catalog finished");
+    const stC10 = bfState();
+    fs.writeFileSync(path.join(bf10.dir, ".state.json"), JSON.stringify({ ...stC10, changes: [...(stC10.changes || []), { at: new Date(Date.now() + 1000).toISOString(), phase: "requirements", reopened: [] }] }, null, 2));
+    const naC10 = S.nextAction(w10d, "login-loop");
+    fs.writeFileSync(path.join(bf10.dir, ".state.json"), JSON.stringify(stC10, null, 2));
+    ok(naC10.step === "finish" && naC10.staleBaseline.since.map((x) => x.kind + (x.n || "")).join() === "change-request" + (1 + (stC10.changes || []).length) &&
+      naC10.staleBaseline.newFiles.length === 0 && /changed since \(change request #\d+\)/.test(naC10.recommendation) &&
+      /mudou desde então \(x\)/.test(S.msg("pt").next.refinish("f", "2026-01-01", "x")) && /cambió desde entonces \(x\)/.test(S.msg("es").next.refinish("f", "2026-01-01", "x")) &&
+      /pedido de alteração/.test(S.msg("pt").drift.staleWhy.changeRequests("#1")) && /solicitud de cambio/.test(S.msg("es").drift.staleWhy.changeRequests("#1")),
+      "a change request recorded after the finish makes the baseline stale too (next_action names it); the re-finish messages exist in PT and ES");
 
     // PT / ES chrome.
     const w10pt = path.join(tmp, "proj-wp10-pt");
@@ -4738,6 +4821,26 @@ function endRun() {
       /o plano de testes cobre ACs desconhecidos/.test(S.traceGapLines(ph12, "pt").join()) && /el plan de pruebas cubre ACs desconocidos/.test(S.traceGapLines(ph12, "es").join()),
       "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: the test-plan approval is refused, doctor fails once the test plan is the current phase and defers it while it is a later template; a fenced example is none; EN/PT/ES) (got " + phDoc12.detail + " | " + gTr12.status + ": " + gTr12.detail + ")");
 
+    // A fenced example row in test-plan.md is no planned test either way: it neither covers its AC (a false traceability
+    // pass — and a passed test-plan gate — for an AC with no real row) nor adds a planned T-ID the Phase 4 gate demands in
+    // the test code (MCP trace_check says the same).
+    const fp12 = S.createFeature(e12, "Shop H", ["tdd"]);
+    fs.writeFileSync(path.join(fp12.dir, "requirements.md"), "# Feature: Shop H\n\n## Summary\nLogin.\n\n### US-1 (P1 — MVP): Login\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a user logs in THE SYSTEM SHALL open the dashboard.\n2. **US-1.AC-2** — WHEN a user logs out THE SYSTEM SHALL end the session.\n\n## Success Criteria\n- **SC-001** — 99% within 1 s.\n");
+    fs.writeFileSync(path.join(fp12.dir, "test-plan.md"), "# Test Plan: Shop H\n\n| ID | AC | File |\n|---|---|---|\n| T-01 | US-1.AC-1 | tests/login.test.js |\n\n" +
+      "An example row, for reference:\n\n```md\n| T-02 | US-1.AC-2 | tests/logout.test.js |\n```\n");
+    fs.writeFileSync(path.join(fp12.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n");
+    put12(e12, "tests/login.test.js", "test('T-01 opens the dashboard', () => {});\n");
+    const fTr12 = S.traceCheck(e12, fp12.slug, { code: true });
+    const fMcp12 = (await call12("trace_check", { name: fp12.slug, projectDir: e12 })).p;
+    const fTests12 = S.approvePhase(e12, fp12.slug, "tests");
+    const fPlan12 = S.approvePhase(e12, fp12.slug, "test-plan");
+    ok(fTr12.verdict === "gaps-found" && fTr12.uncoveredByTests.join() === "US-1.AC-2" && fTr12.plannedTests === 1 && !fTr12.testsNotMappedToTasks.length &&
+      fTr12.code.planned === 1 && !fTr12.code.plannedNotInCode.length && fMcp12.uncoveredByTests.join() === "US-1.AC-2" && fMcp12.plannedTests === 1 &&
+      fPlan12.ok === false && fPlan12.failing.includes("traceability") && /US-1\.AC-2/.test(fPlan12.error) && fTests12.ok === true,
+      "trace_check / gates: a ```fenced example``` row in test-plan.md covers nothing (US-1.AC-2 uncovered, the test-plan approval refused) and plans no T-ID (plannedTests 1, the tests gate asks only for T-01) — MCP trace_check agrees (got " +
+      JSON.stringify([fTr12.verdict, fTr12.uncoveredByTests, fTr12.plannedTests, fTr12.code.plannedNotInCode, fPlan12.ok, fTests12.ok, fTests12.error]) + ")");
+
     // An `_Implements:_` glob whose bounded walk stops at its cap before any match proves nothing: never a missing-file gap
     // (a warning, unresolvedImplGlobs); a glob whose walk ended without a match is still missing; the finish baseline says
     // its glob list was truncated.
@@ -5063,6 +5166,66 @@ function endRun() {
     ok(l14.every(([n, b]) => typeof n === "string" && n.includes("\\\\h\\s") && typeof b === "string" && b.includes(".specs/f/.lock")) &&
       /pasta local/.test(l14[1][0]) && /carpeta local/.test(l14[2][0]) && /Outro processo dev-spec/.test(l14[1][1]) && /Otro proceso de dev-spec/.test(l14[2][1]),
       "the network-projectDir refusal and the busy-lock error exist in EN, PT and ES");
+
+    // Every op that read-modify-writes a feature or moves its folder takes that lock: spec_create re-run on an existing
+    // feature (applyTracks — it used to write state.tracks / tasks.md unlocked and lose a concurrent tick's evidence, or be
+    // lost to it), rename / archive / remove (they moved the folder away mid-write: a zombie .specs/<old>/ and progress split
+    // between two folders) and restore (its archived folder's lock). And roadmap.json's read-modify-writes take
+    // .specs/.roadmap.lock. A live holder → busy (localized), nothing changed.
+    const m14 = path.join(tmp, "proj-wp14-movelock");
+    S.initProject(m14, ["core"], "en");
+    const mf14 = S.createFeature(m14, "Alpha", ["core"]);
+    S.createFeature(m14, "Parked", ["core"]);
+    S.manageFeature(m14, "archive", "parked");
+    const mTasks14 = fs.readFileSync(path.join(mf14.dir, "tasks.md"), "utf8");
+    const holdNote14 = JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() });
+    const mLock14 = path.join(mf14.dir, ".lock"), aLock14 = path.join(m14, ".specs", "_archive", "parked", ".lock"), rLock14 = path.join(m14, ".specs", ".roadmap.lock");
+    [mLock14, aLock14, rLock14].forEach((l) => fs.writeFileSync(l, holdNote14));
+    const moveKid14 = spawnSync(process.execPath, ["-e", `const S=require(${JSON.stringify(specJs)});const p=${JSON.stringify(m14)};const pick=(r)=>({ok:r.ok,busy:r.busy,error:r.error});` +
+      `process.stdout.write(JSON.stringify([S.createFeature(p,"Alpha",["saas"]),S.manageFeature(p,"rename","alpha","beta"),S.manageFeature(p,"archive","alpha"),` +
+      `S.manageFeature(p,"remove","alpha",null,{confirm:true}),S.manageFeature(p,"restore","parked"),S.backlog(p,"add","Later"),S.setDependency(p,"alpha",["parked"]),S.initProject(p,["core"],"pt")].map(pick)))`],
+      { encoding: "utf8", env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: "60" } });
+    let mv14 = [];
+    try { mv14 = JSON.parse(moveKid14.stdout); } catch { /* stays [] */ }
+    const mSt14 = JSON.parse(fs.readFileSync(path.join(mf14.dir, ".state.json"), "utf8"));
+    const mUntouched14 = fs.readFileSync(path.join(mf14.dir, "tasks.md"), "utf8") === mTasks14 && mSt14.tracks.join() === "core" && !fs.existsSync(path.join(mf14.dir, "load-test.md")) &&
+      !fs.existsSync(path.join(m14, ".specs", "beta")) && fs.existsSync(path.join(m14, ".specs", "_archive", "parked")) && (S.readRoadmap(m14).backlog || []).length === 0 &&
+      S.projectLang(m14) === "en";
+    const featBusy14 = (r, slug, rel) => r && r.ok === false && r.busy === true && (r.error || "").includes(`Another dev-spec process is updating '${slug}' right now (${rel})`);
+    const rmBusy14 = (r) => r && r.ok === false && r.busy === true && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(r.error || "");
+    ok(mv14.length === 8 && mv14.slice(0, 4).every((r) => featBusy14(r, "alpha", ".specs/alpha/.lock")) && featBusy14(mv14[4], "parked", ".specs/_archive/parked/.lock") &&
+      mv14.slice(5).every(rmBusy14) && mUntouched14,
+      "a held feature lock makes create (existing feature) / rename / archive / remove wait, then answer busy; restore waits on its archived folder's lock; backlog / depend / init --lang wait on .specs/.roadmap.lock — nothing changed (got " +
+      JSON.stringify(mv14.map((r) => [r.ok, r.busy, (r.error || "").slice(0, 60)])) + ")");
+    [mLock14, aLock14, rLock14].forEach((l) => fs.rmSync(l, { force: true }));
+    const cr14 = S.createFeature(m14, "Alpha", ["saas"]);
+    const rn14 = S.manageFeature(m14, "rename", "alpha", "beta");
+    const bDir14 = path.join(m14, ".specs", "beta");
+    const ar14 = S.manageFeature(m14, "archive", "beta");
+    const rs14 = S.manageFeature(m14, "restore", "beta");
+    const leftLocks14 = [path.join(m14, ".specs", "alpha"), path.join(bDir14, ".lock"), path.join(m14, ".specs", "_archive", "beta", ".lock"), rLock14].filter((p) => fs.existsSync(p));
+    ok(cr14.ok && (cr14.addedTracks || []).join() === "saas" && JSON.parse(fs.readFileSync(path.join(bDir14, ".state.json"), "utf8")).tracks.join() === "core,saas" &&
+      rn14.ok && ar14.ok && rs14.ok && leftLocks14.length === 0 && tmpsIn(bDir14).length === 0 && S.manageFeature(m14, "remove", "beta", null, { confirm: true }).ok && !fs.existsSync(bDir14),
+      "once free: create adds the track, rename / archive / restore move the folder and release the lock at its NEW place (no .lock, no zombie folder left); remove deletes it (left: " + leftLocks14.join(", ") + ")");
+    // Two processes adding backlog items at once: every ok add is kept (last-writer-wins used to drop about a third).
+    const bl14r = path.join(tmp, "proj-wp14-roadmaprace");
+    S.initProject(bl14r, ["core"], "en");
+    const blRacer14 = (tag, startAt) => new Promise((resolve) => {
+      const code = `const S=require(${JSON.stringify(specJs)});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,Math.max(0,${startAt}-Date.now()));` +
+        `let n=0;for(let i=0;i<20;i++)if(S.backlog(${JSON.stringify(bl14r)},"add","${tag}-"+i).ok)n++;process.stdout.write(String(n));`;
+      let out = "";
+      const kid = spawn(process.execPath, ["-e", code], { stdio: ["ignore", "pipe", "inherit"] });
+      kid.stdout.on("data", (d) => (out += d));
+      kid.on("close", () => resolve(Number(out)));
+    });
+    const blStart14 = Date.now() + 600;
+    const [blA14, blB14] = await Promise.all([blRacer14("a", blStart14), blRacer14("b", blStart14)]);
+    const blN14 = (S.readRoadmap(bl14r).backlog || []).length;
+    ok(blA14 === 20 && blB14 === 20 && blN14 === 40 && !fs.existsSync(path.join(bl14r, ".specs", ".roadmap.lock")),
+      "two processes adding backlog items at once: all " + blN14 + "/40 kept (roadmap.json is read-modify-written under .specs/.roadmap.lock), no lock left");
+    const rb14 = ["en", "pt", "es"].map((l) => S.msg(l).err.roadmapBusy);
+    ok(rb14.every((m) => typeof m === "string" && m.includes(".specs/.roadmap.lock")) && /Outro processo/.test(rb14[1]) && /Otro proceso/.test(rb14[2]),
+      "the roadmap-busy error exists in EN, PT and ES");
   }
 
   async function sectionWp15() { // --- 1.13 batch 6: the docs' worked examples pass the engine's own gates; no stale test counts ---

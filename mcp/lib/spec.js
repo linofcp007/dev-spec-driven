@@ -104,7 +104,8 @@ function sleepSync(ms) {
 // Cross-process lock for a feature's read-modify-write. Two MCP servers (two editors on one repo) or an MCP server
 // and `dev-spec done` completing tasks of the same feature at the same moment each read tasks.md + .state.json,
 // changed their copy and wrote the whole file back — the last writer won, so a tick or an evidence record was
-// silently lost while both calls answered ok. The mutators of a feature (featureLocked) now hold
+// silently lost while both calls answered ok. The mutators of a feature (featureLocked — spec_create re-run on an existing
+// feature included — and the folder moves, withMoveLock) now hold
 // `.specs/<feature>/.lock` (created with O_EXCL) for the whole read → check → write, and waiters retry for up to
 // LOCK_WAIT_MS before answering a localized "busy" error. A lock left by a crashed process is reclaimed: its pid is
 // gone (same host), or it is older than LOCK_STALE_MS (LOCK_MAX_HOLD_MS while its holder still runs). Re-entrant in
@@ -137,7 +138,10 @@ function lockWaitMs() {
   return /^\d{1,7}$/.test(v) ? Number(v) : LOCK_WAIT_MS;
 }
 function withFeatureLock(dir, fn, opts = {}) {
-  const lock = path.join(dir, LOCK_FILE);
+  return withLockFile(path.join(dir, LOCK_FILE), fn, opts);
+}
+// The lock itself, on any lock file (a feature's .lock, the project's .specs/.roadmap.lock).
+function withLockFile(lock, fn, opts = {}) {
   const key = readCacheKey(lock);
   if (HELD_LOCKS.has(key)) return fn();
   const deadline = Date.now() + (Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs());
@@ -170,7 +174,9 @@ function withFeatureLock(dir, fn, opts = {}) {
   try { fs.closeSync(fd); } catch { /* ignore */ }
   HELD_LOCKS.add(key);
   try {
-    invalidateReadCache(); // anything read before the lock may predate another process's write
+    // Anything read before the lock may predate another process's write: the whole read cache (a feature's files), or
+    // only what opts.forget names (the roadmap lock: roadmap.json).
+    if (typeof opts.forget === "function") opts.forget(); else invalidateReadCache();
     return fn();
   } finally {
     HELD_LOCKS.delete(key);
@@ -178,17 +184,70 @@ function withFeatureLock(dir, fn, opts = {}) {
   }
 }
 // A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
-// write (impact --reopen, finish --write). An unknown feature runs straight through: fn reports it.
+// write (impact --reopen, finish --write). An unknown feature runs straight through: fn reports it (spec_create of a NEW
+// feature too — there is no folder to lock yet; re-run on an existing one, it adds tracks like spec_add_track, locked).
 function featureLocked(fn, when) {
   const run = function (projectDir, name) {
     const args = arguments;
     if (when && !when(args)) return fn.apply(this, args);
     const f = existingFeature(projectDir, name);
     if (!f.ok) return fn.apply(this, args);
-    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: () => ({ ok: false, busy: true, error: errs(projectDir, f.slug).featureBusy(f.slug) }) });
+    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: () => featureBusyResult(projectDir, f.slug) });
   };
   Object.defineProperty(run, "name", { value: fn.name });
   return run;
+}
+const featureBusyResult = (projectDir, slug, rel) => ({ ok: false, busy: true, error: errs(projectDir, slug).featureBusy(slug, rel) });
+// A feature folder that moves or goes (rename / archive / restore / remove) under the lock its mutators hold: it waits for
+// a running tick, approval or track change to finish (or answers busy) instead of moving the folder away mid-write — the
+// writer's next write (writeFileAtomic → ensureDir) recreated a zombie .specs/<old>/ beside the moved spec, and progress
+// and spec split between two folders. The lock file travels with the folder; `release(newDir)` drops it at the NEW place
+// once the whole operation is done (left there, it kept the renamed / archived feature "busy" for as long as its holder
+// ran). A folder is never moved while another process holds its lock.
+function withMoveLock(projectDir, dir, slug, rel, fn) {
+  return withFeatureLock(dir, () => {
+    let moved = null;
+    try {
+      // Held at its new place from the move on (re-entrant there too, like the old one).
+      return fn((to) => { moved = to; HELD_LOCKS.add(readCacheKey(path.join(to, LOCK_FILE))); });
+    } finally {
+      if (moved) {
+        HELD_LOCKS.delete(readCacheKey(path.join(moved, LOCK_FILE)));
+        releaseMovedLock(moved);
+      }
+    }
+  }, { onBusy: () => featureBusyResult(projectDir, slug, rel) });
+}
+// The lock this process carried into `dir` by moving its folder: removed — only when it is this process's own.
+function releaseMovedLock(dir) {
+  const lock = path.join(dir, LOCK_FILE);
+  let info = null;
+  try { info = JSON.parse(fs.readFileSync(lock, "utf8")); } catch { return; }
+  if (isObj(info) && info.pid === process.pid && info.host === require("os").hostname()) try { fs.unlinkSync(lock); } catch { /* ignore */ }
+}
+// fs.renameSync of a folder, retried briefly on Windows: a scanner, an indexer or a lock waiter reading a file inside
+// answers EPERM / EACCES / EBUSY for a moment (writeFileAtomic's rule).
+function renameDirSync(from, to) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fs.renameSync(from, to);
+    } catch (e) {
+      if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) throw e;
+      sleepSync(RENAME_RETRY_MS[attempt]);
+    }
+  }
+}
+
+// roadmap.json's read-modify-writes — depend, backlog, the backlog / dependency prunes of create / restore / archive /
+// rename / remove, init's lang and guard, roadmap --lang — under ONE project lock, .specs/.roadmap.lock (the feature
+// lock's O_EXCL file, wait, stale-reclaim and busy answer). Each process read roadmap.json, changed its copy and wrote it
+// back: the last writer won, silently dropping the other's dependency (a blocked feature then read as ready), backlog item
+// or meta.guard while both answered ok. Lock order: a feature lock first, then this one — never the other way round.
+const ROADMAP_LOCK_FILE = ".roadmap.lock";
+const roadmapBusyResult = (projectDir) => ({ ok: false, busy: true, error: i18n.msg(projectLang(projectDir)).err.roadmapBusy });
+function withRoadmapLock(projectDir, fn, onBusy) {
+  return withLockFile(path.join(specsRoot(projectDir), ROADMAP_LOCK_FILE), fn,
+    { onBusy: onBusy || (() => roadmapBusyResult(projectDir)), forget: () => forgetCached(roadmapPath(projectDir)) });
 }
 
 // JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
@@ -333,6 +392,13 @@ function stripFencedCode(s) {
 // references (another feature's ACs) left out.
 function requirementAcIds(reqText) {
   return extractAcIds(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))));
+}
+// test-plan.md as every reader of its IDs sees it — trace_check's coverage and planned T-IDs, its test-code scan, the
+// Phase 4 gate, doctor, finish, the brief and impact: outside HTML comments AND fenced code. A fenced example row
+// (`| T-02 | US-1.AC-2 | … |` in a ```md block) is no planned test: it counted as coverage (a false traceability pass for an
+// AC with no real row) and as a planned T-ID the tests gate then demanded in the test code.
+function planIdText(planText) {
+  return stripFencedCode(stripHtmlComments(planText));
 }
 
 // Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments).
@@ -821,17 +887,22 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const root = specsRoot(projectDir);
   const steering = path.join(root, "steering");
-  // Both writes go to roadmap.json: refuse on a broken one before creating anything.
+  // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
+  // creating anything.
   const setsGuard = typeof opts.guard === "boolean";
   if (lang || setsGuard) {
-    const bad = roadmapError(projectDir);
-    if (bad) return { ok: false, error: bad };
+    const meta = withRoadmapLock(projectDir, () => {
+      const bad = roadmapError(projectDir);
+      if (bad) return { ok: false, error: bad };
+      // Seed/refresh the project language (single source of truth) if one was requested.
+      if (lang) setRoadmapLang(projectDir, lang);
+      // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
+      if (setsGuard) setGuard(projectDir, opts.guard);
+      return { ok: true };
+    });
+    if (!meta.ok) return meta;
   }
   ensureDir(steering);
-  // Seed/refresh the project language (single source of truth) if one was requested.
-  if (lang) setRoadmapLang(projectDir, lang);
-  // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
-  if (setsGuard) setGuard(projectDir, opts.guard);
   const lng = projectLang(projectDir);
   const wanted = steeringFilesForTracks(pt.tracks);
   const created = [];
@@ -1199,11 +1270,14 @@ function designSaveCheck(projectDir, name) {
 
 // roadmap.json meta.guard ← on (spec_init {guard} / `dev-spec init --guard on|off`). No write when unchanged.
 function setGuard(projectDir, on) {
-  const rm = readRoadmap(projectDir);
-  if (isObj(rm.meta) && rm.meta.guard === on) return;
-  rm.meta = isObj(rm.meta) ? rm.meta : {};
-  rm.meta.guard = on;
-  writeRoadmap(projectDir, rm);
+  return withRoadmapLock(projectDir, () => {
+    const rm = readRoadmap(projectDir);
+    if (isObj(rm.meta) && rm.meta.guard === on) return { ok: true };
+    rm.meta = isObj(rm.meta) ? rm.meta : {};
+    rm.meta.guard = on;
+    writeRoadmap(projectDir, rm);
+    return { ok: true };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1403,14 +1477,19 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
 // slug). Best-effort — an unreadable roadmap.json is left alone (the mutators report it).
 function pruneBacklog(projectDir, slug) {
   try {
-    if (roadmapError(projectDir)) return [];
-    const rm = readRoadmap(projectDir);
-    const before = Array.isArray(rm.backlog) ? rm.backlog : [];
-    const gone = before.filter((b) => b && slugify(b.name) === slug);
-    if (!gone.length) return [];
-    rm.backlog = before.filter((b) => !gone.includes(b));
-    writeRoadmap(projectDir, rm);
-    return gone.map((b) => b.name);
+    // Most creates fulfil no backlog entry: a look first, the lock only for a real prune (re-read under it).
+    const listed = readRoadmap(projectDir).backlog;
+    if (!Array.isArray(listed) || !listed.some((b) => isObj(b) && slugify(b.name) === slug)) return [];
+    return withRoadmapLock(projectDir, () => {
+      if (roadmapError(projectDir)) return [];
+      const rm = readRoadmap(projectDir);
+      const before = Array.isArray(rm.backlog) ? rm.backlog : [];
+      const gone = before.filter((b) => b && slugify(b.name) === slug);
+      if (!gone.length) return [];
+      rm.backlog = before.filter((b) => !gone.includes(b));
+      writeRoadmap(projectDir, rm);
+      return gone.map((b) => b.name);
+    }, () => []); // roadmap busy: the entry stays (best-effort, like an unreadable roadmap.json)
   } catch {
     return [];
   }
@@ -1680,7 +1759,7 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 // "Corrigir a causa raiz") would otherwise open the gate for itself once step 2 is reworded. Without such a task only
 // the first task can be completed. → null (allowed) or { gated: 'root-cause', error } (localized).
 function bugfixGate(dir, kind, blocks, task, lng) {
-  if (kind !== "bugfix" || !task || sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
+  if (kind !== "bugfix" || !task || bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
   const pos = blockPosition(blocks, task);
   const rc = rootCauseTaskIndex(blocks);
   if (pos <= Math.max(rc, 0)) return null;
@@ -1793,7 +1872,7 @@ function completeTask(projectDir, name, number, evidence) {
   // Bugfix: the root-cause task ticked while bug.md → Root Cause is still empty — allowed (it is the task that writes it),
   // but its deliverable is that section: say so now, not only when the next task is refused. rootCausePending: stable.
   if (state.kind === "bugfix" && blockPosition(blocks, task) === rootCauseTaskIndex(blocks) &&
-      !sectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
+      !bugSectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
     res.rootCausePending = true;
     res.note = [i18n.msg(lng).gates.rootCauseTaskEmpty(n), res.note].filter(Boolean).join(" ");
   }
@@ -2088,7 +2167,7 @@ function traceCheck(projectDir, name, opts = {}) {
   // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace). An ID
   // that only appears in a fenced code block (an example) is not a required AC either (requirementAcIds).
   const tasks = tasksProseText(rawTasks); // comments out, fenced examples blanked (the task scanner's view)
-  const testPlan = stripHtmlComments(rawPlan);
+  const testPlan = planIdText(rawPlan); // comments out, fenced examples blanked — like the tasks
   const tracks = detectTracks(dir);
 
   const requiredAcs = requirementAcIds(rawReqs);
@@ -2161,8 +2240,8 @@ function traceCheck(projectDir, name, opts = {}) {
   if (tracks.includes("tdd")) {
     const uncoveredByTests = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
     // Reverse: AC IDs the test plan covers that requirements.md doesn't define (a typo, a removed criterion, a template
-    // row for a track the requirements never got) — a fenced example is no reference, as for tasks.
-    const phantomAcsInTests = [...extractAcIds(stripFencedCode(testPlan))].filter((id) => !requiredAcs.has(id));
+    // row for a track the requirements never got) — a fenced example is no reference (planIdText), as for tasks.
+    const phantomAcsInTests = [...extractAcIds(testPlan)].filter((id) => !requiredAcs.has(id));
     const planTestIds = extractTestIds(testPlan);
     const tasksTestIds = extractTestIds(tasks);
     const testsNotInTasks = [...planTestIds].filter((id) => !tasksTestIds.has(id));
@@ -2328,7 +2407,7 @@ function testPlanEntries(planText) {
   let inTable = false;
   let item = null; // the list entry being continued: { indent, blank, entry }
   const tidLead = (line) => RE_LIST_ITEM.test(line) && line.replace(RE_LIST_ITEM, "").replace(/^[\s*`_]+/, "").match(/^T-\d+(?!\d)/);
-  for (const line of stripHtmlComments(planText || "").split(/\r?\n/)) {
+  for (const line of planIdText(planText || "").split(/\r?\n/)) {
     if (item) {
       const indent = line.match(/^\s*/)[0].length;
       if (!line.trim()) { item.blank = true; continue; }
@@ -2425,7 +2504,7 @@ function allPlannedTestKeys(projectDir) {
   const keys = new Set();
   for (const d of specFeatureDirs(projectDir)) {
     const plan = readIfExists(path.join(d, "test-plan.md"));
-    if (plan != null) for (const id of extractTestIds(stripHtmlComments(plan))) keys.add(tKey(id.slice(2)));
+    if (plan != null) for (const id of extractTestIds(planIdText(plan))) keys.add(tKey(id.slice(2)));
   }
   return keys;
 }
@@ -3084,7 +3163,7 @@ function testIndex(planText) {
   let header = null;
   let sep = null;
   let inTable = false;
-  for (const line of stripHtmlComments(planText || "").split(/\r?\n/)) {
+  for (const line of planIdText(planText || "").split(/\r?\n/)) {
     if (/^\s*\|/.test(line)) {
       if (!inTable) { inTable = true; header = line.trim(); sep = null; continue; }
       if (!sep && /^\s*\|[\s:|-]+$/.test(line.trim())) { sep = line.trim(); continue; }
@@ -3160,7 +3239,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const gate = bugfixGate(dir, kind, blocks, block, lng);
   if (kind === "bugfix") {
     const bugText = readIfExists(path.join(dir, "bug.md")) || "";
-    const sec = (syn) => (sectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
+    const sec = (syn) => (bugSectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
     bug = { reproduction: sec(REPRO_SYN), rootCause: sec(ROOT_CAUSE_SYN) };
   }
 
@@ -3337,7 +3416,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const kind = state.kind || "feature";
   // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
   // One walk of the test code (only when an active +tdd plan has T-IDs), shared with doctor's tests-in-code check.
-  const scan = tracks.includes("tdd") && extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
+  const scan = tracks.includes("tdd") && extractTestIds(planIdText(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
   const tr = traceCheck(projectDir, slug, { ...(scan ? { code: true, scan } : {}), globCap: opts.globCap });
   const warnings = tr.ok ? traceWarningLines(tr, lng, [...TRACE_SECONDARY_KINDS, "plannedNotInCode"]) : [];
   const doc = specDoctor(projectDir, slug, { scan });
@@ -3358,7 +3437,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
   if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
-  const rootCauseMissing = kind === "bugfix" && !sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
+  const rootCauseMissing = kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
   // Each blocker with a stable id: the approve gate of 'execution' refuses on exactly these (opts.gateOnly).
   const blocked = [];
@@ -4172,6 +4251,9 @@ function metricsLines(r) {
 
 // Drop a feature slug from roadmap.json: its own entry and any dependsOn that referenced it.
 function pruneRoadmapRefs(projectDir, slug, renameTo) {
+  return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo), () => { throw new Error(roadmapBusyResult(projectDir).error); });
+}
+function pruneRoadmapRefsLocked(projectDir, slug, renameTo) {
   const rm = readRoadmap(projectDir);
   if (!rm || !rm.features) return;
   if (renameTo) {
@@ -4187,20 +4269,35 @@ function pruneRoadmapRefs(projectDir, slug, renameTo) {
   writeRoadmap(projectDir, rm);
 }
 
+// remove / archive / rename / restore: the folder's lock (withMoveLock), then the roadmap lock around the move and the
+// roadmap.json prune, the feature re-resolved under them (it may have moved meanwhile); the ROADMAP.md refresh after both.
 function removeFeature(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name)));
+  if (res.ok) maybeRefreshRoadmap(projectDir);
+  return res;
+}
+function removeFeatureLocked(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); // its .lock (ours) goes with it
   pruneRoadmapRefs(projectDir, slug);
-  maybeRefreshRoadmap(projectDir);
   return { ok: true, action: "remove", feature: slug };
 }
 
 function archiveFeature(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const res = withMoveLock(projectDir, f.dir, f.slug, null, (moved) => withRoadmapLock(projectDir, () => archiveFeatureLocked(projectDir, name, moved)));
+  if (res.ok) maybeRefreshRoadmap(projectDir);
+  return res;
+}
+function archiveFeatureLocked(projectDir, name, moved) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir, root } = f;
@@ -4223,10 +4320,10 @@ function archiveFeature(projectDir, name) {
   const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length);
   const R = i18n.msg(featureLang(projectDir, slug)).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  fs.renameSync(dir, dest);
+  renameDirSync(dir, dest);
+  moved(dest); // the lock went with the folder: released there once the archive is done
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
-  maybeRefreshRoadmap(projectDir);
   const res = { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug), dependentsPruned: record.dependents.map((d) => d.feature) };
   if (res.dependentsPruned.length) {
     const list = res.dependentsPruned.join(", ");
@@ -4238,6 +4335,13 @@ function archiveFeature(projectDir, name) {
 
 function renameFeature(projectDir, name, newName) {
   if (newName == null || !String(newName).trim()) return { ok: false, error: errs(projectDir).renameNeedsName };
+  const from = existingFeature(projectDir, name);
+  if (!from.ok) return { ok: false, error: from.error };
+  const res = withMoveLock(projectDir, from.dir, from.slug, null, (moved) => withRoadmapLock(projectDir, () => renameFeatureLocked(projectDir, name, newName, moved)));
+  if (res.ok) maybeRefreshRoadmap(projectDir);
+  return res;
+}
+function renameFeatureLocked(projectDir, name, newName, moved) {
   const from = existingFeature(projectDir, name);
   if (!from.ok) return { ok: false, error: from.error };
   const to = resolveFeature(projectDir, newName);
@@ -4254,11 +4358,11 @@ function renameFeature(projectDir, name, newName) {
   const plan = renamePlan(projectDir, oldDir, oldSlug, newSlug);
   if (plan.error) return { ok: false, error: plan.error };
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  fs.renameSync(oldDir, newDir);
+  renameDirSync(oldDir, newDir);
+  moved(newDir); // the lock went with the folder: released there once the rename is done
   pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
-  maybeRefreshRoadmap(projectDir);
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));
@@ -4442,8 +4546,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, TRACK_MARKER[tr]);
       if (!present) {
-        forgetCached(designPath); // written in place below: its cached text is dropped
-        fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
+        writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng)); // trimEnd: no /\s*$/ backtracking
         note(T.addedDesign);
       }
     } else if (tr !== "tdd") {
@@ -4464,8 +4567,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (tasksText != null) {
       const block = trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng);
       if (block) {
-        forgetCached(tasksPath); // written in place below: its cached text is dropped
-        fs.writeFileSync(tasksPath, tasksText.trimEnd() + "\n" + block, "utf8");
+        writeFileAtomic(tasksPath, tasksText.trimEnd() + "\n" + block); // never a torn tasks.md for a concurrent reader
         note(T.addedTasks);
       }
     }
@@ -4942,6 +5044,7 @@ function nextAction(projectDir, name) {
   let gateFix = false;
   let impactPhases = [];
   let finishedDrift = null;
+  let staleBaseline = null;
   if (open) {
     step = "fill";
     const first = open.items.length ? open.items[0].text : "";
@@ -4970,16 +5073,24 @@ function nextAction(projectDir, name) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
   } else {
-    const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
+    const activeText = activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks);
+    const tasks = parseTasks(activeText);
     const next = tasks.find((t) => !t.done);
     step = next ? "implement" : tasks.length ? "finish" : "tasks";
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
       : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
-    if (step === "finish" && isObj(st.finished) && isObj(st.finished.files)) {
+    const stale = step === "finish" ? staleFinish(projectDir, st, activeText || "") : null;
+    if (stale) {
+      // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
+      // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
+      // "finish"; staleBaseline says why.
+      staleBaseline = stale;
+      recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, featureLang(projectDir, slug)));
+    } else if (step === "finish" && isObj(st.finished) && isObj(st.finished.files)) {
       // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again — a re-finish would
       // silently replace a drifted baseline. Drift since then → decide (change-management §7); else the sign-off, if
-      // the execution phase isn't approved yet, or nothing left to do.
+      // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
       const root = path.resolve(projectDir);
       const dr = baselineDrift(root, realRootOf(root), st.finished);
       const day = typeof st.finished.at === "string" ? st.finished.at.slice(0, 10) : "?";
@@ -4990,7 +5101,7 @@ function nextAction(projectDir, name) {
         recommendation = nx.drifted(slug, day, dr.changed.length + dr.missing.length + dr.nowPresent.length, total, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
       } else {
         step = "finished";
-        recommendation = nx.finished(slug, day, total, !approvals.execution);
+        recommendation = nx.finished(slug, day, total, !approvals.execution || executionSignOffStale(st));
       }
     }
   }
@@ -4998,6 +5109,7 @@ function nextAction(projectDir, name) {
   const res = { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
     gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
   if (finishedDrift) res.drift = finishedDrift; // stable: {finishedAt, files, changed, missing, nowPresent, drifted}
+  if (staleBaseline) res.staleBaseline = staleBaseline; // stable: {finishedAt, since: [{kind, n | phase, at}], newFiles}
   if (open) res.file = open.file;
   if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
@@ -5310,7 +5422,9 @@ function artifactReport(dir, file, tracks, preloaded) {
   const lines = raw.split(/\r?\n/);
   const drop = file === "tasks.md" ? inactiveTaskLines(raw, tracks)
     : file === "requirements.md" || file === "design.md" ? inactiveMarkerLines(raw, tracks) : new Set();
-  let items = placeholderReport(raw).filter((p) => !drop.has(p.line - 1)).map((p) => ({ line: p.line, text: p.text }));
+  let found = placeholderReport(raw).filter((p) => !drop.has(p.line - 1));
+  if (file === "bug.md") found = bugPlaceholders(raw, found); // quoted evidence ([object Object], [WARN]) is not a slot
+  let items = found.map((p) => ({ line: p.line, text: p.text }));
   if (file === "tasks.md") items = items.filter((p) => !(/^\[\s*manual\b/i.test(p.text) && RE_MANUAL_VERIFY.test(lines[p.line - 1])));
   const empty = headingsOnly(lines.filter((_, i) => !drop.has(i)).join("\n"));
   return { file, state: empty || items.length ? "placeholder" : "filled", items, empty };
@@ -5412,6 +5526,55 @@ function sectionFilled(md, syn) {
   const b = extractSection(md || "", syn);
   return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !placeholderReport(b).length;
 }
+// bug.md's Reproduction / Root Cause as the bugfix gates judge them (doctor, approve requirements / design, complete_task's
+// root-cause gate, finish, the brief): present, no `> **TODO**` sentinel, not empty, and no bug-report placeholder left
+// (bugPlaceholders — quoted evidence such as `[object Object]` or `[WARN]` is content, not a slot).
+function bugSectionFilled(md, syn) {
+  const b = extractSection(md || "", syn);
+  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !bugPlaceholders(b, placeholderReport(b)).length;
+}
+// bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
+// brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
+// `[Invalid Date]`. The generic rule (any bracketed prose is a slot) reported a written root cause as "not filled": the
+// design approval, the fix tasks and finish were refused with no word about the bracket. In bug.md a bracket is a
+// placeholder only when it IS one of the bug report's own slots (bugTemplateSlots, every language) or when its section
+// holds nothing but brackets (no prose written around them). The TODO sentinel always counts.
+// → the `items` (placeholderReport(text) entries) that still count.
+function bugPlaceholders(text, items) {
+  const lines = String(text || "").split(/\r?\n/);
+  const heads = headingIndex(lines);
+  const slots = bugTemplateSlots();
+  const unitCache = new Map();
+  // A heading line is judged on its own text; any other line on its section's body (up to the next heading).
+  const unitHasProse = (i) => {
+    const isHead = heads.includes(i);
+    const start = isHead ? i : heads.filter((h) => h < i).pop();
+    const key = isHead ? "h" + i : "s" + (start == null ? -1 : start);
+    if (!unitCache.has(key)) {
+      const from = start == null ? 0 : start + 1;
+      const end = heads.find((h) => h > (start == null ? -1 : start));
+      const body = isHead ? lines[i].replace(/^#{1,6}\s+/, "") : lines.slice(from, end == null ? lines.length : end).join("\n");
+      let t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
+      for (let prev = null; prev !== t;) { prev = t; t = t.replace(/\[[^[\]\n]*\]/g, " "); }
+      unitCache.set(key, /[\p{L}\p{N}]/u.test(t));
+    }
+    return unitCache.get(key);
+  };
+  return (items || []).filter((p) => p.kind !== "bracket" || slots.has(enumKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
+}
+const RE_TODO_SENTINEL_LINE = /^\s*>\s*\*\*TODO\*\*.*$/gm;
+// Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
+let BUG_SLOTS = null;
+function bugTemplateSlots() {
+  if (BUG_SLOTS) return BUG_SLOTS;
+  const set = new Set();
+  for (const l of i18n.LANGS) {
+    let t;
+    try { t = i18n.bugReport({ name: "x" }, l); } catch { continue; } // a builder's trouble never breaks the check
+    for (const m of String(t || "").matchAll(/\[([^[\]\n]*)\]/g)) set.add(enumKey(m[1]));
+  }
+  return (BUG_SLOTS = set);
+}
 const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
 
 // What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
@@ -5446,7 +5609,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       need("priorities", hasPriority(activeDesign(reqs, tracks)), m.prioritiesMissing);
       const dups = acDuplicates(reqs);
       need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
-      if (bugfix) need("reproduction", sectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
+      if (bugfix) need("reproduction", bugSectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
       break;
     }
     case "design": {
@@ -5454,7 +5617,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       if (bugfix) {
         // A bugfix has no design of its own: its Root Cause stands in for it.
         if (!exists("bug.md")) return nothing("bug.md");
-        need("root-cause", sectionFilled(read("bug.md"), ROOT_CAUSE_SYN), m.rootCauseMissing);
+        need("root-cause", bugSectionFilled(read("bug.md"), ROOT_CAUSE_SYN), m.rootCauseMissing);
       } else {
         if (design == null) return nothing("design.md");
         noPlaceholders("design.md");
@@ -5503,7 +5666,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       if (tdd) {
         // Every planned T-ID named by a test file (SKILL Phase 4: the T-ID in each failing test's name) — trace_check's
         // own code scan, so a row scoped to a test path counts only there.
-        const planned = extractTestIds(stripHtmlComments(read("test-plan.md") || "")).size;
+        const planned = extractTestIds(planIdText(read("test-plan.md") || "")).size;
         const tr = planned ? traceCheck(projectDir, slug, { code: true }) : null;
         const missing = tr && tr.ok && tr.code ? tr.code.plannedNotInCode : [];
         need("tests-in-code", planned > 0 && !missing.length, planned ? G.testsNotInCode(missing.join(", ")) : G.noPlannedTests);
@@ -5588,7 +5751,7 @@ function specDoctor(projectDir, name, opts = {}) {
   const kind = readState(projectDir, slug).kind || "feature";
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
-    const filled = (syn) => sectionFilled(bug, syn); // a [bracketed placeholder] left in the section is not filled either
+    const filled = (syn) => bugSectionFilled(bug, syn); // a bug-report slot left in the section is not filled either (quoted [evidence] is)
     add("reproduction", filled(REPRO_SYN) ? "pass" : "warn", filled(REPRO_SYN) ? m.reproOk : m.reproMissing);
     add("root-cause", filled(ROOT_CAUSE_SYN) ? "pass" : "fail", filled(ROOT_CAUSE_SYN) ? m.rootCauseOk : m.rootCauseMissing);
   }
@@ -5663,7 +5826,7 @@ function specDoctor(projectDir, name, opts = {}) {
     // gap already). Open tasks' tests may legitimately not exist yet.
     if (tr.code) {
       const key = (id) => tKey(id.slice(2)); // T-1 in a task names T-01 in the plan
-      const planKeys = new Set([...extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || ""))].map(key));
+      const planKeys = new Set([...extractTestIds(planIdText(readIfExists(path.join(dir, "test-plan.md")) || ""))].map(key));
       const notInCode = new Set(tr.code.plannedNotInCode.map(key));
       const outsideCode = new Set(tr.code.plannedOutsideCode.map(key)); // a load run / eval set: its own evidence, no test file
       const claimed = [...greenDone].filter((id) => planKeys.has(key(id)) && !outsideCode.has(key(id)));
@@ -5878,6 +6041,16 @@ function findCycle(depsMap) {
 // that order, after a replacement); order sets the position. Nothing requested = a read: the current deps
 // come back and roadmap.json is not touched (the CLI's bare `depend <f>` used to clear them).
 function setDependency(projectDir, name, dependsOn, order, edits) {
+  const e = edits || {};
+  const asked = (v) => v != null && !(Array.isArray(v) && !v.length) && String(v).trim() !== "";
+  // A change is one read-modify-write of roadmap.json under the roadmap lock; a bare read takes no lock.
+  if (dependsOn == null && order == null && !asked(e.add) && !asked(e.remove)) return dependencyUnlocked(projectDir, name, dependsOn, order, e);
+  const r = withRoadmapLock(projectDir, () => dependencyUnlocked(projectDir, name, dependsOn, order, e));
+  if (r.ok && r.changed) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
+  if (r.ok) delete r.changed;
+  return r;
+}
+function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   edits = edits || {};
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -5927,8 +6100,7 @@ function setDependency(projectDir, name, dependsOn, order, edits) {
   rm.features[slug].dependsOn = finalDeps;
   if (order != null) rm.features[slug].order = parseInt(String(order).trim(), 10);
   writeRoadmap(projectDir, rm);
-  maybeRefreshRoadmap(projectDir);
-  return { ok: true, feature: slug, dependsOn: finalDeps, order: rm.features[slug].order, unknownDeps: unknown };
+  return { ok: true, changed: true, feature: slug, dependsOn: finalDeps, order: rm.features[slug].order, unknownDeps: unknown };
 }
 
 function roadmap(projectDir) {
@@ -5961,19 +6133,28 @@ function roadmap(projectDir) {
 function addBacklog(projectDir, name, note) {
   const nm = String(name || "").trim();
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
+  const r = withRoadmapLock(projectDir, () => addBacklogUnlocked(projectDir, nm, note));
+  if (r.ok) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
+  return r;
+}
+function addBacklogUnlocked(projectDir, nm, note) {
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   const rm = readRoadmap(projectDir);
   rm.backlog = rm.backlog || [];
   if (!rm.backlog.some((b) => b.name.toLowerCase() === nm.toLowerCase())) rm.backlog.push({ name: nm, note: String(note || "").trim() });
   writeRoadmap(projectDir, rm);
-  maybeRefreshRoadmap(projectDir);
   return { ok: true, backlog: rm.backlog };
 }
 
 function removeBacklog(projectDir, name) {
   const nm = String(name || "").trim();
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
+  const r = withRoadmapLock(projectDir, () => removeBacklogUnlocked(projectDir, nm));
+  if (r.ok) maybeRefreshRoadmap(projectDir);
+  return r;
+}
+function removeBacklogUnlocked(projectDir, nm) {
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   const rm = readRoadmap(projectDir);
@@ -5984,7 +6165,6 @@ function removeBacklog(projectDir, name) {
   }
   rm.backlog = before.filter((b) => b.name.toLowerCase() !== nm.toLowerCase());
   writeRoadmap(projectDir, rm);
-  maybeRefreshRoadmap(projectDir);
   return { ok: true, backlog: rm.backlog };
 }
 
@@ -6297,10 +6477,13 @@ function roadmapChromeLang(projectDir) {
   return meta.roadmapLang || meta.lang || "en";
 }
 function setRoadmapLang(projectDir, lang, key) {
-  const rm = readRoadmap(projectDir);
-  rm.meta = rm.meta || {};
-  rm.meta[key || "lang"] = normalizeLang(lang);
-  writeRoadmap(projectDir, rm);
+  return withRoadmapLock(projectDir, () => {
+    const rm = readRoadmap(projectDir);
+    rm.meta = rm.meta || {};
+    rm.meta[key || "lang"] = normalizeLang(lang);
+    writeRoadmap(projectDir, rm);
+    return { ok: true };
+  });
 }
 
 // Generated roadmap files carry this marker (EN/PT/ES). A same-named file WITHOUT it was written by a
@@ -6327,9 +6510,11 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
   const file = path.join(root, name);
   if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated(name) };
   if (lang) {
-    const bad = roadmapError(projectDir); // persisting roadmapLang writes roadmap.json: refuse on a broken one
-    if (bad) return { ok: false, error: bad };
-    setRoadmapLang(projectDir, lang, "roadmapLang");
+    const saved = withRoadmapLock(projectDir, () => {
+      const bad = roadmapError(projectDir); // persisting roadmapLang writes roadmap.json: refuse on a broken one
+      return bad ? { ok: false, error: bad } : setRoadmapLang(projectDir, lang, "roadmapLang");
+    });
+    if (!saved.ok) return saved;
   }
   const d = data || roadmapData(projectDir);
   writeFileAtomic(file, render(projectDir, lang || roadmapChromeLang(projectDir), d));
@@ -6573,8 +6758,11 @@ function catalogData(projectDir) {
       if (mine.length) o.supersedes = mine;
       return o;
     });
-    const fin = isObj(s.state.finished) && typeof s.state.finished.at === "string" ? s.state.finished.at : null;
+    let fin = isObj(s.state.finished) && typeof s.state.finished.at === "string" ? s.state.finished.at : null;
     const arch = isObj(s.state.archived) && typeof s.state.archived.at === "string" ? s.state.archived.at : null;
+    // Finished = complete with a CURRENT finish baseline: one changed since (staleFinish, state only — this runs on every
+    // refresh) reads as complete until it is finished again.
+    if (fin && !s.archived && s.phase === "complete" && staleFinish(projectDir, s.state, "", { newFiles: false })) fin = null;
     const status = s.archived ? "archived" : s.phase === "complete" ? (fin ? "finished" : "complete") : "active";
     const f = { feature: s.slug, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
     if (fin) f.finishedAt = fin;
@@ -6662,14 +6850,28 @@ function reinsertDep(current, slug, original) {
   const at = prev != null ? current.indexOf(prev) + 1 : idx < 0 ? current.length : Math.min(idx, current.length);
   return [...current.slice(0, at), slug, ...current.slice(at)];
 }
-function restoreFeature(projectDir, name) {
+// The archived folder a name reaches (current or pre-1.11 slug) → { f, slug, from } or { error }.
+function archivedFeature(projectDir, name) {
   const f = resolveFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { error: f.error };
   const archRoot = path.join(f.root, "_archive");
-  const R0 = i18n.msg(projectLang(projectDir)).restore;
   const slug = [slugify(name), legacySlugify(name)].find((s) => s && isFeatureFolder(s, archRoot) && isDirSafe(path.join(archRoot, s)));
-  if (!slug) return { ok: false, error: R0.notArchived(f.slug) };
-  const from = path.join(archRoot, slug);
+  if (!slug) return { error: i18n.msg(projectLang(projectDir)).restore.notArchived(f.slug) };
+  return { f, slug, from: path.join(archRoot, slug) };
+}
+function restoreFeature(projectDir, name) {
+  const a = archivedFeature(projectDir, name);
+  if (a.error) return { ok: false, error: a.error };
+  const res = withMoveLock(projectDir, a.from, a.slug, ".specs/_archive/" + a.slug + "/" + LOCK_FILE,
+    (moved) => withRoadmapLock(projectDir, () => restoreFeatureLocked(projectDir, name, moved)));
+  if (res.ok) maybeRefreshRoadmap(projectDir);
+  return res;
+}
+function restoreFeatureLocked(projectDir, name, moved) {
+  const a = archivedFeature(projectDir, name); // again, under the locks: it may have been restored meanwhile
+  if (a.error) return { ok: false, error: a.error };
+  const { f, slug, from } = a;
+  const R0 = i18n.msg(projectLang(projectDir)).restore;
   const to = path.join(f.root, slug);
   if (fs.existsSync(to)) return { ok: false, error: R0.activeExists(slug) };
   const bad = roadmapError(projectDir);
@@ -6678,7 +6880,8 @@ function restoreFeature(projectDir, name) {
   if (st.invalid) return { ok: false, error: st.invalid };
   const R = i18n.msg(normalizeLang(st.lang || projectLang(projectDir))).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  fs.renameSync(from, to);
+  renameDirSync(from, to);
+  moved(to); // the lock went with the folder: released there once the restore is done
 
   const rec = isObj(st.archived) ? st.archived : null;
   const restored = { entry: false, dependsOn: [], dependents: [] };
@@ -6725,7 +6928,6 @@ function restoreFeature(projectDir, name) {
     writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
   }
   const fromBacklog = pruneBacklog(projectDir, slug); // the feature has a folder again, like createFeature
-  maybeRefreshRoadmap(projectDir);
   const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
   if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
   const skipLine = (s) => s.kind === "record" ? R.skipRecord(s.field, R.reason[s.reason] || s.reason)
@@ -6811,11 +7013,70 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   if (replaced) res.replaced = replaced; // the drift this finish accepted: {at, changed, missing, nowPresent}
   return res;
 }
+// A finish baseline (state.finished) describes the feature as it was when it was finished. Work added or reopened AFTER
+// it — a change request (spec_impact --reopen: state.changes[].at), a re-approval of any other phase (the tasks
+// re-approved after append_tasks …), or an active task's _Implements:_ file the baseline never recorded — means the
+// feature has to be finished AGAIN (spec_finish {write}: a fresh readiness report, merge summary and baseline) before
+// drift or next_action's "nothing left to do" can speak for it. Once its tasks were done again, next_action said
+// "finished — nothing left to do", drift kept hashing the old file list (a new implementing file was never checked) and
+// the catalog kept calling it finished. tasksText: the ACTIVE tasks (what a finish records). opts.newFiles === false skips
+// the _Implements:_ walk (state only): SessionStart's bounded drift check and the catalog, refreshed after every mutation.
+// → null (no baseline, or still current) | { finishedAt, since: [{ kind: "change-request", n, at } | { kind: "approval",
+// phase, at }], newFiles: [rel …] }
+function staleFinish(projectDir, st, tasksText, opts = {}) {
+  const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
+  if (!fin) return null;
+  const finAt = timeOf(fin.at);
+  const since = finAt == null ? [] : changesSince(st, finAt, "execution");
+  let newFiles = [];
+  if (!fin.truncated && opts.newFiles !== false) {
+    const now = baselineFiles(projectDir, tasksText || "");
+    if (!now.truncated) { // a capped walk proves nothing about what is new
+      const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+      const had = new Set(Object.keys(fin.files).map(fold));
+      newFiles = now.files.filter((rel) => !had.has(fold(rel)));
+    }
+  }
+  if (!since.length && !newFiles.length) return null;
+  return { finishedAt: typeof fin.at === "string" ? fin.at : null, since, newFiles };
+}
+// What changed the spec after time t: change requests, and approvals of any phase but `except`.
+function changesSince(st, t, except) {
+  const out = [];
+  (Array.isArray(st.changes) ? st.changes : []).forEach((c, i) => {
+    const at = isRecord(c) ? timeOf(c.at) : null;
+    if (at != null && at > t) out.push({ kind: "change-request", n: i + 1, at: c.at });
+  });
+  for (const [phase, a] of Object.entries(isObj(st.approvals) ? st.approvals : {})) {
+    const at = phase !== except && isRecord(a) ? timeOf(a.at) : null;
+    if (at != null && at > t) out.push({ kind: "approval", phase, at: a.at });
+  }
+  return out;
+}
+// The execution sign-off predates a change (a change request or a re-approval of another phase after it): it signed
+// off a different feature — next_action asks for it again.
+function executionSignOffStale(st) {
+  const ex = isObj(st.approvals) && isRecord(st.approvals.execution) ? timeOf(st.approvals.execution.at) : null;
+  return ex != null && changesSince(st, ex, "execution").length > 0;
+}
+// "change request #2, tasks re-approved, 1 implementing file not in the baseline (src/a.js)" — localized.
+function staleFinishText(stale, lang) {
+  const W = i18n.msg(lang).drift.staleWhy;
+  const parts = [];
+  const crs = stale.since.filter((x) => x.kind === "change-request").map((x) => "#" + x.n);
+  if (crs.length) parts.push(W.changeRequests(crs.join(", ")));
+  const phases = [...new Set(stale.since.filter((x) => x.kind === "approval").map((x) => x.phase))];
+  if (phases.length) parts.push(W.approvals(phases.join(", ")));
+  if (stale.newFiles.length) parts.push(W.newFiles(stale.newFiles.length, stale.newFiles.slice(0, 5).join(", ") + (stale.newFiles.length > 5 ? ", …" : "")));
+  return parts.join("; ");
+}
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
 // present since the finish baseline. Only the recorded files are hashed. "Finished" is the catalog's definition —
-// phase complete AND a baseline: a baselined feature whose tasks are open again (append_tasks after finish) is
-// `reopened`, listed apart and not hashed until it is finished again. A state file that can't be read is an error
-// (verdict `error` unless something drifted; a named feature that can't be read at all → ok:false), never "clean".
+// phase complete AND a CURRENT baseline: a baselined feature whose tasks are open again (append_tasks after finish) is
+// `reopened`, listed apart and not hashed until it is finished again; one whose tasks are done again but changed since
+// the finish (staleFinish) is `stale` — listed apart with why, not hashed (verdict `stale` unless something drifted or a
+// state file failed): finish it again. A state file that can't be read is an error (verdict `error` unless something
+// drifted; a named feature that can't be read at all → ok:false), never "clean".
 // opts.maxFiles / opts.maxBytes bound the work (SessionStart): over budget, nothing is hashed and the result says
 // `skipped`. opts.activeOnly leaves archived features out (the SessionStart line is about the work in .specs/).
 function drift(projectDir, name, opts = {}) {
@@ -6832,6 +7093,7 @@ function drift(projectDir, name, opts = {}) {
   const withBase = [];
   const unbaselined = [];
   const reopened = [];
+  const stale = []; // [{ feature, archived, finishedAt, since, newFiles, why }] — finished again needed (staleFinish)
   const errors = [];
   let lang = projectLang(projectDir);
   for (const s of sources) {
@@ -6839,11 +7101,17 @@ function drift(projectDir, name, opts = {}) {
     if (named && typeof st.lang === "string") lang = normalizeLang(st.lang);
     if (st.invalid) { errors.push({ feature: s.slug, error: st.invalid }); continue; }
     if (!isObj(st.finished) || !isObj(st.finished.files)) { unbaselined.push(s.slug); continue; }
-    if (detectPhase(s.dir, detectTracks(s.dir)) !== "complete") { reopened.push(s.slug); continue; }
+    const tracks = detectTracks(s.dir);
+    if (detectPhase(s.dir, tracks) !== "complete") { reopened.push(s.slug); continue; }
+    // Budgeted (SessionStart): the state-only check — no _Implements:_ walk before the hashing budget is even known.
+    const budgeted = opts.maxFiles != null || opts.maxBytes != null;
+    const sf = staleFinish(projectDir, st, budgeted ? "" : activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", tracks), { newFiles: !budgeted });
+    if (sf) { stale.push({ feature: s.slug, archived: s.archived, ...sf }); continue; }
     withBase.push({ s, fin: st.finished });
   }
   if (named && errors.length && errors.length === sources.length) return { ok: false, error: errors[0].error, errors };
-  const res = { ok: true, lang, features: [], drifted: [], unbaselined, reopened, verdict: errors.length ? "error" : "clean" };
+  const res = { ok: true, lang, features: [], drifted: [], unbaselined, reopened, stale, verdict: errors.length ? "error" : "clean" };
+  for (const x of stale) x.why = staleFinishText(x, lang); // localized, for the CLI line
   if (errors.length) res.errors = errors;
   const recorded = withBase.reduce((n, x) => n + Object.keys(x.fin.files).length, 0);
   const rootReal = realRootOf(root);
@@ -6868,7 +7136,8 @@ function drift(projectDir, name, opts = {}) {
     if (d.drifted) res.drifted.push(s.slug);
   }
   if (res.drifted.length) res.verdict = "drift";
-  if (!res.features.length && !errors.length && !reopened.length) res.note = i18n.msg(lang).drift.none;
+  else if (!errors.length && stale.length) res.verdict = "stale"; // not "clean": the baseline no longer covers the feature
+  if (!res.features.length && !errors.length && !reopened.length && !stale.length) res.note = i18n.msg(lang).drift.none;
   return res;
 }
 // One finish baseline (state.finished) against the files now: the recorded files changed / missing / now present
@@ -8402,7 +8671,7 @@ module.exports = {
   classify,
   initProject,
   scaffoldSteeringFile,
-  createFeature,
+  createFeature: featureLocked(createFeature), // re-run on an EXISTING feature: new tracks via applyTracks (spec_add_track's path), locked like it
   checklistMd,
   integrationPlanMd,
   listFeatures,
@@ -8419,7 +8688,7 @@ module.exports = {
   parseTasks,
   approvePhase: featureLocked(approvePhase),
   readState,
-  manageFeature,
+  manageFeature, // remove / archive / rename / restore move or delete the folder under its lock (withMoveLock), then the roadmap lock
   removeFeature,
   archiveFeature,
   renameFeature,

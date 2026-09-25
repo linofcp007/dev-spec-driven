@@ -64,7 +64,7 @@ dev-spec metrics [feature] [--write]           # lead times, rework, forced appr
 dev-spec add-track <feature> <track> [--remove]   # add a track (additive, never overwrites); --remove takes one off, files kept
 dev-spec feature <archive|restore|rename|remove> <name> [new-name] [--yes]   # lifecycle; remove is destructive and needs --yes
 dev-spec catalog [--write]                     # living catalog of every feature's ACs (_Supersedes:_ marks replaced ones) → .specs/SPECS.md
-dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift)
+dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
 dev-spec backlog [add|rm "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)

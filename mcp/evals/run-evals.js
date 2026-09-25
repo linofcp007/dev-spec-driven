@@ -21,9 +21,12 @@
  *   --require-live       fail (exit 2) instead of silently dry-running when ANTHROPIC_API_KEY is unset
  *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
+ *   --max-items=<N>      grade at most N items per set (an integer >= 1; default 200) — anything else exits 2
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
- * is invalid (dry or live — then no model is called) — handy for a manual pre-push gate.
+ * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
+ * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items, --require-live
+ * without a key).
  * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
@@ -202,6 +205,20 @@ async function main() {
     process.exit(2);
   }
 
+  // --max-items: an integer >= 1 (the CLI's rule for --cap / --max). parseInt read a bare flag or "abc" as NaN and "0" /
+  // "-5" as themselves — slice(0, NaN | 0 | -5) graded nothing, and 0/0 scored 100%: every set "passed" (exit 0) and
+  // --set-baseline wrote a 100% baseline. Refused before anything runs.
+  let maxItems = 200;
+  if (flags["max-items"] !== undefined) {
+    const v = String(flags["max-items"]).trim();
+    if (!(/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1)) {
+      const A = spec.msg(spec.featureLang(projectDir, slug)).args;
+      console.error(A.invalid(A.item("--max-items", A.type.integer + " " + A.atLeast(1), JSON.stringify(flags["max-items"] === true ? "" : String(flags["max-items"])))));
+      process.exit(2);
+    }
+    maxItems = Number(v);
+  }
+
   const model = flags.model || DEFAULT_MODEL;
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
   if (flags["require-live"] && !hasKey && !flags["dry-run"]) {
@@ -247,7 +264,6 @@ async function main() {
 
   // Load + validate every set first: a live run starts only when all of them are valid (no tokens spent on a broken set).
   const toRun = [];
-  const maxItems = flags["max-items"] ? parseInt(flags["max-items"], 10) : 200;
   for (const setName of setNames) {
     const file = path.join(evalsDir, setName + ".json");
     if (!fs.existsSync(file)) continue;
@@ -266,6 +282,12 @@ async function main() {
       continue;
     }
     const allItems = set.items || [];
+    // A set with nothing to grade can't pass: 0/0 used to score 100% (and a baseline of 1). Add items or delete the file.
+    if (!allItems.length) {
+      console.log(T.emptySet(setName));
+      invalid = true;
+      continue;
+    }
     const problems = setProblems(setName, allItems); // every item, also past --max-items: the set is what's on disk
     if (problems.length) {
       problems.forEach((l) => console.log(l));
@@ -301,7 +323,7 @@ async function main() {
         failures.push({ id: item.id, error: e.message });
       }
     }
-    const score = items.length ? pass / items.length : 1;
+    const score = items.length ? pass / items.length : 0; // never reached with 0 items (an empty set is invalid above)
     const thr = thresholds[setName] != null ? thresholds[setName] : 0;
     const okThr = score >= thr;
     if (!okThr) belowThreshold = true;

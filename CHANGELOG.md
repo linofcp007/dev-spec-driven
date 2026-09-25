@@ -136,10 +136,17 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   run it under cmd.exe anyway).
 - **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
   moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
-  feature mutators (complete, approve, append-tasks, add/remove track, impact `--reopen`, finish `--write`) now hold a
-  cross-process lock (`.specs/<feature>/.lock`, reclaimed when its process is gone) and a caller that can't get it
-  within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized "busy" error with nothing changed; tasks.md ticks are
-  written atomically (a concurrent reader no longer sees a truncated file). When a generated file couldn't be replaced
+  feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,
+  impact `--reopen`, finish `--write`) now hold a cross-process lock (`.specs/<feature>/.lock`, reclaimed when its
+  process is gone) and a caller that can't get it within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized
+  "busy" error with nothing changed; tasks.md ticks and track additions are written atomically (a concurrent reader no
+  longer sees a truncated file). `spec_feature` rename / archive / remove / restore never move or delete a folder
+  another process is writing (they moved it away mid-write: a zombie `.specs/<old>/` came back and a feature's ticks
+  and its spec split between two folders) — they wait on the same lock, which moves with the folder and is released
+  there (left behind, it kept the renamed feature "busy"). `roadmap.json`'s read-modify-writes (depend, backlog, the
+  prunes of create / archive / rename / remove / restore, init `--lang` / `--guard`, roadmap `--lang`) hold
+  `.specs/.roadmap.lock`: two processes adding backlog items at once kept about half of them, and a dependency could
+  vanish (its feature then read as unblocked). When a generated file couldn't be replaced
   (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
   `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is
   retried). A BOM-only re-save ("UTF-8 with BOM", Windows PowerShell 5.1) of an approved artifact counted as
@@ -170,7 +177,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   from its own AC IDs (one generic row each).
 - **Bugfix root-cause task.** Ticking the root-cause task while bug.md → Root Cause is still empty stays allowed (it
   is the task that writes it) but returns `rootCausePending: true` with a note, and a later task's refusal no longer
-  says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES).
+  says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES). A Reproduction or
+  Root Cause that quotes bracketed evidence — `[object Object]`, a regex class `[A-Z]`, a log tag `[WARN]`,
+  `[Error: ENOENT …]` — was "not filled" in every language (doctor, the requirements / design approvals, the fix tasks
+  and finish refused a documented bug, naming no bracket); in bug.md only the bug report's own slots, or a section
+  holding nothing but brackets, count as unfilled — the 1.12 behaviour for evidence.
 - **Removed criteria.** `spec_impact --reopen` unticked the tasks of a REMOVED AC with "redo them with fresh
   evidence" — `next` then pointed at re-building a feature the spec no longer has — and doctor called the leftover
   reference a typo. A removed criterion's tasks are never unticked (nor by a design section naming only removed
@@ -182,12 +193,25 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   drifted files without a word. It now answers `finished` (asking for the `execution` sign-off while it is missing)
   or `drift` with the changed files and the decision (spec wrong → `spec_impact`, code wrong → fix, harmless →
   re-finish), plus a structured `drift`; a re-finish over a drifted baseline returns `baseline.replaced` and the CLI
-  prints the files it accepted.
+  prints the files it accepted. A feature that changed after its finish — a change request or a re-approval newer
+  than the baseline (tasks re-approved after `spec_append_tasks`), or an `_Implements:_` file the baseline never
+  recorded — read "finished — nothing left to do" again once its tasks were done, drift called it unchanged (a new
+  implementing file was never hashed), the catalog called it finished and the old execution sign-off still counted.
+  `spec_next_action` now answers `finish` again with `staleBaseline` {finishedAt, since, newFiles}, `spec_drift` lists
+  it as `stale` (verdict `stale`, CLI exit 1), the catalog shows it as complete, and an execution sign-off older than
+  the change is asked for again.
 - **Eval sets.** The harness's dry run said "sets are valid" for items a live run then paid a model call for and
   failed: an unknown grader type, a missing `id` / `input` / `expect`, a non-object item, a regex that doesn't
   compile, `judge` without a rubric, `contains` / `equals` / `regex` without a value. Every item is validated — the
   dry run exits 1 with one line per bad item, and a live run calls no model while any set is invalid; an
   unparseable `evals/thresholds.json` (or a set threshold outside [0, 1]) is invalid instead of silently ignored.
+  A bare, non-numeric, zero or negative `--max-items` graded nothing and scored every set 0/0 = 100% (exit 0, and
+  `--set-baseline` wrote a 100% baseline): it must be an integer ≥ 1 (exit 2 otherwise, before any model call), and a
+  set with no items is invalid instead of passing.
+- **Fenced examples in test-plan.md.** A ```fenced``` example row counted as a real one: it covered its AC (trace_check
+  and the test-plan approval passed for an AC with no real test row) and planned a T-ID the Phase 4 `tests` gate then
+  demanded in the test code. Every reader of test-plan.md's IDs now skips fenced code, like tasks.md and
+  requirements.md.
 
 ### Added
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
@@ -289,7 +313,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 700 assertions (was 181), `node cli/test-cli.js` 235 (was 53); the tool count is
+- `node mcp/test.js` 710 assertions (was 181), `node cli/test-cli.js` 240 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

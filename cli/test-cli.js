@@ -1120,6 +1120,20 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
   refin10.code === 0 && new RegExp("Replaced the baseline of " + finDay10 + ", in which 1 file\\(s\\) had drifted: src/auth\\.js").test(refin10.out) &&
   /→ 'login-loop' is finished \(\d{4}-\d\d-\d\d\) — its 1 implementing file\(s\) are unchanged since\. Sign it off: \/approve login-loop execution\./.test(naFin10.out),
   "next-action on a finished feature: 'drift' with the changed file (--json = spec_next_action); finish --write names the drift it accepts; then 'finished' + the execution sign-off");
+// Work added after the finish (append-tasks with a new _Implements:_ file, tasks re-approved, done --run): next-action says
+// finish it again (never "nothing left to do"), drift exits 1 naming why the baseline is stale — audit.js was never hashed.
+run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", "node -e process.exit(0)", "--project", w10f]);
+fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
+const apT10 = run(["approve", "login-loop", "tasks", "--project", w10f]);
+const done5 = run(["done", "login-loop", "5", "--run", "--project", w10f]);
+const naSt10 = run(["next-action", "login-loop", "--project", w10f]);
+fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
+const drSt10 = run(["drift", "login-loop", "--project", w10f]);
+ok(apT10.code === 0 && done5.code === 0 && /was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and its tasks are done again — finish it again/.test(naSt10.out) &&
+  !/Nothing left to do/.test(naSt10.out) && drSt10.code === 1 && /↻ login-loop: changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js; its baseline no longer covers it: finish it again \(dev-spec finish login-loop --write\)/.test(drSt10.out) &&
+  !/✓ login-loop/.test(drSt10.out),
+  "after append-tasks + re-approval + done, next-action asks to finish again and drift exits 1 with the stale baseline (never '✓ unchanged' while audit.js is unhashed) (got " +
+  JSON.stringify([apT10.code, done5.code, naSt10.out.slice(0, 160), drSt10.code, drSt10.out.slice(0, 160)]) + ")");
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");
@@ -1348,6 +1362,21 @@ if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-proc
   ok(busy14.code === 1 && /Another dev-spec process is updating 'race' right now \(\.specs\/race\/\.lock\)/.test(busy14.out) && busyJson14.code === 1 && bj14.ok === false && bj14.busy === true &&
     untouched14 && free14.code === 0 && !fs.existsSync(lock14),
     "done under another process's feature lock: exit 1 with the busy error (--json prints {ok:false, busy:true}), nothing ticked; once released it ticks and leaves no .lock");
+  // feature rename / create (existing feature) wait on the same lock; depend / backlog on .specs/.roadmap.lock — like MCP.
+  fs.writeFileSync(lock14, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() }));
+  const rlock14 = path.join(k14, ".specs", ".roadmap.lock");
+  fs.writeFileSync(rlock14, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() }));
+  const rn14 = runEnv(["feature", "rename", "race", "sprint", "--project", k14]);
+  const cr14 = runEnv(["create", "race", "saas", "--project", k14]);
+  const bl14r = runEnv(["backlog", "add", "Later", "--project", k14]);
+  fs.rmSync(lock14, { force: true });
+  fs.rmSync(rlock14, { force: true });
+  const kept14 = fs.existsSync(kDir14) && !fs.existsSync(path.join(kDir14, "load-test.md")) && !fs.existsSync(path.join(k14, ".specs", "sprint"));
+  const rnFree14 = run(["feature", "rename", "race", "sprint", "--project", k14]);
+  ok(rn14.code === 1 && /Another dev-spec process is updating 'race' right now/.test(rn14.out) && cr14.code === 1 && /updating 'race' right now/.test(cr14.out) &&
+    bl14r.code === 1 && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(bl14r.out) && kept14 && rnFree14.code === 0 && !fs.existsSync(path.join(k14, ".specs", "sprint", ".lock")) && !fs.existsSync(kDir14),
+    "feature rename / create on a held feature lock and backlog add on a held roadmap lock: exit 1, busy, nothing changed; once free the rename moves the folder and leaves no .lock (got " +
+    JSON.stringify([rn14.code, rn14.out.slice(0, 80), cr14.code, cr14.out.slice(0, 80), bl14r.code, bl14r.out.slice(0, 80), rnFree14.code, rnFree14.out.slice(0, 80)]) + ")");
 }
 
 if (inSection("wp15")) { // 1.13 batch 6 — examples/README.md's "Verify it yourself" outputs are what the CLI prints on a fresh copy
@@ -1434,6 +1463,32 @@ if (inSection("wp16")) { // 1.13 batch 7 — gates at the planning phases, the b
   ok(ev16.status === 1 && /✗ regression\.json — item r1: unknown grader type 'contain' \(use contains \| equals \| regex \| refuse \| judge\)/.test(ev16.stdout) &&
     /Dry run found invalid eval set\(s\)/.test(ev16.stdout) && !/sets are valid/.test(ev16.stdout),
     "evals --dry-run (CLI): a malformed item is an invalid set — exit 1, named with its reason, never 'sets are valid'");
+  // --max-items 0 (or a bare / non-numeric one) is a usage error the CLI passes through — exit 2, no 0/0 = 100% and no
+  // baseline, even with a key set (nothing is called: it is refused before any set is read).
+  fs.rmSync(path.join(ai16, ".specs", "ticket-summary", "evals", "regression.json"));
+  const evMax16 = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", "--max-items", "0", "--set-baseline", "--project", ai16], { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy" } });
+  ok(evMax16.status === 2 && /Invalid argument\(s\): --max-items must be an integer ≥ 1 \(got "0"\)/.test(evMax16.stderr) && !/100\.0%|all sets pass/.test(evMax16.stdout) &&
+    !fs.existsSync(path.join(ai16, ".specs", "ticket-summary", "evals", "baseline.json")),
+    "evals --max-items 0 (CLI): exit 2 with the argument error — never 0/0 = 100% 'all sets pass', no baseline written");
+
+  // bug.md evidence in brackets ([object Object], [A-Z]) is content: doctor documents both sections and approve design passes.
+  run(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);
+  const bugP16 = at16("profile-name-shows-object", "bug.md");
+  fs.writeFileSync(bugP16, fs.readFileSync(bugP16, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\n1. Log in.\n2. Open /profile: the header reads [object Object].")
+    .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so the browser shows [object Object]; norm() only maps [A-Z]."));
+  const bugDoc16 = run(["doctor", "profile-name-shows-object", "--project", w16]);
+  const bugAp16 = run(["approve", "profile-name-shows-object", "design", "--project", w16]);
+  ok(/✓ reproduction — reproduction documented/.test(bugDoc16.out) && /✓ root-cause — root cause documented/.test(bugDoc16.out) && !/bug\.md:\d+ \[object Object\]/.test(bugDoc16.out) && bugAp16.code === 0,
+    "bugfix (CLI): a Reproduction / Root Cause quoting [object Object] / [A-Z] is documented (doctor ✓) and approve design passes (got " + bugAp16.out.slice(0, 120) + ")");
+
+  // A ```fenced example``` row in test-plan.md covers nothing: trace reports the AC without a real row (exit 1), never PASS.
+  S16.createFeature(w16, "Shop fence", ["tdd"]);
+  fs.writeFileSync(at16("shop-fence", "requirements.md"), REQ16);
+  fs.writeFileSync(at16("shop-fence", "test-plan.md"), "# Test Plan\n\n| ID | AC | File |\n|---|---|---|\n| T-01 | US-1.AC-1 | tests/digest.test.js |\n\n```md\n| T-02 | US-1.AC-2 | tests/skip.test.js |\n```\n");
+  fs.writeFileSync(at16("shop-fence", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Digest\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n");
+  const trF16 = run(["trace", "shop-fence", "--project", w16]);
+  ok(trF16.code === 1 && /US-1\.AC-2/.test(trF16.out) && !/verdict=pass/i.test(trF16.out),
+    "trace (CLI): a fenced example row in test-plan.md is no coverage — the AC it names is reported uncovered, exit 1 (got " + trF16.out.slice(0, 160) + ")");
 }
 
 // unknown command errors

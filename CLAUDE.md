@@ -197,7 +197,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   intervals, written-out enumerations (`isEnumeration()`: 2+ one-token or quoted items split by `, ; |` —
   `[owner, admin]`; the templates' own enumerations, `templateEnumerationSet()` built from every i18n
   builder, stay placeholders), other code spans, comments and fences. `artifactState()` = missing /
-  placeholder / filled. Every regex here must stay linear: `RE_STABLE_BRACKET`'s list separator is
+  placeholder / filled. **bug.md is evidence** (`bugPlaceholders()`, used by `artifactReport` and
+  `bugSectionFilled()`): its Reproduction / Root Cause quote `[object Object]`, `[WARN]`, `[A-Z]`, `[Error: …]` — a
+  bracket there is a slot only when it IS one of the bug report's own slots (`bugTemplateSlots()`, every language) or
+  its section holds nothing but brackets; the generic rule refused a written root cause as "not filled". Every regex here must stay linear: `RE_STABLE_BRACKET`'s list separator is
   `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list.
   `detectPhase()`: `complete` / `executing` once tasks are ticked, `tasks-ready` once a real (non-placeholder)
   task exists; otherwise the earliest still-template chain artifact — so a fresh scaffold is phase `requirements`.
@@ -220,7 +223,11 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   exists (finish `{write}` recorded it), `finish` becomes `finished` (asks for the `execution` sign-off while it is
   missing) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
   nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
-  baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts.
+  baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts. A baseline is STALE
+  (`staleFinish()`) once a change request or a re-approval of another phase is newer than `finished.at`, or an active
+  task's `_Implements:_` file isn't in it: then the step stays `finish` (re-run spec_finish `{write}`) with
+  `staleBaseline` {finishedAt, since, newFiles} — it said "finished — nothing left to do" on the old baseline — and an
+  execution sign-off older than such a change is asked for again (`executionSignOffStale()`).
 - **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates.
   `warnings` (EC/NFR/SC, planned-not-in-code) never block.
@@ -319,8 +326,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
   only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
-  `reopened`, an unreadable state is verdict `error` — never "clean". SessionStart adds one line per drifted
-  ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
+  `reopened`, one changed since its finish (`staleFinish()`) is `stale` (not hashed, verdict `stale`, CLI exit 1 —
+  finish it again; the catalog calls it `complete`), an unreadable state is verdict `error` — never "clean".
+  SessionStart adds one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
 - **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
   BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
   in their old position (only for features that still exist; a now-circular edge is skipped and reported). The
@@ -373,13 +381,23 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   ticks go through it too (a reader never sees a truncated tasks.md).
 - **Feature mutators hold a cross-process lock** (`withFeatureLock` / `featureLocked` in the exports):
   `completeTask`, `approvePhase`, `appendTasks`, `addTrack` / `removeTrack`, `impactReport` with `reopen`,
-  `finishFeature` with `write`. Two MCP servers (or MCP + `dev-spec done`) on one feature each read tasks.md +
-  `.state.json`, wrote the whole file back and the last writer won — ticks and evidence were lost while both
-  answered ok. The lock is `.specs/<feature>/.lock` (O_EXCL, holds `{pid, host, at}`), re-entrant in one process;
-  waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get `{ok:false, busy:true, error}` (`err.featureBusy`,
-  localized) with nothing changed. A dead holder's lock (same host) is reclaimed at once, any other after 2 min
-  (10 min while its pid still runs). Where no lock file can be created (read-only folder) the op runs unlocked.
-  Internal calls use the unwrapped functions, so no op ever takes two locks.
+  `finishFeature` with `write`, and `createFeature` re-run on an EXISTING feature (it adds tracks through
+  `applyTracks`, spec_add_track's path — a NEW feature has no folder to lock). Two MCP servers (or MCP + `dev-spec done`)
+  on one feature each read tasks.md + `.state.json`, wrote the whole file back and the last writer won — ticks and
+  evidence were lost while both answered ok. The lock is `.specs/<feature>/.lock` (O_EXCL, holds `{pid, host, at}`),
+  re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
+  `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A dead holder's lock (same host)
+  is reclaimed at once, any other after 2 min (10 min while its pid still runs). Where no lock file can be created
+  (read-only folder) the op runs unlocked. **Folder moves** — `manageFeature` rename / archive / remove, and restore
+  (on `.specs/_archive/<slug>/.lock`) — run under `withMoveLock`: never while another process holds the lock (it moved
+  the folder away mid-write: the writer's next `writeFileAtomic` recreated a zombie `.specs/<old>/`, and ticks landed
+  in one folder, the spec in the other); the lock file travels with the folder and is released at the NEW place
+  (`releaseMovedLock` — left there it kept the renamed feature "busy" while its holder lived). Folders move through
+  `renameDirSync` (Windows EPERM retry). **`roadmap.json`** read-modify-writes (depend, backlog add/rm, `pruneBacklog`,
+  `pruneRoadmapRefs`, restore, init `--lang`/`--guard`, roadmap `--lang`) hold `.specs/.roadmap.lock`
+  (`withRoadmapLock`, `err.roadmapBusy`; it forgets only roadmap.json from the read cache). Lock order: a feature lock,
+  then the roadmap lock — never the reverse; the ROADMAP.md refresh runs after both are released. Internal calls use
+  the unwrapped functions.
 - **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**.
   `writeRoadmapMd/Html` skip a same-named file without it — the hooks run in every project; `spec_roadmap`
   returns a refused ROADMAP.md write as an error (a kept hand-written ROADMAP.html is a warning). The
@@ -421,7 +439,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
-  excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. A scaffolded test plan
+  excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
+  test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
+  scan, the Phase 4 gate, doctor, finish, `testIndex` / `testPlanEntries` — a fenced example row covered its AC (a
+  false pass) and planned a T-ID the tests gate demanded. A scaffolded test plan
   only gets the template rows of the track ACs requirements.md has (`testPlanTracks()`, shared by spec_create on an
   existing feature and spec_add_track — a track added after the requirements brings none).
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
@@ -540,7 +561,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything but `en|pt|es` (case-folded) with the localized
   `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
-  `drift` (drift or error) and any refused operation exit 1. An engine refusal goes through `fail(r)`, never
+  `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
+  (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
+  integer ≥ 1 — it graded nothing and scored 0/0 = 100%) and 1 on an invalid set (an empty one included). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
@@ -557,9 +580,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(700 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(710 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 235 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 240 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

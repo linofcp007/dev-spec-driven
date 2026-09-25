@@ -42,7 +42,7 @@
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
- *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift)
+ *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
@@ -762,11 +762,12 @@ function main() {
 
     case "drift": {
       // dev-spec drift [feature] — implementing files changed / missing / now present since spec_finish recorded the
-      // baseline (= spec_drift {name}); exit 1 when any finished feature drifted or a state file couldn't be read (a check
-      // that didn't run is not "clean" — scriptable, like trace).
+      // baseline (= spec_drift {name}); exit 1 when any finished feature drifted, a baseline is stale (the feature changed
+      // since its finish: finish it again) or a state file couldn't be read (a check that didn't run is not "clean" —
+      // scriptable, like trace).
       const r = spec.drift(projectDir, pos[0]);
       if (!r.ok) return fail(r);
-      if (r.drifted.length || (r.errors && r.errors.length)) process.exitCode = 1;
+      if (r.drifted.length || r.stale.length || (r.errors && r.errors.length)) process.exitCode = 1;
       const D = spec.msg(r.lang).drift;
       const day = (iso) => String(iso || "").slice(0, 10);
       return out(r, (r) => {
@@ -779,6 +780,7 @@ function main() {
           if (f.missing.length) console.log(D.missing(f.missing.join(", ")));
           if (f.nowPresent.length) console.log(D.nowPresent(f.nowPresent.join(", ")));
         }
+        for (const s of r.stale) console.log(D.stale(s.feature, day(s.finishedAt), s.why, s.archived));
         if (r.reopened.length) console.log(D.reopened(r.reopened.join(", ")));
         if (r.unbaselined.length) console.log(D.unbaselined(r.unbaselined.join(", ")));
         (r.errors || []).forEach((e) => console.error("dev-spec: " + e.error));
@@ -844,7 +846,7 @@ function helpText() {
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
-  drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift)
+  drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
