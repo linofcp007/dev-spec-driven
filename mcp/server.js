@@ -197,6 +197,36 @@ const TOOLS = [
   // @wp WP6 <<<
 
   // @wp WP7 tools >>>
+  {
+    name: "spec_append_tasks",
+    description:
+      "Converge: append NEW tasks to an existing feature's tasks.md without touching the tasks already there (never renumbered or edited). They are numbered after the highest number in use and go under a phase heading — default a localized 'Phase: Convergence' (created with a closing **Checkpoint:**, after the last active phase); an existing heading with that exact text is reused (tasks go at the end of that phase, before its closing checkpoint). Each task becomes `- [ ] N. [USn][P] text` with `_Requirements:_` / `_Implements:_` / `_Verify:_` sub-lines, so status, next_task {batch}, task_brief, complete_task (evidence) and finish work on them as on any task. Every AC ID must exist in requirements.md — an unknown one is an error and NOTHING is written; _Implements:_ paths must be project-relative (stored with forward slashes, no '..'). CRLF line endings and a BOM are preserved; a removed track's task section is never used. New content invalidates an earlier tasks approval: the result says so (`needsReapproval`) — review and re-approve. Use when implementation drifted from the plan or a review found follow-up work.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Feature name/slug." },
+        tasks: {
+          type: "array",
+          description: "The tasks to append, in order (at least one).",
+          items: {
+            type: "object",
+            properties: {
+              text: { type: "string", description: "Task description (required)." },
+              requirements: { type: "array", items: { type: "string" }, description: "AC IDs the task proves (e.g. US-1.AC-2) — each must exist in requirements.md." },
+              implements: { type: "array", items: { type: "string" }, description: "Project-relative files the task touches (_Implements:_)." },
+              verify: { type: "string", description: "Single-line command that proves the task (_Verify:_) — spec_complete_task then needs its passing run as evidence." },
+              story: { type: "string", description: "US<n> (e.g. US1) or shared." },
+              parallel: { type: "boolean", description: "[P] — can run in parallel (different files, no dependencies)." },
+            },
+            required: ["text"],
+          },
+        },
+        heading: { type: "string", description: "Phase heading to append under (default: the localized 'Phase: Convergence')." },
+        projectDir: { type: "string" },
+      },
+      required: ["name", "tasks"],
+    },
+  },
   // @wp WP7 <<<
 
   // @wp WP8 tools >>>
@@ -281,6 +311,8 @@ function runTool(name, args) {
     // @wp WP6 <<<
 
     // @wp WP7 dispatch >>>
+    case "spec_append_tasks":
+      return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
     // @wp WP7 <<<
 
     // @wp WP8 dispatch >>>

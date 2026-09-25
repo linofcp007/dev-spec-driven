@@ -29,6 +29,8 @@
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
+ *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
+ *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename a feature
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
@@ -107,6 +109,8 @@ function readStdin(cb) {
 // @wp WP6 <<<
 
 // @wp WP7 value-flags >>>
+// append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--story US1] [--heading "<phase>"]
+["task", "req", "implements", "verify", "story", "heading"].forEach((k) => VALUE_FLAGS.add(k));
 // @wp WP7 <<<
 
 // @wp WP8 value-flags >>>
@@ -574,6 +578,26 @@ function main() {
     // @wp WP6 <<<
 
     // @wp WP7 commands >>>
+    case "append-tasks": {
+      // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
+      if (!pos[0] || typeof flags.task !== "string") die('usage: dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
+      const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
+      // The parser keeps only the last value of a repeated flag: a second --task would be dropped silently.
+      if (argv.filter((a) => a === "--task" || a.startsWith("--task=")).length > 1) die(T.oneTaskPerCall);
+      const task = { text: flags.task };
+      if (typeof flags.req === "string") task.requirements = [flags.req]; // the engine splits "a,b" — same as over MCP
+      if (typeof flags.implements === "string") task.implements = [flags.implements];
+      if (typeof flags.verify === "string") task.verify = flags.verify;
+      if (typeof flags.story === "string") task.story = flags.story;
+      if (flags.parallel != null) task.parallel = flags.parallel === true || flags.parallel === "true";
+      const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => {
+        console.log(T.appended(r.heading, r.headingCreated));
+        r.appended.forEach((t) => console.log("  - [ ] " + t.number + ". " + t.text));
+        if (r.note) console.log("  ⚠ " + r.note);
+      });
+    }
     // @wp WP7 <<<
 
     // @wp WP8 commands >>>
@@ -629,6 +653,8 @@ function helpText() {
                                   (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
   finish <feature> [--write] [--include-body]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary
+  append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
+                                  --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
   approve <feature> <phase>       Record a phase approval (.state.json)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)

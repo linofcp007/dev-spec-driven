@@ -1653,6 +1653,155 @@ function payload(res) {
   // @wp WP6 <<<
 
   // @wp WP7 tests >>>
+  // --- 1.13 WP7: spec_append_tasks (converge) — appended tasks work end to end, all-or-nothing, line-exact ---
+  {
+    const call7 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
+    const w7 = path.join(tmp, "proj-wp7");
+    S.initProject(w7, ["tdd"]);
+    const cf = S.createFeature(w7, "Converge", ["tdd"]);
+    const cTasks = path.join(cf.dir, "tasks.md");
+    fs.writeFileSync(path.join(cf.dir, "requirements.md"), "# Requirements\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft\n" +
+      "2. **US-1.AC-2** — WHEN the parser meets a BOM THE SYSTEM SHALL skip it\n3. **US-1.AC-3** — WHEN the writer runs THE SYSTEM SHALL keep CRLF endings\n");
+    fs.writeFileSync(path.join(cf.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
+    const cOrig = "# Tasks: Converge\n\n## Global Constraints\n- Node >= 20\n\n## Story US-1 (P1 — MVP)\n- [x] 1. [US1] Core behavior\n  - _Requirements: US-1.AC-1_\n" +
+      "- [x] 2. [US1] Second step\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** US-1 works.\n";
+    fs.writeFileSync(cTasks, cOrig);
+    S.approvePhase(w7, "converge", "tasks");
+    const vCmd = 'node -e "process.exit(0)"';
+    const ap = await call7("spec_append_tasks", { name: "converge", projectDir: w7, tasks: [
+      { text: "Skip the BOM in the parser", requirements: ["US-1.AC-2"], implements: ["src\\parser.js"], verify: vCmd, story: "US1", parallel: true },
+      { text: "Keep CRLF in the writer", requirements: ["us-1.ac-3"], implements: ["./src/writer.js"], story: "US1", parallel: true },
+      { text: "[shared] Document the drift" },
+    ] });
+    const cNow = fs.readFileSync(cTasks, "utf8");
+    const cSection = "\n## Phase: Convergence\n- [ ] 3. [US1][P] Skip the BOM in the parser\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/parser.js_\n  - _Verify: " + vCmd + "_\n" +
+      "- [ ] 4. [US1][P] Keep CRLF in the writer\n  - _Requirements: US-1.AC-3_\n  - _Implements: src/writer.js_\n- [ ] 5. [shared] Document the drift\n" +
+      "**Checkpoint:** the convergence tasks are done and verified — the spec and the code agree again.\n";
+    ok(!ap.isError && ap.p.ok && ap.p.headingCreated === true && ap.p.heading === "Phase: Convergence" && ap.p.appended.map((t) => t.number).join() === "3,4,5" && cNow === cOrig + cSection,
+      "spec_append_tasks appends a new 'Phase: Convergence' (max+1 numbering, [USn][P] tags, English-stable markers, forward-slash paths, closing Checkpoint) — existing lines untouched");
+    ok(ap.p.needsReapproval === true && /re-approve: \/approve converge tasks/.test(ap.p.note) && S.nextAction(w7, "converge").changedSinceApproval.includes("tasks.md"),
+      "appending after a tasks approval → needsReapproval + note, and next_action lists tasks.md as changed since approval");
+    const apSt = (await call7("spec_status", { name: "converge", projectDir: w7 })).p;
+    ok(apSt.tasks.total === 5 && apSt.tasks.next.number === 3 && apSt.tasks.list.filter((t) => t.parallel).map((t) => t.number).join() === "3,4" && apSt.tasks.list.find((t) => t.number === 5).story === "shared",
+      "spec_status counts the appended tasks (next = #3, [P] and story read back)");
+    const apNx = (await call7("spec_next_task", { name: "converge", batch: true, projectDir: w7 })).p;
+    ok(apNx.next.number === 3 && JSON.stringify(apNx.batch.map((b) => [b.number, b.implements])) === JSON.stringify([[3, ["src/parser.js"]], [4, ["src/writer.js"]]]),
+      "spec_next_task batch pairs the appended [P] tasks by their disjoint _Implements:_ files (the non-[P] #5 ends it)");
+    const apBr = (await call7("spec_task_brief", { name: "converge", number: 3, projectDir: w7 })).p;
+    ok(apBr.acceptanceCriteria.length === 1 && apBr.acceptanceCriteria[0].id === "US-1.AC-2" && /meets a BOM THE SYSTEM SHALL skip it/.test(apBr.acceptanceCriteria[0].text) &&
+      apBr.verify.join() === vCmd && apBr.unresolved.acs.length === 0 && apBr.task.phase === "Phase: Convergence" && /spec and the code agree again/.test(apBr.task.checkpoint) &&
+      apBr.brief.includes("- `" + vCmd + "`"), "spec_task_brief on an appended task resolves its AC to the EARS text and carries its _Verify:_ command + checkpoint");
+    const apNoEv = (await call7("spec_complete_task", { name: "converge", number: 3, projectDir: w7 })).p;
+    const apEv = (await call7("spec_complete_task", { name: "converge", number: 3, evidence: { command: vCmd, exitCode: 0, summary: "ok" }, projectDir: w7 })).p;
+    const apEv4 = (await call7("spec_complete_task", { name: "converge", number: 4, evidence: { summary: "writer keeps CRLF (checked by hand)" }, projectDir: w7 })).p;
+    const apEv5 = (await call7("spec_complete_task", { name: "converge", number: 5, projectDir: w7 })).p;
+    ok(apNoEv.ok && apNoEv.verified === false && apEv.ok && apEv.alreadyDone && apEv.verified === true && apEv4.verified === true && apEv5.ok && apEv5.done === 5 && apEv5.next === null,
+      "spec_complete_task on appended tasks: the runnable _Verify:_ needs its passing run (back-filled), a manual one takes a note");
+    const apFin = (await call7("spec_finish", { name: "converge", projectDir: w7 })).p;
+    ok(apFin.ok && apFin.openTasks.length === 0 && apFin.unverified.length === 0 && apFin.mergeSummary.includes("- [x] 3. Skip the BOM in the parser — `" + vCmd + "` → exit 0 · ok") &&
+      apFin.mergeSummary.includes("- [x] 5. Document the drift"), "spec_finish lists the appended tasks with their evidence (none open, none unverified)");
+    ok(S.traceCheck(w7, "converge").phantomAcsInTasks.length === 0, "appended _Requirements:_ never introduce a phantom AC in trace_check");
+
+    // Reuse: the default heading again → the same phase, before its closing checkpoint; a custom existing heading too.
+    const beforeReuse = fs.readFileSync(cTasks, "utf8");
+    const ap2 = S.appendTasks(w7, "converge", [{ text: "Follow-up" }]);
+    const ap3 = S.appendTasks(w7, "converge", [{ text: "Story fix", requirements: ["US-1.AC-1"] }], { heading: "## Story US-1 (P1 — MVP)" });
+    const reuseTxt = fs.readFileSync(cTasks, "utf8");
+    const reuseBlocks = S.taskBlocks(reuseTxt);
+    ok(ap2.ok && ap2.headingCreated === false && ap2.appended[0].number === 6 && reuseTxt.includes("- [x] 5. [shared] Document the drift\n- [ ] 6. Follow-up\n**Checkpoint:** the convergence") &&
+      reuseTxt.split("## Phase: Convergence").length === 2, "an existing 'Phase: Convergence' is reused: the task goes at the end of that phase, before its closing checkpoint");
+    ok(ap3.ok && ap3.heading === "Story US-1 (P1 — MVP)" && reuseTxt.includes("  - _Requirements: US-1.AC-1_\n- [ ] 7. Story fix\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** US-1 works.") &&
+      reuseBlocks.find((b) => b.number === 7).checkpoint === "US-1 works." && reuseBlocks.filter((b) => b.number < 6).every((b) => b.done) &&
+      reuseTxt.replace("- [ ] 6. Follow-up\n", "").replace("- [ ] 7. Story fix\n  - _Requirements: US-1.AC-1_\n", "") === beforeReuse,
+      "heading → an existing phase gets the task before ITS checkpoint; nothing else in tasks.md changed");
+
+    // All-or-nothing validation: a phantom AC (with a valid task beside it), bad paths/story/verify/heading write nothing.
+    const frozen = fs.readFileSync(cTasks, "utf8");
+    const ph = await call7("spec_append_tasks", { name: "converge", projectDir: w7, tasks: [{ text: "ok one", requirements: ["US-1.AC-1"] }, { text: "bad", requirements: ["US-1.AC-9", "US-7.AC-1"] }] });
+    ok(ph.isError && ph.p.ok === false && /US-1\.AC-9, US-7\.AC-1/.test(ph.p.error) && /Nothing was written/.test(ph.p.error) && ph.p.phantom.join() === "US-1.AC-9,US-7.AC-1" &&
+      fs.readFileSync(cTasks, "utf8") === frozen, "phantom AC IDs → localized error listing them (isError) and NOTHING is written, not even the valid task");
+    const bads = [
+      [{ text: "x", implements: ["../outside.js"] }], [{ text: "x", implements: ["/etc/passwd"] }], [{ text: "x", implements: ["C:\\repo\\a.js"] }],
+      [{ text: "x", story: "P1" }], [{ text: "x", verify: "npm test\nrm -rf /" }], [{ text: "x", verify: "pytest -k 'a_ b'" }], [{ text: "   " }], [{ text: "[US1][P]" }], [],
+    ].map((t) => S.appendTasks(w7, "converge", t));
+    const badHeads = [S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "Global Constraints" }), S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "a\nb" })];
+    ok(bads.concat(badHeads).every((r) => r.ok === false && r.error) && /relative to the project root, without '\.\.'/.test(bads[0].error) && /relative/.test(bads[1].error) && /relative/.test(bads[2].error) &&
+      /US<n>/.test(bads[3].error) && /single-line/.test(bads[4].error) && /would not read back/.test(bads[5].error) && /text is required/.test(bads[6].error) && /text is required/.test(bads[7].error) &&
+      /at least one task/.test(bads[8].error) && /constraints/.test(badHeads[0].error) && /one line/.test(badHeads[1].error) && fs.readFileSync(cTasks, "utf8") === frozen,
+      "bad paths (.., absolute, drive), story, multi-line/unstorable _Verify:_, empty text, no tasks, a non-phase heading: localized errors, nothing written");
+    const hid = S.appendTasks(w7, "converge", [{ text: "fix <!-- hidden --> parser" }]);
+    ok(hid.ok === false && /task 8 would not read back as written/.test(hid.error) && fs.readFileSync(cTasks, "utf8") === frozen,
+      "a task that would not read back as written (an inline comment hides part of it) is refused — the read-back check writes nothing");
+    const noTasksArg = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: "converge", projectDir: w7 } });
+    const badItem = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: "converge", projectDir: w7, tasks: [{ text: 123 }] } });
+    const apTool = list.result.tools.find((t) => t.name === "spec_append_tasks");
+    ok(apTool && apTool.inputSchema.required.join() === "name,tasks" && apTool.inputSchema.properties.tasks.items.required.join() === "text" &&
+      noTasksArg.result.isError && /Missing required argument\(s\): tasks/.test(payload(noTasksArg).error) && badItem.result.isError && /tasks\[0\]\.text must be a string/.test(payload(badItem).error),
+      "spec_append_tasks is advertised (name + tasks required, items need text) and its arguments are schema-checked");
+
+    // Line endings: CRLF + BOM kept exactly; a CRLF file without a final newline keeps having none.
+    const crF = S.createFeature(w7, "Crlf", ["core"]);
+    const crTasks = path.join(crF.dir, "tasks.md");
+    const BOM7 = String.fromCharCode(0xfeff);
+    const crOrig = BOM7 + "# Tasks: Crlf\r\n\r\n## Phase: Setup\r\n- [ ] 1. [shared] Set up\r\n**Checkpoint:** ready.\r\n";
+    fs.writeFileSync(crTasks, crOrig);
+    const crR = S.appendTasks(w7, "crlf", [{ text: "Converge the setup", implements: ["src/setup.js"] }]);
+    const crNow = fs.readFileSync(crTasks, "utf8");
+    ok(crR.ok && crNow.startsWith(crOrig) && crNow.startsWith(BOM7) && crNow.split(BOM7).length === 2 && !/[^\r]\n/.test(crNow) &&
+      crNow.endsWith("\r\n\r\n## Phase: Convergence\r\n- [ ] 2. Converge the setup\r\n  - _Implements: src/setup.js_\r\n**Checkpoint:** the convergence tasks are done and verified — the spec and the code agree again.\r\n") &&
+      S.completeTask(w7, "crlf", 2).ok && /- \[x\] 2\. Converge the setup\r\n/.test(fs.readFileSync(crTasks, "utf8")),
+      "a CRLF tasks.md with a BOM: every existing byte kept, new lines CRLF, BOM still first — and the appended task can be ticked");
+    fs.writeFileSync(crTasks, "# Tasks: Crlf\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [x] 2. b");
+    const crR2 = S.appendTasks(w7, "crlf", [{ text: "c" }]);
+    ok(crR2.ok && crR2.headingCreated === false && fs.readFileSync(crTasks, "utf8") === "# Tasks: Crlf\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [x] 2. b\r\n- [ ] 3. c",
+      "a CRLF tasks.md with no final newline: the last line is ended with CRLF and the file still has no final newline");
+    fs.writeFileSync(crTasks, BOM7);
+    const crR3 = S.appendTasks(w7, "crlf", [{ text: "first" }]);
+    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 1. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
+      "a BOM-only tasks.md: the new heading starts one line down (a BOM'd first line is not read as a heading)");
+
+    // PT feature: localized default heading, checkpoint and errors; markers stay English-stable.
+    const ptF = S.createFeature(w7, "Convergência", ["core"], undefined, undefined, "pt");
+    S.approvePhase(w7, "convergencia", "tasks");
+    const ptR = await call7("spec_append_tasks", { name: "Convergência", projectDir: w7, tasks: [{ text: "Corrigir o desvio", requirements: ["US-1.AC-2"], verify: "npm test", story: "US1" }] });
+    const ptTxt = fs.readFileSync(path.join(ptF.dir, "tasks.md"), "utf8");
+    const ptPh = S.appendTasks(w7, "convergencia", [{ text: "x", requirements: ["US-3.AC-3"] }]);
+    ok(ptR.p.ok && ptR.p.heading === "Fase: Convergência" && /\n## Fase: Convergência\n- \[ \] \d+\. \[US1\] Corrigir o desvio\n  - _Requirements: US-1\.AC-2_\n  - _Verify: npm test_\n\*\*Checkpoint:\*\* as tarefas de convergência estão concluídas/.test(ptTxt) &&
+      /Critérios de aceitação desconhecidos \(não estão em requirements\.md\): US-3\.AC-3\. Nada foi escrito/.test(ptPh.error) && S.statusFeature(w7, "convergencia").tasks.list.some((t) => t.text === "[US1] Corrigir o desvio") &&
+      ptR.p.needsReapproval === true && /revê as novas tarefas e volta a aprovar: \/approve convergencia tasks/.test(ptR.p.note),
+      "PT feature: 'Fase: Convergência' + PT checkpoint, English-stable markers, PT phantom error and re-approval note; status counts the task");
+    const esF = S.createFeature(w7, "Convergencia ES", ["core"], undefined, undefined, "es");
+    const esR = S.appendTasks(w7, "convergencia-es", [{ text: "Corregir la desviación", story: "US-2" }]);
+    ok(esR.ok && esR.heading === "Fase: Convergencia" && /\n## Fase: Convergencia\n- \[ \] \d+\. \[US2\] Corregir la desviación\n\*\*Checkpoint:\*\* las tareas de convergencia/.test(fs.readFileSync(path.join(esF.dir, "tasks.md"), "utf8")) &&
+      /Tarea 1: story debe ser US<n>/.test(S.appendTasks(w7, "convergencia-es", [{ text: "x", story: "historia" }]).error), "ES feature: 'Fase: Convergencia' + ES checkpoint and errors ('US-2' → [US2])");
+
+    // Removed track: its trailing task section stays after the new phase, and its heading is refused.
+    const rtF = S.createFeature(w7, "Tracked", ["core"]);
+    const rtTasks = path.join(rtF.dir, "tasks.md");
+    S.addTrack(w7, "tracked", "ai");
+    S.addTrack(w7, "tracked", "ai", { remove: true });
+    const rtBefore = fs.readFileSync(rtTasks, "utf8");
+    const rtMax = Math.max(...S.parseTasks(rtBefore).map((t) => t.number));
+    const rtR = S.appendTasks(w7, "tracked", [{ text: "Converge without AI" }]);
+    const rtTxt = fs.readFileSync(rtTasks, "utf8");
+    const rtNew = rtTxt.indexOf("## Phase: Convergence"), rtAi = rtTxt.indexOf("## Story US-1 — AI");
+    const rtSt = S.statusFeature(w7, "tracked");
+    const rtHead = S.appendTasks(w7, "tracked", [{ text: "x" }], { heading: "Story US-1 — AI" });
+    ok(rtR.ok && rtR.appended[0].number === rtMax + 1 && rtNew > 0 && rtAi > rtNew && rtSt.tasks.list.some((t) => t.number === rtMax + 1) &&
+      rtTxt.replace(/\n## Phase: Convergence\n- \[ \] \d+\. Converge without AI\n\*\*Checkpoint:\*\* [^\n]*\n\n/, "\n") === rtBefore &&
+      rtHead.ok === false && /inactive \+ai track/.test(rtHead.error) && fs.readFileSync(rtTasks, "utf8") === rtTxt,
+      "after add_track --remove ai the new phase goes after the last ACTIVE phase (before the inactive AI section), counts in status; the AI heading is refused");
+
+    // A removed task's leftover evidence is never inherited: the new task is numbered past it.
+    const evF = S.createFeature(w7, "Leftover", ["core"]);
+    fs.writeFileSync(path.join(evF.dir, "tasks.md"), "# Tasks\n\n## Phase: Build\n- [x] 1. a\n");
+    const evState = JSON.parse(fs.readFileSync(path.join(evF.dir, ".state.json"), "utf8"));
+    evState.evidence = { "2": { command: "npm test", exitCode: 0, at: "2026-01-01T00:00:00Z", task: "old task", verify: "npm test" } };
+    fs.writeFileSync(path.join(evF.dir, ".state.json"), JSON.stringify(evState));
+    const evR = S.appendTasks(w7, "leftover", [{ text: "new work", verify: "npm test" }]);
+    ok(evR.ok && evR.appended[0].number === 3 && S.statusFeature(w7, "leftover").tasks.list.find((t) => t.number === 3).verified === false,
+      "a number that still has a removed task's evidence is skipped (the new task never inherits that run)");
+  }
   // @wp WP7 <<<
 
   // @wp WP8 tests >>>
