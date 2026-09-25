@@ -1180,7 +1180,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const given = pt.given;
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const storedKind = existed ? readState(projectDir, slug).kind || "feature" : null;
-  const askedKind = kind ? String(kind).toLowerCase() : null;
+  const askedKind = kind ? String(kind).trim().toLowerCase() : null;
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
@@ -1250,7 +1250,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   put("requirements.md", requirementsMd(name, t, summary, lng));
   put("design.md", designMd(name, t, lng));
   if (t.includes("tdd")) {
-    put("test-plan.md", testPlanMd(name, lng, t));
+    // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
+    // EXISTING feature given +tdd with +saas/+ai the requirements predate those tracks, and their rows would cite
+    // US-1.AC-5…AC-9 that don't exist.
+    put("test-plan.md", testPlanMd(name, lng, testPlanTracks(dir, t)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
@@ -1996,6 +1999,9 @@ function traceCheck(projectDir, name, opts = {}) {
 
   if (tracks.includes("tdd")) {
     const uncoveredByTests = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
+    // Reverse: AC IDs the test plan covers that requirements.md doesn't define (a typo, a removed criterion, a template
+    // row for a track the requirements never got) — a fenced example is no reference, as for tasks.
+    const phantomAcsInTests = [...extractAcIds(stripFencedCode(testPlan))].filter((id) => !requiredAcs.has(id));
     const planTestIds = extractTestIds(testPlan);
     const tasksTestIds = extractTestIds(tasks);
     const testsNotInTasks = [...planTestIds].filter((id) => !tasksTestIds.has(id));
@@ -2003,6 +2009,7 @@ function traceCheck(projectDir, name, opts = {}) {
     const phantomTestsInTasks = [...tasksTestIds].filter((id) => !planTestIds.has(id));
     result.coveredByTests = requiredAcs.size - uncoveredByTests.length;
     result.uncoveredByTests = uncoveredByTests;
+    result.phantomAcsInTests = phantomAcsInTests;
     result.plannedTests = planTestIds.size;
     result.testsNotMappedToTasks = testsNotInTasks;
     result.phantomTestsInTasks = phantomTestsInTasks;
@@ -2013,6 +2020,7 @@ function traceCheck(projectDir, name, opts = {}) {
     phantomAcsInTasks.length +
     missingImplFiles.length +
     (result.uncoveredByTests ? result.uncoveredByTests.length : 0) +
+    (result.phantomAcsInTests ? result.phantomAcsInTests.length : 0) +
     (result.phantomTestsInTasks ? result.phantomTestsInTasks.length : 0);
   result.verdict = gaps === 0 ? "pass" : "gaps-found";
 
@@ -2031,7 +2039,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
 const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"]);
-const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
+const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 function traceGaps(tr) {
   const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
   return Object.keys(tr || {})
@@ -2786,6 +2794,23 @@ function summarizeRunOutput(output, max = 500) {
   }
   return picked.map((p) => p.text).join("\n").slice(0, max);
 }
+// POSIX-only shell syntax in a _Verify:_ command that cmd.exe — the default shell of `dev-spec done --run` on Windows —
+// reads differently, often WITHOUT failing: cmd.exe has no single quotes (`node -e 'process.exit(1)'` evaluates a string
+// literal and exits 0) and never expands `$VAR` / `${…}` / `$(…)`. Quote state is tracked the way cmd.exe does it (every
+// `"` toggles), so an apostrophe inside double quotes, or a lone one (`it's`), is not a single-quoted string.
+// → the stable codes found, in order: "single-quotes" | "variable" ([] = nothing POSIX-only).
+function posixShellSyntax(cmd) {
+  const s = String(cmd == null ? "" : cmd);
+  const found = new Set();
+  let dq = false, sq = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"' && !sq) dq = !dq;
+    else if (c === "'" && !dq) { sq = !sq; if (!sq) found.add("single-quotes"); }
+    else if (c === "$" && !sq && /[A-Za-z_{(]/.test(s[i + 1] || "")) found.add("variable");
+  }
+  return ["single-quotes", "variable"].filter((k) => found.has(k));
+}
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
@@ -3108,20 +3133,29 @@ function finishFeature(projectDir, name, opts = {}) {
   const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause").map((c) => c.id) : [];
   const pendingGates = doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
-  // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause.
-  const changed = changedSinceApproval(dir, state.approvals || {}, tracks, kind);
+  // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause. Only a change known by CONTENT blocks: a file date
+  // (a pre-1.11 approval) is no evidence — every clone or copy resets it — and a pre-1.13 bugfix design approval never
+  // tracked bug.md; both are warnings (re-approve to track them).
+  const cs = changedSinceApproval(dir, state.approvals || {}, tracks, kind, { detail: true });
+  const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
+  if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
+  if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
-  const blockers = [];
-  if (failing.length) blockers.push(F.doctor(failing.join(", ")));
-  if (rootCauseMissing) blockers.push(G.finishRootCause);
-  if (leftovers.length) blockers.push(G.finishPlaceholders(placeholderSummary(leftovers, lng)));
-  if (changed.length) blockers.push(G.finishChanged(changed.join(", ")));
-  if (!blocks.length) blockers.push(F.noTasks);
-  if (open.length) blockers.push(F.open(open.map((n) => "#" + n).join(", ")));
-  if (vs.unverified.length) blockers.push(F.unverified(unverifiedLabel(vs, lng)));
-  if (pendingGates.length) blockers.push(F.gates(pendingGates.join(", ")));
+  // Each blocker with a stable id: the approve gate of 'execution' refuses on exactly these (opts.gateOnly).
+  const blocked = [];
+  const block = (id, detail) => blocked.push({ id, detail });
+  if (failing.length) block("doctor", F.doctor(failing.join(", ")));
+  if (rootCauseMissing) block("root-cause", G.finishRootCause);
+  if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));
+  if (changed.length) block("changed-since-approval", G.finishChanged(changed.join(", ")));
+  if (!blocks.length) block("tasks", F.noTasks);
+  if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
+  if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
+  if (pendingGates.length) block("approval-gates", F.gates(pendingGates.join(", ")));
+  if (opts.gateOnly) return { ok: true, checks: blocked };
+  const blockers = blocked.map((b) => b.detail);
 
   // What only a human (or a fresh run) can confirm — the track-gated "done" checks.
   const checks = [F.checkSuite];
@@ -3469,6 +3503,15 @@ function impactReport(projectDir, name, opts = {}) {
   const tracks = detectTracks(dir);
   const res = { ok: true, feature: slug, lang: lng, phase, file, approvedAt: appr.at || null };
   const snap = latestSnapshot(dir, state, phase);
+  if (!snap && !appr.fingerprint) {
+    // Approved before content fingerprints (≤1.10, or a 1.12 bugfix design approval): nothing about the approved version
+    // was recorded. `changed` is true only for a change known without a date (a bugfix's design.md created since), else
+    // null — unknown: a file date is no evidence (a clone or copy resets it).
+    const cs = changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind, { detail: true });
+    Object.assign(res, { baseline: "none", changed: cs.changed.some((x) => !cs.byDate.includes(x)) ? true : null, hint: I.noFingerprint(phase, slug) });
+    if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
+    return res;
+  }
   if (!snap) {
     // Approved before 1.13: only the fingerprint was recorded — WHETHER it changed, not what.
     Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind).length > 0, hint: I.fingerprintOnly(phase, slug) });
@@ -3620,8 +3663,8 @@ function impactLines(r) {
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
   const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
-  if (r.baseline === "fingerprint-only") {
-    const out = [I.headFp(r.feature, r.phase, r.changed), "  " + r.hint];
+  if (r.baseline === "fingerprint-only" || r.baseline === "none") {
+    const out = [(r.baseline === "none" ? I.headNone : I.headFp)(r.feature, r.phase, r.changed), "  " + r.hint];
     if (r.note) out.push("  " + r.note);
     return out;
   }
@@ -3727,8 +3770,11 @@ function featureMetrics(projectDir, slug, dir) {
     if (t == null) { try { t = fs.statSync(path.join(dir, "tasks.md")).mtimeMs; } catch { /* unknown */ } }
     if (t != null) leadTime.complete = { at: isoOf(t), hours: hoursFrom(created, t), ...(!stamps.length || !everyTask ? { approximate: true } : {}) };
   }
-  // Finished, when recorded: the execution phase's first approval (or a finishedAt a later tool may record).
-  const fin = first.execution ? first.execution.t : timeOf(state.finishedAt);
+  // Finished, when recorded: the earliest of the execution phase's first approval (gated on spec_finish's readiness since
+  // 1.13 — a forced one is counted in forcedApprovals) and the finish spec_finish {write} records on a READY feature
+  // (state.finished.at; finishedAt: an older spelling).
+  const finishes = [first.execution ? first.execution.t : null, isRecord(state.finished) ? timeOf(state.finished.at) : null, timeOf(state.finishedAt)].filter((t) => t != null);
+  const fin = finishes.length ? Math.min(...finishes) : null;
   leadTime.finished = fin != null ? { at: isoOf(fin), hours: hoursFrom(created, fin) } : null;
   // Rework: approvals of a phase beyond its first (history only — a pre-1.13 approval replaced its predecessor).
   // Nothing but legacy approvals (none made under the history): unknown, not 0.
@@ -4070,7 +4116,7 @@ function removePreview(projectDir, name) {
 }
 
 function manageFeature(projectDir, action, name, arg, opts = {}) {
-  switch (String(action || "").toLowerCase()) {
+  switch (String(action || "").trim().toLowerCase()) {
     case "remove":
     case "delete":
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
@@ -4112,10 +4158,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
 
   for (const tr of trs) {
     if (tr === "tdd") {
-      // Plan a test only for the track criteria requirements.md actually has (a track added later brings none).
-      const reqIds = requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
-      const planTracks = after.filter((x) => (x !== "saas" || reqIds.has("US-1.AC-5")) && (x !== "ai" || reqIds.has("US-1.AC-7")));
-      put("test-plan.md", testPlanMd(name, lng, planTracks));
+      put("test-plan.md", testPlanMd(name, lng, testPlanTracks(dir, after)));
       ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
     }
     if (tr === "ai") {
@@ -4169,6 +4212,14 @@ function applyTracks(projectDir, f, name, trs, lng) {
   state.tracks = after;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   return { ok: true, added, tracks: after };
+}
+
+// The tracks whose template rows a scaffolded test plan gets: a test is planned only for the track criteria
+// requirements.md actually has (US-1.AC-5 for +saas, US-1.AC-7 for +ai) — a track added after the requirements brings
+// none. spec_add_track and spec_create (new or existing feature) share it, so both give the same plan.
+function testPlanTracks(dir, tracks) {
+  const reqIds = requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
+  return tracks.filter((x) => (x !== "saas" || reqIds.has("US-1.AC-5")) && (x !== "ai" || reqIds.has("US-1.AC-7")));
 }
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
@@ -4636,7 +4687,10 @@ function nextAction(projectDir, name) {
     // name what it would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
     step = "fix";
     gateFix = true;
-    recommendation = G.fixGate(pending, refused.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; "), slug);
+    const ids = refused.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; ");
+    // Phase 4: what its gate refuses on (planned tests not in the test code, the sample eval set) IS the work the phase
+    // asks for — name that work (/writeTests), then what the gate checks.
+    recommendation = pending === "tests" ? approveMsg.tests(slug) + " " + G.testsGateChecks(refused.map((c) => c.id).join(", ")) : G.fixGate(pending, ids, slug);
   } else if (pending && approveMsg[pending]) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
@@ -4969,10 +5023,11 @@ function artifactReport(dir, file, tracks, preloaded) {
   return { file, state: empty || items.length ? "placeholder" : "filled", items, empty };
 }
 
-// artifactReport by feature name (resolver-aware) — for the hook and the CLI. null when the feature doesn't exist.
-function featurePlaceholders(projectDir, name, file) {
+// artifactReport by feature name (resolver-aware) — for the hooks and the CLI. null when the feature doesn't exist.
+// text: the content to judge instead of the file on disk (the pre-commit hook passes the STAGED version).
+function featurePlaceholders(projectDir, name, file, text) {
   const f = existingFeature(projectDir, name);
-  return f.ok ? artifactReport(f.dir, file, detectTracks(f.dir)) : null;
+  return f.ok ? artifactReport(f.dir, file, detectTracks(f.dir), typeof text === "string" ? text : undefined) : null;
 }
 
 // "requirements.md (17): requirements.md:11 [1-2 sentences…], …, +12 more" — bounded (5 per file) for every surface.
@@ -5000,20 +5055,24 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
 // Approved artifacts whose content changed after THEIR OWN approval (fingerprint at approval; checkbox ticks in
 // tasks.md don't count). Approvals recorded before fingerprints existed fall back to that phase's own timestamp —
 // never the latest approval of any phase. Inactive-track phases are skipped. Shared by next_action, finish, roadmap.
-// kind: the feature's (state.kind) — a bugfix's legacy design approval (no fingerprint, no `file`) signed off bug.md,
-// so its timestamp is compared with bug.md's mtime; every other legacy approval with its own phase file's.
-function changedSinceApproval(dir, approvals, tracks, kind) {
+// kind: the feature's (state.kind). A file's date is no evidence of an edit — a clone, checkout, copy or unzip gives every
+// file a new mtime — so what is judged by it alone is reported apart (opts.detail → { changed, byDate, untracked }):
+//   byDate     a pre-1.11 approval (no fingerprint): its phase file newer than the approval — kept in `changed` (next_action,
+//              doctor and the roadmap show it, as 1.12 did) but never a spec_finish blocker (a warning there);
+//   untracked  a pre-1.13 bugfix design approval (no fingerprint, no `file`) signed off bug.md, and nothing about bug.md was
+//              recorded (1.12 never tracked it): not a change at all — re-approving starts tracking it.
+// Without opts.detail → the `changed` list.
+function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
   const out = [];
+  const byDate = [];
+  const untracked = [];
   for (const [ph, file] of Object.entries(PHASE_FILE)) {
     const a = approvals && approvals[ph];
     if (a && !a.fingerprint && !a.file && a.at && kind === "bugfix" && ph === "design" && phaseActive(ph, tracks)) {
-      // A pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md, judged on its mtime. 1.12 fingerprinted
-      // design.md whenever it existed, so a design.md newer than that approval was created after it (a track added since) —
-      // a change too, as for a 1.13 approval.
-      const since = new Date(a.at).getTime();
-      const newer = (rel) => { try { return fs.statSync(path.join(dir, rel)).mtime.getTime() > since; } catch { return false; } };
-      if (newer(phaseFile(ph, "bugfix"))) out.push(phaseFile(ph, "bugfix"));
-      if (newer(file)) out.push(file);
+      // bug.md: untracked (above). design.md: 1.12 fingerprinted design.md whenever it existed, so one that exists now was
+      // created after this approval (a track added since) — a change known without any date, as for a 1.13 approval.
+      if (fs.existsSync(path.join(dir, phaseFile(ph, "bugfix")))) untracked.push({ phase: ph, file: phaseFile(ph, "bugfix") });
+      if (fs.existsSync(path.join(dir, file))) out.push(file);
       continue;
     }
     if (a && a.file !== file && a.file === phaseFile(ph, "bugfix") && phaseActive(ph, tracks)) {
@@ -5029,10 +5088,10 @@ function changedSinceApproval(dir, approvals, tracks, kind) {
     if (a.fingerprint) {
       if (artifactFingerprint(abs, ph) !== a.fingerprint) out.push(file);
     } else if (a.at && ph !== "tasks") {
-      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) out.push(file); } catch { /* ignore */ }
+      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(file); byDate.push(file); } } catch { /* ignore */ }
     }
   }
-  return out;
+  return opts.detail ? { changed: out, byDate, untracked } : out;
 }
 
 // Success criteria / priorities count once they are REAL: the template's "Priorities: **P1** = …" legend, its
@@ -5123,7 +5182,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       if (!phaseActive("test-plan", tracks) || !exists("test-plan.md")) return nothing("test-plan.md");
       noPlaceholders("test-plan.md");
       const tr = traceCheck(projectDir, slug);
-      need("traceability", !(tr.uncoveredByTests || []).length, gaps(tr, ["uncoveredByTests"]));
+      need("traceability", !(tr.uncoveredByTests || []).length && !(tr.phantomAcsInTests || []).length, gaps(tr, ["uncoveredByTests", "phantomAcsInTests"]));
       break;
     }
     case "eval-plan":
@@ -5142,7 +5201,37 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
       break;
     }
-    default: // tests / execution: no artifact of their own — nothing to check
+    case "tests": {
+      // Phase 4 has no artifact of its own: it signs off the failing tests (+tdd) / the eval harness (+ai) that implement
+      // an active plan — nothing to approve without one (a core-only feature has no Phase 4).
+      const tdd = tracks.includes("tdd") && exists("test-plan.md");
+      const ai = tracks.includes("ai") && exists("eval-plan.md");
+      if (!phaseActive("tests", tracks) || (!tdd && !ai)) return nothing(tracks.includes("ai") && !tracks.includes("tdd") ? "eval-plan.md" : "test-plan.md");
+      if (tdd) {
+        // Every planned T-ID named by a test file (SKILL Phase 4: the T-ID in each failing test's name) — trace_check's
+        // own code scan, so a row scoped to a test path counts only there.
+        const planned = extractTestIds(stripHtmlComments(read("test-plan.md") || "")).size;
+        const tr = planned ? traceCheck(projectDir, slug, { code: true }) : null;
+        const missing = tr && tr.ok && tr.code ? tr.code.plannedNotInCode : [];
+        need("tests-in-code", planned > 0 && !missing.length, planned ? G.testsNotInCode(missing.join(", ")) : G.noPlannedTests);
+      }
+      if (ai) {
+        // The harness runs this feature's eval sets: evals/golden.json must be a set of its own, not the scaffold's sample.
+        const golden = readJson(path.join(dir, "evals", "golden.json"));
+        const items = golden.data && Array.isArray(golden.data.items) ? golden.data.items : null;
+        const sample = items && JSON.stringify(golden.data) === JSON.stringify(JSON.parse(SAMPLE_GOLDEN));
+        need("eval-sets", !!(items && items.length) && !sample, sample ? G.evalSetsSample : G.evalSetsMissing);
+      }
+      break;
+    }
+    case "execution": {
+      // The sign-off after a READY finish (commands/spec-finish.md): spec_finish's blockers are its failing checks —
+      // open or unverified tasks, pending gates, edits after approval, placeholders, a bugfix's missing root cause.
+      const fin = finishFeature(projectDir, slug, { gateOnly: true });
+      if (fin.ok) fin.checks.forEach((c) => need(c.id, false, c.detail));
+      break;
+    }
+    default:
   }
   return { artifact: true, checks };
 }
@@ -5592,8 +5681,9 @@ function removeBacklog(projectDir, name) {
 }
 
 function backlog(projectDir, action, name, note) {
-  if (action === "add") return addBacklog(projectDir, name, note);
-  if (action === "rm" || action === "remove") return removeBacklog(projectDir, name);
+  const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
+  if (a === "add") return addBacklog(projectDir, name, note);
+  if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
 
@@ -8013,6 +8103,7 @@ module.exports = {
   resolveTask,
   verificationStatus,
   summarizeRunOutput,
+  posixShellSyntax, // `done --run` on Windows: POSIX-only syntax cmd.exe would misread (refused unless --shell)
 
   parseTracks,
   detectTracks,

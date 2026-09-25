@@ -23,5 +23,7 @@ circuit breaker) AND implement the runnable eval harness; establish and record t
 0 erroring; the `trace_check {code: true}` result) and, when the user signs off, record it with `spec_approve
 {name, phase: "tests"}` (CLI `dev-spec approve <feature> tests`). The engine tracks this gate: on a +tdd / +ai
 feature with a test or eval plan, `tests` stays in `pendingGates` (so `gatesOk` is false, `spec_next_action` asks
-for it instead of the next task, and `spec_finish` blocks) until it is approved. A bugfix has no Phase 4 gate — its
-failing regression test is one of its tasks.
+for it instead of the next task, and `spec_finish` blocks) until it is approved. The approval checks what this phase
+produces: +tdd `tests-in-code` (every planned T-ID named by a test file — the T-ID in each test's name), +ai `eval-sets`
+(`evals/golden.json` is this feature's own set, not the scaffold's sample); a failing check refuses it unless the user
+explicitly accepts it with `force`. A bugfix has no Phase 4 gate — its failing regression test is one of its tasks.

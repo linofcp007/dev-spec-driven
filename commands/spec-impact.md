@@ -19,7 +19,9 @@ Use this when an **approved** artifact was edited afterwards — `spec_doctor` w
      bugfix diffs `bug.md` too — its design approval signed it off);
    - **tasks** — task numbers added / removed / changed.
    `baseline: "fingerprint-only"` means the approval predates the change history: only *that* it changed is
-   known — re-review it by hand and re-approve (that starts the history).
+   known — re-review it by hand and re-approve (that starts the history). `baseline: "none"` (≤1.10, or a 1.12
+   bugfix design approval) recorded not even a fingerprint: `changed` is `null` (unknown — a file date is no
+   evidence) unless a file was added after it; re-review and re-approve to start tracking it.
 2. Show the user the diff and `affectedTasks`, grouped by ID, with each task's evidence state. Ask whether the
    change is intended and which done tasks must be redone.
 3. **Only with the user's OK**, run it again with `reopen: true` (CLI `--reopen`; requirements/design only): it

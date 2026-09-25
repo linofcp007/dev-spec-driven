@@ -1001,6 +1001,12 @@ function endRun() {
   ok(/# tests 2\n# pass 2\n# fail 0\n/.test(sumNoisy) && /trailing noise line 11$/.test(sumNoisy) && !/ok 1 - a/.test(sumNoisy) && sumHuge.length <= 500 && /1 failing$/.test(sumHuge) &&
     /^ℹ tests 1\nℹ pass 0\nℹ fail 1\n {4}at Test\.run/.test(sumFail) && /'test failed'$/.test(sumFail),
     "run summary keeps the last count lines (node --test pass/fail, even past failure details) + the tail, deduped and capped at ~500 chars");
+  // `done --run` on Windows refuses (unless --shell) a _Verify:_ command in POSIX syntax that cmd.exe would misread.
+  const px = (c) => S.posixShellSyntax(c).join("+");
+  ok(px("node -e 'process.exit(1)'") === "single-quotes" && px("npm test -- -t 'T-01'") === "single-quotes" && px("test \"$CI\" = 1") === "variable" &&
+    px("echo ${HOME} $(pwd) 'x'") === "single-quotes+variable" && px("node -e \"process.exit(0)\"") === "" && px("node -e \"console.log('it is')\"") === "" &&
+    px("echo it's done") === "" && px("grep -q \"foo$\" out.txt") === "" && px("awk '{print $1}' f") === "single-quotes" && px("npm test") === "" && px(undefined) === "",
+    "posixShellSyntax: single-quoted strings outside double quotes and $VAR/${…}/$(…) are POSIX-only; an apostrophe in double quotes, a lone one, a regex '$\"' are not");
   // Review fixes. A line that only LOOKS like a fence opener must not hide the tasks below it (CommonMark):
   // "```npm test```" is inline code; a fence left open in a task's body ends with that list item; a fence
   // that never closes is plain text — the feature must not read as complete with real tasks still open.
@@ -1492,7 +1498,24 @@ function endRun() {
     // tracks carry no schema enum (the engine splits "tdd,saas" and answers with a did-you-mean), but the bad item is still named
     ok(rEnum.result.isError && /'quantum'/.test(errText(rEnum)) && /core, tdd, saas, ai/.test(errText(rEnum)) && !fs.existsSync(path.join(w3, ".specs", "enum-check")),
       "an unknown track item is rejected and named (nothing scaffolded)");
-    const rNested = await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
+    // String enums the engine folds are case-insensitive on MCP too (the CLI and the 1.12 MCP took 'Design' / 'PT'):
+    // phase, lang, kind, action. spec_import's tool stays exact on both surfaces; a value that folds to nothing is refused as given.
+    const rPhase = body(await call("spec_approve", { name: "arg-check", phase: " Design ", force: true, projectDir: w3 }));
+    const rLang = body(await call("spec_create", { name: "Case Lang", lang: "PT", projectDir: w3 }));
+    const rKind = body(await call("spec_create", { name: "Case Kind", kind: "Bugfix", projectDir: w3 }));
+    const rBl = body(await call("spec_backlog", { action: "ADD", name: "Later thing", projectDir: w3 }));
+    const rBlList = body(await call("spec_backlog", { action: "LIST", projectDir: w3 }));
+    const rFeat = await call("spec_feature", { action: "Remove", name: "case-lang", projectDir: w3 });
+    const rImp = await call("spec_impact", { name: "arg-check", phase: "DESIGN", projectDir: w3 });
+    const rTool = await call("spec_import", { tool: "Kiro", path: ".kiro/specs/x", projectDir: w3 });
+    const rBadPh = await call("spec_approve", { name: "arg-check", phase: "Desing", projectDir: w3 });
+    ok(rPhase.ok && rPhase.approved === "design" && rLang.ok && rLang.lang === "pt" && rKind.ok && rKind.kind === "bugfix" &&
+      rBl.ok && rBl.backlog.some((b) => b.name === "Later thing") && rBlList.ok && rBlList.backlog.length === 1 &&
+      body(rFeat).needsConfirm === true && !/one of/.test(errText(rFeat)) && !/one of/.test(errText(rImp)) &&
+      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec \(got "Kiro"\)/.test(errText(rTool)) &&
+      rBadPh.result.isError && /phase must be one of: .* \(got "Desing"\)/.test(errText(rBadPh)),
+      "MCP enums are case-insensitive where the engine folds them (phase ' Design ', lang 'PT', kind 'Bugfix', backlog 'ADD'/'LIST', feature 'Remove', impact 'DESIGN'); spec_import's tool stays exact; a typo is still refused as given");
+    const rNested =await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
     ok(rNested.result.isError && /evidence\.exitCode must be an integer/.test(errText(rNested)) && /- \[ \] 2\./.test(fs.readFileSync(w3Tasks, "utf8")),
       "nested object properties are validated (evidence.exitCode)");
     const rExtra = await call("spec_list", { projectDir: w3, bogus: { deep: 1 } });
@@ -1678,6 +1701,23 @@ function endRun() {
       ok(pc.status === 1 && /serviços e apps\/\.specs\/autenticacao\/requirements\.md: 1 erro\(s\) EARS/.test(pc.stdout),
         "pre-commit checks staged spec files under accented/space paths (the EARS error blocks the commit)");
       ok(/fantasma[^\n]*US-9\.AC-9/.test(pc.stdout) && /sem tarefa[^\n]*US-1\.AC-2/.test(pc.stdout), "pre-commit names the phantom and uncovered AC IDs (localized)");
+      // An untouched template has no EARS errors but is not "clean": its warnings and placeholders are named (not blocking).
+      const repo2 = path.join(tmp, "proj-wp3-git-template");
+      S.initProject(repo2, ["core"], "en");
+      const tf = S.createFeature(repo2, "Search", ["core"]);
+      const git2 = (...a) => spawnSync("git", a, { cwd: repo2, encoding: "utf8" });
+      const hook2 = () => spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "precommit-check.js")], { cwd: repo2, encoding: "utf8" });
+      git2("init", "-q");
+      git2("add", "-A");
+      const pcT = hook2();
+      fs.writeFileSync(path.join(tf.dir, "requirements.md"), "# Feature: Search\n\n## Summary\nFind invoices.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a user searches THE SYSTEM SHALL list the matching invoices\n");
+      git2("add", "-A"); // tasks.md still cites the template ACs: its phantom refs block — this checks the requirements line only
+      const pcC = hook2();
+      ok(pcT.status === 0 && /⚠ \.specs\/search\/requirements\.md: no EARS errors \(5 criteria\), but 5 warning\(s\) and \d+ template placeholder\(s\) left — not blocking/.test(pcT.stdout) &&
+        /L\d+ Criterion still holds template placeholder/.test(pcT.stdout) && !/EARS clean/.test(pcT.stdout) &&
+        /✓ \.specs\/search\/requirements\.md: EARS clean \(1 criteria\)/.test(pcC.stdout) &&
+        /sem erros EARS \(2 critérios\), mas 1 aviso\(s\) e 3 placeholder/.test(S.msg("pt").precommit.earsWarnings("x", 2, 1, 3)) && /pero 2 aviso\(s\) — no bloquea/.test(S.msg("es").precommit.earsWarnings("x", 1, 2, 0)),
+        "pre-commit never says 'EARS clean' for a template: warnings + staged placeholders are named (exit 0); a real requirements.md is clean (EN/PT/ES)");
     }
 
     // 8. No invisible code points in this file (the BOM test writes it as an escape).
@@ -1857,7 +1897,20 @@ function endRun() {
     const noPlan = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: f2.slug, phase: "test-plan", force: true, projectDir: w5 } }));
     ok(noEval.ok === false && noEval.nothingToApprove && /Nothing to approve: 'eval-plan'/.test(noEval.error) && noPlan.ok === false && /test-plan\.md/.test(noPlan.error) &&
       !stateOf(f2).approvals["eval-plan"], "approving a phase with no artifact (eval-plan without +ai, test-plan without +tdd) is an error even with force");
-    ok(S.approvePhase(w5, f2.slug, "execution").ok && S.approvePhase(w5, f2.slug, "tests").ok, "tests / execution have no artifact of their own — approved without checks");
+    // execution is the sign-off after a READY finish: spec_finish's blockers are its checks (stable ids); forced otherwise.
+    // tests (Phase 4) is track-conditional: a core-only feature has nothing to approve, not even with force.
+    const ex2 = S.approvePhase(w5, f2.slug, "execution");
+    const exMcp2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: f2.slug, phase: "execution", projectDir: w5 } }));
+    const noTests2 = S.approvePhase(w5, f2.slug, "tests", undefined, { force: true });
+    const before2 = stateOf(f2).approvals;
+    const exF2 = S.approvePhase(w5, f2.slug, "execution", undefined, { force: true });
+    const m2 = S.metrics(w5, f2.slug);
+    ok(ex2.ok === false && ex2.refused && ["placeholders", "open-tasks", "approval-gates"].every((id) => ex2.failing.includes(id)) && /✗ open-tasks — /.test(ex2.error) &&
+      exMcp2.ok === false && exMcp2.failing.join() === ex2.failing.join() && !before2.execution && !before2.tests &&
+      noTests2.ok === false && noTests2.nothingToApprove && /Nothing to approve: 'tests'/.test(noTests2.error) &&
+      exF2.ok && exF2.forced && stateOf(f2).approvals.execution.forced === true && stateOf(f2).approvals.execution.failing.includes("open-tasks") &&
+      m2.forcedApprovals >= 1 && m2.leadTime.finished != null,
+      "approve execution runs spec_finish's blockers (open-tasks, placeholders, approval-gates… — same on MCP) and is refused on an unfinished feature; --force records it as forced; tests on a core-only feature: nothing to approve (got " + ex2.failing + ")");
     // A core-only classification.md: the Signals line is the tool's own final answer ("- none beyond core", no brackets)
     // — filling the real slots (Blast Radius, Compliance) is enough to approve it; a pre-1.13 file's bracketed
     // "- [none beyond core]" is no placeholder either (EN/PT/ES).
@@ -1994,15 +2047,44 @@ function endRun() {
     const ap6t = S.approvePhase(w5, f6t.slug, "tasks");
     const n6t2 = S.nextAction(w5, f6t.slug);
     const fin6t = S.finishFeature(w5, f6t.slug);
-    S.approvePhase(w5, f6t.slug, "tests");
+    // The tests gate checks what Phase 4 asks for: every planned T-ID named by a test file (trace_check's code scan).
+    const noCode6t = S.approvePhase(w5, f6t.slug, "tests");
+    write5(f6t, "tests/unit/order.test.js", ["T-01", "T-02", "T-03", "T-04"].map((t) => `test("${t} builds it", () => { throw new Error("not implemented"); });`).join("\n") + "\n");
+    const part6t = S.approvePhase(w5, f6t.slug, "tests");
+    fs.appendFileSync(path.join(f6t.dir, "tests", "unit", "order.test.js"), `test("T-05 builds it", () => { throw new Error("not implemented"); });\n`);
+    const ap6tT = S.approvePhase(w5, f6t.slug, "tests");
     const n6t3 = S.nextAction(w5, f6t.slug);
-    ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "approve" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
-      /\/writeTests order-tdd/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) &&
-      ap6t.ok && n6t2.step === "approve" && n6t2.pendingGates.join() === "tests" && fin6t.blockers.some((b) => /tests/.test(b)) &&
+    ok(noCode6t.refused && noCode6t.failing.join() === "tests-in-code" && /planned tests no test file names yet: T-01, T-02, T-03, T-04, T-05/.test(noCode6t.error) &&
+      part6t.refused && /names yet: T-05 —/.test(part6t.error) && ap6tT.ok && !ap6tT.forced,
+      "approve tests (+tdd) is refused until every planned T-ID is named by a test file (tests-in-code, the missing ones listed); then approved unforced");
+    ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "fix" && n6t.refusedGate.phase === "tests" && n6t.refusedGate.failing.join() === "tests-in-code" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
+      /\/writeTests order-tdd/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation) &&
+      ap6t.ok && n6t2.step === "fix" && n6t2.pendingGates.join() === "tests" && fin6t.blockers.some((b) => /tests/.test(b)) &&
       n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
       /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")) && /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
       "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, finish is blocked; approved → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
     ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
+    // +ai: the tests gate needs an eval set of the feature's own — the scaffold's sample golden.json is refused (eval-sets).
+    const f6a = S.createFeature(w5, "Order ai", ["ai"], undefined, undefined, "pt");
+    const aiSample = S.approvePhase(w5, f6a.slug, "tests");
+    fs.writeFileSync(path.join(f6a.dir, "evals", "golden.json"), JSON.stringify({ set: "golden", items: [] }));
+    const aiEmpty = S.approvePhase(w5, f6a.slug, "tests");
+    fs.writeFileSync(path.join(f6a.dir, "evals", "golden.json"), JSON.stringify({ set: "golden", items: [{ id: "o1", input: "Total da encomenda 7?", expect: { type: "contains", value: "7" } }] }));
+    const aiOwn = S.approvePhase(w5, f6a.slug, "tests");
+    ok(aiSample.refused && aiSample.failing.join() === "eval-sets" && /conjunto de exemplo do scaffold/.test(aiSample.error) &&
+      aiEmpty.refused && /não tem itens de eval/.test(aiEmpty.error) && aiOwn.ok && !aiOwn.forced,
+      "approve tests (+ai) is refused while evals/golden.json is the scaffold's sample (or empty) — eval-sets, localized; an eval set of its own passes");
+    // execution on a READY feature (order-core: every task done, its gates approved) is approved unforced. spec_metrics'
+    // finished = the earliest of that approval and the finish spec_finish {write} records (state.finished.at).
+    const exReady = S.approvePhase(w5, f6c.slug, "execution");
+    const mReady = S.metrics(w5, f6c.slug);
+    const f6f = S.createFeature(w5, "Order fin", ["core"]);
+    const st6f = JSON.parse(read5(f6f, ".state.json"));
+    write5(f6f, ".state.json", JSON.stringify({ ...st6f, createdAt: "2026-01-01T00:00:00.000Z", finished: { at: "2026-01-03T00:00:00.000Z", files: {} } }));
+    const mFin = S.metrics(w5, f6f.slug);
+    ok(exReady.ok && !exReady.forced && mReady.leadTime.finished && mReady.leadTime.finished.at === stateOf(f6c).approvals.execution.at &&
+      mFin.leadTime.finished && mFin.leadTime.finished.at === "2026-01-03T00:00:00.000Z" && mFin.leadTime.finished.hours === 48,
+      "approve execution on a ready-to-finish feature: approved unforced; spec_metrics reads finished from it, or from spec_finish's state.finished.at (48h)");
 
     // (7) clarify: IF…THEN per criterion, natural rate-limit wording, grouped placeholders; the classifier
     const f7 = S.createFeature(w5, "Clarify gate", ["saas"]);
@@ -3074,11 +3156,14 @@ function endRun() {
     const obFile = path.join(ob8.dir, ".state.json");
     fs.writeFileSync(obFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(obFile, "utf8")), approvals: { design: { at: "2026-01-01T00:00:00.000Z", by: "x" } } }));
     fs.appendFileSync(path.join(ob8.dir, "bug.md"), "\nmore\n");
-    // 1.13 WP12: a pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md — its timestamp is compared
-    // with bug.md's mtime (edited after it here), no longer with a design.md the bugfix doesn't have.
-    ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && S.finishFeature(w8, "old-bug").changedSinceApproval.join() === "bug.md" &&
-      S.impactReport(w8, "old-bug", { phase: "design" }).baseline === "fingerprint-only",
-      "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) is judged on bug.md's mtime");
+    // A pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md, and nothing about bug.md was recorded:
+    // its file date is no evidence (a clone resets it) — untracked, never "changed", a finish WARNING to re-approve.
+    const obFin = S.finishFeature(w8, "old-bug");
+    const obIm = S.impactReport(w8, "old-bug", { phase: "design" });
+    ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && obFin.changedSinceApproval.join() === "" &&
+      !obFin.blockers.some((b) => /changed after their approval/.test(b)) && obFin.warnings.some((w) => /^approved before change tracking .*: design \(bug\.md\) — re-approve .*\/approve old-bug design/.test(w)) &&
+      obIm.baseline === "none" && obIm.changed === null && /predates content fingerprints/.test(obIm.hint) && S.impactLines(obIm)[0] === "Impact: old-bug · design — no fingerprint recorded: whether it changed can't be told",
+      "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) never judges bug.md by its date — untracked (finish warning); impact: baseline none");
     const csI = S.impactReport(w8, "crash-on-save", { phase: "design" });
     ok(csI.designMd && csI.designMd.baseline === "absent" && csI.designMd.changed === true && csI.added.length > 0 &&
       csI.added.every((x) => x.file === "design.md" && x.section.startsWith("design.md: ")) && csI.modified.map((x) => x.section).join() === "bug.md: Root Cause",
@@ -4236,12 +4321,14 @@ function endRun() {
       secs12(im12b) === "bug.md: Root Cause|bug.md: Fix|design.md: [SaaS] Performance Budget" && /design: bug\.md: Root Cause, bug\.md: Fix/.test(S.impactLines(im12).join("\n")),
       "spec_impact --phase requirements on a bugfix names the bug.md sections that mention the changed AC (Root Cause, Fix) — and a track's design.md section, each keyed by its file");
 
-    // (6) a pre-1.13 bugfix design approval (no fingerprint, no file): judged on bug.md's mtime — and, since 1.12 fingerprinted
-    // design.md whenever it existed, a design.md newer than the approval (created since, e.g. by add_track) is a change too; a
-    // feature's legacy approval keeps its own phase file.
+    // (6) approvals with no fingerprint are never judged by a file's date alone as a finish blocker — a clone, checkout, copy
+    // or unzip resets every mtime. A pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md, which 1.12
+    // never tracked: untracked — no change anywhere (doctor, next_action, finish), a finish warning to re-approve, impact
+    // baseline `none`. A pre-1.11 feature approval keeps its date check where 1.12 had it (next_action, doctor), but on
+    // finish that's a warning, never a blocker.
     const o12 = path.join(tmp, "proj-wp12-legacy");
     S.initProject(o12, ["core"], "en");
-    const ob12 = S.createFeature(o12, "Old Crash", ["saas"], "crash", undefined, "en", "bugfix");
+    const ob12 = S.createFeature(o12, "Old Crash", undefined, "crash", undefined, "en", "bugfix");
     const of12 = S.createFeature(o12, "Old Feature", ["core"]);
     const at12 = new Date(Date.now() - 3600e3);
     const legacy12 = (dir) => { const sf = path.join(dir, ".state.json"); fs.writeFileSync(sf, JSON.stringify({ ...JSON.parse(fs.readFileSync(sf, "utf8")), approvals: { design: { at: at12.toISOString(), by: "x" } } })); };
@@ -4249,19 +4336,28 @@ function endRun() {
     legacy12(of12.dir);
     const before12 = new Date(at12.getTime() - 3600e3), after12 = new Date(at12.getTime() + 60e3);
     fs.utimesSync(path.join(ob12.dir, "bug.md"), before12, before12);
-    fs.utimesSync(path.join(ob12.dir, "design.md"), before12, before12);
     fs.utimesSync(path.join(of12.dir, "design.md"), before12, before12);
-    const csB0 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF0 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
+    const csF0 = S.nextAction(o12, "old-feature").changedSinceApproval.join();
+    // A fresh clone: every file dated now, content unchanged.
     fs.utimesSync(path.join(ob12.dir, "bug.md"), after12, after12);
     fs.utimesSync(path.join(of12.dir, "design.md"), after12, after12);
-    const csB1 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF1 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
-    const docB12 = S.specDoctor(o12, "old-crash").checks.find((c) => c.id === "changed-since-approval") || {};
-    const naB12 = S.nextAction(o12, "old-crash").changedSinceApproval.join();
-    fs.utimesSync(path.join(ob12.dir, "design.md"), after12, after12);
-    const csB2 = S.finishFeature(o12, "old-crash").changedSinceApproval.join();
-    ok(csB0 === "" && csF0 === "" && csB1 === "bug.md" && csF1 === "design.md" && /bug\.md/.test(docB12.detail || "") && naB12 === "bug.md" &&
-      S.impactReport(o12, "old-crash", { phase: "design" }).changed === true && csB2 === "bug.md,design.md",
-      "a legacy bugfix design approval is judged on bug.md's mtime (and on a design.md newer than it), a legacy feature approval on design.md; doctor, next_action and impact agree (got " + [csB0, csF0, csB1, csF1, csB2].join(" / ") + ")");
+    const finB12 = S.finishFeature(o12, "old-crash"), finF12 = S.finishFeature(o12, "old-feature");
+    const docB12 = S.specDoctor(o12, "old-crash").checks.find((c) => c.id === "changed-since-approval");
+    const docF12 = S.specDoctor(o12, "old-feature").checks.find((c) => c.id === "changed-since-approval") || {};
+    const naB12 = S.nextAction(o12, "old-crash"), naF12 = S.nextAction(o12, "old-feature");
+    const imB12 = S.impactReport(o12, "old-crash", { phase: "design" });
+    ok(csF0 === "" && finB12.changedSinceApproval.join() === "" && !finB12.blockers.some((b) => /changed after their approval/.test(b)) && !docB12 &&
+      naB12.changedSinceApproval.join() === "" && naB12.step !== "re-review" &&
+      finB12.warnings.some((w) => /approved before change tracking/.test(w) && /design \(bug\.md\)/.test(w)) && imB12.baseline === "none" && imB12.changed === null,
+      "a 1.12 bugfix design approval (no fingerprint, no file) on a fresh clone: bug.md is untracked — no change in finish / doctor / next_action, a finish warning to re-approve; impact baseline none (changed unknown)");
+    ok(naF12.changedSinceApproval.join() === "design.md" && /design\.md/.test(docF12.detail || "") && finF12.changedSinceApproval.join() === "" &&
+      !finF12.blockers.some((b) => /changed after their approval/.test(b)) && finF12.warnings.some((w) => /^judged by file date only .*: design\.md — re-review/.test(w)) &&
+      /^avaliado só pela data/.test(S.msg("pt").finish.changedByDate("x", "y")) && /^juzgado solo por la fecha/.test(S.msg("es").finish.changedByDate("x", "y")) &&
+      /^aprovado antes do registo/.test(S.msg("pt").finish.untrackedApproval("x", "y")) && /^aprobado antes del registro/.test(S.msg("es").finish.untrackedApproval("x", "y")),
+      "a pre-1.11 feature approval (no fingerprint): a newer design.md still shows in next_action / doctor (1.12 parity) but is only a finish WARNING (a date is no evidence); PT/ES messages");
+    // Re-approving records a fingerprint: from then on it's judged by content (no warning for it any more).
+    S.approvePhase(o12, "old-crash", "design", "x", { force: true });
+    ok(!S.finishFeature(o12, "old-crash").warnings.some((w) => /approved before change tracking/.test(w)), "re-approving the legacy bugfix design approval starts tracking bug.md — the warning is gone");
     // The 1.12 → 1.13 path: a bugfix approved in 1.12 (no design.md then), then add_track +saas creates design.md.
     const ob12b = S.createFeature(o12, "Older Crash", undefined, "crash", undefined, "en", "bugfix");
     const noDesign12 = !fs.existsSync(path.join(ob12b.dir, "design.md"));
@@ -4361,6 +4457,43 @@ function endRun() {
     ok(dt12.ok && dt12.addedTracks.join() === "saas,tdd" && !/_Requirements:[^_\n]*US-1\.AC-[56]/.test(dTasks12) && dTasks12.includes("[the +saas criterion this task proves]") &&
       !dPlan12.includes("US-1.AC-5") && !dPlan12.includes("US-1.AC-6"),
       "add_track saas,tdd: US-1.AC-5 only in a _Supersedes:_ marker and US-1.AC-6 only in a fence get no +saas task IDs and no test-plan row");
+
+    // (e) spec_create on an EXISTING feature adding +tdd with +saas / +ai plans exactly what add_track plans: the requirements
+    // predate those tracks, so no template row for US-1.AC-5…AC-9 (they don't exist). The same through the MCP tool, and via
+    // create core → add_track saas → create tdd. A test-plan row covering an AC requirements.md doesn't define is a phantom.
+    const e12 = path.join(tmp, "proj-wp12-create-tracks");
+    S.initProject(e12, ["core"], "en");
+    const planE12 = (slug) => fs.readFileSync(path.join(e12, ".specs", slug, "test-plan.md"), "utf8");
+    const rowsE12 = (slug) => (planE12(slug).match(/^\| T-\d+ /gm) || []).map((r) => r.slice(2).trim()).join();
+    S.createFeature(e12, "Shop A", ["core"]);
+    const ce12 = S.createFeature(e12, "Shop A", ["tdd", "saas"]);
+    S.createFeature(e12, "Shop B", ["core"]);
+    S.addTrack(e12, "shop-b", "tdd,saas");
+    S.createFeature(e12, "Shop C", ["core"]);
+    S.createFeature(e12, "Shop C", ["tdd", "ai"]);
+    S.createFeature(e12, "Shop D", ["core"]);
+    S.addTrack(e12, "shop-d", "saas");
+    S.createFeature(e12, "Shop D", ["tdd"]);
+    await rpc("tools/call", { name: "spec_create", arguments: { name: "Shop E", tracks: ["core"], projectDir: e12 } });
+    const me12 = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Shop E", tracks: ["tdd", "saas"], projectDir: e12 } }));
+    const fresh12 = S.createFeature(e12, "Shop F", ["tdd", "saas", "ai"]);
+    const trE12 = ["shop-a", "shop-c", "shop-d", "shop-e"].map((s) => S.traceCheck(e12, s));
+    ok(ce12.ok && ce12.addedTracks.join() === "tdd,saas" && me12.ok && rowsE12("shop-a") === "T-01,T-02,T-03,T-04,T-05" && planE12("shop-a").replace(/^# .*$/m, "") === planE12("shop-b").replace(/^# .*$/m, "") &&
+      rowsE12("shop-c") === rowsE12("shop-a") && rowsE12("shop-d") === rowsE12("shop-a") && rowsE12("shop-e") === rowsE12("shop-a") &&
+      !/US-1\.AC-[5-9]/.test(planE12("shop-a") + planE12("shop-c") + planE12("shop-d") + planE12("shop-e")) &&
+      trE12.every((t) => t.ok && !t.phantomAcsInTests.length) && fresh12.ok && rowsE12("shop-f") === "T-01,T-02,T-03,T-04,T-05,T-06,T-07,T-08,T-09,T-10" &&
+      !S.traceCheck(e12, "shop-f").phantomAcsInTests.length,
+      "spec_create on an existing feature (+tdd with +saas/+ai; CLI engine and MCP) plans the same 5 rows as add_track — no row for US-1.AC-5…AC-9 it lacks; a new feature keeps its 10 (got " +
+      ["shop-a", "shop-c", "shop-d", "shop-e", "shop-f"].map(rowsE12).join(" | ") + ")");
+    fs.appendFileSync(path.join(e12, ".specs", "shop-a", "test-plan.md"), "| T-06 | load | example | p95 | US-1.AC-6 | load-test.md |\n\n```md\n| T-07 | x | x | x | US-9.AC-9 | x |\n```\n");
+    const ph12 = S.traceCheck(e12, "shop-a");
+    const phDoc12 = S.specDoctor(e12, "shop-a").checks.find((c) => c.id === "traceability");
+    const phGate12 = S.approvePhase(e12, "shop-a", "test-plan");
+    ok(ph12.verdict === "gaps-found" && ph12.phantomAcsInTests.join() === "US-1.AC-6" && S.traceGaps(ph12).some((g) => g.kind === "phantomAcsInTests") &&
+      phDoc12.status === "fail" && /the test plan covers unknown ACs \(typos\?\): US-1\.AC-6/.test(phDoc12.detail) &&
+      phGate12.refused && phGate12.failing.includes("traceability") && /US-1\.AC-6/.test(phGate12.error) &&
+      /o plano de testes cobre ACs desconhecidos/.test(S.traceGapLines(ph12, "pt").join()) && /el plan de pruebas cubre ACs desconocidos/.test(S.traceGapLines(ph12, "es").join()),
+      "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: doctor fails, the test-plan approval is refused; a fenced example is none; EN/PT/ES)");
 
     // An `_Implements:_` glob whose bounded walk stops at its cap before any match proves nothing: never a missing-file gap
     // (a warning, unresolvedImplGlobs); a glob whose walk ended without a match is still missing; the finish baseline says

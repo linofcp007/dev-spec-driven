@@ -41,7 +41,9 @@ current artifact against the latest approval's snapshot:
 | `tasks` | task numbers added / removed / changed (checkbox state ignored) | — |
 
 `affectedTasks` lists every task a change reaches, once, with `via` (which IDs/sections reach it).
-`baseline: "fingerprint-only"` = a pre-1.13 approval: review by hand, then re-approve.
+`baseline: "fingerprint-only"` = a pre-1.13 approval: review by hand, then re-approve. `baseline: "none"` = no
+fingerprint either (≤1.10, or a 1.12 bugfix design approval): whether it changed is unknown (`changed: null`) —
+a file date is never evidence, so `spec_finish` only warns about such approvals; re-approve to start tracking them.
 
 ## 4. Reopen — only with the human's OK
 

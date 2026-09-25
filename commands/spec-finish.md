@@ -19,7 +19,8 @@ Feature: $ARGUMENTS
    reproduction no longer reproduces). Show the commands and their output. No evidence, no "done".
 3. Show the merge title and summary generated from the spec chain
    (`.specs/<feature>/.execution/merge-summary.md`) and ask the user to approve the `execution` phase
-   (`spec_approve`). A written finish of a **ready** feature also records the **drift baseline** (a hash of every
+   (`spec_approve`) — its gate is this report's blockers, so it is refused while the feature isn't ready (only an
+   explicit `force` records it, flagged as forced; `spec_metrics` reads `finished` from it or from the written finish). A written finish of a **ready** feature also records the **drift baseline** (a hash of every
    file its `_Implements:_` markers name) — `/spec-drift` compares against it later; re-run `finish --write` after
    last-minute code changes so the baseline matches what ships.
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the

@@ -41,6 +41,14 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   scaffold's verbatim +saas/+ai tasks as real tasks. A core-only feature's Signals line is written as
   `- none beyond core` (PT/ES too) — in brackets, the gate refused every core-only classification (created or
   imported) on the tool's own answer — and a pre-1.13 `[none beyond core]` is not a placeholder either.
+  `tests` and `execution` were stamped unchecked (an untouched scaffold with 0 tasks done was "finished 0m" in
+  `spec_metrics`): approving `tests` now needs every planned T-ID named by a test file (+tdd, `tests-in-code`) and an
+  `evals/golden.json` of the feature's own (+ai, `eval-sets`) — nothing to approve on a core-only feature — and
+  `execution` runs `spec_finish`'s blockers; `spec_metrics` also reads `finished` from the finish `spec_finish {write}`
+  records. A file date alone no longer blocks `spec_finish`: a 1.12 bugfix design approval (no fingerprint) judged
+  bug.md by its mtime, so every clone or copy was "changed since approval" and couldn't finish — bug.md is now
+  reported as untracked (a warning to re-approve), a pre-1.11 approval's date check is a finish warning, and
+  `spec_impact` says `baseline: "none"` (changed unknown) instead of "only its fingerprint was recorded".
 - **Gates next_action follows.** SKILL.md calls Phase 4 (failing tests / eval harness) the hard gate, yet no
   surface ever asked for it: on a +tdd feature `next_action` went from the tasks approval straight to "Implement
   task #1" with `gatesOk: true`. Phase `tests` is now pending on a +tdd / +ai feature once its test or eval plan
@@ -77,7 +85,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   detection, as it already was for tasks. `clarify` finds IF…THEN per criterion, keeps
   real line numbers after multi-line comments and groups placeholder questions. The classifier negates
   across filler words ("sem uso de IA") while PT "no uso do LLM" stays em+o. Every template AC now has a
-  task and a test row, so a fresh scaffold traces clean once filled.
+  task and a test row, so a fresh scaffold traces clean once filled. `spec_create` on an existing feature adding
+  +tdd with +saas/+ai planned test rows for US-1.AC-5…AC-9 its requirements never had (`spec_add_track` already
+  didn't) — both now share one rule — and `trace_check` reports a test-plan row covering an AC requirements.md
+  doesn't define as a gap (`phantomAcsInTests`; doctor and the test-plan approval see it).
 - **Robustness.** MCP arguments weren't type-checked: `number: 1.9` (or `1e21`) ticked task 1, `name: {a:1}`
   created `.specs/object-object/`, `cap: "abc"` scanned nothing. Arguments are now validated against each
   tool's `inputSchema` (safe integers, enums, minimum, array items, nested objects) with localized errors.
@@ -92,11 +103,18 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `--rm` / `--req` are all kept; `--tracks` is merged with positional tracks everywhere; `backlog rm` of an
   unknown name is an error; `ears --text "---"` is a value; approvals default to the same approver on both
   surfaces; `--lang` is checked against `en|pt|es` like the MCP enum (an unknown value such as `fr` became
-  `en` and was saved — `init` rewrote the project language).
+  `en` and was saved — `init` rewrote the project language). The new MCP enum validation was case-sensitive while
+  the CLI (and the 1.12 MCP) took `Design` / `PT` / `Bugfix`: enums the engine folds (phase, lang, kind, action) are
+  case-insensitive on both surfaces (`backlog ADD` too); `spec_import`'s tool stays exact.
 - **Localization.** CLI human output, SessionStart phase names, argument errors and the eval harness speak
   the feature's (or project's) language — EN/PT/ES; `--json` is unchanged.
 - **Pre-commit.** Staged paths with accents (`serviços/.specs/…`) were quoted by git and skipped; names are
-  now read NUL-separated, and the output names the phantom and uncovered IDs.
+  now read NUL-separated, and the output names the phantom and uncovered IDs. A requirements.md with EARS
+  warnings or template placeholders no longer reads "EARS clean" — a non-blocking ⚠ line names them.
+- **`done --run` on Windows.** cmd.exe (the default shell) has no single quotes, so `_Verify: node -e
+  'process.exit(1)'_` exited 0 and the task was recorded as verified. A `_Verify:_` in POSIX syntax (single quotes,
+  `$VAR`) is now refused before anything runs unless `--shell` picks a shell (`--shell bash`, or `--shell cmd` to
+  run it under cmd.exe anyway).
 - **Docs.** SKILL.md claims match the engine (every execution loop ends in `spec_complete_task
   {evidence}`, the EARS example passes the linter, the constitution check is section presence), the
   description is trigger-accurate and under 1,024 characters, rule files stay true in the copy
@@ -171,7 +189,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **A fresh feature starts at phase `requirements`** (8%) until its artifacts hold real content.
 - **Two more pending gates.** A +tdd / +ai feature now has a pending `tests` approval (Phase 4) and a bugfix a
   pending `design` approval (bug.md): in-flight features show them in doctor / next_action and can't finish until
-  `approve <f> tests` / `approve <f> design`.
+  `approve <f> tests` / `approve <f> design`. Approving `tests` checks that the planned tests exist in test code
+  (+tdd) and that the eval set is the feature's own (+ai); approving `execution` needs a ready `spec_finish` — or
+  `--force`.
+- **Windows: `done --run` refuses a POSIX-syntax `_Verify:_`** under the default cmd.exe — add `--shell bash` (or
+  `DEV_SPEC_SHELL=bash`), or `--shell cmd` to keep cmd.exe.
 - **Renaming a feature edits other features' requirements.md** when they `_Supersedes:_` its ACs; an approved one
   then shows as changed-since-approval (re-review, re-approve).
 - **A note no longer verifies a task with a runnable `_Verify:_`** — record the command and its exit code
@@ -185,7 +207,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 657 assertions (was 181), `node cli/test-cli.js` 206 (was 53); the tool count is
+- `node mcp/test.js` 667 assertions (was 181), `node cli/test-cli.js` 208 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

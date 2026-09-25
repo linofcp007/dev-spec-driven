@@ -377,6 +377,12 @@ function main() {
         if (!cmds.length) die(D.noRunnable(b.task.number));
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).
         const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
+        // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
+        // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
+        if (process.platform === "win32" && shell === true) {
+          const posix = cmds.map((c) => [c, spec.posixShellSyntax(c)]).find(([, k]) => k.length);
+          if (posix) die(D.posixOnWindows(posix[0], posix[1]));
+        }
         for (const cmd of cmds) {
           say("$ " + cmd);
           // Runs the user's OWN _Verify:_ command from their tasks.md, only on an explicit --run (the same
@@ -427,7 +433,8 @@ function main() {
     }
 
     case "backlog": {
-      const action = ["add", "rm", "remove"].includes(pos[0]) ? pos[0] : "list";
+      const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase(); // case-folded, like the engine and the MCP enum
+      const action = ["add", "rm", "remove"].includes(a0) ? a0 : "list";
       const r = spec.backlog(projectDir, action, pos[1], action === "add" ? pos.slice(2).join(" ") : undefined);
       if (!r.ok) die(r.error); // e.g. rm of a name that isn't in the backlog
       const T = projectText();

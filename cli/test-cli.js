@@ -232,6 +232,26 @@ let w1Json = null;
 try { w1Json = JSON.parse(w1Env.stdout); } catch { /* not one JSON document */ }
 ok(w1EnvOnly.status === 1 && /no-such-shell-dsd/.test(w1EnvOnly.stdout + w1EnvOnly.stderr) && w1Env.status === 0 && w1Json && w1Json.verified === true,
   "DEV_SPEC_SHELL picks the shell, --shell beats it; with --json the run log goes to stderr and stdout stays one JSON document");
+// Windows' default shell (cmd.exe) has no single quotes: `node -e 'process.exit(1)'` exits 0 there, so a _Verify:_ written for a
+// POSIX shell is refused before anything runs (unless --shell / DEV_SPEC_SHELL picks one) — never a false "verified".
+run(["create", "Posix", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "posix", "tasks.md"), "- [ ] 1. q\n  - _Verify: node -e 'process.exit(1)'_\n");
+const w1Px = run(["done", "posix", "1", "--run", "--project", w1p]);
+const w1PxState = () => JSON.parse(fs.readFileSync(path.join(w1p, ".specs", "posix", ".state.json"), "utf8"));
+if (process.platform === "win32") {
+  run(["create", "Plicas", "core", "--lang", "pt", "--project", w1p]);
+  fs.writeFileSync(path.join(w1p, ".specs", "plicas", "tasks.md"), "- [ ] 1. q\n  - _Verify: echo $HOME_\n");
+  const w1PxPt = run(["done", "plicas", "1", "--run", "--project", w1p]);
+  const w1PxOpen = /- \[ \] 1\. q/.test(w1Read("posix")) && !(w1PxState().evidence || {})["1"]; // before --shell cmd ticks it
+  const w1PxCmd = run(["done", "posix", "1", "--run", "--shell", "cmd", "--project", w1p]);
+  ok(w1Px.code === 1 && /uses POSIX shell syntax \(single quotes/.test(w1Px.out) && /--shell bash/.test(w1Px.out) && !/^\$ node/m.test(w1Px.out) &&
+    w1PxOpen && w1PxPt.code === 1 && /usa sintaxe de shell POSIX \(\$VARIAVEIS\)/.test(w1PxPt.out) &&
+    w1PxCmd.code === 0 && /^\$ node -e 'process\.exit\(1\)'/m.test(w1PxCmd.out),
+    "Windows: done --run refuses a POSIX-quoted _Verify:_ under the default cmd.exe (nothing run, task open, no evidence; localized); --shell cmd runs it anyway");
+} else {
+  ok(w1Px.code === 1 && /process\.exit\(1\)/.test(w1Px.out) && /- \[ \] 1\. q/.test(w1Read("posix")) && w1PxState().evidence["1"].exitCode === 1,
+    "POSIX: done --run runs a single-quoted _Verify:_ under /bin/sh as written (a failing check fails)");
+}
 run(["create", "Tarefas", "core", "--lang", "pt", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "tarefas", "tasks.md"), "- [ ] 1. um\n- [ ] 2. dois\n");
 const w1Pt = run(["done", "tarefas", "1", "--project", w1p]);
@@ -431,6 +451,11 @@ run(["backlog", "add", "sso", "--project", w4]);
 const blm = run(["backlog", "rm", "nope", "--project", w4]);
 ok(blm.code === 1 && /'nope' is not in the backlog \(backlog: sso\)/.test(blm.out) && /removed from the backlog/.test(run(["backlog", "rm", "SSO", "--project", w4]).out),
   "backlog rm <unknown> exits 1 with the backlog listed; a listed name is removed");
+// Enum-like arguments are case-folded like the MCP enums (spec_backlog {action: 'ADD'} adds): same input, same result.
+const blUp = run(["backlog", "ADD", "Later", "--project", w4]);
+const apUp = run(["approve", "gaps", "Design", "--force", "--project", w4]);
+ok(blUp.code === 0 && /Later/.test(blUp.out) && /Backlog \(1\)/.test(blUp.out) && /removed from the backlog/.test(run(["backlog", "RM", "later", "--project", w4]).out) &&
+  apUp.code === 0 && /Approved 'design' for gaps/.test(apUp.out), "CLI backlog ADD / RM and approve <f> Design are case-insensitive (parity with the MCP enums)");
 
 // feature remove without --yes shows what would be deleted and exits 1; --yes deletes.
 run(["create", "Doomed", "core", "--project", w4]);

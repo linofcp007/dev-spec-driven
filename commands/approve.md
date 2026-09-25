@@ -16,8 +16,12 @@ check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `succ
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
 `saas-sections` / `ai-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
 `bug.md`); test-plan: `placeholders`, `traceability`; eval-plan: `placeholders`; tasks: `placeholders`,
-`traceability`; tests (the Phase 4 sign-off — failing tests / eval harness written and red) and execution have no
-checks. `tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
+`traceability` (incl. test-plan rows citing ACs requirements.md doesn't define); tests (the Phase 4 sign-off —
+failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
++ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
+core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
+`root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `approval-gates`.
+`tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
 `gatesOk` stays false and `spec_next_action` asks for it until it is approved. On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
 
 `force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only

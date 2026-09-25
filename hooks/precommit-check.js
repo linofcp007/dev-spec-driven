@@ -70,7 +70,17 @@ for (const f of files) {
         out.push(PF.earsErrors(f, errs.length));
         errs.slice(0, 5).forEach((i) => out.push(`    L${i.line} ${i.msg}`));
       } else {
-        out.push(PF.earsClean(f, r.summary.criteriaDetected));
+        // Never "clean" while warnings or template placeholders remain (the PostToolUse hook's rule) — listed, not blocking.
+        // Placeholders in the STAGED text, judged like the gates do (a removed track's criteria are inactive).
+        const warns = r.issues.filter((i) => i.severity === "warn");
+        const phRep = spec.featurePlaceholders(featureProject, feature, "requirements.md", text);
+        const ph = phRep ? phRep.items : spec.placeholderReport(text);
+        if (warns.length || ph.length) {
+          out.push(PF.earsWarnings(f, r.summary.criteriaDetected, warns.length, ph.length));
+          warns.slice(0, 3).forEach((i) => out.push(`    L${i.line} ${i.msg}`));
+        } else {
+          out.push(PF.earsClean(f, r.summary.criteriaDetected));
+        }
       }
     }
   }

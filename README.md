@@ -89,7 +89,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 ### Gates and evidence
 
 - **An approval is a gate, not a stamp.** `spec_approve` runs that phase's checks first (EARS errors,
-  template placeholders, open `[NEEDS CLARIFICATION]`, missing sections, uncovered ACs, …) and refuses
+  template placeholders, open `[NEEDS CLARIFICATION]`, missing sections, uncovered ACs, …; Phase 4 `tests`: every
+  planned T-ID in a test file / an eval set of the feature's own; `execution`: `spec_finish`'s blockers) and refuses
   while any fails. `force: true` (CLI `--force`) records it anyway as a **forced** approval with the
   failing checks, and `doctor` and the roadmap keep flagging it.
 - **A template is not content.** `doctor` has a `placeholders` check (it fails for the current and
@@ -314,7 +315,8 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
 
 - **Uma aprovação é um gate, não um carimbo.** `spec_approve` corre primeiro as verificações da fase (erros
   EARS, placeholders do template, `[NEEDS CLARIFICATION]` por resolver, secções em falta, ACs sem cobertura,
-  …) e recusa enquanto alguma falhar. `force: true` (CLI `--force`) regista-a na mesma como aprovação
+  …; a Fase 4 `tests`: cada T-ID planeado num ficheiro de teste / um conjunto de evals próprio; `execution`: os
+  bloqueios do `spec_finish`) e recusa enquanto alguma falhar. `force: true` (CLI `--force`) regista-a na mesma como aprovação
   **forçada**, com as verificações que falharam, e o `doctor` e o roadmap continuam a assinalá-la.
 - **Um template não é conteúdo.** O `doctor` tem a verificação `placeholders` (falha na fase atual e nas
   anteriores), uma funcionalidade nova começa na fase `requirements` e o `ears_validate` reporta o código
@@ -540,7 +542,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 - **Una aprobación es un gate, no un sello.** `spec_approve` ejecuta primero las comprobaciones de la fase
   (errores EARS, placeholders de la plantilla, `[NEEDS CLARIFICATION]` sin resolver, secciones ausentes, ACs
-  sin cobertura, …) y la rechaza mientras alguna falle. `force: true` (CLI `--force`) la registra igualmente
+  sin cobertura, …; la Fase 4 `tests`: cada T-ID planeado en un archivo de prueba / un conjunto de evals propio;
+  `execution`: los bloqueos de `spec_finish`) y la rechaza mientras alguna falle. `force: true` (CLI `--force`) la registra igualmente
   como aprobación **forzada**, con las comprobaciones que fallaron, y el `doctor` y la hoja de ruta siguen
   señalándola.
 - **Una plantilla no es contenido.** El `doctor` tiene la comprobación `placeholders` (falla en la fase

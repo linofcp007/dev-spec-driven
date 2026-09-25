@@ -125,7 +125,7 @@ const TOOLS = [
   },
   {
     name: "trace_check",
-    description: "Verify traceability for a feature, both directions. GAPS decide `verdict`: ACs in requirements.md that no task cites (uncoveredByTasks), phantom AC IDs in tasks (typos), on +tdd ACs without a test-plan row (uncoveredByTests) and phantom T-IDs in tasks, and `_Implements:_` files that don't exist (missingImplFiles) — a file named only by OPEN tasks is the plan (plannedImplFiles), not a gap; planned T-IDs no task names are listed as testsNotMappedToTasks without failing the verdict. `_Supersedes: <feature>/US-n.AC-m_` markers are reported as `supersedes`, and the ones that resolve to nothing as `phantomSupersedes` (informational). WARNINGS (never the verdict) trace the secondary IDs of requirements.md: edge cases EC-n and NFR-n need a task or a test-plan row, success criteria SC-nnn a test-plan row or quickstart.md (uncoveredEdgeCases / uncoveredNfr / uncoveredSuccessCriteria / phantomSecondary; untouched template rows don't count) — all listed in `warnings` as [{kind, items}]. With `code: true` it also scans the project's test files (bounded, read-only; each feature's own .specs/<feature>/tests/ included) for T-IDs and AC IDs — a planned T-ID whose plan row names a concrete test path in its File column counts only in that file/folder, and another feature's .specs tests never count: `code` = {planned, testsInCode, plannedNotInCode, inCodeNotInPlan (in no feature's plan), acsInTests, scanned, truncated} — plannedNotInCode / inCodeNotInPlan are warnings too.",
+    description: "Verify traceability for a feature, both directions. GAPS decide `verdict`: ACs in requirements.md that no task cites (uncoveredByTasks), phantom AC IDs in tasks (typos), on +tdd ACs without a test-plan row (uncoveredByTests), test-plan rows citing ACs requirements.md doesn't define (phantomAcsInTests) and phantom T-IDs in tasks, and `_Implements:_` files that don't exist (missingImplFiles) — a file named only by OPEN tasks is the plan (plannedImplFiles), not a gap; planned T-IDs no task names are listed as testsNotMappedToTasks without failing the verdict. `_Supersedes: <feature>/US-n.AC-m_` markers are reported as `supersedes`, and the ones that resolve to nothing as `phantomSupersedes` (informational). WARNINGS (never the verdict) trace the secondary IDs of requirements.md: edge cases EC-n and NFR-n need a task or a test-plan row, success criteria SC-nnn a test-plan row or quickstart.md (uncoveredEdgeCases / uncoveredNfr / uncoveredSuccessCriteria / phantomSecondary; untouched template rows don't count) — all listed in `warnings` as [{kind, items}]. With `code: true` it also scans the project's test files (bounded, read-only; each feature's own .specs/<feature>/tests/ included) for T-IDs and AC IDs — a planned T-ID whose plan row names a concrete test path in its File column counts only in that file/folder, and another feature's .specs tests never count: `code` = {planned, testsInCode, plannedNotInCode, inCodeNotInPlan (in no feature's plan), acsInTests, scanned, truncated} — plannedNotInCode / inCodeNotInPlan are warnings too.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, code: { type: "boolean", description: "Also scan test files (test/spec/__tests__ folders, .specs/<feature>/tests/, *.test.*, test_*.py, *_test.go, *Test.java, *Tests.cs, *Tests.fs, *Spec.scala …) for the T-IDs they name — put the T-ID in the test name: test(\"T-01 …\"), def test_T01_…, func TestT01…, [Fact(DisplayName=\"T-01 …\")] (CLI: --code)." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
@@ -135,7 +135,7 @@ const TOOLS = [
   },
   {
     name: "spec_approve",
-    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. The approval is a GATE: that phase's checks run first (requirements: EARS errors, template placeholders, open [NEEDS CLARIFICATION], success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, active +saas/+ai sections, clarifications — bugfix: bug.md Root Cause instead; test-plan: placeholders, every AC has a test; eval-plan: placeholders; tasks: no placeholder tasks, every AC covered, no phantom IDs; tests — the Phase 4 sign-off, failing tests / eval harness written — and execution: no checks) and any failure REFUSES it, listing the failing check ids and details. `force: true` records it anyway as a forced approval (`forced` + the failing ids; doctor's approval-gates and the roadmap keep flagging it). A phase with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even with force. Makes approval-gated progress auditable and resumable.",
+    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. The approval is a GATE: that phase's checks run first (requirements: EARS errors, template placeholders, open [NEEDS CLARIFICATION], success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, active +saas/+ai sections, clarifications — bugfix: bug.md Root Cause instead; test-plan: placeholders, every AC has a test; eval-plan: placeholders; tasks: no placeholder tasks, every AC covered, no phantom IDs; tests — the Phase 4 sign-off: +tdd every planned T-ID named by a test file (tests-in-code), +ai an evals/golden.json of the feature's own, not the scaffold's sample (eval-sets), nothing to approve on a core-only feature; execution — spec_finish's blockers: doctor, root-cause, placeholders, changed-since-approval, tasks, open-tasks, verification, approval-gates) and any failure REFUSES it, listing the failing check ids and details. `force: true` records it anyway as a forced approval (`forced` + the failing ids; doctor's approval-gates and the roadmap keep flagging it). A phase with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even with force. Makes approval-gated progress auditable and resumable.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"] }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user' — same as the CLI)." }, force: { type: "boolean", description: "Approve even though the phase's checks fail — recorded as forced, with the failing check ids (CLI: --force)." }, projectDir: { type: "string" } }, required: ["name", "phase"] },
   },
   {
@@ -244,7 +244,7 @@ const TOOLS = [
   {
     name: "spec_impact",
     description:
-      "Change request: what an edit made AFTER an approval touches. Compares the current artifact with the snapshot saved by its latest approval (.specs/<feature>/.history/<phase>@<n>.md — every spec_approve appends to .state.json approvalHistory and saves one). `phase` 'requirements' (default): AC-level diff via stable IDs — added / modified (whitespace-normalized text differs) / removed ACs, plus SC-/EC-/NFR- IDs — and, for each modified or removed ID, the tasks citing it in _Requirements:_ (done/open + evidence state), the T-IDs covering it in the test plan and the design sections mentioning it. 'design': section-level diff (## headings, by normalized body — of design.md; for a bugfix, of bug.md and design.md, which its design approval signs off, each section keyed by its file ('bug.md: Root Cause'), with `designMd` giving design.md's baseline) and the tasks citing an ID named in a changed section. 'tasks': added / removed / changed task numbers. An approval made before the change history has only a fingerprint → `baseline: 'fingerprint-only'` with `changed` and a hint to re-approve (which starts the history); a phase never approved is an error. `reopen: true` (requirements/design): unticks the affected DONE tasks, marks their evidence stale (they count as unverified until a new run is recorded), records the change request in .state.json `changes` and refreshes the roadmap — it never edits requirements.md or design.md, and a second reopen with nothing new changes nothing.",
+      "Change request: what an edit made AFTER an approval touches. Compares the current artifact with the snapshot saved by its latest approval (.specs/<feature>/.history/<phase>@<n>.md — every spec_approve appends to .state.json approvalHistory and saves one). `phase` 'requirements' (default): AC-level diff via stable IDs — added / modified (whitespace-normalized text differs) / removed ACs, plus SC-/EC-/NFR- IDs — and, for each modified or removed ID, the tasks citing it in _Requirements:_ (done/open + evidence state), the T-IDs covering it in the test plan and the design sections mentioning it. 'design': section-level diff (## headings, by normalized body — of design.md; for a bugfix, of bug.md and design.md, which its design approval signs off, each section keyed by its file ('bug.md: Root Cause'), with `designMd` giving design.md's baseline) and the tasks citing an ID named in a changed section. 'tasks': added / removed / changed task numbers. An approval made before the change history has only a fingerprint → `baseline: 'fingerprint-only'` with `changed` and a hint to re-approve (which starts the history); one with no fingerprint either (≤1.10, a 1.12 bugfix design approval) → `baseline: 'none'`, `changed: null` (unknown — a file date is no evidence) unless a file was added after it; a phase never approved is an error. `reopen: true` (requirements/design): unticks the affected DONE tasks, marks their evidence stale (they count as unverified until a new run is recorded), records the change request in .state.json `changes` and refreshes the roadmap — it never edits requirements.md or design.md, and a second reopen with nothing new changes nothing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -452,6 +452,26 @@ function invalidArgs(toolName, args) {
   propertyIssues(tool.inputSchema.properties, args, "", out);
   return out;
 }
+// String enums are case-insensitive where the ENGINE folds them (phase, lang, kind, action — the CLI passes 'Design' / 'PT'
+// straight through and the 1.12 MCP accepted them): a value that trims + lowercases to a member is replaced by it before
+// validation, so both surfaces take the same input. spec_import's `tool` stays exact on both surfaces (the engine
+// matches it literally). Only the schema's own top-level keys are read; a value that folds to no member is left as given
+// (the enum error names it).
+const EXACT_ENUMS = { spec_import: new Set(["tool"]) };
+function foldEnumArgs(toolName, args) {
+  const tool = TOOLS.find((t) => t.name === toolName);
+  if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
+  let out = args;
+  for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
+    if (!Array.isArray(s.enum) || !hasOwn(args, k) || typeof args[k] !== "string" || (EXACT_ENUMS[toolName] && EXACT_ENUMS[toolName].has(k))) continue;
+    const v = args[k].trim().toLowerCase();
+    if (v !== args[k] && s.enum.includes(v)) {
+      if (out === args) out = { ...args };
+      out[k] = v;
+    }
+  }
+  return out;
+}
 function argError(id, message) {
   return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }, null, 2) }], isError: true });
 }
@@ -484,7 +504,7 @@ function handle(msg) {
         const toolName = params && params.name;
         const rawArgs = params ? params.arguments : undefined;
         if (rawArgs != null && !TYPE_CHECK.object(rawArgs)) return argError(id, argMessages().notObject);
-        const args = rawArgs || {};
+        const args = foldEnumArgs(toolName, rawArgs || {});
         const missing = missingArgs(toolName, args);
         if (missing.length) return argError(id, argMessages(args).missing(missing.join(", ")));
         const invalid = invalidArgs(toolName, args);

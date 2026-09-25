@@ -136,7 +136,10 @@ a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, arr
 object properties. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
 an absent or `null` value means "not given". `arguments` that isn't an object, or a relative `..` in
 `projectDir`, is refused. Messages are localized in the project language (`msg(lang).args`). The engine
-still validates what schemas can't express (track names, AC IDs, paths).
+still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
+(`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`
+straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` stays exact on both surfaces
+(`EXACT_ENUMS`). The engine and the CLI fold `backlog`'s action too (`ADD` adds on every surface).
 
 ## Config paths: committable (relative) vs. host-installed (absolute)
 Two distinct distribution targets, deliberately kept separate — never conflate them:
@@ -198,7 +201,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Approve gate.** `approvePhase()` runs `approvalChecks()` for that phase and refuses (`refused`, `failing`,
   `checks`) while any fails. `force:true` (CLI `--force`) records it anyway with `forced: true` + the failing
   ids — doctor's `approval-gates` and the roadmap keep flagging it; a clean re-approval replaces it. A phase
-  with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) is an error even with force.
+  with no artifact (eval-plan without +ai, test-plan without +tdd, `tests` on a core-only feature, a missing file) is an
+  error even with force. `tests` and `execution` have checks too (see Pending gates below).
 - **next_action step order:** `fill` (first chain artifact missing / template; `file`) → `re-review` (an
   artifact changed since ITS approval; `impact` when a snapshot exists) → `fix` (failing checks of the
   current or an earlier phase, via `CHECK_PHASE`; or the approve gate's refusal of the next pending phase —
@@ -215,7 +219,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **`_Verify: <command>_`** is an English-stable task marker; `taskMarkers()` keeps its value whole (commas
   belong to the command), drops wrapping backticks and ignores a `[placeholder]`. The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
-  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`).
+  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). On Windows with the default
+  shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
+  `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
+  and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway.
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
@@ -257,7 +264,13 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **`spec_impact`** diffs the current artifact with the latest snapshot (requirements: by stable ID, incl.
   SC/EC/NFR; design: by `##` section; tasks: by number). `reopen` unticks the affected DONE tasks, marks their
   evidence `stale`, and appends the change request to `.state.json → changes` (idempotent per snapshot via
-  digests). It never edits requirements.md or design.md. An approval without a snapshot → `fingerprint-only`.
+  digests). It never edits requirements.md or design.md. An approval without a snapshot → `fingerprint-only`; one
+  without even a fingerprint (≤1.10, or a 1.12 bugfix design approval) → `none`, `changed: null` (unknown).
+- **A file date is never a finish blocker** (`changedSinceApproval(…, {detail: true})` → `{changed, byDate,
+  untracked}`): a clone, checkout, copy or unzip resets every mtime. A pre-1.11 approval (no fingerprint) still shows a
+  newer phase file in next_action / doctor / roadmap (1.12 parity), but spec_finish only warns about it. A 1.12 bugfix
+  design approval (no fingerprint, no `file`) never tracked bug.md: `untracked` — no change anywhere, a finish warning
+  to re-approve; a design.md that exists now was created after it (1.12 fingerprinted an existing design.md) — a change.
 - `readState()` refuses a non-list `approvalHistory` / `changes` (they are appended to).
 - **`spec_metrics`** derives everything from `.state.json`, `.history/` and the artifacts (`createdAt` is
   stored by createFeature; older features get an approximate one). `write` creates `retro.md` (writeIfAbsent).
@@ -333,7 +346,13 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   a phase is due once the file `phaseFile(ph, kind)` names exists — a bugfix's `design` gate is `bug.md` (it used to
   look for design.md, so it was never asked for) — and Phase 4 `tests` (no artifact) via `testsGateDue()`: +tdd with
   test-plan.md or +ai with eval-plan.md, never a bugfix (its failing regression test is a task). `phaseActive('tests')`
-  is tdd||ai. Approving `tests` still runs no checks (the engine can't see tests run).
+  is tdd||ai. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every
+  planned T-ID named by a test file (trace_check's code scan); +ai `eval-sets` — evals/golden.json is a set of the
+  feature's own (not the scaffold's sample, not empty). Nothing to approve on a core-only feature. next_action keeps
+  the Phase 4 wording (`/writeTests`) plus what the gate checks. **Approving `execution`** runs spec_finish's blockers
+  (`finishFeature(…, {gateOnly: true})` → stable ids `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
+  `tasks`, `open-tasks`, `verification`, `approval-gates`); otherwise only `force` records it. spec_metrics' `finished`
+  = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).
 - **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
@@ -350,6 +369,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing).
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
+  A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
+  excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. A scaffolded test plan
+  only gets the template rows of the track ACs requirements.md has (`testPlanTracks()`, shared by spec_create on an
+  existing feature and spec_add_track — a track added after the requirements brings none).
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.
@@ -420,7 +443,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `designSaveCheck()` (active tracks' `[SaaS]`/`[AI]` sections, Constitution Check, placeholders).
 - **Hooks on Windows**: read stdin asynchronously (not `fs.readFileSync(0)`), and flush stdout
   before `process.exit` (write callback) — pipes truncate otherwise. The pre-commit validator reads staged
-  names NUL-separated with `core.quotePath=false`, so accented paths work.
+  names NUL-separated with `core.quotePath=false`, so accented paths work. Only EARS errors and phantom task refs
+  block; a requirements.md with EARS warnings or template placeholders (the STAGED text, `featurePlaceholders(…, text)`)
+  gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
   only read. Tool names are exact (`kiro` | `spec-kit` | `openspec`, the schema enum) on both surfaces, and it
@@ -456,9 +481,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(617 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(667 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 198 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 208 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
