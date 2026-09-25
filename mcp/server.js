@@ -133,8 +133,8 @@ const TOOLS = [
   },
   {
     name: "spec_approve",
-    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. Makes approval-gated progress auditable and resumable.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"] }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user' — same as the CLI)." }, projectDir: { type: "string" } }, required: ["name", "phase"] },
+    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. The approval is a GATE: that phase's checks run first (requirements: EARS errors, template placeholders, open [NEEDS CLARIFICATION], success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, active +saas/+ai sections, clarifications — bugfix: bug.md Root Cause instead; test-plan: placeholders, every AC has a test; eval-plan: placeholders; tasks: no placeholder tasks, every AC covered, no phantom IDs) and any failure REFUSES it, listing the failing check ids and details. `force: true` records it anyway as a forced approval (`forced` + the failing ids; doctor's approval-gates and the roadmap keep flagging it). A phase with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even with force. Makes approval-gated progress auditable and resumable.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"] }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user' — same as the CLI)." }, force: { type: "boolean", description: "Approve even though the phase's checks fail — recorded as forced, with the failing check ids (CLI: --force)." }, projectDir: { type: "string" } }, required: ["name", "phase"] },
   },
   {
     name: "steering_scaffold",
@@ -252,7 +252,7 @@ function runTool(name, args) {
     case "spec_doctor":
       return spec.specDoctor(pdir, args.name);
     case "spec_approve":
-      return spec.approvePhase(pdir, args.name, args.phase, args.by);
+      return spec.approvePhase(pdir, args.name, args.phase, args.by, { force: args.force === true });
     case "steering_scaffold":
       return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
     case "spec_roadmap": // html:true implies writing; a failed write is an error (same engine call as the CLI)

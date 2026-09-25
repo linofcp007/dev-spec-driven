@@ -122,13 +122,19 @@ function main(raw) {
     try {
       if (base === "requirements.md") {
         const text = fs.readFileSync(filePath, "utf8");
-        const r = spec.earsValidate(text, spec.featureLang(pdir, feature)); // issue messages in the spec's language
+        const lang = spec.featureLang(pdir, feature);
+        const r = spec.earsValidate(text, lang); // issue messages in the spec's language
         if (!r.ok) process.exit(0);
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");
-        if (!errs.length && !warns.length) return emit("PostToolUse", h.earsClean(r.summary.criteriaDetected));
+        // Template placeholders anywhere in the file (Summary, stories, SC/NFR — not only criteria): never "all clean"
+        // while any remain. The gates' own view: a removed track's [SaaS]/[AI] criteria are inactive.
+        const ph = (spec.featurePlaceholders(pdir, feature, "requirements.md") || { items: [] }).items;
+        const G = spec.msg(lang).gates;
+        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
+        if (!errs.length && !warns.length) return emit("PostToolUse", phLine || h.earsClean(r.summary.criteriaDetected));
         const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${i.severity}] ${i.msg}`);
-        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0));
+        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : ""));
       }
 
       if (base === "tasks.md") {

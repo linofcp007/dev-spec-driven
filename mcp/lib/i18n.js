@@ -28,9 +28,41 @@ function normalizeLang(l) {
   return LANGS.includes(s) ? s : "en";
 }
 
+// The template's test IDs: one per template AC of the active tracks, numbered in the order the requirements template
+// lists them. The test-plan and tasks builders (every language) share it, so a fresh +tdd scaffold plans a test for
+// every AC and every planned test is made green by a task (it used to start with AC-3/AC-4/US-2.AC-1 uncovered and
+// T-02 unmapped).
+const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"] };
+function templateTests(tracks) {
+  const ids = {};
+  let n = 0;
+  for (const t of ["core", "saas", "ai"]) {
+    if (t !== "core" && !(tracks || []).includes(t)) continue;
+    for (const ac of TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
+  }
+  return ids;
+}
+// `_Makes green: T-0x, …_` for these template ACs — only on a +tdd scaffold (green = templateTests, else null).
+function greenLine(green, ...acs) {
+  return green ? "\n  - _Makes green: " + acs.map((ac) => green[ac]).join(", ") + "_" : "";
+}
+// The test-plan matrix rows of the template ACs — row(testId, layer, description, acId, file) formats one per language,
+// L holds that language's layer names and descriptions.
+function templateTestRows(tracks, row, L) {
+  const T = templateTests(tracks);
+  const r = (ac, layer, desc, file) => row(T[ac], layer, desc, ac, file);
+  const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
+    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/..."),
+    r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
+  if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/..."), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
+  if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
+    r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
+  return rows.join("\n");
+}
+
 // ===========================================================================
-// Artifact builders, one set per language. EN is the canonical reference and
-// is byte-for-byte the original output (the test suite asserts against it).
+// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
+// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
 // ===========================================================================
 
 const BUILD = {
@@ -66,11 +98,12 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
     },
 
     requirements(a) {
+      // Track criteria sit under [SaaS]/[AI] headings: inactive (not a gate, not a placeholder) once the track is off.
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95.\n"
+        ? "\n\n#### [SaaS] Acceptance Criteria (EARS)\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size.\n"
+        ? "\n\n#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size."
         : "";
       return (
 `# Feature: ${a.name}
@@ -262,7 +295,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null; // each template test made green by one task
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -273,19 +306,19 @@ ${extra}
 
 ## Phase: Foundational (blocks all stories)
 - [ ] ${id()}. [shared] [Models, schemas, indexes shared across stories]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## Story US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 - [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 is fully functional and independently testable/shippable.
 `;
       for (const t of ["saas", "ai"]) {
         if (!a.tracks.includes(t)) continue;
-        const block = BUILD.en.trackTasks({ track: t, start: n + 1 });
+        const block = BUILD.en.trackTasks({ track: t, start: n + 1, green });
         phases += block;
         n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
@@ -293,7 +326,7 @@ ${extra}
 `
 ## Story US-2 (P2)
 - [ ] ${id()}. [US2] [Behavior for US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 works without breaking US-1.
 
 ## Phase: Polish (cross-cutting)
@@ -321,7 +354,8 @@ ${phases}`
     },
 
     // A track's template task block (none for +tdd — it only adds markers). Shared by tasks() and
-    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start }.
+    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start, green? } — green
+    // (templateTests) only on a greenfield +tdd scaffold, whose test plan holds those T-IDs.
     trackTasks(a) {
       let n = a.start - 1;
       const id = () => ++n;
@@ -331,16 +365,19 @@ ${phases}`
 - [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
   - _Requirements: US-1.AC-6_
 - [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Enforce tenant isolation — every query scoped by tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
 `;
       }
       if (a.track === "ai") {
         return `
 ## Story US-1 — AI
 - [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Affects evals: golden, adversarial, regression_
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
 `;
       }
       return "";
@@ -435,7 +472,11 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks) {
+      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
+          tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
+          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" });
       return (
 `# Test Plan: ${name}
 
@@ -449,8 +490,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 
 | Test ID | Layer | Description | Covers (AC IDs) | File |
 |---------|-------|-------------|-----------------|------|
-| T-01 | unit | [behavior] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integration | [behavior] | US-1.AC-2 | \`tests/integration/...\` |
+${rows}
 
 ## Coverage Check
 Every AC must appear in at least one "Covers" cell. Gaps (with justification):
@@ -618,10 +658,10 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
 
     requirements(a) {
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — QUANDO um utilizador do inquilino A pede dados, O SISTEMA NÃO DEVE devolver qualquer registo cujo tenant_id != A.\n6. **US-1.AC-6** — O SISTEMA DEVE responder em [N]ms no P95.\n"
+        ? "\n\n#### [SaaS] Critérios de Aceitação (EARS)\n5. **US-1.AC-5** — QUANDO um utilizador do inquilino A pede dados, O SISTEMA NÃO DEVE devolver qualquer registo cujo tenant_id != A.\n6. **US-1.AC-6** — O SISTEMA DEVE responder em [N]ms no P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — O SISTEMA DEVE produzir saídas classificadas como 'boas ou excelentes' em pelo menos [85]% do conjunto de avaliação golden.\n8. **US-1.AC-8** — SE a entrada contiver uma tentativa de injeção de prompt, ENTÃO O SISTEMA DEVE ignorar a instrução injetada e concluir a tarefa original.\n9. **US-1.AC-9** — O SISTEMA DEVE custar no máximo $[0.03] por pedido de utilizador no tamanho P95.\n"
+        ? "\n\n#### [AI] Critérios de Aceitação (EARS)\n7. **US-1.AC-7** — O SISTEMA DEVE produzir saídas classificadas como 'boas ou excelentes' em pelo menos [85]% do conjunto de avaliação golden.\n8. **US-1.AC-8** — SE a entrada contiver uma tentativa de injeção de prompt, ENTÃO O SISTEMA DEVE ignorar a instrução injetada e concluir a tarefa original.\n9. **US-1.AC-9** — O SISTEMA DEVE custar no máximo $[0.03] por pedido de utilizador no tamanho P95."
         : "";
       return (
 `# Feature: ${a.name}
@@ -813,7 +853,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null;
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -824,19 +864,19 @@ ${extra}
 
 ## Fase: Fundacional (bloqueia todas as histórias)
 - [ ] ${id()}. [shared] [Modelos, schemas, índices partilhados entre histórias]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## História US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamento central para US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 - [ ] ${id()}. [US1][P] [tarefa paralelizável — ficheiro diferente, sem deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
 `;
       for (const t of ["saas", "ai"]) {
         if (!a.tracks.includes(t)) continue;
-        const block = BUILD.pt.trackTasks({ track: t, start: n + 1 });
+        const block = BUILD.pt.trackTasks({ track: t, start: n + 1, green });
         phases += block;
         n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
@@ -844,7 +884,7 @@ ${extra}
 `
 ## História US-2 (P2)
 - [ ] ${id()}. [US2] [Comportamento para US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 funciona sem quebrar US-1.
 
 ## Fase: Acabamento (transversal)
@@ -880,16 +920,19 @@ ${phases}`
 - [ ] ${id()}. [US1] Emitir métricas, adicionar dashboard, configurar alertas
   - _Requirements: US-1.AC-6_
 - [ ] ${id()}. [US1] Teste de carga — verificar o orçamento de desempenho do design.md (só caminho crítico)
-  - _Requirements: US-1.AC-6_
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Garantir o isolamento de inquilino — todas as queries filtradas por tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
 `;
       }
       if (a.track === "ai") {
         return `
 ## História US-1 — IA
 - [ ] ${id()}. [US1] Prompt v1 + ligação ao harness de avaliação (tarefa separada por mudança de prompt)
-  - _Affects evals: golden, adversarial, regression_
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
-  - _Requirements: US-1.AC-9_
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
 `;
       }
       return "";
@@ -984,7 +1027,11 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks) {
+      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
+          tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
+          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" });
       return (
 `# Test Plan: ${name}
 
@@ -998,8 +1045,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 
 | Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
 |---------|--------|-----------|----------------|----------|
-| T-01 | unit | [comportamento] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integração | [comportamento] | US-1.AC-2 | \`tests/integration/...\` |
+${rows}
 
 ## Verificação de Cobertura
 Cada AC tem de aparecer em pelo menos uma célula "Cobre". Lacunas (com justificação):
@@ -1167,10 +1213,10 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
 
     requirements(a) {
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.\n6. **US-1.AC-6** — EL SISTEMA DEBE responder en [N]ms en P95.\n"
+        ? "\n\n#### [SaaS] Criterios de Aceptación (EARS)\n5. **US-1.AC-5** — CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.\n6. **US-1.AC-6** — EL SISTEMA DEBE responder en [N]ms en P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95.\n"
+        ? "\n\n#### [AI] Criterios de Aceptación (EARS)\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95."
         : "";
       return (
 `# Función: ${a.name}
@@ -1362,7 +1408,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null;
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -1373,19 +1419,19 @@ ${extra}
 
 ## Fase: Fundacional (bloquea todas las historias)
 - [ ] ${id()}. [shared] [Modelos, schemas, índices compartidos entre historias]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## Historia US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamiento central para US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]_
 - [ ] ${id()}. [US1][P] [tarea paralelizable — archivo distinto, sin deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional y es testeable/lanzable de forma independiente.
 `;
       for (const t of ["saas", "ai"]) {
         if (!a.tracks.includes(t)) continue;
-        const block = BUILD.es.trackTasks({ track: t, start: n + 1 });
+        const block = BUILD.es.trackTasks({ track: t, start: n + 1, green });
         phases += block;
         n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
@@ -1393,7 +1439,7 @@ ${extra}
 `
 ## Historia US-2 (P2)
 - [ ] ${id()}. [US2] [Comportamiento para US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 funciona sin romper US-1.
 
 ## Fase: Pulido (transversal)
@@ -1429,16 +1475,19 @@ ${phases}`
 - [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
   - _Requirements: US-1.AC-6_
 - [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
-  - _Requirements: US-1.AC-6_
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Imponer el aislamiento de inquilino — toda query filtrada por tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
 `;
       }
       if (a.track === "ai") {
         return `
 ## Historia US-1 — IA
 - [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
-  - _Affects evals: golden, adversarial, regression_
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
-  - _Requirements: US-1.AC-9_
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
 `;
       }
       return "";
@@ -1533,7 +1582,11 @@ ${a.summary || "[una línea: el bug a corregir]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks) {
+      const rows = templateTestRows(tracks, (t, layer, desc, ac, file) => `| ${t} | ${layer} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
+          tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
+          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" });
       return (
 `# Test Plan: ${name}
 
@@ -1547,8 +1600,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 
 | Test ID | Capa | Descripción | Cubre (AC IDs) | Archivo |
 |---------|------|-------------|----------------|---------|
-| T-01 | unit | [comportamiento] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integración | [comportamiento] | US-1.AC-2 | \`tests/integration/...\` |
+${rows}
 
 ## Verificación de Cobertura
 Cada AC debe aparecer en al menos una celda "Cubre". Lagunas (con justificación):
@@ -1925,7 +1977,7 @@ const MSG = {
       approveTestPlan: (slug) => `Review & approve the test plan — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Review & approve the eval plan — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "All tasks done — verify, then close the feature.",
+      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
     },
     clarify: {
@@ -1935,7 +1987,6 @@ const MSG = {
       prioritize: "Prioritize the user stories (P1 = the MVP slice that delivers value alone; P2/P3 incremental).",
       independentTest: "State how each user story can be tested independently (so it's shippable on its own).",
       quantifyVague: (line, text) => `Quantify the vague term on line ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resolve placeholder/TBD on line ${line}.`,
       edgeCases: "List the edge cases and error-handling behavior (each as an IF…THEN AC).",
       outOfScope: "State explicitly what is OUT of scope.",
       nfr: "Specify non-functional requirements (performance / security / accessibility) with measurable targets.",
@@ -2140,6 +2191,46 @@ const MSG = {
     // @wp WP4 <<<
 
     // @wp WP5 msg-en >>>
+    // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
+    // next_action's "fill <file>" step, clarify's grouped placeholder question and the requirements hook line.
+    gates: {
+      empty: "no content beyond headings",
+      more: (n) => `+${n} more`,
+      placeholdersNone: "no template placeholders left in the current phase",
+      placeholdersFail: (list) => `template placeholders left in the current phase (or an earlier one): ${list}`,
+      placeholdersLater: (list) => `later phases are still templates (not blocking yet): ${list}`,
+      earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
+      constitutionUnfilled: "the Constitution Check section is missing or not filled in",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
+      approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
+      approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
+      forcedGates: (list) => `approved with force over failing checks: ${list}`,
+      finishRootCause: "bug.md → Root Cause is not filled — no fix before the root cause is known",
+      finishPlaceholders: (list) => `template placeholders left in the spec chain: ${list}`,
+      finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
+      bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
+      bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
+      fillMissing: "it doesn't exist yet",
+      fillEmpty: "it has no content beyond headings",
+      fillPlaceholders: (n, first) => `${n} template placeholder(s) left (first: ${first})`,
+      fillHint: {
+        "requirements.md": (slug) => `check it with /clarify ${slug} and ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `write the Reproduction and the Root Cause with evidence (/spec-doctor ${slug})`,
+        "design.md": (slug) => `run /spec-doctor ${slug} (mandatory sections, Constitution Check)`,
+        "test-plan.md": (slug) => `check the AC coverage with trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `break the design into real tasks (/createTask ${slug}), then trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Before approving '${phase}', fix what the approve gate would refuse: ${list} — then /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `approving '${phase}' would be refused (${ids})`,
+      noRealTasks: "only the scaffold's template tasks — break the design into at least one real task of your own",
+      clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Template placeholders: ${n} left in requirements.md (${list}) — replace them before approving the requirements.`,
+    },
     // @wp WP5 <<<
 
     // @wp WP6 msg-en >>>
@@ -2300,7 +2391,7 @@ const MSG = {
       approveTestPlan: (slug) => `Revê e aprova o plano de testes — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revê e aprova o plano de evals — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "Todas as tarefas feitas — verifica e depois fecha a feature.",
+      allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
     },
     clarify: {
@@ -2310,7 +2401,6 @@ const MSG = {
       prioritize: "Prioriza as histórias de utilizador (P1 = a fatia MVP que entrega valor sozinha; P2/P3 incrementais).",
       independentTest: "Indica como cada história de utilizador pode ser testada de forma independente (para ser lançável por si só).",
       quantifyVague: (line, text) => `Quantifica o termo vago na linha ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resolve o placeholder/TBD na linha ${line}.`,
       edgeCases: "Lista os casos limite e o comportamento de tratamento de erros (cada um como um AC SE…ENTÃO).",
       outOfScope: "Indica explicitamente o que está FORA de âmbito.",
       nfr: "Especifica os requisitos não-funcionais (desempenho / segurança / acessibilidade) com alvos mensuráveis.",
@@ -2507,6 +2597,44 @@ const MSG = {
     // @wp WP4 <<<
 
     // @wp WP5 msg-pt >>>
+    gates: {
+      empty: "sem conteúdo além dos títulos",
+      more: (n) => `+${n} a mais`,
+      placeholdersNone: "nenhum placeholder do template na fase atual",
+      placeholdersFail: (list) => `placeholders do template por preencher na fase atual (ou numa anterior): ${list}`,
+      placeholdersLater: (list) => `as fases seguintes ainda são template (ainda não bloqueia): ${list}`,
+      earsPlaceholder: (list) => `O critério ainda tem placeholder(s) do template ${list} — escreve o gatilho/comportamento real.`,
+      constitutionUnfilled: "a secção Verificação da Constituição está em falta ou por preencher",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `Não é possível aprovar '${phase}' de '${slug}' — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}), ou passa force: true (CLI: --force) para registar a aprovação mesmo assim — fica assinalada como forçada.`,
+      approveNothing: (phase, slug, file) => `Nada para aprovar: '${phase}' não tem artefacto em '${slug}' (${file} não existe, ou o track está desativado) — nem com force.`,
+      approveForced: (ids) => `Aprovado com force — as verificações a falhar ficam registadas com a aprovação: ${ids}.`,
+      forcedGates: (list) => `aprovado com force apesar de verificações a falhar: ${list}`,
+      finishRootCause: "bug.md → Causa Raiz por preencher — nenhuma correção antes de se conhecer a causa",
+      finishPlaceholders: (list) => `placeholders do template por preencher na cadeia da spec: ${list}`,
+      finishChanged: (list) => `alterados depois da aprovação (rever e voltar a aprovar): ${list}`,
+      bugGate: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher. Nenhuma correção antes de a causa raiz estar escrita no bug.md — faz primeiro a tarefa ${first} (encontra a causa raiz com evidência e escreve-a lá).`,
+      bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
+      fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,
+      fillMissing: "ainda não existe",
+      fillEmpty: "não tem conteúdo além dos títulos",
+      fillPlaceholders: (n, first) => `${n} placeholder(s) do template por preencher (primeiro: ${first})`,
+      fillHint: {
+        "requirements.md": (slug) => `verifica-o com /clarify ${slug} e ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `escreve a Reprodução e a Causa Raiz com evidência (/spec-doctor ${slug})`,
+        "design.md": (slug) => `corre /spec-doctor ${slug} (secções obrigatórias, Verificação da Constituição)`,
+        "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `define os limiares e a baseline, depois /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `divide o design em tarefas reais (/createTask ${slug}), depois trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirma e aprova a classificação — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Antes de aprovar '${phase}', corrige o que o gate de aprovação recusaria: ${list} — depois /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `aprovar '${phase}' seria recusado (${ids})`,
+      noRealTasks: "só as tarefas do template — divide o design em pelo menos uma tarefa real tua",
+      clarifyPlaceholders: (file, n, list) => `Substitui os ${n} placeholder(s)/TBD do template em ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Placeholders do template: ${n} por preencher em requirements.md (${list}) — substitui-os antes de aprovar os requisitos.`,
+    },
     // @wp WP5 <<<
 
     // @wp WP6 msg-pt >>>
@@ -2667,7 +2795,7 @@ const MSG = {
       approveTestPlan: (slug) => `Revisa y aprueba el plan de pruebas — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revisa y aprueba el plan de evals — /approve ${slug} eval-plan.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "Todas las tareas hechas — verifica y luego cierra la función.",
+      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
     },
     clarify: {
@@ -2677,7 +2805,6 @@ const MSG = {
       prioritize: "Prioriza las historias de usuario (P1 = la porción MVP que entrega valor sola; P2/P3 incrementales).",
       independentTest: "Indica cómo cada historia de usuario puede testearse de forma independiente (para ser lanzable por sí sola).",
       quantifyVague: (line, text) => `Cuantifica el término vago en la línea ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resuelve el placeholder/TBD en la línea ${line}.`,
       edgeCases: "Lista los casos límite y el comportamiento de manejo de errores (cada uno como un AC SI…ENTONCES).",
       outOfScope: "Indica explícitamente qué está FUERA de alcance.",
       nfr: "Especifica los requisitos no funcionales (rendimiento / seguridad / accesibilidad) con objetivos medibles.",
@@ -2874,6 +3001,44 @@ const MSG = {
     // @wp WP4 <<<
 
     // @wp WP5 msg-es >>>
+    gates: {
+      empty: "sin contenido además de los títulos",
+      more: (n) => `+${n} más`,
+      placeholdersNone: "ningún placeholder de la plantilla en la fase actual",
+      placeholdersFail: (list) => `placeholders de la plantilla sin rellenar en la fase actual (o en una anterior): ${list}`,
+      placeholdersLater: (list) => `las fases siguientes aún son plantilla (todavía no bloquea): ${list}`,
+      earsPlaceholder: (list) => `El criterio aún tiene placeholder(s) de la plantilla ${list} — escribe el disparador/comportamiento real.`,
+      constitutionUnfilled: "la sección Verificación de la Constitución falta o está sin rellenar",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}), o pasa force: true (CLI: --force) para registrar la aprobación igualmente — queda marcada como forzada.`,
+      approveNothing: (phase, slug, file) => `Nada que aprobar: '${phase}' no tiene artefacto en '${slug}' (${file} no existe, o su track está desactivado) — ni con force.`,
+      approveForced: (ids) => `Aprobado con force — las verificaciones que fallan quedan registradas con la aprobación: ${ids}.`,
+      forcedGates: (list) => `aprobado con force pese a verificaciones que fallan: ${list}`,
+      finishRootCause: "bug.md → Causa Raíz sin rellenar — ninguna corrección antes de conocer la causa",
+      finishPlaceholders: (list) => `placeholders de la plantilla sin rellenar en la cadena de la spec: ${list}`,
+      finishChanged: (list) => `modificados tras su aprobación (revisar y volver a aprobar): ${list}`,
+      bugGate: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar. Ninguna corrección antes de que la causa raíz esté escrita en bug.md — haz primero la tarea ${first} (encuentra la causa raíz con evidencia y escríbela allí).`,
+      bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
+      fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
+      fillMissing: "aún no existe",
+      fillEmpty: "no tiene contenido además de los títulos",
+      fillPlaceholders: (n, first) => `${n} placeholder(s) de la plantilla sin rellenar (primero: ${first})`,
+      fillHint: {
+        "requirements.md": (slug) => `compruébalo con /clarify ${slug} y ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `escribe la Reproducción y la Causa Raíz con evidencia (/spec-doctor ${slug})`,
+        "design.md": (slug) => `ejecuta /spec-doctor ${slug} (secciones obligatorias, Verificación de la Constitución)`,
+        "test-plan.md": (slug) => `comprueba la cobertura de los ACs con trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `define los umbrales y la baseline, luego /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `desglosa el diseño en tareas reales (/createTask ${slug}), luego trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirma y aprueba la clasificación — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Antes de aprobar '${phase}', corrige lo que el gate de aprobación rechazaría: ${list} — después /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `aprobar '${phase}' sería rechazado (${ids})`,
+      noRealTasks: "solo las tareas de la plantilla — divide el diseño en al menos una tarea real propia",
+      clarifyPlaceholders: (file, n, list) => `Sustituye los ${n} placeholder(s)/TBD de la plantilla en ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Placeholders de la plantilla: ${n} sin rellenar en requirements.md (${list}) — sustitúyelos antes de aprobar los requisitos.`,
+    },
     // @wp WP5 <<<
 
     // @wp WP6 msg-es >>>
@@ -2911,6 +3076,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Inline only** — prompt/eval task: the controller runs it in the main session (evals cost money; accept/revert is a judgment call). Do not delegate it.",
     task: "## Task",
     context: "## Where this fits (user story)",
+    bug: "## The bug (bug.md)", bugRepro: "Reproduction", bugRootCause: "Root cause",
+    bugUnfilled: "_Not written yet — no fix before the root cause is written in bug.md._",
     acs: "## Acceptance criteria (binding)",
     acsNone: "_No acceptance criteria referenced — report NEEDS_CONTEXT rather than inventing scope._",
     tests: "## Tests to make green",
@@ -2966,6 +3133,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Só inline** — tarefa de prompt/evals: o controlador executa-a na sessão principal (as evals custam dinheiro; aceitar/reverter é uma decisão). Não a delegues.",
     task: "## Tarefa",
     context: "## Onde isto encaixa (história de utilizador)",
+    bug: "## O bug (bug.md)", bugRepro: "Reprodução", bugRootCause: "Causa raiz",
+    bugUnfilled: "_Ainda por escrever — nenhuma correção antes de a causa raiz estar escrita no bug.md._",
     acs: "## Critérios de aceitação (vinculativos)",
     acsNone: "_Nenhum critério de aceitação referido — responde NEEDS_CONTEXT em vez de inventar âmbito._",
     tests: "## Testes a pôr a verde",
@@ -3021,6 +3190,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Solo inline** — tarea de prompt/evals: el controlador la ejecuta en la sesión principal (las evals cuestan dinero; aceptar/revertir es una decisión). No la delegues.",
     task: "## Tarea",
     context: "## Dónde encaja (historia de usuario)",
+    bug: "## El bug (bug.md)", bugRepro: "Reproducción", bugRootCause: "Causa raíz",
+    bugUnfilled: "_Aún sin escribir — ninguna corrección antes de que la causa raíz esté escrita en bug.md._",
     acs: "## Criterios de aceptación (vinculantes)",
     acsNone: "_Ningún criterio de aceptación referenciado — responde NEEDS_CONTEXT en vez de inventar alcance._",
     tests: "## Pruebas a poner en verde",
@@ -3085,6 +3256,9 @@ function renderBrief(d, lang) {
   if (d.stories.length) {
     push("", t.context);
     d.stories.forEach((s, i) => { if (i) push(""); push(`**${s[0]}**`, ...s.slice(1)); });
+  }
+  if (d.bug) { // a bugfix task: the reproduction and the root cause it must respect (or that they are still unwritten)
+    push("", t.bug, `**${t.bugRepro}**`, d.bug.reproduction || t.bugUnfilled, "", `**${t.bugRootCause}**`, d.bug.rootCause || t.bugUnfilled);
   }
 
   push("", t.acs);
@@ -3152,7 +3326,7 @@ module.exports = {
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
   tasks: (a, lang) => L(lang).tasks(a),
-  testPlan: (name, lang) => L(lang).testPlan(name),
+  testPlan: (name, lang, tracks) => L(lang).testPlan(name, tracks), // tracks: which template ACs get a planned test
   evalPlan: (name, lang) => L(lang).evalPlan(name),
   loadTest: (name, lang) => L(lang).loadTest(name),
   quickstart: (name, lang) => L(lang).quickstart(name),

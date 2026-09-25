@@ -200,8 +200,9 @@ function payload(res) {
   ok(doc.checks.some((c) => c.id === "saas-sections" && c.status === "fail") && doc.checks.some((c) => c.id === "ai-sections" && c.status === "fail"), "spec_doctor detects unfilled +saas and +ai sections");
 
   // --- new: spec_approve records a phase gate, surfaced by doctor ---
-  const appr = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: "Invoice Summary", phase: "requirements" } }));
-  ok(appr.ok && appr.approvals.requirements, "spec_approve records the requirements gate");
+  // 1.13: the requirements are still the template, so the gate refuses them — force records a flagged approval.
+  const appr = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: "Invoice Summary", phase: "requirements", force: true } }));
+  ok(appr.ok && appr.approvals.requirements && appr.approvals.requirements.forced === true, "spec_approve records the requirements gate (forced over the template's failing checks)");
   const doc2 = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
   ok(doc2.approvals && doc2.approvals.requirements, "spec_doctor surfaces recorded approvals");
 
@@ -272,7 +273,8 @@ function payload(res) {
   ok(typeof reqV15.summary.needsClarification === "number" && reqV15.summary.needsClarification === 0, "scaffold requirements have 0 open [NEEDS CLARIFICATION]");
   const doc3 = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
   ok(["success-criteria", "priorities", "clarifications", "constitution-check", "ac-uniqueness"].every((id) => doc3.checks.some((c) => c.id === id)), "spec_doctor includes v1.5 checks");
-  ok(doc3.checks.find((c) => c.id === "success-criteria").status === "pass" && doc3.checks.find((c) => c.id === "priorities").status === "pass", "scaffold has SC + P1 (success-criteria & priorities pass)");
+  ok(doc3.checks.find((c) => c.id === "success-criteria").status === "warn" && doc3.checks.find((c) => c.id === "priorities").status === "warn",
+    "1.13: the scaffold's placeholder SC-001 and its P1 legend don't pass success-criteria & priorities while still template");
 
   // --- multilingual: a PT-headed design passes the +saas/Constitution checks ---
   await rpc("tools/call", { name: "spec_create", arguments: { name: "Escala PT", tracks: ["saas"] } });
@@ -505,7 +507,8 @@ function payload(res) {
   const prose = S.earsValidate("## Acceptance Criteria\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n\n## Assumptions\n1. Users will already have an account.\n\n## Pressupostos\n1. O utilizador já se registou.\n");
   ok(prose.verdict === "pass" && prose.summary.criteriaDetected === 1, "numbered prose under Assumptions/Pressupostos is not linted as a criterion");
   const ptFresh = S.earsValidate(fs.readFileSync(path.join(ptDir, ".specs", "resumo-faturas", "requirements.md"), "utf8"));
-  ok(ptFresh.issues.filter((i) => i.severity === "warn").length === 0, "a fresh PT scaffold has no EARS warnings (template prose 'deve' is not a criterion)");
+  ok(ptFresh.issues.filter((i) => i.severity === "warn" && i.code !== "placeholder").length === 0 && ptFresh.issues.some((i) => i.code === "placeholder"),
+    "a fresh PT scaffold has no EARS warnings beyond its template placeholders (template prose 'deve' is not a criterion)");
 
   // Doctor: [AI] Observability for AI can't stand in for [SaaS] Observability; definitions-only AC uniqueness.
   const aiSaas = S.createFeature(rDir, "Mixed", ["ai"]);
@@ -537,7 +540,7 @@ function payload(res) {
   // next_action: ticking tasks after approval is progress, not a spec change.
   const na2Feat = S.createFeature(rDir, "Flow", ["core"]);
   fs.writeFileSync(path.join(na2Feat.dir, "tasks.md"), "- [ ] 1. first\n- [ ] 2. second\n");
-  ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(rDir, "flow", p));
+  ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(rDir, "flow", p, undefined, { force: true })); // templates: 1.13 gate
   S.completeTask(rDir, "flow", 1);
   const na2 = S.nextAction(rDir, "flow");
   ok(!na2.changedSinceApproval.includes("tasks.md"), "completing a task does not flag tasks.md as changed since approval");
@@ -743,6 +746,13 @@ function payload(res) {
   const notReady = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", projectDir: vDir } }));
   ok(notReady.ok && notReady.readyToFinish === false && notReady.blockers.length >= 2 && /^fix\(login-loop\): users bounce back/.test(notReady.mergeTitle) &&
     /cookie/.test(notReady.mergeSummary) && notReady.checks.some((c) => /no longer reproduce/.test(c)), "spec_finish reports blockers + a merge summary built from the spec (root cause, fix)");
+  // 1.13 gates: the bugfix templates' placeholders must be filled before approving and finishing.
+  const llFill = (rel, pairs) => { const fp = path.join(vDir, ".specs", "login-loop", rel); let t = fs.readFileSync(fp, "utf8"); pairs.forEach(([a, b]) => { t = t.split(a).join(b); }); fs.writeFileSync(fp, t); };
+  llFill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
+    ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
+  llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
+  llFill("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+  llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
   [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
@@ -789,7 +799,9 @@ function payload(res) {
   fs.writeFileSync(path.join(tpNa.dir, "requirements.md"), "## Success Criteria\n- **SC-001** — x\n\n### US-1 (P1)\n#### Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
   fs.writeFileSync(path.join(tpNa.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
   fs.writeFileSync(path.join(tpNa.dir, "tasks.md"), "- [ ] 1. real task\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
-  ["classification", "requirements", "design"].forEach((p) => S.approvePhase(vDir, "gate-chain", p));
+  fs.writeFileSync(path.join(tpNa.dir, "design.md"), "# Design: Gate Chain\n\n## Overview\nOne endpoint.\n\n## Constitution Check\n- [x] Principle 1 — complies\n"); // 1.13: gates need real content
+  S.approvePhase(vDir, "gate-chain", "classification", undefined, { force: true });
+  ["requirements", "design"].forEach((p) => S.approvePhase(vDir, "gate-chain", p));
   ok(/test-plan/.test(S.nextAction(vDir, "gate-chain").recommendation), "next_action prompts the test-plan gate (spec_finish blocks on it)");
   const shortT = S.createFeature(vDir, "Title Case", ["core"]);
   fs.writeFileSync(path.join(shortT.dir, "requirements.md"), "## Summary\nPer-tenant API keys, e.g. Stripe-style secrets. They rotate.\n");
@@ -1100,7 +1112,7 @@ function payload(res) {
     !/\*\*invoice-export\*\* — design has unfilled/.test(S.renderRoadmapMd(w2, "en")),
     "after removal doctor/status/roadmap stop requiring the +saas sections");
   const aiRm = S.createFeature(w2, "Ai Gone", ["ai"]);
-  S.approvePhase(w2, "ai-gone", "requirements"); S.approvePhase(w2, "ai-gone", "design");
+  S.approvePhase(w2, "ai-gone", "requirements", undefined, { force: true }); S.approvePhase(w2, "ai-gone", "design", undefined, { force: true }); // templates: 1.13 gate
   S.removeTrack(w2, "ai-gone", "ai");
   ok(!S.specDoctor(w2, "ai-gone").pendingGates.includes("eval-plan") && !/eval-plan/.test(S.nextAction(w2, "ai-gone").recommendation) && fs.existsSync(path.join(aiRm.dir, "eval-plan.md")),
     "an inactive track's artifact is no longer an approval gate (doctor, next_action) — and it is still on disk");
@@ -1492,7 +1504,7 @@ function payload(res) {
 
     // 5. One default approver on both surfaces.
     const expectBy = process.env.USER || process.env.USERNAME || "user";
-    const apBy = body(await call("spec_approve", { name: "b", phase: "requirements", projectDir: dp }));
+    const apBy = body(await call("spec_approve", { name: "b", phase: "requirements", force: true, projectDir: dp })); // a template: 1.13 gate
     ok(apBy.ok && apBy.approvals.requirements.by === expectBy, "MCP approve without `by` records $USER/$USERNAME (same default as the CLI), not a fixed 'user'");
 
     // 6. Eval harness: resolver (accents, legacy slugs), project-dir resolution, localized output.
@@ -1555,7 +1567,7 @@ function payload(res) {
   const w4f = S.createFeature(w4, "Gaps", ["tdd"]);
   fs.writeFileSync(path.join(w4f.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n2. **US-1.AC-2** — WHEN c THE SYSTEM SHALL d\n");
   fs.writeFileSync(path.join(w4f.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2 |\n");
-  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-99_\n  - _Implements: src/nope.js_\n");
+  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-99_\n  - _Implements: src/nope.js_\n"); // ticked: 1.13 plannedImplFiles
   const w4kinds = S.traceGaps(S.traceCheck(w4, "gaps")).map((g) => g.kind).join(",");
   ok(w4kinds === "phantomTestsInTasks,testsNotMappedToTasks,missingImplFiles", "traceGaps lists every non-empty gap kind in a stable order (got " + w4kinds + ")");
   const w4doc = S.specDoctor(w4, "gaps").checks.find((c) => c.id === "traceability");
@@ -1566,7 +1578,7 @@ function payload(res) {
   ok(/testes desconhecidos \(erros de escrita\?\): T-99/.test(S.specDoctor(w4, "lacunas").checks.find((c) => c.id === "traceability").detail),
     "doctor's traceability detail is localized (PT)");
   // The hook used to print "Traceability gaps in <f>:" and an empty "- " when the only gap was a missing file.
-  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n  - _Implements: src/nope.js_\n");
+  fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n  - _Implements: src/nope.js_\n"); // ticked: 1.13 plannedImplFiles
   const hkTr = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
   const hkTrTxt = JSON.parse(hkTr.stdout).hookSpecificOutput.additionalContext;
   ok(/Traceability gaps in gaps/.test(hkTrTxt) && /_Implements:_ files that don't exist: src\/nope\.js/.test(hkTrTxt) && !/^\s*-\s*$/m.test(hkTrTxt),
@@ -1647,6 +1659,313 @@ function payload(res) {
   // @wp WP4 <<<
 
   // @wp WP5 tests >>>
+  { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
+    const w5 = path.join(tmp, "proj-wp5");
+    S.initProject(w5, ["core"], "en");
+    const read5 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const write5 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const stateOf = (f) => JSON.parse(read5(f, ".state.json"));
+    // Real content for the core chain (IDs match the template tasks, so traceability passes).
+    const REQ = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — WHILE an export runs, WHEN the admin clicks again THE SYSTEM SHALL ignore it.\n" +
+      "3. **US-1.AC-3** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n4. **US-1.AC-4** — THE SYSTEM SHALL name files invoices-YYYY-MM.csv.\n\n" +
+      "### US-2 (P2): Schedule\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN a schedule is due THE SYSTEM SHALL email the CSV.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n\n## Edge Cases & Error Handling\n- **EC-1** — WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV.\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 export time < 5 s.\n\n## Out of Scope\n- PDF export.\n";
+    const DESIGN = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+
+    // (1) placeholder gate: an untouched scaffold is never readyToAdvance; file:line detail, bounded
+    const f1 = S.createFeature(w5, "Fresh gate", ["core"]);
+    const d1 = S.specDoctor(w5, f1.slug);
+    const ph1 = chk(d1, "placeholders");
+    ok(d1.readyToAdvance === false && ph1.status === "fail" && /requirements\.md \(\d+\): requirements\.md:4 \[1-2 sentences/.test(ph1.detail) && /\+\d+ more/.test(ph1.detail) &&
+      (ph1.detail.match(/requirements\.md:\d+/g) || []).length === 5,
+      "doctor: a fresh scaffold fails 'placeholders' (file:line + text, first 5 + a count) and is NOT readyToAdvance");
+    write5(f1, "requirements.md", REQ);
+    write5(f1, "design.md", DESIGN);
+    const d1b = S.specDoctor(w5, f1.slug);
+    ok(d1b.phase === "design" && chk(d1b, "placeholders").status === "warn" && /tasks\.md/.test(chk(d1b, "placeholders").detail) && d1b.readyToAdvance === true &&
+      chk(d1b, "success-criteria").status === "pass" && chk(d1b, "priorities").status === "pass",
+      "a LATER phase still being a template (tasks.md at phase design) is only a warn; real SC-001 / P1 lines pass");
+    // EARS: a template criterion is reported with the stable code 'placeholder' (warn) — never 'clean'
+    const e1 = S.earsValidate("1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]\n2. **US-1.AC-2** — WHEN x THE SYSTEM SHALL y");
+    ok(e1.verdict === "pass" && e1.summary.placeholders === 1 && e1.issues.filter((i) => i.code === "placeholder").length === 1 &&
+      e1.issues.find((i) => i.code === "placeholder").severity === "warn" && /\[trigger\] \[behavior\]/.test(e1.issues.find((i) => i.code === "placeholder").msg),
+      "ears_validate reports template placeholder criteria with code 'placeholder' (warn)");
+    const hookReq = (file) => { const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const f1h = S.createFeature(w5, "Hook gate", ["core"]);
+    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does]"));
+    const hk1 = hookReq(path.join(f1h.dir, "requirements.md"));
+    write5(f1h, "requirements.md", REQ);
+    const hk2 = hookReq(path.join(f1h.dir, "requirements.md"));
+    ok(/Template placeholders: 1 left in requirements\.md \(L4 \[1-2 sentences: what this does\]\)/.test(hk1) && !/all clean/.test(hk1) && /all clean ✓/.test(hk2),
+      "PostToolUse on requirements.md: a placeholder outside any criterion still stops 'all clean' (count + line, localized); clean once filled");
+
+    // (2) approve gate: refused while the phase's checks fail; force records forced + failing ids; nothing to approve = error
+    const f2 = S.createFeature(w5, "Approve gate", ["core"]);
+    const ap1 = S.approvePhase(w5, f2.slug, "requirements");
+    ok(ap1.ok === false && ap1.refused && ap1.failing.join() === "placeholders,success-criteria,priorities" && /✗ placeholders — requirements\.md \(\d+\): requirements\.md:4/.test(ap1.error) &&
+      /force: true/.test(ap1.error) && !stateOf(f2).approvals.requirements, "approve on the template is REFUSED, listing the failing check ids + details — nothing recorded");
+    const ap2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: f2.slug, phase: "requirements", force: true, projectDir: w5 } }));
+    const d2 = S.specDoctor(w5, f2.slug);
+    ok(ap2.ok && ap2.forced === true && stateOf(f2).approvals.requirements.forced === true && stateOf(f2).approvals.requirements.failing.join() === "placeholders,success-criteria,priorities" &&
+      chk(d2, "approval-gates").status === "warn" && /approved with force over failing checks: requirements \(placeholders, success-criteria, priorities\)/.test(chk(d2, "approval-gates").detail) &&
+      d2.forcedGates.join() === "requirements", "spec_approve {force: true} records forced + failing ids; doctor's approval-gates shows it as a warn");
+    write5(f2, "requirements.md", REQ);
+    const ap3 = S.approvePhase(w5, f2.slug, "requirements");
+    ok(ap3.ok && !ap3.forced && !stateOf(f2).approvals.requirements.forced, "a clean re-approval replaces the forced one");
+    const noEval = S.approvePhase(w5, f2.slug, "eval-plan", undefined, { force: true });
+    const noPlan = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: f2.slug, phase: "test-plan", force: true, projectDir: w5 } }));
+    ok(noEval.ok === false && noEval.nothingToApprove && /Nothing to approve: 'eval-plan'/.test(noEval.error) && noPlan.ok === false && /test-plan\.md/.test(noPlan.error) &&
+      !stateOf(f2).approvals["eval-plan"], "approving a phase with no artifact (eval-plan without +ai, test-plan without +tdd) is an error even with force");
+    ok(S.approvePhase(w5, f2.slug, "execution").ok && S.approvePhase(w5, f2.slug, "tests").ok, "tests / execution have no artifact of their own — approved without checks");
+    const apD = S.approvePhase(w5, f2.slug, "design");
+    write5(f2, "design.md", DESIGN.replace("- [x] Principle 1 — complies\n", ""));
+    const apD2 = S.approvePhase(w5, f2.slug, "design");
+    write5(f2, "design.md", DESIGN);
+    ok(apD.ok === false && apD.failing.includes("placeholders") && apD.failing.includes("constitution-check") && apD2.failing.join() === "constitution-check" &&
+      S.approvePhase(w5, f2.slug, "design").ok, "design gate: placeholders and an empty Constitution Check refuse it; a filled design is approved");
+    const apT = S.approvePhase(w5, f2.slug, "tasks");
+    write5(f2, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-9_\n");
+    const apT2 = S.approvePhase(w5, f2.slug, "tasks");
+    write5(f2, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Verify: [manual: open the CSV in a spreadsheet]_\n");
+    ok(apT.ok === false && apT.failing.includes("placeholders") && apT2.ok === false && apT2.failing.join() === "traceability" &&
+      /US-1\.AC-4/.test(apT2.error) && /US-1\.AC-9/.test(apT2.error) && S.approvePhase(w5, f2.slug, "tasks").ok,
+      "tasks gate: template tasks, uncovered ACs and phantom IDs refuse it; a '[manual: …]' _Verify:_ is not a placeholder");
+    const f2t = S.createFeature(w5, "Plan gate", ["tdd"]);
+    write5(f2t, "requirements.md", REQ);
+    write5(f2t, "test-plan.md", "# Test Plan\n\n| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
+    const apP = S.approvePhase(w5, f2t.slug, "test-plan");
+    ok(apP.ok === false && apP.failing.join() === "traceability" && /ACs with no planned test: US-1\.AC-2/.test(apP.error), "test-plan gate: every AC needs a planned test");
+    const f2b = S.createFeature(w5, "Bug gate", undefined, "crash", undefined, "en", "bugfix");
+    const apB1 = S.approvePhase(w5, f2b.slug, "requirements", undefined, { force: true });
+    const apB2 = S.approvePhase(w5, f2b.slug, "design");
+    const apB3 = S.approvePhase(w5, f2b.slug, "classification", undefined, { force: true });
+    ok(apB1.forced && apB1.failing.includes("reproduction") && apB2.ok === false && apB2.failing.join() === "root-cause" && apB3.ok === false && apB3.nothingToApprove,
+      "bugfix: requirements needs bug.md Reproduction, design needs its Root Cause (no design.md), classification has nothing to approve");
+    const w5pt = path.join(tmp, "proj-wp5-pt");
+    S.initProject(w5pt, ["core"], "pt");
+    const fpt = S.createFeature(w5pt, "Aprovação", ["core"]);
+    ok(/Não é possível aprovar 'requirements' de 'aprovacao' — verificações a falhar: placeholders/.test(S.approvePhase(w5pt, fpt.slug, "requirements").error) &&
+      /Nada para aprovar/.test(S.approvePhase(w5pt, fpt.slug, "eval-plan").error), "the approve refusal / nothing-to-approve errors are localized (PT)");
+    const apTool = list.result.tools.find((t) => t.name === "spec_approve");
+    ok(apTool.inputSchema.properties.force.type === "boolean" && !apTool.inputSchema.required.includes("force") && /REFUSES/.test(apTool.description), "spec_approve advertises force: boolean (optional) and the gate");
+
+    // (3) _Implements:_ of an OPEN task is planned, not a gap; a DONE task's missing file is
+    const f3 = S.createFeature(w5, "Planned files", ["core"]);
+    write5(f3, "requirements.md", "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    write5(f3, "tasks.md", "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/not-yet.js_\n");
+    const t3a = S.traceCheck(w5, f3.slug);
+    write5(f3, "tasks.md", "- [x] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/not-yet.js_\n");
+    const t3b = S.traceCheck(w5, f3.slug);
+    ok(t3a.verdict === "pass" && t3a.plannedImplFiles.join() === "src/not-yet.js" && t3a.missingImplFiles.length === 0 && S.traceGaps(t3a).length === 0 &&
+      t3b.verdict === "gaps-found" && t3b.missingImplFiles.join() === "src/not-yet.js" && t3b.plannedImplFiles.length === 0,
+      "trace: an OPEN task's not-yet-written _Implements:_ file is plannedImplFiles (no gap); once the task is done it is a gap");
+
+    // (4) spec_finish blocks on what next_action flags (changed since approval), placeholders anywhere, the root cause
+    const f4 = S.createFeature(w5, "Finish gate", ["core"]);
+    write5(f4, "requirements.md", REQ);
+    S.approvePhase(w5, f4.slug, "requirements");
+    fs.appendFileSync(path.join(f4.dir, "requirements.md"), "\n## Assumptions\n- Admins are logged in.\n");
+    const na4 = S.nextAction(w5, f4.slug);
+    const fin4 = S.finishFeature(w5, f4.slug);
+    ok(na4.changedSinceApproval.join() === "requirements.md" && fin4.changedSinceApproval.join() === "requirements.md" &&
+      fin4.blockers.some((b) => /changed after their approval \(re-review, then re-approve\): requirements\.md/.test(b)) &&
+      fin4.blockers.some((b) => /template placeholders left in the spec chain: design\.md/.test(b)) && fin4.placeholders.includes("tasks.md") && fin4.readyToFinish === false,
+      "spec_finish: an artifact changed after its approval (the same list next_action shows) and placeholders anywhere in the chain are blockers");
+    const fin4b = S.finishFeature(w5, f2b.slug);
+    ok(fin4b.blockers.some((b) => b === "bug.md → Root Cause is not filled — no fix before the root cause is known") && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
+      "spec_finish on a bugfix: an unfilled Root Cause is its own blocker");
+
+    // (5) bugfix execution gate + brief context
+    const f5 = S.createFeature(w5, "Null deref", undefined, "crash on save", undefined, "en", "bugfix");
+    const tasks5 = () => read5(f5, "tasks.md");
+    const c51 = S.completeTask(w5, f5.slug, 1), c52 = S.completeTask(w5, f5.slug, 2);
+    const c53 = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: f5.slug, number: 4, evidence: { command: "npm test", exitCode: 0 }, projectDir: w5 } }));
+    ok(c51.ok && c52.ok && c53.ok === false && c53.gated === "root-cause" && /Task 4 can't be completed yet: bug\.md → Root Cause is not filled/.test(c53.error) && /do task 2 first/.test(c53.error) &&
+      /- \[ \] 4\./.test(tasks5()) && !(stateOf(f5).evidence || {})["4"], "bugfix: while Root Cause is unfilled, tasks after the root-cause task are refused (nothing ticked, no evidence recorded)");
+    const br5 = S.taskBrief(w5, f5.slug, 4);
+    const bug5 = path.join(f5.dir, "bug.md");
+    fs.writeFileSync(bug5, fs.readFileSync(bug5, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nSave an empty form.")
+      .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nform.owner is null when the form is empty (save.js:12)."));
+    const br5b = S.taskBrief(w5, f5.slug, 4);
+    ok(br5.bug.rootCause === null && /## The bug \(bug\.md\)/.test(br5.brief) && /Not written yet/.test(br5.brief) &&
+      br5b.bug.reproduction === "Save an empty form." && /\*\*Root cause\*\*\nform\.owner is null/.test(br5b.brief) && S.completeTask(w5, f5.slug, 3).ok,
+      "spec_task_brief on a bugfix task carries bug.md's Reproduction and Root Cause; once written, the gate opens");
+    const f5b = S.createFeature(w5, "Odd bug", undefined, "x", undefined, "en", "bugfix");
+    write5(f5b, "tasks.md", "- [ ] 1. Investigate\n- [ ] 2. Patch it\n");
+    const f5pt = S.createFeature(w5pt, "Falha", undefined, "x", undefined, "pt", "bugfix");
+    ok(/only task 1 can be completed/.test(S.completeTask(w5, f5b.slug, 2).error) && S.completeTask(w5, f5b.slug, 1).ok &&
+      /A tarefa 3 ainda não pode ser concluída/.test(S.completeTask(w5pt, f5pt.slug, 3).error), "no task mentions the Root Cause → only the first task can be completed; the refusal is localized (PT)");
+
+    // (6) next_action: the chain's order — fill → re-review → current checks → approve → implement → finish
+    const f6 = S.createFeature(w5, "Order", ["saas"]);
+    const n6a = S.nextAction(w5, f6.slug);
+    ok(n6a.step === "fill" && n6a.file === "requirements.md" && /^Fill requirements\.md — \d+ template placeholder/.test(n6a.recommendation) && /\/clarify order/.test(n6a.recommendation) &&
+      !/saas-sections|traceability/.test(n6a.recommendation), "next_action on a fresh +saas feature: 'fill requirements.md' (with /clarify), never the later phases' failing checks");
+    const f6c = S.createFeature(w5, "Order core", ["core"]);
+    write5(f6c, "requirements.md", REQ);
+    const n6b = S.nextAction(w5, f6c.slug);
+    write5(f6c, "design.md", DESIGN);
+    write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-7_\n");
+    const n6c = S.nextAction(w5, f6c.slug);
+    write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const n6d = S.nextAction(w5, f6c.slug);
+    // classification.md is still the scaffold: the approve gate would refuse it, so next_action names what it fails on
+    write5(f6c, "classification.md", read5(f6c, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    const n6d2 = S.nextAction(w5, f6c.slug);
+    ok(n6b.step === "fill" && n6b.file === "design.md" && n6c.step === "fix" && /traceability/.test(n6c.recommendation) &&
+      n6d.step === "fix" && n6d.refusedGate.phase === "classification" && n6d.refusedGate.failing.join() === "placeholders" && /Before approving 'classification'.*classification\.md:\d+ \[/.test(n6d.recommendation) &&
+      n6d2.step === "approve" && /classification/.test(n6d2.recommendation) && !n6d2.refusedGate,
+      "next_action: requirements filled → fill design.md; a current-phase check fails → fix it; a pending gate approve would refuse → what it fails on; then approve");
+    ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(w5, f6c.slug, p));
+    const n6e = S.nextAction(w5, f6c.slug);
+    S.completeTask(w5, f6c.slug, 1, "built and checked");
+    const n6f = S.nextAction(w5, f6c.slug);
+    ok(n6e.step === "implement" && /#1/.test(n6e.recommendation) && n6f.step === "finish" && /\/spec-finish order-core \(spec_finish\)/.test(n6f.recommendation),
+      "next_action: approvals done → implement the next task; all tasks done → spec_finish / /spec-finish by name");
+    ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
+
+    // (7) clarify: IF…THEN per criterion, natural rate-limit wording, grouped placeholders; the classifier
+    const f7 = S.createFeature(w5, "Clarify gate", ["saas"]);
+    write5(f7, "requirements.md", REQ.replace("3. **US-1.AC-3** — IF the export fails THEN THE SYSTEM SHALL show the error code.", "3. **US-1.AC-3** — IF the export fails,\n   THEN THE SYSTEM SHALL show the error code.") +
+      "\n## Tenancy\nEvery query is scoped by tenant; exports are throttled to 10 per minute per tenant.\n");
+    const q7 = S.clarify(w5, f7.slug).questions;
+    ok(!q7.some((q) => /unwanted-behavior/.test(q)) && !q7.some((q) => /rate limits/.test(q)), "clarify: IF on one line and THEN on the next counts; 'throttled' answers the rate-limit question");
+    const ptRate = S.createFeature(w5pt, "Limites", ["saas"]);
+    write5(ptRate, "requirements.md", "## Critérios\n1. **US-1.AC-1** — SE o inquilino excede o limite de pedidos, ENTÃO O SISTEMA DEVE responder 429.\n");
+    const esW5 = path.join(tmp, "proj-wp5-es");
+    S.initProject(esW5, ["core"], "es");
+    const esRate = S.createFeature(esW5, "Limites", ["saas"]);
+    write5(esRate, "requirements.md", "## Criterios\n1. **US-1.AC-1** — SI se supera el límite de solicitudes, ENTONCES EL SISTEMA DEBE responder 429.\n");
+    ok(!S.clarify(w5pt, ptRate.slug).questions.some((q) => /limites de taxa/.test(q)) && !S.clarify(esW5, esRate.slug).questions.some((q) => /límites de tasa/.test(q)),
+      "clarify: 'limite de pedidos' (PT) / 'límite de solicitudes' (ES) count as rate limits");
+    const q7b = S.clarify(w5, f1h.slug).questions;
+    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences]").replace("PDF export.", "[what is excluded] TBD"));
+    const q7c = S.clarify(w5, f1h.slug).questions.filter((q) => /placeholder/.test(q));
+    ok(!q7b.some((q) => /placeholder/.test(q)) && q7c.length === 1 && /^Replace the 3 template placeholder\(s\)\/TBD in requirements\.md: requirements\.md:4 \[1-2 sentences\], requirements\.md:\d+ \[what is excluded\], requirements\.md:\d+ TBD$/.test(q7c[0]),
+      "clarify groups the placeholders/TBDs into ONE question naming file:line and the bracketed text");
+    const cls7 = ["Página simples sem uso de IA", "Página simple sin uso de IA", "Simple page without AI", "A page with no use of AI"].map((x) => S.classify(x));
+    ok(cls7.every((r) => !r.tracks.includes("ai") && !r.possible.some((p) => p.track === "ai") && r.negated.ai.length === 1) &&
+      S.classify("Summarize tickets with an LLM, no use of AI moderation").tracks.includes("ai"),
+      "classifier: 'sem/sin uso de IA', 'without AI', 'no use of AI' negate the weak signal (no 'Possible +ai'); a strong signal still turns +ai on");
+
+    // (8) EARS: EC-/NFR-/SC- are stable IDs; a deeper numbered sub-list continues its criterion
+    const e8 = S.earsValidate("## Edge Cases\n- **EC-1** — WHEN the payload is empty THE SYSTEM SHALL respond 400.\n- **NFR-1** — THE SYSTEM SHALL answer in < 200 ms.\n- **SC-001** — THE SYSTEM SHALL keep errors < 1%.\n");
+    ok(e8.summary.criteriaDetected === 3 && e8.summary.withStableId === 3 && !e8.issues.some((i) => i.code === "no-id"), "EARS: EC-1 / NFR-1 / SC-001 are stable IDs (no 'Criterion has no stable ID')");
+    const e8b = S.earsValidate("1. **US-1.AC-1** — WHEN the form is submitted THE SYSTEM SHALL:\n   2. show an inline error when a field is invalid\n   3. keep the entered values\n2. **US-1.AC-2** — WHEN x THE SYSTEM SHALL y\n");
+    const e8c = S.earsValidate("- Criteria:\n  - **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n  - **US-1.AC-2** — WHEN c THE SYSTEM SHALL d\n");
+    ok(e8b.verdict === "pass" && e8b.summary.criteriaDetected === 2 && e8b.issues.length === 0 && e8c.summary.criteriaDetected === 2 && e8c.summary.withStableId === 2,
+      "EARS: a numbered sub-list indented under 'THE SYSTEM SHALL:' continues that criterion; a sub-item that defines its own AC still starts one");
+
+    // (9) templates internally consistent (EN/PT/ES, feature and bugfix); track criteria under [SaaS]/[AI] headings
+    const tplOk = ["en", "pt", "es"].every((l) => {
+      const f = S.createFeature(w5, "Tpl full " + l, ["tdd", "saas", "ai"], undefined, undefined, l);
+      const b = S.createFeature(w5, "Tpl bug " + l, undefined, "x", undefined, l, "bugfix");
+      const t = S.traceCheck(w5, f.slug), tb = S.traceCheck(w5, b.slug);
+      const req = read5(f, "requirements.md");
+      return t.verdict === "pass" && t.totalAcs === 10 && t.plannedTests === 10 && tb.verdict === "pass" && /^#### \[SaaS\] .*\n5\. \*\*US-1\.AC-5\*\*/m.test(req) && /^#### \[AI\] .*\n7\. \*\*US-1\.AC-7\*\*/m.test(req);
+    });
+    const t9 = S.traceCheck(w5, S.createFeature(w5, "Tpl tdd", ["tdd"]).slug);
+    ok(tplOk && t9.verdict === "pass" && t9.plannedTests === 5 && t9.uncoveredByTests.length === 0 && t9.testsNotMappedToTasks.length === 0,
+      "fresh scaffolds trace clean: every template AC has a planned test and a task, every T-ID a task (EN/PT/ES, +tdd+saas+ai, +tdd, bugfix); track ACs sit under [SaaS]/[AI] headings");
+    const f9 = S.createFeature(w5, "Ai off", ["ai"]);
+    S.removeTrack(w5, f9.slug, "ai");
+    const ph9 = S.featurePlaceholders(w5, f9.slug, "requirements.md").items;
+    write5(f9, "requirements.md", read5(f9, "requirements.md").split("\n").map((l, i) => (ph9.some((p) => p.line === i + 1) ? l.replace(/\[[^\]]*\]/g, "x") : l)).join("\n"));
+    ok(!ph9.some((p) => /85|0\.03/.test(p.text)) && S.featurePlaceholders(w5, f9.slug, "requirements.md").state === "filled" && S.statusFeature(w5, f9.slug).phase === "design",
+      "after add_track ai --remove, the [AI] criteria ([85]%, $[0.03]) are inactive: requirements.md can be 'filled' and the phase moves on");
+
+    // (10) roadmap: a placeholder next task gets a localized marker; the icon agrees with the percent; attention lists the gates
+    const w10 = path.join(tmp, "proj-wp5-rm");
+    S.initProject(w10, ["core"], "en");
+    const r1 = S.createFeature(w10, "Fresh one", ["saas"]);
+    const r2 = S.createFeature(w10, "Designing", ["core"]);
+    write5(r2, "requirements.md", REQ);
+    S.approvePhase(w10, r2.slug, "requirements");
+    fs.appendFileSync(path.join(r2.dir, "requirements.md"), "\n## Assumptions\n- none.\n");
+    S.approvePhase(w10, r2.slug, "classification", undefined, { force: true });
+    const md10 = S.renderRoadmapMd(w10, "en");
+    const row = (n) => md10.split("\n").find((l) => l.includes("[" + n + "]")) || "";
+    ok(/#1 \(placeholder\)/.test(row("fresh-one")) && /^\| ⬜ \|.* 8% /.test(row("fresh-one")) && /^\| 🟡 \|.* 16% /.test(row("designing")) && !/#1 \|/.test(md10),
+      "roadmap: a placeholder next task reads '#1 (placeholder)'; 16% (design) is 🟡 in progress, ⬜ only below");
+    ok(/\*\*fresh-one\*\* — mandatory sections missing\/unfilled: \[SaaS\] Performance Budget \(unfilled\)/.test(md10) && /\*\*fresh-one\*\* — template placeholders in the current phase: requirements\.md/.test(md10) &&
+      /\*\*designing\*\* — changed since approval — re-review: requirements\.md/.test(md10) && /\*\*designing\*\* — approved with --force \(checks were failing\): classification/.test(md10) &&
+      /\*\*designing\*\* — template placeholders in the current phase: design\.md/.test(md10),
+      "roadmap 'needs attention': mandatory sections, current-phase placeholders, changed since approval, forced approvals");
+    const pt10 = S.renderRoadmapMd(w10, "pt"), html10 = S.renderRoadmapHtml(w10, "es");
+    ok(/#1 \(por preencher\)/.test(pt10) && /secções obrigatórias em falta\/por preencher: \[SaaS\] Orçamento de Desempenho \(por preencher\)/.test(pt10) &&
+      /#1 \(sin rellenar\)/.test(html10) && /aprobado con --force/.test(html10) && /modificado desde la aprobación/.test(html10), "the roadmap markers and attention lines are localized (MD PT, HTML ES)");
+
+    // --- review fixes ---
+    // next_action never recommends an approval the approve gate refuses (it looped: approve → refused → approve…)
+    const fR = S.createFeature(w5, "No loop", ["core"]);
+    write5(fR, "classification.md", read5(fR, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(fR, "requirements.md", REQ.replace(/## Success Criteria\n[^\n]*\n\n/, ""));
+    write5(fR, "design.md", DESIGN);
+    write5(fR, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const apR0 = S.approvePhase(w5, fR.slug, "classification");
+    const nR1 = S.nextAction(w5, fR.slug);
+    const apR = S.approvePhase(w5, fR.slug, "requirements");
+    const nR2 = S.nextAction(w5, fR.slug);
+    const dR = S.specDoctor(w5, fR.slug);
+    ok(apR0.ok && nR1.step === "fix" && nR1.refusedGate.phase === "requirements" && nR1.refusedGate.failing.join() === "success-criteria" &&
+      /^Before approving 'requirements', fix what the approve gate would refuse: success-criteria \(no measurable SC-### success criteria\)/.test(nR1.recommendation) &&
+      apR.ok === false && apR.failing.join() === "success-criteria" && nR2.step === "fix" && nR2.recommendation === nR1.recommendation &&
+      chk(dR, "success-criteria").status === "warn" && dR.nextGate.phase === "requirements" && dR.nextGate.ready === false &&
+      /approving 'requirements' would be refused \(success-criteria\)/.test(chk(dR, "approval-gates").detail),
+      "next_action never recommends an approval the gate would refuse (no loop) — it names the failing check; doctor's approval-gates says so too");
+    ok(/^Antes de aprovar 'design', corrige/.test(S.msg("pt").gates.fixGate("design", "x", "f")) && /^Antes de aprobar 'design', corrige/.test(S.msg("es").gates.fixGate("design", "x", "f")),
+      "the refused-gate recommendation is localized (PT/ES)");
+
+    // clarify: TBDs are reported at their real line after a multi-line comment; one in an inactive [AI] section is not asked
+    const fT = S.createFeature(w5, "Tbd lines", ["core"]);
+    write5(fT, "requirements.md", "# Feature: Q\n<!-- guidance\n   more guidance\n   even more -->\n\n## Summary\nA thing.\n\n- Retention period: TBD\n\n" +
+      "#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL be good TBD\n\n## Edge Cases\n- none\n## Non-Functional Requirements\n- none\n");
+    const qT = S.clarify(w5, fT.slug).questions.filter((q) => /placeholder/.test(q));
+    ok(qT.length === 1 && qT[0] === "Replace the 1 template placeholder(s)/TBD in requirements.md: requirements.md:9 TBD",
+      "clarify: a TBD below a multi-line HTML comment keeps its real line; a TBD in an inactive [AI] section is not asked about");
+
+    // classifier: PT 'no uso do/de' is the contraction em+o, never a negation across filler words
+    const clsNo = ["Guia no uso do LLM", "Chatbot no uso do LLM para suporte", "Painel no uso de IA"].map((x) => S.classify(x));
+    ok(clsNo[0].tracks.includes("ai") && !clsNo[0].negated.ai.length && !clsNo[0].notes.length &&
+      clsNo[1].tracks.includes("ai") && !clsNo[1].notes.some((n) => /negated/.test(n)) && !clsNo[2].negated.ai.length && clsNo[2].possible.some((p) => p.track === "ai"),
+      "classifier: 'Guia no uso do LLM' keeps +ai ON (no negation, no false conflict note); 'no use of AI' still negates");
+
+    // bugfix gate: the template's own FIX task ("Fix the root cause") never counts as the task that writes the root cause
+    const fG = S.createFeature(w5, "Login crash", undefined, "crashes", undefined, "en", "bugfix");
+    write5(fG, "tasks.md", read5(fG, "tasks.md").replace("Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)", "Find why it crashes, with evidence, and document it in bug.md"));
+    const g1 = S.completeTask(w5, fG.slug, 1), g4 = S.completeTask(w5, fG.slug, 4), g2 = S.completeTask(w5, fG.slug, 2);
+    const brG = S.taskBrief(w5, fG.slug, 4);
+    ok(g1.ok && g4.ok === false && g4.gated === "root-cause" && /only task 1 can be completed/.test(g4.error) && g2.ok === false && !/- \[x\] [24]\./.test(read5(fG, "tasks.md")) &&
+      brG.gated === "root-cause" && brG.gateError === g4.error && S.taskBrief(w5, fG.slug, 1).gated === undefined,
+      "bugfix gate: with step 2 reworded, 'Fix the root cause' does not open the gate for itself — only the first task; spec_task_brief reports the gate");
+
+    // the scaffold's concrete track tasks are real tasks (doctor / next_action / finish); a list of ONLY template tasks can't be approved
+    const fK = S.createFeature(w5, "Track tasks kept", ["core"]);
+    write5(fK, "classification.md", read5(fK, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(fK, "requirements.md", REQ);
+    write5(fK, "design.md", DESIGN);
+    write5(fK, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n" +
+      "- [ ] 2. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const apK1 = S.approvePhase(w5, fK.slug, "tasks");
+    write5(fK, "tasks.md", "# Tasks\n\n- [x] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-2_\n" +
+      "- [ ] 3. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const approvedK = ["classification", "requirements", "design", "tasks"].every((p) => S.approvePhase(w5, fK.slug, p).ok);
+    const nK = S.nextAction(w5, fK.slug);
+    const dK = S.specDoctor(w5, fK.slug);
+    ok(apK1.ok === false && apK1.failing.join() === "placeholders" && /only the scaffold's template tasks/.test(apK1.error) &&
+      S.featurePlaceholders(w5, fK.slug, "tasks.md").state === "filled" && approvedK && nK.phase === "executing" && nK.step === "implement" && /#2/.test(nK.recommendation) &&
+      chk(dK, "placeholders").status === "pass" && !S.finishFeature(w5, fK.slug).placeholders.length,
+      "verbatim track tasks (tenant isolation, metrics) are not placeholders mid-execution: doctor passes, next_action implements; ONLY template tasks refuse the tasks gate");
+
+    // trace: an OPEN task's path outside the project root can never be created there — it stays a gap, never 'planned'
+    write5(f3, "tasks.md", "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: ../../outside/secret.js, src/not-yet.js_\n");
+    const t3c = S.traceCheck(w5, f3.slug);
+    ok(t3c.verdict === "gaps-found" && t3c.missingImplFiles.join() === "../../outside/secret.js" && t3c.plannedImplFiles.join() === "src/not-yet.js",
+      "trace: an open task's _Implements:_ path outside the project root is missingImplFiles (only in-root files are planned)");
+  }
   // @wp WP5 <<<
 
   // @wp WP6 tests >>>

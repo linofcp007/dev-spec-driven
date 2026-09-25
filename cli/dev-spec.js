@@ -25,7 +25,8 @@
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd)
- *   approve <feature> <phase> [--by NAME]  Record a phase approval (--by = who approved)
+ *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
+ *                                      (--by = who approved; --force records it anyway, flagged as forced)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
@@ -343,6 +344,7 @@ function main() {
         // duplicated number), so the command that runs belongs to the task that gets ticked.
         const b = spec.taskBrief(projectDir, pos[0], pos[1]);
         if (!b.ok) die(b.error);
+        if (b.gated) die(b.gateError); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
         if (!cmds.length) die(D.noRunnable(b.task.number));
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).
@@ -379,10 +381,14 @@ function main() {
     }
 
     case "approve": {
-      if (!pos[0] || !pos[1]) die("usage: dev-spec approve <feature> <phase>");
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined); // default approver: the engine's (same as MCP)
+      if (!pos[0] || !pos[1]) die("usage: dev-spec approve <feature> <phase> [--force] [--by NAME]");
+      // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
+      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined, { force: flags.force === true || flags.force === "true" });
       if (!r.ok) die(r.error);
-      return out(r, (r) => console.log(featureText(r.feature).approved(r.approved, r.feature)));
+      return out(r, (r) => {
+        console.log(featureText(r.feature).approved(r.approved, r.feature));
+        if (r.note) console.log("  ⚠ " + r.note); // a forced approval names the checks that were failing
+      });
     }
 
     case "evals": {
@@ -629,7 +635,8 @@ function helpText() {
                                   (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
   finish <feature> [--write] [--include-body]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary
-  approve <feature> <phase>       Record a phase approval (.state.json)
+  approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
+                                  --force records it anyway (flagged as forced, with the failing checks)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes)
@@ -646,7 +653,7 @@ function helpText() {
   Flags: --json  --project <dir>  --lang en|pt|es (init/create/steering/roadmap/ears)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
-         --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME (approve)
+         --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
