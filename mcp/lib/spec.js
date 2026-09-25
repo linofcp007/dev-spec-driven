@@ -47,7 +47,7 @@ function specsRoot(projectDir) {
 }
 
 function ensureDir(p) {
-  forgetCached(p);
+  forgetCached(p, { dir: true });
   fs.mkdirSync(p, { recursive: true });
 }
 
@@ -111,18 +111,26 @@ function shapeError(lang, rel, problems) {
 // of what they write (and the "exists" answers of its folders), and a raw write — a moved or removed folder, an in-place
 // edit — clears the whole cache (invalidateReadCache). Nested scopes share the outer one. Keys are resolved paths,
 // case-folded where the file system folds case, so two spellings of one file can't hold two different texts.
-let READ_CACHE = null; // Map(key → text | null | boolean), only while a withReadCache scope runs
+// The same scope memoizes the folder listings walkProject reads and the files each _Implements:_ glob matches
+// (globFiles): trace_check runs several times in one call (finish → trace + doctor → trace; next_action; approve's
+// checks) and a `**` glob walks the whole tree. A written file drops every listing above it and every glob whose walk
+// could see it (forgetCached); a created folder alone adds no file, so it leaves the globs alone.
+let READ_CACHE = null; // Map(key → text | null | boolean | Dirent[]), only while a withReadCache scope runs
+let GLOB_CACHE = null; // Map(key → { base, allowDir, result }) — globFiles results, same scope
 function withReadCache(fn) {
   if (READ_CACHE) return fn();
   READ_CACHE = new Map();
+  GLOB_CACHE = new Map();
   try {
     return fn();
   } finally {
     READ_CACHE = null;
+    GLOB_CACHE = null;
   }
 }
 const readCacheKey = (p) => { const r = path.resolve(String(p)); return FOLD_CASE ? r.toLowerCase() : r; };
 const EXISTS_KEY = "\u0000exists:";
+const DIR_KEY = "\u0000dir:";
 function readIfExists(file) {
   const k = READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
@@ -144,22 +152,51 @@ function existsCached(p) {
   READ_CACHE.set(k, v);
   return v;
 }
-// `file` is about to be written (or created, with its folders): its text and the "exists" answers of it and of every
-// folder above it are dropped.
-function forgetCached(file) {
+// fs.readdirSync(d, { withFileTypes: true }) sorted by name, served from the same scope (walkProject); null = unreadable.
+function readDirCached(d) {
+  const k = READ_CACHE ? DIR_KEY + readCacheKey(d) : null;
+  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
+  let entries = null;
+  try {
+    entries = fs.readdirSync(d, { withFileTypes: true });
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  } catch {
+    entries = null;
+  }
+  if (k !== null) READ_CACHE.set(k, entries);
+  return entries;
+}
+// `file` is about to be written (or created, with its folders): its text, the "exists" answers and listings of it and of
+// every folder above it are dropped — and every cached glob whose walk could reach it. opts.dir: `file` is a folder being
+// created (ensureDir) — an empty folder changes no glob's matches.
+function forgetCached(file, opts = {}) {
   if (!READ_CACHE) return;
   let k = readCacheKey(file);
   READ_CACHE.delete(k);
   for (;;) {
     READ_CACHE.delete(EXISTS_KEY + k);
+    READ_CACHE.delete(DIR_KEY + k);
     const up = path.dirname(k);
     if (up === k) break;
     k = up;
   }
+  if (!opts.dir && GLOB_CACHE && GLOB_CACHE.size) {
+    const abs = readCacheKey(file);
+    for (const [gk, e] of GLOB_CACHE) if (e.base !== null && globWalkReaches(e, abs)) GLOB_CACHE.delete(gk);
+  }
+}
+// Could the walk of a cached glob (from e.base, entering e.allowDir's folders) reach the file `abs` (both readCacheKey
+// forms)? Only a hidden folder on the way (.specs, where the engine writes) proves it can't — anything else is "yes",
+// so a cached result is dropped rather than risked.
+function globWalkReaches(e, abs) {
+  const rel = path.relative(e.base, abs);
+  if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false;
+  return rel.split(path.sep).slice(0, -1).every((n) => !n.startsWith(".") || (e.allowDir && e.allowDir(n)));
 }
 // A write the per-file bookkeeping can't follow (a folder moved or removed, a file edited in place): forget everything.
 function invalidateReadCache() {
   if (READ_CACHE) READ_CACHE.clear();
+  if (GLOB_CACHE) GLOB_CACHE.clear();
 }
 
 function stripHtmlComments(s) {
@@ -2161,7 +2198,8 @@ function scanTestCode(projectDir) {
     if (left <= 0) break;
     const tdir = path.join(d, "tests");
     try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
-    const w = walkProject(tdir, left, (rel, full, name) => onFile(toPosix(path.relative(root, full)), full, name));
+    const tPre = toPosix(path.relative(root, tdir));
+    const w = walkProject(tdir, left, (rel, full, name) => onFile(tPre + "/" + rel, full, name));
     left -= w.total;
     truncated = truncated || w.truncated;
   }
@@ -4779,8 +4817,13 @@ function changedSinceApproval(dir, approvals, tracks, kind) {
   for (const [ph, file] of Object.entries(PHASE_FILE)) {
     const a = approvals && approvals[ph];
     if (a && !a.fingerprint && !a.file && a.at && kind === "bugfix" && ph === "design" && phaseActive(ph, tracks)) {
-      const bug = path.join(dir, phaseFile(ph, "bugfix"));
-      try { if (fs.statSync(bug).mtime.getTime() > new Date(a.at).getTime()) out.push(phaseFile(ph, "bugfix")); } catch { /* no bug.md */ }
+      // A pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md, judged on its mtime. 1.12 fingerprinted
+      // design.md whenever it existed, so a design.md newer than that approval was created after it (a track added since) —
+      // a change too, as for a 1.13 approval.
+      const since = new Date(a.at).getTime();
+      const newer = (rel) => { try { return fs.statSync(path.join(dir, rel)).mtime.getTime() > since; } catch { return false; } };
+      if (newer(phaseFile(ph, "bugfix"))) out.push(phaseFile(ph, "bugfix"));
+      if (newer(file)) out.push(file);
       continue;
     }
     if (a && a.file !== file && a.file === phaseFile(ph, "bugfix") && phaseActive(ph, tracks)) {
@@ -6136,7 +6179,7 @@ function baselineFiles(projectDir, tasksText, globCap) {
     }
     const abs = path.resolve(root, p);
     if (abs === root || !isInsideDir(root, abs)) continue;
-    if (isDirSafe(abs)) walkProject(abs, BASELINE_CAP + 1, (_r, full) => add(toPosix(path.relative(root, full))));
+    if (isDirSafe(abs)) { const pre = toPosix(path.relative(root, abs)); walkProject(abs, BASELINE_CAP + 1, (r) => add(pre + "/" + r)); }
     else add(toPosix(path.relative(root, abs)));
   }
   return { files: [...out.values()], truncated };
@@ -6247,29 +6290,33 @@ const toPosix = (p) => String(p).split(path.sep).join("/");
 // Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
 // out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
 // opts.maxDepth: folder levels below the root to enter (0 = the root's own files); onFile returning WALK_STOP ends the walk.
+// opts.allowDir(name): a hidden / SCAN_IGNORE folder this walk enters anyway (a glob that spells `dist` or `.generated`).
+// Folder listings come from the per-call read cache (readDirCached). `full` is absolute (under path.resolve(root)) and
+// both paths are built by concatenation — path.relative / path.join cost ~15 µs a file on Windows, most of a `**` walk.
 const WALK_STOP = Symbol("walk-stop");
 function walkProject(root, cap, onFile, opts = {}) {
   let total = 0;
   const maxDepth = opts.maxDepth == null ? Infinity : opts.maxDepth;
-  const stack = [[root, 0]];
+  const stack = [[path.resolve(root), 0, ""]]; // [absolute folder, depth, its forward-slash path from the root]
   let stopped = false;
   while (stack.length && total < cap && !stopped) {
-    const [d, depth] = stack.pop();
-    let entries = [];
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
-    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const [d, depth, relDir] = stack.pop();
+    const entries = readDirCached(d);
+    if (!entries) continue;
+    const pre = d.endsWith(path.sep) ? d : d + path.sep; // a drive / file-system root already ends in a separator
+    const relPre = relDir ? relDir + "/" : "";
     const dirs = [];
     for (const e of entries) {
       if (total >= cap) break;
-      if (e.isDirectory() && e.name.startsWith(".")) continue; // hidden dirs: VCS, tool caches, worktrees
-      if (SCAN_IGNORE.has(e.name)) continue;
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) { if (depth < maxDepth) dirs.push(full); continue; }
+      if (e.isDirectory() && (e.name.startsWith(".") || SCAN_IGNORE.has(e.name))) {
+        if (!(opts.allowDir && opts.allowDir(e.name))) continue; // hidden dirs: VCS, tool caches, worktrees
+      } else if (SCAN_IGNORE.has(e.name)) continue;
+      if (e.isDirectory()) { if (depth < maxDepth) dirs.push(e.name); continue; }
       if (!e.isFile()) continue;
       total++;
-      if (onFile(toPosix(path.relative(root, full)), full, e.name) === WALK_STOP) { stopped = true; break; }
+      if (onFile(relPre + e.name, pre + e.name, e.name) === WALK_STOP) { stopped = true; break; }
     }
-    if (!stopped) for (let i = dirs.length - 1; i >= 0; i--) stack.push([dirs[i], depth + 1]);
+    if (!stopped) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i]]);
   }
   return { total, truncated: !stopped && total >= cap };
 }
@@ -6789,31 +6836,55 @@ function projectGlob(pattern, root) {
 // ("src/api/**" walks src/api; "lib/*.js" reads lib/ alone) and only as deep as the pattern can reach. Never outside the
 // project: a glob that would leave it matches nothing (`outside`), the walk follows no symlink (walkProject) and a
 // literal folder that resolves out of the project through a link is not entered. opts.first: stop at the first match;
-// opts.cap: files looked at (default COVERAGE_CAP). → { files: [rel], outside, truncated }
+// opts.cap: files looked at (default COVERAGE_CAP). The walk skips hidden and SCAN_IGNORE folders (dist, build, vendor…)
+// like every project walk — except one the pattern spells out in a folder segment ("packages/*/dist/*.js",
+// "src/**/.generated/*.ts"): a lone `*` / `**` never enters them, a named one does. Memoized per call (GLOB_CACHE).
+// → { files: [rel], outside, truncated }
 function globFiles(projectDir, pattern, opts = {}) {
   const root = path.resolve(projectDir);
+  const cap = opts.cap || COVERAGE_CAP;
+  const key = GLOB_CACHE ? [readCacheKey(root), String(pattern), opts.first ? 1 : 0, cap].join("\u0000") : null;
+  const copy = (r) => ({ files: r.files.slice(), outside: r.outside, truncated: r.truncated });
+  if (key !== null && GLOB_CACHE.has(key)) return copy(GLOB_CACHE.get(key).result);
+  const done = (result, base, allowDir) => {
+    if (key !== null) GLOB_CACHE.set(key, { base: base == null ? null : readCacheKey(base), allowDir, result: copy(result) });
+    return result;
+  };
   const g = projectGlob(pattern, root);
-  if (!g) return { files: [], outside: true, truncated: false };
+  if (!g) return done({ files: [], outside: true, truncated: false }, null);
   const parts = g.split("/");
   const lit = [];
   for (let i = 0; i < parts.length - 1 && !/[*?{]/.test(parts[i]); i++) lit.push(parts[i]);
   const base = path.resolve(root, ...lit);
-  if (!withinRoot(root, base)) return { files: [], outside: true, truncated: false };
+  if (!withinRoot(root, base)) return done({ files: [], outside: true, truncated: false }, null);
+  const allowDir = globFolderNames(g);
   try {
-    if (!fs.statSync(base).isDirectory() || !withinRoot(realRootOf(root), fs.realpathSync.native(base))) return { files: [], outside: false, truncated: false };
+    if (!fs.statSync(base).isDirectory() || !withinRoot(realRootOf(root), fs.realpathSync.native(base))) return done({ files: [], outside: false, truncated: false }, base, allowDir);
   } catch {
-    return { files: [], outside: false, truncated: false }; // the literal folder doesn't exist: nothing matches
+    return done({ files: [], outside: false, truncated: false }, base, allowDir); // the literal folder doesn't exist: nothing matches
   }
   const rest = parts.slice(lit.length);
   const match = globMatcher(g);
   const files = [];
-  const walk = walkProject(base, opts.cap || COVERAGE_CAP, (_r, full) => {
-    const rel = toPosix(path.relative(root, full));
+  const basePre = toPosix(path.relative(root, base)); // the literal folders, as path.relative spells them
+  const walk = walkProject(base, cap, (r) => {
+    const rel = basePre ? basePre + "/" + r : r;
     if (!match(rel)) return undefined;
     files.push(rel);
     return opts.first ? WALK_STOP : undefined;
-  }, { maxDepth: rest.some((s) => s.includes("**")) ? Infinity : rest.length - 1 });
-  return { files, outside: false, truncated: walk.truncated };
+  }, { maxDepth: rest.some((s) => s.includes("**")) ? Infinity : rest.length - 1, allowDir });
+  return done({ files, outside: false, truncated: walk.truncated }, base, allowDir);
+}
+// The folder names a glob spells out → (name) => boolean, or null: every folder segment (all but the last, in every brace
+// alternative) that is not wildcards alone — `dist`, `.generated`, `.gen*` — matched like the glob matches (case folded
+// where the file system folds case). `*`, `**` and `?*` name no folder.
+function globFolderNames(g) {
+  const alts = globAlternatives(globNorm(g)) || [];
+  const segs = new Set();
+  for (const a of alts) for (const s of a.split("/").slice(0, -1)) if (s && /[^*?]/.test(s)) segs.add(s);
+  if (!segs.size) return null;
+  const matchers = [...segs].map((s) => globMatcher(s));
+  return (name) => matchers.some((m) => m(name));
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.

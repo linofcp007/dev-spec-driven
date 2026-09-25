@@ -4080,8 +4080,9 @@ function endRun() {
       secs12(im12b) === "bug.md: Root Cause|bug.md: Fix|design.md: [SaaS] Performance Budget" && /design: bug\.md: Root Cause, bug\.md: Fix/.test(S.impactLines(im12).join("\n")),
       "spec_impact --phase requirements on a bugfix names the bug.md sections that mention the changed AC (Root Cause, Fix) — and a track's design.md section, each keyed by its file");
 
-    // (6) a pre-1.13 bugfix design approval (no fingerprint, no file): judged on bug.md's mtime, not design.md's; a feature's
-    // legacy approval keeps its own phase file.
+    // (6) a pre-1.13 bugfix design approval (no fingerprint, no file): judged on bug.md's mtime — and, since 1.12 fingerprinted
+    // design.md whenever it existed, a design.md newer than the approval (created since, e.g. by add_track) is a change too; a
+    // feature's legacy approval keeps its own phase file.
     const o12 = path.join(tmp, "proj-wp12-legacy");
     S.initProject(o12, ["core"], "en");
     const ob12 = S.createFeature(o12, "Old Crash", ["saas"], "crash", undefined, "en", "bugfix");
@@ -4092,16 +4093,30 @@ function endRun() {
     legacy12(of12.dir);
     const before12 = new Date(at12.getTime() - 3600e3), after12 = new Date(at12.getTime() + 60e3);
     fs.utimesSync(path.join(ob12.dir, "bug.md"), before12, before12);
-    fs.utimesSync(path.join(ob12.dir, "design.md"), after12, after12); // a bugfix's design.md (its +saas sections) is not what that approval covered
+    fs.utimesSync(path.join(ob12.dir, "design.md"), before12, before12);
     fs.utimesSync(path.join(of12.dir, "design.md"), before12, before12);
     const csB0 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF0 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
     fs.utimesSync(path.join(ob12.dir, "bug.md"), after12, after12);
     fs.utimesSync(path.join(of12.dir, "design.md"), after12, after12);
     const csB1 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF1 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
     const docB12 = S.specDoctor(o12, "old-crash").checks.find((c) => c.id === "changed-since-approval") || {};
-    ok(csB0 === "" && csF0 === "" && csB1 === "bug.md" && csF1 === "design.md" && /bug\.md/.test(docB12.detail || "") && S.nextAction(o12, "old-crash").changedSinceApproval.join() === "bug.md" &&
-      S.impactReport(o12, "old-crash", { phase: "design" }).changed === true,
-      "a legacy bugfix design approval is judged on bug.md's mtime (design.md ignored), a legacy feature approval still on design.md; doctor, next_action and impact agree (got " + [csB0, csF0, csB1, csF1].join(" / ") + ")");
+    const naB12 = S.nextAction(o12, "old-crash").changedSinceApproval.join();
+    fs.utimesSync(path.join(ob12.dir, "design.md"), after12, after12);
+    const csB2 = S.finishFeature(o12, "old-crash").changedSinceApproval.join();
+    ok(csB0 === "" && csF0 === "" && csB1 === "bug.md" && csF1 === "design.md" && /bug\.md/.test(docB12.detail || "") && naB12 === "bug.md" &&
+      S.impactReport(o12, "old-crash", { phase: "design" }).changed === true && csB2 === "bug.md,design.md",
+      "a legacy bugfix design approval is judged on bug.md's mtime (and on a design.md newer than it), a legacy feature approval on design.md; doctor, next_action and impact agree (got " + [csB0, csF0, csB1, csF1, csB2].join(" / ") + ")");
+    // The 1.12 → 1.13 path: a bugfix approved in 1.12 (no design.md then), then add_track +saas creates design.md.
+    const ob12b = S.createFeature(o12, "Older Crash", undefined, "crash", undefined, "en", "bugfix");
+    const noDesign12 = !fs.existsSync(path.join(ob12b.dir, "design.md"));
+    legacy12(ob12b.dir);
+    for (const f of fs.readdirSync(ob12b.dir)) if (f.endsWith(".md")) fs.utimesSync(path.join(ob12b.dir, f), before12, before12);
+    const csT0 = S.finishFeature(o12, "older-crash").changedSinceApproval.join();
+    const addT12 = S.addTrack(o12, "older-crash", "saas");
+    const csT1 = S.finishFeature(o12, "older-crash").changedSinceApproval.join(), naT1 = S.nextAction(o12, "older-crash").changedSinceApproval.join();
+    const docT12 = S.specDoctor(o12, "older-crash").checks.find((c) => c.id === "changed-since-approval") || {};
+    ok(noDesign12 && csT0 === "" && addT12.ok && fs.existsSync(path.join(ob12b.dir, "design.md")) && csT1 === "design.md" && naT1 === "design.md" && /design\.md/.test(docT12.detail || ""),
+      "a legacy bugfix design approval + add_track +saas: the design.md created since is reported as changed by finish, next_action and doctor (got " + [csT0, csT1, naT1].join(" / ") + ")");
 
     // (7) the per-call read cache: each file read once per call, a write inside the call is seen by the refresh after it
     // (create, complete, archive, rename), and nothing carries over to the next call.
@@ -4230,6 +4245,57 @@ function endRun() {
     ok(kt12.totalAcs === 2 && kt12.uncoveredByTasks.join() === "US-1.AC-2" && kt12.phantomAcsInTasks.length === 0 && ke12.summary.criteriaDetected === 2 && ke12.verdict === "pass" &&
       kFenced12.summary.criteriaDetected === 1,
       "a line starting with inline ```code``` is no fence: trace_check still sees both ACs (US-1.AC-2 uncovered), the EARS lint both criteria; a real ``` md fence still hides its body (got totalAcs=" + kt12.totalAcs + ")");
+
+    // --- WP12 review round 2 ---
+    // A glob that SPELLS a skipped folder (dist, build, a hidden one) after a wildcard enters it: the file exists, the literal
+    // path is found, so is the glob. A lone `*` / `**` still never enters node_modules, dist or a hidden folder.
+    const v12 = path.join(tmp, "proj-wp12-glob-ignored");
+    S.initProject(v12, ["core"], "en");
+    ["packages/ui/dist/index.js", "src/gen/.generated/api.ts", "services/api/build/server.js", "node_modules/pkg/index.js", "src/.cache/x.ts", "packages/ui/src/index.js"].forEach((f) => put12(v12, f, "x\n"));
+    const vf12 = S.createFeature(v12, "Pkg", ["core"]);
+    fs.writeFileSync(path.join(vf12.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    fs.writeFileSync(path.join(vf12.dir, "tasks.md"), ["- [x] 1. literal paths", "  - _Requirements: US-1.AC-1_", "  - _Implements: packages/ui/dist/index.js, src/gen/.generated/api.ts, services/api/build/server.js_",
+      "- [x] 2. the same files by glob", "  - _Implements: packages/*/dist/*.js, src/**/.generated/*.ts, services/*/build/*.js_", ""].join("\n"));
+    const vt12 = (await call12("trace_check", { name: "pkg", projectDir: v12 })).p;
+    const vg12 = (p) => S.globFiles(v12, p).files.join();
+    ok(vt12.verdict === "pass" && vt12.missingImplFiles.length === 0 && vg12("packages/*/dist/*.js") === "packages/ui/dist/index.js" && vg12("src/**/.generated/*.ts") === "src/gen/.generated/api.ts" &&
+      vg12("services/*/build/*.js") === "services/api/build/server.js" && vg12("**/index.js") === "packages/ui/src/index.js" && vg12("src/**/*.ts") === "" && vg12("src/*/*.ts") === "" &&
+      vg12("**/node_modules/pkg/*.js") === "node_modules/pkg/index.js" && vg12("src/.c*/*.ts") === "src/.cache/x.ts",
+      "globFiles enters a dist/build/hidden folder the pattern names (packages/*/dist/*.js, src/**/.generated/*.ts, src/.c*/*.ts) — trace_check passes a done task citing them; `*`/`**` alone skip them (got missing=" + vt12.missingImplFiles.join("|") + ")");
+
+    // _Implements:_ glob walks are memoized per call: finish (trace + doctor's trace + tests-in-code) reads each folder once; a
+    // raw write inside one call is not seen (one snapshot per call), an engine write the walk can reach drops the result, one
+    // under .specs/ keeps the others; the next call walks afresh.
+    const q12 = path.join(tmp, "proj-wp12-glob-memo");
+    S.initProject(q12, ["core"], "en");
+    for (let d = 0; d < 4; d++) for (let i = 0; i < 3; i++) put12(q12, "src/m" + d + "/f" + i + ".js", "");
+    put12(q12, "notes/a.md", "a\n");
+    const qf12 = S.createFeature(q12, "Memo", ["core"]);
+    fs.writeFileSync(path.join(qf12.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    fs.writeFileSync(path.join(qf12.dir, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: **/future-a.ts, src/**/future-b.ts_\n");
+    const rawDir12 = fs.readdirSync, rawReal12 = fs.realpathSync.native;
+    const dirReads12 = new Map();
+    let srcReal12 = 0; // globFiles resolves the literal folder of `src/**/future-b.ts` once per walk it really does
+    fs.readdirSync = function (p) { const k = path.resolve(String(p)).toLowerCase(); if (/[\\/]src(?:[\\/]|$)/.test(k)) dirReads12.set(k, (dirReads12.get(k) || 0) + 1); return rawDir12.apply(this, arguments); };
+    fs.realpathSync.native = function (p) { if (path.resolve(String(p)).toLowerCase() === path.join(q12, "src").toLowerCase()) srcReal12++; return rawReal12.apply(this, arguments); };
+    let qfin12;
+    try { qfin12 = S.finishFeature(q12, "memo"); } finally { fs.readdirSync = rawDir12; fs.realpathSync.native = rawReal12; }
+    const qTwice12 = [...dirReads12].filter(([, n]) => n > 1).map(([k, n]) => path.basename(k) + "×" + n);
+    ok(qfin12.ok && qfin12.openTasks.join() === "1" && S.traceCheck(q12, "memo").plannedImplFiles.join() === "**/future-a.ts,src/**/future-b.ts" && dirReads12.size === 5 && qTwice12.length === 0 && srcReal12 === 1,
+      "finish reads each src/ folder once although trace_check runs twice (and doctor scans the tests): glob walks and folder listings are memoized per call (read twice: " + qTwice12.join(", ") + "; folders " + dirReads12.size + "; src/** walks " + srcReal12 + ")");
+    const qm12 = S.withReadCache(() => {
+      const n1 = S.globFiles(q12, "notes/*.md").files.join();
+      put12(q12, "notes/b.md", "b\n"); // a raw write: the engine can't know — the call keeps its snapshot
+      const n2 = S.globFiles(q12, "notes/*.md").files.join();
+      const s1 = S.globFiles(q12, ".specs/*/requirements.md").files.join();
+      const w1 = S.globFiles(q12, "**/*.md").files.join();
+      S.createFeature(q12, "Second", ["core"]); // an engine write under .specs/
+      return { n1, n2, s1, w1, s2: S.globFiles(q12, ".specs/*/requirements.md").files.join(), n3: S.globFiles(q12, "notes/*.md").files.join(), w2: S.globFiles(q12, "**/*.md").files.join() };
+    });
+    const qAfter12 = S.globFiles(q12, "notes/*.md").files.join();
+    ok(qm12.n1 === "notes/a.md" && qm12.n2 === "notes/a.md" && qm12.s1 === ".specs/memo/requirements.md" && qm12.s2 === ".specs/memo/requirements.md,.specs/second/requirements.md" &&
+      qm12.n3 === "notes/a.md" && qm12.w1 === "notes/a.md" && qm12.w2 === qm12.w1 && qAfter12 === "notes/a.md,notes/b.md",
+      "the glob memo: repeats answer from the call's snapshot; an engine write the walk reaches (.specs/*/requirements.md) is seen at once, one it can't reach (notes/*, **/*.md skip .specs) keeps the result; the next call is fresh (got " + JSON.stringify(qm12) + ")");
   }
   // @wp WP11 <<<
 
