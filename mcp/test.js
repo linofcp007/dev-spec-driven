@@ -1465,21 +1465,52 @@ function endRun() {
   // RE_STABLE_BRACKET is linear: a bracket of space-separated IDs followed by a word used to backtrack 2^k (26 IDs ≈ 9 s,
   // freezing the MCP server and timing the hooks out). 40 single- and double-spaced IDs must take milliseconds.
   const redosT0 = Date.now();
-  const redos = [S.placeholderReport("[" + "US-1 ".repeat(40) + "x]"), S.placeholderReport("Related: [" + Array.from({ length: 40 }, (_, i) => "US-" + (1 + (i % 3)) + ".AC-" + i).join("  ") + " and follow-ups]")];
+  const redos = [S.placeholderReport("[" + "US-1 ".repeat(40) + "x]"), S.placeholderReport("Related: [" + Array.from({ length: 40 }, (_, i) => "US-" + (1 + (i % 3)) + ".AC-" + i).join("  ") + " and follow-ups]"),
+    S.placeholderReport("[" + "US-1 ".repeat(40) + "[trigger]]")];
   const redosMs = Date.now() - redosT0;
-  ok(redosMs < 500 && redos.every((r) => r.length === 1) && !S.placeholderReport("[US-1.AC-1 T-01] [US-1.AC-1, T-01] [US-1.AC-1/T-01] [US-1.AC-1T-01]").length,
-    "placeholderReport: 40 space-separated IDs + a word in one bracket is checked in linear time (" + redosMs + " ms) and still flagged; ID lists (space, comma, slash, glued) stay exempt");
-  // A written-out enumeration is content (approved 1.12 specs used them in ACs); the templates' own enumerations stay placeholders.
+  ok(redosMs < 500 && !redos[0].length && !redos[1].length && redos[2].map((p) => p.text).join() === "[trigger]" && !S.placeholderReport("[US-1.AC-1 T-01] [US-1.AC-1, T-01] [US-1.AC-1/T-01] [US-1.AC-1T-01]").length,
+    "placeholderReport: 40 space-separated IDs + a word in one bracket is checked in linear time (" + redosMs + " ms) and is content (no template writes it); a template slot nested inside it is still found; ID lists (space, comma, slash, glued) stay exempt");
+  // A bracket is a placeholder only when a template writes that text: written-out lists, values and prose of the user's own
+  // are content (approved 1.12 specs quote them in ACs); the templates' own brackets — enumerations included — stay placeholders.
   const enums = S.placeholderReport([
     "1. **US-1.AC-1** — WHEN an admin exports THE SYSTEM SHALL download a CSV with the columns [id, number, amount_cents, issued_at].",
     "2. **US-1.AC-2** — IF the user's role is not one of [owner, admin] THEN THE SYSTEM SHALL return HTTP 403 for [GET | POST] and [`draft`, `sent`] or [\"read only\", \"admin\"].",
     "Mocks: [factories, fixtures, seeds] · [GDPR | PCI | HIPAA | SOC2 | none] · [rede, fs, tempo, serviços externos] · [Consultivo | Semi-autónomo | Autónomo]",
-    "Still slots: [e.g., Redis] · [a, b c] · [trigger] · [optional] · [ , ]",
+    "Content: [e.g., Redis] · [a, b c] · [optional] · [ , ] — slots: [trigger] · [Story   title] · [e.g., 90% of users complete checkout in under [N] seconds]",
   ].join("\n")).map((x) => x.line + ":" + x.text);
   const enumReq = "# Feature: Export\n\n## Summary\nExport invoices.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV with the columns [id, number, amount_cents, issued_at].\n2. **US-1.AC-2** — IF the user's role is not one of [owner, admin] THEN THE SYSTEM SHALL return HTTP 403.\n";
-  ok(enums.join("|") === "3:[factories, fixtures, seeds]|3:[GDPR | PCI | HIPAA | SOC2 | none]|3:[rede, fs, tempo, serviços externos]|3:[Consultivo | Semi-autónomo | Autónomo]|4:[e.g., Redis]|4:[a, b c]|4:[trigger]|4:[optional]|4:[ , ]" &&
+  ok(enums.join("|") === "3:[factories, fixtures, seeds]|3:[GDPR | PCI | HIPAA | SOC2 | none]|3:[rede, fs, tempo, serviços externos]|3:[Consultivo | Semi-autónomo | Autónomo]|4:[trigger]|4:[Story   title]|4:[N]" &&
     S.artifactState({ text: enumReq }) === "filled" && !S.earsValidate(enumReq).issues.some((i) => i.code === "placeholder"),
-    "placeholderReport: written-out enumerations ([id, amount_cents], [owner, admin], [GET | POST], code/quoted items) are content — not in the gate, not an EARS 'placeholder' warning; template enumerations, prose items and example leads still are (got " + enums.join("|") + ")");
+    "placeholderReport: written-out enumerations ([id, amount_cents], [owner, admin], [GET | POST], code/quoted items) and the user's own bracketed prose are content — not in the gate, not an EARS 'placeholder' warning; the templates' texts (enumerations too; case/spacing ignored) and a slot left inside a half-edited template sentence still are (got " + enums.join("|") + ")");
+  // Real bracketed values in a criterion (the 1.13 acceptance repro) are content everywhere: the approval, doctor, EARS;
+  // the generic unfilled tokens (TODO / TBD / TBC / FIXME / … / "por definir") are placeholders, "todo" (a PT/ES word) is not.
+  const quota = S.createFeature(w2, "Plan quotas", ["core"]);
+  const quotaReq = "# Feature: Plan quotas\n\n## Summary\nPer-plan request quotas.\n\n## User Stories\n\n### US-1 (P1 — MVP): Enforce quotas\n**As an** operator, **I want** quotas, **so that** no tenant starves the others.\n\n" +
+    "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — THE SYSTEM SHALL apply the per-minute quotas [free: 60, pro: 600, enterprise: 6000].\n" +
+    "2. **US-1.AC-2** — WHEN a user's role is one of [admin, billing-manager, read only] THE SYSTEM SHALL allow uploads up to [10 MB, 25 MB for pro].\n\n" +
+    "## Success Criteria\n- **SC-001** — zero noisy-neighbour incidents.\n";
+  fs.writeFileSync(path.join(quota.dir, "requirements.md"), quotaReq);
+  const quotaAp = S.approvePhase(w2, quota.slug, "requirements");
+  const generic = S.placeholderReport("[TODO] · [TBD: pricing] · [tbc] · [FIXME later] · [...] · [ … ] · [por definir] · [todo] · [TODOs list] · [fill me in]").map((x) => x.text).join("|");
+  ok(quotaAp.ok && !quotaAp.forced && !S.placeholderReport(quotaReq).length && !S.earsValidate(quotaReq).issues.some((i) => i.code === "placeholder") &&
+    generic === "[TODO]|[TBD: pricing]|[tbc]|[FIXME later]|[...]|[ … ]|[por definir]|[fill me in]",
+    "real bracketed values ([free: 60, pro: 600, enterprise: 6000], [admin, billing-manager, read only], [10 MB, 25 MB for pro]) never block the requirements approval nor read as EARS placeholders; TODO/TBD/TBC/FIXME/…/'por definir' and the init stub's [fill me in] do, 'todo' does not (got " +
+    JSON.stringify([quotaAp.ok, quotaAp.error, generic]) + ")");
+  // Every bracket text a scaffold writes is in the set, in every language, track combination and kind — and the 1.12.1
+  // texts are kept (a spec scaffolded by 1.12 still holds them): each fresh chain artifact reads 'placeholder'.
+  const everyScaffold = [];
+  for (const l of ["en", "pt", "es"]) {
+    const d = path.join(tmp, "proj-a1-" + l);
+    for (const [n, t, k] of [["All " + l, ["tdd", "saas", "ai"]], ["Core " + l, ["core"]], ["Bug " + l, ["saas", "ai"], "bugfix"]]) {
+      const c = S.createFeature(d, n, t, undefined, undefined, l, k);
+      for (const file of ["classification.md", "requirements.md", "design.md", "tasks.md", "test-plan.md", "eval-plan.md", "bug.md"]) {
+        const txt = fs.existsSync(path.join(c.dir, file)) ? fs.readFileSync(path.join(c.dir, file), "utf8") : null;
+        if (txt != null && S.artifactState({ text: txt }) !== "placeholder") everyScaffold.push(l + "/" + c.slug + "/" + file);
+      }
+    }
+  }
+  ok(!everyScaffold.length && S.isTemplatePlaceholder("1-2 frases: o que faz e porque importa") && S.isTemplatePlaceholder("Advisory  |  Semi-autonomous | Autonomous"),
+    "every fresh scaffold artifact (EN/PT/ES, all tracks, core-only, bugfix + tracks) reads 'placeholder'; 1.12.1 template texts stay placeholders (got " + everyScaffold.join(", ") + ")");
   const auth = S.createFeature(w2, "Auth keys", ["core"]);
   fs.writeFileSync(path.join(auth.dir, "requirements.md"), "# Feature: Auth keys\n\n## Summary\nOnly callers passing the `[Authorize]` filter may list keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin lists keys THE SYSTEM SHALL return them.\n");
   fs.writeFileSync(path.join(auth.dir, "design.md"), "# Design: Auth keys\n\n## Overview\nA GET endpoint on KeysController.\n");
@@ -2099,11 +2130,11 @@ function endRun() {
       "ears_validate reports template placeholder criteria with code 'placeholder' (warn)");
     const hookReq = (file) => { const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const f1h = S.createFeature(w5, "Hook gate", ["core"]);
-    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does]"));
+    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does and why it matters]"));
     const hk1 = hookReq(path.join(f1h.dir, "requirements.md"));
     write5(f1h, "requirements.md", REQ);
     const hk2 = hookReq(path.join(f1h.dir, "requirements.md"));
-    ok(/Template placeholders: 1 left in requirements\.md \(L4 \[1-2 sentences: what this does\]\)/.test(hk1) && !/all clean/.test(hk1) && /all clean ✓/.test(hk2),
+    ok(/Template placeholders: 1 left in requirements\.md \(L4 \[1-2 sentences: what this does and why …\)/.test(hk1) && !/all clean/.test(hk1) && /all clean ✓/.test(hk2),
       "PostToolUse on requirements.md: a placeholder outside any criterion still stops 'all clean' (count + line, localized); clean once filled");
     // A stray, never-closed "<!--" above the criteria: the requirements approve gate still sees (and refuses) the broken
     // AC below it, and a placeholder below it is still a placeholder — EARS used to see 0 criteria and pass.
@@ -2414,9 +2445,9 @@ function endRun() {
     ok(!S.clarify(w5pt, ptRate.slug).questions.some((q) => /limites de taxa/.test(q)) && !S.clarify(esW5, esRate.slug).questions.some((q) => /límites de tasa/.test(q)),
       "clarify: 'limite de pedidos' (PT) / 'límite de solicitudes' (ES) count as rate limits");
     const q7b = S.clarify(w5, f1h.slug).questions;
-    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences]").replace("PDF export.", "[what is excluded] TBD"));
+    write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does and why it matters]").replace("PDF export.", "[What this feature does NOT include] TBD"));
     const q7c = S.clarify(w5, f1h.slug).questions.filter((q) => /placeholder/.test(q));
-    ok(!q7b.some((q) => /placeholder/.test(q)) && q7c.length === 1 && /^Replace the 3 template placeholder\(s\)\/TBD in requirements\.md: requirements\.md:4 \[1-2 sentences\], requirements\.md:\d+ \[what is excluded\], requirements\.md:\d+ TBD$/.test(q7c[0]),
+    ok(!q7b.some((q) => /placeholder/.test(q)) && q7c.length === 1 && /^Replace the 3 template placeholder\(s\)\/TBD in requirements\.md: requirements\.md:4 \[1-2 sentences: what this does and why …, requirements\.md:\d+ \[What this feature does NOT include\], requirements\.md:\d+ TBD$/.test(q7c[0]),
       "clarify groups the placeholders/TBDs into ONE question naming file:line and the bracketed text");
     const cls7 = ["Página simples sem uso de IA", "Página simple sin uso de IA", "Simple page without AI", "A page with no use of AI"].map((x) => S.classify(x));
     ok(cls7.every((r) => !r.tracks.includes("ai") && !r.possible.some((p) => p.track === "ai") && r.negated.ai.length === 1) &&
@@ -3649,7 +3680,7 @@ function endRun() {
       "| T-01 | unit | example | expired token rejected | US-1.AC-1, SC-001 | `tests/unit/session.test.js` |",
       "| T-02 | unit | property | refresh stays in budget | US-1.AC-1, NFR-1, NFR-7 | `tests/unit/perf.test.js` |", "",
       "## Coverage Check", "- EC-2 — not tested yet (a gap note is not a test row).", ""].join("\n"));
-    w9f(d9.dir, "quickstart.md", "# Quickstart: Deep\n\n3. **Expect:** no session outlives its expiry (SC-2).\n4. **Expect:** [observable result tied to SC-003]\n");
+    w9f(d9.dir, "quickstart.md", "# Quickstart: Deep\n\n3. **Expect:** no session outlives its expiry (SC-2).\n4. **Expect:** [observable result tied to a Success Criterion, e.g. SC-001] (SC-003)\n");
     const t9 = S.traceCheck(w9, "deep");
     ok(t9.ok && t9.verdict === "pass" && t9.uncoveredEdgeCases.join() === "EC-2" && t9.uncoveredNfr.length === 0 && t9.uncoveredSuccessCriteria.join() === "SC-003" &&
       t9.phantomSecondary.join() === "EC-9,NFR-7" && kinds9(t9) === "uncoveredEdgeCases=EC-2 uncoveredSuccessCriteria=SC-003 phantomSecondary=EC-9+NFR-7",

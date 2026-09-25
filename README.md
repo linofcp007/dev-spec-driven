@@ -95,7 +95,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   failing checks, and `doctor` and the roadmap keep flagging it.
 - **A template is not content.** `doctor` has a `placeholders` check (it fails for the current and
   earlier phases), a fresh feature starts at phase `requirements`, and `ears_validate` reports a
-  `placeholder` code.
+  `placeholder` code. A bracket counts only when its text is one the templates write (or TODO / TBD / FIXME / `…`):
+  real values such as `[free: 60, pro: 600]` or `[admin, billing-manager]` are your content.
 - **`next_action` follows the chain:** fill → re-review → fix → approve → implement → verify → finish. It never
   recommends an approval the gate would refuse; it names what the gate fails on instead — nor `spec_finish` while a
   ticked task is unverified (`verify` names it and its `dev-spec done <f> <n> --run`). On +tdd / +ai, Phase 4
@@ -322,7 +323,8 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   **forçada**, com as verificações que falharam, e o `doctor` e o roadmap continuam a assinalá-la.
 - **Um template não é conteúdo.** O `doctor` tem a verificação `placeholders` (falha na fase atual e nas
   anteriores), uma funcionalidade nova começa na fase `requirements` e o `ears_validate` reporta o código
-  `placeholder`.
+  `placeholder`. Um parêntese reto só conta quando o texto é um dos que os templates escrevem (ou TODO / TBD / FIXME /
+  `…`): valores reais como `[free: 60, pro: 600]` ou `[admin, billing-manager]` são conteúdo teu.
 - **O `next_action` segue a cadeia:** preencher → rever → corrigir → aprovar → implementar → verificar → fechar. Nunca
   recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha — nem o `spec_finish` enquanto houver
   uma tarefa marcada por verificar (o passo `verify` nomeia-a com o seu `dev-spec done <f> <n> --run`). Em +tdd / +ai, a Fase 4
@@ -552,7 +554,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   señalándola.
 - **Una plantilla no es contenido.** El `doctor` tiene la comprobación `placeholders` (falla en la fase
   actual y en las anteriores), una función nueva empieza en la fase `requirements` y `ears_validate` informa
-  del código `placeholder`.
+  del código `placeholder`. Un corchete solo cuenta cuando su texto es uno de los que escriben las plantillas (o TODO /
+  TBD / FIXME / `…`): valores reales como `[free: 60, pro: 600]` o `[admin, billing-manager]` son tu contenido.
 - **`next_action` sigue la cadena:** completar → revisar → corregir → aprobar → implementar → verificar → cerrar. Nunca
   recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla — ni `spec_finish` mientras haya
   una tarea marcada sin verificar (el paso `verify` la nombra con su `dev-spec done <f> <n> --run`). En +tdd / +ai, la Fase 4

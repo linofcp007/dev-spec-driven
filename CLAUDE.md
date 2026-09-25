@@ -191,17 +191,28 @@ quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/
 never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT).
 
 ## Gates (1.13) — an approval is a gate, not a stamp
-- **Placeholders.** `placeholderReport()` finds what a scaffold still waits for (bracketed prose
-  `[trigger]`, empty `[]` slots, the templates' own code-span slots `` `[path]` ``, the `> **TODO**`
-  sentinel) and deliberately ignores links, checkboxes, stable tags/IDs, `[NEEDS CLARIFICATION]`, number
-  intervals, written-out enumerations (`isEnumeration()`: 2+ one-token or quoted items split by `, ; |` —
-  `[owner, admin]`; the templates' own enumerations, `templateEnumerationSet()` built from every i18n
-  builder, stay placeholders), other code spans, comments and fences. `artifactState()` = missing /
-  placeholder / filled. **bug.md is evidence** (`bugPlaceholders()`, used by `artifactReport` and
-  `bugSectionFilled()`): its Reproduction / Root Cause quote `[object Object]`, `[WARN]`, `[A-Z]`, `[Error: …]` — a
-  bracket there is a slot only when it IS one of the bug report's own slots (`bugTemplateSlots()`, every language) or
-  its section holds nothing but brackets; the generic rule refused a written root cause as "not filled". Every regex here must stay linear: `RE_STABLE_BRACKET`'s list separator is
-  `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list.
+- **Placeholders — a lookup, never a guess from the shape.** `placeholderReport()` reports a bracket only when
+  its normalized text (`placeholderKey()`: case, spacing and `…`/`...` ignored) is one a scaffold actually writes —
+  `templateSets()`, built lazily once per process from `templateCorpus()` (every i18n builder, EN/PT/ES, every track
+  combination and kind, the track/import task slots `acPlaceholder` / `taskAcPlaceholder`, the steering and custom
+  stubs, init's `[fill me in]`) **plus** `LEGACY_TEMPLATE_PLACEHOLDERS` (the 1.12.1 templates' bracket texts, a static
+  list extracted once from `main:mcp/lib/i18n.js` — a 1.12 spec still holds them) **plus** `isGenericSlot()` (TODO
+  upper-case only — "todo" is a PT/ES word —, TBD, TBC, FIXME, `...`, `…`, a/por definir) — and the `> **TODO**`
+  sentinel. Everything else in brackets is the user's content: `[free: 60, pro: 600]`, `[admin, billing-manager, read
+  only]`, `[10 MB, 25 MB for pro]` (1.13's shape heuristics refused those and blocked upgraded, finished 1.12 specs).
+  `scanBrackets()` walks outermost first and descends into a non-placeholder group, so a half-edited template sentence
+  still reports the `[N]` left inside it. Syntax is skipped whole (links, reference links, footnotes, callouts, wiki
+  links, glued indexing `x[0]`, checkboxes) and so are stable tags/IDs, `[NEEDS CLARIFICATION]` and the legacy
+  `[none beyond core]`; code spans are opaque except a template's own code-span slot (`` `[path]` ``, `templateSets().code`);
+  comments and fences are skipped. **When you add or reword a template bracket, nothing else is needed** (the corpus
+  renders it); a NEW builder or artifact-writing message must be added to `templateCorpus()` — the test "every fresh
+  scaffold artifact reads 'placeholder'" catches a miss. `artifactState()` = missing / placeholder / filled.
+  **bug.md is evidence** (`bugPlaceholders()`, used by `artifactReport` and `bugSectionFilled()`): its Reproduction /
+  Root Cause quote `[object Object]`, `[WARN]`, `[A-Z]`, `[Error: …]` — a template text there counts only when it IS one
+  of the bug report's own slots (`bugTemplateSlots()`) or its section holds no prose outside brackets
+  (`hasProseOutsideBrackets()` — also required by `bugSectionFilled()`: a root cause written as nothing but
+  `[the cause, with evidence]` is not written). Every regex here must stay linear: `RE_STABLE_BRACKET`'s list
+  separator is `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list.
   `detectPhase()`: `complete` / `executing` once tasks are ticked, `tasks-ready` once a real (non-placeholder)
   task exists; otherwise the earliest still-template chain artifact — so a fresh scaffold is phase `requirements`.
   Doctor's `placeholders` check fails for the current and earlier phases, warns for later ones;

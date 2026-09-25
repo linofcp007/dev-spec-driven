@@ -1020,7 +1020,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const created = [];
   const skipped = [];
   for (const f of wanted) {
-    const stub = i18n.steeringStub(f, lng) || `# ${f.replace(/\.md$/, "")}\n\n[fill me in]\n`;
+    const stub = i18n.steeringStub(f, lng) || unknownSteeringStub(f);
     if (writeIfAbsent(path.join(steering, f), stub)) created.push(f);
     else skipped.push(f);
   }
@@ -5402,75 +5402,211 @@ const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 // final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
 const RE_LEGACY_ANSWER = /^\s*(?:none beyond core|nenhum além de core|ninguno además de core)\s*$/i;
 const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
-// The code spans a template itself leaves as placeholders — exactly the bugfix test plan's `[path]` / `[caminho]` /
-// `[ruta]`, read from the templates (every language). Any other span is code, even bracketed words: C# attributes
-// `[Authorize]` `[Fact]`, TOML/INI tables `[dependencies]`, a regex class `[aeiou]`, literals `[]` `["a"]` `[0, 1]`.
-let CODE_PLACEHOLDERS = null;
-function codePlaceholderSet() {
-  if (CODE_PLACEHOLDERS) return CODE_PLACEHOLDERS;
-  const set = new Set();
-  for (const l of i18n.LANGS) {
-    for (const m of i18n.bugTestPlan("x", l).matchAll(/`([^`\n]+)`/g)) if (/^\[[^\]]+\]$/.test(m[1].trim())) set.add(m[1].trim());
-  }
-  return (CODE_PLACEHOLDERS = set);
-}
-// A list or interval of numbers (`score in [0, 1]`) — the templates' numeric placeholders are single values
-// (`[85]%`, `$[0.03]`).
-const RE_NUMBER_LIST = /^\s*[-+]?\d+(?:\.\d+)?(?:\s*[,;]\s*[-+]?\d+(?:\.\d+)?)+\s*$/;
-// An enumeration a spec writes out — `[owner, admin]`, `[GET | POST]`, `[id, number, amount_cents, issued_at]`,
-// `["read only", "admin"]`, `` [`draft`, `sent`] ``: two or more items split by , ; or |, each ONE token (no inner
-// whitespace) or a quoted / code-span string. That is content, not a slot: bracketed columns, roles or states in a
-// criterion used to fail the placeholder gate of approved 1.12 specs. Prose items ("external services") and an
-// example lead ("e.g., Redis") keep it a placeholder, and so do the templates' own enumerations
-// ([factories, fixtures, seeds], [GDPR | PCI | …]) — templateEnumerationSet(). Every test is linear (no nesting).
-const RE_ENUM_ITEM = /^(?:[^\s[\]"'`]{1,60}|"[^"\n]{0,60}"|'[^'\n]{0,60}'|`[^`\n]{1,60}`)$/;
-const RE_EXAMPLE_LEAD = /^(?:e\.?g\.?|eg|i\.?e\.?|ex\.?:?|p\.\s?ej\.?:?|por ejemplo|por exemplo|for example)$/i;
-function isEnumeration(inner) {
-  const parts = String(inner).split(/[,;|]/).map((p) => p.trim());
-  return parts.length >= 2 && !RE_EXAMPLE_LEAD.test(parts[0]) && parts.every((p) => RE_ENUM_ITEM.test(p));
-}
-const enumKey = (inner) => String(inner).replace(/\s+/g, " ").trim().toLowerCase();
-// The templates' own bracketed enumerations (every builder, every language, every track) — still placeholders
-// wherever they appear verbatim, although they look like a real list.
-let TEMPLATE_ENUMERATIONS = null;
-function templateEnumerationSet() {
-  if (TEMPLATE_ENUMERATIONS) return TEMPLATE_ENUMERATIONS;
-  const set = new Set();
-  const a = { name: "x", tracks: VALID_TRACKS, label: "", slug: "x", kind: "feature", description: "" };
-  const build = [(l) => i18n.classification(a, l), (l) => i18n.requirements(a, l), (l) => i18n.design(a, l), (l) => i18n.tasks(a, l),
-    (l) => i18n.testPlan("x", l, VALID_TRACKS), (l) => i18n.evalPlan("x", l), (l) => i18n.loadTest("x", l), (l) => i18n.quickstart("x", l),
-    (l) => i18n.checklist(a, l), (l) => i18n.integrationPlan("x", l), (l) => i18n.promptStub("x", l), (l) => i18n.bugReport(a, l),
-    (l) => i18n.bugRequirements(a, l), (l) => i18n.bugTestPlan("x", l), (l) => i18n.bugTasks("x", l),
-    ...i18n.steeringKnownFiles().map((f) => (l) => i18n.steeringStub(f, l)), ...["saas", "ai"].map((t) => (l) => i18n.trackDesignBlock(t, l))];
-  for (const l of i18n.LANGS) {
-    for (const fn of build) {
-      let t;
-      try { t = fn(l); } catch { continue; } // a builder's trouble never breaks placeholder detection
-      if (typeof t !== "string") continue;
-      for (const m of t.matchAll(/\[([^[\]\n]*)\]/g)) if (isEnumeration(m[1])) set.add(enumKey(m[1]));
-    }
-  }
-  return (TEMPLATE_ENUMERATIONS = set);
-}
 
-// [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
-// kind 'bracket' | 'todo'):
-//   • bracketed prose: `[trigger]`, `[1-2 sentences: what this does and why it matters]`, `[N]`, `$[0.03]`,
-//     an empty `[]` / `[ ]` slot, and the templates' own code-span slots (`` `[path]` `` / `[caminho]` / `[ruta]`);
-//   • the `> **TODO**` sentinel line.
-// NOT placeholders: links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is
-// defined), footnotes `[^1]`, callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`,
-// the English-stable tags ([US1] [P] [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1],
-// [T-01]…), indexing glued to a word (`x[0]`), escaped `\[`, [NEEDS CLARIFICATION] (clarificationMarkers
-// tracks those), the pre-1.13 core-only answer `[none beyond core]` (PT/ES too), number lists / intervals `[0, 1]`, every other code span (literals such as `` `[]` `` or
-// `` `["a"]` ``, attributes / TOML tables such as `` `[Authorize]` `` `` `[dependencies]` ``), and anything
-// inside HTML comments or fenced code. Language-agnostic, so EN/PT/ES templates
-// behave the same.
-function placeholderReport(text) {
-  const lines = String(text || "").split(/\r?\n/);
+// A bracket is a TEMPLATE PLACEHOLDER only when its text is one a scaffold actually writes — a deterministic lookup,
+// never a guess from its shape. 1.13 first guessed (bracketed prose = a slot, a written-out one-token enumeration =
+// content), and a criterion quoting real values — `[free: 60, pro: 600, enterprise: 6000]`, `[admin, billing-manager,
+// read only]`, `[10 MB, 25 MB for pro]` — read as a slot: the approval was refused and finished, upgraded 1.12 specs
+// were blocked (doctor FAIL, next_action "fill requirements.md" at 5/5 tasks, finish refused). The set
+// (templatePlaceholderSet) holds every bracket text the CURRENT templates render (templateCorpus: every builder, EN/PT/ES,
+// every track combination and kind, the track / import task slots, the steering stubs), every bracket text the 1.12.1
+// templates rendered (LEGACY_TEMPLATE_PLACEHOLDERS: a spec scaffolded by 1.12 still holds those), and the generic unfilled
+// tokens (isGenericSlot: TODO, TBD, TBC, FIXME, "...", "…"). Anything else in brackets is the user's own content.
+// The key ignores case, spacing and "…" vs "...": `[Story title]` is `[story   title]`.
+const placeholderKey = (inner) => String(inner).normalize("NFC").replace(/…/g, "...").replace(/\s+/g, " ").trim().toLowerCase();
+// TODO / TBD / TBC / FIXME (alone or leading: "[TBD: pricing]"), an ellipsis, "a definir" / "por definir". TODO is
+// matched upper-case only: "todo" is a Portuguese / Spanish word.
+function isGenericSlot(inner) {
+  const t = String(inner).trim();
+  return /^TODO(?![\p{L}\p{N}_])/u.test(t) || /^(?:tbd|tbc|fixme)(?![\p{L}\p{N}_])/iu.test(t) || /^(?:\.{3,}|…+)$/u.test(t) || /^(?:a|por) definir$/iu.test(t);
+}
+// The stub `spec_init` writes for a steering file with no template (the file name is the user's; the slot is fixed).
+const unknownSteeringStub = (f) => `# ${f.replace(/\.md$/, "")}\n\n[fill me in]\n`;
+// The bracket texts the 1.12.1 templates rendered (and the current ones no longer do) — extracted ONCE from
+// `git show main:mcp/lib/i18n.js` (1.12.1) by rendering every builder (classification, requirements, design + the
+// track blocks, tasks, test plan, eval plan, load test, quickstart, checklist, integration plan, the bugfix templates,
+// the prompt stub, the steering stubs; EN/PT/ES; every track combination; a dummy name) and reading each bracket as
+// templateBracketKeys does. A 1.12 spec that still holds one of them is still a template there; the texts the current
+// templates share with 1.12.1 come from templateCorpus.
+const LEGACY_TEMPLATE_PLACEHOLDERS = [
+  "", "0.03", "0.1", "1-2 frases: o que faz e porque importa", "1-2 frases: qué hace y por qué importa",
+  "1-2 sentences: what this does and why it matters", "85", "98", "a condição que provoca o bug", "acción específica",
+  "aciona uma condição de erro de um ac se...então", "advisory | semi-autonomous | autonomous",
+  "algo assumido como verdadeiro que, se for falso, muda a spec",
+  "algo asumido como verdadero que, si es falso, cambia la spec", "always-true property",
+  "ambiente / dados / contas necessárias", "anything assumed true that, if wrong, changes the spec",
+  "auth, validación, riesgos de exposición de datos", "auth, validation, data exposure risks",
+  "auth, validação, riscos de exposição de dados", "ação específica", "behavior", "behavior for us-2", "beneficio",
+  "benefit", "benefício", "caminho", "caminho → alteração", "capability", "capacidad", "capacidade", "carga, ~$/mes",
+  "carga, ~$/mês", "cenário", "clocks, randomness, ids abstracted how", "comando da suite de testes completa",
+  "comando de la suite de pruebas completa", "comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js",
+  "comando que o prova, ex.: npm test -- caminho/ficheiro.test.js",
+  "command that proves it, e.g. npm test -- path/to/file.test.js",
+  "como desempatar — ex.: 'preferir o aborrecido/comprovado ao engenhoso'.", "como gera receita",
+  "como isto se integra com o sistema existente. decisões-chave e fundamentação.", "como testar esta sozinha",
+  "componentes/módulos existentes que esta feature toca", "componentes/módulos existentes que esta función toca",
+  "comportamento", "comportamento central para us-1", "comportamento correto", "comportamento esperado",
+  "comportamento para us-2", "comportamiento", "comportamiento central para us-1", "comportamiento correcto",
+  "comportamiento esperado", "comportamiento para us-2", "condición de error", "condição de erro",
+  "consultivo | semi-autónomo | autónomo", "core behavior for us-1", "correct behavior",
+  "cómo desempatar — p.ej., 'preferir lo aburrido/probado a lo ingenioso'.", "cómo genera ingresos",
+  "cómo se integra esto con el sistema existente. decisiones clave y justificación.", "cómo testear esta sola",
+  "depois isto", "directory tree", "dispara una condición de error de un ac si...entonces", "disparador", "do this",
+  "docs, cleanup, edge-case hardening", "docs, limpeza, robustez de casos limite",
+  "docs, limpieza, robustez de casos límite", "dónde inyectar test doubles",
+  "e.g. node >= 20 · no new runtime dependencies · api field names in snake_case",
+  "e.g., 90% of users complete [task] in under [n] seconds", "e.g., backend service", "e.g., db migrations",
+  "e.g., error rate on [flow] stays below [n]%", "e.g., errors fail closed (deny) on the security path.",
+  "e.g., every write is idempotent or explicitly justified.",
+  "e.g., no breaking api change without a versioned migration path.",
+  "e.g., no pii in logs; user ids are pseudonymized.", "e.g., second cache layer", "e.g., wire ui",
+  "el comportamiento correcto", "el comportamiento vecino que ya funcionaba", "entorno / datos / cuentas necesarias",
+  "entradas cercanas que deben seguir funcionando", "env / data / accounts needed", "error condition", "escenario",
+  "estado", "estrategia por modo de fallo a partir de los requisitos",
+  "estratégia por modo de falha a partir dos requisitos",
+  "ex.: 90% dos utilizadores completam [tarefa] em menos de [n] segundos",
+  "ex.: a taxa de erro em [fluxo] mantém-se abaixo de [n]%", "ex.: ligar a ui", "ex.: migrações de bd",
+  "ex.: node >= 20 · sem dependências de runtime novas · campos da api em snake_case",
+  "ex.: os erros falham fechados (negar) no caminho de segurança.", "ex.: segunda camada de cache",
+  "ex.: sem alteração de api com quebra sem um caminho de migração versionado.",
+  "ex.: sem pii nos logs; os ids de utilizador são pseudonimizados.", "ex.: serviço de backend",
+  "ex.: toda a escrita é idempotente ou explicitamente justificada.",
+  "exact values the fix must respect — versions, limits, formats", "existing components/modules this feature touches",
+  "expected behavior", "factories, fixtures, seeds", "faz isto", "flow", "flujo", "fluxo", "full test suite command",
+  "gatilho", "gdpr | pci | hipaa | soc2 | nenhuma", "gdpr | pci | hipaa | soc2 | ninguna",
+  "gdpr | pci | hipaa | soc2 | none", "graceful handling", "hard tech/regulatory constraints that bound all designs.",
+  "haz esto", "how it makes money", "how this integrates with the existing system. key decisions and rationale.",
+  "how to break ties — e.g., 'prefer boring/proven over clever'.", "how to test this alone",
+  "inputs próximos que têm de continuar a funcionar", "la condición que provoca el bug",
+  "lo que esta función no incluye", "lo que esto explícitamente no es",
+  "lo que ocurre — mensaje de error, salida, líneas de log", "load, ~$/month", "luego esto", "manejo elegante",
+  "measurable performance / security / accessibility constraint", "mensagem do utilizador / {{variáveis}}",
+  "mensaje del usuario / {{variables}}", "mitigación / rollback", "mitigation / rollback", "mitigação / rollback",
+  "modelos, schemas, índices compartidos entre historias", "modelos, schemas, índices partilhados entre histórias",
+  "models, schemas, indexes shared across stories", "métrica específica a 6 meses", "n",
+  "nearby inputs that must keep working", "nenhuma", "network, fs, time, external services", "ninguna", "none",
+  "o comportamento correto", "o comportamento vizinho que já funcionava",
+  "o que acontece — mensagem de erro, output, linhas de log", "o que cada um cobre", "o que esta feature não inclui",
+  "o que falha se isto estiver errado? quem é afetado? recuperável? em quanto tempo?",
+  "o que isto explicitamente não é", "o que muda e porque é que elimina a causa raiz — uma correção, não um pacote.",
+  "o que tem de mudar no código existente, e porquê", "observable result tied to a success criterion, e.g. sc-001",
+  "onde injetar test doubles", "one line: the bug being fixed", "one line: what is broken, for whom, since when",
+  "one sentence: what is this product and who is it for?",
+  "p. ej.: node >= 20 · sin dependencias de runtime nuevas · campos de la api en snake_case",
+  "p.ej., 90% de los usuarios completan [tarea] en menos de [n] segundos", "p.ej., conectar la ui",
+  "p.ej., la tasa de error en [flujo] se mantiene por debajo de [n]%",
+  "p.ej., los errores fallan cerrados (denegar) en la ruta de seguridad.", "p.ej., migraciones de bd",
+  "p.ej., segunda capa de caché", "p.ej., servicio de backend",
+  "p.ej., sin cambio de api con ruptura sin una ruta de migración versionada.",
+  "p.ej., sin pii en los logs; los ids de usuario se pseudonimizan.",
+  "p.ej., toda escritura es idempotente o explícitamente justificada.", "papel",
+  "parallelizable task — different file, no deps", "path", "path → change", "por qué es la porción mínima viable",
+  "por qué la opción simple falla", "por qué se aplica", "porque a opção simples falha", "porque se aplica",
+  "porque é a fatia mínima viável", "principio 1", "principio 2", "principle 1", "principle 2", "princípio 1",
+  "princípio 2", "project/dev setup if needed — deps, scaffolding", "propiedad siempre verdadera",
+  "propriedade sempre verdadeira", "quem mais lhe toca?", "quem usa isto diariamente?",
+  "qué cambia y por qué elimina la causa raíz — una corrección, no un paquete.", "qué cubre cada uno",
+  "qué debe cambiar en el código existente, y por qué", "razão", "razón", "reason", "recovery", "recuperación",
+  "recuperação", "red, fs, tiempo, servicios externos", "rede, fs, tempo, serviços externos",
+  "relojes, aleatoriedad, ids abstraídos cómo", "relógios, aleatoriedade, ids abstraídos como",
+  "restricciones técnicas/regulatorias rígidas que limitan todos los diseños.",
+  "restricción medible de rendimiento / seguridad / accesibilidad",
+  "restrição mensurável de desempenho / segurança / acessibilidade",
+  "restrições técnicas/regulatórias rígidas que limitam todos os designs.",
+  "resultado observable vinculado a un criterio de éxito, p.ej. sc-001",
+  "resultado observável ligado a um critério de sucesso, ex. sc-001", "riesgo", "risco", "risk", "rol", "role", "ruta",
+  "ruta → cambio", "scenario", "setup de projeto/dev se necessário — deps, scaffolding",
+  "setup de proyecto/dev si hace falta — deps, scaffolding", "señal", "signal",
+  "sim/não — se sim, load-test.md é obrigatório.", "sinal", "specific 6-month metric", "specific action",
+  "specific value", "state", "story title", "strategy per failure mode from requirements",
+  "sí/no — si sí, load-test.md es obligatorio.", "tarea", "tarea paralelizable — archivo distinto, sin deps", "tarefa",
+  "tarefa paralelizável — ficheiro diferente, sem deps", "task", "the condition that triggers the bug",
+  "the correct behavior", "the neighbouring behavior that already worked", "then this", "tratamento controlado",
+  "trigger", "trigger an error condition from an if...then ac", "título da história", "título de la historia",
+  "ubicuo", "ubiquitous", "ubíquo", "uma frase: o que é este produto e para quem é?", "uma linha: o bug a corrigir",
+  "uma linha: o que está partido, para quem, desde quando", "una frase: ¿qué es este producto y para quién es?",
+  "una línea: el bug a corregir", "una línea: qué está roto, para quién, desde cuándo", "unit/integración",
+  "unit/integration", "unit/integração", "user message / {{variables}}", "valor específico",
+  "valores exactos que la corrección debe respetar — versiones, límites, formatos",
+  "valores exatos que a correção tem de respeitar — versões, limites, formatos",
+  "what breaks if this is wrong? who is affected? recoverable? how fast?",
+  "what changes and why it removes the root cause — one fix, not a bundle.", "what each covers",
+  "what happens — error message, output, log lines", "what must change in existing code, and why",
+  "what this feature does not include", "what this is explicitly not", "where test doubles inject",
+  "who else touches it?", "who uses this daily?", "why it applies", "why the simple option fails",
+  "why this is the minimum viable slice", "yes/no — if yes, load-test.md is required.", "¿quién más lo toca?",
+  "¿quién usa esto a diario?", "¿qué se rompe si esto está mal? ¿a quién afecta? ¿recuperable? ¿en cuánto tiempo?",
+  "árbol de directorios", "árvore de diretórios"
+];
+function templateCorpus() {
   const out = [];
+  const add = (fn) => { try { const t = fn(); if (typeof t === "string") out.push(t); } catch { /* a builder's trouble never breaks placeholder detection */ } };
+  const combos = [[], ["tdd"], ["saas"], ["ai"], ["tdd", "saas"], ["tdd", "ai"], ["saas", "ai"], ["tdd", "saas", "ai"]].map((x) => ["core", ...x]);
+  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"] };
+  for (const l of i18n.LANGS) {
+    const M = i18n.msg(l);
+    for (const tracks of combos) {
+      const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "" };
+      add(() => i18n.classification(a, l));
+      add(() => i18n.classification({ ...a, signals }, l));
+      add(() => i18n.requirements(a, l));
+      add(() => i18n.design(a, l));
+      add(() => i18n.tasks(a, l));
+      add(() => i18n.testPlan("x", l, tracks));
+      add(() => i18n.checklist(a, l));
+    }
+    add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
+    for (const tr of VALID_TRACKS) {
+      add(() => i18n.trackDesignBlock(tr, l));
+      add(() => M.tracks.taskBlock(tr, 1));
+      add(() => M.tracks.acPlaceholder(tr));
+    }
+    for (const fn of [i18n.evalPlan, i18n.loadTest, i18n.quickstart, i18n.integrationPlan, i18n.promptStub, i18n.bugTestPlan, i18n.bugTasks]) add(() => fn("x", l));
+    add(() => i18n.bugReport({ name: "x" }, l));
+    add(() => i18n.bugRequirements({ name: "x" }, l));
+    add(() => i18n.evalsReadme(l));
+    for (const f of i18n.steeringKnownFiles()) add(() => i18n.steeringStub(f, l));
+    add(() => M.scopedSteering.customStub("X", "src/api/**"));
+    add(() => M.importSpec.taskAcPlaceholder + "\n" + M.importSpec.taskTestPlaceholder);
+  }
+  add(() => unknownSteeringStub("x.md"));
+  return out;
+}
+// Every bracket group a text holds as the gates read it (visible lines, syntax and exempt groups set aside, nested
+// groups too) → { brackets: [key], code: [key] } — code: a code span that is exactly one bracket group (`` `[path]` ``).
+function templateBracketKeys(text, seen) {
+  const brackets = [], code = [];
+  const slot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); return !!b && !!b[1].trim(); };
+  for (const [, line, refs] of visibleLines(text)) {
+    if (seen && !refs.size) { if (seen.has(line)) continue; seen.add(line); } // the corpus repeats most lines
+    for (const m of line.matchAll(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g)) if (slot(m[2].trim())) code.push(placeholderKey(m[2].trim().slice(1, -1)));
+    scanBrackets(line, refs, slot, (inner, raw) => { brackets.push(placeholderKey(raw)); return false; });
+  }
+  return { brackets, code };
+}
+let TEMPLATE_SETS = null;
+function templateSets() {
+  if (TEMPLATE_SETS) return TEMPLATE_SETS;
+  const brackets = new Set(LEGACY_TEMPLATE_PLACEHOLDERS), code = new Set();
+  const seen = new Set();
+  for (const t of new Set(templateCorpus())) {
+    const k = templateBracketKeys(t, seen);
+    k.brackets.forEach((x) => brackets.add(x));
+    k.code.forEach((x) => code.add(x));
+  }
+  return (TEMPLATE_SETS = { brackets, code });
+}
+const isTemplatePlaceholder = (inner) => isGenericSlot(inner) || templateSets().brackets.has(placeholderKey(inner));
+// A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
+// code-span slot (the bugfix test plan's `[path]` / `[caminho]` / `[ruta]`), which is unwrapped and scanned.
+const isCodeSlot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); return !!b && templateSets().code.has(placeholderKey(b[1])); };
+
+// [lineNo, content, refs] — the lines a placeholder can sit on: HTML comments, fenced code and reference definitions
+// set aside (refs: the reference labels those define, so a bare `[x]` with a `[x]: url` is a link).
+function visibleLines(text) {
+  const lines = String(text || "").split(/\r?\n/);
   const refs = new Set();
-  const visible = []; // [lineNo, content] outside comments and fences
+  const visible = [];
   let inComment = false;
   const fst = { fence: null }; // fenceStep: an unclosed fence in a list item ends with the item
   const closes = closerBelow(lines); // a "<!--" that never closes is text — it hides no placeholder below it
@@ -5490,7 +5626,24 @@ function placeholderReport(text) {
     if (def) { refs.add(def[1].trim().toLowerCase()); return; }
     visible.push([i + 1, line]);
   });
-  for (const [ln, line] of visible) {
+  return visible.map(([n, l]) => [n, l, refs]);
+}
+
+// [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
+// kind 'bracket' | 'todo'):
+//   • a bracket whose text a template writes (isTemplatePlaceholder): `[trigger]`, `[1-2 sentences: what this does and
+//     why it matters]`, `[N]`, `$[0.03]`, an empty `[]` / `[ ]` slot, the code-span slots (`` `[path]` ``), and the
+//     generic TODO / TBD / FIXME / … tokens — a half-edited template sentence still reports the slot left inside it;
+//   • the `> **TODO**` sentinel line.
+// NOT placeholders: every other bracket (the user's own values — `[free: 60, pro: 600]`, `[owner, admin]`, `[0, 1]`),
+// links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is defined), footnotes `[^1]`,
+// callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`, the English-stable tags ([US1] [P]
+// [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1], [T-01]…), indexing glued to a word (`x[0]`), escaped
+// `\[`, [NEEDS CLARIFICATION] (clarificationMarkers tracks those), the pre-1.13 core-only answer `[none beyond core]`
+// (PT/ES too), every other code span, and anything inside HTML comments or fenced code. Language-agnostic.
+function placeholderReport(text) {
+  const out = [];
+  for (const [ln, line, refs] of visibleLines(text)) {
     if (RE_TODO_SENTINEL.test(line)) { out.push({ line: ln, text: line.trim(), kind: "todo" }); continue; }
     bracketPlaceholders(line, refs).forEach((t) => out.push({ line: ln, text: t, kind: "bracket" }));
   }
@@ -5498,10 +5651,23 @@ function placeholderReport(text) {
 }
 
 function bracketPlaceholders(line, refs) {
-  // Code is opaque — except a template's own code-span slot (codePlaceholderSet), unwrapped and scanned.
-  const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
-    codePlaceholderSet().has(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const found = [];
+  scanBrackets(line, refs, isCodeSlot, (inner, raw) => {
+    if (!isTemplatePlaceholder(raw)) return false;
+    found.push("[" + inner + "]");
+    return true;
+  });
+  return found;
+}
+
+// The bracket groups of one line, outermost first: visit(inner, rawInner) → true = a placeholder (its nested groups are
+// part of it), false = not (its nested groups are visited in turn — a template sentence half edited keeps its `[N]`).
+// Syntax (links, reference links, footnotes, callouts, wiki links, glued indexing, the list checkbox) and the exempt
+// contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
+// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line.
+function scanBrackets(line, refs, codeSlot, visit) {
+  const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
+    codeSlot(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const box = s.match(RE_LIST_CHECKBOX);
   const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
     let depth = 0;
@@ -5512,28 +5678,28 @@ function bracketPlaceholders(line, refs) {
     }
     return -1;
   };
-  for (let i = box ? box[0].length : 0; i < s.length; i++) {
-    if (s[i] === "\\") { i++; continue; }
-    if (s[i] !== "[") continue;
-    const j = groupEnd(i);
-    if (j === -1) break; // unbalanced: nothing reliable after this point
-    const inner = s.slice(i + 1, j);
-    const before = i > 0 ? s[i - 1] : "";
-    const after = s[j + 1] || "";
-    const rawInner = line.slice(i + 1, j); // code spans intact (the blanking above keeps every column)
-    let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
-      (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
-      (isEnumeration(rawInner) && !templateEnumerationSet().has(enumKey(rawInner)));
-    let end = j;
-    if (after === "[") { // reference link [x][y]: both halves are syntax
-      const k = groupEnd(j + 1);
-      if (k !== -1) { skip = true; end = k; }
+  const walk = (from, to) => {
+    for (let i = from; i < to; i++) {
+      if (s[i] === "\\") { i++; continue; }
+      if (s[i] !== "[") continue;
+      const j = groupEnd(i);
+      if (j === -1 || j >= to) return; // unbalanced: nothing reliable after this point
+      const inner = s.slice(i + 1, j);
+      const before = i > 0 ? s[i - 1] : "";
+      const after = s[j + 1] || "";
+      let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
+        (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
+        refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) || RE_LEGACY_ANSWER.test(inner);
+      let end = j;
+      if (after === "[") { // reference link [x][y]: both halves are syntax
+        const k = groupEnd(j + 1);
+        if (k !== -1) { skip = true; end = k; }
+      }
+      if (!skip && !visit(inner, line.slice(i + 1, j))) walk(i + 1, j); // rawInner: code spans intact (columns kept)
+      i = end;
     }
-    if (!skip) found.push("[" + inner + "]");
-    i = end;
-  }
-  return found;
+  };
+  walk(box ? box[0].length : 0, s.length);
 }
 
 // 'missing' | 'placeholder' | 'filled' for an artifact — `input` is { file } or { text }, or a string
@@ -5708,7 +5874,14 @@ function sectionFilled(md, syn) {
 // (bugPlaceholders — quoted evidence such as `[object Object]` or `[WARN]` is content, not a slot).
 function bugSectionFilled(md, syn) {
   const b = extractSection(md || "", syn);
-  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !bugPlaceholders(b, placeholderReport(b)).length;
+  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !bugPlaceholders(b, placeholderReport(b)).length && hasProseOutsideBrackets(b);
+}
+// Some prose once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
+// nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says.
+function hasProseOutsideBrackets(body) {
+  let t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(/\[[^[\]\n]*\]/g, " "); }
+  return /[\p{L}\p{N}]/u.test(t);
 }
 // bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
 // brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
@@ -5731,13 +5904,11 @@ function bugPlaceholders(text, items) {
       const from = start == null ? 0 : start + 1;
       const end = heads.find((h) => h > (start == null ? -1 : start));
       const body = isHead ? lines[i].replace(/^#{1,6}\s+/, "") : lines.slice(from, end == null ? lines.length : end).join("\n");
-      let t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
-      for (let prev = null; prev !== t;) { prev = t; t = t.replace(/\[[^[\]\n]*\]/g, " "); }
-      unitCache.set(key, /[\p{L}\p{N}]/u.test(t));
+      unitCache.set(key, hasProseOutsideBrackets(body));
     }
     return unitCache.get(key);
   };
-  return (items || []).filter((p) => p.kind !== "bracket" || slots.has(enumKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
+  return (items || []).filter((p) => p.kind !== "bracket" || slots.has(placeholderKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
 }
 const RE_TODO_SENTINEL_LINE = /^\s*>\s*\*\*TODO\*\*.*$/gm;
 // Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
@@ -5748,7 +5919,7 @@ function bugTemplateSlots() {
   for (const l of i18n.LANGS) {
     let t;
     try { t = i18n.bugReport({ name: "x" }, l); } catch { continue; } // a builder's trouble never breaks the check
-    for (const m of String(t || "").matchAll(/\[([^[\]\n]*)\]/g)) set.add(enumKey(m[1]));
+    for (const m of String(t || "").matchAll(/\[([^[\]\n]*)\]/g)) set.add(placeholderKey(m[1]));
   }
   return (BUG_SLOTS = set);
 }
@@ -9010,6 +9181,10 @@ module.exports = {
   detectPhase,
   isPlaceholderTask,
   placeholderReport,
+  templateBracketKeys,
+  templateSets,
+  placeholderKey,
+  isTemplatePlaceholder,
   artifactState,
   extractSection,
   removeTrack: featureLocked(removeTrack),

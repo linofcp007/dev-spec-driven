@@ -39,10 +39,16 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   the chain, or a bugfix without a root cause; each now blocks. A bugfix's fix task could be ticked before
   bug.md's Root Cause was written — tasks after the root-cause task are now refused until it is, and the
   template's own "Fix the root cause" task can't open the gate for itself. The requirements.md hook no
-  longer says "all clean" while placeholders remain. Placeholder detection leaves code alone
-  (`[Authorize]`, `[dependencies]`, `[]`, `[0, 1]`) and written-out enumerations (`[owner, admin]`,
-  `[id, amount_cents, issued_at]`, `[GET | POST]` — only the templates' own, like `[factories, fixtures, seeds]`,
-  stay placeholders), so an approved 1.12 spec with bracketed lists stays finishable; its ID-list check is
+  longer says "all clean" while placeholders remain. Placeholder detection is a lookup, not a guess from the
+  bracket's shape: a bracket is a template placeholder only when its text (case and spacing ignored) is one a
+  scaffold writes — the current templates (every builder, EN/PT/ES, every track combination and kind), the 1.12.1
+  templates (kept as a static list, so a spec scaffolded by 1.12 is still read correctly) — or a generic
+  TODO / TBD / TBC / FIXME / `…`. Everything else in brackets is your content: real values in a criterion
+  (`[free: 60, pro: 600, enterprise: 6000]`, `[admin, billing-manager, read only]`, `[10 MB, 25 MB for pro]`, `[owner, admin]`)
+  never refuse an approval, and an approved 1.12 spec with bracketed values stays finishable (a shape heuristic
+  flagged those, so upgraded, fully-done features failed doctor, `next_action` said "fill requirements.md" at 5/5
+  tasks and finish was blocked). Code is left alone (`[Authorize]`, `[dependencies]`, `[]`) except the templates' own
+  `` `[path]` ``, a slot left inside a half-edited template sentence is still found, the ID-list check is
   linear (a long space-separated ID list in one bracket used to freeze the server); and it treats the
   scaffold's verbatim +saas/+ai tasks as real tasks. A core-only feature's Signals line is written as
   `- none beyond core` (PT/ES too) — in brackets, the gate refused every core-only classification (created or
