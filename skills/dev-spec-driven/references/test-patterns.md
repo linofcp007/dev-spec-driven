@@ -111,9 +111,14 @@ Put the test plan's T-ID at the start of each test's name. `trace_check {code: t
   folder, from a monorepo package (`tests/unit/login.test.ts` matches
   `packages/api/tests/unit/login.test.ts`) or as a bare file name (`login.test.ts`); it matches whole
   path segments, so `tests/beta.test.js` never matches `tests/alpha.test.js`. While the cell is still a
-  template slot (`[path]`, `tests/unit/...`), or names a file the scan doesn't read (a `.md` load-test
-  plan), the match is by number across the project, so another feature's `T-01` test would pass this
-  one. A test under **another** feature's `.specs/<feature>/tests/` never counts for this one.
+  template slot (`[path]`, `tests/unit/...`) or names a code file outside a test folder (`load/invoice.k6.js`),
+  the match is by number across the project, so another feature's `T-01` test would pass this one. A test
+  under **another** feature's `.specs/<feature>/tests/` never counts for this one.
+- A row whose File column names **only non-code artifacts** — `load-test.md`, `evals/golden.json`, a Gherkin
+  `.feature`, a JMeter `.jmx` — is a check run outside test code (a load run, the eval harness, a manual pass):
+  its T-ID is listed in `plannedOutsideCode`, never in `plannedNotInCode`, so neither doctor, `finish` nor the
+  Phase 4 gate expects it in a test file (the scaffold's own load and eval rows are such rows). Its evidence is
+  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead.
 - `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
   (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
 

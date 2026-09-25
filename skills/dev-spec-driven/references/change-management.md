@@ -120,7 +120,9 @@ again.
 ## 8. Archive and restore
 
 `spec_feature archive` moves the feature to `.specs/_archive/<slug>/` and records in its `.state.json →
-archived` the roadmap entry and every `dependsOn` reference it pruned from other features. `spec_feature restore`
+archived` the roadmap entry and every `dependsOn` reference it pruned from other features; the result names those
+features (`dependentsPruned`) and warns (`incompleteDependency`, a `note`) when the archived feature wasn't complete —
+they now read as unblocked in the roadmap although its work was never done. `spec_feature restore`
 moves it back and puts those back — only references to features that still exist, never one that would now
 close a cycle (the rest are listed in `skipped`). Archive is the reversible alternative to `remove` (which needs
 `confirm: true`). Archived features still count for `spec_coverage` and appear in the catalog.

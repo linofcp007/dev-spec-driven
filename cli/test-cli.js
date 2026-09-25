@@ -225,6 +225,12 @@ ok(w1P1.code === 0 && /Task 1 done \(verified\)\. 1\/3/.test(w1P1.out) && w1P2.c
   /- \[x\] 01\. First\n[\s\S]*- \[x\] 02\. Second/.test(w1Read("pad")), "done finds zero-padded tasks ('01' with --run, and 2 for '02.')");
 const w1Exit = run(["done", "pad", "3", "--exit", "0", "--project", w1p]);
 ok(w1Exit.code === 1 && /exit code alone/.test(w1Exit.out) && /- \[ \] 03\. Third/.test(w1Read("pad")), "done --exit 0 alone (no --cmd, no --evidence) is rejected and ticks nothing");
+// No runnable _Verify:_ and nothing recorded: verified (doctor's verdict — never verified:false without a reason), flagged
+// nothingToVerify, so the human line never says "(verified)" for a task nothing checked (w1P2 above).
+const w1J = run(["done", "pad", "3", "--json", "--project", w1p]);
+const w1Jr = (() => { try { return JSON.parse(w1J.out); } catch { return {}; } })();
+ok(w1J.code === 0 && w1Jr.verified === true && w1Jr.nothingToVerify === true && w1Jr.unverifiedReason === undefined && w1Jr.note === undefined,
+  "done --json on a task with no _Verify:_ and no evidence: verified + nothingToVerify, no unverifiedReason (the human line prints no '(verified)')");
 run(["create", "Sh", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "sh", "tasks.md"), "- [ ] 1. t\n  - _Verify: node -e \"process.exit(0)\"_\n");
 const w1Sh = run(["done", "sh", "1", "--run", "--shell", "no-such-shell-dsd", "--project", w1p]);
@@ -838,7 +844,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   let im8j = null;
   try { im8j = JSON.parse(run(["impact", "drafts", "--json", "--project", w8]).out); } catch { /* invalid JSON */ }
   ok(ap8.code === 0 && im8.code === 0 && /Impact: drafts · requirements — against the approval of \d{4}-\d\d-\d\d \(\.history\/requirements@1\.md\)/.test(im8.out) &&
-    im8.out.includes("~ US-1.AC-2  WHEN the parser meets a BOM THE SYSTEM SHALL strip it") && im8.out.includes("US-1.AC-2 (modified) — tasks: #2 [x] no evidence · tests: T-02 · design: Parser") &&
+    im8.out.includes("~ US-1.AC-2  WHEN the parser meets a BOM THE SYSTEM SHALL strip it") && im8.out.includes("US-1.AC-2 (modified) — tasks: #2 [x] nothing to verify (no _Verify:_ command, nothing recorded) · tests: T-02 · design: Parser") &&
     /--reopen/.test(im8.out) && im8j && JSON.stringify(im8j) === JSON.stringify(S8.impactReport(w8, "drafts", {})),
     "impact prints the diff against the approved snapshot and what it reaches; --json = spec_impact (same engine call)");
   ok(/First see what the edit touches with spec_impact \(dev-spec impact drafts --phase requirements\)/.test(run(["next-action", "drafts", "--project", w8]).out) &&
@@ -882,7 +888,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   fs.writeFileSync(pd8("requirements.md"), preq8.replace("o rascunho", "o rascunho cifrado"));
   const pim8 = run(["impact", "rascunhos", "--project", p8]);
   const pmw8 = run(["metrics", "rascunhos", "--write", "--project", p8]);
-  ok(/Impacto: rascunhos · requirements — face à aprovação de/.test(pim8.out) && /Afetado:/.test(pim8.out) && /tarefas: #1 \[x\] sem evidência/.test(pim8.out) &&
+  ok(/Impacto: rascunhos · requirements — face à aprovação de/.test(pim8.out) && /Afetado:/.test(pim8.out) && /tarefas: #1 \[x\] nada a verificar \(sem comando _Verify:_, nada registado\)/.test(pim8.out) &&
     /Vê primeiro o que a edição afeta com spec_impact/.test(run(["na", "rascunhos", "--project", p8]).out) && /^Métricas: rascunhos \[core\] — criada a /.test(pmw8.out) &&
     /Retrospetiva → \.specs\/rascunhos\/retro\.md/.test(pmw8.out) && fs.readFileSync(pd8("retro.md"), "utf8").startsWith("# Retrospetiva: rascunhos") &&
     /nunca foi aprovada/.test(run(["impact", "rascunhos", "--phase", "design", "--project", p8]).out), "impact / next-action / metrics --write / errors (PT) are in European Portuguese");
@@ -972,6 +978,19 @@ if (inSection("wp9")) { // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (ex
   const bgd9 = run(["doctor", "badge", "--project", w9]);
   ok(/tests in code: 1\/1 planned/.test(bg9.out) && !/planned tests that no test file names/.test(bg9.out) && /✓ tests-in-code/.test(bgd9.out),
     "trace --code / doctor: a bare file name File cell (`badge.test.js`) is satisfied by src/badge/badge.test.js (got " + bg9.out + ")");
+  // The scaffold's own load row (`load-test.md`) is run outside test code: once its load task is done (k6 evidence),
+  // doctor raises no tests-in-code warning, finish's planned-not-in-code warning leaves T-07 out, trace --code lists it apart.
+  const o9 = path.join(tmp, "wp9-outside");
+  run(["init", "tdd", "saas", "--project", o9]);
+  run(["create", "Tenant billing", "tdd", "saas", "--project", o9]);
+  const o9n = (fs.readFileSync(path.join(o9, ".specs", "tenant-billing", "tasks.md"), "utf8").match(/- \[ \] (\d+)\.[^\n]*\n(?:[ \t]+[^\n]*\n)*?[ \t]+- _Makes green: T-07_/) || [])[1];
+  const o9done = run(["done", "tenant-billing", String(o9n), "--evidence", "k6: p95=142ms", "--exit", "0", "--cmd", "k6 run load/invoice.k6.js", "--project", o9]);
+  const o9doc = run(["doctor", "tenant-billing", "--project", o9]);
+  const o9fin = run(["finish", "tenant-billing", "--project", o9]);
+  const o9tr = run(["trace", "tenant-billing", "--code", "--project", o9]);
+  ok(o9n && o9done.code === 0 && !/tests-in-code/.test(o9doc.out) && /planned tests that no test file names[^\n]*T-06/.test(o9fin.out) && !/planned tests that no test file names[^\n]*T-07/.test(o9fin.out) &&
+    /tests in code: 0\/6 planned T-ID\(s\) named in 0 test file\(s\) · checked outside test code \(the File column names a non-code artifact\): T-07/.test(o9tr.out),
+    "the scaffold's load-test.md row (T-07) is checked outside test code: a done load task leaves no tests-in-code warning (doctor, finish); trace --code lists it apart (got " + o9tr.out + ")");
 }
 
 if (inSection("wp10")) {
@@ -1010,11 +1029,12 @@ fs.unlinkSync(specs10);
 // feature restore: archive → restore round-trip keeps the dependencies.
 r10(["depend", "billing-v2", "billing", "accounts"]);
 const rmBefore10 = fs.readFileSync(path.join(w10s, "roadmap.json"), "utf8");
-r10(["feature", "archive", "billing"]);
+const arch10c = r10(["feature", "archive", "billing"]);
 const rest10 = r10(["feature", "restore", "Billing"]);
-ok(rest10.code === 0 && /Restored 'billing' from \.specs\/_archive\/ ✓/.test(rest10.out) && JSON.parse(fs.readFileSync(path.join(w10s, "roadmap.json"), "utf8")).features["billing-v2"].dependsOn.join() === "billing,accounts" &&
+ok(arch10c.code === 0 && /Archived 'billing' → \.specs\/_archive\/billing ✓\n {2}⚠ 'billing' was not complete \(\d+%\), yet billing-v2 depended on it: the roadmap no longer shows them blocked by it/.test(arch10c.out) &&
+  rest10.code === 0 && /Restored 'billing' from \.specs\/_archive\/ ✓/.test(rest10.out) && JSON.parse(fs.readFileSync(path.join(w10s, "roadmap.json"), "utf8")).features["billing-v2"].dependsOn.join() === "billing,accounts" &&
   JSON.stringify(JSON.parse(rmBefore10).features["billing-v2"]) === JSON.stringify(JSON.parse(fs.readFileSync(path.join(w10s, "roadmap.json"), "utf8")).features["billing-v2"]),
-  "feature restore brings an archived feature back with the dependsOn references archive pruned");
+  "feature archive warns that the unfinished feature's dependents now read as unblocked; feature restore brings it back with the dependsOn references archive pruned");
 const rest2 = r10(["feature", "restore", "billing"]);
 ok(rest2.code === 1 && /Nothing is archived as 'billing'/.test(rest2.out) && /restore/.test(r10(["feature"]).out), "feature restore of nothing archived exits 1; the usage names restore");
 // archive → rename the dependent → restore: the dependency comes back under the new name (rename prints what it updated).
@@ -1022,7 +1042,10 @@ const w10rn = path.join(tmp, "wp10-rename");
 run(["init", "core", "--project", w10rn]);
 ["Auth", "Billing"].forEach((n) => run(["create", n, "core", "--project", w10rn]));
 run(["depend", "billing", "auth", "--project", w10rn]);
-run(["feature", "archive", "auth", "--project", w10rn]);
+const arch10j = run(["feature", "archive", "auth", "--project", w10rn, "--json"]);
+const arch10jr = (() => { try { return JSON.parse(arch10j.out); } catch { return {}; } })();
+ok(arch10j.code === 0 && arch10jr.action === "archive" && JSON.stringify(arch10jr.dependentsPruned) === '["billing"]' && arch10jr.incompleteDependency === true && /yet billing depended on it/.test(arch10jr.note),
+  "feature archive --json carries dependentsPruned + incompleteDependency + the note (= spec_feature)");
 const ren10c = run(["feature", "rename", "billing", "payments", "--project", w10rn]);
 const rest10c = run(["feature", "restore", "auth", "--project", w10rn]);
 ok(ren10c.code === 0 && /Renamed 'billing' → 'payments' ✓\n {2}archive records updated to the new name .*: auth/.test(ren10c.out) && rest10c.code === 0 && !/Not restored/.test(rest10c.out) &&

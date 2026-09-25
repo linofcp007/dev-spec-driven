@@ -997,8 +997,25 @@ function endRun() {
     S.specDoctor(w1, "legacy-exit").checks.find((c) => c.id === "verification").status === "pass" &&
     lxTask1 === "- [x] 1. Build the exporter — exit 0" && !/ — $/m.test(lxFin.mergeSummary) &&
     lxNote.ok && lxNote.verified === true && lxRec.summary === "exporter checked by hand" && lxRec.note === undefined &&
-    lxOdd.ok && lxOdd.verified === false && lxOdd.unverifiedReason === "no-evidence" && !/_Verify:_/.test(lxOdd.note) && /summary of how it was checked/.test(lxOdd.note),
-    "a v1.12 bare {exitCode: 0} on a task without _Verify:_ verifies (doctor, finish, merge summary 'exit 0'); a note replaces it as the summary; a no-_Verify:_ task's message never claims a _Verify:_ command");
+    lxOdd.ok && lxOdd.verified === true && lxOdd.nothingToVerify === true && lxOdd.unverifiedReason === undefined && lxOdd.note === undefined &&
+    !lxVs.unverified.includes(2) && S.statusFeature(w1, "legacy-exit").tasks.list.find((t) => t.number === 2).verified === true,
+    "a v1.12 bare {exitCode: 0} on a task without _Verify:_ verifies (doctor, finish, merge summary 'exit 0'); a note replaces it as the summary; an empty record on a no-_Verify:_ task is what doctor says: verified, nothing to verify");
+  // One verdict everywhere (taskVerification): a task with no runnable _Verify:_ and nothing recorded is verified — with
+  // nothingToVerify, and no reason code — in spec_complete_task, spec_status, spec_impact, doctor and spec_finish alike
+  // (complete_task used to answer verified:false with NO unverifiedReason while doctor/finish/roadmap passed it).
+  const nv = S.createFeature(w1, "Nothing to verify", ["core"]);
+  fs.writeFileSync(path.join(nv.dir, "tasks.md"), "- [ ] 1. Write the docs\n- [ ] 2. Build it\n  - _Verify: npm test_\n- [ ] 3. Proofread\n");
+  const nv1 = S.completeTask(w1, "nothing-to-verify", 1);
+  const nv2 = S.completeTask(w1, "nothing-to-verify", 2);
+  const nv3 = S.completeTask(w1, "nothing-to-verify", 3, { summary: "read it twice" });
+  const nvSt = S.statusFeature(w1, "nothing-to-verify").tasks.list;
+  const nvVs = S.verificationStatus(w1, "nothing-to-verify", nv.dir);
+  ok(nv1.ok && nv1.verified === true && nv1.nothingToVerify === true && nv1.unverifiedReason === undefined && nv1.note === undefined &&
+    nv2.verified === false && nv2.unverifiedReason === "no-evidence" && nv2.nothingToVerify === undefined && /_Verify:_/.test(nv2.note) &&
+    nv3.verified === true && nv3.nothingToVerify === undefined &&
+    nvSt.map((t) => t.number + ":" + t.verified + (t.nothingToVerify ? "~" : "")).join() === "1:true~,2:false,3:true" &&
+    nvVs.unverified.join() === "2" && S.finishFeature(w1, "nothing-to-verify").unverified.join() === "2",
+    "verified means the same on every surface: no _Verify:_ + nothing recorded → verified (nothingToVerify, no reason); a runnable _Verify:_ without a run → no-evidence; a note attests a manual task");
   // 5. what `done --run` records: the count lines a plain tail loses, plus the tail, capped.
   const noisy = ["TAP version 13", "ok 1 - a", "ok 2 - b", "# tests 2", "# pass 2", "# fail 0", ...Array.from({ length: 12 }, (_, i) => "trailing noise line " + i)].join("\n");
   const sumNoisy = S.summarizeRunOutput(noisy);
@@ -1037,6 +1054,18 @@ function endRun() {
   fs.writeFileSync(fzTasks, "\uFEFF```md\n- [ ] 9. example\n```\n- [ ] 1. real\n");
   ok(fzSeen() === "1" && S.completeTask(w1, "fence", 1).ok && fs.readFileSync(fzTasks, "utf8") === "\uFEFF```md\n- [ ] 9. example\n```\n- [x] 1. real\n",
     "a UTF-8 BOM is not indentation: a fence on the first line still hides its look-alikes (and the tick keeps the BOM)");
+  // CommonMark closers — one rule (closesFence) for every fence-aware reader: a closer carries no info string and is at
+  // least as long as its opener, so "```js" inside an open ``` block is code, and "```" never closes a ```` block.
+  // "```js" used to close the block: the requirements below read inverted and AC-1 disappeared from EARS and trace.
+  const fcReq = "# Feature: Fence\n\n## Acceptance Criteria\n```md\n```js\nconst shall = 1;\n```\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL answer.\n\n" +
+    "````\n```\n2. **US-1.AC-9** — WHEN shown THE SYSTEM SHALL be an example.\n````\n";
+  fs.writeFileSync(path.join(fz.dir, "requirements.md"), fcReq);
+  fs.writeFileSync(fzTasks, "- [ ] 1. doc\n```\n```js\n- [ ] 9. example\n  - _Requirements: US-1.AC-9_\n```\n- [ ] 2. b\n  - _Requirements: US-1.AC-1_\n");
+  const fcEars = S.earsValidate(fcReq);
+  const fcTrace = S.traceCheck(w1, "fence");
+  ok(fcEars.summary.criteriaDetected === 1 && fcEars.verdict === "pass" && fcTrace.totalAcs === 1 && fcTrace.coveredByTasks === 1 && !fcTrace.phantomAcsInTasks.length &&
+    fzSeen() === "1,2", "a fence closer with an info string (```js) or shorter than its opener is code, never the closer: EARS, trace_check and the task scanner agree " +
+    `(criteria ${fcEars.summary.criteriaDetected}, ACs ${fcTrace.totalAcs}, tasks ${fzSeen()})`);
   // Comment tokens inside `inline code` are literal text, never a comment spanning two task lines.
   fs.writeFileSync(fzTasks, "- [x] 1. Detect the `<!--` opener\n- [ ] 2. Detect the `-->` closer\n");
   const cmList = S.statusFeature(w1, "fence").tasks.list;
@@ -2955,13 +2984,13 @@ function endRun() {
       /skip it$/.test(im1.modified[0].before) && /strip it and log a warning$/.test(im1.modified[0].after) && im1.removed.map((r) => r.id).join() === "US-1.AC-3",
       "requirements diff by stable ID: added / modified (a whitespace-only reflow is NOT a change) / removed — SC-/EC-/NFR- IDs too");
     ok(imp8("US-1.AC-2").tasks.map((t) => [t.number, t.done, t.evidence].join(":")).join() === "2:true:verified" && imp8("US-1.AC-2").tests.map((t) => t.id).join() === "T-02" &&
-      imp8("US-1.AC-2").designSections.join() === "Parser" && imp8("US-1.AC-3").tasks.map((t) => [t.number, t.evidence].join(":")).join() === "3:no-evidence" &&
+      imp8("US-1.AC-2").designSections.join() === "Parser" && imp8("US-1.AC-3").tasks.map((t) => [t.number, t.evidence, t.nothingToVerify].join(":")).join() === "3:verified:true" &&
       imp8("US-1.AC-3").tests.map((t) => t.id).join() === "T-03" && imp8("US-1.AC-3").designSections.join() === "Writer" && imp8("SC-001").tasks.map((t) => t.number).join() === "2" &&
       im1.affectedTasks.map((t) => t.number + ":" + t.via.join("+")).join() === "2:US-1.AC-2+SC-001,3:US-1.AC-3" && /--reopen/.test(im1.hint),
       "each modified/removed ID lists the tasks citing it (done + evidence state), its T-IDs and design sections; affectedTasks names each task once (+ a reopen hint)");
     const imL8 = S.impactLines(im1).join("\n");
     ok(/^Impact: drafts · requirements — against the approval of \d{4}-\d\d-\d\d \(\.history\/requirements@1\.md\)/.test(imL8) && imL8.includes("  ~ US-1.AC-2  WHEN the parser meets a BOM THE SYSTEM SHALL strip it") &&
-      imL8.includes("  - US-1.AC-3  WHEN the writer runs") && imL8.includes("US-1.AC-2 (modified) — tasks: #2 [x] verified · tests: T-02 · design: Parser") && /new, no task cites them yet: US-1\.AC-4/.test(imL8),
+      imL8.includes("  - US-1.AC-3  WHEN the writer runs") && imL8.includes("US-1.AC-2 (modified) — tasks: #2 [x] verified · tests: T-02 · design: Parser") && imL8.includes("tasks: #3 [x] nothing to verify (no _Verify:_ command, nothing recorded)") && /new, no task cites them yet: US-1\.AC-4/.test(imL8),
       "impactLines: the diff, what each change reaches, the uncovered new AC");
 
     // 3. next_action + doctor name spec_impact.
@@ -3109,7 +3138,7 @@ function endRun() {
     const ptNa8 = S.nextAction(w8, "rascunhos");
     const ptNv8 = S.impactReport(w8, "rascunhos", { phase: "design", reopen: true });
     const ptDg = S.specDoctor(w8, "rascunhos").checks.find((c) => c.id === "changed-since-approval");
-    ok(/^Impacto: rascunhos · requirements — face à aprovação de \d{4}/.test(ptL8) && ptL8.includes("US-1.AC-1 (alterado) — tarefas: #1 [x] sem evidência") && /volta a aprovar: \/approve rascunhos requirements/.test(ptL8) &&
+    ok(/^Impacto: rascunhos · requirements — face à aprovação de \d{4}/.test(ptL8) && ptL8.includes("US-1.AC-1 (alterado) — tarefas: #1 [x] nada a verificar (sem comando _Verify:_, nada registado)") && /volta a aprovar: \/approve rascunhos requirements/.test(ptL8) &&
       /Vê primeiro o que a edição afeta com spec_impact/.test(ptNa8.recommendation) && ptNv8.ok && ptNv8.changed === false && ptNv8.recorded === false &&
       /^alterado\(s\) após a aprovação: requirements\.md/.test(ptDg.detail) && /nunca foi aprovada em 'fresca'/.test(S.impactReport(w8, S.createFeature(w8, "Fresca", ["core"], undefined, undefined, "pt").slug, {}).error),
       "PT feature: impact lines, next_action's spec_impact hint, doctor's check and errors are in European Portuguese");
@@ -3443,7 +3472,7 @@ function endRun() {
     // doctor: the done task claims T-01 and T-07 → tests-in-code warns about T-07 only (open tasks' tests may not exist yet).
     const cdoc9 = S.specDoctor(c9, "coded").checks.find((c) => c.id === "tests-in-code");
     const cfin9 = S.finishFeature(c9, "coded");
-    ok(cdoc9 && cdoc9.status === "warn" && /no test file names them: T-07 — put the T-ID in the test name/.test(cdoc9.detail) && !/T-0[2-6]/.test(cdoc9.detail) &&
+    ok(cdoc9 && cdoc9.status === "warn" && /no test file names them: T-07 — put the T-ID in a test's name/.test(cdoc9.detail) && !/T-0[2-6]/.test(cdoc9.detail) &&
       cfin9.warnings.some((w) => /^planned tests that no test file names \(put the T-ID in the test name\): T-07$/.test(w)) && !cfin9.warnings.some((w) => /T-42/.test(w)) &&
       !cfin9.blockers.some((b) => /T-07/.test(b)),
       "doctor tests-in-code warns about the done task's T-07 only; spec_finish lists plannedNotInCode as a warning (not T-42, never a blocker)");
@@ -3549,7 +3578,8 @@ function endRun() {
       "EC/NFR/SC on a list item's sub-bullet / lazy continuation, or on a T-ID's row in a second table, are covered; prose isn't a row (got " + kinds9(rl9) + " | " + kinds9(rt9) + ")");
 
     // A concrete File cell scopes the T-ID to that file / folder (project- or feature-relative): another feature's T-01
-    // test no longer passes it. A template slot or a non-test artifact falls back to the project-wide number match.
+    // test no longer passes it. A template slot falls back to the project-wide number match; a non-code artifact alone
+    // (load-test.md) is run outside test code — plannedOutsideCode, never planned-not-in-code (it may still be found by number).
     const f9 = fx9("scoped");
     S.createFeature(f9, "Alpha", ["tdd"]);
     const fb9 = S.createFeature(f9, "Beta", ["tdd"]);
@@ -3561,8 +3591,8 @@ function endRun() {
     const fc9 = S.traceCheck(f9, "beta", { code: true }).code;
     const fd9 = S.specDoctor(f9, "beta").checks.find((c) => c.id === "tests-in-code");
     ok(fc9.plannedNotInCode.join() === "T-01,T-03,T-04" && !fc9.testsInCode["T-01"] && fc9.testsInCode["T-02"].join() === "tests/alpha.test.js" && fc9.testsInCode["T-05"].join() === "tests/alpha.test.js" &&
-      fd9.status === "warn" && /: T-01, T-03, T-04 — put the T-ID in the test name .*File column/.test(fd9.detail),
-      "Alpha's tests don't satisfy Beta's T-01 / T-03 / T-04 (concrete File cells); T-02 (template slot) and T-05 (load-test.md) match by number (got " + JSON.stringify(fc9) + ")");
+      fc9.plannedOutsideCode.join() === "T-05" && fd9.status === "warn" && /: T-01, T-03, T-04 — put the T-ID in a test's name .*File column/.test(fd9.detail),
+      "Alpha's tests don't satisfy Beta's T-01 / T-03 / T-04 (concrete File cells); T-02 (template slot) matches by number; T-05 (load-test.md) is outside test code (got " + JSON.stringify(fc9) + ")");
     w9f(f9, "tests/beta.test.js", "test(\"T-01 beta\", () => {});\n");
     w9f(f9, "tests/beta/rotate.test.js", "test(\"T-03 beta\", () => {});\n");
     w9f(fb9.dir, "tests/unit/beta.test.js", "test(\"T-04 beta\", () => {});\n");
@@ -3597,6 +3627,36 @@ function endRun() {
     ok(/columna Archivo \(o Fichero\) del plan/.test(S.msg("es").deepTrace.testsInCodeMissing("T-01")) &&
       /\| Fichero \|/.test(fs.readFileSync(path.join(S.createFeature(sx9, "Fallo", ["tdd"], undefined, undefined, "es", "bugfix").dir, "test-plan.md"), "utf8")),
       "ES advice names both spellings of the column (the ES bugfix plan says Fichero, the feature plan Archivo)");
+
+    // A row whose File column names only a non-code artifact (the scaffold's own load row `load-test.md`, its eval rows
+    // `evals/*.json`, a Gherkin .feature) is run outside test code: plannedOutsideCode, never plannedNotInCode — a done
+    // load / eval task used to leave a permanent tests-in-code warning (doctor, spec_finish) whose advice ("the file the
+    // File column names") pointed at a file no scan reads. A code path outside a test folder, a scoped test folder next to
+    // the artifact, or a template slot keeps the T-ID expected in code.
+    const ol9 = fx9("outside");
+    const olTask = (slug, marker) => S.taskBlocks(fs.readFileSync(path.join(ol9, ".specs", slug, "tasks.md"), "utf8"))
+      .find((b) => [b.text, ...(b.body || [])].join("\n").includes(marker)).number;
+    S.createFeature(ol9, "Tenant billing", ["tdd", "saas"]);
+    S.createFeature(ol9, "Chat assist", ["tdd", "ai"]);
+    const olLoad = S.completeTask(ol9, "tenant-billing", olTask("tenant-billing", "_Makes green: T-07_"), { command: "k6 run load/invoice.k6.js", exitCode: 0, summary: "p95=142ms" });
+    const olEval = S.completeTask(ol9, "chat-assist", olTask("chat-assist", "_Makes green: T-06, T-07_"), { command: "node mcp/evals/run-evals.js chat-assist", exitCode: 0, summary: "golden 10/10" });
+    const olTb = S.traceCheck(ol9, "tenant-billing", { code: true }).code;
+    const olCa = S.traceCheck(ol9, "chat-assist", { code: true }).code;
+    const olTip = (slug) => S.specDoctor(ol9, slug).checks.find((c) => c.id === "tests-in-code");
+    const olFinWarn = (slug) => S.finishFeature(ol9, slug).warnings.filter((w) => /^planned tests/.test(w)).join(" ");
+    ok(olLoad.ok && olEval.ok && olTb.plannedOutsideCode.join() === "T-07" && !olTb.plannedNotInCode.includes("T-07") && olTb.plannedNotInCode.length === 6 &&
+      olCa.plannedOutsideCode.join() === "T-06,T-07" && !olCa.plannedNotInCode.some((t) => t === "T-06" || t === "T-07") &&
+      olTip("tenant-billing") === undefined && olTip("chat-assist") === undefined && !/T-07/.test(olFinWarn("tenant-billing")) && !/T-0[67]/.test(olFinWarn("chat-assist")),
+      "the scaffold's load (load-test.md) and eval (evals/*.json) rows are run outside test code: their done tasks raise no tests-in-code warning in doctor or finish (got " +
+      JSON.stringify([olTb.plannedOutsideCode, olCa.plannedOutsideCode, olTip("tenant-billing"), olFinWarn("tenant-billing")]) + ")");
+    const olMix = S.createFeature(ol9, "Mixed", ["tdd"]);
+    w9f(olMix.dir, "requirements.md", REQ9);
+    w9f(olMix.dir, "test-plan.md", TPH9 + "| T-01 | load | example | x | US-1.AC-1 | `load/invoice.k6.js` |\n| T-02 | load | example | x | US-1.AC-1 | `load-test.md`, `tests/load/` |\n" +
+      "| T-03 | load | example | x | US-1.AC-1 | `load-test.md` |\n| T-04 | e2e | example | x | US-1.AC-1 | `features/checkout.feature` |\n| T-05 | unit | example | x | US-1.AC-1 | `[path]` |\n" +
+      "| T-06 | load | example | x | US-1.AC-1 | `load-test.md` |\n\n- T-06 — the same load check, listed again outside the table\n");
+    const olMc = S.traceCheck(ol9, "mixed", { code: true }).code;
+    ok(olMc.plannedOutsideCode.join() === "T-03,T-04" && olMc.plannedNotInCode.join() === "T-01,T-02,T-05,T-06",
+      "only rows naming non-code artifacts alone are outside test code: a code path outside a test folder, a scoped test folder, a template slot or a second row without a File cell keep the T-ID expected (got " + JSON.stringify(olMc) + ")");
   }
 
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
@@ -3674,6 +3734,27 @@ function endRun() {
       JSON.stringify(archState.archived.dependents) === JSON.stringify([{ feature: "billing-v2", dependsOn: ["billing", "payments"] }, { feature: "payments", dependsOn: ["billing"] }]) &&
       typeof archState.archived.at === "string" && !rmArch.features.billing && rmArch.features["billing-v2"].dependsOn.join() === "payments" && rmArch.features.payments.dependsOn.length === 0,
       "archive records its roadmap.json entry and the dependents' dependsOn in the archived .state.json BEFORE pruning them");
+    ok(arch10.p.dependentsPruned.join() === "billing-v2,payments" && arch10.p.incompleteDependency === true &&
+      /^'billing' was not complete \(\d+%\), yet billing-v2, payments depended on it: the roadmap no longer shows them blocked by it/.test(arch10.p.note),
+      "spec_feature archive names the dependents whose dependsOn it pruned, with a warning (incompleteDependency) when the archived feature was not complete — they now read as unblocked (got " + JSON.stringify(arch10.p) + ")");
+    // A complete feature's dependents are just listed; a feature nobody depends on returns [] and no note; the note is in
+    // the archived feature's language (PT).
+    const w10a = path.join(tmp, "proj-wp10-archdeps");
+    S.initProject(w10a, ["core"]);
+    ["Card payments", "Dunning emails", "Receipts", "Lonely"].forEach((n) => S.createFeature(w10a, n, ["core"]));
+    S.createFeature(w10a, "Pagamentos", ["core"], undefined, undefined, "pt");
+    fs.writeFileSync(path.join(w10a, ".specs", "receipts", "tasks.md"), "# Tasks\n\n## Phase: Build\n- [x] 1. Send receipts\n");
+    S.setDependency(w10a, "dunning-emails", ["card-payments", "receipts"]);
+    S.setDependency(w10a, "card-payments", ["pagamentos"]);
+    const adDone = S.manageFeature(w10a, "archive", "receipts");
+    const adLone = S.manageFeature(w10a, "archive", "lonely");
+    const adPt = S.manageFeature(w10a, "archive", "pagamentos");
+    const adRm = S.roadmap(w10a).features.find((f) => f.name === "dunning-emails");
+    ok(adDone.ok && adDone.dependentsPruned.join() === "dunning-emails" && adDone.incompleteDependency === undefined && /^its dependents' links to it left the roadmap: dunning-emails \(recorded/.test(adDone.note) &&
+      adLone.ok && adLone.dependentsPruned.length === 0 && adLone.note === undefined &&
+      adPt.ok && adPt.incompleteDependency === true && /^'pagamentos' não estava completa \(\d+%\), mas card-payments dependia\(m\) dela/.test(adPt.note) &&
+      adRm.dependsOn.join() === "card-payments" && adRm.blocked === true,
+      "archive of a complete feature lists the pruned dependents (no warning); nobody depending → [] and no note; the warning is in the archived feature's language (PT)");
     const trArch = S.traceCheck(w10, "billing-v2");
     const specsArch = fs.readFileSync(specsMd, "utf8");
     ok(trArch.phantomSupersedes.length === 3 && trArch.supersedes.every((s) => s.archived === true) && /## 🗄 billing — archived\n\n_core · archived \d{4}-\d\d-\d\d_/.test(specsArch) &&
@@ -5017,16 +5098,16 @@ function endRun() {
   ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /always scaffolds `quickstart\.md`/.test(docsSkill) && !/^\| Tool \|/m.test(docsSkill) &&
     (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
-  const docsTools = ["spec_init", "spec_classify", "spec_create", "spec_list", "spec_status", "spec_next_task", "spec_complete_task", "ears_validate", "trace_check",
-    "spec_doctor", "spec_approve", "steering_scaffold", "spec_roadmap", "spec_backlog", "spec_depend", "spec_scan", "spec_coverage", "spec_clarify",
-    "spec_next_action", "spec_add_track", "spec_feature", "spec_task_brief", "spec_finish"];
+  // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
+  const docsTools = list.result.tools.map((t) => t.name);
   const docsReadme = docsRead("README.md");
   const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
     .matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));
   ok(docsTables.every((s) => docsTools.every((t) => s.has(t)) && [...s].every((t) => list.result.tools.some((x) => x.name === t))) &&
     !/path-filled/.test(docsReadme) && ["## Português", "## Español"].every((h) => { const sec = docsReadme.split("\n" + h + "\n")[1].split("\n## ")[0];
       return /\/plugin marketplace add/.test(sec) && /node cli\/test-cli\.js/.test(sec) && /--subagents/.test(sec) && /_Verify:/.test(sec); }),
-    "README: EN/PT/ES tool tables list all 23 tools (no phantom); PT/ES carry subagents, evidence, marketplace install and the CLI test line");
+    `README: EN/PT/ES tool tables list all ${docsTools.length} tools of the live tools/list (no phantom; missing: ` +
+    docsTables.map((s) => docsTools.filter((t) => !s.has(t)).join("+") || "none").join(" / ") + "); PT/ES carry subagents, evidence, marketplace install and the CLI test line");
   const docsRules = [[path.join(".cursor", "rules", "dev-spec-driven.mdc"), "cursor"], [path.join(".windsurf", "rules", "dev-spec-driven.md"), "windsurf"],
     [path.join(".github", "copilot-instructions.md"), "copilot"], ["GEMINI.md", "gemini"], ["AGENTS.md", "agents"]];
   const docsAgents = docsRead("AGENTS.md");

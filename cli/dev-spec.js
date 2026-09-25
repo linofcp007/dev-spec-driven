@@ -324,7 +324,11 @@ function main() {
         // Every gap kind the engine reports, with its IDs — never "gaps-found" with nothing listed.
         spec.traceGapLines(r, lang).forEach((l) => console.log("  " + l));
         spec.traceWarningLines(r, lang).forEach((l) => console.log("  ▲ " + l));
-        if (r.code) console.log(spec.msg(lang).deepTrace.codeSummary(r.code.planned - r.code.plannedNotInCode.length, r.code.planned, r.code.scanned, r.code.truncated));
+        if (r.code) { // T-IDs run outside test code (a load-test.md / eval-set row) are listed apart, never counted as expected in code
+          const outside = r.code.plannedOutsideCode || [];
+          const expected = r.code.planned - outside.length;
+          console.log(spec.msg(lang).deepTrace.codeSummary(expected - r.code.plannedNotInCode.length, expected, r.code.scanned, r.code.truncated, outside.join(", ")));
+        }
         spec.supersedesWarnings(r, lang).forEach((l) => console.log("  ⚠ " + l)); // warnings, not gaps (exit code unchanged)
       });
     }
@@ -456,7 +460,8 @@ function main() {
       const r = spec.completeTask(projectDir, pos[0], pos[1], evidence);
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
-        console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
+        // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
+        console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
         if (r.note) console.log("  ⚠ " + r.note);
       });
     }
@@ -631,7 +636,11 @@ function main() {
           console.log(T.renamed(r.from, r.to));
           if (r.note) console.log("  " + r.note); // _Supersedes:_ references / archive records that follow the new name
         }
-        else if (r.action === "archive") console.log(T.archived(r.feature, String(r.dest).replace(/\\/g, "/")));
+        else if (r.action === "archive") {
+          console.log(T.archived(r.feature, String(r.dest).replace(/\\/g, "/")));
+          // the dependents whose dependsOn the archive pruned — a warning when the archived work was never finished
+          if (r.note) console.log((r.incompleteDependency ? "  ⚠ " : "  ") + r.note);
+        }
         else if (r.action === "restore") {
           const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language
           console.log(RT.done(r.feature));

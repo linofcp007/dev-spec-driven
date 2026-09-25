@@ -320,11 +320,11 @@ function stripHtmlComments(s) {
 function stripFencedCode(s) {
   let fence = null;
   return String(s || "").split("\n").map((line) => {
-    const m = line.match(RE_FENCE);
     if (fence) {
-      if (m && line.trim().startsWith(fence)) fence = null;
+      if (closesFence(line, fence)) fence = null;
       return "";
     }
+    const m = line.match(RE_FENCE);
     if (m) { fence = m[1]; return ""; }
     return line;
   }).join("\n");
@@ -1587,8 +1587,10 @@ function statusFeature(projectDir, name) {
   const blocks = taskBlocks(tasksText || "");
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
-  const list = blocks.map((b) => ({ number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text,
-    verified: !taskEvidenceIssue(evidence, b, dups.has(b.number)) })).sort((a, b) => a.number - b.number);
+  const list = blocks.map((b) => {
+    const v = taskVerification(evidence, b, dups.has(b.number)); // doctor's rule — never a second opinion
+    return { number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text, verified: !v.reason, ...(v.nothingToVerify ? { nothingToVerify: true } : {}) };
+  }).sort((a, b) => a.number - b.number);
 
   // Mandatory-section completeness — headings matched by EN/PT/ES synonym. `filled` uses the SAME rule as
   // doctor (sectionState: no `> **TODO**` sentinel, non-empty body): status used to show ✓ for sections doctor
@@ -1766,7 +1768,8 @@ function completeTask(projectDir, name, number, evidence) {
   const next = tasks.find((t) => !t.done) || null;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
-  const reason = taskEvidenceIssue(state.evidence || {}, task, dup);
+  // The same verdict doctor, spec_finish and ROADMAP.md give (taskVerification): unverified ⇔ a reason code.
+  const { reason, nothingToVerify } = taskVerification(state.evidence || {}, task, dup);
   const res = {
     ok: true,
     feature: f.slug,
@@ -1777,13 +1780,15 @@ function completeTask(projectDir, name, number, evidence) {
     total: tasks.length,
     next: next && { number: next.number, text: next.text },
   };
-  if (reason && (runnable || entry)) {
+  // No runnable _Verify:_ and nothing usable recorded: verified (nothing to run), flagged so no one reads it as a check.
+  if (nothingToVerify) res.nothingToVerify = true;
+  if (reason) {
     res.unverifiedReason = reason; // stable code — callers branch on this, never on the note's text
     res.note = reason === "failed-run" ? EG.failedRun(n, entry.exitCode, f.slug, runnable)
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
-      : runnable ? EV.missing(n, f.slug) : EV.missingManual(n);
+      : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
   }
   // Bugfix: the root-cause task ticked while bug.md → Root Cause is still empty — allowed (it is the task that writes it),
   // but its deliverable is that section: say so now, not only when the next task is refused. rootCausePending: stable.
@@ -1839,6 +1844,15 @@ const RE_BLOCK_BREAK = /^\s*(?:#{1,6}\s|>|\||(?:-{3,}|={3,}|\*{3,})\s*$)/;
 // A fence opener as CommonMark reads it: a backtick fence's info string holds no backtick — "```US-1.AC-1``` is how
 // an ID looks." is inline code, not a fence that would turn the rest of the file into code (and hide every AC below it).
 const RE_FENCE = /^\s*(`{3,}(?![^`]*`)|~{3,})/;
+// A fence closer as CommonMark reads it: the opener's character, at least as long, and nothing after it but spaces.
+const RE_FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/;
+// Does `line` close the fence opened by `fence` (its marker: "```", "~~~~" …)? The ONE closer rule of every fence-aware
+// reader: a closer carries no info string, so "```js" inside an open ``` block is code — it used to close the block and
+// the rest of the file read inverted (the code below as prose, the prose after the real closer as code).
+function closesFence(line, fence) {
+  const c = String(line).match(RE_FENCE_CLOSE);
+  return !!c && c[1][0] === fence[0] && c[1].length >= fence.length;
+}
 const B = "(?<![\\p{L}\\p{N}_])"; // unicode word boundary (before)
 const E = "(?![\\p{L}\\p{N}_])"; // unicode word boundary (after)
 const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
@@ -1902,11 +1916,11 @@ function criterionBlocks(text) {
       inComment = true;
       line = line.slice(0, openIdx);
     }
-    const fenceHere = line.match(RE_FENCE);
     if (fence) {
-      if (fenceHere && line.trim().startsWith(fence)) fence = null;
+      if (closesFence(line, fence)) fence = null;
       return; // inside a fence: no content, no criteria
     }
+    const fenceHere = line.match(RE_FENCE);
     if (fenceHere) {
       fence = fenceHere[1];
       return flush();
@@ -2441,28 +2455,46 @@ function scannableTestPath(t) {
   const ext = path.posix.extname(t).toLowerCase();
   return ext === "" || CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext);
 }
-// key(T-ID) → [test paths] its plan rows' File column names — only CONCRETE test paths (a test file or a folder under a
-// test dir: `tests/unit/login.test.ts`, `tests/auth/`); a template slot (`[path]`, `tests/unit/...`), a non-test artifact
-// (`load-test.md`, `evals/golden.json`, `tests/load/plan.md`) or a missing column scopes nothing. `::test_x`, `#L3` and
-// `:12` suffixes are cut.
+// A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
+// `load-test.md`, `evals/golden.json`, `tests/load/plan.md`, a Gherkin `.feature` or a JMeter `.jmx`. The test-code scan
+// reads none of them, so a row whose File column names only such files is checked outside test code (a load run, the eval
+// harness, a manual pass) — expecting its T-ID in a test file warned forever (the scaffold's own load/eval rows did).
+function nonCodeArtifactPath(t) {
+  const ext = path.posix.extname(t.replace(/^[("'[]+|[)"'\].,:;]+$/g, "")).toLowerCase();
+  return /^\.[a-z][a-z0-9]*$/.test(ext) && !GUARD_CODE_EXT.has(ext);
+}
+// Does a File cell token look like code — a source file in any language, or a folder? Then the row is not "outside code".
+function codePathToken(t) {
+  const ext = path.posix.extname(t).toLowerCase();
+  return GUARD_CODE_EXT.has(ext) || (ext === "" && t.includes("/"));
+}
+// → { scopes, outside }. scopes: key(T-ID) → [test paths] its plan rows' File column names — only CONCRETE test paths (a
+// test file or a folder under a test dir: `tests/unit/login.test.ts`, `tests/auth/`); a template slot (`[path]`,
+// `tests/unit/...`), a non-test artifact or a missing column scopes nothing. `::test_x`, `#L3` and `:12` suffixes are
+// cut. outside: the keys whose EVERY plan row names only non-code artifacts (nonCodeArtifactPath) in its File column —
+// verified outside test code, never expected in a test file; a row with no File cell, a template slot or a code path
+// keeps its T-ID expected in code.
 function planFileScopes(planText) {
   const scopes = new Map();
+  const outsideRows = new Set();
+  const inCodeRows = new Set();
   for (const e of testPlanEntries(planText)) {
-    if (!e.cells || !e.header) continue;
-    const col = e.header.findIndex((h) => RE_FILE_COLUMN.test(h.replace(/[*_`]/g, "").trim()));
-    if (col < 0 || col >= e.cells.length) continue;
+    const keys = e.ids.map((id) => tKey(id.slice(2)));
+    const col = e.cells && e.header ? e.header.findIndex((h) => RE_FILE_COLUMN.test(h.replace(/[*_`]/g, "").trim())) : -1;
+    if (col < 0 || col >= e.cells.length) { keys.forEach((k) => inCodeRows.add(k)); continue; }
     const cell = e.cells[col];
     const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
-    const paths = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
+    const raw = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
       .map((t) => t.replace(/\\/g, "/").replace(/::.*$/, "").replace(/#.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/^(?:\.\/)+/, "").replace(/^\/+/, ""))
-      .filter((t) => t && !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t) && isTestCodePath(t) && scannableTestPath(t));
+      .filter(Boolean);
+    const tokens = raw.filter((t) => !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t)); // template slots out
+    const paths = tokens.filter((t) => isTestCodePath(t) && scannableTestPath(t));
+    const outside = !paths.length && tokens.length === raw.length && tokens.some(nonCodeArtifactPath) && !tokens.some(codePathToken);
+    for (const k of keys) (outside ? outsideRows : inCodeRows).add(k);
     if (!paths.length) continue;
-    for (const id of e.ids) {
-      const k = tKey(id.slice(2));
-      scopes.set(k, [...new Set([...(scopes.get(k) || []), ...paths])]);
-    }
+    for (const k of keys) scopes.set(k, [...new Set([...(scopes.get(k) || []), ...paths])]);
   }
-  return scopes;
+  return { scopes, outside: new Set([...outsideRows].filter((k) => !inCodeRows.has(k))) };
 }
 // trace_check {code: true}: this feature's plan against the test code. T-IDs restart at T-01 in every plan, so a file
 // counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/; and a planned T-ID whose plan row's File
@@ -2470,7 +2502,9 @@ function planFileScopes(planText) {
 // root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
 // number would pass it. Without a File path the match is by number across the project.
 //   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
-//   plannedNotInCode  this plan's T-IDs that no counting test file names
+//   plannedNotInCode  this plan's T-IDs that no counting test file names (those checked outside test code left out)
+//   plannedOutsideCode  this plan's T-IDs whose every row's File column names only non-code artifacts (load-test.md,
+//                     evals/golden.json …): run outside test code — never expected in a test file (planFileScopes)
 //   inCodeNotInPlan   T-IDs in test code that NO feature's test plan lists (another feature's T-01 is not this one's gap)
 //   acsInTests        this feature's AC IDs that test code names (another feature's .specs tests excluded)
 //   planned           how many T-IDs this plan lists
@@ -2482,7 +2516,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   const specsRel = toPosix(path.relative(root, specsRoot(projectDir)));
   const mine = (rel) => !pathUnder(rel, specsRel) || pathUnder(rel, own);
   const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
-  const scopes = planFileScopes(planText);
+  const { scopes, outside } = planFileScopes(planText);
   const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathNames(rel, p));
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
@@ -2496,7 +2530,8 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   return {
     planned: planned.size,
     testsInCode,
-    plannedNotInCode: [...planned].filter(([k]) => !found.has(k)).map(([, id]) => id),
+    plannedNotInCode: [...planned].filter(([k]) => !found.has(k) && !outside.has(k)).map(([, id]) => id),
+    plannedOutsideCode: [...planned].filter(([k]) => outside.has(k)).map(([, id]) => id),
     inCodeNotInPlan: [...s.tids].filter(([k]) => found.has(k) && !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
     acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(mine)),
     scanned: s.scanned,
@@ -2533,7 +2568,6 @@ const RE_TASK_FENCE_OPEN = /^(\s*)(?:(`{3,})[^`]*|(~{3,}).*)$/;
 // its line (an HTML block) may run past the end of its list item's paragraph; one after text on the line is
 // inline and ends with the paragraph — never past the next task line. A "-->" inside fenced code or an inline
 // code span doesn't count as the closer that lets a comment open.
-const RE_FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/; // the same character, at least as long, nothing after
 const RE_PARA_BREAK = /^\s*$|^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s{0,3}#{1,6}(?:\s|$)|^\s*(?:`{3,}|~{3,})|^\s*<!--/;
 function scanTaskLines(tasksText) {
   const lines = String(tasksText || "").split("\n").map((l) => l.replace(/\r$/, ""));
@@ -2614,8 +2648,7 @@ function fenceLine(st, lines, i, below) {
   const src = lines[i];
   const indent = indentOf(src);
   if (st.fence) {
-    const c = src.match(RE_FENCE_CLOSE);
-    if (c && c[1][0] === st.fence.ch && c[1].length >= st.fence.len) { st.fence = null; return "code"; }
+    if (closesFence(src, st.fence.mark)) { st.fence = null; return "code"; }
     // A fence opened inside a list item ends with it: a less-indented line (the next "- [ ] N.") is
     // outside, as in CommonMark — so an unclosed fence in a task's body can't swallow the next task.
     if (!(st.fence.indent > 0 && src.trim() && indent < st.fence.indent)) return "code";
@@ -2624,7 +2657,7 @@ function fenceLine(st, lines, i, below) {
   const f = src.match(RE_TASK_FENCE_OPEN);
   const mark = f && (f[2] || f[3]);
   if (mark && (below[mark[0]][i + 1] >= mark.length || (indent > 0 && below.indent[i + 1] < indent))) {
-    st.fence = { ch: mark[0], len: mark.length, indent };
+    st.fence = { mark, indent };
     return "open";
   }
   return null;
@@ -2877,6 +2910,18 @@ function taskEvidenceIssue(evidence, block, dup) {
   // they are for an earlier _Verify:_ command / a task that held the number before a renumbering.
   return dup ? "duplicate-number" : "stale-evidence";
 }
+// The evidence gate's verdict for one task → { reason, nothingToVerify }: `reason` a stable code, or null (verified). The
+// ONE rule behind every public `verified` (spec_complete_task, spec_status, spec_impact's per-task `evidence`) and every
+// unverified list (doctor, spec_finish, ROADMAP.md): a task with no runnable _Verify:_ is outside the run gate, so nothing
+// recorded for THIS task (a duplicated number's record may be the other's) — or a record that proves nothing — is no
+// worse than no record, and passes (`nothingToVerify`: nothing was run or attested, so no surface calls it a check); only
+// its own failed run or stale record counts against it. (spec_complete_task used to answer verified:false with no reason
+// for such a task while doctor, finish and the roadmap passed it.)
+function taskVerification(evidence, block, dup) {
+  if (taskMarkers(block).verify.length) return { reason: taskEvidenceIssue(evidence, block, dup), nothingToVerify: false };
+  const reason = ownEvidence(evidence, block, dup) == null ? "no-evidence" : taskEvidenceIssue(evidence, block, dup);
+  return reason === "no-evidence" ? { reason: null, nothingToVerify: true } : { reason, nothingToVerify: false };
+}
 // evidence[n] stays the LATEST RUN {command, exitCode, summary, at} (the v1.12 shape) plus `history`, its
 // last EVIDENCE_HISTORY runs (oldest dropped) for pass-rate metrics, and the stamps. A note after a run is
 // attached as `note` — it never overwrites (or clears) the run's result. A v1.12 bare {exitCode: 0} (no command)
@@ -2930,13 +2975,7 @@ function verificationStatus(projectDir, slug, dir) {
   const unverifiedDetail = [];
   for (const b of blocks) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
-    const runnable = taskMarkers(b).verify.length > 0;
-    // no command and nothing recorded (for THIS task — a duplicated number's record may be the other's)
-    if (!runnable && ownEvidence(evidence, b, dups.has(b.number)) == null) continue;
-    const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
-    // Without a runnable _Verify:_ a record that proves nothing is no worse than no record (which passes): only a
-    // failed run, a stale record or another task's record under the number count against it.
-    if (!runnable && reason === "no-evidence") continue;
+    const { reason } = taskVerification(evidence, b, dups.has(b.number)); // the rule every `verified` shares
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
     if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
   }
@@ -3071,7 +3110,7 @@ function designSections(designText) {
   let fence = null;
   for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
     const f = line.match(RE_FENCE);
-    if (fence) { if (f && line.trim().startsWith(fence)) fence = null; }
+    if (fence) { if (closesFence(line, fence)) fence = null; }
     else if (f) fence = f[1];
     const h = !fence && !f && line.match(/^##\s+(.*?)\s*$/);
     if (h) { cur = { title: h[1], body: [] }; out.push(cur); continue; }
@@ -3738,8 +3777,9 @@ function impactReport(projectDir, name, opts = {}) {
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
   const taskView = (b) => {
-    const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
-    return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
+    const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number));
+    return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(nothingToVerify ? { nothingToVerify: true } : {}),
+      ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
   };
   const citing = (ids) => blocks.filter((b) => {
     const mk = taskMarkers(b);
@@ -3872,7 +3912,7 @@ function impactLines(r) {
   const I = i18n.msg(r.lang).impact;
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
-  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
+  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.nothingToVerify ? I.nothingToVerify : t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
   if (r.baseline === "fingerprint-only" || r.baseline === "none") {
     const out = [(r.baseline === "none" ? I.headNone : I.headFp)(r.feature, r.phase, r.changed), "  " + r.hint];
     if (r.note) out.push("  " + r.note);
@@ -4175,12 +4215,25 @@ function archiveFeature(projectDir, name) {
   const dest = path.join(archRoot, slug);
   if (fs.existsSync(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) };
   const record = { at: new Date().toISOString(), ...archiveRecord(readRoadmap(projectDir), slug) };
+  // What the prune does to the roadmap, said out loud: every feature that depended on this one stops being blocked by it —
+  // silently turning a blocked feature into a ready one when the archived work was never finished (roadmap's rule: a dep
+  // is met at 100%). Measured before the move, in the feature's own language.
+  const tracks = detectTracks(dir);
+  const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
+  const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length);
+  const R = i18n.msg(featureLang(projectDir, slug)).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   fs.renameSync(dir, dest);
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug) };
+  const res = { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug), dependentsPruned: record.dependents.map((d) => d.feature) };
+  if (res.dependentsPruned.length) {
+    const list = res.dependentsPruned.join(", ");
+    if (percent < 100) res.incompleteDependency = true; // stable: those features now read as unblocked, the work isn't done
+    res.note = percent < 100 ? R.prunedIncomplete(slug, percent, list) : R.prunedDependents(list);
+  }
+  return res;
 }
 
 function renameFeature(projectDir, name, newName) {
@@ -4988,8 +5041,8 @@ function headingIndex(lines) {
   const out = [];
   let fence = null;
   lines.forEach((l, i) => {
+    if (fence) { if (closesFence(l, fence)) fence = null; return; }
     const f = l.match(RE_FENCE);
-    if (fence) { if (f && l.trim().startsWith(fence)) fence = null; return; }
     if (f) { fence = f[1]; return; }
     if (/^#{1,6}\s/.test(l)) out.push(i);
   });
@@ -5141,8 +5194,8 @@ function placeholderReport(text) {
     line = line.replace(/<!--.*?-->/g, "");
     const open = line.indexOf("<!--");
     if (open !== -1 && closes[i]) { inComment = true; line = line.slice(0, open); }
+    if (fence) { if (closesFence(line, fence)) fence = null; return; }
     const fm = line.match(RE_FENCE);
-    if (fence) { if (fm && line.trim().startsWith(fence)) fence = null; return; }
     if (fm) { fence = fm[1]; return; }
     const def = line.match(RE_REF_DEFINITION);
     if (def) { refs.add(def[1].trim().toLowerCase()); return; }
@@ -5612,7 +5665,8 @@ function specDoctor(projectDir, name, opts = {}) {
       const key = (id) => tKey(id.slice(2)); // T-1 in a task names T-01 in the plan
       const planKeys = new Set([...extractTestIds(stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || ""))].map(key));
       const notInCode = new Set(tr.code.plannedNotInCode.map(key));
-      const claimed = [...greenDone].filter((id) => planKeys.has(key(id)));
+      const outsideCode = new Set(tr.code.plannedOutsideCode.map(key)); // a load run / eval set: its own evidence, no test file
+      const claimed = [...greenDone].filter((id) => planKeys.has(key(id)) && !outsideCode.has(key(id)));
       const missing = claimed.filter((id) => notInCode.has(key(id)));
       const tail = tr.code.truncated ? " (" + D.truncated + ")" : "";
       if (claimed.length) add("tests-in-code", missing.length ? "warn" : "pass", (missing.length ? D.testsInCodeMissing(missing.join(", ")) : D.testsInCodeOk(claimed.length)) + tail);
@@ -7627,8 +7681,8 @@ function mdListItems(lines, numberedOnly) {
   let cur = null;
   let fence = null;
   lines.forEach((l, i) => {
+    if (fence) { if (closesFence(l, fence)) fence = null; cur = null; return; }
     const f = l.match(RE_FENCE);
-    if (fence) { if (f && l.trim().startsWith(fence)) fence = null; cur = null; return; }
     if (f) { fence = f[1]; cur = null; return; }
     const ind = indentOf(l);
     const m = l.match(numberedOnly ? /^\s*(\d+)[.)]\s+(.*)$/ : /^\s*(?:(\d+)[.)]|[-*+])\s+(.*)$/);
@@ -8055,7 +8109,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     if (fence) {
       if (fenceOwner) fenceOwner.body.push(i);
       else inert.add(i);
-      if (f && l.trim().startsWith(fence)) { fence = null; fenceOwner = null; }
+      if (closesFence(l, fence)) { fence = null; fenceOwner = null; }
       return;
     }
     if (f) {

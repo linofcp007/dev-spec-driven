@@ -14,7 +14,9 @@ rows concrete cases. Scaffold only stubs/signatures so tests compile — no busi
 **for the right reason** (assertion / NotImplementedError, not a typo or missing import). Confirm: N written,
 N red, 0 green, 0 erroring. Then run `trace_check {name, code: true}` (CLI `dev-spec trace <feature> --code`):
 every planned T-ID should be found in the test code (`plannedNotInCode` empty), and no test should carry a T-ID
-no plan has (`inCodeNotInPlan`). Commit `test(<feature>): scaffold failing tests …`.
+no plan has (`inCodeNotInPlan`). Rows whose File column names only a non-code artifact (`load-test.md`,
+`evals/golden.json`) are checked outside test code (`plannedOutsideCode`) — their task's `_Verify:_` run is the
+evidence. Commit `test(<feature>): scaffold failing tests …`.
 
 **+ai:** Write the deterministic tests (validation, schema, rate limiting, logging, fallback, cost
 circuit breaker) AND implement the runnable eval harness; establish and record the baseline scores.

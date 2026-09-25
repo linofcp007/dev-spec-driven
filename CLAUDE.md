@@ -244,11 +244,18 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
   `duplicate-number` · `stale-evidence`. They are RETURNED in `spec_complete_task`'s `unverifiedReason` (set
-  only for a task with a runnable `_Verify:_` or recorded evidence) and in `spec_impact`'s per-task `evidence`
-  (`impacted[].tasks[]`, `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on
-  these, never on the localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and
-  `spec_finish` render it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and the
-  ROADMAP.md attention line only counts unverified tasks per feature.
+  exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
+  `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
+  localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and `spec_finish` render
+  it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and the ROADMAP.md attention line only
+  counts unverified tasks per feature.
+- **One verdict: `taskVerification()`** → `{reason, nothingToVerify}` is the ONLY rule behind every `verified`
+  (`spec_complete_task`, `spec_status` tasks, `spec_impact` tasks) and every unverified list (doctor, finish,
+  ROADMAP.md). A task with no runnable `_Verify:_` and nothing recorded for it (or a record that proves nothing) is
+  verified, with `nothingToVerify: true` so no surface calls it a check (`done` prints no "(verified)", impact says
+  "nothing to verify"); `no-evidence` is only ever a runnable `_Verify:_` without a run. Never compute a second
+  opinion from `taskEvidenceIssue()` directly — `spec_complete_task` used to answer `verified: false` with no reason
+  for such a task while doctor, finish and the roadmap passed it.
 - **Record shape** (`.state.json → evidence[<n>]`): the latest run `{command, exitCode, summary, at}` plus
   `history` (last `EVIDENCE_HISTORY` = 5 runs, for pass-rate metrics), stamps `task` (text) and `verify`
   (the command) — an edited `_Verify:_` makes the old run `stale-evidence`; a record made while the number
@@ -315,7 +322,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
 - **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
   BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
-  in their old position (only for features that still exist; a now-circular edge is skipped and reported).
+  in their old position (only for features that still exist; a now-circular edge is skipped and reported). The
+  archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
+  warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
+  meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
 - **Guard mode:** `roadmap.json → meta.guard` (`spec_init {guard}` / `init --guard on|off`, with or without
   tracks). `hooks/guard-hook.js` (PreToolUse, `Write|Edit|MultiEdit|NotebookEdit`) is **silent unless the
   guard is on** — guard off costs one small raw JSON read, the engine is loaded only for guarded projects —
@@ -420,7 +430,11 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   the hyphen an uppercase `T` + zero-padded number (`test_T01_…`, `testT01`, `TestT01`, `T01_…`) — see
   `RE_CODE_TID`. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts.
-  Doctor's `tests-in-code` warns only for T-IDs made green by DONE tasks.
+  A T-ID whose EVERY row names only non-code artifacts in its File column (`load-test.md`, `evals/*.json`, a
+  `.feature` — any extension outside `GUARD_CODE_EXT`) is run outside test code: `plannedOutsideCode`, never
+  `plannedNotInCode`, so neither doctor, finish nor the Phase 4 gate expects it in a test file (the scaffold's own
+  load/eval rows warned forever). A code path outside a test folder, a template slot or a row without a File cell
+  keeps the T-ID expected. Doctor's `tests-in-code` warns only for T-IDs made green by DONE tasks.
 - **`_Implements:_` of an OPEN task is the plan**: a missing file only named by open tasks is
   `plannedImplFiles`, not a gap; a done task's missing file (or any path outside the project) stays
   `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
@@ -432,6 +446,12 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
   several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`).
+- **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
+  `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
+  scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
+  nothing after it but spaces. Never `line.trim().startsWith(fence)` — it closed an open backtick fence on a line
+  carrying an info string (a `js` opener), and requirements.md then read inverted (its ACs vanished from EARS and
+  trace_check).
 - **Classifier signals are matched as WORDS, never substrings** (`keywordRe`, not `indexOf`).
   `indexOf` fired `claude` inside `.claude-plugin`, `rag` inside `sto·rag·e`, `sla` inside
   `tran·sla·te`, `auth` inside `auth·or` — and a phantom STRONG signal auto-enables a track, which
@@ -536,9 +556,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(693 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(699 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 232 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 235 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

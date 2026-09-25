@@ -51,10 +51,12 @@ BEFORE claiming any status:
 
 ### Why a task is unverified — stable reason codes
 
-`spec_complete_task` returns `verified`. When it is false, `unverifiedReason` (plus a localized `note`) is present
-if the task has a runnable `_Verify:_` or a recorded run/note — branch on the code, never on the `note`. A task with
-no runnable `_Verify:_` and nothing recorded comes back `verified: false` with **no** `unverifiedReason`, and
-doctor, finish and the roadmap do not count it as unverified. Everywhere else they label each task the same way.
+`spec_complete_task` returns `verified`. Whenever it is false, `unverifiedReason` (plus a localized `note`) is
+present — branch on the code, never on the `note`. `verified` is the same verdict on every surface: `spec_complete_task`,
+`spec_status` (each task), `spec_impact` (each task's `evidence`), doctor, `spec_finish` and the roadmap. A task with
+no runnable `_Verify:_` and nothing recorded for it is outside the run gate: it comes back `verified: true` with
+`nothingToVerify: true` (and no reason code) — nothing was run or attested, so `dev-spec done` prints no
+"(verified)" and `spec_impact` shows "nothing to verify". Give it a note (`{summary}`) to record how it was checked.
 
 | Code | Meaning | What to do |
 |---|---|---|

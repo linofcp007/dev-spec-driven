@@ -12,6 +12,9 @@ Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
 
 - **archive** — move `.specs/<slug>/` to `.specs/_archive/<slug>/`, out of the active roadmap. Its roadmap entry
   and the `dependsOn` references it prunes are recorded in its `.state.json` (`archived`). **Prefer this** over remove.
+  The result names the features that depended on it (`dependentsPruned`); when the archived feature wasn't complete
+  it also carries `incompleteDependency: true` and a warning `note` — those features now read as unblocked, so tell
+  the user and offer `restore` or re-declaring the dependency with `spec_depend`.
 - **restore** — move `.specs/_archive/<slug>/` back and put back its roadmap entry and the `dependsOn` references
   archive pruned — only for features that still exist (and never one that would now close a cycle); the rest are
   listed in `skipped`. An error when an active feature already has that slug or nothing is archived under the name.

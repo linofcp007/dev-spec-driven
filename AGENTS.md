@@ -105,8 +105,10 @@ next, `dev-spec next-action <feature>` names the single next step.
   keeps the task unverified until a later passing run; evidence goes stale when the spec behind the
   task changes (`impact --reopen`) or its `_Verify:_` command is edited. `done --json` (MCP
   `spec_complete_task`) returns a stable reason code in `unverifiedReason` (`no-evidence`, `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`); `doctor` and `finish` list
-  each unverified task with a localized reason; `ROADMAP.md` shows how many each feature has.
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`) whenever `verified` is false;
+  `doctor` and `finish` list each unverified task with a localized reason; `ROADMAP.md` shows how many each
+  feature has. A task with no runnable `_Verify:_` and nothing recorded comes back `verified: true` with
+  `nothingToVerify: true` — the same verdict doctor gives; a note records how it was checked.
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders

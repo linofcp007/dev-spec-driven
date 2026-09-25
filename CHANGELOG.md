@@ -22,8 +22,12 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   doctor and `spec_finish` list each unverified task with a localized reason, and ROADMAP.md counts them
   per feature. A `.state.json` whose evidence/approvals aren't objects is refused
   before tasks.md is touched. A task with no runnable `_Verify:_` stays outside the run gate: a v1.12 bare
-  `{exitCode: 0}` there still verifies (legacy evidence never leaves a task worse off than none), a later
-  note becomes its summary, and the "no evidence" note never claims a `_Verify:_` command it doesn't have.
+  `{exitCode: 0}` there still verifies (legacy evidence never leaves a task worse off than none) and a later
+  note becomes its summary. `verified` is one verdict on every surface (`spec_complete_task`, `spec_status`,
+  `spec_impact`, doctor, `spec_finish`, ROADMAP.md): `spec_complete_task` answered `verified: false` with no
+  `unverifiedReason` for a task with no runnable `_Verify:_` and nothing recorded while doctor and finish passed
+  it — it is now verified with `nothingToVerify: true`, `unverifiedReason` is present whenever `verified` is
+  false, `done` prints no "(verified)" for it and `spec_impact` says "nothing to verify".
 - **Placeholder and approve gates.** An untouched scaffold passed `doctor` with `readyToAdvance: true`,
   and `spec_approve` stamped anything. Doctor has a `placeholders` check (fail for the current and earlier
   phases, warn for later ones), the approval runs that phase's checks and refuses while any fails, and
@@ -82,7 +86,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   template criterion linted clean (new `placeholder` code). A stray unclosed `<!--` above the criteria hid every AC
   from the EARS linter (0 criteria, verdict pass — so the requirements approval passed a criterion with no modal verb)
   while trace_check counted them all; a marker that never closes is now plain text there and in placeholder
-  detection, as it already was for tasks. `clarify` finds IF…THEN per criterion, keeps
+  detection, as it already was for tasks. Every fence-aware reader shares one CommonMark closer rule: a closing
+  fence carries no info string and is at least as long as its opener — a `js`-tagged fence line inside an open
+  block used to close it, so the rest of requirements.md read inverted and its ACs vanished from EARS and
+  trace_check. `clarify` finds IF…THEN per criterion, keeps
   real line numbers after multi-line comments and groups placeholder questions. The classifier negates
   across filler words ("sem uso de IA") while PT "no uso do LLM" stays em+o. Every template AC now has a
   task and a test row, so a fresh scaffold traces clean once filled. `spec_create` on an existing feature adding
@@ -211,7 +218,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   slug — archived features' archive records (restore used to drop the edge as "no longer exists") and
   `_Supersedes:_` markers in other features' requirements.md, active and archived (the auto-refreshed SPECS.md
   un-struck the replaced ACs); the result lists what it rewrote. Doctor warns (`supersedes`) on a `_Supersedes:_`
-  reference that resolves to nothing.
+  reference that resolves to nothing. Archive names the features whose dependency it pruned (`dependentsPruned`,
+  printed by the CLI) and warns (`incompleteDependency`) when the archived feature wasn't complete — the roadmap
+  used to turn a blocked feature into a ready one without a word.
 - **Guard mode** (`spec_init {guard}`, `dev-spec init --guard on|off`, `/spec-guard`): an opt-in
   PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
   while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
@@ -224,7 +233,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   files still holding template placeholders.
 - **Deeper traceability**: `trace_check` warns about edge cases, NFRs and success criteria nothing covers
   (never the verdict); `trace --code` finds T-IDs in test names (`test("T-01 …")`, `def test_T01_…`,
-  `TestT01…`) and doctor warns when a test made green by a done task isn't in any test file.
+  `TestT01…`) and doctor warns when a test made green by a done task isn't in any test file. A plan row whose
+  File column names only a non-code artifact (`load-test.md`, `evals/golden.json`, a `.feature`) is a check run
+  outside test code — listed in `plannedOutsideCode`, never expected in a test file — so the scaffold's own load
+  and eval rows no longer leave a permanent tests-in-code warning (doctor, finish) once their task is done.
 - **Test plans** gain a **Kind** column (`example` | `property`) with property-based testing guidance in
   `references/test-patterns.md`.
 - **Brownfield depth**: `spec_scan` lists HTTP routes with method, path and `file:line` across the common
@@ -276,8 +288,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 693 assertions (was 181), `node cli/test-cli.js` 232 (was 53); the tool count is
-  asserted exactly again (29).
+- `node mcp/test.js` 699 assertions (was 181), `node cli/test-cli.js` 235 (was 53); the tool count is
+  asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
+  list of 23 names had gone stale).
 
 ## [1.12.1]
 
