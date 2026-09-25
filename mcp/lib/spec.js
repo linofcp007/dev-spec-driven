@@ -1420,7 +1420,9 @@ function traceCheck(projectDir, name) {
   if (!f.ok) return { ok: false, error: f.error };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
-  const reqs = stripHtmlComments(readIfExists(path.join(dir, "requirements.md")) || "");
+  // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace).
+  const reqsRaw = readIfExists(path.join(dir, "requirements.md")) || "";
+  const reqs = stripSupersedes(stripHtmlComments(reqsRaw));
   const tasks = stripHtmlComments(readIfExists(path.join(dir, "tasks.md")) || "");
   const testPlan = stripHtmlComments(readIfExists(path.join(dir, "test-plan.md")) || "");
   const tracks = detectTracks(dir);
@@ -1501,6 +1503,7 @@ function traceCheck(projectDir, name) {
     (result.uncoveredByTests ? result.uncoveredByTests.length : 0) +
     (result.phantomTestsInTasks ? result.phantomTestsInTasks.length : 0);
   result.verdict = gaps === 0 ? "pass" : "gaps-found";
+  Object.assign(result, supersedesTrace(projectDir, dir, reqsRaw)); // informational: never a gap, never the verdict
   return result;
 }
 
@@ -1951,10 +1954,11 @@ function acIndex(reqText) {
     const m = b.text.match(RE_DEFINES_AC);
     if (m && !map.has(m[1])) map.set(m[1], entry(m[1], b));
   }
-  for (const b of blocks) for (const id of extractAcIds(b.text)) if (!map.has(id)) map.set(id, entry(id, b));
+  // A `_Supersedes: other/US-1.AC-2_` reference is another feature's AC, not one of this feature's.
+  for (const b of blocks) for (const id of extractAcIds(stripSupersedes(b.text))) if (!map.has(id)) map.set(id, entry(id, b));
   stripHtmlComments(reqText || "").split(/\r?\n/).forEach((l, i) => {
     if (!/^\s*\|/.test(l)) return;
-    for (const id of extractAcIds(l)) if (!map.has(id)) map.set(id, { id, text: l.trim(), line: i + 1 });
+    for (const id of extractAcIds(stripSupersedes(l))) if (!map.has(id)) map.set(id, { id, text: l.trim(), line: i + 1 });
   });
   return map;
 }
@@ -2292,6 +2296,8 @@ function finishFeature(projectDir, name, opts = {}) {
     fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
   }
   const ready = blockers.length === 0;
+  // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
+  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText) : null;
   const res = {
     ok: true,
     feature: slug,
@@ -2310,6 +2316,7 @@ function finishFeature(projectDir, name, opts = {}) {
     paths: { summary: summaryPath },
     wrote: write,
   };
+  if (baseline) res.baseline = baseline;
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
@@ -2327,7 +2334,10 @@ function statePath(dir) {
 function readState(projectDir, name) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { approvals: {} };
-  const file = statePath(f.dir);
+  return stateFromFile(projectDir, statePath(f.dir));
+}
+// The same read + shape check for a state file at a known path (an archived feature's .state.json too).
+function stateFromFile(projectDir, file) {
   const j = readJson(file);
   if (j.error) return { approvals: {}, invalid: i18n.msg(projectLang(projectDir)).err.invalidJson(j.errorRel, j.errorDetail) };
   // Valid JSON of the wrong shape is refused like unparseable JSON — an `approvals` ARRAY silently dropped
@@ -2429,11 +2439,17 @@ function archiveFeature(projectDir, name) {
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // restore needs what the prune below removes: it is recorded in the feature's own .state.json (a broken one is
+  // refused like in every mutator — never rewritten).
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
   const archRoot = path.join(root, "_archive");
   ensureDir(archRoot);
   const dest = path.join(archRoot, slug);
   if (fs.existsSync(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) };
+  const record = { at: new Date().toISOString(), ...archiveRecord(readRoadmap(projectDir), slug) };
   fs.renameSync(dir, dest);
+  writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
   maybeRefreshRoadmap(projectDir);
   return { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug) };
@@ -2498,6 +2514,8 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       return archiveFeature(projectDir, name);
     case "rename":
       return renameFeature(projectDir, name, arg);
+    case "restore":
+      return restoreFeature(projectDir, name);
     default:
       return { ok: false, error: errs(projectDir).badAction };
   }
@@ -4231,6 +4249,7 @@ function maybeRefreshRoadmap(projectDir) {
     if (!fs.existsSync(root)) return;
     writeRoadmapMd(projectDir);
     if (fs.existsSync(path.join(root, "ROADMAP.html"))) writeRoadmapHtml(projectDir);
+    maybeRefreshCatalog(projectDir); // .specs/SPECS.md — only once it exists (and is generated)
   } catch {
     /* best-effort */
   }
@@ -4261,6 +4280,423 @@ function roadmapReport(projectDir, opts = {}) {
     rm.errors = errors;
   }
   return rm;
+}
+
+// ---------------------------------------------------------------------------
+// Living catalog (.specs/SPECS.md) · _Supersedes:_ · restore · drift since finish
+// ---------------------------------------------------------------------------
+
+const isDirSafe = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+
+// Every feature folder, active first, then archived (.specs/_archive/<slug>/) — the same addressability rule as
+// listFeatures, without its per-feature phase work (the SessionStart drift check runs on this). → [{ slug, dir, archived }]
+function featureDirs(projectDir) {
+  const root = specsRoot(projectDir);
+  const dirsIn = (base) => {
+    try {
+      return fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
+    } catch {
+      return [];
+    }
+  };
+  const archRoot = path.join(root, "_archive");
+  return dirsIn(root).map((n) => ({ slug: n, dir: path.join(root, n), archived: false }))
+    .concat(dirsIn(archRoot).map((n) => ({ slug: n, dir: path.join(archRoot, n), archived: true })));
+}
+
+// The existing folders a name reaches — active and/or archived (current or pre-1.11 slug). → [{ slug, dir, archived }]
+function locateFeatures(projectDir, name) {
+  const root = specsRoot(projectDir);
+  const slugs = [...new Set([slugify(name), legacySlugify(name)])].filter((s) => s && !RESERVED_SLUGS.has(s));
+  const out = [];
+  for (const [base, archived] of [[root, false], [path.join(root, "_archive"), true]]) {
+    const s = slugs.find((x) => isFeatureFolder(x, base) && isDirSafe(path.join(base, x)));
+    if (s) out.push({ slug: s, dir: path.join(base, s), archived });
+  }
+  return out;
+}
+
+// `_Supersedes: <feature>/US-n.AC-m[, …]_` — English-stable, on a criterion of requirements.md (its line or a sub-line):
+// that criterion replaces an AC of an earlier feature, active or archived. Read like the task markers: HTML comments
+// and fenced code never count, the value runs to the LAST underscore before whitespace/end and is kept whole
+// (then split on , / ;). The referenced ID is ANOTHER feature's — stripped before this feature's own AC IDs are read.
+const RE_SUPERSEDES_SRC = "_Supersedes:\\s*(.+?)_(?=\\s|$)";
+function stripSupersedes(text) {
+  return String(text || "").replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "");
+}
+// The AC a criterion block defines (its leading ID, else the first own ID it names), or null.
+function criterionAc(text) {
+  const m = String(text || "").match(RE_DEFINES_AC);
+  return m ? m[1] : [...extractAcIds(stripSupersedes(text))][0] || null;
+}
+// → [{ ref, feature, ac, by, line }] — `by` = the AC of the criterion carrying the marker (null outside one).
+function supersedesMarkers(reqText) {
+  const { cleaned, blocks } = criterionBlocks(reqText || "");
+  const out = [];
+  for (const c of cleaned) {
+    const re = new RegExp(RE_SUPERSEDES_SRC, "gi");
+    let m;
+    while ((m = re.exec(c.text)) !== null) {
+      const b = blocks.find((x) => c.line >= x.line && c.line <= x.endLine);
+      const by = b ? criterionAc(b.text) : null;
+      for (const ref of m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
+        const mm = ref.match(/^(.+?)\s*\/\s*(US-\d+\.AC-\d+)$/);
+        out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: c.line });
+      }
+    }
+  }
+  return out;
+}
+// Markers → { valid: [{…, feature (slug), ac, archived, dir}], phantom: [{…, reason}] }. Reasons (English-stable):
+// bad-ref (not <feature>/US-n.AC-m) · unknown-feature (no active or archived folder) · unknown-ac · self.
+// `cache` (dir → acIndex) is shared across features by the catalog.
+function resolveSupersedes(projectDir, fromDir, markers, cache) {
+  const acsOf = (t) => {
+    if (!cache.has(t.dir)) cache.set(t.dir, acIndex(readIfExists(path.join(t.dir, "requirements.md")) || ""));
+    return cache.get(t.dir);
+  };
+  const valid = [];
+  const phantom = [];
+  for (const mk of markers) {
+    const base = { ref: mk.ref, by: mk.by, line: mk.line };
+    if (!mk.feature || !mk.ac) { phantom.push({ ...base, reason: "bad-ref" }); continue; }
+    const targets = locateFeatures(projectDir, mk.feature);
+    if (!targets.length) { phantom.push({ ...base, feature: slugify(mk.feature), ac: mk.ac, reason: "unknown-feature" }); continue; }
+    const others = targets.filter((t) => path.resolve(t.dir) !== path.resolve(fromDir));
+    if (!others.length) { phantom.push({ ...base, feature: targets[0].slug, ac: mk.ac, reason: "self" }); continue; }
+    const hit = others.find((t) => acsOf(t).has(mk.ac));
+    if (!hit) { phantom.push({ ...base, feature: others[0].slug, ac: mk.ac, reason: "unknown-ac" }); continue; }
+    valid.push({ ...base, feature: hit.slug, ac: mk.ac, archived: hit.archived, dir: hit.dir });
+  }
+  return { valid, phantom };
+}
+// trace_check's part: the declared replacements and the ones that resolve to nothing — warnings, never an AC gap.
+function supersedesTrace(projectDir, dir, reqsRaw) {
+  const r = resolveSupersedes(projectDir, dir, supersedesMarkers(reqsRaw), new Map());
+  return { supersedes: r.valid.map(({ dir: _d, ...v }) => v), phantomSupersedes: r.phantom };
+}
+TRACE_INFO_FIELDS.add("supersedes").add("phantomSupersedes"); // informational, so traceGaps never lists them as gaps
+// Localized "⚠" lines for a trace_check result's phantom _Supersedes:_ references (CLI).
+function supersedesWarnings(tr, lang) {
+  const W = i18n.msg(lang).supersedes;
+  return (tr && Array.isArray(tr.phantomSupersedes) ? tr.phantomSupersedes : []).map((p) => W.phantom(p.ref, W.reason[p.reason] || p.reason, p.by));
+}
+
+// --- catalog ---
+
+const day = (iso) => String(iso || "").slice(0, 10);
+// One line of an AC for the catalog: whitespace folded, its own leading ID and the _Supersedes:_ marker dropped.
+function acOneLine(text, id) {
+  // A sub-list bullet that only carried the marker ("… owner - _Supersedes: x/US-1.AC-3_") goes with it.
+  let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?" + RE_SUPERSEDES_SRC, "gi"), " ").replace(/\s+/g, " ").trim();
+  if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
+  const esc = id.replace(/\./g, "\\.");
+  s = s.replace(new RegExp("^(?:\\*\\*|__|\\*|_)?" + esc + "(?:\\*\\*|__|\\*|_)?\\s*(?:[—–:-]\\s*)?"), "").replace(new RegExp("\\s*\\(" + esc + "\\)"), "");
+  if (s.length > 200) s = s.slice(0, 199).replace(/\s+\S*$/, "") + "…";
+  return s || id;
+}
+function catalogData(projectDir) {
+  const lang = projectLang(projectDir);
+  const cache = new Map();
+  const srcs = featureDirs(projectDir).map((s) => {
+    const tracks = detectTracks(s.dir);
+    const reqRaw = readIfExists(path.join(s.dir, "requirements.md")) || "";
+    return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
+  });
+  // Superseded ACs, keyed by the target folder + ID → the "<feature>/<AC>" that replaces them.
+  const supBy = new Map();
+  for (const s of srcs) {
+    s.sup = resolveSupersedes(projectDir, s.dir, supersedesMarkers(s.reqRaw), cache).valid;
+    for (const v of s.sup) {
+      const k = path.resolve(v.dir) + "\n" + v.ac;
+      const who = s.slug + (v.by ? "/" + v.by : "");
+      if (!supBy.has(k)) supBy.set(k, []);
+      if (!supBy.get(k).includes(who)) supBy.get(k).push(who);
+    }
+  }
+  const features = srcs.map((s) => {
+    // A removed track's [SaaS]/[AI] criteria are inactive — not what the system does.
+    const acs = [...acIndex(activeDesign(s.reqRaw, s.tracks)).values()].sort((a, b) => a.line - b.line).map((e) => {
+      const o = { id: e.id, text: acOneLine(e.text, e.id) };
+      if (placeholderReport(e.text).length) o.template = true;
+      const by = supBy.get(path.resolve(s.dir) + "\n" + e.id);
+      if (by) o.supersededBy = by;
+      const mine = s.sup.filter((v) => v.by === e.id).map((v) => v.feature + "/" + v.ac);
+      if (mine.length) o.supersedes = mine;
+      return o;
+    });
+    const fin = isObj(s.state.finished) && typeof s.state.finished.at === "string" ? s.state.finished.at : null;
+    const arch = isObj(s.state.archived) && typeof s.state.archived.at === "string" ? s.state.archived.at : null;
+    const status = s.archived ? "archived" : s.phase === "complete" ? (fin ? "finished" : "complete") : "active";
+    const f = { feature: s.slug, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
+    if (fin) f.finishedAt = fin;
+    if (arch && s.archived) f.archivedAt = arch;
+    return f;
+  });
+  const all = features.flatMap((f) => f.acs);
+  const superseded = all.filter((a) => a.supersededBy).length;
+  const totals = { features: features.length, acs: all.length, current: all.length - superseded, superseded };
+  const data = { lang, features, totals };
+  data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
+  return data;
+}
+function renderCatalogMd(data, lang, proj) {
+  const C = i18n.msg(lang).catalog;
+  const P = i18n.msg(lang).phaseNames || {};
+  const icon = { finished: "✅", complete: "☑", active: "🟡", archived: "🗄" };
+  const code = (s) => "`" + s + "`";
+  const t = data.totals;
+  let md = `# ${C.title(proj)}\n\n<!-- ${C.autogen} -->\n\n> ${C.intro}\n\n${C.totals(t.features, t.acs, t.current, t.superseded)}\n`;
+  if (!data.features.length) md += `\n_${C.noFeatures}_\n`;
+  for (const f of data.features) {
+    md += `\n## ${icon[f.status]} ${f.feature} — ${C.status[f.status]}${f.status === "active" ? ` (${P[f.phase] || f.phase})` : ""}\n\n`;
+    const meta = [f.tracks, f.finishedAt ? C.finishedOn(day(f.finishedAt)) : null, f.archivedAt ? C.archivedOn(day(f.archivedAt)) : null].filter(Boolean);
+    md += `_${meta.join(" · ")}_\n\n`;
+    if (!f.acs.length) md += `_${C.noAcs}_\n`;
+    for (const a of f.acs) {
+      const body = `**${a.id}** — ${a.text}`;
+      let line = a.supersededBy ? `- ~~${body}~~ — ${C.supersededBy(a.supersededBy.map(code).join(", "))}` : `- ${body}`;
+      if (a.supersedes) line += ` _(${C.supersedes(a.supersedes.map(code).join(", "))})_`;
+      if (a.template) line += ` _(${C.template})_`;
+      md += line + "\n";
+    }
+  }
+  return md;
+}
+// spec_catalog {write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing). Writing never
+// replaces a same-named file dev-spec didn't generate (the roadmap's guard) — the result is then an error.
+function catalog(projectDir, opts = {}) {
+  const root = specsRoot(projectDir);
+  const file = path.join(root, "SPECS.md");
+  const data = catalogData(projectDir);
+  const res = { ok: true, file, lang: data.lang, totals: data.totals, features: data.features, wrote: false };
+  if (opts.write) {
+    const E = i18n.msg(data.lang).err;
+    if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
+    if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: E.notGenerated("SPECS.md") };
+    writeFileAtomic(file, data.markdown);
+    res.wrote = true;
+  } else res.markdown = data.markdown;
+  return res;
+}
+// Keep SPECS.md current after a mutation — only once it exists and carries the marker. Best-effort.
+function maybeRefreshCatalog(projectDir) {
+  try {
+    const file = path.join(specsRoot(projectDir), "SPECS.md");
+    if (!fs.existsSync(file) || !isGeneratedOrAbsent(file)) return;
+    writeFileAtomic(file, catalogData(projectDir).markdown);
+  } catch {
+    /* best-effort */
+  }
+}
+
+// --- archive record → restore ---
+
+// What archiving `slug` prunes from roadmap.json: its own entry and the dependsOn lists that name it (whole, so restore
+// can put the name back where it was).
+function archiveRecord(rm, slug) {
+  const feats = rm.features || {};
+  return {
+    entry: isObj(feats[slug]) ? JSON.parse(JSON.stringify(feats[slug])) : null,
+    dependents: Object.keys(feats).filter((k) => k !== slug && Array.isArray(feats[k].dependsOn) && feats[k].dependsOn.includes(slug))
+      .map((k) => ({ feature: k, dependsOn: feats[k].dependsOn.slice() })),
+  };
+}
+// `slug` back into a dependsOn list: after the dep that preceded it at archive time (if still there), else at its old index.
+function reinsertDep(current, slug, original) {
+  const idx = original.indexOf(slug);
+  const prev = original.slice(0, Math.max(0, idx)).reverse().find((d) => current.includes(d));
+  const at = prev != null ? current.indexOf(prev) + 1 : idx < 0 ? current.length : Math.min(idx, current.length);
+  return [...current.slice(0, at), slug, ...current.slice(at)];
+}
+function restoreFeature(projectDir, name) {
+  const f = resolveFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const archRoot = path.join(f.root, "_archive");
+  const R0 = i18n.msg(projectLang(projectDir)).restore;
+  const slug = [slugify(name), legacySlugify(name)].find((s) => s && isFeatureFolder(s, archRoot) && isDirSafe(path.join(archRoot, s)));
+  if (!slug) return { ok: false, error: R0.notArchived(f.slug) };
+  const from = path.join(archRoot, slug);
+  const to = path.join(f.root, slug);
+  if (fs.existsSync(to)) return { ok: false, error: R0.activeExists(slug) };
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
+  const st = stateFromFile(projectDir, statePath(from));
+  if (st.invalid) return { ok: false, error: st.invalid };
+  const R = i18n.msg(normalizeLang(st.lang || projectLang(projectDir))).restore;
+  fs.renameSync(from, to);
+
+  const rec = isObj(st.archived) ? st.archived : null;
+  const restored = { entry: false, dependsOn: [], dependents: [] };
+  const skipped = [];
+  if (rec) {
+    const rm = readRoadmap(projectDir);
+    // Only references to features that still exist come back (by their folder, as at archive time).
+    const exists = (k) => typeof k === "string" && k !== slug && isFeatureFolder(k, f.root) && isDirSafe(path.join(f.root, k));
+    if (isObj(rec.entry) && !rm.features[slug]) {
+      const entry = JSON.parse(JSON.stringify(rec.entry));
+      if (Array.isArray(entry.dependsOn)) {
+        entry.dependsOn = entry.dependsOn.filter((d) => exists(d) || (skipped.push({ feature: String(d), kind: "dependsOn", reason: "gone" }), false));
+        restored.dependsOn = entry.dependsOn.slice();
+      }
+      rm.features[slug] = entry;
+      restored.entry = true;
+    }
+    for (const dep of Array.isArray(rec.dependents) ? rec.dependents : []) {
+      if (!isObj(dep) || typeof dep.feature !== "string") continue;
+      const k = dep.feature;
+      if (!exists(k)) { skipped.push({ feature: k, kind: "dependent", reason: "gone" }); continue; }
+      const cur = rm.features[k] && Array.isArray(rm.features[k].dependsOn) ? rm.features[k].dependsOn : [];
+      if (cur.includes(slug)) continue;
+      const next = reinsertDep(cur, slug, Array.isArray(dep.dependsOn) ? dep.dependsOn.filter((d) => typeof d === "string") : [slug]);
+      // A dependency declared since the archive may make the old edge circular: that one stays out (reported).
+      const map = Object.create(null);
+      for (const [key, v] of Object.entries(rm.features)) map[key] = (v.dependsOn || []).slice();
+      map[k] = next;
+      if (findCycle(map)) { skipped.push({ feature: k, kind: "dependent", reason: "cycle" }); continue; }
+      rm.features[k] = { ...(rm.features[k] || {}), dependsOn: next };
+      restored.dependents.push(k);
+    }
+    writeRoadmap(projectDir, rm);
+    delete st.archived;
+    writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
+  }
+  const fromBacklog = pruneBacklog(projectDir, slug); // the feature has a folder again, like createFeature
+  maybeRefreshRoadmap(projectDir);
+  const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
+  if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
+  const notes = [rec ? null : R.noRecord,
+    skipped.length ? R.skipped(skipped.map((s) => (s.kind === "dependsOn" ? R.skipDependsOn : R.skipDependent)(s.feature, R.reason[s.reason] || s.reason)).join("; ")) : null].filter(Boolean);
+  if (notes.length) res.note = notes.join(" ");
+  return res;
+}
+
+// --- drift since finish ---
+
+// Content hash of a file, CRLF-normalized on the raw bytes (latin1 is byte-preserving), or null (missing / not a file).
+function fileHash(abs) {
+  try {
+    if (!fs.statSync(abs).isFile()) return null;
+    return require("crypto").createHash("sha1").update(fs.readFileSync(abs).toString("latin1").replace(/\r\n/g, "\n"), "latin1").digest("hex");
+  } catch {
+    return null;
+  }
+}
+// A project-relative path → its absolute path, or null when it leaves the project (by path or through a symlink).
+function projectFile(root, rootReal, rel) {
+  if (typeof rel !== "string" || !rel.trim() || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return null;
+  const abs = path.resolve(root, rel);
+  if (abs === root || !isInsideDir(root, abs)) return null;
+  try {
+    return isInsideDir(rootReal, fs.realpathSync.native(abs)) ? abs : null;
+  } catch {
+    return abs; // missing: judged by its path alone
+  }
+}
+const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catch { return root; } };
+// The files a feature's _Implements:_ markers name, project-relative with forward slashes: a file (existing or not) or
+// every file under a folder — only inside the project, at most BASELINE_CAP. (A glob never reaches a ready finish:
+// trace_check reads it as a missing file.)
+const BASELINE_CAP = 500;
+function baselineFiles(projectDir, tasksText) {
+  const root = path.resolve(projectDir);
+  const rootReal = realRootOf(root);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const out = new Map(); // fold(rel) → rel
+  let truncated = false;
+  const add = (rel) => {
+    if (out.has(fold(rel))) return;
+    if (out.size >= BASELINE_CAP) { truncated = true; return; }
+    if (projectFile(root, rootReal, rel)) out.set(fold(rel), rel);
+  };
+  for (const ref of implementsRefs(tasksText)) {
+    const p = implementsPath(ref).replace(/^\.\//, "");
+    if (!p || /[*?]/.test(p)) continue;
+    const abs = path.resolve(root, p);
+    if (abs === root || !isInsideDir(root, abs)) continue;
+    if (isDirSafe(abs)) walkProject(abs, BASELINE_CAP + 1, (_r, full) => add(toPosix(path.relative(root, full))));
+    else add(toPosix(path.relative(root, abs)));
+  }
+  return { files: [...out.values()], truncated };
+}
+// state.finished = { at, files: { '<rel>': sha1 | null } } — latest finish wins.
+function recordFinishBaseline(projectDir, slug, dir, tasksText) {
+  const st = readState(projectDir, slug);
+  if (st.invalid) return { recorded: false, error: st.invalid };
+  const root = path.resolve(projectDir);
+  const { files, truncated } = baselineFiles(root, tasksText);
+  const map = {};
+  for (const rel of files) map[rel] = fileHash(path.resolve(root, rel));
+  const at = new Date().toISOString();
+  st.finished = { at, files: map };
+  if (truncated) st.finished.truncated = true;
+  writeFileAtomic(statePath(dir), JSON.stringify(st, null, 2));
+  maybeRefreshCatalog(projectDir); // the feature now reads as finished
+  const res = { recorded: true, at, files: files.length, missing: files.filter((r) => map[r] === null).length };
+  if (truncated) res.truncated = true;
+  return res;
+}
+// spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
+// present since the finish baseline. Only the recorded files are hashed. opts.maxFiles / opts.maxBytes bound the work
+// (SessionStart): over budget, nothing is hashed and the result says `skipped`.
+function drift(projectDir, name, opts = {}) {
+  const root = path.resolve(projectDir);
+  const named = name != null && String(name).trim() !== "";
+  let sources;
+  if (named) {
+    const f = resolveFeature(projectDir, name);
+    if (!f.ok) return { ok: false, error: f.error };
+    sources = locateFeatures(projectDir, name);
+    if (!sources.length) return { ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
+  } else sources = featureDirs(projectDir);
+  const withBase = [];
+  const unbaselined = [];
+  const errors = [];
+  let lang = projectLang(projectDir);
+  for (const s of sources) {
+    const st = stateFromFile(projectDir, statePath(s.dir));
+    if (named && typeof st.lang === "string") lang = normalizeLang(st.lang);
+    if (st.invalid) { errors.push({ feature: s.slug, error: st.invalid }); continue; }
+    if (!isObj(st.finished) || !isObj(st.finished.files)) { unbaselined.push(s.slug); continue; }
+    withBase.push({ s, fin: st.finished });
+  }
+  const res = { ok: true, lang, features: [], drifted: [], unbaselined, verdict: "clean" };
+  if (errors.length) res.errors = errors;
+  const recorded = withBase.reduce((n, x) => n + Object.keys(x.fin.files).length, 0);
+  const rootReal = realRootOf(root);
+  const over = () => {
+    if (opts.maxFiles != null && recorded > opts.maxFiles) return true;
+    if (opts.maxBytes == null) return false;
+    let bytes = 0;
+    for (const { fin } of withBase) for (const rel of Object.keys(fin.files)) {
+      const abs = projectFile(root, rootReal, rel);
+      try { if (abs) bytes += fs.statSync(abs).size; } catch { /* missing */ }
+      if (bytes > opts.maxBytes) return true;
+    }
+    return false;
+  };
+  if (over()) return { ...res, skipped: true, recordedFiles: recorded, verdict: "skipped" };
+  for (const { s, fin } of withBase) {
+    const changed = [], missing = [], nowPresent = [], ignored = [];
+    let unchanged = 0;
+    for (const [rel, was] of Object.entries(fin.files)) {
+      const abs = projectFile(root, rootReal, rel);
+      if (!abs || (was !== null && typeof was !== "string")) { ignored.push(rel); continue; }
+      const now = fileHash(abs);
+      if (was === null) { if (now === null) unchanged++; else nowPresent.push(rel); }
+      else if (now === null) missing.push(rel);
+      else if (now !== was) changed.push(rel);
+      else unchanged++;
+    }
+    const d = { feature: s.slug, archived: s.archived, finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length,
+      unchanged, changed, missing, nowPresent, drifted: changed.length + missing.length + nowPresent.length > 0 };
+    if (ignored.length) d.ignored = ignored;
+    res.features.push(d);
+    if (d.drifted) res.drifted.push(s.slug);
+  }
+  if (res.drifted.length) res.verdict = "drift";
+  if (!res.features.length) res.note = i18n.msg(lang).drift.none;
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -5796,6 +6232,12 @@ module.exports = {
   // @wp WP9 <<<
 
   // @wp WP10 exports >>>
+  catalog, // spec_catalog / `dev-spec catalog` (.specs/SPECS.md)
+  maybeRefreshCatalog,
+  supersedesMarkers,
+  supersedesWarnings,
+  restoreFeature, // spec_feature restore / `dev-spec feature restore`
+  drift, // spec_drift / `dev-spec drift` / SessionStart
   // @wp WP10 <<<
 
   // @wp WP11 exports >>>

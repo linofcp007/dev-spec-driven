@@ -34,7 +34,9 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai (additive); --remove turns one off
- *   feature <action> <name> [new]      remove (needs --yes) | archive | rename a feature
+ *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
+ *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
+ *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
@@ -270,6 +272,7 @@ function main() {
         console.log(T.traceHead(r.feature, T.word(r.verdict), r.totalAcs, r.coveredByTasks));
         // Every gap kind the engine reports, with its IDs — never "gaps-found" with nothing listed.
         spec.traceGapLines(r, lang).forEach((l) => console.log("  " + l));
+        spec.supersedesWarnings(r, lang).forEach((l) => console.log("  ⚠ " + l)); // warnings, not gaps (exit code unchanged)
       });
     }
 
@@ -315,6 +318,8 @@ function main() {
         r.blockers.forEach((b) => console.log("  ✗ " + b));
         console.log("\n" + r.checks.map((c) => "  [ ] " + c).join("\n"));
         if (r.wrote) console.log(T.mergeSummaryAt(r.paths.summary));
+        if (r.baseline && r.baseline.recorded) console.log(spec.msg(spec.featureLang(projectDir, r.feature)).drift.baselineRecorded(r.baseline.files, r.baseline.missing));
+        else if (r.baseline && r.baseline.error) console.error("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten
         if (r.mergeSummary != null) console.log("\n# " + r.mergeTitle + "\n\n" + r.mergeSummary);
       });
     }
@@ -545,8 +550,8 @@ function main() {
     }
 
     case "feature": {
-      // dev-spec feature <remove|archive|rename> <name> [new-name] — remove needs --yes (= spec_feature confirm:true)
-      if (!pos[0] || !pos[1]) die("usage: dev-spec feature <remove|archive|rename> <name> [new-name] [--yes]");
+      // dev-spec feature <remove|archive|rename|restore> <name> [new-name] — remove needs --yes (= spec_feature confirm:true)
+      if (!pos[0] || !pos[1]) die("usage: dev-spec feature <remove|archive|rename|restore> <name> [new-name] [--yes]");
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
       const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: flags.yes === true || flags.yes === "true" });
       if (!r.ok && r.needsConfirm) {
@@ -561,6 +566,11 @@ function main() {
       return out(r, (r) => {
         if (r.action === "rename") console.log(T.renamed(r.from, r.to));
         else if (r.action === "archive") console.log(T.archived(r.feature, String(r.dest).replace(/\\/g, "/")));
+        else if (r.action === "restore") {
+          const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language
+          console.log(RT.done(r.feature));
+          if (r.note) console.log("  ⚠ " + r.note);
+        }
         else console.log(T.removed(r.feature));
       });
     }
@@ -672,6 +682,41 @@ function main() {
     // @wp WP9 <<<
 
     // @wp WP10 commands >>>
+    case "catalog": {
+      // dev-spec catalog [--write] — the living .specs/SPECS.md (= spec_catalog {write}). Without --write the markdown is
+      // printed; a hand-written SPECS.md (no AUTO-GENERATED marker) is never overwritten → exit 1.
+      const r = spec.catalog(projectDir, { write: !!flags.write });
+      if (r.ok === false) process.exitCode = 1;
+      if (!flags.json && r.error) console.error("dev-spec: " + r.error);
+      const C = spec.msg(r.lang).catalog;
+      return out(r, (r) => {
+        if (r.wrote) console.log(C.cliWrote(r.file, r.totals.features, r.totals.acs, r.totals.superseded));
+        else if (r.markdown != null) process.stdout.write(r.markdown);
+      });
+    }
+
+    case "drift": {
+      // dev-spec drift [feature] — implementing files changed / missing / now present since spec_finish recorded the
+      // baseline (= spec_drift {name}); exit 1 when any finished feature drifted (scriptable, like trace).
+      const r = spec.drift(projectDir, pos[0]);
+      if (!r.ok) die(r.error);
+      if (r.drifted.length) process.exitCode = 1;
+      const D = spec.msg(r.lang).drift;
+      const day = (iso) => String(iso || "").slice(0, 10);
+      return out(r, (r) => {
+        if (!r.features.length) console.log(D.none);
+        for (const f of r.features) {
+          const n = f.changed.length + f.missing.length + f.nowPresent.length;
+          if (!f.drifted) { console.log(D.clean(f.feature, f.files, day(f.finishedAt), f.archived)); continue; }
+          console.log(D.drifted(f.feature, n, f.files, day(f.finishedAt), f.archived));
+          if (f.changed.length) console.log(D.changed(f.changed.join(", ")));
+          if (f.missing.length) console.log(D.missing(f.missing.join(", ")));
+          if (f.nowPresent.length) console.log(D.nowPresent(f.nowPresent.join(", ")));
+        }
+        if (r.unbaselined.length) console.log(D.unbaselined(r.unbaselined.join(", ")));
+        (r.errors || []).forEach((e) => console.error("dev-spec: " + e.error));
+      });
+    }
     // @wp WP10 <<<
 
     // @wp WP11 commands >>>
@@ -725,7 +770,10 @@ function helpText() {
                                   --force records it anyway (flagged as forced, with the failing checks)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
-  feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes)
+  feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
+                                  restore brings an archived feature back with its roadmap entry and dependencies)
+  catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
+  drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift)
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)

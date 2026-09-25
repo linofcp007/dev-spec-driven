@@ -187,8 +187,8 @@ const TOOLS = [
   {
     name: "spec_feature",
     description:
-      "Manage a feature's lifecycle: remove (delete its `.specs/<slug>/` folder), archive (move it to `.specs/_archive/<slug>/`, out of the active roadmap), or rename (slug + folder + roadmap.json key, with all dependsOn references updated). All actions keep roadmap.json dependencies consistent and regenerate the roadmap. 'remove' is destructive and needs `confirm: true` - without it nothing is deleted and the result (an error with needsConfirm) lists what would be; prefer 'archive'.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, confirm: { type: "boolean", description: "Must be true for action 'remove' (deletion is permanent). Ignored by archive/rename." }, projectDir: { type: "string" } }, required: ["action", "name"] },
+      "Manage a feature's lifecycle: remove (delete its `.specs/<slug>/` folder), archive (move it to `.specs/_archive/<slug>/`, out of the active roadmap — its roadmap.json entry and the dependsOn references it prunes are recorded in its .state.json `archived`), restore (move `.specs/_archive/<slug>/` back to `.specs/<slug>/` and put back its roadmap.json entry and the dependsOn references archive pruned — only for features that still exist, the rest are listed in `skipped`; an error if an active feature has that slug or nothing is archived under that name), or rename (slug + folder + roadmap.json key, with all dependsOn references updated). All actions keep roadmap.json dependencies consistent and regenerate the roadmap (and .specs/SPECS.md when it exists). 'remove' is destructive and needs `confirm: true` - without it nothing is deleted and the result (an error with needsConfirm) lists what would be; prefer 'archive' (reversible with 'restore').",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, confirm: { type: "boolean", description: "Must be true for action 'remove' (deletion is permanent). Ignored by archive/rename/restore." }, projectDir: { type: "string" } }, required: ["action", "name"] },
   },
 
   // @wp WP5 tools >>>
@@ -254,6 +254,18 @@ const TOOLS = [
   // @wp WP9 <<<
 
   // @wp WP10 tools >>>
+  {
+    name: "spec_catalog",
+    description:
+      "Living catalog — 'what the system does today': every feature (active; complete/finished; archived under .specs/_archive) with its status and every AC ID with a one-line EARS text, grouped by feature. A criterion replaced by a later feature is shown as superseded, naming the ID that replaces it: the newer criterion declares it with the English-stable marker `_Supersedes: <feature>/US-n.AC-m[, …]_` (same line or a sub-line; trace_check reports references that resolve to nothing as `phantomSupersedes` warnings). With `write: true` it (re)writes `.specs/SPECS.md` — chrome in the project language, carrying the AUTO-GENERATED marker; a hand-written SPECS.md (no marker) is never overwritten (the result is then an error). Without `write` it returns the structure plus the markdown. Once SPECS.md exists, every mutator that refreshes the roadmap refreshes it too.",
+    inputSchema: { type: "object", properties: { write: { type: "boolean", description: "(Re)write .specs/SPECS.md (never over a hand-written one)." }, projectDir: { type: "string" } } },
+  },
+  {
+    name: "spec_drift",
+    description:
+      "Drift since finish: spec_finish {write: true} on a ready feature records a baseline — a CRLF-normalized sha1 of every file its `_Implements:_` markers name (a folder expands to its files; only files inside the project). spec_drift compares each finished feature's recorded files with the working tree and reports, per feature, the files changed, missing, or now present (missing at finish) since that baseline. `name` checks one feature (active or archived); features without a baseline are listed apart (`unbaselined`), not an error. Read-only; hashes only the recorded files (never walks the tree).",
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "One feature (active or archived). Omit for every feature." }, projectDir: { type: "string" } } },
+  },
   // @wp WP10 <<<
 
   // @wp WP11 tools >>>
@@ -342,6 +354,10 @@ function runTool(name, args) {
     // @wp WP9 <<<
 
     // @wp WP10 dispatch >>>
+    case "spec_catalog": // a refused write (hand-written SPECS.md, no .specs/) is an error — same call as the CLI's `catalog`
+      return spec.catalog(pdir, { write: args.write === true });
+    case "spec_drift":
+      return spec.drift(pdir, args.name);
     // @wp WP10 <<<
 
     // @wp WP11 dispatch >>>
