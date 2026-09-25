@@ -2136,6 +2136,15 @@ function endRun() {
     const hk2 = hookReq(path.join(f1h.dir, "requirements.md"));
     ok(/Template placeholders: 1 left in requirements\.md \(L4 \[1-2 sentences: what this does and why …\)/.test(hk1) && !/all clean/.test(hk1) && /all clean ✓/.test(hk2),
       "PostToolUse on requirements.md: a placeholder outside any criterion still stops 'all clean' (count + line, localized); clean once filled");
+    // The hook's EARS severity label is the one `dev-spec ears` prints in the spec's language (PT 'aviso' / ES 'error').
+    const hkL = ["pt", "es"].map((l) => {
+      const d = path.join(tmp, "proj-wp5-hook-" + l);
+      const f = S.createFeature(d, "Gancho " + l, ["core"], undefined, undefined, l);
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), "## Critérios de Aceitação\n1. **US-1.AC-1** — " + (l === "pt" ? "QUANDO x O SISTEMA DEVE responder.\n2. QUANDO y O SISTEMA DEVE responder de forma rápida e adequada.\n" : "CUANDO x EL SISTEMA DEBE responder.\n2. CUANDO y EL SISTEMA DEBE responder de forma rápida y adecuada.\n"));
+      return hookReq(path.join(f.dir, "requirements.md"));
+    });
+    ok(hkL.every((h) => /\[aviso\]/.test(h) && !/\[warn\]/.test(h)),
+      "PostToolUse on a PT/ES requirements.md: the EARS severity is localized ([aviso]) like `dev-spec ears`, never [warn] (got " + JSON.stringify(hkL) + ")");
     // A stray, never-closed "<!--" above the criteria: the requirements approve gate still sees (and refuses) the broken
     // AC below it, and a placeholder below it is still a placeholder — EARS used to see 0 criteria and pass.
     const f1u = S.createFeature(w5, "Unclosed gate", ["core"]);

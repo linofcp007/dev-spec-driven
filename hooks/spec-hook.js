@@ -162,7 +162,9 @@ function handle(raw) {
         const G = spec.msg(lang).gates;
         const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
         if (!errs.length && !warns.length) return emit("PostToolUse", phLine || h.earsClean(r.summary.criteriaDetected));
-        const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${i.severity}] ${i.msg}`);
+        // The severity label `dev-spec ears` prints (cliOutput.words: aviso / erro · aviso / error); EN keeps warn / error.
+        const words = (spec.msg(lang).cliOutput && spec.msg(lang).cliOutput.words) || {};
+        const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${words[i.severity] || i.severity}] ${i.msg}`);
         return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : ""));
       }
 
