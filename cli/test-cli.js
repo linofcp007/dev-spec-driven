@@ -762,6 +762,20 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
     "trace (PT feature): warnings and the tests-in-code summary in Portuguese (T-01 matches by number, whichever feature wrote the test)");
   ok(/usage: dev-spec trace <feature> \[--code\]/.test(run(["trace", "--project", w9]).out) && /trace <feature> \[--code\]/.test(run(["help"]).out) &&
     /trace <feature> \[--code\]/.test(fs.readFileSync(CLI, "utf8").split("*/")[0]), "usage, help and the docblock show trace --code");
+  // Review round: the feature's own .specs/<f>/tests/ is scanned; test_t2_… is not a T-ID; a concrete File cell scopes the
+  // match (tests/session.test.js's T-01 — Deep's test — no longer passes Clock's T-01).
+  run(["create", "Clock", "tdd", "--project", w9]);
+  put9(".specs/clock/requirements.md", "# Feature: Clock\n\n## User Stories\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the clock ticks THE SYSTEM SHALL advance it.\n");
+  put9(".specs/clock/tasks.md", "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Tick\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01, T-02_\n");
+  put9(".specs/clock/test-plan.md", "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | ticks | US-1.AC-1 | `tests/unit/clock.test.js` |\n| T-02 | unit | example | order | US-1.AC-1 | `tests/clock/` |\n");
+  put9(".specs/clock/tests/unit/clock.test.js", "test(\"T-01 ticks\", () => {});\n");
+  put9("tests/test_clock.py", "def test_t2_is_after_t1():\n    pass\n");
+  let ck9 = null;
+  try { ck9 = JSON.parse(run(["trace", "clock", "--code", "--json", "--project", w9]).out); } catch { /* invalid JSON */ }
+  const ckd9 = run(["doctor", "clock", "--project", w9]);
+  ok(ck9 && ck9.code.testsInCode["T-01"].join() === ".specs/clock/tests/unit/clock.test.js" && ck9.code.plannedNotInCode.join() === "T-02" && !ck9.code.inCodeNotInPlan.includes("T-2") &&
+    /▲ tests-in-code — made green by done tasks, but no test file names them: T-02 — [^\n]*File column/.test(ckd9.out),
+    "trace --code reads .specs/clock/tests/, scopes T-01 to its File cell and ignores test_t2_…; doctor warns about T-02 only (got " + JSON.stringify(ck9 && ck9.code) + ")");
 }
 // @wp WP9 <<<
 

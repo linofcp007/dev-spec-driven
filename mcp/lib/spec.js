@@ -1510,8 +1510,8 @@ function traceCheck(projectDir, name, opts = {}) {
 
   // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
   // requirements.md and, with opts.code, the T-IDs of the project's test code.
-  Object.assign(result, traceSecondary(dir, rawReqs, blocks, rawPlan));
-  if (opts.code) result.code = traceTestCode(projectDir, testPlan, requiredAcs, opts.scan);
+  Object.assign(result, traceSecondary(dir, rawReqs, blocks, rawPlan, tracks));
+  if (opts.code) result.code = traceTestCode(projectDir, dir, testPlan, requiredAcs, opts.scan);
   result.warnings = traceWarnings(result);
   return result;
 }
@@ -1595,11 +1595,12 @@ function secondaryDefinitions(reqText) {
 }
 // EC / NFR are covered by a task (its text or any sub-line, _Requirements:_ included) or a test-plan row (a T-ID's row);
 // SC by a test-plan row or a real (non-template) line of quickstart.md. phantomSecondary = IDs the tasks / test plan
-// cite that requirements.md never writes.
-function traceSecondary(dir, reqText, blocks, planText) {
+// cite that requirements.md never writes. The test plan counts only while +tdd is active: after add_track --remove tdd
+// it is an inactive artifact and must not silence (or raise) anything — the rest of traceCheck reads it only under tdd.
+function traceSecondary(dir, reqText, blocks, planText, tracks) {
   const { defined, all } = secondaryDefinitions(reqText);
   const inTasks = secondaryIds(blocks.map((b) => [b.text, ...b.body].join("\n")).join("\n"));
-  const inPlan = secondaryIds([...testIndex(planText).values()].map((r) => r.row).join("\n"));
+  const inPlan = tracks.includes("tdd") ? secondaryIds(testPlanEntries(planText).map((e) => e.text).join("\n")) : new Map();
   const inQuickstart = secondaryIds(realLines(readIfExists(path.join(dir, "quickstart.md")) || "", RE_SECONDARY_ID_LINE).join("\n"));
   const out = { uncoveredEdgeCases: [], uncoveredNfr: [], uncoveredSuccessCriteria: [], phantomSecondary: [] };
   for (const [k, id] of defined) {
@@ -1613,18 +1614,72 @@ function traceSecondary(dir, reqText, blocks, planText) {
   return out;
 }
 
+// Every test-plan entry that belongs to a T-ID — ALL of them, not testIndex's first row per ID (a T-ID may have a row in
+// the matrix and another in a "non-functional checks" table): each table row whose FIRST cell holds a T-ID, with its
+// cells and its table's header cells, and each list item that starts with a T-ID, with its continuation lines (sub-bullets
+// indented under it, a lazy continuation before any blank line). → [{ ids: [T-ID …], text, cells, header }]
+const tableCells = (line) => line.trim().replace(/^\|/, "").replace(/\|\s*$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
+function testPlanEntries(planText) {
+  const out = [];
+  let header = null;
+  let sep = false;
+  let inTable = false;
+  let item = null; // the list entry being continued: { indent, blank, entry }
+  const tidLead = (line) => RE_LIST_ITEM.test(line) && line.replace(RE_LIST_ITEM, "").replace(/^[\s*`_]+/, "").match(/^T-\d+(?!\d)/);
+  for (const line of stripHtmlComments(planText || "").split(/\r?\n/)) {
+    if (item) {
+      const indent = line.match(/^\s*/)[0].length;
+      if (!line.trim()) { item.blank = true; continue; }
+      const block = RE_LIST_ITEM.test(line) || /^\s*(?:#|\||>|[-*_]{3,}\s*$)/.test(line);
+      if (!tidLead(line) && (indent > item.indent || (!item.blank && !block))) { item.entry.text += "\n" + line.trim(); continue; }
+      item = null;
+    }
+    if (/^\s*\|/.test(line)) {
+      if (!inTable) { inTable = true; header = tableCells(line); sep = false; continue; }
+      if (!sep && /^\s*\|[\s:|-]+$/.test(line.trim())) { sep = true; continue; }
+      const cells = tableCells(line);
+      const ids = [...extractTestIds(cells[0] || "")];
+      if (ids.length) out.push({ ids, text: line.trim(), cells, header });
+      continue;
+    }
+    inTable = false;
+    const m = tidLead(line);
+    if (m) {
+      const entry = { ids: [m[0]], text: line.trim(), cells: null, header: null };
+      out.push(entry);
+      item = { indent: line.match(/^\s*/)[0].length, blank: false, entry };
+    }
+  }
+  return out;
+}
+
 // T-IDs as test code writes them: "T-01" anywhere (a test title, DisplayName, a comment), test_T01 / testT01 / TestT01
-// (pytest, JUnit, Go) and a leading T01_ method name (C# / Java). A bare "T1" is not one — generic type parameters
-// (Func<T1, T2>) would read as tests. Group 1/2/3 = the number as written.
-const RE_CODE_TID = /(?<![A-Za-z0-9])T-(\d+)|(?<![A-Za-z0-9])[Tt]est_?[Tt](\d+)(?![0-9])|(?<![A-Za-z0-9_])T(\d{2,})_(?=[A-Za-z])/g;
+// (pytest, JUnit, Go) and a leading T01_ method name (C# / Java). Without the hyphen the T is UPPERCASE and the number
+// zero-padded (two digits or more) as the templates write it: a bare "T1" collides with generic type parameters
+// (Func<T1, T2>), and test_t2_is_after_t1 / test_t0_is_epoch are pytest names about time variables, not tests T-2 / T-0.
+// Group 1/2/3 = the number as written.
+const RE_CODE_TID = /(?<![A-Za-z0-9])T-(\d+)|(?<![A-Za-z0-9])[Tt]est_?T(\d{2,})(?![0-9])|(?<![A-Za-z0-9_])T(\d{2,})_(?=[A-Za-z])/g;
 const CODE_TRACE_CAP = 5000; // files walked
 const CODE_TRACE_READ_CAP = 1500; // test files read
 const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still counts)
+// Test code in languages scan/coverage don't count as code (CODE_EXT), with their own test-name conventions: F# / Scala /
+// Groovy (FsCheck, ScalaTest, Spock: CodecTests.fs, CodecSpec.scala), Elixir and Dart (codec_test.exs / codec_test.dart).
+const TEST_EXTRA_EXT = new Set([".fs", ".fsx", ".scala", ".groovy", ".exs", ".dart"]);
+const RE_TEST_NAME_EXTRA = /(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|_test\.(?:exs|dart)$/;
+const isTestCodePath = (rel) => isTestFile(rel) || RE_TEST_NAME_EXTRA.test(rel.split("/").pop());
 const tKey = (num) => "T-" + parseInt(num, 10);
+// The feature folders under .specs/ (live, then archived — their tests may still be in the tree).
+function specFeatureDirs(projectDir) {
+  const root = specsRoot(projectDir);
+  return safeReaddir(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !RESERVED_SLUGS.has(n.toLowerCase())).map((n) => path.join(root, n))
+    .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
+}
 // One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
 // files (isTestFile: test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs …),
-// collecting the T-IDs and AC IDs they name. Project-level (not per feature), so doctor / finish reuse it.
-// → { tids: Map(key → { id, files }), acs: Map(acId → files), scanned, truncated }
+// collecting the T-IDs and AC IDs they name — plus each feature's own .specs/<feature>/tests/ (the folder +tdd and bugfix
+// scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
+// feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
+// → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), scanned, truncated }
 function scanTestCode(projectDir) {
   const root = path.resolve(projectDir);
   const tids = new Map();
@@ -1636,8 +1691,9 @@ function scanTestCode(projectDir) {
     const e = map.get(key);
     if (!e.files.includes(rel)) e.files.push(rel);
   };
-  const walk = walkProject(root, CODE_TRACE_CAP, (rel, full, name) => {
-    if (!CODE_EXT.has(path.extname(name).toLowerCase()) || !isTestFile(rel)) return;
+  const onFile = (rel, full, name) => {
+    const ext = path.extname(name).toLowerCase();
+    if (!(CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext)) || !isTestCodePath(rel)) return;
     if (scanned >= CODE_TRACE_READ_CAP) { readCapped = true; return; }
     let txt;
     try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
@@ -1647,40 +1703,95 @@ function scanTestCode(projectDir) {
       note(tids, tKey(num), "T-" + num, rel);
     }
     for (const id of extractAcIds(txt)) note(acs, id, id, rel);
-  });
-  return { tids, acs, scanned, truncated: walk.truncated || readCapped };
+  };
+  const walk = walkProject(root, CODE_TRACE_CAP, onFile);
+  let left = CODE_TRACE_CAP - walk.total;
+  let truncated = walk.truncated;
+  for (const d of specFeatureDirs(projectDir)) {
+    if (left <= 0) break;
+    const tdir = path.join(d, "tests");
+    try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
+    const w = walkProject(tdir, left, (rel, full, name) => onFile(toPosix(path.relative(root, full)), full, name));
+    left -= w.total;
+    truncated = truncated || w.truncated;
+  }
+  return { tids, acs, scanned, truncated: truncated || readCapped };
 }
 // Every T-ID any feature's test plan lists (archived features too — their tests may still be in the tree), by key.
 function allPlannedTestKeys(projectDir) {
-  const root = specsRoot(projectDir);
   const keys = new Set();
-  const dirs = safeReaddir(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !RESERVED_SLUGS.has(n.toLowerCase())).map((n) => path.join(root, n))
-    .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
-  for (const d of dirs) {
+  for (const d of specFeatureDirs(projectDir)) {
     const plan = readIfExists(path.join(d, "test-plan.md"));
     if (plan != null) for (const id of extractTestIds(stripHtmlComments(plan))) keys.add(tKey(id.slice(2)));
   }
   return keys;
 }
-// trace_check {code: true}: this feature's plan against the test code.
-//   testsInCode       { T-ID: [test files …] } — every T-ID found, keyed by this plan's spelling when it plans that number
-//   plannedNotInCode  this plan's T-IDs that no test file names
+// A test-plan table's File column (EN / PT / ES header synonyms, optional "Test" prefix or "(…)" note).
+const RE_FILE_COLUMN = /^(?:test\s+)?(?:files?|paths?|ficheiros?|arquivos?|caminhos?|archivos?|ficheros?|rutas?)(?:\s*\(.*\))?$/i;
+// Is `rel` the path `p` or under the folder `p`? Forward-slash project-relative paths; case-folded where the FS is.
+function pathUnder(rel, p) {
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const r = fold(rel);
+  const q = fold(p).replace(/\/+$/, "");
+  return q !== "" && (r === q || r.startsWith(q + "/"));
+}
+// key(T-ID) → [test paths] its plan rows' File column names — only CONCRETE test paths (a test file or a folder under a
+// test dir: `tests/unit/login.test.ts`, `tests/auth/`); a template slot (`[path]`, `tests/unit/...`), a non-test artifact
+// (`load-test.md`, `evals/golden.json`) or a missing column scopes nothing. `::test_x`, `#L3` and `:12` suffixes are cut.
+function planFileScopes(planText) {
+  const scopes = new Map();
+  for (const e of testPlanEntries(planText)) {
+    if (!e.cells || !e.header) continue;
+    const col = e.header.findIndex((h) => RE_FILE_COLUMN.test(h.replace(/[*_`]/g, "").trim()));
+    if (col < 0 || col >= e.cells.length) continue;
+    const cell = e.cells[col];
+    const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+    const paths = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
+      .map((t) => t.replace(/\\/g, "/").replace(/::.*$/, "").replace(/#.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/^(?:\.\/)+/, "").replace(/^\/+/, ""))
+      .filter((t) => t && !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t) && isTestCodePath(t));
+    if (!paths.length) continue;
+    for (const id of e.ids) {
+      const k = tKey(id.slice(2));
+      scopes.set(k, [...new Set([...(scopes.get(k) || []), ...paths])]);
+    }
+  }
+  return scopes;
+}
+// trace_check {code: true}: this feature's plan against the test code. T-IDs restart at T-01 in every plan, so a file
+// counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/; and a planned T-ID whose plan row's File
+// column names a concrete test path counts only in that file / under that folder (relative to the project root or to
+// the feature folder) — otherwise another feature's test with the same number would pass it. Without a File path the
+// match is by number across the project.
+//   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
+//   plannedNotInCode  this plan's T-IDs that no counting test file names
 //   inCodeNotInPlan   T-IDs in test code that NO feature's test plan lists (another feature's T-01 is not this one's gap)
-//   acsInTests        this feature's AC IDs that test code names
+//   acsInTests        this feature's AC IDs that test code names (another feature's .specs tests excluded)
 //   planned           how many T-IDs this plan lists
 //   scanned / truncated  test files read · the walk or the read hit its cap
-function traceTestCode(projectDir, planText, requiredAcs, scan) {
+function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   const s = scan || scanTestCode(projectDir);
+  const root = path.resolve(projectDir);
+  const own = toPosix(path.relative(root, dir));
+  const specsRel = toPosix(path.relative(root, specsRoot(projectDir)));
+  const mine = (rel) => !pathUnder(rel, specsRel) || pathUnder(rel, own);
   const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
+  const scopes = planFileScopes(planText);
+  const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathUnder(rel, p) || pathUnder(rel, own + "/" + p));
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
-  for (const [k, e] of s.tids) testsInCode[planned.get(k) || e.id] = e.files.slice(0, CODE_TRACE_FILES_PER_ID);
+  const found = new Set();
+  for (const [k, e] of s.tids) {
+    const files = e.files.filter((rel) => mine(rel) && (!planned.has(k) || inScope(k, rel)));
+    if (!files.length) continue;
+    found.add(k);
+    testsInCode[planned.get(k) || e.id] = files.slice(0, CODE_TRACE_FILES_PER_ID);
+  }
   return {
     planned: planned.size,
     testsInCode,
-    plannedNotInCode: [...planned].filter(([k]) => !s.tids.has(k)).map(([, id]) => id),
-    inCodeNotInPlan: [...s.tids].filter(([k]) => !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
-    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id)),
+    plannedNotInCode: [...planned].filter(([k]) => !found.has(k)).map(([, id]) => id),
+    inCodeNotInPlan: [...s.tids].filter(([k]) => found.has(k) && !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
+    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(mine)),
     scanned: s.scanned,
     truncated: s.truncated,
   };

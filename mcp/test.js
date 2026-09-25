@@ -2733,7 +2733,7 @@ function payload(res) {
     // The scan is bounded and never enters .specs/, node_modules/ or hidden folders.
     const sc9 = S.scanTestCode(c9);
     ok(sc9.scanned === 7 && !sc9.truncated && ![...sc9.tids.values()].some((e) => e.files.some((f) => /node_modules|\.specs|src\/app\.js/.test(f))),
-      "scanTestCode reads only test files (node_modules/, .specs/ and source files skipped)");
+      "scanTestCode reads only test files (node_modules/, .specs/ outside a feature's tests/ folder and source files skipped)");
     // +tdd removed: its test plan is inactive — no tests-in-code check and no planned-not-in-code finish warning.
     const u9 = S.createFeature(c9, "Untested", ["tdd"]);
     w9f(u9.dir, "tasks.md", "# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-11_\n");
@@ -2742,6 +2742,119 @@ function payload(res) {
     S.addTrack(c9, "untested", "tdd", { remove: true });
     ok(u9Before && !S.specDoctor(c9, "untested").checks.some((c) => c.id === "tests-in-code") && !S.finishFeature(c9, "untested").warnings.some((w) => /^planned tests/.test(w)),
       "after add_track --remove tdd the inactive test plan raises no tests-in-code check and no planned-not-in-code finish warning");
+
+    // --- review round: one small project per finding ---
+    const fx9 = (n) => { const p = path.join(tmp, "proj-wp9-" + n); S.initProject(p, ["tdd"]); return p; };
+    const REQ9 = "# Feature: X\n\n## User Stories\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL reject it.\n";
+    const TPH9 = "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n";
+    const DONE9 = (tids) => `# Tasks\n\n## Phase: Build\n- [x] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Makes green: ${tids}_\n`;
+
+    // Without the hyphen a T-ID needs an UPPERCASE T and a zero-padded number: test_t2_is_after_t1 / test_t0_is_epoch are
+    // pytest names about time variables — they used to pass T-02's tests-in-code check and report a phantom T-0.
+    const k9 = fx9("clock");
+    const kf9 = S.createFeature(k9, "Clock", ["tdd"]);
+    w9f(kf9.dir, "requirements.md", REQ9);
+    w9f(kf9.dir, "tasks.md", DONE9("T-02"));
+    w9f(kf9.dir, "test-plan.md", TPH9 + "| T-02 | unit | example | x | US-1.AC-1 | `x` |\n");
+    w9f(k9, "tests/test_clock.py", "def test_t2_is_after_t1():\n    assert t2 > t1\n\ndef test_t0_is_epoch():\n    pass\n\ndef testT2(x):\n    pass\n");
+    const kc9 = S.traceCheck(k9, "clock", { code: true }).code;
+    const kd9 = S.specDoctor(k9, "clock").checks.find((c) => c.id === "tests-in-code");
+    ok(JSON.stringify(kc9.testsInCode) === "{}" && kc9.plannedNotInCode.join() === "T-02" && kc9.inCodeNotInPlan.length === 0 && kd9 && kd9.status === "warn" && /: T-02 — /.test(kd9.detail),
+      "test_t2_… / test_t0_… / testT2 are not T-IDs: T-02 stays planned-not-in-code (doctor warns), no phantom T-0 (got " + JSON.stringify(kc9) + ")");
+    w9f(k9, "tests/test_clock.py", "def test_T02_rejects_a_stale_clock():\n    pass\n");
+    ok(S.traceCheck(k9, "clock", { code: true }).code.testsInCode["T-02"].join() === "tests/test_clock.py", "the documented test_T02_ form still names T-02");
+
+    // Test files in F# / Scala / Groovy / Elixir / Dart are read (by name: CodecTests.fs, CodecSpec.scala, codec_test.exs …).
+    const g9 = fx9("langs");
+    const gf9 = S.createFeature(g9, "Codec", ["tdd"]);
+    w9f(gf9.dir, "requirements.md", REQ9);
+    w9f(gf9.dir, "test-plan.md", TPH9 + ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `| ${t} | unit | property | round trip | US-1.AC-1 | \`x\` |`).join("\n") + "\n");
+    w9f(g9, "src/CodecTests.fs", "[<Property(DisplayName = \"T-01 round trip\")>]\nlet ``T-01 round trip`` (s: string) = decode (encode s) = s\n");
+    w9f(g9, "modules/codec/CodecSpec.scala", "class CodecSpec extends AnyFlatSpec { \"T-02 round trip\" should \"hold\" in {} }\n");
+    w9f(g9, "lib/codec_test.exs", "test \"T-03 round trip\" do\nend\n");
+    w9f(g9, "pkg/codec_test.dart", "test('T-04 round trip', () {});\n");
+    w9f(g9, "src/CodecSpec.groovy", "def \"T-05 round trip\"() { expect: true }\n");
+    w9f(g9, "src/shader.fs", "// T-06 a fragment shader, not a test\n");
+    const gc9 = S.traceCheck(g9, "codec", { code: true }).code;
+    ok(gc9.plannedNotInCode.length === 0 && gc9.scanned === 5 && gc9.testsInCode["T-01"].join() === "src/CodecTests.fs" && gc9.testsInCode["T-02"].join() === "modules/codec/CodecSpec.scala" &&
+      gc9.testsInCode["T-03"].join() === "lib/codec_test.exs" && gc9.testsInCode["T-04"].join() === "pkg/codec_test.dart" && gc9.testsInCode["T-05"].join() === "src/CodecSpec.groovy" && !gc9.testsInCode["T-06"],
+      "F# / Scala / Elixir / Dart / Groovy test files are scanned; a non-test .fs file is not (got " + JSON.stringify(gc9) + ")");
+
+    // +tdd removed: the inactive test plan no longer covers (or cites) EC / NFR / SC — only tasks and quickstart.md do.
+    const o9 = fx9("offtdd");
+    const of9b = S.createFeature(o9, "Probe", ["tdd"]);
+    w9f(of9b.dir, "requirements.md", REQ9 + "\n## Edge Cases\n- **EC-1** — a clock skew of 5 s is tolerated.\n\n## Success Criteria\n- **SC-001** — 99% of refreshes succeed.\n");
+    w9f(of9b.dir, "tasks.md", "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] Reject\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+    w9f(of9b.dir, "test-plan.md", TPH9 + "| T-01 | unit | example | x | US-1.AC-1, EC-1, SC-001, NFR-9 | `x` |\n");
+    const ob9 = S.traceCheck(o9, "probe");
+    S.addTrack(o9, "probe", "tdd", { remove: true });
+    const oa9 = S.traceCheck(o9, "probe");
+    ok(kinds9(ob9) === "phantomSecondary=NFR-9" && oa9.tracks === "core" && kinds9(oa9) === "uncoveredEdgeCases=EC-1 uncoveredSuccessCriteria=SC-001",
+      "after add_track --remove tdd the inactive plan's rows neither cover EC-1 / SC-001 nor cite a phantom NFR-9 (got " + kinds9(oa9) + ")");
+
+    // The feature's own .specs/<f>/tests/ (scaffolded by +tdd) is scanned; another feature's never counts; the rest of the
+    // feature folder stays unread.
+    const s9 = fx9("specs-tests");
+    const sl9 = S.createFeature(s9, "Login", ["tdd"]);
+    const sb9 = S.createFeature(s9, "Beta", ["tdd"]);
+    for (const f of [sl9, sb9]) {
+      w9f(f.dir, "requirements.md", REQ9);
+      w9f(f.dir, "tasks.md", DONE9("T-01, T-02, T-03"));
+      w9f(f.dir, "test-plan.md", "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-1 |\n| T-03 | US-1.AC-1 |\n");
+    }
+    w9f(sl9.dir, "tests/unit/login.test.js", "test(\"T-01 valid login (US-1.AC-1)\", () => {});\ntest(\"T-02 wrong password\", () => {});\ntest(\"T-03 latency\", () => {});\n");
+    w9f(sl9.dir, "notes.test.js", "test(\"T-99 not under tests/\", () => {});\n");
+    const slc9 = S.traceCheck(s9, "login", { code: true }).code;
+    const sbc9 = S.traceCheck(s9, "beta", { code: true }).code;
+    const sld9 = S.specDoctor(s9, "login").checks.find((c) => c.id === "tests-in-code");
+    const sbd9 = S.specDoctor(s9, "beta").checks.find((c) => c.id === "tests-in-code");
+    ok(slc9.plannedNotInCode.length === 0 && slc9.testsInCode["T-01"].join() === ".specs/login/tests/unit/login.test.js" && slc9.acsInTests.join() === "US-1.AC-1" &&
+      slc9.scanned === 1 && !slc9.testsInCode["T-99"] && sld9.status === "pass" && !S.finishFeature(s9, "login").warnings.some((w) => /^planned tests/.test(w)),
+      "tests in .specs/login/tests/ count for Login (doctor passes, finish has no planned-not-in-code warning); .specs/login/notes.test.js is not read (got " + JSON.stringify(slc9) + ")");
+    ok(sbc9.plannedNotInCode.join() === "T-01,T-02,T-03" && JSON.stringify(sbc9.testsInCode) === "{}" && sbc9.acsInTests.length === 0 && sbd9.status === "warn",
+      "Login's .specs tests never satisfy Beta's T-01..T-03 nor its AC (another feature's scaffolded test folder is theirs)");
+
+    // A secondary ID covered on ANY row of the T-ID: a list item's sub-bullets / lazy continuation, or a second table.
+    const r9 = fx9("plan-rows");
+    const rf9 = S.createFeature(r9, "Adv", ["tdd"]);
+    w9f(rf9.dir, "requirements.md", REQ9 + "2. **US-1.AC-2** — WHEN a key rotates THE SYSTEM SHALL keep old tokens for 60 s.\n\n## Success Criteria\n- **SC-001** — 99% of logins succeed.\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 latency ≤ 300 ms.\n\n## Edge Cases\n- **EC-1** — a clock skew of 5 s is tolerated.\n");
+    w9f(rf9.dir, "tasks.md", "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] Build\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n");
+    w9f(rf9.dir, "test-plan.md", "# Test Plan\n\n- **T-01** — valid login\n  - Covers: US-1.AC-1, SC-001\n- **T-02** — latency, covers US-1.AC-2\nand the skew window EC-1\n\n  - Covers: NFR-1\n\nProse about NFR-9 is not a test row.\n");
+    const rl9 = S.traceCheck(r9, "adv");
+    w9f(rf9.dir, "test-plan.md", "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2, EC-1 |\n\n## Non-functional checks\n\n| Test ID | Check | Covers |\n|---|---|---|\n| T-02 | p95 | NFR-1, SC-001 |\n");
+    const rt9 = S.traceCheck(r9, "adv");
+    ok(rl9.verdict === "pass" && rl9.warnings.length === 0 && rt9.verdict === "pass" && rt9.warnings.length === 0,
+      "EC/NFR/SC on a list item's sub-bullet / lazy continuation, or on a T-ID's row in a second table, are covered; prose isn't a row (got " + kinds9(rl9) + " | " + kinds9(rt9) + ")");
+
+    // A concrete File cell scopes the T-ID to that file / folder (project- or feature-relative): another feature's T-01
+    // test no longer passes it. A template slot or a non-test artifact falls back to the project-wide number match.
+    const f9 = fx9("scoped");
+    S.createFeature(f9, "Alpha", ["tdd"]);
+    const fb9 = S.createFeature(f9, "Beta", ["tdd"]);
+    w9f(fb9.dir, "requirements.md", REQ9);
+    w9f(fb9.dir, "tasks.md", DONE9("T-01, T-02, T-03, T-04, T-05"));
+    w9f(fb9.dir, "test-plan.md", TPH9 + "| T-01 | unit | example | x | US-1.AC-1 | `tests/beta.test.js` |\n| T-02 | unit | example | x | US-1.AC-1 | `tests/unit/...` |\n" +
+      "| T-03 | unit | example | x | US-1.AC-1 | `tests/beta/` |\n| T-04 | unit | example | x | US-1.AC-1 | `tests/unit/beta.test.js::test_T04` |\n| T-05 | load | example | x | US-1.AC-1 | `load-test.md` |\n");
+    w9f(f9, "tests/alpha.test.js", ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} alpha", () => {});`).join("\n") + "\n");
+    const fc9 = S.traceCheck(f9, "beta", { code: true }).code;
+    const fd9 = S.specDoctor(f9, "beta").checks.find((c) => c.id === "tests-in-code");
+    ok(fc9.plannedNotInCode.join() === "T-01,T-03,T-04" && !fc9.testsInCode["T-01"] && fc9.testsInCode["T-02"].join() === "tests/alpha.test.js" && fc9.testsInCode["T-05"].join() === "tests/alpha.test.js" &&
+      fd9.status === "warn" && /: T-01, T-03, T-04 — put the T-ID in the test name .*File column/.test(fd9.detail),
+      "Alpha's tests don't satisfy Beta's T-01 / T-03 / T-04 (concrete File cells); T-02 (template slot) and T-05 (load-test.md) match by number (got " + JSON.stringify(fc9) + ")");
+    w9f(f9, "tests/beta.test.js", "test(\"T-01 beta\", () => {});\n");
+    w9f(f9, "tests/beta/rotate.test.js", "test(\"T-03 beta\", () => {});\n");
+    w9f(fb9.dir, "tests/unit/beta.test.js", "test(\"T-04 beta\", () => {});\n");
+    const fc9b = S.traceCheck(f9, "beta", { code: true }).code;
+    ok(fc9b.plannedNotInCode.length === 0 && fc9b.testsInCode["T-01"].join() === "tests/beta.test.js" && fc9b.testsInCode["T-03"].join() === "tests/beta/rotate.test.js" &&
+      fc9b.testsInCode["T-04"].join() === ".specs/beta/tests/unit/beta.test.js" && S.specDoctor(f9, "beta").checks.find((c) => c.id === "tests-in-code").status === "pass",
+      "the named file, a file under the named folder and the feature-relative path (with a ::test suffix) satisfy the scoped T-IDs; doctor passes");
+    const fp9 = S.createFeature(f9, "Pagamentos", ["tdd"], undefined, undefined, "pt");
+    w9f(fp9.dir, "test-plan.md", "| Test ID | Camada | Tipo | Descrição | Cobre (AC IDs) | Ficheiro |\n|---|---|---|---|---|---|\n| T-01 | unit | example | x | US-1.AC-1 | `tests/pagamentos.test.js` |\n");
+    const fpc9 = S.traceCheck(f9, "pagamentos", { code: true }).code;
+    ok(fpc9.plannedNotInCode.join() === "T-01" && JSON.stringify(fpc9.testsInCode).indexOf("T-01") === -1 &&
+      /no ficheiro que a coluna Ficheiro do plano indica/.test(S.msg("pt").deepTrace.testsInCodeMissing("T-01")),
+      "PT: a concrete Ficheiro cell scopes T-01 too (Alpha's / Beta's T-01 tests don't satisfy it); the PT advice names the Ficheiro column");
   }
   // @wp WP9 <<<
 

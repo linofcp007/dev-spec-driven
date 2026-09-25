@@ -93,15 +93,25 @@ Put the test plan's T-ID at the start of each test's name. `trace_check {code: t
 | C# (xUnit, NUnit, FsCheck) | `[Fact(DisplayName = "T-01 rejects an expired token")]` · `public void T01_RejectsExpiredToken()` |
 
 - `T-01` with the hyphen is found anywhere in a test file (a title, a display name, a comment). Without
-  the hyphen only the naming forms count: `test_T01…`, `testT01…`, `TestT01…` and a method that starts
-  with `T01_`. A bare `T1` is ignored — it collides with generic type parameters (`Func<T1, T2>`).
+  the hyphen only the naming forms count, with an **uppercase** `T` and the zero-padded number the
+  templates write (two digits or more): `test_T01…`, `testT01…`, `TestT01…` and a method that starts
+  with `T01_`. A bare `T1` is ignored — it collides with generic type parameters (`Func<T1, T2>`) — and
+  so is `test_t2_is_after_t1` (a pytest name about a time variable, not test T-2).
 - IDs compare by number: `T-1`, `T-01` and `test_T01` name the same planned test.
-- Only test files are read: anything under a `test/`, `tests/`, `__tests__/`, `spec/` or `e2e/` folder,
-  or named like a test (`*.test.ts`, `*.spec.js`, `test_*.py`, `*_test.go`, `*Test.java`, `*Tests.cs` …).
-  `node_modules/`, `.specs/`, build output and hidden folders are skipped, and the walk is bounded (the
-  result says `truncated` when it stopped at its cap).
-- T-IDs are per feature — every plan starts at T-01 — so a match is by number across the project, and
-  `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
+- Only test files are read: files in JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#, Ruby,
+  PHP, Swift, C/C++, Vue/Svelte, Elixir or Dart that sit under a `test/`, `tests/`, `__tests__/`,
+  `spec/` or `e2e/` folder or are named like a test (`*.test.ts`, `*.spec.js`, `test_*.py`, `*_test.go`,
+  `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs` …). `node_modules/`, build
+  output and hidden folders are skipped. `.specs/` is skipped
+  too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
+  is bounded (the result says `truncated` when it stopped at its cap).
+- T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
+  names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`, relative to the
+  project root or to the feature folder), only that file — or a file under that folder — can satisfy
+  the T-ID. While the cell is still a template slot (`[path]`, `tests/unit/...`) the match is by number
+  across the project, so another feature's `T-01` test would pass this one. A test under **another**
+  feature's `.specs/<feature>/tests/` never counts for this one.
+- `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
   (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
 
 ---
