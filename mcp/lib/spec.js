@@ -317,6 +317,9 @@ const SIGNALS = {
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
 const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin"];
 
+// Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
+const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
+
 // Phrases that negate a signal shortly AFTER the keyword ("auth is not needed", "auth não é preciso").
 const NEG_AFTER = /^\s*(\w+\s+)?(is |are |isn'?t |aren'?t |won'?t |é |são |sao |es |no )?(not (needed|required|necessary|used)|n[ãa]o (é |e )?(preciso|necess[áa]ri[ao]|usad[ao])|no (es )?necesari[ao]|no hace falta)\b/;
 
@@ -358,6 +361,12 @@ function isNegated(text, idx, kwLen, lang, cased) {
   const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
     (lang === "pt" || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
   if (!contraction && tokens.slice(-2).some((w) => negators.includes(w))) return true;
+  // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
+  // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
+  const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
+  let k = wide.length - 1;
+  while (k >= 0 && NEG_FILLER.has(wide[k])) k--;
+  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k])) return true; // only across at least one filler word
   // "<keyword> ... not needed/required" shortly after.
   const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
   return NEG_AFTER.test(after);
@@ -632,8 +641,9 @@ function tasksMd(name, tracks, lang) {
   return i18n.tasks({ name, tracks, label: trackLabel(tracks), slug: slugify(name) }, lang);
 }
 
-function testPlanMd(name, lang) {
-  return i18n.testPlan(name, lang);
+// tracks decide which template ACs the plan covers (one planned test each — the tasks template makes each green).
+function testPlanMd(name, lang, tracks) {
+  return i18n.testPlan(name, lang, tracks);
 }
 
 function evalPlanMd(name, lang) {
@@ -759,7 +769,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
   put("requirements.md", requirementsMd(name, t, summary, lng));
   put("design.md", designMd(name, t, lng));
   if (t.includes("tdd")) {
-    put("test-plan.md", testPlanMd(name, lng));
+    put("test-plan.md", testPlanMd(name, lng, t));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
@@ -890,7 +900,9 @@ function detectPhase(dir, tracks) {
   const bugfix = (readJson(statePath(dir)).data || {}).kind === "bugfix";
   const chain = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]]
     .filter(([ph, f]) => phaseActive(ph, tracks) && has(f) && !(f === "design.md" && bugfix && headingsOnly(activeDesignText())));
-  const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesignText() } : { file: path.join(dir, f) });
+  // requirements.md too: its +saas/+ai template criteria sit under [SaaS]/[AI] headings, inactive once the track is off.
+  const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesignText() }
+    : f === "requirements.md" ? { text: activeDesign(readIfExists(path.join(dir, f)) || "", tracks) } : { file: path.join(dir, f) });
   const open = chain.find(([, f]) => stateOf(f) !== "filled");
   // A scaffold whose tasks are ALL still placeholders / template track tasks hasn't been broken into tasks yet.
   // One real task wins over an unfilled chain (the task-driven model); the verbatim bugfix steps only count
@@ -1043,6 +1055,7 @@ function parallelBatch(tasksText, max, tracks) {
   return batch;
 }
 
+const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(?![\p{L}])/iu;
 function completeTask(projectDir, name, number, evidence) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -1068,6 +1081,17 @@ function completeTask(projectDir, name, number, evidence) {
   const state = readState(projectDir, f.slug);
   const bad = state.invalid; // readState refuses wrong-shape JSON (evidence/approvals/tracks/top level) — checked before any write
   if (bad) return { ok: false, error: bad };
+  // Bugfix iron law, enforced during execution: while bug.md → Root Cause is unfilled, no task positioned AFTER the
+  // one that writes it — the first task mentioning the Root Cause section (root cause / causa raiz / causa raíz) —
+  // can be completed (ticked or given evidence): no fix before the root cause is written in bug.md. Without such a
+  // task only the first task can be. Checked before anything is recorded or ticked.
+  if (state.kind === "bugfix" && !sectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
+    const rc = blocks.findIndex((b) => RE_ROOT_CAUSE_TASK.test([b.text, ...b.body].join(" ")));
+    if (blocks.indexOf(task) > Math.max(rc, 0)) {
+      const GT = i18n.msg(lng).gates;
+      return { ok: false, gated: "root-cause", error: rc === -1 ? GT.bugGateFirst(n, blocks[0].number) : GT.bugGate(n, blocks[rc].number) };
+    }
+  }
   const key = String(n);
   const failed = !!ev && ev.exitCode != null && ev.exitCode !== 0;
   const alreadyDone = task.done;
@@ -1176,7 +1200,8 @@ const RE_AC_HEADING = /acceptance criteria|crit[ée]rios de aceita[çc][ãa]o|cr
 const RE_EARS_CAPS = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "u");
 const RE_EARS_KEYWORD = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "iu");
 const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|EL SISTEMA (NO )?(DEBE|DEBER[ÁA]))/iu;
-const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+)/;
+// The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
+const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
 // Strip HTML comments (possibly multi-line) so template guidance doesn't count as real content,
 // then fold the surviving lines into criterion blocks.
@@ -1231,8 +1256,17 @@ function criterionBlocks(text) {
     }
     if (RE_BLOCK_BREAK.test(line)) return flush();
     if (RE_LIST_ITEM.test(line)) {
+      // A sub-list indented deeper than a criterion's first line continues it ("THE SYSTEM SHALL:" followed by
+      // its numbered points is ONE criterion) — when the parent reads as a criterion (a modal verb or a defined
+      // AC) and the sub-item doesn't define an AC of its own.
+      if (cur && indentOf(line) > cur.indent && !RE_LIST_DEFINES_AC.test(line.trim()) &&
+        (RE_MODAL.test(cur.parts.join(" ")) || RE_LIST_DEFINES_AC.test(cur.parts[0]))) {
+        cur.endLine = ln;
+        cur.parts.push(line.trim());
+        return;
+      }
       flush();
-      cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, parts: [line.trim()] };
+      cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, indent: indentOf(line), parts: [line.trim()] };
       return;
     }
     if (cur) {
@@ -1240,7 +1274,7 @@ function criterionBlocks(text) {
       cur.parts.push(line.trim());
       return;
     }
-    cur = { line: ln, endLine: ln, numbered: false, section, parts: [line.trim()] };
+    cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [line.trim()] };
   });
   flush();
   return { cleaned, blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, section: b.section, text: b.parts.join(" ") })) };
@@ -1256,10 +1290,11 @@ function earsFeature(projectDir, name) {
   return earsValidate(text, lng);
 }
 
-// Issues carry a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification) — callers
-// branch on it, never on the (localized) `msg`.
+// Issues carry a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification · placeholder) —
+// callers branch on it, never on the (localized) `msg`.
 function earsValidate(text, lang) {
   const M = i18n.msg(lang).ears;
+  const G = i18n.msg(lang).gates;
   if (!text || !text.trim()) return { ok: false, error: i18n.msg(lang).err.noText };
   const issues = [];
   const { cleaned, blocks } = criterionBlocks(text);
@@ -1267,6 +1302,7 @@ function earsValidate(text, lang) {
   let withShall = 0;
   let withId = 0;
   let needsClar = 0;
+  let withPlaceholder = 0;
 
   // Unresolved [NEEDS CLARIFICATION] markers can sit anywhere (heading, table, prose), not just in
   // a criterion — design is gated on these, so scan every content line.
@@ -1308,6 +1344,13 @@ function earsValidate(text, lang) {
     // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify).
     const vagueTerms = [...new Set([...b.text.matchAll(VAGUE_RE_ALL)].map((v) => v[1].toLowerCase()))];
     vagueTerms.forEach((term) => add("warn", "vague", M.vague(term)));
+    // A template criterion ("WHEN [trigger] THE SYSTEM SHALL [behavior]") is well-formed EARS but says nothing
+    // yet — never "clean" while its placeholders remain.
+    const slots = placeholderReport(b.text).map((p) => p.text);
+    if (slots.length) {
+      withPlaceholder++;
+      add("warn", "placeholder", G.earsPlaceholder(slots.slice(0, 4).join(" ") + (slots.length > 4 ? " …" : "")));
+    }
     // EARS keyword presence (EN/PT/ES)
     if (mentionsShall && !RE_EARS_KEYWORD.test(b.text) && !RE_UBIQUITOUS.test(b.text)) {
       add("info", "no-keyword", M.noKeyword);
@@ -1318,7 +1361,7 @@ function earsValidate(text, lang) {
 
   return {
     ok: true,
-    summary: { criteriaDetected: acCount, withShall, withStableId: withId, needsClarification: needsClar, issues: issues.length },
+    summary: { criteriaDetected: acCount, withShall, withStableId: withId, needsClarification: needsClar, placeholders: withPlaceholder, issues: issues.length },
     issues,
     verdict: issues.filter((x) => x.severity === "error").length === 0 ? "pass" : "fail",
   };
@@ -1376,11 +1419,25 @@ function traceCheck(projectDir, name) {
   }
   // Clamp to the project root: paths that escape it count as missing without probing arbitrary FS.
   const projRoot = path.resolve(projectDir);
-  const missingImplFiles = implFiles.filter((f) => {
+  const absent = implFiles.filter((f) => {
     const abs = path.resolve(projRoot, f);
     const inRoot = abs === projRoot || abs.startsWith(projRoot + path.sep);
     return !inRoot || !fs.existsSync(abs);
   });
+  // A file that doesn't exist YET is a gap only once a task claiming it is done: an OPEN task's _Implements:_ is
+  // the plan (next --batch needs those markers before a line is written) — reported as plannedImplFiles. A marker
+  // no open task holds (a done task's, or one outside any task) stays a gap.
+  const unq = (p) => p.trim().replace(/^`|`$/g, "");
+  const openOnly = new Set();
+  const claimed = new Set();
+  for (const b of taskBlocks(readIfExists(path.join(dir, "tasks.md")) || "")) {
+    for (const p of taskMarkers(b).implements.map(unq)) {
+      if (!b.done && !claimed.has(p)) openOnly.add(p);
+      if (b.done) { claimed.add(p); openOnly.delete(p); }
+    }
+  }
+  const plannedImplFiles = absent.filter((p) => openOnly.has(p));
+  const missingImplFiles = absent.filter((p) => !openOnly.has(p));
 
   const result = {
     ok: true,
@@ -1392,6 +1449,7 @@ function traceCheck(projectDir, name) {
     phantomAcsInTasks,
     implementsFiles: implFiles,
     missingImplFiles,
+    plannedImplFiles,
   };
 
   if (tracks.includes("tdd")) {
@@ -1422,7 +1480,7 @@ function traceCheck(projectDir, name) {
 // list them ALL — a hand-picked subset used to print "gaps-found" with nothing under it (phantom T-IDs,
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles"]); // planned = an OPEN task's file, not written yet
 const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 function traceGaps(tr) {
   const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
@@ -1961,6 +2019,13 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const planText = readIfExists(path.join(dir, "test-plan.md")) || "";
   const mk = taskMarkers(block);
   const blockText = [block.text, ...block.body].join("\n");
+  // A bugfix task carries the bug itself: bug.md's Reproduction and Root Cause (null while still unwritten).
+  let bug = null;
+  if (readState(projectDir, slug).kind === "bugfix") {
+    const bugText = readIfExists(path.join(dir, "bug.md")) || "";
+    const sec = (syn) => (sectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
+    bug = { reproduction: sec(REPRO_SYN), rootCause: sec(ROOT_CAUSE_SYN) };
+  }
 
   // Acceptance criteria and tests referenced by the task, resolved to their spec text.
   const acs = acIndex(reqText);
@@ -2023,6 +2088,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     loop,
     inlineOnly,
     stories,
+    bug,
     acceptanceCriteria,
     tests: testRows,
     evals: mk["affects evals"],
@@ -2064,6 +2130,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     paths,
     wrote: write,
   };
+  if (bug) res.bug = bug;
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   return res;
@@ -2120,11 +2187,21 @@ function finishFeature(projectDir, name, opts = {}) {
   const blocks = taskBlocks(tasksText);
   const open = blocks.filter((b) => !b.done).map((b) => b.number);
   const vs = verificationStatus(projectDir, slug, dir);
-  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail").map((c) => c.id) : [];
+  const G = i18n.msg(lng).gates;
+  // placeholders / root-cause get their own, more precise blockers below.
+  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause").map((c) => c.id) : [];
   const pendingGates = doc.pendingGates || [];
+  // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
+  // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause.
+  const changed = changedSinceApproval(dir, state.approvals || {}, tracks);
+  const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
+  const rootCauseMissing = kind === "bugfix" && !sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
   const blockers = [];
   if (failing.length) blockers.push(F.doctor(failing.join(", ")));
+  if (rootCauseMissing) blockers.push(G.finishRootCause);
+  if (leftovers.length) blockers.push(G.finishPlaceholders(placeholderSummary(leftovers, lng)));
+  if (changed.length) blockers.push(G.finishChanged(changed.join(", ")));
   if (!blocks.length) blockers.push(F.noTasks);
   if (open.length) blockers.push(F.open(open.map((n) => "#" + n).join(", ")));
   if (vs.unverified.length) blockers.push(F.unverified(unverifiedLabel(vs, lng)));
@@ -2193,6 +2270,8 @@ function finishFeature(projectDir, name, opts = {}) {
     openTasks: open,
     unverified: vs.unverified,
     pendingGates,
+    changedSinceApproval: changed,
+    placeholders: leftovers.map((r) => r.file),
     checks,
     mergeTitle,
     paths: { summary: summaryPath },
@@ -2242,24 +2321,40 @@ function artifactFingerprint(file, phase) {
   return require("crypto").createHash("sha1").update(text).digest("hex");
 }
 
-function approvePhase(projectDir, name, phase, by) {
+// An approval is a GATE, not a stamp: the checks of the phase being approved run first (approvalChecks) and a
+// failure refuses it — unless opts.force, which records it anyway with `forced: true` and the failing check ids
+// (doctor's approval-gates and the roadmap keep showing it). A phase with no artifact to sign off (eval-plan
+// without +ai, test-plan without +tdd, a missing file) is an error even with force: there is nothing to approve.
+function approvePhase(projectDir, name, phase, by, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const p = String(phase || "").toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const lng = featureLang(projectDir, f.slug);
+  const G = i18n.msg(lng).gates;
+  const gate = approvalChecks(projectDir, f.slug, f.dir, p, detectTracks(f.dir), state.kind || "feature", lng);
+  if (!gate.artifact) return { ok: false, nothingToApprove: true, error: G.approveNothing(p, f.slug, gate.file) };
+  const failing = gate.checks.map((c) => c.id);
+  if (failing.length && opts.force !== true) {
+    return { ok: false, refused: true, failing, checks: gate.checks,
+      error: G.approveRefused(p, f.slug, failing.join(", "), gate.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n")) };
+  }
   // One default for every surface (the CLI used $USER, the MCP server 'user').
   const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
   if (PHASE_FILE[p]) {
     const fp = artifactFingerprint(path.join(f.dir, PHASE_FILE[p]), p);
     if (fp) entry.fingerprint = fp;
   }
+  if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
   state.approvals[p] = entry;
   state.lastApprovedPhase = p;
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, feature: f.slug, approved: p, approvals: state.approvals };
+  const res = { ok: true, feature: f.slug, approved: p, approvals: state.approvals };
+  if (failing.length) Object.assign(res, { forced: true, failing, checks: gate.checks, note: G.approveForced(failing.join(", ")) });
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -2399,7 +2494,10 @@ function applyTracks(projectDir, f, name, trs, lng) {
 
   for (const tr of trs) {
     if (tr === "tdd") {
-      put("test-plan.md", testPlanMd(name, lng));
+      // Plan a test only for the track criteria requirements.md actually has (a track added later brings none).
+      const reqIds = extractAcIds(stripHtmlComments(readIfExists(path.join(dir, "requirements.md")) || ""));
+      const planTracks = after.filter((x) => (x !== "saas" || reqIds.has("US-1.AC-5")) && (x !== "ai" || reqIds.has("US-1.AC-7")));
+      put("test-plan.md", testPlanMd(name, lng, planTracks));
       ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
     }
     if (tr === "ai") {
@@ -2483,18 +2581,31 @@ function trackTaskHeading(tr, tasksText) {
 // read this; completing, tracing and briefing a task read the whole file.
 function activeTasks(tasksText, tracks) {
   if (tasksText == null) return tasksText;
-  const wanted = new Set(["saas", "ai"].filter((t) => !tracks.includes(t)).flatMap((t) => [...trackTaskHeadings(t)]));
-  if (!wanted.size) return tasksText;
-  const lines = tasksText.split(/\r?\n/);
+  const drop = inactiveTaskLines(tasksText, tracks);
+  return drop.size ? tasksText.split(/\r?\n/).filter((_, i) => !drop.has(i)).join("\n") : tasksText;
+}
+// 0-based indices of the lines under the headings `isOff` picks, each up to the next heading of the same or a
+// higher level. The ONE rule behind activeTasks / activeDesign — and the gates, which need the real line numbers.
+function sectionDropLines(lines, isOff) {
   const heads = headingIndex(lines);
   const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
   const drop = new Set();
   for (const h of heads) {
-    if (!wanted.has(normTaskHeading(lines[h]))) continue;
+    if (!isOff(lines[h])) continue;
     const end = heads.find((x) => x > h && level(x) <= level(h));
     for (let i = h; i < (end == null ? lines.length : end); i++) drop.add(i);
   }
-  return drop.size ? lines.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
+  return drop;
+}
+// tasks.md: the template task blocks of tracks that are off (matched by their heading, in any language).
+function inactiveTaskLines(tasksText, tracks) {
+  const wanted = new Set(["saas", "ai"].filter((t) => !tracks.includes(t)).flatMap((t) => [...trackTaskHeadings(t)]));
+  return wanted.size ? sectionDropLines(tasksText.split(/\r?\n/), (l) => wanted.has(normTaskHeading(l))) : new Set();
+}
+// design.md / requirements.md: the [SaaS] / [AI] headed sections of tracks that are off.
+function inactiveMarkerLines(md, tracks) {
+  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => TRACK_MARKER[t].toLowerCase());
+  return off.length ? sectionDropLines(md.split(/\r?\n/), (l) => off.some((m) => l.toLowerCase().includes(m))) : new Set();
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -2603,52 +2714,62 @@ function nextAction(projectDir, name) {
   const tracks = detectTracks(dir);
   const phase = detectPhase(dir, tracks);
   const doc = specDoctor(projectDir, name);
-  const approvals = (readState(projectDir, name).approvals) || {};
+  const st = readState(projectDir, name);
+  const approvals = st.approvals || {};
+  // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
+  const changed = changedSinceApproval(dir, approvals, tracks);
 
-  // An approved artifact whose content changed after ITS OWN approval needs re-review. Compared by the
-  // fingerprint recorded at approval (checkbox ticks in tasks.md don't count); approvals recorded before
-  // fingerprints existed fall back to that phase's own timestamp — never the latest approval of any phase.
-  const changedSinceApproval = [];
-  for (const [ph, file] of Object.entries(PHASE_FILE)) {
-    const a = approvals[ph];
-    const abs = path.join(dir, file);
-    if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
-    if (a.fingerprint) {
-      if (artifactFingerprint(abs, ph) !== a.fingerprint) changedSinceApproval.push(file);
-    } else if (a.at && ph !== "tasks") {
-      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) changedSinceApproval.push(file); } catch { /* ignore */ }
-    }
-  }
-
-  const nx = i18n.msg(featureLang(projectDir, name)).next;
-  const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail") : [];
-  const has = (f) => fs.existsSync(path.join(dir, f));
+  const fm = i18n.msg(featureLang(projectDir, name));
+  const nx = fm.next;
+  const G = fm.gates;
+  // The order is the spec chain's, so a brand-new feature is told to write its requirements — not to fix the
+  // checks of phases it hasn't reached ("Fix blocking checks (saas-sections, traceability)"):
+  // (1) the first chain artifact still missing / a template → fill it; (2) an artifact changed since its approval →
+  // re-review; (3) failing checks of the CURRENT phase (or an earlier one) → fix; (4) the first pending approval;
+  // (5) the next task; (6) all tasks done → spec_finish.
+  const open = chainArtifacts(dir, tracks, st.kind || "feature").map((a) => artifactReport(dir, a.file, tracks)).find((r) => r.state !== "filled");
+  const cur = PHASE_INDEX[phase] || 0;
+  const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && (CHECK_PHASE[c.id] || 0) <= cur) : [];
+  const pending = (doc.pendingGates || [])[0];
+  const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements, design: nx.approveDesign,
+    "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan, tasks: nx.approveTasks };
+  let step;
   let recommendation;
-  if (fails.length) {
+  if (open) {
+    step = "fill";
+    const first = open.items.length ? open.items[0].text : "";
+    const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
+      : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
+    recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
+  } else if (changed.length) {
+    step = "re-review";
+    recommendation = nx.reReview(changed.join(", "));
+  } else if (fails.length) {
+    step = "fix";
     recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
-  } else if (changedSinceApproval.length) {
-    recommendation = nx.reReview(changedSinceApproval.join(", "));
-  } else if (has("requirements.md") && !approvals.requirements) {
-    recommendation = nx.approveRequirements(slug);
-  } else if (has("design.md") && !approvals.design) {
-    recommendation = nx.approveDesign(slug);
-  } else if (tracks.includes("tdd") && has("test-plan.md") && !approvals["test-plan"]) {
-    recommendation = nx.approveTestPlan(slug);
-  } else if (tracks.includes("ai") && has("eval-plan.md") && !approvals["eval-plan"]) {
-    recommendation = nx.approveEvalPlan(slug);
-  } else if (has("tasks.md") && !approvals.tasks) {
-    recommendation = nx.approveTasks(slug);
+  } else if (pending && approveMsg[pending]) {
+    step = "approve";
+    recommendation = approveMsg[pending](slug);
   } else {
     const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
     const next = tasks.find((t) => !t.done);
+    step = next ? "implement" : tasks.length ? "finish" : "tasks";
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
-      : (tasks.length ? nx.allDone : nx.breakIntoTasks(slug));
+      : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
   }
 
-  return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
-    gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval, recommendation };
+  const res = { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
+    gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
+  if (open) res.file = open.file;
+  return res;
 }
+// The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
+// (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
+// one) counts as current.
+const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "root-cause": 2,
+  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, verification: 6 };
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -2869,6 +2990,205 @@ function headingsOnly(text) {
   return !stripHtmlComments(text).split(/\r?\n/).some((l) => l.trim() && !/^#{1,6}(\s|$)/.test(l.trim()));
 }
 
+// ---------------------------------------------------------------------------
+// Gates — the ONE view doctor / approve / next_action / finish / roadmap share of what a phase still lacks
+// ---------------------------------------------------------------------------
+
+// detectPhase's phases on the chain's scale: the artifact at the current position and every earlier one must be
+// real content; later ones may still be templates (tasks-ready = tasks.md is current; executing/complete = all).
+const PHASE_INDEX = { empty: 0, classified: 0, requirements: 1, design: 2, "test-plan": 3, "eval-plan": 4, tests: 5, "tasks-ready": 5, executing: 6, complete: 6 };
+
+// The planning chain in phase order (detectPhase's walk). A bugfix's bug.md takes the design slot — its Root Cause
+// replaces the design — and its design.md joins only while it holds active track sections (detectPhase's rule).
+function chainArtifacts(dir, tracks, kind) {
+  const out = [{ file: "requirements.md", phase: "requirements", idx: 1 }];
+  if (kind === "bugfix") {
+    out.push({ file: "bug.md", phase: "design", idx: 2 });
+    const d = readIfExists(path.join(dir, "design.md"));
+    if (d != null && !headingsOnly(activeDesign(d, tracks))) out.push({ file: "design.md", phase: "design", idx: 2 });
+  } else out.push({ file: "design.md", phase: "design", idx: 2 });
+  if (tracks.includes("tdd")) out.push({ file: "test-plan.md", phase: "test-plan", idx: 3 });
+  if (tracks.includes("ai")) out.push({ file: "eval-plan.md", phase: "eval-plan", idx: 4 });
+  out.push({ file: "tasks.md", phase: "tasks", idx: 5 });
+  return out;
+}
+
+// `_Verify: [manual: …]_` names a human check (not a runnable command) — not a template placeholder.
+const RE_MANUAL_VERIFY = /_Verify:\s*`?\[\s*manual\b/i;
+// An artifact as the gates judge it: its ACTIVE part (a removed track's [SaaS]/[AI] sections and task blocks are
+// inactive), with each placeholder's real line number. tasks.md also counts an open template track task left
+// verbatim (isPlaceholderTask). → { file, state: missing | placeholder | filled, items: [{ line, text }], empty }
+function artifactReport(dir, file, tracks, preloaded) {
+  const raw = preloaded !== undefined ? preloaded : readIfExists(path.join(dir, file)); // preloaded: null = missing
+  if (raw == null) return { file, state: "missing", items: [], empty: false };
+  const lines = raw.split(/\r?\n/);
+  const drop = file === "tasks.md" ? inactiveTaskLines(raw, tracks)
+    : file === "requirements.md" || file === "design.md" ? inactiveMarkerLines(raw, tracks) : new Set();
+  let items = placeholderReport(raw).filter((p) => !drop.has(p.line - 1)).map((p) => ({ line: p.line, text: p.text }));
+  if (file === "tasks.md") {
+    items = items.filter((p) => !(/^\[\s*manual\b/i.test(p.text) && RE_MANUAL_VERIFY.test(lines[p.line - 1])));
+    for (const b of taskBlocks(raw)) {
+      const desc = taskDescription(b.text);
+      if (!b.done && !drop.has(b.line) && !/^\[[^\]]*\]$/.test(desc) && templateTaskSet().has(desc)) items.push({ line: b.line + 1, text: cleanTaskText(b.text) });
+    }
+    items.sort((a, b) => a.line - b.line);
+  }
+  const empty = headingsOnly(lines.filter((_, i) => !drop.has(i)).join("\n"));
+  return { file, state: empty || items.length ? "placeholder" : "filled", items, empty };
+}
+
+// artifactReport by feature name (resolver-aware) — for the hook and the CLI. null when the feature doesn't exist.
+function featurePlaceholders(projectDir, name, file) {
+  const f = existingFeature(projectDir, name);
+  return f.ok ? artifactReport(f.dir, file, detectTracks(f.dir)) : null;
+}
+
+// "requirements.md (17): requirements.md:11 [1-2 sentences…], …, +12 more" — bounded (5 per file) for every surface.
+function placeholderSummary(reports, lang) {
+  const G = i18n.msg(lang).gates;
+  const short = (s) => (s.length > 48 ? s.slice(0, 47) + "…" : s);
+  return reports.map((r) => {
+    if (!r.items.length) return `${r.file} (${G.empty})`;
+    const shown = r.items.slice(0, 5).map((p) => `${r.file}:${p.line} ${short(p.text)}`);
+    if (r.items.length > 5) shown.push(G.more(r.items.length - 5));
+    return `${r.file} (${r.items.length}): ${shown.join(", ")}`;
+  }).join("; ");
+}
+
+// Chain artifacts still holding template placeholders, split at the current phase: `blocking` (current and earlier)
+// fail the gates, `later` are informational. blockingOnly skips reading the later ones (the roadmap refresh runs on
+// every mutation, for every feature — file reads are its cost).
+function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
+  const cur = PHASE_INDEX[phase] || 0;
+  const all = chainArtifacts(dir, tracks, kind).filter((a) => !blockingOnly || a.idx <= cur)
+    .map((a) => ({ ...artifactReport(dir, a.file, tracks, texts ? texts[a.file] : undefined), idx: a.idx })).filter((r) => r.state === "placeholder");
+  return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
+}
+
+// Approved artifacts whose content changed after THEIR OWN approval (fingerprint at approval; checkbox ticks in
+// tasks.md don't count). Approvals recorded before fingerprints existed fall back to that phase's own timestamp —
+// never the latest approval of any phase. Inactive-track phases are skipped. Shared by next_action, finish, roadmap.
+function changedSinceApproval(dir, approvals, tracks) {
+  const out = [];
+  for (const [ph, file] of Object.entries(PHASE_FILE)) {
+    const a = approvals && approvals[ph];
+    const abs = path.join(dir, file);
+    if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
+    if (a.fingerprint) {
+      if (artifactFingerprint(abs, ph) !== a.fingerprint) out.push(file);
+    } else if (a.at && ph !== "tasks") {
+      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) out.push(file); } catch { /* ignore */ }
+    }
+  }
+  return out;
+}
+
+// Success criteria / priorities count once they are REAL: the template's "Priorities: **P1** = …" legend, its
+// "US-1 (P1 — MVP): [Story Title]" and its placeholder SC-001 line must not pass while still template.
+function realLines(md, re) {
+  return stripHtmlComments(md || "").split(/\r?\n/).filter((l) => re.test(l) && !placeholderReport(l).length);
+}
+function hasSuccessCriteria(md) {
+  return realLines(md, /(?<![A-Za-z0-9])SC-\d+/).length > 0;
+}
+function hasPriority(md) {
+  // A line naming P1, P2 AND P3 is the priority legend, not a prioritized story.
+  return realLines(md, /(?<![A-Za-z0-9])P1(?![0-9])/).some((l) => !(/(?<![A-Za-z0-9])P2(?![0-9])/.test(l) && /(?<![A-Za-z0-9])P3(?![0-9])/.test(l)));
+}
+// Duplicate AC DEFINITIONS (the ID opening a list item, optionally bold) — "as in US-1.AC-1" is a reference.
+function acDuplicates(md) {
+  const seen = new Set(), dups = new Set();
+  for (const mm of stripHtmlComments(md || "").matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  return [...dups];
+}
+// A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
+function sectionFilled(md, syn) {
+  const b = extractSection(md || "", syn);
+  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !placeholderReport(b).length;
+}
+const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
+
+// What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
+// where `checks` lists only the FAILING ones as { id, detail }; artifact=false = nothing to approve (the file is
+// missing, or its track is off) — an error even with force.
+function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
+  const fm = i18n.msg(lang);
+  const m = fm.doctor, G = fm.gates;
+  const read = (x) => readIfExists(path.join(dir, x));
+  const exists = (x) => fs.existsSync(path.join(dir, x));
+  const checks = [];
+  const need = (id, ok, detail) => { if (!ok && !checks.some((c) => c.id === id)) checks.push({ id, detail }); };
+  const noPlaceholders = (x) => { const r = artifactReport(dir, x, tracks); need("placeholders", r.state !== "placeholder", placeholderSummary([r], lang)); };
+  const gaps = (tr, kinds) => traceGapLines(Object.fromEntries(kinds.map((k) => [k, tr[k] || []])), lang).join("; ");
+  const nothing = (file) => ({ artifact: false, file, checks });
+  const bugfix = kind === "bugfix";
+  const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
+  switch (phase) {
+    case "classification":
+      if (!exists("classification.md")) return nothing("classification.md");
+      noPlaceholders("classification.md");
+      break;
+    case "requirements": {
+      if (!exists("requirements.md")) return nothing("requirements.md");
+      const reqs = read("requirements.md");
+      const errs = (earsValidate(reqs, lang).issues || []).filter((i) => i.severity === "error");
+      need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
+      noPlaceholders("requirements.md");
+      const mk = clarificationMarkers(reqs);
+      need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
+      need("success-criteria", hasSuccessCriteria(activeDesign(reqs, tracks)), m.scMissing);
+      need("priorities", hasPriority(activeDesign(reqs, tracks)), m.prioritiesMissing);
+      const dups = acDuplicates(reqs);
+      need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
+      if (bugfix) need("reproduction", sectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
+      break;
+    }
+    case "design": {
+      const design = read("design.md");
+      if (bugfix) {
+        // A bugfix has no design of its own: its Root Cause stands in for it.
+        if (!exists("bug.md")) return nothing("bug.md");
+        need("root-cause", sectionFilled(read("bug.md"), ROOT_CAUSE_SYN), m.rootCauseMissing);
+      } else {
+        if (design == null) return nothing("design.md");
+        noPlaceholders("design.md");
+        need("constitution-check", sectionFilled(activeDesign(design, tracks), CONSTITUTION_SYN), G.constitutionUnfilled);
+      }
+      if (design != null) {
+        for (const [tr, id, secs, mark] of [["saas", "saas-sections", SAAS_SECTIONS, "[SaaS]"], ["ai", "ai-sections", AI_SECTIONS, "[AI]"]]) {
+          if (!tracks.includes(tr)) continue;
+          const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
+          need(id, !bad.length, bad.map(label).join("; "));
+        }
+      }
+      const mk = [...clarificationMarkers(read("requirements.md") || ""), ...clarificationMarkers(design || "")];
+      need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
+      break;
+    }
+    case "test-plan": {
+      if (!phaseActive("test-plan", tracks) || !exists("test-plan.md")) return nothing("test-plan.md");
+      noPlaceholders("test-plan.md");
+      const tr = traceCheck(projectDir, slug);
+      need("traceability", !(tr.uncoveredByTests || []).length, gaps(tr, ["uncoveredByTests"]));
+      break;
+    }
+    case "eval-plan":
+      if (!phaseActive("eval-plan", tracks) || !exists("eval-plan.md")) return nothing("eval-plan.md");
+      noPlaceholders("eval-plan.md");
+      break;
+    case "tasks": {
+      if (!exists("tasks.md")) return nothing("tasks.md");
+      noPlaceholders("tasks.md");
+      const tr = traceCheck(projectDir, slug);
+      const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
+      need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
+      break;
+    }
+    default: // tests / execution: no artifact of their own — nothing to check
+  }
+  return { artifact: true, checks };
+}
+
 // Multilingual heading matchers for the doctor / clarify checks.
 const RE_CONSTITUTION_CHECK = /constitution check|verifica[çc][ãa]o da constitui[çc][ãa]o|verificaci[óo]n de la constituci[óo]n/i;
 const RE_SUCCESS_CRITERIA = /success criteria|crit[ée]rios de sucesso|criterios de [ée]xito/i;
@@ -2884,8 +3204,10 @@ function specDoctor(projectDir, name) {
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir, root } = f;
   const tracks = detectTracks(dir);
-  const fm = i18n.msg(featureLang(projectDir, name));
+  const lng = featureLang(projectDir, name);
+  const fm = i18n.msg(lng);
   const m = fm.doctor; // localized detail strings
+  const G = fm.gates;
   const sectionLabel = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   const checks = [];
   const add = (id, status, detail) => checks.push({ id, status, detail });
@@ -2908,26 +3230,31 @@ function specDoctor(projectDir, name) {
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqs);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
-    // Spec-Kit-style structure
-    add("success-criteria", /\bSC-\d+/.test(reqs) ? "pass" : "warn", /\bSC-\d+/.test(reqs) ? m.scPresent : m.scMissing);
-    add("priorities", /\bP1\b/.test(reqs) ? "pass" : "warn", /\bP1\b/.test(reqs) ? m.prioritiesOk : m.prioritiesMissing);
+    // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't.
+    const reqsActive = activeDesign(reqs, tracks);
+    add("success-criteria", hasSuccessCriteria(reqsActive) ? "pass" : "warn", hasSuccessCriteria(reqsActive) ? m.scPresent : m.scMissing);
+    add("priorities", hasPriority(reqsActive) ? "pass" : "warn", hasPriority(reqsActive) ? m.prioritiesOk : m.prioritiesMissing);
     // Folded analyze: AC ID uniqueness (duplicate IDs = a real spec bug)
-    // Count DEFINITIONS only (the ID opening a list item, optionally bold) — "as in US-1.AC-1" is a
-    // reference, not a duplicate.
-    const allAc = [...stripHtmlComments(reqs).matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)].map((mm) => mm[1]);
-    const seen = new Set(), dups = new Set();
-    for (const a of allAc) { if (seen.has(a)) dups.add(a); else seen.add(a); }
-    add("ac-uniqueness", dups.size ? "fail" : "pass", dups.size ? m.acDup([...dups].join(", ")) : m.acUnique);
+    const dups = acDuplicates(reqs);
+    add("ac-uniqueness", dups.length ? "fail" : "pass", dups.length ? m.acDup(dups.join(", ")) : m.acUnique);
   }
 
   // Bugfix (systematic debugging): bug.md replaces design.md, and the root cause gates the fix.
   const kind = readState(projectDir, slug).kind || "feature";
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
-    const filled = (syn) => { const b = extractSection(bug, syn); return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim(); };
+    const filled = (syn) => sectionFilled(bug, syn); // a [bracketed placeholder] left in the section is not filled either
     add("reproduction", filled(REPRO_SYN) ? "pass" : "warn", filled(REPRO_SYN) ? m.reproOk : m.reproMissing);
     add("root-cause", filled(ROOT_CAUSE_SYN) ? "pass" : "fail", filled(ROOT_CAUSE_SYN) ? m.rootCauseOk : m.rootCauseMissing);
   }
+
+  // Template placeholders: the current phase's artifact and every earlier one must be real content — an untouched
+  // scaffold used to pass with readyToAdvance=true. A later phase's template is informational (warn) only.
+  const phase = detectPhase(dir, tracks);
+  const ph = chainPlaceholders(dir, tracks, kind, phase);
+  add("placeholders", ph.blocking.length ? "fail" : ph.later.length ? "warn" : "pass",
+    ph.blocking.length ? G.placeholdersFail(placeholderSummary(ph.blocking, lng))
+      : ph.later.length ? G.placeholdersLater(ph.later.map((r) => `${r.file} (${r.items.length || G.empty})`).join(", ")) : G.placeholdersNone);
 
   // Design + Mermaid + Constitution Check
   const design = readIfExists(path.join(dir, "design.md"));
@@ -2985,8 +3312,12 @@ function specDoctor(projectDir, name) {
     ["tasks", "tasks.md"],
   ];
   const pendingGates = GATE_PHASES.filter(([ph, file]) => phaseActive(ph, tracks) && fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
-  add("approval-gates", pendingGates.length ? "warn" : "pass",
-    pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : m.gatesOk);
+  // A forced approval (approve --force over failing checks) is recorded, but it stays visible here as a warn.
+  const forcedGates = PHASES.filter((ph) => phaseActive(ph, tracks) && approvals[ph] && approvals[ph].forced);
+  add("approval-gates", pendingGates.length || forcedGates.length ? "warn" : "pass",
+    [pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : null,
+      forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null]
+      .filter(Boolean).join("; ") || m.gatesOk);
   const gatesOk = pendingGates.length === 0;
 
   const fails = checks.filter((c) => c.status === "fail");
@@ -2996,9 +3327,10 @@ function specDoctor(projectDir, name) {
     ok: true,
     feature: slug,
     tracks: trackLabel(tracks),
-    phase: detectPhase(dir, tracks),
+    phase,
     approvals,
     pendingGates,
+    forcedGates,
     gatesOk,
     checks,
     summary: { pass: checks.filter((c) => c.status === "pass").length, warn: warns.length, fail: fails.length },
@@ -3278,6 +3610,12 @@ const ROADMAP_I18N = {
 };
 // "planned": broken into tasks, none done yet — 30% of the way, so ⬜ "not started" next to it read as a contradiction.
 Object.entries({ en: "planned", pt: "planeada", es: "planificada" }).forEach(([l, s]) => { ROADMAP_I18N[l].planned = s; });
+// What the gates flag (1.13): "needs attention" lines and the marker for a next task that is still only a placeholder.
+Object.entries({
+  en: { sections: "mandatory sections missing/unfilled", placeholders: "template placeholders in the current phase", changedSince: "changed since approval — re-review", forced: "approved with --force (checks were failing)", placeholderTask: "(placeholder)" },
+  pt: { sections: "secções obrigatórias em falta/por preencher", placeholders: "placeholders do template na fase atual", changedSince: "alterado desde a aprovação — rever de novo", forced: "aprovado com --force (havia verificações a falhar)", placeholderTask: "(por preencher)" },
+  es: { sections: "secciones obligatorias que faltan/sin rellenar", placeholders: "placeholders de la plantilla en la fase actual", changedSince: "modificado desde la aprobación — revisar de nuevo", forced: "aprobado con --force (había verificaciones fallando)", placeholderTask: "(sin rellenar)" },
+}).forEach(([l, o]) => Object.assign(ROADMAP_I18N[l], o));
 function i18nLang(lang) {
   const l = String(lang || "en").toLowerCase().slice(0, 2);
   return ROADMAP_I18N[l] || ROADMAP_I18N.en;
@@ -3290,19 +3628,10 @@ function cleanTaskText(t) {
 }
 
 // design.md minus the [SaaS]/[AI] sections of tracks that were turned off (their text stays, inactive).
+// Also applied to requirements.md, whose +saas/+ai template criteria sit under [SaaS]/[AI] headings.
 function activeDesign(design, tracks) {
-  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => TRACK_MARKER[t].toLowerCase());
-  if (!off.length) return design;
-  const lines = design.split(/\r?\n/);
-  const heads = headingIndex(lines);
-  const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
-  const drop = new Set();
-  for (const h of heads) {
-    if (!off.some((m) => lines[h].toLowerCase().includes(m))) continue;
-    const end = heads.find((x) => x > h && level(x) <= level(h));
-    for (let i = h; i < (end == null ? lines.length : end); i++) drop.add(i);
-  }
-  return lines.filter((_, i) => !drop.has(i)).join("\n");
+  const drop = inactiveMarkerLines(design, tracks);
+  return drop.size ? design.split(/\r?\n/).filter((_, i) => !drop.has(i)).join("\n") : design;
 }
 
 // Shared computation for both renderers.
@@ -3313,32 +3642,58 @@ function roadmapData(projectDir) {
   let tasksTotal = 0;
   const rows = rmv.features.map((f) => {
     const dir = path.join(root, f.name);
-    const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
-    const design = readIfExists(path.join(dir, "design.md")) || "";
+    const raw = { "requirements.md": readIfExists(path.join(dir, "requirements.md")), "design.md": readIfExists(path.join(dir, "design.md")), "tasks.md": readIfExists(path.join(dir, "tasks.md")) };
+    const reqs = raw["requirements.md"] || "";
+    const design = raw["design.md"] || "";
     const clar = clarificationMarkers(reqs).length;
     const tracks = detectTracks(dir);
     const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, tracks));
-    const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
+    const tasks = parseTasks(activeTasks(raw["tasks.md"], tracks));
     const done = tasks.filter((t) => t.done).length;
     tasksDone += done;
     tasksTotal += tasks.length;
     const next = tasks.find((t) => !t.done);
-    const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress" : f.phase === "tasks-ready" ? "planned" : "notstarted";
+    // The icon agrees with the percent: past the requirements (16–25% = design / test / eval plan) a feature is in
+    // progress — ⬜ 'not started' only below that; tasks-ready (30%, nothing done) is 📋 planned.
+    const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress"
+      : f.phase === "tasks-ready" ? "planned" : f.percent > PHASE_PERCENT.requirements ? "inprogress" : "notstarted";
     const unverified = verificationStatus(projectDir, f.name, dir).unverified.length;
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified };
+    // What the gates flag, per feature: missing/unfilled mandatory sections, artifacts edited after their approval,
+    // the current phase's template placeholders, approvals recorded with --force.
+    const st = readJson(statePath(dir)).data; // read-only here: no resolver pass (it re-reads roadmap.json per call)
+    const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
+    const sections = [["saas", SAAS_SECTIONS, "[SaaS]"], ["ai", AI_SECTIONS, "[AI]"]].filter(([tr]) => tracks.includes(tr))
+      .flatMap(([, secs, mark]) => sectionState(design, secs, mark).filter((s) => s.status !== "filled").map((s) => ({ ...s, mark })));
+    const changed = changedSinceApproval(dir, approvals, tracks);
+    const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
+    const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
+    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, sections, changed, placeholders, forced };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
 
-function buildAttention(rows, t) {
+function buildAttention(rows, t, lang) {
+  const fm = i18n.msg(lang);
   const a = [];
   rows.forEach((r) => {
     if (r.f.blocked) a.push({ name: r.f.name, msg: `${t.blockedBy} ${r.f.unmetDeps.join(", ")}` });
     if (r.clar) a.push({ name: r.f.name, msg: `${r.clar} ${t.openClar}` });
-    if (r.designTodo) a.push({ name: r.f.name, msg: t.designTodo });
+    // The named sections say more than "design has unfilled (TODO) sections" — that line stays for a TODO elsewhere.
+    if (r.sections && r.sections.length) {
+      a.push({ name: r.f.name, msg: `${t.sections}: ${r.sections.map((s) => `${s.mark} ${fm.sectionNames[s.section] || s.section} (${fm.sectionStatus[s.status] || s.status})`).join(", ")}` });
+    } else if (r.designTodo) a.push({ name: r.f.name, msg: t.designTodo });
+    if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
+    if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
+    if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.join(", ")}` });
     if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}` });
   });
   return a;
+}
+// A roadmap "next" cell: the task text without its tags — or a localized marker when nothing but a template
+// placeholder is left ("#1 " with an empty text used to be shown).
+function roadmapTaskText(text, t) {
+  const s = cleanTaskText(text).trim();
+  return s ? s : t.placeholderTask;
 }
 
 function renderRoadmapMd(projectDir, lang) {
@@ -3346,10 +3701,10 @@ function renderRoadmapMd(projectDir, lang) {
   const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
-  const attention = buildAttention(rows, t);
+  const attention = buildAttention(rows, t, lang);
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
-  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${cell(cleanTaskText(r.next.text).slice(0, 42))}` : "…");
+  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
@@ -3387,11 +3742,11 @@ function renderRoadmapHtml(projectDir, lang) {
   const langAttr = ROADMAP_I18N[String(lang || "en").toLowerCase().slice(0, 2)] ? String(lang).toLowerCase().slice(0, 2) : "en";
   const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
-  const attention = buildAttention(rows, t);
+  const attention = buildAttention(rows, t, lang);
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
-  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(cleanTaskText(r.next.text).slice(0, 60))}` : "…");
+  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(roadmapTaskText(r.next.text, t).slice(0, 60))}` : "…");
 
   const featRows = rows
     .map(
@@ -3725,6 +4080,8 @@ function coverage(projectDir) {
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
+// Rate limits in natural wording (EN/PT/ES), not just the literal "rate limit".
+const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solicita[çc][õo]es)|limita[çc](?:[ãa]o|[õo]es) de taxa|l[íi]mites? de (?:peticiones|solicitudes|tasa)|limitaci[óo]n(?:es)? de tasa/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -3732,7 +4089,8 @@ function clarify(projectDir, name) {
   const reqs = readIfExists(path.join(dir, "requirements.md"));
   if (reqs == null) return { ok: false, error: errs(projectDir, f.slug).requirementsMissing(f.slug) };
   const tracks = detectTracks(dir);
-  const q = i18n.msg(featureLang(projectDir, name)).clarify; // localized clarification questions
+  const fm = i18n.msg(featureLang(projectDir, name));
+  const q = fm.clarify; // localized clarification questions
   const questions = [];
   const add = (s) => { if (!questions.includes(s)) questions.push(s); };
 
@@ -3751,22 +4109,30 @@ function clarify(projectDir, name) {
   for (const i of e.issues || []) {
     if (i.code === "vague") add(q.quantifyVague(i.line, i.text.slice(0, 80)));
   }
-  // leftover placeholders — a [bracket] that is not an English-stable tag ([P], [US1], [SaaS]…), a
-  // markdown link, a checkbox, inline code, or an ID. Lines are capped so one huge line can't stall us.
-  const STABLE_TAG = /\[(?:P|US\d+|shared|SaaS|AI|x| |NEEDS[ _-]CLARIFICATION[^\]]*|US-[^\]]*|AC-[^\]]*|T-[^\]]*)\]/gi;
-  stripHtmlComments(reqs).split(/\r?\n/).forEach((raw, idx) => {
-    const l = raw.slice(0, 2000).replace(/`[^`]*`/g, "").replace(/\[[^\]]*\]\([^)]*\)/g, "").replace(STABLE_TAG, "");
-    if (/\bTBD\b/.test(l) || (/\[[^\]]+\]/.test(l) && /[A-Za-z]/.test(l.replace(/\[[^\]]*\]/g, "")))) add(q.resolvePlaceholder(idx + 1));
-  });
+  // Leftover template placeholders (placeholderReport: bracketed prose, the TODO sentinel — never tags, IDs, links,
+  // checkboxes or code) plus TBDs, as ONE question naming file:line and the text (it used to be one "Resolve
+  // placeholder/TBD on line N" per line). A removed track's [SaaS]/[AI] criteria are inactive, not asked about.
+  const active = artifactReport(dir, "requirements.md", tracks);
+  const drop = inactiveMarkerLines(reqs, tracks);
+  const tbd = [];
+  stripHtmlComments(reqs).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
+  const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
+  if (slots.length) {
+    const shown = slots.slice(0, 8).map((p) => `requirements.md:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);
+    if (slots.length > 8) shown.push(fm.gates.more(slots.length - 8));
+    add(fm.gates.clarifyPlaceholders("requirements.md", slots.length, shown.join(", ")));
+  }
   // missing structural sections (matched EN/PT/ES)
   if (!RE_EDGE_CASES.test(reqs)) add(q.edgeCases);
   if (!RE_OUT_OF_SCOPE.test(reqs)) add(q.outOfScope);
   if (!RE_NFR.test(reqs)) add(q.nfr);
-  // Unwanted-behaviour criteria: IF…THEN / SE…ENTÃO / SI…ENTONCES (CUANDO is WHEN, not IF).
-  if (!/(?<![\p{L}\p{N}_])(IF|SE|SI)(?![\p{L}\p{N}_]).{0,400}?(?<![\p{L}\p{N}_])(THEN|ENTÃO|ENTAO|ENTONCES)(?![\p{L}\p{N}_])/iu.test(reqs)) add(q.unwanted);
+  // Unwanted-behaviour criteria: IF…THEN / SE…ENTÃO / SI…ENTONCES (CUANDO is WHEN, not IF) — per CRITERION, so an
+  // IF on one line and its THEN on the next (wrapped EARS) count.
+  const RE_IF_THEN = /(?<![\p{L}\p{N}_])(IF|SE|SI)(?![\p{L}\p{N}_]).{0,400}?(?<![\p{L}\p{N}_])(THEN|ENTÃO|ENTAO|ENTONCES)(?![\p{L}\p{N}_])/iu;
+  if (!criterionBlocks(reqs).blocks.some((b) => RE_IF_THEN.test(b.text))) add(q.unwanted);
   // track-specific
   if (tracks.includes("saas") && !/tenant|inquilino/i.test(reqs)) add(q.tenant);
-  if (tracks.includes("saas") && !/rate limit|limite de taxa|límite de tasa/i.test(reqs)) add(q.rateLimit);
+  if (tracks.includes("saas") && !RE_RATE_LIMIT.test(reqs)) add(q.rateLimit);
   if (tracks.includes("ai") && !/quality|qualidade|calidad|golden|refus/i.test(reqs)) add(q.aiQuality);
   if (tracks.includes("ai") && !/cost|cust[aoe]|custar|coste|token/i.test(reqs)) add(q.aiCost);
 
@@ -3855,6 +4221,7 @@ module.exports = {
   // @wp WP4 <<<
 
   // @wp WP5 exports >>>
+  featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
   // @wp WP5 <<<
 
   // @wp WP6 exports >>>

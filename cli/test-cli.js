@@ -67,7 +67,7 @@ ok(/task-2-brief\.md/.test(brw.out) && fs.existsSync(path.join(tmp, ".specs", "i
 ok(run(["brief", "Invoice Summary", "999"]).code === 1, "brief on a missing task exits non-zero");
 
 // approve
-ok(run(["approve", "Invoice Summary", "design"]).out.includes("Approved 'design'"), "approve records gate");
+ok(run(["approve", "Invoice Summary", "design", "--force"]).out.includes("Approved 'design'"), "approve records gate (--force: the design is still the template — 1.13 gate)");
 
 // ears on a file
 const reqFile = path.join(tmp, ".specs", "invoice-summary", "requirements.md");
@@ -140,7 +140,7 @@ ok(/parallel batch: #3 \[src\/a\.js\]\s+#4 \[src\/b\.js\]/.test(run(["next", "pa
 const bfx = run(["bugfix", "Login Loop", "--summary", "bounce to /login", "--project", vp]);
 ok(/login-loop/.test(bfx.out) && fs.existsSync(path.join(vp, ".specs", "login-loop", "bug.md")), "bugfix scaffolds the systematic-debugging flow");
 const fin = run(["finish", "login-loop", "--project", vp]);
-ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /root-cause/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
+ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /Root Cause is not filled/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
 
 // @wp WP1 cli-tests >>>
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
@@ -301,8 +301,8 @@ ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 
   ok(depsOfA() === "b,c" && run(["depend", "a", "--rm", "b", "--rm", "c", "--project", dp]).code === 0 && depsOfA() === "", "depend --rm b --rm c removes both");
   ok(run(["depend", "a", "--add", "b", "--project", dp, "--add"]).code === 1 && depsOfA() === "", "a repeated --add with a missing value exits 1 and changes nothing");
   ok(/--add x,y/.test(run(["help"]).out), "help documents depend --add/--rm/--clear");
-  const ap = spawnSync(process.execPath, [CLI, "approve", "a", "requirements", "--project", dp], { encoding: "utf8", env: { ...process.env, USER: "wp3-tester", USERNAME: "wp3-tester" } });
-  run(["approve", "a", "design", "--by", "carol", "--project", dp]);
+  const ap = spawnSync(process.execPath, [CLI, "approve", "a", "requirements", "--force", "--project", dp], { encoding: "utf8", env: { ...process.env, USER: "wp3-tester", USERNAME: "wp3-tester" } }); // templates: 1.13 gate
+  run(["approve", "a", "design", "--by", "carol", "--force", "--project", dp]);
   const appr = JSON.parse(fs.readFileSync(path.join(dp, ".specs", "a", ".state.json"), "utf8")).approvals;
   ok(ap.status === 0 && appr.requirements.by === "wp3-tester" && appr.design.by === "carol", "approve without --by records the engine default ($USER/$USERNAME, same as MCP); --by still wins");
   const st = run(["steering", "constructor", "--project", dp]);
@@ -346,7 +346,7 @@ ok(/criteria/.test(run(["ears", "gaps", "--project", w4]).out) && run(["ears", "
 // trace lists EVERY gap kind with its IDs (phantom T-IDs and unmapped tests used to be dropped).
 fs.writeFileSync(path.join(w4f, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n2. **US-1.AC-2** — WHEN c THE SYSTEM SHALL d\n");
 fs.writeFileSync(path.join(w4f, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2 |\n");
-fs.writeFileSync(path.join(w4f, "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-3.AC-1_\n  - _Makes green: T-01, T-99_\n  - _Implements: src/nope.js_\n");
+fs.writeFileSync(path.join(w4f, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-3.AC-1_\n  - _Makes green: T-01, T-99_\n  - _Implements: src/nope.js_\n"); // ticked: 1.13 plannedImplFiles
 const tr4 = run(["trace", "gaps", "--project", w4]);
 ok(tr4.code === 1 && /verdict=gaps-found/.test(tr4.out) && /unknown ACs \(typos\?\): US-3\.AC-1/.test(tr4.out) && /unknown tests \(typos\?\): T-99/.test(tr4.out) &&
   /planned tests that no task makes green: T-02/.test(tr4.out) && /_Implements:_ files that don't exist: src\/nope\.js/.test(tr4.out), "trace prints every gap kind with its IDs");
@@ -418,7 +418,7 @@ try { ptListJ = JSON.parse(run(["list", "--json", "--project", pt4]).out); } cat
 ok(/requisitos\s+\(0\/\d+ tarefas\)/.test(ptList) && ptListJ && ptListJ.features[0].phase === "requirements", "list (PT): localized phase + 'tarefas'; --json keeps the English phase token");
 ok(/fase: requisitos/.test(run(["status", "pagamentos", "--project", pt4]).out) && /Diagnóstico: pagamentos .*veredicto=FALHA\s+pronta para avançar: não/.test(run(["doctor", "pagamentos", "--project", pt4]).out),
   "status/doctor (PT) wrappers are localized");
-ok(/Fase 'requirements' de pagamentos aprovada ✓/.test(run(["approve", "pagamentos", "requirements", "--project", pt4]).out) &&
+ok(/Fase 'requirements' de pagamentos aprovada ✓/.test(run(["approve", "pagamentos", "requirements", "--force", "--project", pt4]).out) &&
   /Clarificar: pagamentos .*pergunta\(s\)/.test(run(["clarify", "pagamentos", "--project", pt4]).out) && /Próxima → #1/.test(run(["next", "pagamentos", "--project", pt4]).out),
   "approve/clarify/next (PT) are localized");
 ok(/adicionada ao backlog/.test(run(["backlog", "add", "sso", "--project", pt4]).out) && /não está no backlog/.test(run(["backlog", "rm", "x", "--project", pt4]).out) &&
@@ -432,7 +432,7 @@ ok(/Nada foi apagado/.test(run(["feature", "remove", "pagamentos", "--project", 
 const es4 = path.join(tmp, "wp4-es");
 run(["init", "core", "--lang", "es", "--project", es4]);
 ok(/Función 'pagos' \[core\] \(es\)/.test(run(["create", "Pagos", "core", "--project", es4]).out) && /\(0\/\d+ tareas\)/.test(run(["list", "--project", es4]).out) &&
-  /Aprobada|aprobada/.test(run(["approve", "pagos", "design", "--project", es4]).out), "create/list/approve (ES) are localized");
+  /Aprobada|aprobada/.test(run(["approve", "pagos", "design", "--force", "--project", es4]).out), "create/list/approve (ES) are localized");
 ok(/Aclarar: pagos/.test(run(["clarify", "pagos", "--project", es4]).out) && /No se ha eliminado nada/.test(run(["feature", "remove", "pagos", "--project", es4]).out) &&
   /falta el valor de --text/.test(run(["ears", "--text", "--project", es4]).out) && /herramienta desconocida/.test(run(["rules", "vim", "--project", es4]).out) &&
   /'pagos' renombrada → 'cobros'/.test(run(["feature", "rename", "pagos", "Cobros", "--project", es4]).out), "clarify/remove preview/errors/rename (ES) are localized");
@@ -461,6 +461,51 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
 // @wp WP4 <<<
 
 // @wp WP5 cli-tests >>>
+{ // 1.13 WP5 — gates on the CLI: approve (refused / --force / nothing to approve), next-action order, bugfix gate, planned files
+  const w5 = path.join(tmp, "wp5-proj");
+  run(["init", "core", "--project", w5]);
+  run(["create", "Gate", "core", "--project", w5]);
+  const stateOf = (f) => JSON.parse(fs.readFileSync(path.join(w5, ".specs", f, ".state.json"), "utf8"));
+  const refused = run(["approve", "gate", "requirements", "--project", w5]);
+  ok(refused.code === 1 && /Can't approve 'requirements' for 'gate' — failing checks: placeholders, success-criteria, priorities/.test(refused.out) &&
+    /✗ placeholders — requirements\.md \(\d+\): requirements\.md:4 /.test(refused.out) && /--force/.test(refused.out) && !stateOf("gate").approvals.requirements,
+    "approve on a template exits 1 listing the failing checks (nothing recorded)");
+  const forced = run(["approve", "gate", "requirements", "--force", "--project", w5]);
+  let forcedJ = null;
+  try { forcedJ = JSON.parse(run(["approve", "gate", "design", "--force", "--json", "--project", w5]).out); } catch { /* invalid JSON */ }
+  ok(forced.code === 0 && /Approved 'requirements' for gate ✓/.test(forced.out) && /⚠ Approved with force — the failing checks are recorded with the approval: placeholders, success-criteria, priorities\./.test(forced.out) &&
+    stateOf("gate").approvals.requirements.forced === true && forcedJ && forcedJ.forced === true && forcedJ.failing.includes("placeholders"),
+    "approve --force records a flagged approval (⚠ note; --json forced + failing)");
+  const nothing = run(["approve", "gate", "eval-plan", "--force", "--project", w5]);
+  ok(nothing.code === 1 && /Nothing to approve: 'eval-plan'/.test(nothing.out), "approve of a phase with no artifact exits 1 even with --force");
+  const docG = run(["doctor", "gate", "--project", w5]);
+  ok(/✗ placeholders — template placeholders left/.test(docG.out) && /▲ approval-gates — .*approved with force over failing checks: requirements \(placeholders/.test(docG.out),
+    "doctor lists the placeholders failure and the forced approval (warn)");
+  ok(/→ Fill requirements\.md — \d+ template placeholder\(s\) left .*\/clarify gate/.test(run(["next-action", "gate", "--project", w5]).out), "next-action on a fresh feature: fill requirements.md first");
+  ok(/approve <feature> <phase> \[--force\]/.test(run(["help"]).out) && /--by NAME \/ --force \(approve\)/.test(run(["help"]).out), "help documents approve --force");
+
+  // PT: refusal, forced note and next-action are localized
+  const p5 = path.join(tmp, "wp5-pt");
+  run(["init", "core", "--lang", "pt", "--project", p5]);
+  run(["create", "Pagamentos", "core", "--project", p5]);
+  const ptRef = run(["approve", "pagamentos", "requirements", "--project", p5]);
+  const ptForce = run(["approve", "pagamentos", "requirements", "--force", "--project", p5]);
+  ok(ptRef.code === 1 && /Não é possível aprovar 'requirements' de 'pagamentos' — verificações a falhar: placeholders/.test(ptRef.out) &&
+    ptForce.code === 0 && /Fase 'requirements' de pagamentos aprovada ✓/.test(ptForce.out) && /⚠ Aprovado com force — as verificações a falhar ficam registadas/.test(ptForce.out) &&
+    /→ Preenche requirements\.md — \d+ placeholder\(s\) do template por preencher/.test(run(["next-action", "pagamentos", "--project", p5]).out),
+    "approve refusal / --force note / next-action speak the feature language (PT)");
+
+  // bugfix: no fix before the root cause is written; an OPEN task's planned file is no trace gap
+  run(["bugfix", "Crash", "--summary", "crash on save", "--project", w5]);
+  const bugDone = run(["done", "crash", "3", "--project", w5]);
+  ok(bugDone.code === 1 && /Task 3 can't be completed yet: bug\.md → Root Cause is not filled/.test(bugDone.out) &&
+    /- \[ \] 3\./.test(fs.readFileSync(path.join(w5, ".specs", "crash", "tasks.md"), "utf8")), "done on a bugfix task after the root-cause task exits 1 while bug.md → Root Cause is empty");
+  run(["create", "Plan", "core", "--project", w5]);
+  fs.writeFileSync(path.join(w5, ".specs", "plan", "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  fs.writeFileSync(path.join(w5, ".specs", "plan", "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/not-yet.js_\n");
+  const trP = run(["trace", "plan", "--project", w5]);
+  ok(trP.code === 0 && /verdict=pass/.test(trP.out) && !/src\/not-yet\.js/.test(trP.out), "trace: an open task's not-yet-written _Implements:_ file is no gap (exit 0)");
+}
 // @wp WP5 <<<
 
 // @wp WP6 cli-tests >>>
