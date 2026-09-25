@@ -21,8 +21,8 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 ## Developing
 
 ```bash
-node mcp/test.js        # MCP server end-to-end (617 assertions)
-node cli/test-cli.js    # universal CLI (198 assertions)
+node mcp/test.js        # MCP server end-to-end (674 assertions)
+node cli/test-cli.js    # universal CLI (221 assertions)
 claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
 # or both:
 npm test

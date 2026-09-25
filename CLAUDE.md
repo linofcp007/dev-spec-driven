@@ -297,7 +297,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **Guard mode:** `roadmap.json → meta.guard` (`spec_init {guard}` / `init --guard on|off`, with or without
   tracks). `hooks/guard-hook.js` (PreToolUse, `Write|Edit|MultiEdit|NotebookEdit`) is **silent unless the
   guard is on** — guard off costs one small raw JSON read, the engine is loaded only for guarded projects —
-  and `guardCheck()` reads roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. A code
+  and `guardCheck()` reads roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. "Code" is
+  `GUARD_CODE_EXT` — the scanner's `CODE_EXT` + `TEST_EXTRA_EXT` + `.ipynb` + the source languages the scanner
+  doesn't inventory (`.mts`/`.cts`, `.cc`/`.hpp`, `.sh`/`.ps1`, `.sql`…); never reuse `CODE_EXT` alone there (it
+  waved those through as "not-code"). Docs, config, markup and styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
   `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
@@ -461,9 +464,12 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
 - **Returned text is localized, structured fields are not.** Engine errors (`errs()`), EARS issue
-  `msg`, classifier `notes`/`reasoning`, doctor section names, CLI output, hook and pre-commit lines all go
-  through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code`, evidence `unverifiedReason` (and
-  `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` — never regex a `msg`.
+  `msg`, classifier `notes`/`reasoning`, doctor section names and details (the ears `earsDetail`), add_track's
+  `added` annotations (`design.md (+secções)`), the ROADMAP.md/.html Phase column (`phaseNames`; the JSON
+  `phase` stays English), CLI output (usage prefix, section labels, EARS severities included), hook and
+  pre-commit lines all go through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code` / `severity`,
+  evidence `unverifiedReason` (and `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` —
+  never regex a `msg`.
 - **Classifier language guess** (`guessLang`): STRONG PT/ES markers (weight 2: `não`, `uma`, `-ção`,
   `ñ`…) and WEAK ones (weight 1: `de`, `por`, `com`…) must beat the English function-word count —
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.
@@ -475,15 +481,23 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything but `en|pt|es` (case-folded) with the localized
   `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
-  `drift` (drift or error) and any refused operation exit 1.
+  `drift` (drift or error) and any refused operation exit 1. An engine refusal goes through `fail(r)`, never
+  `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
+  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
+- **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
+  so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
+  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`.
+  Numeric flags that MCP bounds (`--cap`, `--max`) go through `intFlag()` (integer ≥ 1). The engine refuses what
+  the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
+  task 1 / 2), `createFeature` kind ∈ feature|bugfix, `backlog` action ∈ add|rm|remove|list.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1).
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(667 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(674 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 208 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 221 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

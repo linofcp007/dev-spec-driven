@@ -57,6 +57,7 @@
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
  *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
+ *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  */
 
 const fs = require("fs");
@@ -135,6 +136,33 @@ const cmd = pos.shift();
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > cwd — the same resolution as the MCP server.
 const projectDir = spec.resolveProjectDir(flags.project);
 
+// Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
+// an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
+// so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
+const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear"];
+const on = (k) => flags[k] === true;
+function normalizeBoolFlags() {
+  for (const k of BOOL_FLAGS) {
+    if (typeof flags[k] !== "string") continue;
+    const v = flags[k].trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
+    else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
+    else {
+      const A = spec.msg(spec.projectLang(projectDir)).args;
+      die(A.invalid(A.item("--" + k, A.type.boolean, JSON.stringify(flags[k]))));
+    }
+  }
+}
+// --cap / --max: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}). parseInt read "1.5" as 1, "-3" as -3
+// (a scan of zero files, "truncated") and "abc" as the default. Absent → undefined (the engine's default).
+function intFlag(k) {
+  if (flags[k] === undefined) return undefined;
+  const v = String(flags[k]).trim();
+  if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1) return Number(v);
+  const A = spec.msg(spec.projectLang(projectDir)).args;
+  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1), JSON.stringify(String(flags[k])))));
+}
+
 function out(obj, human) {
   if (flags.json) console.log(JSON.stringify(obj, null, 2));
   else if (typeof human === "function") human(obj);
@@ -143,6 +171,24 @@ function out(obj, human) {
 function die(msg) {
   console.error("dev-spec: " + msg);
   process.exit(1);
+}
+// An engine refusal ({ok: false, error, …}). With --json the WHOLE result is the one JSON document on stdout — what the
+// MCP tool returns, `recorded` / `neverApproved` / `gated`… included — and the exit code is 1; a script never has to
+// parse localized stderr. Otherwise the error goes to stderr (+ an optional hint line), exit 1. Callers `return fail(r)`.
+function fail(r, hint) {
+  if (flags.json) {
+    console.log(JSON.stringify(r, null, 2));
+    if (hint) console.error(hint);
+    process.exitCode = 1;
+    return;
+  }
+  console.error("dev-spec: " + r.error);
+  if (hint) console.error(hint);
+  process.exit(1);
+}
+// A usage line: the syntax stays as typed, the "usage:" prefix is in the project language.
+function usage(syntax) {
+  die(projectText().usage(syntax));
 }
 
 // ---- mcp-config snippets ---------------------------------------------------
@@ -163,7 +209,7 @@ function mcpConfig(client) {
   };
   if (client && client !== "all") {
     // Own keys only: 'constructor' / 'toString' are not clients.
-    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die("unknown client '" + client + "'. Known: " + Object.keys(blocks).join(", ") + ", all");
+    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
     return blocks[client];
   }
   return Object.values(blocks).join("\n\n");
@@ -183,6 +229,7 @@ function main() {
     }
     flags.lang = l;
   }
+  normalizeBoolFlags(); // `--run=false` is false, `--run=maybe` an error — before any command runs
   switch (cmd) {
     case undefined:
     case "help":
@@ -191,7 +238,7 @@ function main() {
       return console.log(helpText());
 
     case "classify": {
-      if (!pos[0]) die('usage: dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|es]');
+      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|es]');
       const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang }); // same args as spec_classify
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
@@ -213,7 +260,7 @@ function main() {
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
       }
       const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard });
-      if (r.ok === false) die(r.error); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
+      if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
         if (r.guardNote) console.log("  " + r.guardNote);
@@ -222,14 +269,14 @@ function main() {
 
     case "bugfix":
     case "create": {
-      if (!pos[0]) die('usage: dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
+      if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
       const name = pos[0];
       const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
-        { brownfield: flags.brownfield === true || flags.brownfield === "true" }); // = spec_create {brownfield}
-      if (!r.ok) die(r.error);
+        { brownfield: on("brownfield") }); // = spec_create {brownfield}
+      if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
 
@@ -239,7 +286,7 @@ function main() {
     case "status": {
       if (!pos[0]) return main2list();
       const r = spec.statusFeature(projectDir, pos[0]);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       const T = featureText(r.feature);
       return out(r, (r) => {
         console.log(T.statusHead(r.feature, r.tracks, T.phase(r.phase)));
@@ -248,15 +295,15 @@ function main() {
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
         const marks = (list) => list.map((s) => (s.filled ? "✓ " : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
           (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
-        if (r.scaleSections) console.log("Scale sections: " + marks(r.scaleSections));
-        if (r.aiSections && r.aiSections.sections) console.log("AI sections: " + marks(r.aiSections.sections));
+        if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
+        if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
       });
     }
 
     case "doctor": {
-      if (!pos[0]) die("usage: dev-spec doctor <feature>");
+      if (!pos[0]) usage("dev-spec doctor <feature>");
       const r = spec.specDoctor(projectDir, pos[0]);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       if (r.verdict === "fail") process.exitCode = 1; // scriptable: blocking checks → non-zero
       const T = featureText(r.feature);
       return out(r, (r) => {
@@ -266,9 +313,9 @@ function main() {
     }
 
     case "trace": {
-      if (!pos[0]) die("usage: dev-spec trace <feature> [--code]");
-      const r = spec.traceCheck(projectDir, pos[0], { code: flags.code === true || flags.code === "true" }); // = trace_check {code}
-      if (!r.ok) die(r.error);
+      if (!pos[0]) usage("dev-spec trace <feature> [--code]");
+      const r = spec.traceCheck(projectDir, pos[0], { code: on("code") }); // = trace_check {code}
+      if (!r.ok) return fail(r);
       if (r.verdict !== "pass") process.exitCode = 1; // scriptable: gaps → non-zero (warnings never change it)
       const lang = spec.featureLang(projectDir, r.feature);
       const T = cliText(lang);
@@ -284,14 +331,14 @@ function main() {
 
     case "ears": {
       // dev-spec ears <feature|file.md> | --text "<criteria>" | -   (raw text / stdin = ears_validate {text})
-      if (flags.text == null && !pos[0]) die('usage: dev-spec ears <feature|path-to.md> | --text "<criteria>" | - (stdin)');
+      if (flags.text == null && !pos[0]) usage('dev-spec ears <feature|path-to.md> | --text "<criteria>" | - (stdin)');
       const textLang = flags.lang || spec.projectLang(projectDir);
       const report = (r, T) => {
-        if (!r.ok) die(r.error);
+        if (!r.ok) return fail(r);
         if (r.verdict === "fail") process.exitCode = 1; // scriptable: EARS errors → non-zero
         return out(r, (r) => {
           console.log(T.earsHead(r.summary.criteriaDetected, r.summary.withShall, T.word(r.verdict)));
-          r.issues.forEach((i) => console.log("  L" + i.line + " [" + i.severity + "] " + i.msg));
+          r.issues.forEach((i) => console.log("  L" + i.line + " [" + T.word(i.severity) + "] " + i.msg)); // `severity` stays English in --json
         });
       };
       if (typeof flags.text === "string") return report(spec.earsValidate(flags.text, textLang), cliText(textLang));
@@ -302,9 +349,9 @@ function main() {
     }
 
     case "next": {
-      if (!pos[0]) die("usage: dev-spec next <feature> [--batch] [--max N]");
-      const r = spec.nextTask(projectDir, pos[0], { batch: !!flags.batch, max: flags.max });
-      if (!r.ok) die(r.error);
+      if (!pos[0]) usage("dev-spec next <feature> [--batch] [--max N]");
+      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: intFlag("max") });
+      if (!r.ok) return fail(r);
       const T = featureText(r.feature);
       return out(r, (r) => {
         console.log(r.next ? T.next(r.next.number, r.next.text, r.remaining, r.total) : T.allDone);
@@ -314,9 +361,9 @@ function main() {
 
     case "finish": {
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
-      if (!pos[0]) die("usage: dev-spec finish <feature> [--write] [--include-body]");
-      const r = spec.finishFeature(projectDir, pos[0], { write: !!flags.write, includeBody: flags["include-body"] ? true : undefined }); // = spec_finish {includeBody}
-      if (!r.ok) die(r.error);
+      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body]");
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: on("include-body") ? true : undefined }); // = spec_finish {includeBody}
+      if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
       return out(r, (r) => {
@@ -334,18 +381,18 @@ function main() {
     case "steering": {
       // dev-spec steering <file> [--lang] — one steering file from its template, or a custom scoped one with front
       // matter (inclusion: always|fileMatch|manual) for any other safe name (same as steering_scaffold)
-      if (!pos[0]) die("usage: dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|es]");
+      if (!pos[0]) usage("dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|es]");
       const r = spec.scaffoldSteeringFile(projectDir, pos[0], flags.lang);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       const T = cliText(flags.lang || spec.projectLang(projectDir)); // the language the file was written in
       return out(r, (r) => console.log(r.created ? T.steeringCreated(r.file) : T.steeringExists(r.file)));
     }
 
     case "brief": {
       // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
-      if (!pos[0]) die("usage: dev-spec brief <feature> [task-number] [--write]");
-      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: !!flags.write, includeBrief: flags["include-brief"] ? true : undefined });
-      if (!r.ok) die(r.error);
+      if (!pos[0]) usage("dev-spec brief <feature> [task-number] [--write]");
+      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: on("include-brief") ? true : undefined });
+      if (!r.ok) return fail(r);
       const T = cliText(r.lang);
       return out(r, (r) => {
         if (!r.task) return console.log(r.note);
@@ -360,28 +407,28 @@ function main() {
     }
 
     case "done": {
-      if (!pos[0] || pos[1] == null) die("usage: dev-spec done <feature> <task-number> [--run [--shell bash|<path>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
+      if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|<path>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
       if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
-      if (flags.run) {
+      if (on("run")) {
         // Evidence before claims: run the task's own _Verify:_ command(s) from the project root; any failure
         // leaves the task open. taskBrief resolves the SAME task completeTask ticks (first open one of a
         // duplicated number), so the command that runs belongs to the task that gets ticked.
         const b = spec.taskBrief(projectDir, pos[0], pos[1]);
-        if (!b.ok) die(b.error);
-        if (b.gated) die(b.gateError); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
+        if (!b.ok) return fail(b);
+        if (b.gated) return fail({ ok: false, gated: b.gated, error: b.gateError }); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
-        if (!cmds.length) die(D.noRunnable(b.task.number));
+        if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).
         const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
         // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
         if (process.platform === "win32" && shell === true) {
           const posix = cmds.map((c) => [c, spec.posixShellSyntax(c)]).find(([, k]) => k.length);
-          if (posix) die(D.posixOnWindows(posix[0], posix[1]));
+          if (posix) return fail({ ok: false, error: D.posixOnWindows(posix[0], posix[1]) });
         }
         for (const cmd of cmds) {
           say("$ " + cmd);
@@ -403,11 +450,7 @@ function main() {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       const r = spec.completeTask(projectDir, pos[0], pos[1], evidence);
-      if (!r.ok) {
-        console.error("dev-spec: " + r.error);
-        if (hint) console.error(hint);
-        process.exit(1);
-      }
+      if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
         if (r.note) console.log("  ⚠ " + r.note);
@@ -415,10 +458,10 @@ function main() {
     }
 
     case "approve": {
-      if (!pos[0] || !pos[1]) die("usage: dev-spec approve <feature> <phase> [--force] [--by NAME]");
+      if (!pos[0] || !pos[1]) usage("dev-spec approve <feature> <phase> [--force] [--by NAME]");
       // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined, { force: flags.force === true || flags.force === "true" });
-      if (!r.ok) die(r.error);
+      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined, { force: on("force") });
+      if (!r.ok) return fail(r);
       return out(r, (r) => {
         console.log(featureText(r.feature).approved(r.approved, r.feature));
         if (r.note) console.log("  ⚠ " + r.note); // a forced approval names the checks that were failing
@@ -426,7 +469,7 @@ function main() {
     }
 
     case "evals": {
-      if (!pos[0]) die("usage: dev-spec evals <feature> [--dry-run] [--set-baseline]");
+      if (!pos[0]) usage("dev-spec evals <feature> [--dry-run] [--set-baseline]");
       const passthru = argv.slice(argv.indexOf(pos[0]) + 1);
       const res = spawnSync(process.execPath, [EVALS, pos[0], "--project", projectDir, ...passthru], { stdio: "inherit" });
       return process.exit(res.status || 0);
@@ -434,13 +477,14 @@ function main() {
 
     case "backlog": {
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase(); // case-folded, like the engine and the MCP enum
-      const action = ["add", "rm", "remove"].includes(a0) ? a0 : "list";
+      // No action lists; an unknown one (delete, ad…) is an error from the engine, as over MCP — it used to just list.
+      const action = a0 || "list";
       const r = spec.backlog(projectDir, action, pos[1], action === "add" ? pos.slice(2).join(" ") : undefined);
-      if (!r.ok) die(r.error); // e.g. rm of a name that isn't in the backlog
+      if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = projectText();
       return out(r, (r) => {
         if (action === "add") console.log(T.backlogAdded(String(pos[1]).trim()));
-        else if (action !== "list") console.log(T.backlogRemoved(String(pos[1]).trim()));
+        else if (action === "rm" || action === "remove") console.log(T.backlogRemoved(String(pos[1]).trim()));
         console.log(T.backlogHead(r.backlog.length));
         r.backlog.forEach((b) => console.log("  - " + b.name + (b.note ? " — " + b.note : "")));
       });
@@ -448,7 +492,7 @@ function main() {
 
     case "roadmap": {
       // Same engine call as spec_roadmap: a failed write (e.g. a hand-written ROADMAP.md) is an error → exit 1.
-      const r = spec.roadmapReport(projectDir, { write: flags.write || flags.md, html: flags.html, lang: flags.lang });
+      const r = spec.roadmapReport(projectDir, { write: on("write") || on("md"), html: on("html"), lang: flags.lang });
       if (r.ok === false) process.exitCode = 1;
       const T = cliText(flags.lang || spec.projectLang(projectDir));
       if (!flags.json) {
@@ -464,8 +508,8 @@ function main() {
     }
 
     case "depend": {
-      const usage = "usage: dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
-      if (!pos[0]) die(usage);
+      const syntax = "dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
+      if (!pos[0]) usage(syntax);
       // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c
       // alone. Collect every occurrence here, walking argv with the parser's own rules.
       const every = (name) => {
@@ -479,18 +523,18 @@ function main() {
         return vals;
       };
       const adds = every("add"), rms = every("rm");
-      if (adds.concat(rms).some((v) => typeof v !== "string")) die(usage);
+      if (adds.concat(rms).some((v) => typeof v !== "string")) usage(syntax);
       // Same semantics as the MCP tool: positional deps REPLACE the list, --clear empties it, --add/--rm edit
       // it; with nothing at all it only shows the current deps (a bare `depend <f>` used to clear them).
-      const deps = pos.slice(1).length ? pos.slice(1) : flags.clear ? [] : undefined;
+      const deps = pos.slice(1).length ? pos.slice(1) : on("clear") ? [] : undefined;
       const r = spec.setDependency(projectDir, pos[0], deps, flags.order, { add: adds.length ? adds.join(",") : undefined, remove: rms.length ? rms.join(",") : undefined });
-      if (!r.ok) die(r.error);
-      return out(r, (r) => console.log(r.feature + " depends on: " + (r.dependsOn.join(", ") || "(none)") + (r.order != null ? "  order=" + r.order : "") + (r.unknownDeps.length ? "  ⚠ unknown deps: " + r.unknownDeps.join(", ") : "")));
+      if (!r.ok) return fail(r);
+      return out(r, (r) => console.log(projectText().dependsOn(r.feature, r.dependsOn.join(", "), r.order, r.unknownDeps.join(", ")))); // project language, like the engine's depend messages
     }
 
     case "scan": {
       const root = pos[0] ? path.resolve(pos[0]) : projectDir;
-      const r = spec.scanCodebase(root, { cap: flags.cap ? parseInt(flags.cap, 10) : undefined });
+      const r = spec.scanCodebase(root, { cap: intFlag("cap") });
       const T = cliText(spec.projectLang(root)); // same language as the engine's note
       const B = spec.msg(spec.projectLang(root)).brownfield;
       return out(r, (r) => {
@@ -527,9 +571,9 @@ function main() {
     }
 
     case "clarify": {
-      if (!pos[0]) die("usage: dev-spec clarify <feature>");
+      if (!pos[0]) usage("dev-spec clarify <feature>");
       const r = spec.clarify(projectDir, pos[0]);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       const T = featureText(r.feature);
       return out(r, (r) => {
         console.log(T.clarify(r.feature, r.tracks, T.word(r.verdict), r.gapCount));
@@ -539,9 +583,9 @@ function main() {
 
     case "next-action":
     case "na": {
-      if (!pos[0]) die("usage: dev-spec next-action <feature>");
+      if (!pos[0]) usage("dev-spec next-action <feature>");
       const r = spec.nextAction(projectDir, pos[0]);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       const T = featureText(r.feature);
       return out(r, (r) => {
         console.log(T.naHead(r.feature, r.tracks, T.phase(r.phase), T.word(r.verdict), T.bool(r.gatesOk)));
@@ -552,12 +596,12 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
-      const r = spec.addTrack(projectDir, pos[0], tr, { remove: !!flags.remove });
-      if (!r.ok) die(r.error);
+      const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
+      if (!r.ok) return fail(r);
       return out(r, (r) => {
-        console.log("'" + r.feature + "' now [" + r.tracks + "]");
+        console.log(featureText(r.feature).trackNow(r.feature, r.tracks));
         if (r.added && r.added.length) console.log("  + " + r.added.join(", "));
         if (r.inactive && r.inactive.length) console.log("  ~ " + r.inactive.join(", "));
         if (r.note) console.log("  " + r.note);
@@ -566,9 +610,9 @@ function main() {
 
     case "feature": {
       // dev-spec feature <remove|archive|rename|restore> <name> [new-name] — remove needs --yes (= spec_feature confirm:true)
-      if (!pos[0] || !pos[1]) die("usage: dev-spec feature <remove|archive|rename|restore> <name> [new-name] [--yes]");
+      if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore> <name> [new-name] [--yes]");
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
-      const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: flags.yes === true || flags.yes === "true" });
+      const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes") });
       if (!r.ok && r.needsConfirm) {
         // Without --yes: show what would be deleted, delete nothing, exit 1.
         process.exitCode = 1;
@@ -577,7 +621,7 @@ function main() {
           console.log(T.confirmHint(r.feature));
         });
       }
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       return out(r, (r) => {
         if (r.action === "rename") {
           console.log(T.renamed(r.from, r.to));
@@ -603,7 +647,7 @@ function main() {
         gemini: "GEMINI.md",
         agents: "AGENTS.md",
       };
-      if (!pos[0]) die("usage: dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
+      if (!pos[0]) usage("dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
       const tool = String(pos[0]).toLowerCase();
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
       if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")));
@@ -625,9 +669,9 @@ function main() {
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) die("usage: dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai]");
+      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai]");
       const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       return out(r, (r) => {
         const B = spec.msg(r.lang).importSpec;
         console.log(B.done(r.toolName, r.source, r.feature, r.label, r.lang));
@@ -640,7 +684,7 @@ function main() {
 
     case "append-tasks": {
       // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
-      if (!pos[0] || typeof flags.task !== "string") die('usage: dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
+      if (!pos[0] || typeof flags.task !== "string") usage('dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
       const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
       // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a.
       // Collect every occurrence, walking argv with the parser's own rules (as `depend` does for --add/--rm).
@@ -665,9 +709,9 @@ function main() {
       if (impls.length) task.implements = impls;
       if (typeof flags.verify === "string") task.verify = flags.verify;
       if (typeof flags.story === "string") task.story = flags.story;
-      if (flags.parallel != null) task.parallel = flags.parallel === true || flags.parallel === "true";
+      if (flags.parallel != null) task.parallel = on("parallel");
       const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       return out(r, (r) => {
         console.log(T.appended(r.heading, r.headingCreated));
         r.appended.forEach((t) => console.log("  - [ ] " + t.number + ". " + t.text));
@@ -677,23 +721,23 @@ function main() {
 
     case "impact": {
       // dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen] — the same engine call as spec_impact
-      if (!pos[0]) die("usage: dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]");
-      const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: flags.reopen === true || flags.reopen === "true" });
-      if (!r.ok) die(r.error);
+      if (!pos[0]) usage("dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]");
+      const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: on("reopen") });
+      if (!r.ok) return fail(r);
       return out(r, (r) => spec.impactLines(r).forEach((l) => console.log(l)));
     }
 
     case "metrics": {
       // dev-spec metrics [feature] [--write] — one feature (+ retro.md with --write) or the whole project; = spec_metrics
-      const r = spec.metrics(projectDir, pos[0], { write: flags.write === true || flags.write === "true" });
-      if (!r.ok) die(r.error);
+      const r = spec.metrics(projectDir, pos[0], { write: on("write") });
+      if (!r.ok) return fail(r);
       return out(r, (r) => spec.metricsLines(r).forEach((l) => console.log(l)));
     }
 
     case "catalog": {
       // dev-spec catalog [--write] — the living .specs/SPECS.md (= spec_catalog {write}). Without --write the markdown is
       // printed; a hand-written SPECS.md (no AUTO-GENERATED marker) is never overwritten → exit 1.
-      const r = spec.catalog(projectDir, { write: !!flags.write });
+      const r = spec.catalog(projectDir, { write: on("write") });
       if (r.ok === false) process.exitCode = 1;
       if (!flags.json && r.error) console.error("dev-spec: " + r.error);
       const C = spec.msg(r.lang).catalog;
@@ -708,7 +752,7 @@ function main() {
       // baseline (= spec_drift {name}); exit 1 when any finished feature drifted or a state file couldn't be read (a check
       // that didn't run is not "clean" — scriptable, like trace).
       const r = spec.drift(projectDir, pos[0]);
-      if (!r.ok) die(r.error);
+      if (!r.ok) return fail(r);
       if (r.drifted.length || (r.errors && r.errors.length)) process.exitCode = 1;
       const D = spec.msg(r.lang).drift;
       const day = (iso) => String(iso || "").slice(0, 10);
@@ -732,7 +776,7 @@ function main() {
       return console.log(mcpConfig(pos[0]));
 
     default:
-      die("unknown command '" + cmd + "'. Run `dev-spec help`.");
+      die(projectText().unknownCommand(cmd));
   }
 }
 
@@ -807,6 +851,8 @@ function helpText() {
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
+         Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
+         With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

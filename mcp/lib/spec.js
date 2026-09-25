@@ -1003,8 +1003,10 @@ function guardEnabled(projectDir) {
 
 // The guard's decision for ONE code edit (hooks/guard-hook.js). Cheap by design — it runs before every Write/Edit
 // while the guard is on: roadmap.json plus each feature's .state.json and tasks.md, never a repo walk.
-//   allow: guard off · the file is outside the project · inside .specs/ · not code (CODE_EXT; notebooks count as
-//          code — NotebookEdit only edits them) · some non-archived feature has an approved tasks phase and open
+//   allow: guard off · the file is outside the project · inside .specs/ · not code (GUARD_CODE_EXT: the scanner's CODE_EXT
+//          plus the source languages it doesn't inventory — C++ .cc/.hpp, .mts/.cts, Scala, Dart, Elixir, shell, SQL…;
+//          notebooks count as code — NotebookEdit only edits them. Docs, config, markup and styles are not code) ·
+//          some non-archived feature has an approved tasks phase and open
 //          tasks (a FORCED approval still counts, with a `note` saying so);
 //   ask:   otherwise, with a localized `reason` (project language).
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
@@ -1021,7 +1023,7 @@ function guardCheck(projectDir, filePath, cwd) {
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   if (toPosix(path.relative(pdir, abs)).split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
   const ext = path.extname(abs).toLowerCase();
-  if (!CODE_EXT.has(ext) && ext !== ".ipynb") return allow("not-code");
+  if (!GUARD_CODE_EXT.has(ext)) return allow("not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [];
   for (const name of safeReaddir(root).sort()) {
@@ -1180,7 +1182,13 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const given = pt.given;
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const storedKind = existed ? readState(projectDir, slug).kind || "feature" : null;
-  const askedKind = kind ? String(kind).trim().toLowerCase() : null;
+  const askedKind = kind != null ? String(kind).trim().toLowerCase() : null;
+  // An unknown kind is an error on every surface (the MCP enum refuses it): the CLI's `--kind bugfx` used to scaffold a
+  // plain feature, and a re-run with the right kind then only "kept" the wrong one.
+  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix") {
+    const A = i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).args;
+    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix"), JSON.stringify(String(kind)))) };
+  }
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
@@ -1571,6 +1579,15 @@ function bugfixGate(dir, kind, blocks, task, lng) {
   const GT = i18n.msg(lng).gates;
   return { gated: "root-cause", error: rc === -1 ? GT.bugGateFirst(task.number, blocks[0].number) : GT.bugGate(task.number, blocks[rc].number) };
 }
+// A task number as given by a caller → the integer, or NaN. Digits only ("01" is task 1, like the "01." it names) or a
+// safe non-negative integer: parseInt read "1.9" and "2abc" as tasks 1 and 2 (and 1e21 as 1) — the CLI's `brief 1.9`
+// briefed task 1 where spec_task_brief {number: 1.9} is refused. The same rule on every surface.
+function taskNumber(v) {
+  if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 ? v : NaN;
+  if (typeof v !== "string" || !/^\s*\d+\s*$/.test(v)) return NaN;
+  const n = parseInt(v, 10);
+  return Number.isSafeInteger(n) ? n : NaN;
+}
 function completeTask(projectDir, name, number, evidence) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -1578,7 +1595,7 @@ function completeTask(projectDir, name, number, evidence) {
   const text = readIfExists(file);
   const E = errs(projectDir, f.slug);
   if (text == null) return { ok: false, error: E.tasksMissing(f.slug) };
-  const n = parseInt(number, 10); // "01" is task 1, like the "01." it names
+  const n = taskNumber(number); // "01" is task 1, like the "01." it names
   if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
   // The same scanner + resolver as status/brief/`done --run`: a "- [ ] N." inside a comment or a code fence
   // is never ticked, "1.1" is not task 1, and a duplicated number resolves to its first OPEN task.
@@ -2934,7 +2951,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     block = taskBlocks(activeTasks(tasksText, tracks)).find((b) => !b.done);
     if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone };
   } else {
-    const n = parseInt(number, 10);
+    const n = taskNumber(number);
     if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
     block = resolveTask(blocks, n); // the task completeTask would tick (first OPEN one of a duplicated number)
     if (!block) return { ok: false, error: E.taskNotFound(n) };
@@ -4181,11 +4198,11 @@ function applyTracks(projectDir, f, name, trs, lng) {
       if (!present) {
         forgetCached(designPath); // written in place below: its cached text is dropped
         fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
-        note("design.md (+sections)");
+        note(T.addedDesign);
       }
     } else if (tr !== "tdd") {
       // A bugfix has no design.md: the escalated track's mandatory sections still need a home (localized title).
-      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng))) note("design.md (+sections)");
+      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng))) note(T.addedDesign);
     }
 
     // Steering the track needs (scale/observability/cost, ai-strategy, testing-standards) — project-level,
@@ -4203,12 +4220,12 @@ function applyTracks(projectDir, f, name, trs, lng) {
       if (block) {
         forgetCached(tasksPath); // written in place below: its cached text is dropped
         fs.writeFileSync(tasksPath, tasksText.trimEnd() + "\n" + block, "utf8");
-        note("tasks.md (+tasks)");
+        note(T.addedTasks);
       }
     }
   }
 
-  if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note("classification.md (Active Tracks)");
+  if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note(T.addedActiveTracks);
   state.tracks = after;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   return { ok: true, added, tracks: after };
@@ -5278,7 +5295,7 @@ function specDoctor(projectDir, name, opts = {}) {
     const nErr = e.issues ? e.issues.filter((i) => i.severity === "error").length : 0;
     const nCrit = e.summary ? e.summary.criteriaDetected : 0;
     // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean".
-    add("ears", nErr ? "fail" : nCrit === 0 ? "warn" : "pass", `criteria=${nCrit}, errors=${nErr}, warnings=${e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0}`);
+    add("ears", nErr ? "fail" : nCrit === 0 ? "warn" : "pass", m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqs);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
@@ -5684,6 +5701,11 @@ function backlog(projectDir, action, name, note) {
   const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
   if (a === "add") return addBacklog(projectDir, name, note);
   if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
+  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.
+  if (a && a !== "list") {
+    const A = i18n.msg(projectLang(projectDir)).args;
+    return { ok: false, error: A.invalid(A.item("action", A.oneOf("add, rm, list"), JSON.stringify(String(action)))) };
+  }
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
 
@@ -5796,8 +5818,15 @@ function roadmapTaskText(text, t) {
 }
 
 // `data`: a roadmapData() result to render (one computation for the MD and the HTML refresh).
+// The Phase column in the roadmap's language (detectPhase() tokens stay English in roadmap.json and every JSON result).
+function roadmapPhaseName(lang) {
+  const P = i18n.msg(lang).phaseNames || {};
+  return (phase) => (Object.prototype.hasOwnProperty.call(P, phase) ? P[phase] : phase);
+}
+
 function renderRoadmapMd(projectDir, lang, data) {
   const t = i18nLang(lang);
+  const phaseName = roadmapPhaseName(lang);
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
@@ -5821,7 +5850,7 @@ function renderRoadmapMd(projectDir, lang, data) {
   if (!rows.length) md += `_${t.none}_\n`;
   else {
     md += `| | ${t.colFeature} | ${t.colTracks} | ${t.colPhase} | % | ${t.colTasks} | ${t.colDeps} | ${t.colNext} |\n|---|---|---|---|---|---|---|---|\n`;
-    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](./${r.f.name}/requirements.md) | ${r.f.tracks} | ${r.f.phase} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} |\n`;
+    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](./${r.f.name}/requirements.md) | ${r.f.tracks} | ${phaseName(r.f.phase)} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} |\n`;
   }
 
   md += `\n## ${t.deps}\n\n`;
@@ -5839,6 +5868,7 @@ function renderRoadmapMd(projectDir, lang, data) {
 // Self-contained HTML — brand palette (Pro Digital Key), system-default + toggle, zero dependencies.
 function renderRoadmapHtml(projectDir, lang, data) {
   const t = i18nLang(lang);
+  const phaseName = roadmapPhaseName(lang);
   const langAttr = ROADMAP_I18N[String(lang || "en").toLowerCase().slice(0, 2)] ? String(lang).toLowerCase().slice(0, 2) : "en";
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
@@ -5854,7 +5884,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
         `<tr><td><span class="dot" style="background:${dot[r.state]}"></span></td>` +
         `<td><a href="./${encodeURI(r.f.name)}/requirements.md">${htmlEsc(r.f.name)}</a></td>` +
         `<td><span class="tracks">${htmlEsc(r.f.tracks)}</span></td>` +
-        `<td>${htmlEsc(r.f.phase)}</td>` +
+        `<td>${htmlEsc(phaseName(r.f.phase))}</td>` +
         `<td class="pct"><span class="bar"><span style="width:${r.f.percent}%"></span></span>${r.f.percent}%</td>` +
         `<td>${r.done}/${r.total}</td>` +
         `<td>${r.f.dependsOn.length ? r.f.dependsOn.map((d) => `<span class="${r.f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ") : "—"}</td>` +
@@ -5930,7 +5960,7 @@ ${rmv.cycle ? `<p class="unmet">⚠ ${t.cycle}: ${htmlEsc(rmv.cycle.join(" → "
 ${!rmv.features.length ? `<p class="sub">${t.noFeatures}</p>` : !nextUp.length ? `<p class="sub">${rmv.complete === rmv.total ? t.allDone : t.nothingUnblocked}</p>` : `<div class="cards">${nextCards}</div>`}
 
 <h2>${t.features}</h2>
-${rows.length ? `<table><thead><tr><th></th><th>${t.colFeature}</th><th>${t.colTracks}</th><th>${t.colPhase}</th><th>%</th><th>${t.colTasks}</th><th>${t.colDeps}</th><th>${t.colNext}</th></tr></thead><tbody>${featRows}</tbody></table>` : `<p class="sub">(none)</p>`}
+${rows.length ? `<table><thead><tr><th></th><th>${t.colFeature}</th><th>${t.colTracks}</th><th>${t.colPhase}</th><th>%</th><th>${t.colTasks}</th><th>${t.colDeps}</th><th>${t.colNext}</th></tr></thead><tbody>${featRows}</tbody></table>` : `<p class="sub">${htmlEsc(t.none)}</p>`}
 
 <h2>${t.deps}</h2>
 ${depList ? `<ul>${depList}</ul>` : `<p class="sub">${t.noDeps}</p>`}
@@ -6558,6 +6588,13 @@ function drift(projectDir, name, opts = {}) {
 
 const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
 const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
+// What guard mode treats as code (guardCheck). Broader than CODE_EXT on purpose: CODE_EXT is the brownfield scanner's
+// inventory (scan/coverage percentages), while the guard promises a prompt for ANY source file outside .specs/ — reusing
+// CODE_EXT waved .cc/.hpp, .mts/.cts, .sh/.ps1, .sql, Scala, Dart, Elixir… through silently as "not code".
+const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT, ".ipynb",
+  ".mts", ".cts", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".m", ".mm", ".scala", ".sc", ".dart", ".ex", ".exs", ".erl", ".hrl",
+  ".hs", ".clj", ".cljs", ".cljc", ".lua", ".pl", ".pm", ".r", ".jl", ".zig", ".nim", ".groovy", ".fs", ".fsx", ".fsi", ".vb", ".ml", ".mli",
+  ".sol", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".sql"]);
 const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names, test/entrypoint hints)
 const SCAN_READ_BYTES = 200000;
 const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
@@ -6907,7 +6944,9 @@ const NODE_TEST_RUNNERS = { jest: "jest", vitest: "vitest", mocha: "mocha", ava:
 
 function scanCodebase(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
-  const cap = opts.cap || 5000;
+  // Both surfaces refuse a cap that is not an integer ≥ 1 before calling; here it can only fall back to the default
+  // (a negative cap used to scan zero files and report "truncated").
+  const cap = Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : 5000;
   const lang = projectLang(projectDir);
   const B = i18n.msg(lang).brownfield;
   const byExt = {};

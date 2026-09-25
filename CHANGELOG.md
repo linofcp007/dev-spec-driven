@@ -106,8 +106,19 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `en` and was saved — `init` rewrote the project language). The new MCP enum validation was case-sensitive while
   the CLI (and the 1.12 MCP) took `Design` / `PT` / `Bugfix`: enums the engine folds (phase, lang, kind, action) are
   case-insensitive on both surfaces (`backlog ADD` too); `spec_import`'s tool stays exact.
+- **CLI switches, numbers and refusals.** Boolean switches were read by truthiness, so `--x=false` turned them
+  ON: `done --run=false` ran the `_Verify:_` commands, `add-track --remove=false` removed the track, `--write=false`
+  wrote. `--x=true|false` (1/0, yes/no, on/off) is now honored and any other value is an error. The CLI refuses
+  what MCP refuses: a task number like `1.9` / `2abc` (`brief 1.9` briefed task 1 — the engine now refuses it on
+  both surfaces), `--cap` / `--max` that aren't integers ≥ 1 (`scan --cap -3` scanned nothing; `spec_next_task`
+  `max` gets `minimum: 1` too), an unknown `--kind` (a typo scaffolded a plain feature for good) or backlog action
+  (`backlog delete X` just listed). With `--json`, a refused operation prints the engine result
+  (`{ok: false, error, recorded…}`) on stdout, as MCP returns it, and exits 1 — stdout used to be empty.
 - **Localization.** CLI human output, SessionStart phase names, argument errors and the eval harness speak
-  the feature's (or project's) language — EN/PT/ES; `--json` is unchanged.
+  the feature's (or project's) language — EN/PT/ES; `--json` is unchanged. Leftovers fixed: status section
+  labels, `depend` and `add-track` lines, usage prefixes, `unknown command`, EARS severities, doctor's ears
+  detail, `spec_add_track`'s `added` entries and the ROADMAP.md / ROADMAP.html phase column were English in
+  PT/ES projects (the JSON `phase` stays English-stable).
 - **Pre-commit.** Staged paths with accents (`serviços/.specs/…`) were quoted by git and skipped; names are
   now read NUL-separated, and the output names the phantom and uncovered IDs. A requirements.md with EARS
   warnings or template placeholders no longer reads "EARS clean" — a non-blocking ⚠ line names them.
@@ -156,6 +167,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
   while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
   (appended or edited) covers nothing until re-approved. Silent when off; never blocks on its own errors.
+  "Code" is any source file — not only the scanner's list, so `.mts`, `.cc`/`.hpp`, Scala, Dart, Elixir, shell,
+  PowerShell and SQL edits ask too; docs, config, markup and styles stay silent.
 - **Scoped steering**: Kiro-compatible front matter (`inclusion: always | fileMatch | manual`,
   `fileMatchPattern`), custom steering files via `steering_scaffold` / `dev-spec steering`, per-task
   selection in `spec_task_brief` (matching `fileMatch` bodies quoted), and a doctor warning for steering
@@ -207,7 +220,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 667 assertions (was 181), `node cli/test-cli.js` 208 (was 53); the tool count is
+- `node mcp/test.js` 674 assertions (was 181), `node cli/test-cli.js` 221 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

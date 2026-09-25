@@ -89,7 +89,7 @@ const TOOLS = [
   {
     name: "spec_next_task",
     description: "Return the next unchecked task for a feature (its number and text), plus remaining/total counts. With `batch: true`, also return the tasks that can run in parallel with it: the following open [P] tasks of the same section whose _Implements:_ files are declared and disjoint (for parallel subagents in separate worktrees; max 3 by default).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, batch: { type: "boolean", description: "Also return the parallel batch." }, max: { type: "integer", description: "Batch size cap (default 3, max 8)." }, projectDir: { type: "string" } }, required: ["name"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, batch: { type: "boolean", description: "Also return the parallel batch." }, max: { type: "integer", minimum: 1, description: "Batch size cap (default 3, max 8)." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
     name: "spec_task_brief",

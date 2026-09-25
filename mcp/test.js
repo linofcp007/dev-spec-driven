@@ -17,7 +17,7 @@ const path = require("path");
 // own project folders — so the suite runs every section in a child process of this file (MCP_TEST_SECTION=<name>),
 // each with its own server and temp dir, all at once, and prints their output in order with one total. "main" is
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
 if (!SECTION) {
   const runSection = (name) => new Promise((resolve) => {
@@ -149,7 +149,7 @@ function endRun() {
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;
     const sections = { wp1: sectionWp1, wp2: sectionWp2, wp3: sectionWp3, wp4: sectionWp4, wp5: sectionWp5, wp6: sectionWp6, wp7: sectionWp7, wp8: sectionWp8,
-      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12 };
+      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13 };
     await sections[SECTION]();
     return endRun();
   }
@@ -4585,6 +4585,76 @@ function endRun() {
     ok(qm12.n1 === "notes/a.md" && qm12.n2 === "notes/a.md" && qm12.s1 === ".specs/memo/requirements.md" && qm12.s2 === ".specs/memo/requirements.md,.specs/second/requirements.md" &&
       qm12.n3 === "notes/a.md" && qm12.w1 === "notes/a.md" && qm12.w2 === qm12.w1 && qAfter12 === "notes/a.md,notes/b.md",
       "the glob memo: repeats answer from the call's snapshot; an engine write the walk reaches (.specs/*/requirements.md) is seen at once, one it can't reach (notes/*, **/*.md skip .specs) keeps the result; the next call is fresh (got " + JSON.stringify(qm12) + ")");
+  }
+
+  async function sectionWp13() { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    // ROADMAP.md / .html: the Phase column in the roadmap's language (the JSON `phase` stays English-stable).
+    const r13 = path.join(tmp, "proj-wp13-roadmap");
+    S.initProject(r13, ["core"], "pt");
+    S.createFeature(r13, "Other", ["core"]);
+    const md13 = S.renderRoadmapMd(r13, "pt"), es13 = S.renderRoadmapMd(r13, "es"), html13 = S.renderRoadmapHtml(r13, "pt"), en13 = S.renderRoadmapMd(r13, "en");
+    const empty13 = path.join(tmp, "proj-wp13-empty");
+    fs.mkdirSync(empty13, { recursive: true });
+    ok(/\| core \| requisitos \| /.test(md13) && !/\| requirements \|/.test(md13) && /\| core \| requisitos \| /.test(es13) && /<td>requisitos<\/td>/.test(html13) && !/<td>requirements<\/td>/.test(html13) &&
+      /\| core \| requirements \| /.test(en13) && S.roadmapReport(r13, {}).features[0].phase === "requirements" && /<p class="sub">\(nenhuma\)<\/p>/.test(S.renderRoadmapHtml(empty13, "pt")),
+      "ROADMAP.md / ROADMAP.html render the phase in the roadmap language (PT/ES 'requisitos', EN unchanged); JSON phase stays 'requirements'; the empty HTML table is '(nenhuma)', not '(none)'");
+
+    // spec_doctor's ears detail and spec_add_track's `added` entries follow the feature language (EN byte-identical).
+    const p13 = path.join(tmp, "proj-wp13-pt"), e13 = path.join(tmp, "proj-wp13-es"), n13en = path.join(tmp, "proj-wp13-en");
+    S.initProject(p13, ["core"], "pt");
+    S.initProject(e13, ["core"], "es");
+    S.createFeature(p13, "Login", ["core"]);
+    S.createFeature(e13, "Pago", ["core"]);
+    S.createFeature(n13en, "Auth", ["core"]);
+    const earsOf = (d, f) => (S.specDoctor(d, f).checks.find((c) => c.id === "ears") || {}).detail || "";
+    const at13 = S.addTrack(p13, "login", ["saas"]);
+    const mcpAt13 = payload(await call("spec_add_track", { name: "pago", track: "saas", projectDir: e13 }));
+    const enAt13 = S.addTrack(n13en, "auth", ["saas"]);
+    ok(/^critérios=\d+, erros=\d+, avisos=\d+$/.test(earsOf(p13, "login")) && /^criterios=\d+, errores=\d+, avisos=\d+$/.test(earsOf(e13, "pago")) && /^criteria=\d+, errors=\d+, warnings=\d+$/.test(earsOf(n13en, "auth")),
+      "spec_doctor: the ears check detail is localized (critérios/erros/avisos · criterios/errores/avisos; EN criteria/errors/warnings unchanged)");
+    ok(at13.added.includes("design.md (+secções)") && at13.added.includes("classification.md (Tracks Ativos)") && !at13.added.some((x) => /\+sections|\+tasks|Active Tracks/.test(x)) &&
+      mcpAt13.added.includes("design.md (+secciones)") && mcpAt13.added.includes("classification.md (Tracks Activos)") &&
+      enAt13.added.includes("design.md (+sections)") && enAt13.added.includes("classification.md (Active Tracks)"),
+      "spec_add_track: the 'added' entries for files extended in place are in the feature language (PT/ES; EN unchanged), like the 'inactive' list (got " + JSON.stringify([at13.added, mcpAt13.added]) + ")");
+
+    // Guard mode: every source language counts as code, not only the scanner's CODE_EXT list.
+    const g13 = path.join(tmp, "proj-wp13-guard");
+    S.initProject(g13, ["core"], undefined, { guard: true });
+    S.createFeature(g13, "Billing", ["core"]);
+    const code13 = ["src/a.ts", "src/a.mts", "src/a.cts", "src/a.cc", "src/a.cxx", "src/a.hpp", "src/a.hh", "src/a.scala", "src/a.dart", "src/a.fs", "src/a.groovy",
+      "lib/a.ex", "lib/a.exs", "src/a.lua", "src/a.m", "scripts/a.sh", "scripts/a.ps1", "db/a.sql"];
+    const text13 = ["README.md", "config/app.json", "web/site.css", "web/index.html", "docs/notes.txt", ".env"];
+    const notAsked13 = code13.filter((f) => S.guardCheck(g13, path.join(g13, f)).decision !== "ask");
+    const notText13 = text13.filter((f) => S.guardCheck(g13, path.join(g13, f)).why !== "not-code");
+    ok(!notAsked13.length && !notText13.length,
+      "guard: .mts/.cts, C++ .cc/.cxx/.hpp/.hh, Scala, Dart, F#, Groovy, Elixir, Lua, Objective-C, shell, PowerShell and SQL edits ask; docs/config/markup/styles stay silent (not asked: " +
+      notAsked13.join(", ") + "; not 'not-code': " + notText13.join(", ") + ")");
+
+    // Task numbers, kind, backlog action and scan cap: refused by the engine too, so the CLI and MCP agree.
+    const n13 = path.join(tmp, "proj-wp13-numbers");
+    S.createFeature(n13, "Billing", ["core"]);
+    const tasks13 = path.join(n13, ".specs", "billing", "tasks.md");
+    const tasksBefore13 = fs.readFileSync(tasks13, "utf8");
+    const badNums13 = [S.taskBrief(n13, "billing", "1.9"), S.taskBrief(n13, "billing", "2abc"), S.taskBrief(n13, "billing", 1e21), S.taskBrief(n13, "billing", 1.9), S.taskBrief(n13, "billing", "-1"),
+      S.completeTask(n13, "billing", "1.9"), S.completeTask(n13, "billing", "2abc"), S.completeTask(n13, "billing", 1e21)];
+    ok(badNums13.every((r) => r.ok === false && /number must be an integer/.test(r.error)) && fs.readFileSync(tasks13, "utf8") === tasksBefore13 &&
+      !fs.existsSync(path.join(n13, ".specs", "billing", ".execution")) && S.taskBrief(n13, "billing", " 01 ").task.number === 1 && S.taskBrief(n13, "billing", 2).task.number === 2,
+      "task_brief / complete_task: '1.9', '2abc', 1e21, 1.9 and '-1' are refused (never read as task 1 or 2) — nothing ticked or written; '01' and 2 still resolve");
+    const kind13 = S.createFeature(n13, "Zed", undefined, undefined, undefined, undefined, "bugfx");
+    const kindEmpty13 = S.createFeature(n13, "Zed", undefined, undefined, undefined, undefined, "");
+    const bl13 = S.backlog(n13, "delete", "X");
+    fs.mkdirSync(path.join(n13, "src"), { recursive: true });
+    fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
+    const sc13 = S.scanCodebase(n13, { cap: -3 });
+    ok(kind13.ok === false && /kind must be one of: feature, bugfix \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
+      bl13.ok === false && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
+      sc13.filesScanned === 1 && !sc13.truncated,
+      "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
+    const mx13 = await call("spec_next_task", { name: "billing", batch: true, max: 0, projectDir: n13 });
+    const mxOk13 = await call("spec_next_task", { name: "billing", batch: true, max: 2, projectDir: n13 });
+    ok(mx13.result.isError === true && /max must be an integer ≥ 1 \(got 0\)/.test(payload(mx13).error) && !mxOk13.result.isError,
+      "spec_next_task {max: 0} is refused like the CLI's --max 0 (max is an integer ≥ 1)");
   }
 
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples

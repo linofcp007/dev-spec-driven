@@ -44,8 +44,10 @@ input schema (a wrong type or unknown value is refused with a clear message).
 ## CLI (`dev-spec`, same engine, same behaviour)
 
 `node cli/dev-spec.js <command>` from the plugin clone (or `dev-spec` on PATH). `--json` prints the structured
-result; `--project <dir>` sets the project root; human output is localized. `doctor` (FAIL), `trace` (gaps),
-`ears` (errors) and `drift` (drift) exit 1, so they are scriptable.
+result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it);
+`--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
+(any other value is an error). `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift) exit 1, so
+they are scriptable.
 
 ```
 classify "<description>" [--name n]      init [tracks...] [--lang] [--guard on|off]
