@@ -65,7 +65,8 @@ their most recent message.
    final code. Tick tasks only through `spec_complete_task {evidence}` — never by editing the checkbox.
    A task whose `_Verify:_` names a runnable command counts as verified only with `{command, exitCode: 0}`;
    a text note ticks it but leaves it unverified; a failed run is recorded and refuses the tick; evidence goes
-   stale when the spec it proved changes (`references/verification.md`). The thoughts that
+   stale when `spec_impact --reopen` reopens the task after a spec change, or when its `_Verify:_` command
+   changes (`references/verification.md`). The thoughts that
    precede skipping a phase are listed in `references/red-flags.md`.
 7. **An approved spec that changed is not approved.** Every approval snapshots what it signed off; an edit
    afterwards is diffed (`spec_impact`), reviewed with the human and re-approved — never silently shipped.
@@ -140,7 +141,7 @@ All artifacts live in `.specs/` at the project root: `steering/` (shared context
 `roadmap.json`, and one folder per feature — `classification.md`, `requirements.md`, `design.md`,
 `tasks.md`, `quickstart.md`, `checklist.md`, plus `test-plan.md` + `tests/` (+tdd), `eval-plan.md` +
 `prompts/` + `evals/` (+ai) and `load-test.md` (+saas); `integration-plan.md` (brownfield), `bug.md` (bugfix),
-`retro.md`, and `.history/` (approval snapshots — commit them). Generated at the root: `ROADMAP.md` and the
+`retro.md`, and `.history/` (approval snapshots — commit them). Generated in `.specs/`: `ROADMAP.md` and the
 living catalog `SPECS.md`. Annotated tree: `references/tooling-reference.md`.
 
 ### Steering Files
@@ -466,7 +467,7 @@ Depth: `references/change-management.md`.
 **Local automation, not CI:** saving `requirements.md` lints EARS (and names leftover placeholders), saving
 `tasks.md` checks traceability, saving `design.md` checks the active tracks' mandatory sections and the
 Constitution Check; session start prints feature status plus a line per finished feature whose files drifted;
-with guard mode on, a code edit asks first while nothing is approved; the optional `pre-commit` validator blocks
+with guard mode on, a code edit asks first while no feature has approved, unfinished tasks; the optional `pre-commit` validator blocks
 staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`,
 `/guardian-scan`) and UI work to **ui-ux-pro-max** when present — route to them, don't duplicate them.
 

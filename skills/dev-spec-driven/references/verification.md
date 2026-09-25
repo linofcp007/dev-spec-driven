@@ -46,8 +46,10 @@ BEFORE claiming any status:
 
 ### Why a task is unverified — stable reason codes
 
-`spec_complete_task` returns `verified` and, when false, `unverifiedReason` (branch on the code, never on the
-localized `note`); doctor, finish and the roadmap label each task the same way.
+`spec_complete_task` returns `verified`. When it is false, `unverifiedReason` (plus a localized `note`) is present
+if the task has a runnable `_Verify:_` or a recorded run/note — branch on the code, never on the `note`. A task with
+no runnable `_Verify:_` and nothing recorded comes back `verified: false` with **no** `unverifiedReason`, and
+doctor, finish and the roadmap do not count it as unverified. Everywhere else they label each task the same way.
 
 | Code | Meaning | What to do |
 |---|---|---|

@@ -11,9 +11,10 @@ Run the `spec_doctor` MCP tool for this feature (CLI `dev-spec doctor <feature>`
 result clearly: each check (pass/warn/fail), the recorded phase approvals, and the `readyToAdvance` verdict.
 
 - **Fails** (block advancing): `ears` errors, `clarifications` still open, `ac-uniqueness`, `placeholders` (template
-  text left in the current phase's artifact or an earlier one), `traceability` gaps, unfilled `saas-sections` /
-  `ai-sections` (the `> **TODO**` sentinel or a placeholder still there), missing `requirements`/`design`, a
-  bugfix's `root-cause`.
+  text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
+  a `[SaaS]`/`[AI]` section, which the design approval refuses), `traceability` gaps, unfilled `saas-sections` /
+  `ai-sections` (missing, or the `> **TODO**` sentinel still there / empty body), missing `requirements`/`design`,
+  a bugfix's `root-cause`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,
   `secondary-trace` (EC / NFR / SC IDs no task or test covers), `tests-in-code` (T-IDs made green by done tasks that
