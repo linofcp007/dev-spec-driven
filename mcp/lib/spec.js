@@ -47,10 +47,12 @@ function specsRoot(projectDir) {
 }
 
 function ensureDir(p) {
+  forgetCached(p);
   fs.mkdirSync(p, { recursive: true });
 }
 
 function writeIfAbsent(file, content) {
+  forgetCached(file);
   ensureDir(path.dirname(file));
   try {
     fs.writeFileSync(file, content, { encoding: "utf8", flag: "wx" }); // atomic "create only" — never clobbers
@@ -64,6 +66,7 @@ function writeIfAbsent(file, content) {
 // Replace a file without a torn intermediate state: a concurrent reader (hook + MCP tool) sees the old
 // content or the new one, never an empty/half-written file.
 function writeFileAtomic(file, content) {
+  forgetCached(file);
   ensureDir(path.dirname(file));
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
   fs.writeFileSync(tmp, content, "utf8");
@@ -100,16 +103,86 @@ function shapeError(lang, rel, problems) {
   return S.invalid(rel, problems.map(([code, key]) => (typeof S[code] === "function" ? S[code](key) : S[code])).join("; "));
 }
 
-function readIfExists(file) {
+// One read per file per computation: the roadmap refresh (run by every mutator and the hook) and the checks (doctor,
+// next_action, trace, the catalog) read each feature's artifacts and .state.json from many helpers — the same file up to
+// six times, and on Windows a read costs ~1 ms (the scanner opens every file). withReadCache(fn) serves repeats from
+// memory while fn runs, and only then: the cache lives for ONE call (never across MCP calls — nothing can go stale
+// between them). Inside it every engine write keeps it true: writeFileAtomic / writeIfAbsent / ensureDir drop the entry
+// of what they write (and the "exists" answers of its folders), and a raw write — a moved or removed folder, an in-place
+// edit — clears the whole cache (invalidateReadCache). Nested scopes share the outer one. Keys are resolved paths,
+// case-folded where the file system folds case, so two spellings of one file can't hold two different texts.
+let READ_CACHE = null; // Map(key → text | null | boolean), only while a withReadCache scope runs
+function withReadCache(fn) {
+  if (READ_CACHE) return fn();
+  READ_CACHE = new Map();
   try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return null;
+    return fn();
+  } finally {
+    READ_CACHE = null;
   }
+}
+const readCacheKey = (p) => { const r = path.resolve(String(p)); return FOLD_CASE ? r.toLowerCase() : r; };
+const EXISTS_KEY = "\u0000exists:";
+function readIfExists(file) {
+  const k = READ_CACHE ? readCacheKey(file) : null;
+  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    text = null;
+  }
+  if (k !== null) READ_CACHE.set(k, text);
+  return text;
+}
+// fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks).
+function existsCached(p) {
+  if (!READ_CACHE) return fs.existsSync(p);
+  const k = EXISTS_KEY + readCacheKey(p);
+  if (READ_CACHE.has(k)) return READ_CACHE.get(k);
+  const v = fs.existsSync(p);
+  READ_CACHE.set(k, v);
+  return v;
+}
+// `file` is about to be written (or created, with its folders): its text and the "exists" answers of it and of every
+// folder above it are dropped.
+function forgetCached(file) {
+  if (!READ_CACHE) return;
+  let k = readCacheKey(file);
+  READ_CACHE.delete(k);
+  for (;;) {
+    READ_CACHE.delete(EXISTS_KEY + k);
+    const up = path.dirname(k);
+    if (up === k) break;
+    k = up;
+  }
+}
+// A write the per-file bookkeeping can't follow (a folder moved or removed, a file edited in place): forget everything.
+function invalidateReadCache() {
+  if (READ_CACHE) READ_CACHE.clear();
 }
 
 function stripHtmlComments(s) {
   return String(s || "").replace(/<!--[\s\S]*?-->/g, "");
+}
+// Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
+// is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
+function stripFencedCode(s) {
+  let fence = null;
+  return String(s || "").split("\n").map((line) => {
+    const m = line.match(RE_FENCE);
+    if (fence) {
+      if (m && line.trim().startsWith(fence)) fence = null;
+      return "";
+    }
+    if (m) { fence = m[1]; return ""; }
+    return line;
+  }).join("\n");
+}
+// requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
+// references (another feature's ACs) left out.
+function requirementAcIds(reqText) {
+  return extractAcIds(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))));
 }
 
 // Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments).
@@ -151,17 +224,17 @@ const RESERVED_SLUGS = new Set(["steering"]); // folders under .specs/ that are 
 function resolveFeature(projectDir, name) {
   const root = specsRoot(projectDir);
   const slug = slugify(name);
-  const E = errs(projectDir);
-  if (!slug) return { ok: false, slug, root, error: E.noUsableName(name == null ? "" : name) };
-  if (RESERVED_SLUGS.has(slug)) return { ok: false, slug, root, error: E.reserved(slug) };
+  const E = () => errs(projectDir); // only on a refusal: the project language costs a roadmap.json read
+  if (!slug) return { ok: false, slug, root, error: E().noUsableName(name == null ? "" : name) };
+  if (RESERVED_SLUGS.has(slug)) return { ok: false, slug, root, error: E().reserved(slug) };
   // Windows device names: refuse new ones, but an existing folder of that name (created on another OS)
   // must stay reachable so it can be renamed away. Check the real listing — on Windows existsSync("con")
   // can report the device.
-  if (RE_WIN_RESERVED.test(slug) && !safeReaddir(root).includes(slug)) return { ok: false, slug, root, error: E.reservedWin(slug) };
+  if (RE_WIN_RESERVED.test(slug) && !safeReaddir(root).includes(slug)) return { ok: false, slug, root, error: E().reservedWin(slug) };
   const dir = path.join(root, slug);
-  if (!fs.existsSync(dir)) {
+  if (!existsCached(dir)) {
     const legacy = legacySlugify(name);
-    if (legacy && legacy !== slug && !RESERVED_SLUGS.has(legacy) && fs.existsSync(path.join(root, legacy))) {
+    if (legacy && legacy !== slug && !RESERVED_SLUGS.has(legacy) && existsCached(path.join(root, legacy))) {
       return { ok: true, slug: legacy, dir: path.join(root, legacy), root };
     }
   }
@@ -170,7 +243,7 @@ function resolveFeature(projectDir, name) {
 // resolveFeature + "must exist".
 function existingFeature(projectDir, name) {
   const f = resolveFeature(projectDir, name);
-  if (f.ok && !fs.existsSync(f.dir)) return { ...f, ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
+  if (f.ok && !existsCached(f.dir)) return { ...f, ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
   return f;
 }
 
@@ -406,6 +479,19 @@ function pluralize(body, kw) {
   return body;
 }
 
+// The part of a keyword its regex (keywordRe) always matches verbatim: pluralize() only rewrites the last 3 characters
+// (-ção / -ão / -ión) or inserts a plural right after the FIRST word — so the leading characters up to both are literal.
+const KW_LITERAL = new Map();
+function keywordLiteral(kw) {
+  let lit = KW_LITERAL.get(kw);
+  if (lit != null) return lit;
+  const first = (kw.match(/^[\p{L}\p{N}]+/u) || [""])[0];
+  const n = Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
+  lit = kw.slice(0, Math.max(1, n));
+  KW_LITERAL.set(kw, lit);
+  return lit;
+}
+
 function keywordRe(kw) {
   let re = KW_RE.get(kw);
   if (re) return re;
@@ -455,6 +541,9 @@ function classify(description, opts = {}) {
   for (const track of ["tdd", "saas", "ai"]) {
     for (const tier of ["strong", "weak"]) {
       for (const kw of SIGNALS[track][tier]) {
+        // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
+        // regexes on every CLI run (a classify used to cost ~250 ms per process).
+        if (!text.includes(keywordLiteral(kw))) continue;
         const re = keywordRe(kw);
         re.lastIndex = 0;
         let m;
@@ -735,16 +824,26 @@ function steeringFrontMatter(text) {
 // case-insensitive where the filesystem folds case (Windows, macOS). The pattern is the user's, so no backtracking
 // regex: braces expand into at most GLOB_MAX_ALTS alternatives (more → no match) and each one is matched by a
 // linear DP over (token, position) — `**/**/**/x` or `*a*a*a*b` against a deep path used to hang the brief.
+// It is the project's ONE glob: steering fileMatchPattern, and the _Implements:_ globs coverage() and trace_check resolve.
 const GLOB_MAX_ALTS = 256;
+const globNorm = (s) => String(s == null ? "" : s).trim().replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
 function steeringGlobMatch(pattern, file) {
-  const norm = (s) => String(s == null ? "" : s).trim().replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
-  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
-  const g = fold(norm(pattern));
-  const p = fold(norm(file));
-  if (!g || !p) return false;
-  const alts = globAlternatives(g);
-  return !!alts && alts.some((a) => globDpMatch(a, p));
+  return globMatcher(pattern)(file);
 }
+// The pattern compiled once (brace expansion) → (file) => boolean — for matching one pattern against many paths.
+function globMatcher(pattern) {
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const g = fold(globNorm(pattern));
+  const alts = g ? globAlternatives(g) : null;
+  if (!alts) return () => false;
+  return (file) => {
+    const p = fold(globNorm(file));
+    return !!p && alts.some((a) => globDpMatch(a, p));
+  };
+}
+// An _Implements:_ entry that is a glob (coverage's and trace_check's rule). Braces alone don't make one: an
+// _Implements:_ list is split on commas, so `{a,b}` can't survive there anyway.
+const isImplementsGlob = (p) => /[*?]/.test(String(p || ""));
 // "src/{a,b/{c,d}}/*.js" → ["src/a/*.js", "src/b/c/*.js", "src/b/d/*.js"]; unbalanced braces stay literal (the
 // pattern itself); a top-level comma is literal. null past GLOB_MAX_ALTS.
 function globAlternatives(g) {
@@ -1168,10 +1267,10 @@ function detectTracks(dir) {
     return normalizeTracks(saved);
   }
   const t = ["core"];
-  if (fs.existsSync(path.join(dir, "test-plan.md")) || fs.existsSync(path.join(dir, "tests"))) t.push("tdd");
+  if (existsCached(path.join(dir, "test-plan.md")) || existsCached(path.join(dir, "tests"))) t.push("tdd");
   const design = readIfExists(path.join(dir, "design.md")) || "";
-  if (fs.existsSync(path.join(dir, "load-test.md")) || headingHasMarker(design, "[SaaS]")) t.push("saas");
-  if (fs.existsSync(path.join(dir, "eval-plan.md")) || fs.existsSync(path.join(dir, "evals")) || headingHasMarker(design, "[AI]")) t.push("ai");
+  if (existsCached(path.join(dir, "load-test.md")) || headingHasMarker(design, "[SaaS]")) t.push("saas");
+  if (existsCached(path.join(dir, "eval-plan.md")) || existsCached(path.join(dir, "evals")) || headingHasMarker(design, "[AI]")) t.push("ai");
   return VALID_TRACKS.filter((x) => t.includes(x));
 }
 
@@ -1227,7 +1326,7 @@ function isPlaceholderTask(text) {
 }
 
 function detectPhase(dir, tracks) {
-  const has = (f) => fs.existsSync(path.join(dir, f));
+  const has = (f) => existsCached(path.join(dir, f));
   const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
   const anyDone = tasks.some((t) => t.done);
   const allDone = tasks.length > 0 && tasks.every((t) => t.done);
@@ -1465,6 +1564,7 @@ function completeTask(projectDir, name, number, evidence) {
     const raw = lines[task.line];
     lines[task.line] = raw.slice(0, task.col) + "x" + raw.slice(task.col + 1);
     updated = lines.join("\n");
+    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
     fs.writeFileSync(file, updated, "utf8");
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
@@ -1758,13 +1858,13 @@ function traceCheck(projectDir, name, opts = {}) {
   const rawReqs = readIfExists(path.join(dir, "requirements.md")) || "";
   const rawTasks = readIfExists(path.join(dir, "tasks.md")) || "";
   const rawPlan = readIfExists(path.join(dir, "test-plan.md")) || "";
-  // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace).
-  const reqs = stripSupersedes(stripHtmlComments(rawReqs));
+  // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace). An ID
+  // that only appears in a fenced code block (an example) is not a required AC either (requirementAcIds).
   const tasks = stripHtmlComments(rawTasks);
   const testPlan = stripHtmlComments(rawPlan);
   const tracks = detectTracks(dir);
 
-  const requiredAcs = extractAcIds(reqs);
+  const requiredAcs = requirementAcIds(rawReqs);
   const acsInTasks = extractAcIds(tasks);
   const acsInTestPlan = extractAcIds(testPlan);
 
@@ -1784,6 +1884,13 @@ function traceCheck(projectDir, name, opts = {}) {
   const projRoot = path.resolve(projectDir);
   const outOfRoot = new Set();
   const absent = implFiles.filter((f) => {
+    // A glob (`src/api/**`, `lib/*.js`) is present once it matches a file — coverage()'s glob, walked from its literal
+    // folders only. One that would leave the project is out of root like any such path.
+    if (isImplementsGlob(f)) {
+      const g = globFiles(projRoot, f, { first: true });
+      if (g.outside) outOfRoot.add(f);
+      return !g.files.length;
+    }
     const abs = path.resolve(projRoot, f);
     const inRoot = withinRoot(projRoot, abs); // a drive root (C:\) already ends in a separator
     if (!inRoot) outOfRoot.add(f);
@@ -2314,7 +2421,23 @@ function backtickRuns(s) {
     },
   };
 }
+// The scan is linear but not cheap, and one refresh asks for the same tasks.md many times (status, phase, roadmap row,
+// verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
+const TASK_BLOCKS_MEMO = new Map();
+const TASK_BLOCKS_MEMO_MAX = 32;
 function taskBlocks(tasksText) {
+  const key = String(tasksText || "");
+  let blocks = TASK_BLOCKS_MEMO.get(key);
+  if (blocks) {
+    TASK_BLOCKS_MEMO.delete(key); // most recently used last
+  } else {
+    blocks = scanTaskBlocks(key);
+    if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
+  }
+  TASK_BLOCKS_MEMO.set(key, blocks);
+  return blocks.map((b) => ({ ...b, body: b.body.slice() }));
+}
+function scanTaskBlocks(tasksText) {
   const blocks = [];
   let phase = null;
   let cur = null;
@@ -2607,7 +2730,7 @@ function acIndex(reqText) {
   for (const b of blocks) {
     for (const id of extractAcIds(stripSupersedes(blockLines(byLine, b).map((l) => l.text).join("\n")))) if (!map.has(id)) map.set(id, entry(id, b));
   }
-  stripHtmlComments(reqText || "").split(/\r?\n/).forEach((l, i) => {
+  stripFencedCode(stripHtmlComments(reqText || "")).split(/\r?\n/).forEach((l, i) => { // a table in a ``` example is code
     if (!/^\s*\|/.test(l)) return;
     for (const id of extractAcIds(stripSupersedes(l))) if (!map.has(id)) map.set(id, { id, text: l.trim(), line: i + 1 });
   });
@@ -2794,6 +2917,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // self-ignoring scratch: no repo config needed
     writeIfAbsent(paths.ledger, t.ledgerHeader(slug));    // the ledger is appended by the controller, never reset
+    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
     fs.writeFileSync(paths.brief, md, "utf8");            // derived artifact: regenerated on every call
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
@@ -2892,7 +3016,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const pendingGates = doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
   // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause.
-  const changed = changedSinceApproval(dir, state.approvals || {}, tracks);
+  const changed = changedSinceApproval(dir, state.approvals || {}, tracks, kind);
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
@@ -2955,6 +3079,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
+    invalidateReadCache(); // a raw write: the per-call read cache can't follow it
     fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
   }
   const ready = blockers.length === 0;
@@ -3177,7 +3302,7 @@ function requirementIndex(reqText) {
   const entry = (id, b) => ({ id, text: b.text.replace(RE_LIST_ITEM, ""), line: b.line });
   for (const b of blocks) { const m = b.text.match(RE_DEFINES_REQ_ID); if (m && !other.has(m[1])) other.set(m[1], entry(m[1], b)); }
   for (const b of blocks) for (const id of refsIn(b.text, RE_OTHER_REQ_REF)) if (!other.has(id)) other.set(id, entry(id, b));
-  stripHtmlComments(reqText || "").split(/\r?\n/).forEach((l, i) => {
+  stripFencedCode(stripHtmlComments(reqText || "")).split(/\r?\n/).forEach((l, i) => {
     if (/^\s*\|/.test(l)) for (const id of refsIn(l, RE_OTHER_REQ_REF)) if (!other.has(id)) other.set(id, { id, text: l.trim(), line: i + 1 });
   });
   for (const [id, e] of other) if (!map.has(id)) map.set(id, e);
@@ -3252,7 +3377,7 @@ function impactReport(projectDir, name, opts = {}) {
   const snap = latestSnapshot(dir, state, phase);
   if (!snap) {
     // Approved before 1.13: only the fingerprint was recorded — WHETHER it changed, not what.
-    Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks).length > 0, hint: I.fingerprintOnly(phase, slug) });
+    Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind).length > 0, hint: I.fingerprintOnly(phase, slug) });
     if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
     return res;
   }
@@ -3298,7 +3423,13 @@ function impactReport(projectDir, name, opts = {}) {
   if (phase === "requirements") {
     const d = diffEntries(requirementIndex(snap.text), requirementIndex(cur));
     const plan = [...testIndex(tracks.includes("tdd") ? readIfExists(path.join(dir, "test-plan.md")) || "" : "").values()];
-    const sections = designSections(activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks));
+    let sections = designSections(activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks));
+    if ((state.kind || "feature") === "bugfix") {
+      // A bugfix's design is bug.md (its Root Cause / Fix sections name the ACs they serve) plus design.md for a track's
+      // sections: both are searched, each section named by its file — the keys spec_impact --phase design uses.
+      const byFile = (name) => (s) => ({ ...s, title: `${name}: ${s.title}` });
+      sections = designSections(readIfExists(path.join(dir, "bug.md")) || "").map(byFile("bug.md")).concat(sections.map(byFile(PHASE_FILE.design)));
+    }
     res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
     res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
     res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
@@ -3672,6 +3803,7 @@ function removeFeature(projectDir, name) {
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
   fs.rmSync(dir, { recursive: true, force: true });
   pruneRoadmapRefs(projectDir, slug);
   maybeRefreshRoadmap(projectDir);
@@ -3693,6 +3825,7 @@ function archiveFeature(projectDir, name) {
   const dest = path.join(archRoot, slug);
   if (fs.existsSync(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) };
   const record = { at: new Date().toISOString(), ...archiveRecord(readRoadmap(projectDir), slug) };
+  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
   fs.renameSync(dir, dest);
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
@@ -3714,6 +3847,7 @@ function renameFeature(projectDir, name, newName) {
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
   fs.renameSync(oldDir, newDir);
   pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   maybeRefreshRoadmap(projectDir);
@@ -3791,7 +3925,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
   for (const tr of trs) {
     if (tr === "tdd") {
       // Plan a test only for the track criteria requirements.md actually has (a track added later brings none).
-      const reqIds = extractAcIds(stripHtmlComments(readIfExists(path.join(dir, "requirements.md")) || ""));
+      const reqIds = requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
       const planTracks = after.filter((x) => (x !== "saas" || reqIds.has("US-1.AC-5")) && (x !== "ai" || reqIds.has("US-1.AC-7")));
       put("test-plan.md", testPlanMd(name, lng, planTracks));
       ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
@@ -3814,6 +3948,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, TRACK_MARKER[tr]);
       if (!present) {
+        invalidateReadCache(); // a raw write: the per-call read cache can't follow it
         fs.writeFileSync(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng), "utf8"); // trimEnd: no /\s*$/ backtracking
         note("design.md (+sections)");
       }
@@ -3835,6 +3970,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (tasksText != null) {
       const block = trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng);
       if (block) {
+        invalidateReadCache(); // a raw write: the per-call read cache can't follow it
         fs.writeFileSync(tasksPath, tasksText.trimEnd() + "\n" + block, "utf8");
         note("tasks.md (+tasks)");
       }
@@ -3855,7 +3991,7 @@ function trackTaskBlock(tr, tasksText, reqText, lng) {
   const T = i18n.msg(lng).tracks;
   if (!T.taskBlock(tr, 1) || trackTaskHeading(tr, tasksText)) return null;
   const start = Math.max(0, ...parseTasks(tasksText).map((t) => t.number)) + 1;
-  const known = extractAcIds(stripHtmlComments(reqText || ""));
+  const known = requirementAcIds(reqText || "");
   return T.taskBlock(tr, start).replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
     const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => known.has(id));
     return "_Requirements: " + (keep.length ? keep.join(", ") : T.acPlaceholder(tr)) + "_";
@@ -4037,8 +4173,9 @@ function newTaskSpec(t, i, A) {
   }
   const parallel = typeof t.parallel === "boolean" ? t.parallel : /\[P\]/i.test(lead);
   const list = (v, sep) => (Array.isArray(v) ? v : v == null ? [] : [v]).flatMap((x) => String(x == null ? "" : x).split(sep)).map((s) => s.trim()).filter(Boolean);
-  // AC IDs are English-stable ("us-1.ac-2" is US-1.AC-2); anything else stays as given and is reported as unknown.
-  const requirements = [...new Set(list(t.requirements, /[,;\s]+/).map((id) => (/^us-\d+\.ac-\d+$/i.test(id) ? id.toUpperCase() : id)))];
+  // AC IDs and the secondary IDs (EC-n / NFR-n / SC-nnn) are English-stable ("us-1.ac-2" is US-1.AC-2, "ec-2" is EC-2);
+  // anything else stays as given and is reported as unknown.
+  const requirements = [...new Set(list(t.requirements, /[,;\s]+/).map((id) => (/^(?:us-\d+\.ac-\d+|(?:ec|nfr|sc)-\d+)$/i.test(id) ? id.toUpperCase() : id)))];
   const files = [];
   for (const given of list(t.implements, /[,;]/)) {
     const p = given.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
@@ -4103,13 +4240,20 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     if (t.error) return { ok: false, error: t.error };
     items.push(t);
   }
-  // Every cited AC must exist — the same index spec_task_brief resolves them with.
+  // Every cited AC must exist — the same index spec_task_brief resolves them with. A secondary ID (EC-2, NFR-1, SC-001)
+  // must be one requirements.md writes (secondaryDefinitions — trace_check's phantomSecondary rule: SC-1 names SC-001).
   const cited = [...new Set(items.flatMap((t) => t.requirements))];
   if (cited.length) {
     const reqText = readIfExists(path.join(dir, "requirements.md"));
     if (reqText == null) return { ok: false, error: M.err.requirementsMissing(slug) };
     const known = acIndex(reqText);
-    const phantom = cited.filter((id) => !known.has(id));
+    const secondary = cited.some((id) => /^(?:EC|NFR|SC)-\d+$/.test(id)) ? secondaryDefinitions(reqText).all : new Set();
+    const isKnown = (id) => {
+      if (known.has(id)) return true;
+      const m = id.match(/^(EC|NFR|SC)-(\d+)$/);
+      return !!m && secondary.has(idKey(m[1], m[2]));
+    };
+    const phantom = cited.filter((id) => !isKnown(id));
     if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", ")), phantom };
   }
 
@@ -4258,7 +4402,7 @@ function nextAction(projectDir, name) {
   const st = readState(projectDir, name);
   const approvals = st.approvals || {};
   // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
-  const changed = changedSinceApproval(dir, approvals, tracks);
+  const changed = changedSinceApproval(dir, approvals, tracks, st.kind);
 
   const fm = i18n.msg(featureLang(projectDir, name));
   const nx = fm.next;
@@ -4620,10 +4764,17 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
 // Approved artifacts whose content changed after THEIR OWN approval (fingerprint at approval; checkbox ticks in
 // tasks.md don't count). Approvals recorded before fingerprints existed fall back to that phase's own timestamp —
 // never the latest approval of any phase. Inactive-track phases are skipped. Shared by next_action, finish, roadmap.
-function changedSinceApproval(dir, approvals, tracks) {
+// kind: the feature's (state.kind) — a bugfix's legacy design approval (no fingerprint, no `file`) signed off bug.md,
+// so its timestamp is compared with bug.md's mtime; every other legacy approval with its own phase file's.
+function changedSinceApproval(dir, approvals, tracks, kind) {
   const out = [];
   for (const [ph, file] of Object.entries(PHASE_FILE)) {
     const a = approvals && approvals[ph];
+    if (a && !a.fingerprint && !a.file && a.at && kind === "bugfix" && ph === "design" && phaseActive(ph, tracks)) {
+      const bug = path.join(dir, phaseFile(ph, "bugfix"));
+      try { if (fs.statSync(bug).mtime.getTime() > new Date(a.at).getTime()) out.push(phaseFile(ph, "bugfix")); } catch { /* no bug.md */ }
+      continue;
+    }
     if (a && a.file !== file && a.file === phaseFile(ph, "bugfix") && phaseActive(ph, tracks)) {
       // A bugfix's design approval signed off bug.md (`file`, see phaseFile) and design.md as it was then
       // (`designFingerprint`) — a design.md created since (a track added) is a change too.
@@ -4920,7 +5071,7 @@ function specDoctor(projectDir, name, opts = {}) {
   }
   // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve —
   // spec_impact lists what the edit touches when the approval has a snapshot.
-  const changedArts = changedSinceApproval(dir, approvals, tracks);
+  const changedArts = changedSinceApproval(dir, approvals, tracks, kind);
   if (changedArts.length) {
     // One `impact --phase` command per phase with a snapshot (the CLI defaults to requirements) — next_action's hint.
     const impactPhases = snapshotPhases(dir, state, changedArts);
@@ -5279,7 +5430,7 @@ function roadmapData(projectDir) {
     const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
     const sections = [["saas", SAAS_SECTIONS, "[SaaS]"], ["ai", AI_SECTIONS, "[AI]"]].filter(([tr]) => tracks.includes(tr))
       .flatMap(([, secs, mark]) => sectionState(design, secs, mark).filter((s) => s.status !== "filled").map((s) => ({ ...s, mark })));
-    const changed = changedSinceApproval(dir, approvals, tracks);
+    const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
     return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, sections, changed, placeholders, forced };
@@ -5311,9 +5462,10 @@ function roadmapTaskText(text, t) {
   return s ? s : t.placeholderTask;
 }
 
-function renderRoadmapMd(projectDir, lang) {
+// `data`: a roadmapData() result to render (one computation for the MD and the HTML refresh).
+function renderRoadmapMd(projectDir, lang, data) {
   const t = i18nLang(lang);
-  const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
+  const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
   const attention = buildAttention(rows, t, lang);
@@ -5352,10 +5504,10 @@ function renderRoadmapMd(projectDir, lang) {
 }
 
 // Self-contained HTML — brand palette (Pro Digital Key), system-default + toggle, zero dependencies.
-function renderRoadmapHtml(projectDir, lang) {
+function renderRoadmapHtml(projectDir, lang, data) {
   const t = i18nLang(lang);
   const langAttr = ROADMAP_I18N[String(lang || "en").toLowerCase().slice(0, 2)] ? String(lang).toLowerCase().slice(0, 2) : "en";
-  const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
+  const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const attention = buildAttention(rows, t, lang);
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
@@ -5501,35 +5653,29 @@ function isGeneratedOrAbsent(file) {
   return raw == null || RE_AUTOGEN.test(raw.slice(0, 4000)) || RE_AUTOGEN.test(raw.slice(-4000));
 }
 
-function writeRoadmapMd(projectDir, lang) {
+// `data`: a roadmapData() result computed by the caller (maybeRefreshRoadmap shares one between MD and HTML); the
+// counts returned are that same computation (ROADMAP.* is not a feature, so writing it changes none of them).
+function writeRoadmapMd(projectDir, lang, data) {
+  return writeRoadmapFile(projectDir, lang, data, "ROADMAP.md", renderRoadmapMd);
+}
+
+function writeRoadmapHtml(projectDir, lang, data) {
+  return writeRoadmapFile(projectDir, lang, data, "ROADMAP.html", renderRoadmapHtml);
+}
+
+function writeRoadmapFile(projectDir, lang, data, name, render) {
   const root = specsRoot(projectDir);
   if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
-  const file = path.join(root, "ROADMAP.md");
-  if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated("ROADMAP.md") };
+  const file = path.join(root, name);
+  if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated(name) };
   if (lang) {
     const bad = roadmapError(projectDir); // persisting roadmapLang writes roadmap.json: refuse on a broken one
     if (bad) return { ok: false, error: bad };
     setRoadmapLang(projectDir, lang, "roadmapLang");
   }
-  const md = renderRoadmapMd(projectDir, lang || roadmapChromeLang(projectDir));
-  writeFileAtomic(file, md);
-  const rmv = roadmap(projectDir);
-  return { ok: true, file, overallPercent: rmv.overallPercent, complete: rmv.complete, total: rmv.total };
-}
-
-function writeRoadmapHtml(projectDir, lang) {
-  const root = specsRoot(projectDir);
-  if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
-  const file = path.join(root, "ROADMAP.html");
-  if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated("ROADMAP.html") };
-  if (lang) {
-    const bad = roadmapError(projectDir);
-    if (bad) return { ok: false, error: bad };
-    setRoadmapLang(projectDir, lang, "roadmapLang");
-  }
-  const html = renderRoadmapHtml(projectDir, lang || roadmapChromeLang(projectDir));
-  writeFileAtomic(file, html);
-  const rmv = roadmap(projectDir);
+  const d = data || roadmapData(projectDir);
+  writeFileAtomic(file, render(projectDir, lang || roadmapChromeLang(projectDir), d));
+  const rmv = d.rmv;
   return { ok: true, file, overallPercent: rmv.overallPercent, complete: rmv.complete, total: rmv.total };
 }
 
@@ -5539,8 +5685,11 @@ function maybeRefreshRoadmap(projectDir) {
   try {
     const root = specsRoot(projectDir);
     if (!fs.existsSync(root)) return;
-    writeRoadmapMd(projectDir);
-    if (fs.existsSync(path.join(root, "ROADMAP.html"))) writeRoadmapHtml(projectDir);
+    const html = fs.existsSync(path.join(root, "ROADMAP.html"));
+    // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML).
+    const data = isGeneratedOrAbsent(path.join(root, "ROADMAP.md")) || (html && isGeneratedOrAbsent(path.join(root, "ROADMAP.html"))) ? roadmapData(projectDir) : undefined;
+    writeRoadmapMd(projectDir, undefined, data);
+    if (html) writeRoadmapHtml(projectDir, undefined, data);
     maybeRefreshCatalog(projectDir); // .specs/SPECS.md — only once it exists (and is generated)
   } catch {
     /* best-effort */
@@ -5555,15 +5704,17 @@ function roadmapReport(projectDir, opts = {}) {
   const wrote = [];
   const errors = [];
   const warnings = [];
+  let data = null; // one roadmap computation for the files and the view (writing ROADMAP.* changes no feature)
   if (write) {
-    const m = writeRoadmapMd(projectDir, opts.lang);
+    data = roadmapData(projectDir);
+    const m = writeRoadmapMd(projectDir, opts.lang, data);
     if (m.ok) wrote.push(m.file); else errors.push(m.error);
     if (opts.html) { // independent files: a refused ROADMAP.md is an error, a skipped hand-written ROADMAP.html a warning
-      const h = writeRoadmapHtml(projectDir, opts.lang);
+      const h = writeRoadmapHtml(projectDir, opts.lang, data);
       if (h.ok) wrote.push(h.file); else warnings.push(h.error);
     }
   }
-  const rm = roadmap(projectDir);
+  const rm = data ? data.rmv : roadmap(projectDir);
   if (write) rm.wrote = wrote;
   if (warnings.length) rm.warnings = warnings;
   if (errors.length) {
@@ -5819,13 +5970,18 @@ function catalog(projectDir, opts = {}) {
   return res;
 }
 // Keep SPECS.md current after a mutation — only once it exists and carries the marker. Best-effort.
+// → true when it rewrote the file (unchanged content is not rewritten: the hook runs this on every spec save).
 function maybeRefreshCatalog(projectDir) {
   try {
     const file = path.join(specsRoot(projectDir), "SPECS.md");
-    if (!fs.existsSync(file) || !isGeneratedOrAbsent(file)) return;
-    writeFileAtomic(file, catalogData(projectDir).markdown);
+    const cur = readIfExists(file);
+    if (cur == null || !isGeneratedOrAbsent(file)) return false;
+    const md = catalogData(projectDir).markdown;
+    if (md === cur) return false;
+    writeFileAtomic(file, md);
+    return true;
   } catch {
-    /* best-effort */
+    return false; // best-effort
   }
 }
 
@@ -5863,6 +6019,7 @@ function restoreFeature(projectDir, name) {
   const st = stateFromFile(projectDir, statePath(from));
   if (st.invalid) return { ok: false, error: st.invalid };
   const R = i18n.msg(normalizeLang(st.lang || projectLang(projectDir))).restore;
+  invalidateReadCache(); // a raw write: the per-call read cache can't follow it
   fs.renameSync(from, to);
 
   const rec = isObj(st.archived) ? st.archived : null;
@@ -5944,8 +6101,8 @@ function projectFile(root, rootReal, rel) {
 }
 const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catch { return root; } };
 // The files a feature's _Implements:_ markers name, project-relative with forward slashes: a file (existing or not) or
-// every file under a folder — only inside the project, at most BASELINE_CAP. (A glob never reaches a ready finish:
-// trace_check reads it as a missing file.)
+// every file under a folder, or the files a glob matches now (globFiles — trace_check's reading) — only inside the
+// project, at most BASELINE_CAP.
 const BASELINE_CAP = 500;
 function baselineFiles(projectDir, tasksText) {
   const root = path.resolve(projectDir);
@@ -5960,7 +6117,11 @@ function baselineFiles(projectDir, tasksText) {
   };
   for (const ref of implementsRefs(tasksText)) {
     const p = implementsPath(ref).replace(/^\.\//, "");
-    if (!p || /[*?]/.test(p)) continue;
+    if (!p) continue;
+    if (isImplementsGlob(p)) {
+      for (const rel of globFiles(root, p, { cap: BASELINE_CAP * 20 }).files) add(rel);
+      continue;
+    }
     const abs = path.resolve(root, p);
     if (abs === root || !isInsideDir(root, abs)) continue;
     if (isDirSafe(abs)) walkProject(abs, BASELINE_CAP + 1, (_r, full) => add(toPosix(path.relative(root, full))));
@@ -6073,11 +6234,15 @@ const toPosix = (p) => String(p).split(path.sep).join("/");
 
 // Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
 // out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
-function walkProject(root, cap, onFile) {
+// opts.maxDepth: folder levels below the root to enter (0 = the root's own files); onFile returning WALK_STOP ends the walk.
+const WALK_STOP = Symbol("walk-stop");
+function walkProject(root, cap, onFile, opts = {}) {
   let total = 0;
-  const stack = [root];
-  while (stack.length && total < cap) {
-    const d = stack.pop();
+  const maxDepth = opts.maxDepth == null ? Infinity : opts.maxDepth;
+  const stack = [[root, 0]];
+  let stopped = false;
+  while (stack.length && total < cap && !stopped) {
+    const [d, depth] = stack.pop();
     let entries = [];
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -6087,14 +6252,14 @@ function walkProject(root, cap, onFile) {
       if (e.isDirectory() && e.name.startsWith(".")) continue; // hidden dirs: VCS, tool caches, worktrees
       if (SCAN_IGNORE.has(e.name)) continue;
       const full = path.join(d, e.name);
-      if (e.isDirectory()) { dirs.push(full); continue; }
+      if (e.isDirectory()) { if (depth < maxDepth) dirs.push(full); continue; }
       if (!e.isFile()) continue;
       total++;
-      onFile(toPosix(path.relative(root, full)), full, e.name);
+      if (onFile(toPosix(path.relative(root, full)), full, e.name) === WALK_STOP) { stopped = true; break; }
     }
-    for (let i = dirs.length - 1; i >= 0; i--) stack.push(dirs[i]);
+    if (!stopped) for (let i = dirs.length - 1; i >= 0; i--) stack.push([dirs[i], depth + 1]);
   }
-  return { total, truncated: total >= cap };
+  return { total, truncated: !stopped && total >= cap };
 }
 
 // Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage.
@@ -6595,19 +6760,48 @@ function implementsRefs(tasksText) {
   }
   return out;
 }
-function globRe(glob) {
-  let re = "";
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
-    if (c === "*") {
-      if (glob[i + 1] === "*") {
-        i++;
-        if (glob[i + 1] === "/") { i++; re += "(?:.*/)?"; } else re += ".*";
-      } else re += "[^/]*";
-    } else if (c === "?") re += "[^/]";
-    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+// A glob as a project-relative pattern that stays in the project, or null: an absolute pattern is accepted only under
+// `root` (made relative, like an absolute in-project _Implements:_ path); otherwise no absolute path, drive, URI scheme,
+// home ('~') or '..' segment.
+function projectGlob(pattern, root) {
+  let g = globNorm(pattern);
+  if (root && (g.startsWith("/") || /^[A-Za-z]:\//.test(g))) {
+    const r = toPosix(path.resolve(root)).replace(/\/+$/, "") + "/";
+    const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+    if (fold(g).startsWith(fold(r))) g = g.slice(r.length);
   }
-  return new RegExp("^" + re + "$");
+  if (!g || g.startsWith("/") || g.startsWith("~") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(g) || g.split("/").includes("..")) return null;
+  return g;
+}
+// The files a project-relative glob matches (globMatcher — the one glob), walked only from its literal leading folders
+// ("src/api/**" walks src/api; "lib/*.js" reads lib/ alone) and only as deep as the pattern can reach. Never outside the
+// project: a glob that would leave it matches nothing (`outside`), the walk follows no symlink (walkProject) and a
+// literal folder that resolves out of the project through a link is not entered. opts.first: stop at the first match;
+// opts.cap: files looked at (default COVERAGE_CAP). → { files: [rel], outside, truncated }
+function globFiles(projectDir, pattern, opts = {}) {
+  const root = path.resolve(projectDir);
+  const g = projectGlob(pattern, root);
+  if (!g) return { files: [], outside: true, truncated: false };
+  const parts = g.split("/");
+  const lit = [];
+  for (let i = 0; i < parts.length - 1 && !/[*?{]/.test(parts[i]); i++) lit.push(parts[i]);
+  const base = path.resolve(root, ...lit);
+  if (!withinRoot(root, base)) return { files: [], outside: true, truncated: false };
+  try {
+    if (!fs.statSync(base).isDirectory() || !withinRoot(realRootOf(root), fs.realpathSync.native(base))) return { files: [], outside: false, truncated: false };
+  } catch {
+    return { files: [], outside: false, truncated: false }; // the literal folder doesn't exist: nothing matches
+  }
+  const rest = parts.slice(lit.length);
+  const match = globMatcher(g);
+  const files = [];
+  const walk = walkProject(base, opts.cap || COVERAGE_CAP, (_r, full) => {
+    const rel = toPosix(path.relative(root, full));
+    if (!match(rel)) return undefined;
+    files.push(rel);
+    return opts.first ? WALK_STOP : undefined;
+  }, { maxDepth: rest.some((s) => s.includes("**")) ? Infinity : rest.length - 1 });
+  return { files, outside: false, truncated: walk.truncated };
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
@@ -6615,9 +6809,11 @@ const implementsPath = (ref) => String(ref).trim().replace(/\\/g, "/").replace(/
 function implementsTargets(root, ref, code, fold) {
   const p = implementsPath(ref);
   if (!p) return [];
-  if (/[*?]/.test(p)) {
-    const re = globRe(fold(p.replace(/^\.\//, "")));
-    return [...code.keys()].filter((k) => re.test(k));
+  if (isImplementsGlob(p)) {
+    const g = projectGlob(p, root); // "../x/**", "/elsewhere/*": outside the project, names nothing
+    if (!g) return [];
+    const match = globMatcher(g); // keys are already case-folded where the file system folds case; the matcher folds too
+    return [...code.keys()].filter((k) => match(k));
   }
   const abs = path.resolve(root, p);
   // The whole project, or outside it: never counted. isInsideDir, not `root + sep`: a drive root (Q:\ from subst)
@@ -7610,5 +7806,19 @@ module.exports = {
   guardEnabled, // guard mode (roadmap.json meta.guard) — hooks/guard-hook.js
   guardCheck,
   designSaveCheck, // the PostToolUse design.md save check
+  globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
   // @wp WP11 <<<
 };
+
+// Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a
+// hook step. Inside it each file is read once however many helpers ask (a mutation's gate, its writes and the roadmap /
+// catalog refresh after it); the engine's writers keep the cache true (forgetCached / invalidateReadCache) and it is
+// dropped when the call returns — never shared between calls. A caller that makes several calls as one step (a hook)
+// can wrap them in withReadCache itself.
+for (const [name, fn] of Object.entries(module.exports)) {
+  if (typeof fn !== "function" || name === "msg") continue;
+  const call = function () { return withReadCache(() => fn.apply(this, arguments)); };
+  Object.defineProperty(call, "name", { value: fn.name || name });
+  module.exports[name] = call;
+}
+module.exports.withReadCache = withReadCache;

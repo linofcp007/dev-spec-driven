@@ -2906,9 +2906,11 @@ function payload(res) {
     const obFile = path.join(ob8.dir, ".state.json");
     fs.writeFileSync(obFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(obFile, "utf8")), approvals: { design: { at: "2026-01-01T00:00:00.000Z", by: "x" } } }));
     fs.appendFileSync(path.join(ob8.dir, "bug.md"), "\nmore\n");
-    ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && S.finishFeature(w8, "old-bug").changedSinceApproval.length === 0 &&
+    // 1.13 WP12: a pre-1.13 bugfix design approval (no fingerprint, no file) signed off bug.md — its timestamp is compared
+    // with bug.md's mtime (edited after it here), no longer with a design.md the bugfix doesn't have.
+    ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && S.finishFeature(w8, "old-bug").changedSinceApproval.join() === "bug.md" &&
       S.impactReport(w8, "old-bug", { phase: "design" }).baseline === "fingerprint-only",
-      "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) keeps its old meaning");
+      "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) is judged on bug.md's mtime");
     const csI = S.impactReport(w8, "crash-on-save", { phase: "design" });
     ok(csI.designMd && csI.designMd.baseline === "absent" && csI.designMd.changed === true && csI.added.length > 0 &&
       csI.added.every((x) => x.file === "design.md" && x.section.startsWith("design.md: ")) && csI.modified.map((x) => x.section).join() === "bug.md: Root Cause",
@@ -3862,6 +3864,211 @@ function payload(res) {
     S.manageFeature(e11, "archive", "old-design");
     const dzArch = runPost(path.join(e11, ".specs", "_archive", "old-design", "design.md"));
     ok(/^Roadmap updated → \d+%/.test(dzArch) && !/Design check/.test(dzArch), "hook on an ARCHIVED feature's design.md → the roadmap note, as before (no design check, not silent)");
+  }
+  {
+    // --- 1.13 WP12: secondary IDs in append_tasks, fenced/commented IDs in trace, _Implements:_ globs, SPECS.md from the
+    // hook, bugfix impact via bug.md, legacy bugfix approvals, and the per-call read cache ---
+    const call12 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const hookJs12 = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const post12 = (file) => { const r = spawnSync(process.execPath, [hookJs12], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const put12 = (dir, rel, s) => { const p = path.join(dir, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); return p; };
+
+    // (1) spec_append_tasks accepts the EC-n / NFR-n / SC-nnn IDs requirements.md writes; (2) an ID that only sits in a
+    // fenced example or an HTML comment is not one of the feature's IDs — for append, trace, the secondary trace and _Supersedes:_.
+    const a12 = path.join(tmp, "proj-wp12-append");
+    S.initProject(a12, ["core"], "en");
+    S.createFeature(a12, "Login", ["core"]);
+    const req12 = ["# Feature: Login", "", "## Summary", "Sign in.", "", "### US-1 (P1)", "", "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session", "", "Format example:", "```md",
+      "2. **US-1.AC-9** — WHEN x THE SYSTEM SHALL y _Supersedes: nope/US-1.AC-1_", "- **EC-7** — an example edge case", "| US-1.AC-6 | a table row in the example |", "```", "",
+      "<!-- 3. **US-1.AC-8** — WHEN a THE SYSTEM SHALL b (commented) -->", "", "## Edge Cases", "- **EC-2** — a locked account is refused.", "",
+      "## Non-Functional Requirements", "- **NFR-1** — p95 under 300 ms.", "", "## Success Criteria", "- **SC-001** — 99% of sign-ins succeed.", ""].join("\n");
+    const l12 = path.join(a12, ".specs", "login");
+    fs.writeFileSync(path.join(l12, "requirements.md"), req12);
+    fs.writeFileSync(path.join(l12, "tasks.md"), "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] Sessions\n  - _Requirements: US-1.AC-1_\n**Checkpoint:** sign-in works.\n");
+    const ap12 = await call12("spec_append_tasks", { name: "login", tasks: [{ text: "Lock the account", requirements: ["US-1.AC-1", "EC-2"] }], projectDir: a12 });
+    const ap12b = S.appendTasks(a12, "login", [{ text: "Keep it fast", requirements: ["ec-2", "nfr-1", "SC-1"] }]);
+    const t12 = fs.readFileSync(path.join(l12, "tasks.md"), "utf8");
+    ok(!ap12.isError && ap12.p.ok && ap12.p.appended[0].requirements.join() === "US-1.AC-1,EC-2" && ap12b.ok && ap12b.appended[0].requirements.join() === "EC-2,NFR-1,SC-1" &&
+      t12.includes("- [ ] 2. Lock the account\n  - _Requirements: US-1.AC-1, EC-2_\n") && t12.includes("- [ ] 3. Keep it fast\n  - _Requirements: EC-2, NFR-1, SC-1_\n"),
+      "spec_append_tasks accepts the secondary IDs requirements.md writes (EC-2, NFR-1, SC-1 → SC-001), normalized to upper case, alongside AC IDs (MCP = engine)");
+    const refused12 = ["EC-3", "EC-7", "US-1.AC-9", "US-1.AC-8"].map((id) => S.appendTasks(a12, "login", [{ text: "x", requirements: ["US-1.AC-1", id] }]));
+    const ref12Mcp = await call12("spec_append_tasks", { name: "login", tasks: [{ text: "x", requirements: ["NFR-2"] }], projectDir: a12 });
+    ok(refused12.every((r, i) => r.ok === false && r.phantom.join() === ["EC-3", "EC-7", "US-1.AC-9", "US-1.AC-8"][i] && /Unknown acceptance criteria/.test(r.error)) &&
+      ref12Mcp.isError && /NFR-2/.test(ref12Mcp.p.error) && fs.readFileSync(path.join(l12, "tasks.md"), "utf8") === t12,
+      "an ID requirements.md never writes (EC-3, NFR-2) — or writes only inside a fenced example (EC-7, US-1.AC-9) or a comment (US-1.AC-8) — is still refused; nothing written");
+    const tr12 = S.traceCheck(a12, "login");
+    ok(tr12.totalAcs === 1 && tr12.uncoveredByTasks.length === 0 && tr12.verdict === "pass" && tr12.phantomSecondary.length === 0 && tr12.uncoveredEdgeCases.length === 0 &&
+      tr12.uncoveredNfr.length === 0 && tr12.uncoveredSuccessCriteria.join() === "SC-001" && tr12.supersedes.length === 0 && tr12.phantomSupersedes.length === 0,
+      "trace_check: ACs only in a fenced example (US-1.AC-9, a table row US-1.AC-6) or a comment (US-1.AC-8) are not required; EC-2/NFR-1 covered by the appended tasks; a fenced _Supersedes:_ is no marker (got totalAcs=" + tr12.totalAcs + ")");
+    fs.appendFileSync(path.join(l12, "tasks.md"), "- [ ] 4. Example edge\n  - _Requirements: EC-7_\n");
+    ok(S.traceCheck(a12, "login").phantomSecondary.join() === "EC-7" && !S.traceCheck(a12, "login").uncoveredEdgeCases.includes("EC-7"),
+      "a secondary ID written only in a fenced example is not defined: citing it is a phantom, and it is never 'uncovered'");
+
+    // (3) a glob in _Implements:_ resolves against the project (the one glob): present when it matches a file; otherwise the
+    // existing rule (done → missing, open → planned); never outside the project.
+    const g12 = path.join(tmp, "proj-wp12-glob");
+    S.initProject(g12, ["core"], "en");
+    const gf12 = S.createFeature(g12, "Api", ["core"]);
+    ["src/api/users.ts", "src/api/v2/orders.ts", "lib/a.js", "lib/sub/b.js", "docs/guide.md"].forEach((f) => put12(g12, f, "x\n"));
+    put12(path.join(tmp, "outside-wp12"), "x.js", "x\n");
+    fs.writeFileSync(path.join(gf12.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    const absGlob12 = path.join(g12, "lib", "*.js").replace(/\\/g, "/");
+    fs.writeFileSync(path.join(gf12.dir, "tasks.md"), ["- [x] 1. api", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/api/**, lib/*.js, `./docs/*.md`_",
+      "- [x] 2. web", "  - _Implements: src/web/**, lib/*.ts_", "- [ ] 3. jobs", "  - _Implements: src/jobs/*.ts_",
+      "- [x] 4. escape", "  - _Implements: ../outside-wp12/*.js_", "- [ ] 5. escape, open", "  - _Implements: ../outside-wp12/**_",
+      "- [ ] 6. absolute, in the project", "  - _Implements: " + absGlob12 + "_", ""].join("\n"));
+    const gt12 = (await call12("trace_check", { name: "api", projectDir: g12 })).p;
+    ok(gt12.verdict === "gaps-found" && gt12.missingImplFiles.join() === "src/web/**,lib/*.ts,../outside-wp12/*.js,../outside-wp12/**" && gt12.plannedImplFiles.join() === "src/jobs/*.ts" &&
+      gt12.implementsFiles.length === 9,
+      "trace_check: src/api/** · lib/*.js · ./docs/*.md · an absolute in-project glob are present; src/web/** and lib/*.ts ('*' stays in its folder) of a done task are missing, an open task's glob is planned; a glob out of the project is missing, never planned (got missing=" + gt12.missingImplFiles.join("|") + " planned=" + gt12.plannedImplFiles.join("|") + ")");
+    const gl12 = (p) => S.globFiles(g12, p).files.join();
+    ok(gl12("lib/*.js") === "lib/a.js" && gl12("lib/**/*.js") === "lib/a.js,lib/sub/b.js" && gl12("src/**/*.ts") === "src/api/users.ts,src/api/v2/orders.ts" && gl12("src/api/*") === "src/api/users.ts" &&
+      S.globFiles(g12, "../outside-wp12/*.js").outside === true && S.globFiles(g12, "/etc/*").outside === true && gl12("../outside-wp12/*.js") === "" && gl12("nope/**") === "" &&
+      S.globFiles(g12, absGlob12).files.join() === "lib/a.js",
+      "globFiles: '*' stays in one folder, '**' crosses them; a pattern that leaves the project (.., another absolute path) matches nothing and says so");
+    const gc12 = S.coverage(g12);
+    ok(gc12.coveredFiles === 3 && gc12.codeFiles === 4 && gc12.unmatchedImplements.map((u) => u.ref).join() === "src/web/**,lib/*.ts,src/jobs/*.ts,../outside-wp12/*.js,../outside-wp12/**" &&
+      gc12.nonCodeImplements.map((u) => u.ref).join() === "./docs/*.md",
+      "coverage reads the same globs (src/api/** and lib/*.js cover 3 of 4 code files; the absolute in-project glob too); nothing outside the project counts");
+
+    // (3) a glob reaches the finish baseline: a READY bugfix whose fix task implements `src/lib/*.ts`.
+    const fz12 = path.join(tmp, "proj-wp12-finish");
+    S.initProject(fz12, ["tdd"]);
+    ["src/auth.js", "src/lib/x.ts", "src/lib/y.ts", "src/lib/z.js"].forEach((f) => put12(fz12, f, f + "\n"));
+    const fb12 = S.createFeature(fz12, "Login Loop", undefined, "users bounce back to /login", undefined, "en", "bugfix");
+    const fill12 = (rel, pairs) => { const fp = path.join(fb12.dir, rel); let t = fs.readFileSync(fp, "utf8"); pairs.forEach(([x, y]) => { t = t.split(x).join(y); }); fs.writeFileSync(fp, t); };
+    fill12("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
+      ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
+    fill12("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
+    fill12("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
+    fill12("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
+      ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
+      ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
+      ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
+    [1, 2, 3].forEach((n) => S.completeTask(fz12, "login-loop", n));
+    S.completeTask(fz12, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
+    const fin12 = S.finishFeature(fz12, "login-loop", { write: true });
+    const fst12 = JSON.parse(fs.readFileSync(path.join(fb12.dir, ".state.json"), "utf8"));
+    ok(fin12.readyToFinish && fin12.baseline && fin12.baseline.recorded && Object.keys(fst12.finished.files).join() === "src/auth.js,src/lib/x.ts,src/lib/y.ts" && S.drift(fz12).verdict === "clean",
+      "finish {write}: a glob in _Implements:_ (trace_check reads it as present) records the files it matches in the drift baseline (got " + Object.keys((fst12.finished || {}).files || {}).join() + ")");
+
+    // (4) PostToolUse: a hand edit of a spec artifact refreshes .specs/SPECS.md when it exists and is generated — never a
+    // hand-written one, never creating one, never on an edit of SPECS.md itself.
+    const h12 = path.join(tmp, "proj-wp12-hook");
+    S.initProject(h12, ["core"], "en");
+    const hf12 = S.createFeature(h12, "Billing", ["core"]);
+    const hReq12 = path.join(hf12.dir, "requirements.md");
+    fs.writeFileSync(hReq12, "# Requirements\n\n## Summary\nBilling.\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n");
+    const specsMd12 = path.join(h12, ".specs", "SPECS.md");
+    const noCat12 = post12(hReq12);
+    const created12 = fs.existsSync(specsMd12);
+    S.catalog(h12, { write: true });
+    fs.appendFileSync(hReq12, "2. **US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days\n");
+    const out12 = post12(hReq12);
+    const cat12 = fs.readFileSync(specsMd12, "utf8");
+    ok(!created12 && /criteria/.test(noCat12) && /criteria|clean/i.test(out12) && cat12.includes("**US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days") && /AUTO-GENERATED by dev-spec/.test(cat12),
+      "PostToolUse on requirements.md refreshes a generated SPECS.md with the new AC (and still reports the EARS check); without SPECS.md it creates none");
+    const edited12 = cat12.replace("# Spec catalog", "# Spec catalog (edited)");
+    fs.writeFileSync(specsMd12, edited12);
+    post12(specsMd12);
+    const kept12 = fs.readFileSync(specsMd12, "utf8") === edited12;
+    fs.writeFileSync(specsMd12, "# My own catalog\n");
+    fs.appendFileSync(hReq12, "3. **US-1.AC-3** — WHEN z THE SYSTEM SHALL w\n");
+    post12(hReq12);
+    ok(kept12 && fs.readFileSync(specsMd12, "utf8") === "# My own catalog\n",
+      "an edit of SPECS.md itself is not a reason to rewrite it; a hand-written SPECS.md (no marker) is never replaced by the hook");
+
+    // (5) spec_impact --phase requirements on a bugfix: the sections that mention a changed AC come from bug.md too.
+    const i12 = path.join(tmp, "proj-wp12-impact");
+    S.initProject(i12, ["core"], "en");
+    const ib12 = S.createFeature(i12, "Crash", undefined, "crash on save", undefined, "en", "bugfix");
+    const iReq12 = path.join(ib12.dir, "requirements.md");
+    const iReqText12 = fs.readFileSync(iReq12, "utf8").replace("[the condition that triggers the bug]", "the file is read-only").replace("[the correct behavior]", "show an error")
+      .replace("[the neighbouring behavior that already worked]", "saving a writable file");
+    fs.writeFileSync(iReq12, iReqText12);
+    const iBug12 = path.join(ib12.dir, "bug.md");
+    fs.writeFileSync(iBug12, fs.readFileSync(iBug12, "utf8").replace(/> \*\*TODO\*\* — the cause[^\n]*/, "The save handler ignores EACCES (US-1.AC-1).")
+      .replace("[What changes and why it removes the root cause — one fix, not a bundle.]", "Catch EACCES and report it (US-1.AC-1); writable saves are untouched (US-1.AC-2)."));
+    S.approvePhase(i12, "crash", "requirements", undefined, { force: true });
+    fs.writeFileSync(iReq12, iReqText12.replace("show an error", "show a clear error"));
+    const im12 = (await call12("spec_impact", { name: "crash", projectDir: i12 })).p;
+    S.addTrack(i12, "crash", "saas");
+    const iDes12 = path.join(ib12.dir, "design.md");
+    fs.writeFileSync(iDes12, fs.readFileSync(iDes12, "utf8").replace(/(## \[SaaS\] Performance Budget[^\n]*\n)/, "$1The error path answers in 50 ms (US-1.AC-1).\n"));
+    const im12b = S.impactReport(i12, "crash", { phase: "requirements" });
+    const secs12 = (r) => ((r.impacted || []).find((x) => x.id === "US-1.AC-1") || { designSections: [] }).designSections.join("|");
+    ok(im12.ok && im12.modified.map((m) => m.id).join() === "US-1.AC-1" && secs12(im12) === "bug.md: Root Cause|bug.md: Fix" &&
+      secs12(im12b) === "bug.md: Root Cause|bug.md: Fix|design.md: [SaaS] Performance Budget" && /design: bug\.md: Root Cause, bug\.md: Fix/.test(S.impactLines(im12).join("\n")),
+      "spec_impact --phase requirements on a bugfix names the bug.md sections that mention the changed AC (Root Cause, Fix) — and a track's design.md section, each keyed by its file");
+
+    // (6) a pre-1.13 bugfix design approval (no fingerprint, no file): judged on bug.md's mtime, not design.md's; a feature's
+    // legacy approval keeps its own phase file.
+    const o12 = path.join(tmp, "proj-wp12-legacy");
+    S.initProject(o12, ["core"], "en");
+    const ob12 = S.createFeature(o12, "Old Crash", ["saas"], "crash", undefined, "en", "bugfix");
+    const of12 = S.createFeature(o12, "Old Feature", ["core"]);
+    const at12 = new Date(Date.now() - 3600e3);
+    const legacy12 = (dir) => { const sf = path.join(dir, ".state.json"); fs.writeFileSync(sf, JSON.stringify({ ...JSON.parse(fs.readFileSync(sf, "utf8")), approvals: { design: { at: at12.toISOString(), by: "x" } } })); };
+    legacy12(ob12.dir);
+    legacy12(of12.dir);
+    const before12 = new Date(at12.getTime() - 3600e3), after12 = new Date(at12.getTime() + 60e3);
+    fs.utimesSync(path.join(ob12.dir, "bug.md"), before12, before12);
+    fs.utimesSync(path.join(ob12.dir, "design.md"), after12, after12); // a bugfix's design.md (its +saas sections) is not what that approval covered
+    fs.utimesSync(path.join(of12.dir, "design.md"), before12, before12);
+    const csB0 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF0 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
+    fs.utimesSync(path.join(ob12.dir, "bug.md"), after12, after12);
+    fs.utimesSync(path.join(of12.dir, "design.md"), after12, after12);
+    const csB1 = S.finishFeature(o12, "old-crash").changedSinceApproval.join(), csF1 = S.finishFeature(o12, "old-feature").changedSinceApproval.join();
+    const docB12 = S.specDoctor(o12, "old-crash").checks.find((c) => c.id === "changed-since-approval") || {};
+    ok(csB0 === "" && csF0 === "" && csB1 === "bug.md" && csF1 === "design.md" && /bug\.md/.test(docB12.detail || "") && S.nextAction(o12, "old-crash").changedSinceApproval.join() === "bug.md" &&
+      S.impactReport(o12, "old-crash", { phase: "design" }).changed === true,
+      "a legacy bugfix design approval is judged on bug.md's mtime (design.md ignored), a legacy feature approval still on design.md; doctor, next_action and impact agree (got " + [csB0, csF0, csB1, csF1].join(" / ") + ")");
+
+    // (7) the per-call read cache: each file read once per call, a write inside the call is seen by the refresh after it
+    // (create, complete, archive, rename), and nothing carries over to the next call.
+    const r12 = path.join(tmp, "proj-wp12-cache");
+    S.initProject(r12, ["tdd"], "en");
+    for (let i = 1; i <= 8; i++) S.createFeature(r12, "Feature " + i, ["tdd"]);
+    const rawRead12 = fs.readFileSync;
+    const reads12 = new Map();
+    fs.readFileSync = function (p) { const k = path.resolve(String(p)).toLowerCase(); reads12.set(k, (reads12.get(k) || 0) + 1); return rawRead12.apply(this, arguments); };
+    let rm12, cr12, tc12;
+    try {
+      rm12 = S.writeRoadmapMd(r12);
+      const rmReads = new Map(reads12);
+      reads12.clear();
+      cr12 = S.createFeature(r12, "Feature 9", ["tdd"]);
+      const crReads = new Map(reads12);
+      reads12.clear();
+      tc12 = S.traceCheck(r12, "feature-3");
+      const tcReads = new Map(reads12);
+      reads12.set("rm", rmReads).set("cr", crReads).set("tc", tcReads);
+    } finally {
+      fs.readFileSync = rawRead12;
+    }
+    const rmR = reads12.get("rm"), crR = reads12.get("cr"), tcR = reads12.get("tc");
+    const twice = (m, filter) => [...m].filter(([k, n]) => n > 1 && (!filter || filter(k))).map(([k, n]) => path.basename(path.dirname(k)) + "/" + path.basename(k) + "×" + n);
+    const otherFeature = (k) => /[\\/]feature-[1-8][\\/]/.test(k);
+    ok(rm12.ok && twice(rmR).length === 0 && [...rmR.values()].reduce((a, b) => a + b, 0) <= 8 * 5 + 6 && cr12.ok && twice(crR, otherFeature).length === 0 && twice(tcR).length === 0,
+      "one call reads each file once: the roadmap refresh (≤ 5 reads per feature), create_feature's refresh of the other features, trace_check (read twice: " + twice(rmR).concat(twice(crR, otherFeature), twice(tcR)).join(", ") + ")");
+    const rmd12 = () => fs.readFileSync(path.join(r12, ".specs", "ROADMAP.md"), "utf8");
+    const rows12 = rmd12().includes("feature-9");
+    S.completeTask(r12, "feature-9", 1);
+    const done12 = /feature-9[^\n]*1\/\d+/.test(rmd12());
+    S.manageFeature(r12, "archive", "feature-8");
+    const arch12 = !rmd12().includes("feature-8");
+    S.manageFeature(r12, "rename", "feature-7", "Seventh");
+    const ren12 = rmd12().includes("seventh") && !rmd12().includes("feature-7");
+    ok(rows12 && done12 && arch12 && ren12, "a write inside a call is seen by the roadmap refresh at its end: a created feature is listed, a ticked task counted, an archived or renamed folder gone (got " + [rows12, done12, arch12, ren12].join(",") + ")");
+    const st12a = (await call12("spec_status", { name: "feature-9", projectDir: r12 })).p;
+    const t9 = path.join(r12, ".specs", "feature-9", "tasks.md");
+    fs.writeFileSync(t9, fs.readFileSync(t9, "utf8").replace(/- \[ \]/, "- [x]"));
+    const st12b = (await call12("spec_status", { name: "feature-9", projectDir: r12 })).p;
+    ok(st12b.tasks.done === st12a.tasks.done + 1, "the MCP server keeps no read cache between calls: a hand edit between two spec_status calls is seen by the second");
   }
   // @wp WP11 <<<
 
