@@ -791,6 +791,19 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   const pn8 = run(["metrics", "nova", "--project", p8]);
   ok(pn8.code === 0 && pn8.out.includes("  aprovações: 0 · retrabalho: 0 · forçadas: 0") && !/desconhecido/.test(pn8.out),
     "metrics on a feature never approved: rework 0, not unknown (PT)");
+  // impact --reopen with nothing changed says so (no reopen preceded it); a bugfix's design.md edit is diffed by --phase design.
+  run(["create", "Plain", "core", "--project", w8]);
+  run(["approve", "plain", "requirements", "--force", "--project", w8]);
+  const pr8 = run(["impact", "plain", "--reopen", "--project", w8]);
+  ok(pr8.code === 0 && pr8.out.includes("no changes since the approval") && pr8.out.includes("Nothing changed since the approval — nothing to reopen.") && !/Nothing new since the last reopen/.test(pr8.out),
+    "impact --reopen right after the approval: 'nothing changed — nothing to reopen', never 'nothing new since the last reopen'");
+  run(["bugfix", "Slow page", "saas", "--project", w8]);
+  const sa8 = run(["approve", "slow-page", "design", "--force", "--project", w8]);
+  const sd8 = path.join(w8, ".specs", "slow-page", "design.md");
+  fs.writeFileSync(sd8, fs.readFileSync(sd8, "utf8").replace(/(## \[SaaS\] Performance Budget[^\n]*\n)/, "$1p95 under 200 ms\n"));
+  const bi8 = run(["impact", "slow-page", "--phase", "design", "--project", w8]);
+  ok(sa8.code === 0 && bi8.code === 0 && bi8.out.includes("  ~ design.md: [SaaS] Performance Budget") && bi8.out.includes(".history/design@1.design.md") && !bi8.out.includes("no changes since the approval"),
+    "impact --phase design on a bugfix +saas lists the edited design.md section (its design approval snapshots design.md too)");
   const help8 = run(["help"]).out;
   const doc8 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   const after8 = (t) => { const a = t.indexOf("approve <feature> <phase>"), i = t.indexOf("impact <feature>"), m = t.indexOf("metrics [feature]"); return a !== -1 && i > a && m > i && m < t.indexOf("add-track <feature>"); };

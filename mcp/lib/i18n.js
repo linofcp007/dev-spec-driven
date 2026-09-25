@@ -2338,6 +2338,10 @@ const MSG = {
       fingerprintOnly: (phase, slug) => `This approval predates the change history: only its fingerprint was recorded, so what changed can't be listed. Re-approve to start the history: /approve ${slug} ${phase}.`,
       reopenNeedsSnapshot: (phase) => `Nothing was reopened: without a snapshot of the approved '${phase}' the affected tasks can't be determined.`,
       nothingNew: "Nothing new since the last reopen against this approval — nothing was changed.",
+      nothingToReopen: (changed) => (changed ? "Nothing to reopen: the edit changed no criterion or section (only text outside them) — nothing was changed."
+        : "Nothing changed since the approval — nothing to reopen."),
+      designFingerprintOnly: (slug) => `design.md changed since the approval too, but this approval kept no snapshot of it (only its fingerprint), so what changed there can't be listed. Re-approve to start its history: /approve ${slug} design.`,
+      reopenDesignUnknown: "Nothing was reopened: design.md changed, but without a snapshot of it as approved the affected tasks can't be determined.",
       reopened: (list, slug, phase) => `Reopened ${list}: unticked, their evidence marked stale — redo them with fresh evidence, then re-approve: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Change request #${n} recorded — no done task was affected. Review it, then re-approve: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `To untick the affected done tasks and mark their evidence stale: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
@@ -2375,6 +2379,7 @@ const MSG = {
       noLeadTimes: "  lead time from creation: nothing approved yet",
       rework: (total, n, list, forced) => `  approvals: ${total} · rework: ${n}${list ? ` (${list})` : ""} · forced: ${forced}`,
       reworkUnknown: (forced) => `  rework: unknown (approvals made before the change history) · forced: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  approvals: ${total} · rework: at least ${n}${list ? ` (${list})` : ""} · forced: ${forced} — rework unknown for ${legacy} (approved before the change history)`,
       changes: (n, reopened) => `  change requests: ${n} · reopened tasks: ${reopened}`,
       evidence: (rate, pass, runs) => `  evidence: ${rate}% of runs passing (${pass}/${runs})`,
       noRuns: "  evidence: no recorded runs",
@@ -2398,6 +2403,7 @@ const MSG = {
         lead: (ph) => `Lead time → ${ph}`,
         rework: "Rework (re-approvals)",
         reworkUnknown: "unknown — the approvals predate the change history",
+        reworkPartial: (value, legacy) => `at least ${value} — unknown for ${legacy} (approved before the change history)`,
         forced: "Forced approvals",
         changes: "Change requests",
         reopened: (n) => `${n} task(s) reopened`,
@@ -2428,7 +2434,9 @@ const MSG = {
           if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
         }
         const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
-        rows.push([T.rework, m.rework == null ? T.reworkUnknown : m.rework + (by ? ` (${by})` : "")]);
+        const reworkValue = m.rework == null ? null : m.rework + (by ? ` (${by})` : "");
+        rows.push([T.rework, reworkValue == null ? T.reworkUnknown
+          : m.reworkLowerBound && Array.isArray(m.legacyPhases) ? T.reworkPartial(reworkValue, m.legacyPhases.map((ph) => P[ph] || ph).join(", ")) : reworkValue]);
         rows.push([T.forced, String(m.forcedApprovals)]);
         rows.push([T.changes, `${m.changeRequests} (${T.reopened(m.reopenedTasks)})`]);
         rows.push([T.passRate, m.evidence && m.evidence.runs ? T.runs(m.evidence.passRate, m.evidence.passing, m.evidence.runs) : T.noRuns]);
@@ -2942,6 +2950,10 @@ const MSG = {
       fingerprintOnly: (phase, slug) => `Esta aprovação é anterior ao histórico de alterações: só ficou registada a sua impressão digital, por isso não é possível listar o que mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} ${phase}.`,
       reopenNeedsSnapshot: (phase) => `Nada foi reaberto: sem um snapshot de '${phase}' aprovada não é possível determinar as tarefas afetadas.`,
       nothingNew: "Nada de novo desde a última reabertura sobre esta aprovação — nada foi alterado.",
+      nothingToReopen: (changed) => (changed ? "Nada a reabrir: a edição não alterou nenhum critério nem secção (só texto fora deles) — nada foi alterado."
+        : "Nada mudou desde a aprovação — nada a reabrir."),
+      designFingerprintOnly: (slug) => `O design.md também mudou desde a aprovação, mas esta aprovação não guardou um snapshot dele (só a impressão digital), por isso não é possível listar o que lá mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} design.`,
+      reopenDesignUnknown: "Nada foi reaberto: o design.md mudou, mas sem um snapshot dele tal como foi aprovado não é possível determinar as tarefas afetadas.",
       reopened: (list, slug, phase) => `Reabertas ${list}: desmarcadas, com a evidência marcada como desatualizada — refaz-as com evidência nova e volta a aprovar: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Pedido de alteração #${n} registado — nenhuma tarefa concluída foi afetada. Revê-o e volta a aprovar: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `Para desmarcar as tarefas concluídas afetadas e marcar a evidência como desatualizada: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
@@ -2978,6 +2990,7 @@ const MSG = {
       noLeadTimes: "  tempo desde a criação: ainda nada aprovado",
       rework: (total, n, list, forced) => `  aprovações: ${total} · retrabalho: ${n}${list ? ` (${list})` : ""} · forçadas: ${forced}`,
       reworkUnknown: (forced) => `  retrabalho: desconhecido (aprovações anteriores ao histórico de alterações) · forçadas: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  aprovações: ${total} · retrabalho: pelo menos ${n}${list ? ` (${list})` : ""} · forçadas: ${forced} — retrabalho desconhecido em ${legacy} (aprovações anteriores ao histórico de alterações)`,
       changes: (n, reopened) => `  pedidos de alteração: ${n} · tarefas reabertas: ${reopened}`,
       evidence: (rate, pass, runs) => `  evidência: ${rate}% das execuções com sucesso (${pass}/${runs})`,
       noRuns: "  evidência: nenhuma execução registada",
@@ -3001,6 +3014,7 @@ const MSG = {
         lead: (ph) => `Tempo até ${ph}`,
         rework: "Retrabalho (novas aprovações)",
         reworkUnknown: "desconhecido — as aprovações são anteriores ao histórico de alterações",
+        reworkPartial: (value, legacy) => `pelo menos ${value} — desconhecido em ${legacy} (aprovações anteriores ao histórico de alterações)`,
         forced: "Aprovações forçadas",
         changes: "Pedidos de alteração",
         reopened: (n) => `${n} tarefa(s) reaberta(s)`,
@@ -3521,6 +3535,10 @@ const MSG = {
       fingerprintOnly: (phase, slug) => `Esta aprobación es anterior al historial de cambios: solo se registró su huella, así que no se puede listar qué cambió. Vuelve a aprobar para iniciar el historial: /approve ${slug} ${phase}.`,
       reopenNeedsSnapshot: (phase) => `No se ha reabierto nada: sin una instantánea de '${phase}' aprobada no se pueden determinar las tareas afectadas.`,
       nothingNew: "Nada nuevo desde la última reapertura sobre esta aprobación — no se ha cambiado nada.",
+      nothingToReopen: (changed) => (changed ? "Nada que reabrir: la edición no cambió ningún criterio ni sección (solo texto fuera de ellos) — no se ha cambiado nada."
+        : "Nada ha cambiado desde la aprobación — nada que reabrir."),
+      designFingerprintOnly: (slug) => `design.md también ha cambiado desde la aprobación, pero esta aprobación no guardó una instantánea de él (solo su huella), así que no se puede listar qué cambió allí. Vuelve a aprobar para iniciar su historial: /approve ${slug} design.`,
+      reopenDesignUnknown: "No se ha reabierto nada: design.md ha cambiado, pero sin una instantánea de él tal como se aprobó no se pueden determinar las tareas afectadas.",
       reopened: (list, slug, phase) => `Reabiertas ${list}: desmarcadas y con su evidencia marcada como obsoleta — rehazlas con evidencia nueva y vuelve a aprobar: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Solicitud de cambio #${n} registrada — ninguna tarea completada se ha visto afectada. Revísala y vuelve a aprobar: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `Para desmarcar las tareas completadas afectadas y marcar su evidencia como obsoleta: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
@@ -3557,6 +3575,7 @@ const MSG = {
       noLeadTimes: "  tiempo desde la creación: aún no hay nada aprobado",
       rework: (total, n, list, forced) => `  aprobaciones: ${total} · retrabajo: ${n}${list ? ` (${list})` : ""} · forzadas: ${forced}`,
       reworkUnknown: (forced) => `  retrabajo: desconocido (aprobaciones anteriores al historial de cambios) · forzadas: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  aprobaciones: ${total} · retrabajo: al menos ${n}${list ? ` (${list})` : ""} · forzadas: ${forced} — retrabajo desconocido en ${legacy} (aprobaciones anteriores al historial de cambios)`,
       changes: (n, reopened) => `  solicitudes de cambio: ${n} · tareas reabiertas: ${reopened}`,
       evidence: (rate, pass, runs) => `  evidencia: ${rate}% de ejecuciones correctas (${pass}/${runs})`,
       noRuns: "  evidencia: ninguna ejecución registrada",
@@ -3580,6 +3599,7 @@ const MSG = {
         lead: (ph) => `Tiempo hasta ${ph}`,
         rework: "Retrabajo (nuevas aprobaciones)",
         reworkUnknown: "desconocido — las aprobaciones son anteriores al historial de cambios",
+        reworkPartial: (value, legacy) => `al menos ${value} — desconocido en ${legacy} (aprobaciones anteriores al historial de cambios)`,
         forced: "Aprobaciones forzadas",
         changes: "Solicitudes de cambio",
         reopened: (n) => `${n} tarea(s) reabierta(s)`,

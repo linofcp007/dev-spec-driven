@@ -2755,7 +2755,10 @@ function payload(res) {
       lf1.changed === true && lf1.reopened.length === 0 && lf1.recorded === false && lf1.added === undefined && lgDoc && !/spec_impact/.test(lgDoc.detail),
       "a pre-1.13 approval (no history) → baseline fingerprint-only, changed from the fingerprint + a re-approve hint; reopen reopens nothing; doctor doesn't point to spec_impact");
     const lgRe = S.approvePhase(w8, "legacy", "requirements", "new", { force: true });
-    ok(lgRe.snapshot === ".history/requirements@1.md" && S.impactReport(w8, "legacy", {}).baseline === "snapshot", "re-approving a legacy phase starts its history");
+    const lgH = JSON.parse(fs.readFileSync(lgFile, "utf8")).approvalHistory;
+    ok(lgRe.snapshot === ".history/requirements@1.md" && S.impactReport(w8, "legacy", {}).baseline === "snapshot" &&
+      lgH.length === 2 && lgH[0].legacy === true && lgH[0].by === "old" && lgH[0].snapshot === undefined && lgH[1].by === "new" && !lgH[1].legacy,
+      "re-approving a legacy phase starts its history: the approval it replaces is seeded first as a legacy record (no snapshot; @1 counts snapshots)");
     const bh8 = S.createFeature(w8, "Badhist", ["core"]);
     const bhFile = path.join(bh8.dir, ".state.json");
     fs.writeFileSync(bhFile, JSON.stringify({ lang: "en", approvals: {}, approvalHistory: { requirements: 1 }, changes: "x" }));
@@ -2813,7 +2816,8 @@ function payload(res) {
     fs.writeFileSync(path.join(old8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: { requirements: { at: "2026-02-01T00:00:00.000Z", by: "x" }, design: { at: "2026-02-03T00:00:00.000Z", by: "x", forced: true } } }));
     const om8 = S.metrics(w8m, "oldie");
     ok(om8.ok && om8.createdAt === "2026-02-01T00:00:00.000Z" && om8.createdAtApproximate === true && om8.createdAtSource === "approval" && om8.leadTime.requirements.approximate === true &&
-      om8.leadTime.design.hours === 48 && om8.rework === null && om8.approvalsTotal === null && om8.forcedApprovals === 1 && om8.changeRequests === 0 && om8.evidence.passRate === null &&
+      om8.leadTime.design.hours === 48 && om8.rework === null && om8.approvalsTotal === 2 && om8.legacyPhases.join() === "requirements,design" && om8.reworkLowerBound === false &&
+      om8.forcedApprovals === 1 && om8.changeRequests === 0 && om8.evidence.passRate === null &&
       /rework: unknown/.test(S.metricsLines(om8).join("\n")) && /\(approximate: from the earliest approval\)/.test(S.metricsLines(om8)[0]),
       "a legacy feature (no createdAt, no history): createdAt from the earliest approval (approximate), rework unknown (null) — never throws");
     const bare8 = S.createFeature(w8, "Bare", ["core"]);
@@ -2860,6 +2864,28 @@ function payload(res) {
     ok(ptRetro.startsWith("# Retrospetiva: rascunhos") && ["## O que correu bem", "## O que custou", "## Alterações propostas ao steering ou à constituição", "## Seguimento", "| Tempo até requisitos |"]
       .every((s) => ptRetro.includes(s)) && /^Métricas: rascunhos \[core\] — criada a \d{4}/.test(S.metricsLines(S.metrics(w8, "rascunhos"))[0]), "PT feature: the retro template and metrics lines are European Portuguese");
 
+    // A feature upgraded mid-flight (a pre-1.13 approval, then 1.13 ones): the legacy approval still counts — approvals,
+    // forced (agreeing with doctor's approval-gates) — and rework becomes a lower bound, in the JSON, the lines and retro.md.
+    const mx8 = S.createFeature(w8m, "Mixed", ["core"]);
+    const mxFile = path.join(mx8.dir, ".state.json");
+    fs.writeFileSync(mxFile, JSON.stringify({ lang: "en", tracks: ["core"], approvals: { requirements: { at: "2026-01-01T00:00:00.000Z", by: "old", forced: true, failing: ["placeholders"] } } }));
+    S.approvePhase(w8m, "mixed", "design", "x", { force: true });
+    const mx1 = S.metrics(w8m, "mixed");
+    const mxGates = S.specDoctor(w8m, "mixed").checks.find((c) => c.id === "approval-gates").detail;
+    ok(mx1.approvalsTotal === 2 && mx1.forcedApprovals === 2 && mx1.rework === 0 && mx1.reworkLowerBound === true && mx1.legacyPhases.join() === "requirements" &&
+      mx1.leadTime.requirements.approximate === true && /requirements \(placeholders\), design/.test(mxGates) &&
+      S.metricsLines(mx1).includes("  approvals: 2 · rework: at least 0 · forced: 2 — rework unknown for requirements (approved before the change history)"),
+      "mixed legacy + 1.13 approvals: the legacy one is counted (approvals 2, forced 2 like doctor's approval-gates), rework is a lower bound");
+    S.approvePhase(w8m, "mixed", "requirements", "x", { force: true });
+    const mx2 = S.metrics(w8m, "mixed");
+    const mxH = JSON.parse(fs.readFileSync(mxFile, "utf8")).approvalHistory;
+    S.metrics(w8m, "mixed", { write: true });
+    ok(mxH.map((h) => h.phase + (h.legacy ? "*" : "")).join() === "requirements*,design,requirements" && mxH[0].forced === true && mx2.approvalsTotal === 3 && mx2.forcedApprovals === 3 &&
+      mx2.rework === 1 && mx2.reworkLowerBound === true &&
+      fs.readFileSync(path.join(mx8.dir, "retro.md"), "utf8").includes("| Rework (re-approvals) | at least 1 (requirements 1) — unknown for requirements (approved before the change history) |") &&
+      S.metricsLines(S.metrics(w8m)).some((l) => /^ {2}mixed .* · rework 1\+ · forced 3 /.test(l)),
+      "the replaced legacy approval stays in the history (seeded legacy record): re-approving its phase is rework 1 (at least) — JSON, retro.md, project row");
+
     // Bugfix: the design approval signs off bug.md (its Root Cause) — snapshot, fingerprint, impact and doctor follow it.
     const bf8 = S.createFeature(w8, "Crash on save", ["core"], undefined, undefined, undefined, "bugfix");
     const bff = (x) => path.join(bf8.dir, x);
@@ -2872,7 +2898,7 @@ function payload(res) {
     fs.writeFileSync(bff("bug.md"), bug8.replace(/## Root Cause[^\n]*\n/, (h) => h + "The save handler swallowed ENOSPC (US-1.AC-1).\n"));
     const bfIm = S.impactReport(w8, "crash-on-save", { phase: "design" });
     const bfDc = S.specDoctor(w8, "crash-on-save").checks.find((c) => c.id === "changed-since-approval");
-    ok(bfIm.ok && bfIm.file === "bug.md" && bfIm.baseline === "snapshot" && bfIm.changed === true && bfIm.modified.map((x) => x.section).join() === "Root Cause" &&
+    ok(bfIm.ok && bfIm.file === "bug.md" && bfIm.baseline === "snapshot" && bfIm.changed === true && bfIm.modified.map((x) => x.section + "|" + x.file).join() === "bug.md: Root Cause|bug.md" &&
       bfDc && /^changed after their approval: bug\.md —/.test(bfDc.detail) && bfDc.detail.includes("(dev-spec impact crash-on-save --phase design)"),
       "an edit to bug.md after a bugfix's design approval: spec_impact --phase design diffs bug.md's sections; doctor flags bug.md and names --phase design");
     S.addTrack(w8, "crash-on-save", "saas");
@@ -2883,6 +2909,59 @@ function payload(res) {
     ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && S.finishFeature(w8, "old-bug").changedSinceApproval.length === 0 &&
       S.impactReport(w8, "old-bug", { phase: "design" }).baseline === "fingerprint-only",
       "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) keeps its old meaning");
+    const csI = S.impactReport(w8, "crash-on-save", { phase: "design" });
+    ok(csI.designMd && csI.designMd.baseline === "absent" && csI.designMd.changed === true && csI.added.length > 0 &&
+      csI.added.every((x) => x.file === "design.md" && x.section.startsWith("design.md: ")) && csI.modified.map((x) => x.section).join() === "bug.md: Root Cause",
+      "spec_impact on that bugfix: design.md (absent at approval) adds every section, keyed by its file, next to bug.md's change");
+
+    // A bugfix with +saas: its design approval snapshots design.md too (the [SaaS] sections its gate checks) — an edit there
+    // is diffed by spec_impact --phase design and reopened, agreeing with doctor (it used to read "no changes").
+    const sp8 = S.createFeature(w8, "Slow page", ["saas"], undefined, undefined, "en", "bugfix");
+    const spf = (x) => path.join(sp8.dir, x);
+    const spAp = S.approvePhase(w8, "slow-page", "design", "x", { force: true });
+    const spDesign = fs.readFileSync(spf("design.md"), "utf8");
+    ok(spAp.snapshot === ".history/design@1.md" && spAp.designSnapshot === ".history/design@1.design.md" && fs.readFileSync(spf(".history/design@1.design.md"), "utf8") === spDesign &&
+      JSON.parse(fs.readFileSync(spf(".state.json"), "utf8")).approvalHistory[0].designSnapshot === ".history/design@1.design.md",
+      "a bugfix +saas design approval snapshots design.md too (<phase>@<n>.design.md, recorded as designSnapshot)");
+    fs.writeFileSync(spf("design.md"), spDesign.replace(/(## \[SaaS\] Performance Budget[^\n]*\n)/, "$1p95 under 200 ms on the listing (US-1.AC-1)\n"));
+    const spI = (await call8("spec_impact", { name: "slow-page", phase: "design", projectDir: w8 })).p;
+    const spDc = S.specDoctor(w8, "slow-page").checks.find((c) => c.id === "changed-since-approval");
+    const spL = S.impactLines(spI).join("\n");
+    ok(spI.ok && spI.changed === true && spI.designMd.baseline === "snapshot" && spI.modified.map((x) => x.section + "|" + x.file).join() === "design.md: [SaaS] Performance Budget|design.md" &&
+      spI.impacted[0].ids.includes("US-1.AC-1") && spL.includes("(.history/design@1.md, .history/design@1.design.md)") && spL.includes("  ~ design.md: [SaaS] Performance Budget") &&
+      !spL.includes("no changes since the approval") && /^changed after their approval: design\.md —/.test(spDc.detail) && spDc.detail.includes("(dev-spec impact slow-page --phase design)"),
+      "an edit to a bugfix's design.md after its design approval: spec_impact --phase design diffs it (keyed by file), agreeing with doctor");
+    const spR = S.impactReport(w8, "slow-page", { phase: "design", reopen: true });
+    const spR2 = S.impactReport(w8, "slow-page", { phase: "design", reopen: true });
+    ok(spR.recorded === true && spR.changeRequest === 1 && spR2.recorded === false && /Nothing new since the last reopen/.test(spR2.note),
+      "reopen on a bugfix's design.md edit records the change request; a second reopen is 'nothing new' (a prior reopen exists)");
+    // An approval that kept only design.md's fingerprint (no designSnapshot): impact says THAT design.md changed, never
+    // "no changes"; reopen says why nothing was reopened; doctor doesn't send to an impact that can't diff it.
+    const fp8 = S.createFeature(w8, "Slow list", ["saas"], undefined, undefined, "en", "bugfix");
+    S.approvePhase(w8, "slow-list", "design", "x", { force: true });
+    const fpFile = path.join(fp8.dir, ".state.json");
+    const fpSt = JSON.parse(fs.readFileSync(fpFile, "utf8"));
+    delete fpSt.approvalHistory[0].designSnapshot;
+    fs.writeFileSync(fpFile, JSON.stringify(fpSt));
+    fs.appendFileSync(path.join(fp8.dir, "design.md"), "\nmore budget notes\n");
+    const fpI = S.impactReport(w8, "slow-list", { phase: "design" });
+    const fpR = S.impactReport(w8, "slow-list", { phase: "design", reopen: true });
+    const fpDc = S.specDoctor(w8, "slow-list").checks.find((c) => c.id === "changed-since-approval");
+    ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && /design\.md changed since the approval too, but this approval kept no snapshot of it/.test(fpI.designHint) &&
+      !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && /design\.md changed, but without a snapshot of it/.test(fpR.note) &&
+      /^changed after their approval: design\.md — re-review/.test(fpDc.detail),
+      "a bugfix approval with only design.md's fingerprint: impact and reopen say design.md changed but can't be diffed; doctor doesn't send to spec_impact");
+
+    // reopen with nothing to reopen: say why — never "nothing new since the last reopen" when no reopen preceded it.
+    const nc8 = S.createFeature(w8, "Unchanged", ["core"]);
+    S.approvePhase(w8, "unchanged", "requirements", "x", { force: true });
+    const nc0 = (await call8("spec_impact", { name: "unchanged", reopen: true, projectDir: w8 })).p;
+    fs.appendFileSync(path.join(nc8.dir, "requirements.md"), "\nA closing remark outside any criterion.\n");
+    const nc1 = S.impactReport(w8, "unchanged", { reopen: true });
+    ok(nc0.recorded === false && nc0.note === "Nothing changed since the approval — nothing to reopen." && nc1.changed === true && nc1.recorded === false &&
+      /^Nothing to reopen: the edit changed no criterion or section/.test(nc1.note) && !(JSON.parse(fs.readFileSync(path.join(nc8.dir, ".state.json"), "utf8")).changes || []).length &&
+      ptNv8.note === "Nada mudou desde a aprovação — nada a reabrir.",
+      "reopen with nothing changed (or only text outside the criteria) says so (EN/PT) — not 'nothing new since the last reopen', which no reopen preceded");
 
     // Every WP8 message exists in EN, PT and ES (same keys).
     const keys8 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys8(v, pre + k + ".") : [pre + k])).sort();
