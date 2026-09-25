@@ -13,11 +13,14 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
 - **Fails** (block advancing): `ears` errors, `clarifications` still open, `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
   a `[SaaS]`/`[AI]` section, which the design approval refuses; a written-out list such as `[owner, admin]` is
-  content, not a placeholder), `traceability` gaps, unfilled `saas-sections` /
+  content, not a placeholder), `traceability` gaps (a phantom AC that a recorded change request removed is named
+  with that request — delete or update what cites it — never "typos?"), unfilled `saas-sections` /
   `ai-sections` (missing, or the `> **TODO**` sentinel still there / empty body), missing `requirements`/`design`,
   a bugfix's `root-cause`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,
+  `traceability` "not traced yet" (the gaps that come only from a later phase's still-template `tasks.md` /
+  `test-plan.md` — its template rows are no typos at the requirements or design gate; they fail once it is written),
   `secondary-trace` (EC / NFR / SC IDs no task or test covers), `supersedes` (`_Supersedes:_` references that resolve
   to nothing — the catalog shows the AC they meant to replace as current), `tests-in-code` (T-IDs made green by done tasks that
   no test file names), `verification` (ticked tasks without a passing run — the reason per task: no evidence,

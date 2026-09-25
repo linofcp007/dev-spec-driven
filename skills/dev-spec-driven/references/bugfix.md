@@ -28,7 +28,9 @@ The engine enforces it at every step, not only in doctor:
   runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
   test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the
   first task naming `bug.md` and the root cause that carries no `_Makes green:_` / `_Verify:_` (the scaffold's
-  task 2); without one, only the first task can be completed.
+  task 2); without one, only the first task can be completed. That task itself can be ticked — it is the one that
+  writes the section — but while `Root Cause` is still empty the result carries `rootCausePending: true` and a note,
+  and a later task's refusal says the section is still empty (never "do task 2 first" for a task already ticked).
 - **Finish.** `spec_finish` blocks on an unwritten root cause; the merge summary quotes the Root Cause and Fix.
 
 ## The four phases (= the scaffolded tasks)

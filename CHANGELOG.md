@@ -152,6 +152,34 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   fingerprints, its steering and classification are filled, its edge cases are covered and its Phase 4 tests
   exist; `examples/README.md` shows the real outputs, and `cli/test-cli.js` compares them on every run. README /
   INSTALL / llms-install / CONTRIBUTING no longer hard-code test counts that go stale with every assertion.
+- **Planning gates and test-plan rows.** At the requirements and design gates `spec_doctor` failed `traceability`
+  on the untouched tasks.md / test-plan.md template ("tasks reference unknown ACs (typos?): US-1.AC-3…") for any
+  feature whose ACs aren't the template's — while the same report called that file a later phase's template, "not
+  blocking yet", and the approve gate passed. The gap kinds that read a later phase's still-template artifact are
+  deferred (a warn, "not traced yet"); once it is written they fail as before. `spec_add_track tdd` (and
+  `spec_create` +tdd on an existing feature) planned the template's US-1.AC-1…4 / US-2.AC-1 rows for requirements
+  that were already written (an import) — a test for a criterion the feature lacks, approvable; the rows now come
+  from its own AC IDs (one generic row each).
+- **Bugfix root-cause task.** Ticking the root-cause task while bug.md → Root Cause is still empty stays allowed (it
+  is the task that writes it) but returns `rootCausePending: true` with a note, and a later task's refusal no longer
+  says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES).
+- **Removed criteria.** `spec_impact --reopen` unticked the tasks of a REMOVED AC with "redo them with fresh
+  evidence" — `next` then pointed at re-building a feature the spec no longer has — and doctor called the leftover
+  reference a typo. A removed criterion's tasks are never unticked (nor by a design section naming only removed
+  criteria): `spec_impact` lists them with their test rows in `retire` `[{id, tasks, tests}]` to delete or repoint,
+  and `trace_check`'s informational `removedAcs` `[{id, changeRequest}]` lets doctor, trace and the approve gate say
+  "ACs a change request removed … (change request #N)" instead of "(typos?)".
+- **Finished features.** After `spec_finish {write}`, `spec_next_action` kept answering "close the feature with
+  /spec-finish" — even after the `execution` approval — and never mentioned drift, so following it re-baselined over
+  drifted files without a word. It now answers `finished` (asking for the `execution` sign-off while it is missing)
+  or `drift` with the changed files and the decision (spec wrong → `spec_impact`, code wrong → fix, harmless →
+  re-finish), plus a structured `drift`; a re-finish over a drifted baseline returns `baseline.replaced` and the CLI
+  prints the files it accepted.
+- **Eval sets.** The harness's dry run said "sets are valid" for items a live run then paid a model call for and
+  failed: an unknown grader type, a missing `id` / `input` / `expect`, a non-object item, a regex that doesn't
+  compile, `judge` without a rubric, `contains` / `equals` / `regex` without a value. Every item is validated — the
+  dry run exits 1 with one line per bad item, and a live run calls no model while any set is invalid; an
+  unparseable `evals/thresholds.json` (or a set threshold outside [0, 1]) is invalid instead of silently ignored.
 
 ### Added
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
@@ -248,7 +276,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 685 assertions (was 181), `node cli/test-cli.js` 226 (was 53); the tool count is
+- `node mcp/test.js` 693 assertions (was 181), `node cli/test-cli.js` 232 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

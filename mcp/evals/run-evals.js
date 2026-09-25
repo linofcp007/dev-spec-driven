@@ -7,6 +7,9 @@
  * Runs a feature's golden / adversarial / regression sets against a model using YOUR OWN
  * API key (env ANTHROPIC_API_KEY). No CI, no third party beyond your chosen model provider.
  * Without a key (or with --dry-run) it validates the sets and prints the plan, calling nothing.
+ * Validation (dry AND live, before any model call): each set parses, `items` is an array, every item is
+ * { id, input, expect: { type: contains|equals|regex|refuse|judge, value (contains/equals/regex; a regex that
+ * compiles) | rubric (judge) } }, and evals/thresholds.json (when present) gives each set a number in [0, 1].
  *
  * Usage (from the project root):
  *   node <plugin>/mcp/evals/run-evals.js <feature-slug> [flags]
@@ -19,9 +22,9 @@
  *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
  *
- * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) — handy for a
- * manual pre-push gate. Thresholds: evals/thresholds.json or defaults
- * (golden 0.85, adversarial 1.0, regression 1.0).
+ * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
+ * is invalid (dry or live — then no model is called) — handy for a manual pre-push gate.
+ * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
 const fs = require("fs");
@@ -113,6 +116,41 @@ function looksRefusal(text) {
   return REFUSAL.some((m) => t.includes(m));
 }
 
+// --- set validation (dry run AND before a live run: a broken item never costs a model call) ------------
+
+const GRADERS = ["contains", "equals", "regex", "refuse", "judge"];
+const nonEmpty = (v) => typeof v === "string" && v.trim() !== "";
+// The item format the scaffolded evals/README.md documents: { id, input, expect: { type, value | rubric } } → the
+// localized problems of one item ([] = valid). A regex must compile with the flags gradeItem uses.
+function itemProblems(item) {
+  const W = T.itemWhy;
+  if (!item || typeof item !== "object" || Array.isArray(item)) return [W.notObject];
+  const out = [];
+  if (!nonEmpty(item.id) && !(typeof item.id === "number" && Number.isFinite(item.id))) out.push(W.noId);
+  if (!nonEmpty(item.input)) out.push(W.noInput);
+  const e = item.expect;
+  if (!e || typeof e !== "object" || Array.isArray(e)) { out.push(W.noExpect); return out; }
+  if (!GRADERS.includes(e.type)) { out.push(W.unknownType(String(e.type), GRADERS.join(" | "))); return out; }
+  const hasValue = typeof e.value === "string" ? e.value !== "" : typeof e.value === "number" && Number.isFinite(e.value);
+  if (["contains", "equals", "regex"].includes(e.type) && !hasValue) out.push(W.noValue(e.type));
+  if (e.type === "regex" && hasValue) {
+    try { new RegExp(String(e.value), e.flags || "i"); } catch (err) { out.push(W.badRegex(err.message)); } // gradeItem's own call
+  }
+  if (e.type === "judge" && !nonEmpty(e.rubric)) out.push(W.noRubric);
+  return out;
+}
+// Every invalid item of a set as printable lines (bounded) → [] when the set is valid.
+function setProblems(setName, items) {
+  const lines = [];
+  items.forEach((item, i) => {
+    const why = itemProblems(item);
+    if (!why.length) return;
+    const label = item && typeof item === "object" && (nonEmpty(item.id) || typeof item.id === "number") ? String(item.id) : "#" + (i + 1);
+    lines.push(T.badItem(setName, label, why.join("; ")));
+  });
+  return lines.length > 10 ? lines.slice(0, 10).concat(T.moreBad(lines.length - 10)) : lines;
+}
+
 async function gradeItem(item, response, model, doJudge) {
   const e = item.expect || {};
   switch (e.type) {
@@ -177,12 +215,6 @@ async function main() {
   const promptFile = latestPrompt(path.join(dir, "prompts"), flags.prompt);
   const system = promptFile ? systemFromPrompt(fs.readFileSync(promptFile, "utf8")) : "";
 
-  // Thresholds
-  let thresholds = { ...DEFAULT_THRESHOLDS };
-  try {
-    Object.assign(thresholds, readJson(path.join(evalsDir, "thresholds.json")));
-  } catch {}
-
   const setNames = ["golden", "adversarial", "regression"];
   console.log(T.header(slug));
   console.log(T.config(model, promptFile ? path.basename(promptFile) : T.none, dryRun ? T.modeDry : T.modeLive));
@@ -191,7 +223,31 @@ async function main() {
 
   const report = { feature: slug, model, sets: {}, totalCost: { inTok: 0, outTok: 0 } };
   let belowThreshold = false;
+  let invalid = false; // a set, an item or thresholds.json that can't be run as written — found BEFORE any model call
 
+  // Thresholds: evals/thresholds.json overrides the defaults per set; one that doesn't parse, or gives a set a value that
+  // is not a number in [0, 1], is invalid (it used to be ignored silently). Other keys (a "note") are left alone.
+  const thresholds = { ...DEFAULT_THRESHOLDS };
+  const thrFile = path.join(evalsDir, "thresholds.json");
+  if (fs.existsSync(thrFile)) {
+    let thr;
+    try {
+      thr = readJson(thrFile);
+    } catch (e) {
+      console.log(T.badThresholds(e.message));
+      invalid = true;
+    }
+    if (thr !== undefined) {
+      const bad = !thr || typeof thr !== "object" || Array.isArray(thr) ||
+        setNames.some((s) => thr[s] !== undefined && !(typeof thr[s] === "number" && thr[s] >= 0 && thr[s] <= 1));
+      if (bad) { console.log(T.badThresholds(T.thresholdsShape)); invalid = true; }
+      else for (const s of setNames) if (thr[s] !== undefined) thresholds[s] = thr[s];
+    }
+  }
+
+  // Load + validate every set first: a live run starts only when all of them are valid (no tokens spent on a broken set).
+  const toRun = [];
+  const maxItems = flags["max-items"] ? parseInt(flags["max-items"], 10) : 200;
   for (const setName of setNames) {
     const file = path.join(evalsDir, setName + ".json");
     if (!fs.existsSync(file)) continue;
@@ -200,25 +256,37 @@ async function main() {
       set = readJson(file);
     } catch (e) {
       console.log(T.badJson(setName, e.message));
-      belowThreshold = true;
+      invalid = true;
       continue;
     }
     // Valid JSON of the wrong shape (null, an array, "items": {…}) is an invalid set, not a crash.
     if (!set || typeof set !== "object" || Array.isArray(set) || (set.items !== undefined && !Array.isArray(set.items))) {
       console.log(T.badItems(setName));
-      belowThreshold = true;
+      invalid = true;
       continue;
     }
     const allItems = set.items || [];
-    const maxItems = flags["max-items"] ? parseInt(flags["max-items"], 10) : 200;
+    const problems = setProblems(setName, allItems); // every item, also past --max-items: the set is what's on disk
+    if (problems.length) {
+      problems.forEach((l) => console.log(l));
+      invalid = true;
+      continue;
+    }
     const items = allItems.slice(0, maxItems);
     if (allItems.length > items.length) console.log(T.capped(setName, maxItems, allItems.length));
     if (dryRun) {
-      console.log(T.wouldRun(setName, items.length, items.map((i) => i && i.expect && i.expect.type).join(", ")));
+      console.log(T.wouldRun(setName, items.length, items.map((i) => i.expect.type).join(", ")));
       report.sets[setName] = { items: items.length, dryRun: true };
       continue;
     }
+    toRun.push({ setName, set, items });
+  }
+  if (invalid) {
+    console.log(dryRun ? T.dryInvalid : T.liveInvalid);
+    process.exit(1);
+  }
 
+  for (const { setName, set, items } of toRun) {
     let pass = 0;
     const failures = [];
     for (const item of items) {
@@ -269,11 +337,7 @@ async function main() {
     }
   }
 
-  if (dryRun) {
-    if (belowThreshold) {
-      console.log(T.dryInvalid);
-      process.exit(1);
-    }
+  if (dryRun) { // an invalid set already exited 1 above
     console.log(T.dryOk);
     process.exit(0);
   }

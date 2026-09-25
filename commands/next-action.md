@@ -20,7 +20,11 @@ in the spec chain's order, and names it in `step`:
    write the failing tests / eval harness with `/writeTests`, then `/approve <feature> tests`), and on a bugfix the
    `design` approval of `bug.md`;
 5. **implement** — the next open task;
-6. **finish** — every task done → `/spec-finish` (**tasks** instead when no tasks exist yet).
+6. **finish** — every task done → `/spec-finish` (**tasks** instead when no tasks exist yet). Once
+   `spec_finish {write: true}` has recorded the finish: **finished** (the `execution` sign-off, `/approve <feature>
+   execution`, while it is missing — else nothing left) or **drift** — implementing files changed since the finish
+   (`drift` lists them): decide with the user — the spec is now wrong → `/spec-impact`; the code is wrong → fix it;
+   harmless → re-run `/spec-finish` for a fresh baseline.
 
 Report: the feature's tracks, phase, doctor verdict, whether the gates are met (`gatesOk`), anything in
 `changedSinceApproval`, and the recommended next action — then offer to do it. Never skip a step to reach a

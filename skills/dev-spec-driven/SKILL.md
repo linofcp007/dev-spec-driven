@@ -425,7 +425,7 @@ is a gate:** that phase's checks run first and any failure refuses it, naming th
 (`--force`) records it anyway as a *forced* approval — only when the user explicitly accepts the failures; doctor,
 the roadmap and the metrics keep showing it. Lost? `/next-action <feature>` gives ONE next step in the chain's
 order — fill the first unwritten artifact → re-review what changed since approval → fix the current phase's
-failing checks → approve → implement the next task → finish.
+failing checks → approve → implement the next task → finish (once finished: `finished`, or `drift` to decide on).
 
 At every gate present: **(1) what was produced · (2) key decisions + rationale · (3) tracks/sections
 affected · (4) risks to review · (5) the `spec_doctor` verdict · (6) next step** — then ask for
@@ -440,7 +440,8 @@ approval. Keep it tight.
   `next_action` → re-review; `spec_finish` blocks). `spec_impact` diffs it against the snapshot — ACs (by ID),
   design sections or tasks — and lists the tasks, tests and design sections each change reaches. Show that to the
   user; only with their OK, `reopen: true` unticks the affected done tasks, marks their evidence stale and records
-  the change request (`state.changes`). Then update what the change reaches and re-approve (a new snapshot).
+  the change request (`state.changes`) — a REMOVED criterion's tasks are never redone: `retire` lists them (and
+  their test rows) to delete or repoint. Then update what the change reaches and re-approve (a new snapshot).
 - **Superseding.** A later feature that replaces an earlier criterion marks its new AC
   `_Supersedes: <feature>/US-n.AC-m_` instead of rewriting finished specs. `/spec-catalog` (`spec_catalog
   {write: true}`) keeps `.specs/SPECS.md` — every feature and AC, superseded ones marked — current.

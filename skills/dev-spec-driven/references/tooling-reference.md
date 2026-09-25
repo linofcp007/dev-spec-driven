@@ -18,7 +18,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_import` | Import a Kiro / spec-kit / OpenSpec spec (path inside the project) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: phase, artifacts, tasks (with `verified`), +saas/+ai sections present vs filled, eval state |
-| `spec_next_action` | "You are here → do this next": one ordered `step` (fill → re-review → fix → approve → implement → finish) + `changedSinceApproval` |
+| `spec_next_action` | "You are here → do this next": one ordered `step` (fill → re-review → fix → approve → implement → finish → finished / drift) + `changedSinceApproval` |
 | `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` |
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC and `phantomSupersedes`; `code: true` scans test files for T-IDs |

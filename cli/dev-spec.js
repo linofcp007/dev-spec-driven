@@ -372,8 +372,12 @@ function main() {
         (r.warnings || []).forEach((w) => console.log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
         console.log("\n" + r.checks.map((c) => "  [ ] " + c).join("\n"));
         if (r.wrote) console.log(T.mergeSummaryAt(r.paths.summary));
-        if (r.baseline && r.baseline.recorded) console.log(spec.msg(spec.featureLang(projectDir, r.feature)).drift.baselineRecorded(r.baseline.files, r.baseline.missing));
-        else if (r.baseline && r.baseline.error) console.error("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten
+        if (r.baseline && r.baseline.recorded) {
+          const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
+          console.log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
+          const rp = r.baseline.replaced; // a re-finish over a drifted baseline: the drift it accepted
+          if (rp) { const list = [...rp.changed, ...rp.missing, ...rp.nowPresent]; console.log("  " + D.baselineReplaced(list.length, String(rp.at || "?").slice(0, 10), list.join(", "))); }
+        } else if (r.baseline && r.baseline.error) console.error("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten
         if (r.mergeSummary != null) console.log("\n# " + r.mergeTitle + "\n\n" + r.mergeSummary);
       });
     }

@@ -22,6 +22,9 @@ For each drifted feature, look at the diff (`git log -p -- <file>`) and help the
   then re-approve; or, for new behaviour, a new feature (`/spec`) whose criteria carry `_Supersedes:_`;
 - **the code is wrong** (an unintended regression) → fix it — a bugfix (`/spec-bugfix`) when it's a real defect;
 - **harmless** (refactor, formatting) → accept it: after the spec chain is confirmed, re-run
-  `spec_finish {write: true}` to record a fresh baseline.
+  `spec_finish {write: true}` to record a fresh baseline — its `baseline.replaced` names the drift it accepted.
+
+`spec_next_action` on a finished feature says the same: `step: "drift"` (with `drift` {changed, missing, nowPresent})
+or `step: "finished"` when nothing drifted.
 
 Respond in the user's language (EN/PT/ES).

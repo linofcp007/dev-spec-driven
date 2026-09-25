@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 if (!SECTION) {
@@ -1084,6 +1084,19 @@ ok(drClean.code === 0 && new RegExp("✓ login-loop: 1 implementing file\\(s\\) 
   drDirty.code === 1 && new RegExp("⚠ login-loop: 1 of 1 implementing file\\(s\\) changed since finish \\(" + finDay10 + "\\)").test(drDirty.out) && /changed: src\/auth\.js/.test(drDirty.out) &&
   drJ && drJ.drifted.join() === "login-loop" && JSON.stringify(drJ) === JSON.stringify(S10.drift(w10f)),
   "drift <feature>: clean after finish (CRLF-normalized), exit 1 naming the changed file after an edit; --json = spec_drift");
+// next-action on the finished feature: the drift and the decision, never "close the feature with /spec-finish" again; a
+// re-finish names the drift its new baseline accepted; then next-action says finished (and asks for the sign-off).
+const naDrift10 = run(["next-action", "login-loop", "--project", w10f]);
+let naJ10 = null;
+try { naJ10 = JSON.parse(run(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+const naEng10 = JSON.stringify(S10.nextAction(w10f, "login-loop"));
+const refin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
+const naFin10 = run(["next-action", "login-loop", "--project", w10f]);
+ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finDay10 + ", but 1 of 1 implementing file\\(s\\) changed since: src/auth\\.js").test(naDrift10.out) &&
+  !/close the feature/.test(naDrift10.out) && naJ10 && naJ10.step === "drift" && JSON.stringify(naJ10) === naEng10 &&
+  refin10.code === 0 && new RegExp("Replaced the baseline of " + finDay10 + ", in which 1 file\\(s\\) had drifted: src/auth\\.js").test(refin10.out) &&
+  /→ 'login-loop' is finished \(\d{4}-\d\d-\d\d\) — its 1 implementing file\(s\) are unchanged since\. Sign it off: \/approve login-loop execution\./.test(naFin10.out),
+  "next-action on a finished feature: 'drift' with the changed file (--json = spec_next_action); finish --write names the drift it accepts; then 'finished' + the execution sign-off");
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");
@@ -1336,6 +1349,68 @@ if (inSection("wp15")) { // 1.13 batch 6 — examples/README.md's "Verify it you
   const rm15 = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
   ok(rm15(path.join(demo15, ".specs", "ROADMAP.md")) === rm15(path.join(repo15, "examples", "demo-project", ".specs", "ROADMAP.md")),
     "the demo's committed .specs/ROADMAP.md matches what roadmap --write generates");
+}
+
+if (inSection("wp16")) { // 1.13 batch 7 — gates at the planning phases, the bugfix root-cause task, add-track tdd rows, removed ACs, eval sets
+  const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const w16 = path.join(tmp, "wp16");
+  S16.initProject(w16, ["core"], "en");
+  const at16 = (slug, rel) => path.join(w16, ".specs", slug, rel);
+  const REQ16 = "# Feature: Digest\n\n## Summary\nWeekly digest.\n\n### US-1 (P1 — MVP): Digest\n#### Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN the weekly job runs THE SYSTEM SHALL email each active account a digest.\n2. **US-1.AC-2** — IF an account has no activity THEN THE SYSTEM SHALL skip the email.\n\n" +
+    "## Success Criteria\n- **SC-001** — 95% delivered within 1 hour.\n";
+
+  // doctor at the design gate: the untouched tasks.md template's references are deferred (▲), never "✗ … (typos?)"; exit 0.
+  S16.createFeature(w16, "Weekly digest", ["core"]);
+  fs.writeFileSync(at16("weekly-digest", "requirements.md"), REQ16);
+  fs.writeFileSync(at16("weekly-digest", "design.md"), "# Design: Digest\n\n## Overview\nA weekly job.\n\n## Constitution Check\n- [x] Principle 1 — complies\n");
+  const doc16 = run(["doctor", "weekly-digest", "--project", w16]);
+  ok(doc16.code === 0 && /readyToAdvance=true/.test(doc16.out) && /▲ traceability — not traced yet — still a later phase's template: tasks\.md/.test(doc16.out) && !/✗ traceability|\(typos\?\)/.test(doc16.out),
+    "doctor at the design gate (CLI): the template tasks.md's AC references are deferred (▲ not traced yet), readyToAdvance=true, exit 0");
+
+  // bugfix: ticking the root-cause task with Root Cause empty warns; the next refusal says the section is empty (not "do task 2 first").
+  run(["bugfix", "Login crash", "--summary", "Login crashes on accented emails", "--project", w16]);
+  const d2 = run(["done", "login-crash", "2", "--project", w16]);
+  const d3 = run(["done", "login-crash", "3", "--evidence", "red", "--project", w16]);
+  ok(d2.code === 0 && /⚠ Task 2 is ticked, but bug\.md → Root Cause is still empty — write the root cause there/.test(d2.out) &&
+    d3.code === 1 && /Task 3 can't be completed yet: bug\.md → Root Cause is still empty — task 2 is ticked, but its deliverable is that section/.test(d3.out) && !/do task 2 first/.test(d3.out),
+    "bugfix (CLI): done on the root-cause task with Root Cause empty warns; a later task's refusal names the empty section, never 'do task 2 first' for a ticked task");
+
+  // add-track tdd after the requirements exist: rows from the feature's own ACs.
+  S16.createFeature(w16, "Order cancel", ["core"]);
+  fs.writeFileSync(at16("order-cancel", "requirements.md"), REQ16.replace("### US-1", "### US-1").replace("## Success Criteria", "### US-3 (P2): Notify\n#### Acceptance Criteria (EARS)\n1. **US-3.AC-1** — WHEN a digest bounces THE SYSTEM SHALL flag the account.\n\n## Success Criteria"));
+  const addT16 = run(["add-track", "order-cancel", "tdd", "--project", w16]);
+  const rows16 = (fs.readFileSync(at16("order-cancel", "test-plan.md"), "utf8").match(/^\| T-\d+ \|[^|]*\|[^|]*\|[^|]*\| ([^|]*) \|/gm) || []).map((r) => r.split("|")[5].trim()).join();
+  ok(addT16.code === 0 && rows16 === "US-1.AC-1,US-1.AC-2,US-3.AC-1" && run(["trace", "order-cancel", "--json", "--project", w16]).out.includes('"phantomAcsInTests": []'),
+    "add-track tdd (CLI) on written requirements: one test-plan row per real AC, no phantom template row (got " + rows16 + ")");
+
+  // A removed AC: impact --reopen unticks nothing for it (retire), doctor names the change request instead of "typos?".
+  S16.createFeature(w16, "Billing", ["core"]);
+  const reqB16 = REQ16.replace("## Success Criteria", "### US-2 (P2): Export\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN an admin exports THE SYSTEM SHALL produce a CSV.\n\n## Success Criteria");
+  fs.writeFileSync(at16("billing", "requirements.md"), reqB16);
+  fs.writeFileSync(at16("billing", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Send\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n- [ ] 2. [US2] CSV export\n  - _Requirements: US-2.AC-1_\n");
+  S16.completeTask(w16, "billing", 1, { summary: "checked" });
+  S16.completeTask(w16, "billing", 2, { summary: "checked" });
+  S16.approvePhase(w16, "billing", "requirements", undefined, { force: true });
+  fs.writeFileSync(at16("billing", "requirements.md"), REQ16);
+  const im16 = run(["impact", "billing", "--project", w16]);
+  const ro16 = run(["impact", "billing", "--reopen", "--project", w16]);
+  const drB16 = run(["doctor", "billing", "--project", w16]);
+  ok(/Removed criteria still cited — US-2\.AC-1 → tasks #2: don't redo those tasks/.test(im16.out) && !/To untick the affected done tasks/.test(im16.out) &&
+    ro16.code === 0 && /Change request #1 recorded — nothing unticked: a removed criterion's tasks are not redone/.test(ro16.out) &&
+    /- \[x\] 2\. \[US2\] CSV export/.test(fs.readFileSync(at16("billing", "tasks.md"), "utf8")) &&
+    /✗ traceability — tasks still cite ACs a change request removed \(delete or update those tasks — not a typo\): US-2\.AC-1 \(change request #1\)/.test(drB16.out),
+    "impact (CLI) on a removed AC: retire hint, --reopen records the change request without unticking its task; doctor names the change request, not 'typos?'");
+
+  // Eval sets: a malformed item fails the dry run (exit 1, one line per item) — the CLI forwards to the harness.
+  const ai16 = path.join(tmp, "wp16-ai");
+  S16.initProject(ai16, ["ai"], "en");
+  S16.createFeature(ai16, "Ticket summary", ["ai"]);
+  fs.writeFileSync(path.join(ai16, ".specs", "ticket-summary", "evals", "regression.json"), JSON.stringify({ items: [{ id: "r1", input: "x", expect: { type: "contain", value: "x" } }] }));
+  const ev16 = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", "--dry-run", "--project", ai16], { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "" } });
+  ok(ev16.status === 1 && /✗ regression\.json — item r1: unknown grader type 'contain' \(use contains \| equals \| regex \| refuse \| judge\)/.test(ev16.stdout) &&
+    /Dry run found invalid eval set\(s\)/.test(ev16.stdout) && !/sets are valid/.test(ev16.stdout),
+    "evals --dry-run (CLI): a malformed item is an invalid set — exit 1, named with its reason, never 'sets are valid'");
 }
 
 // unknown command errors

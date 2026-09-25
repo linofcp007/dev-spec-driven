@@ -50,7 +50,12 @@ function greenLine(green, ...acs) {
 // The test-plan matrix rows of the template ACs — row(testId, layer, kind, description, acId, file) formats one per
 // language, L holds that language's layer names and descriptions. Kind stays English-stable (example | property): the
 // ubiquitous AC-4 ("always-true property") and tenant isolation ("never") are invariants, the event-driven ones examples.
-function templateTestRows(tracks, row, L) {
+// acs: the feature's REAL AC IDs (a test plan scaffolded after requirements.md was written — spec_add_track tdd): one
+// generic row each (T-01…, unit, example, [behavior]) instead of the template's, whose IDs the feature may not define.
+function templateTestRows(tracks, row, L, acs) {
+  if (Array.isArray(acs) && acs.length) {
+    return acs.map((ac, i) => row("T-" + String(i + 1).padStart(2, "0"), "unit", "example", L.behavior, ac, "tests/unit/...")).join("\n");
+  }
   const T = templateTests(tracks);
   const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
   const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
@@ -478,11 +483,11 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    testPlan(name, tracks) {
+    testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
           tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
-          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" });
+          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1043,11 +1048,11 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 `;
     },
 
-    testPlan(name, tracks) {
+    testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
           tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
-          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" });
+          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1608,11 +1613,11 @@ ${a.summary || "[una línea: el bug a corregir]"}
 `;
     },
 
-    testPlan(name, tracks) {
+    testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
           tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
-          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" });
+          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -2019,6 +2024,8 @@ const MSG = {
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (dev-spec drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
+      finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` + (signOff ? ` Sign it off: /approve ${slug} execution.` : ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`),
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)"),
@@ -2135,6 +2142,20 @@ const MSG = {
       noKey: "  (no ANTHROPIC_API_KEY set — running dry. Set it to do a live run.)",
       badJson: (set, err) => `  ✗ ${set}.json — invalid JSON: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' must be an array`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} more invalid item(s)`,
+      itemWhy: {
+        notObject: "not an object",
+        noId: "no 'id' (a non-empty string)",
+        noInput: "no 'input' (a non-empty string)",
+        noExpect: "no 'expect' object",
+        unknownType: (t, types) => `unknown grader type '${t}' (use ${types})`,
+        noValue: (t) => `'${t}' needs a 'value'`,
+        badRegex: (msg) => `the regex doesn't compile: ${msg}`,
+        noRubric: "'judge' needs a 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "must be an object giving each set (golden / adversarial / regression) a number between 0 and 1",
       capped: (set, max, total) => `  ⚠ ${set}: capped at ${max}/${total} items (raise with --max-items=N)`,
       wouldRun: (set, n, kinds) => `  • ${set}: ${n} item(s) — would run ${kinds}`,
       score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (threshold ${thr}%)`,
@@ -2150,6 +2171,7 @@ const MSG = {
       baselineWritten: (rel) => `\n  baseline written → ${rel}`,
       tokens: (i, o) => `\n  tokens: ${i} in / ${o} out`,
       dryInvalid: "\nDry run found invalid eval set(s) — fix them before a live run.",
+      liveInvalid: "\nInvalid eval set(s) — fix them first; no model was called.",
       dryOk: "\nDry run complete — sets are valid. Set ANTHROPIC_API_KEY and re-run for live scores.",
       verdict: (below) => `\nVerdict: ${below ? "BELOW THRESHOLD ✗" : "all sets pass ✓"}`,
       crashed: (msg) => `eval harness error: ${msg}`,
@@ -2168,6 +2190,11 @@ const MSG = {
       },
       gap: (label, list) => `${label}: ${list}`,
       allCovered: (n) => `all ${n} ACs covered by tasks`,
+      removedKinds: {
+        phantomAcsInTasks: "tasks still cite ACs a change request removed (delete or update those tasks — not a typo)",
+        phantomAcsInTests: "the test plan still covers ACs a change request removed (delete or update those rows — not a typo)",
+      },
+      removedRef: (id, n) => `${id} (change request #${n})`,
     },
     // detectPhase() tokens stay English in JSON; these are for human-readable lines only.
     phaseNames: {
@@ -2246,6 +2273,7 @@ const MSG = {
       placeholdersNone: "no template placeholders left in the current phase",
       placeholdersFail: (list) => `template placeholders left in the current phase (or an earlier one): ${list}`,
       placeholdersLater: (list) => `later phases are still templates (not blocking yet): ${list}`,
+      traceDeferred: (files) => `not traced yet — still a later phase's template: ${files} (its template references are no typos and don't block this phase); traced once written`,
       earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
       constitutionUnfilled: "the Constitution Check section is missing or not filled in",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
@@ -2258,6 +2286,8 @@ const MSG = {
       finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
       bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
+      rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
       fillMissing: "it doesn't exist yet",
       fillEmpty: "it has no content beyond headings",
@@ -2388,6 +2418,11 @@ const MSG = {
       designFingerprintOnly: (slug) => `design.md changed since the approval too, but this approval kept no snapshot of it (only its fingerprint), so what changed there can't be listed. Re-approve to start its history: /approve ${slug} design.`,
       reopenDesignUnknown: "Nothing was reopened: design.md changed, but without a snapshot of it as approved the affected tasks can't be determined.",
       reopened: (list, slug, phase) => `Reopened ${list}: unticked, their evidence marked stale — redo them with fresh evidence, then re-approve: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tasks " + tasks.join(", ") : "", tests.length ? "tests " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Removed criteria still cited — ${list}: don't redo those tasks; delete them (and the test rows) or point them at the criterion that replaces it.` +
+        (offer ? ` --reopen records the change request without unticking them (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Removed criteria are not redone — still cited: ${list}: delete those tasks and test rows, or point them at the criterion that replaces it.`,
+      recordedRetire: (n, list, slug, phase) => `Change request #${n} recorded — nothing unticked: a removed criterion's tasks are not redone. Still cited: ${list}: delete those tasks and test rows, or point them at the criterion that replaces it; then re-approve: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Change request #${n} recorded — no done task was affected. Review it, then re-approve: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `To untick the affected done tasks and mark their evidence stale: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
       nextHint: (slug, phases) => `First see what the edit touches with spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
@@ -2565,6 +2600,7 @@ const MSG = {
       unbaselined: (list) => `  · no finish baseline yet: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} implementing file(s) changed since finish — run dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Drift baseline recorded: ${n} implementing file(s)${missing ? ` (${missing} missing)` : ""} — dev-spec drift shows what changes after this finish.`,
+      baselineReplaced: (n, day, list) => `Replaced the baseline of ${day}, in which ${n} file(s) had drifted: ${list} — the new baseline accepts them as they are now.`,
     },
 
     // Guard mode (hooks/guard-hook.js, PreToolUse · spec_init {guard} · `dev-spec init --guard on|off`).
@@ -2756,6 +2792,8 @@ const MSG = {
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
+      finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` + (signOff ? ` Falta a aprovação final: /approve ${slug} execution.` : ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`),
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(não especificado)"),
@@ -2866,6 +2904,20 @@ const MSG = {
       noKey: "  (ANTHROPIC_API_KEY não definida — a correr a seco. Define-a para uma execução real.)",
       badJson: (set, err) => `  ✗ ${set}.json — JSON inválido: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' tem de ser um array`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} item(s) inválido(s)`,
+      itemWhy: {
+        notObject: "não é um objeto",
+        noId: "sem 'id' (texto não vazio)",
+        noInput: "sem 'input' (texto não vazio)",
+        noExpect: "sem objeto 'expect'",
+        unknownType: (t, types) => `tipo de avaliador desconhecido '${t}' (usa ${types})`,
+        noValue: (t) => `'${t}' precisa de um 'value'`,
+        badRegex: (msg) => `a regex não compila: ${msg}`,
+        noRubric: "'judge' precisa de uma 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "tem de ser um objeto que dá a cada conjunto (golden / adversarial / regression) um número entre 0 e 1",
       capped: (set, max, total) => `  ⚠ ${set}: limitado a ${max}/${total} itens (aumenta com --max-items=N)`,
       wouldRun: (set, n, kinds) => `  • ${set}: ${n} item(ns) — correria ${kinds}`,
       score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (limiar ${thr}%)`,
@@ -2881,6 +2933,7 @@ const MSG = {
       baselineWritten: (rel) => `\n  baseline gravada → ${rel}`,
       tokens: (i, o) => `\n  tokens: ${i} de entrada / ${o} de saída`,
       dryInvalid: "\nO dry run encontrou conjunto(s) de evals inválido(s) — corrige-os antes de uma execução real.",
+      liveInvalid: "\nConjunto(s) de evals inválido(s) — corrige-os primeiro; nenhum modelo foi chamado.",
       dryOk: "\nDry run concluído — os conjuntos são válidos. Define a ANTHROPIC_API_KEY e volta a correr para obter resultados reais.",
       verdict: (below) => `\nVeredicto: ${below ? "ABAIXO DO LIMIAR ✗" : "todos os conjuntos passam ✓"}`,
       crashed: (msg) => `erro no harness de evals: ${msg}`,
@@ -2898,6 +2951,11 @@ const MSG = {
       },
       gap: (label, list) => `${label}: ${list}`,
       allCovered: (n) => `todos os ${n} ACs cobertos por tarefas`,
+      removedKinds: {
+        phantomAcsInTasks: "tarefas ainda citam ACs que um pedido de alteração removeu (apaga ou atualiza essas tarefas — não é erro de escrita)",
+        phantomAcsInTests: "o plano de testes ainda cobre ACs que um pedido de alteração removeu (apaga ou atualiza essas linhas — não é erro de escrita)",
+      },
+      removedRef: (id, n) => `${id} (pedido de alteração #${n})`,
     },
     phaseNames: {
       complete: "concluída", executing: "em execução", "tasks-ready": "tarefas prontas", "eval-plan": "plano de evals", "test-plan": "plano de testes",
@@ -2972,6 +3030,7 @@ const MSG = {
       placeholdersNone: "nenhum placeholder do template na fase atual",
       placeholdersFail: (list) => `placeholders do template por preencher na fase atual (ou numa anterior): ${list}`,
       placeholdersLater: (list) => `as fases seguintes ainda são template (ainda não bloqueia): ${list}`,
+      traceDeferred: (files) => `ainda não rastreado — ainda é o template de uma fase seguinte: ${files} (as referências do template não são erros de escrita nem bloqueiam esta fase); rastreado quando for escrito`,
       earsPlaceholder: (list) => `O critério ainda tem placeholder(s) do template ${list} — escreve o gatilho/comportamento real.`,
       constitutionUnfilled: "a secção Verificação da Constituição está em falta ou por preencher",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
@@ -2984,6 +3043,8 @@ const MSG = {
       finishChanged: (list) => `alterados depois da aprovação (rever e voltar a aprovar): ${list}`,
       bugGate: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher. Nenhuma correção antes de a causa raiz estar escrita no bug.md — faz primeiro a tarefa ${first} (encontra a causa raiz com evidência e escreve-a lá).`,
       bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
+      bugGateTicked: (n, rc) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz continua vazia — a tarefa ${rc} está marcada, mas o que ela entrega é essa secção. Escreve lá a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
+      rootCauseTaskEmpty: (n) => `A tarefa ${n} está marcada, mas bug.md → Causa Raiz continua vazia — escreve lá a causa raiz, com a evidência: as tarefas seguintes (o teste de regressão, a correção) continuam recusadas até estar escrita.`,
       fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,
       fillMissing: "ainda não existe",
       fillEmpty: "não tem conteúdo além dos títulos",
@@ -3108,6 +3169,11 @@ const MSG = {
       designFingerprintOnly: (slug) => `O design.md também mudou desde a aprovação, mas esta aprovação não guardou um snapshot dele (só a impressão digital), por isso não é possível listar o que lá mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} design.`,
       reopenDesignUnknown: "Nada foi reaberto: o design.md mudou, mas sem um snapshot dele tal como foi aprovado não é possível determinar as tarefas afetadas.",
       reopened: (list, slug, phase) => `Reabertas ${list}: desmarcadas, com a evidência marcada como desatualizada — refaz-as com evidência nova e volta a aprovar: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tarefas " + tasks.join(", ") : "", tests.length ? "testes " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Critérios removidos ainda citados — ${list}: não refaças essas tarefas; apaga-as (e as linhas de teste) ou aponta-as para o critério que o substitui.` +
+        (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Critérios removidos não se refazem — ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui.`,
+      recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um critério removido não se refazem. Ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Pedido de alteração #${n} registado — nenhuma tarefa concluída foi afetada. Revê-o e volta a aprovar: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `Para desmarcar as tarefas concluídas afetadas e marcar a evidência como desatualizada: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
       nextHint: (slug, phases) => `Vê primeiro o que a edição afeta com spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
@@ -3255,6 +3321,7 @@ const MSG = {
       unbaselined: (list) => `  · ainda sem baseline de fecho: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
+      baselineReplaced: (n, day, list) => `Substituída a baseline de ${day}, na qual ${n} ficheiro(s) tinham mudado: ${list} — a nova baseline aceita-os tal como estão agora.`,
     },
 
     guardMode: {
@@ -3443,6 +3510,8 @@ const MSG = {
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (dev-spec drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
+      finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` + (signOff ? ` Falta la aprobación final: /approve ${slug} execution.` : ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`),
     },
     clarify: {
       resolveMarker: (mk) => "Resuelve [NEEDS CLARIFICATION]: " + (mk || "(sin especificar)"),
@@ -3553,6 +3622,20 @@ const MSG = {
       noKey: "  (ANTHROPIC_API_KEY no definida — ejecución en seco. Defínela para una ejecución real.)",
       badJson: (set, err) => `  ✗ ${set}.json — JSON no válido: ${err}`,
       badItems: (set) => `  ✗ ${set}.json — 'items' debe ser un array`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — elemento ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} elemento(s) no válido(s)`,
+      itemWhy: {
+        notObject: "no es un objeto",
+        noId: "sin 'id' (texto no vacío)",
+        noInput: "sin 'input' (texto no vacío)",
+        noExpect: "sin objeto 'expect'",
+        unknownType: (t, types) => `tipo de evaluador desconocido '${t}' (usa ${types})`,
+        noValue: (t) => `'${t}' necesita un 'value'`,
+        badRegex: (msg) => `la regex no compila: ${msg}`,
+        noRubric: "'judge' necesita una 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "debe ser un objeto que dé a cada conjunto (golden / adversarial / regression) un número entre 0 y 1",
       capped: (set, max, total) => `  ⚠ ${set}: limitado a ${max}/${total} elementos (auméntalo con --max-items=N)`,
       wouldRun: (set, n, kinds) => `  • ${set}: ${n} elemento(s) — ejecutaría ${kinds}`,
       score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (umbral ${thr}%)`,
@@ -3568,6 +3651,7 @@ const MSG = {
       baselineWritten: (rel) => `\n  baseline guardada → ${rel}`,
       tokens: (i, o) => `\n  tokens: ${i} de entrada / ${o} de salida`,
       dryInvalid: "\nEl dry run encontró conjunto(s) de evals no válido(s) — corrígelos antes de una ejecución real.",
+      liveInvalid: "\nConjunto(s) de evals no válido(s) — corrígelos primero; no se ha llamado a ningún modelo.",
       dryOk: "\nDry run completado — los conjuntos son válidos. Define ANTHROPIC_API_KEY y vuelve a ejecutar para obtener resultados reales.",
       verdict: (below) => `\nVeredicto: ${below ? "POR DEBAJO DEL UMBRAL ✗" : "todos los conjuntos pasan ✓"}`,
       crashed: (msg) => `error en el harness de evals: ${msg}`,
@@ -3585,6 +3669,11 @@ const MSG = {
       },
       gap: (label, list) => `${label}: ${list}`,
       allCovered: (n) => `los ${n} ACs cubiertos por tareas`,
+      removedKinds: {
+        phantomAcsInTasks: "las tareas aún citan ACs que una solicitud de cambio eliminó (elimina o actualiza esas tareas — no es una errata)",
+        phantomAcsInTests: "el plan de pruebas aún cubre ACs que una solicitud de cambio eliminó (elimina o actualiza esas filas — no es una errata)",
+      },
+      removedRef: (id, n) => `${id} (solicitud de cambio #${n})`,
     },
     phaseNames: {
       complete: "completada", executing: "en ejecución", "tasks-ready": "tareas listas", "eval-plan": "plan de evals", "test-plan": "plan de pruebas",
@@ -3659,6 +3748,7 @@ const MSG = {
       placeholdersNone: "ningún placeholder de la plantilla en la fase actual",
       placeholdersFail: (list) => `placeholders de la plantilla sin rellenar en la fase actual (o en una anterior): ${list}`,
       placeholdersLater: (list) => `las fases siguientes aún son plantilla (todavía no bloquea): ${list}`,
+      traceDeferred: (files) => `aún no trazado — sigue siendo la plantilla de una fase posterior: ${files} (sus referencias de plantilla no son erratas ni bloquean esta fase); se traza cuando se escriba`,
       earsPlaceholder: (list) => `El criterio aún tiene placeholder(s) de la plantilla ${list} — escribe el disparador/comportamiento real.`,
       constitutionUnfilled: "la sección Verificación de la Constitución falta o está sin rellenar",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
@@ -3671,6 +3761,8 @@ const MSG = {
       finishChanged: (list) => `modificados tras su aprobación (revisar y volver a aprobar): ${list}`,
       bugGate: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar. Ninguna corrección antes de que la causa raíz esté escrita en bug.md — haz primero la tarea ${first} (encuentra la causa raíz con evidencia y escríbela allí).`,
       bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
+      bugGateTicked: (n, rc) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz sigue vacía — la tarea ${rc} está marcada, pero lo que entrega es esa sección. Escribe allí la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
+      rootCauseTaskEmpty: (n) => `La tarea ${n} está marcada, pero bug.md → Causa Raíz sigue vacía — escribe allí la causa raíz, con su evidencia: las tareas siguientes (la prueba de regresión, la corrección) siguen rechazadas hasta que esté escrita.`,
       fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
       fillMissing: "aún no existe",
       fillEmpty: "no tiene contenido además de los títulos",
@@ -3795,6 +3887,11 @@ const MSG = {
       designFingerprintOnly: (slug) => `design.md también ha cambiado desde la aprobación, pero esta aprobación no guardó una instantánea de él (solo su huella), así que no se puede listar qué cambió allí. Vuelve a aprobar para iniciar su historial: /approve ${slug} design.`,
       reopenDesignUnknown: "No se ha reabierto nada: design.md ha cambiado, pero sin una instantánea de él tal como se aprobó no se pueden determinar las tareas afectadas.",
       reopened: (list, slug, phase) => `Reabiertas ${list}: desmarcadas y con su evidencia marcada como obsoleta — rehazlas con evidencia nueva y vuelve a aprobar: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tareas " + tasks.join(", ") : "", tests.length ? "pruebas " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Criterios eliminados aún citados — ${list}: no rehagas esas tareas; elimínalas (y las filas de prueba) o apúntalas al criterio que lo sustituye.` +
+        (offer ? ` --reopen registra la solicitud de cambio sin desmarcarlas (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Los criterios eliminados no se rehacen — aún citados: ${list}: elimina esas tareas y filas de prueba, o apúntalas al criterio que lo sustituye.`,
+      recordedRetire: (n, list, slug, phase) => `Solicitud de cambio #${n} registrada — nada desmarcado: las tareas de un criterio eliminado no se rehacen. Aún citados: ${list}: elimina esas tareas y filas de prueba, o apúntalas al criterio que lo sustituye; después vuelve a aprobar: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Solicitud de cambio #${n} registrada — ninguna tarea completada se ha visto afectada. Revísala y vuelve a aprobar: /approve ${slug} ${phase}.`,
       reopenHint: (slug, phase) => `Para desmarcar las tareas completadas afectadas y marcar su evidencia como obsoleta: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
       nextHint: (slug, phases) => `Mira primero qué afecta la edición con spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
@@ -3942,6 +4039,7 @@ const MSG = {
       unbaselined: (list) => `  · aún sin línea base de cierre: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} fichero(s) de implementación modificado(s) desde el cierre — ejecuta dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Línea base de drift registrada: ${n} fichero(s) de implementación${missing ? ` (${missing} ausente(s))` : ""} — dev-spec drift muestra lo que cambie después de este cierre.`,
+      baselineReplaced: (n, day, list) => `Sustituida la línea base del ${day}, en la que ${n} fichero(s) habían cambiado: ${list} — la nueva línea base los acepta tal como están ahora.`,
     },
 
     guardMode: {
@@ -4254,7 +4352,8 @@ module.exports = {
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
   tasks: (a, lang) => L(lang).tasks(a),
-  testPlan: (name, lang, tracks) => L(lang).testPlan(name, tracks), // tracks: which template ACs get a planned test
+  testPlan: (name, lang, tracks, acs) => L(lang).testPlan(name, tracks, acs), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each)
+  templateAcIds: (tracks) => Object.keys(templateTests(tracks)), // the template AC IDs a test plan scaffolded for these tracks covers
   evalPlan: (name, lang) => L(lang).evalPlan(name),
   loadTest: (name, lang) => L(lang).loadTest(name),
   quickstart: (name, lang) => L(lang).quickstart(name),

@@ -1690,6 +1690,37 @@ function endRun() {
     ok(evSetShape.status === 1 && /adversarial\.json — 'items' tem de ser um array/.test(evSetShape.stdout) && /golden\.json — 'items' tem de ser um array/.test(evSetShape.stdout) &&
       !/harness de evals|Cannot read/.test(evSetShape.stdout + evSetShape.stderr),
       "run-evals --dry-run on a null / {items:{…}} eval set → invalid set (exit 1, localized), no harness crash");
+    // Malformed ITEMS are an invalid set too — dry run and live run alike, found before any model call (a fetch stub proves
+    // the live run calls nothing); an unparseable / out-of-range thresholds.json is invalid, not ignored.
+    fs.writeFileSync(path.join(evDir, "golden.json"), JSON.stringify({ items: [{ id: "g1", input: "Sum 2+2", expect: { type: "contains", value: "4" } }] }));
+    fs.rmSync(path.join(evDir, "adversarial.json"));
+    fs.writeFileSync(path.join(evDir, "regression.json"), JSON.stringify({ items: [
+      { id: "r1", input: "x", expect: { type: "contain", value: "x" } }, { id: "r2", input: "x", expect: { type: "regex", value: "(pago" } },
+      { input: "no id, no expect" }, { id: "r4", expect: { type: "equals", value: "x" } }, "not-an-object",
+      { id: "r6", input: "x", expect: { type: "judge" } }, { id: "r7", input: "x", expect: { type: "contains" } },
+      { id: "r8", input: "x", expect: { type: "refuse" } }] }));
+    const stubEv = path.join(tmp, "stub-fetch-evals.js"), markEv = path.join(tmp, "fetch-called.txt");
+    fs.writeFileSync(stubEv, "globalThis.fetch = async () => { require('fs').writeFileSync(process.env.FETCH_MARK, 'called'); throw new Error('offline'); };\n");
+    const evBadDry = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    const evBadLive = spawnSync(process.execPath, ["-r", stubEv, EVALS, "Análise Avançada", "--project", evp],
+      { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", FETCH_MARK: markEv, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+    const itemLines = (out) => (out.match(/regression\.json — item [^\n]*/g) || []).join("\n");
+    ok(evBadDry.status === 1 && itemLines(evBadDry.stdout) === ["regression.json — item r1: tipo de avaliador desconhecido 'contain' (usa contains | equals | regex | refuse | judge)",
+      "regression.json — item r2: a regex não compila: Invalid regular expression: /(pago/i: Unterminated group", "regression.json — item #3: sem 'id' (texto não vazio); sem objeto 'expect'",
+      "regression.json — item r4: sem 'input' (texto não vazio)", "regression.json — item #5: não é um objeto", "regression.json — item r6: 'judge' precisa de uma 'rubric'",
+      "regression.json — item r7: 'contains' precisa de um 'value'"].join("\n") && /golden: 1 item/.test(evBadDry.stdout) && /O dry run encontrou conjunto\(s\) de evals inválido\(s\)/.test(evBadDry.stdout) &&
+      evBadLive.status === 1 && itemLines(evBadLive.stdout) === itemLines(evBadDry.stdout) && /nenhum modelo foi chamado/.test(evBadLive.stdout) && !fs.existsSync(markEv),
+      "run-evals validates every item (object, id, input, a known grader, value / a compiling regex / rubric) — dry run exit 1 with one line per bad item; a live run refuses before any model call (localized, PT) (got " + JSON.stringify(itemLines(evBadDry.stdout)) + ")");
+    fs.rmSync(path.join(evDir, "regression.json"));
+    fs.writeFileSync(path.join(evDir, "thresholds.json"), "{ golden: 0.9");
+    const evThr1 = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    fs.writeFileSync(path.join(evDir, "thresholds.json"), JSON.stringify({ golden: 1.5, note: "strict" }));
+    const evThr2 = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    fs.writeFileSync(path.join(evDir, "thresholds.json"), JSON.stringify({ golden: 0.9, note: "strict" }));
+    const evThr3 = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
+    ok(evThr1.status === 1 && /✗ thresholds\.json — /.test(evThr1.stdout) && evThr2.status === 1 && /thresholds\.json — tem de ser um objeto/.test(evThr2.stdout) &&
+      evThr3.status === 0 && /Dry run concluído/.test(evThr3.stdout),
+      "run-evals: an unparseable thresholds.json or a set threshold outside [0, 1] is invalid (exit 1, localized) — never silently ignored; a valid one (extra keys allowed) passes");
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
@@ -1864,6 +1895,23 @@ function endRun() {
     ok(d1b.phase === "design" && chk(d1b, "placeholders").status === "warn" && /tasks\.md/.test(chk(d1b, "placeholders").detail) && d1b.readyToAdvance === true &&
       chk(d1b, "success-criteria").status === "pass" && chk(d1b, "priorities").status === "pass",
       "a LATER phase still being a template (tasks.md at phase design) is only a warn; real SC-001 / P1 lines pass");
+    // ...and so are the trace gaps that come only from that template: with ACs of its own (not the template's IDs), the
+    // untouched tasks.md's "_Requirements: US-1.AC-3…_" lines are no typos at the design gate — traceability is deferred
+    // (a warn), readyToAdvance holds and the approve gate agrees. Once tasks.md is written, a phantom there fails again.
+    const f1g = S.createFeature(w5, "Digest gate", ["core"]);
+    write5(f1g, "requirements.md", "# Feature: Digest\n\n## Summary\nWeekly digest.\n\n### US-1 (P1 — MVP): Digest\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN the weekly job runs THE SYSTEM SHALL email each active account a digest.\n2. **US-1.AC-2** — IF an account has no activity THEN THE SYSTEM SHALL skip the email.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% delivered within 1 hour.\n");
+    write5(f1g, "design.md", DESIGN);
+    const d1g = S.specDoctor(w5, f1g.slug);
+    const tr1g = chk(d1g, "traceability");
+    write5(f1g, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Send the digest\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_\n");
+    const tr1g2 = chk(S.specDoctor(w5, f1g.slug), "traceability");
+    ok(d1g.phase === "design" && d1g.readyToAdvance === true && tr1g.status === "warn" && /^not traced yet — still a later phase's template: tasks\.md/.test(tr1g.detail) &&
+      !/\(typos\?\)|unknown ACs/.test(tr1g.detail) && d1g.nextGate.phase === "classification" && S.approvePhase(w5, f1g.slug, "design").ok &&
+      tr1g2.status === "fail" && /tasks reference unknown ACs \(typos\?\): US-1\.AC-3/.test(tr1g2.detail) &&
+      /^ainda não rastreado/.test(S.msg("pt").gates.traceDeferred("tasks.md")) && /^aún no trazado/.test(S.msg("es").gates.traceDeferred("tasks.md")),
+      "doctor at the design gate: an untouched tasks.md template's AC references are deferred (warn, 'not traced yet'), never 'typos?' — readyToAdvance, the approve gate agrees; a written tasks.md's phantom still fails (got " + tr1g.status + ": " + tr1g.detail + " | " + [d1g.phase, d1g.readyToAdvance, d1g.nextGate && d1g.nextGate.phase, tr1g2.status, tr1g2.detail].join(" · ") + ")");
     // EARS: a template criterion is reported with the stable code 'placeholder' (warn) — never 'clean'
     const e1 = S.earsValidate("1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]\n2. **US-1.AC-2** — WHEN x THE SYSTEM SHALL y");
     ok(e1.verdict === "pass" && e1.summary.placeholders === 1 && e1.issues.filter((i) => i.code === "placeholder").length === 1 &&
@@ -1995,10 +2043,15 @@ function endRun() {
     // (5) bugfix execution gate + brief context
     const f5 = S.createFeature(w5, "Null deref", undefined, "crash on save", undefined, "en", "bugfix");
     const tasks5 = () => read5(f5, "tasks.md");
-    const c51 = S.completeTask(w5, f5.slug, 1), c52 = S.completeTask(w5, f5.slug, 2);
+    const c51 = S.completeTask(w5, f5.slug, 1);
+    const c50 = S.completeTask(w5, f5.slug, 3); // the root-cause task (#2) still open: "do task 2 first"
+    const c52 = S.completeTask(w5, f5.slug, 2);
     const c53 = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: f5.slug, number: 4, evidence: { command: "npm test", exitCode: 0 }, projectDir: w5 } }));
-    ok(c51.ok && c52.ok && c53.ok === false && c53.gated === "root-cause" && /Task 4 can't be completed yet: bug\.md → Root Cause is not filled/.test(c53.error) && /do task 2 first/.test(c53.error) &&
-      /- \[ \] 4\./.test(tasks5()) && !(stateOf(f5).evidence || {})["4"], "bugfix: while Root Cause is unfilled, tasks after the root-cause task are refused (nothing ticked, no evidence recorded)");
+    ok(c51.ok && !c51.rootCausePending && c50.ok === false && /do task 2 first/.test(c50.error) &&
+      c52.ok && c52.rootCausePending === true && /^Task 2 is ticked, but bug\.md → Root Cause is still empty — write the root cause there/.test(c52.note) &&
+      c53.ok === false && c53.gated === "root-cause" && /Task 4 can't be completed yet: bug\.md → Root Cause is still empty — task 2 is ticked, but its deliverable is that section/.test(c53.error) &&
+      !/do task 2 first/.test(c53.error) && /- \[ \] 4\./.test(tasks5()) && !(stateOf(f5).evidence || {})["4"],
+      "bugfix: while Root Cause is unfilled, tasks after the root-cause task are refused (nothing ticked, no evidence recorded) — 'do task 2 first' while #2 is open; once #2 is ticked (rootCausePending + a note) the refusal says the section is still empty, never 'do task 2 first'");
     const br5 = S.taskBrief(w5, f5.slug, 4);
     const bug5 = path.join(f5.dir, "bug.md");
     fs.writeFileSync(bug5, fs.readFileSync(bug5, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nSave an empty form.")
@@ -2010,8 +2063,12 @@ function endRun() {
     const f5b = S.createFeature(w5, "Odd bug", undefined, "x", undefined, "en", "bugfix");
     write5(f5b, "tasks.md", "- [ ] 1. Investigate\n- [ ] 2. Patch it\n");
     const f5pt = S.createFeature(w5pt, "Falha", undefined, "x", undefined, "pt", "bugfix");
+    const pt3 = S.completeTask(w5pt, f5pt.slug, 3).error;
+    const pt2 = S.completeTask(w5pt, f5pt.slug, 2);
     ok(/only task 1 can be completed/.test(S.completeTask(w5, f5b.slug, 2).error) && S.completeTask(w5, f5b.slug, 1).ok &&
-      /A tarefa 3 ainda não pode ser concluída/.test(S.completeTask(w5pt, f5pt.slug, 3).error), "no task mentions the Root Cause → only the first task can be completed; the refusal is localized (PT)");
+      /A tarefa 3 ainda não pode ser concluída/.test(pt3) && /faz primeiro a tarefa 2/.test(pt3) && /^A tarefa 2 está marcada, mas bug\.md → Causa Raiz continua vazia/.test(pt2.note) &&
+      /a tarefa 2 está marcada, mas o que ela entrega é essa secção/.test(S.completeTask(w5pt, f5pt.slug, 3).error),
+      "no task mentions the Root Cause → only the first task can be completed; the refusal (and the ticked-root-cause-task note / refusal) is localized (PT)");
 
     // (6) next_action: the chain's order — fill → re-review → current checks → approve → implement → finish
     const f6 = S.createFeature(w5, "Order", ["saas"]);
@@ -2915,16 +2972,19 @@ function endRun() {
       /spec_impact/.test(dc8.detail), "next_action's re-review recommends spec_impact (tool + command) before re-approval; doctor warns changed-since-approval with the artifacts");
     ok(/spec_impact \(dev-spec impact drafts --phase requirements\)/.test(dc8.detail), "doctor's changed-since-approval names the phase to diff (dev-spec impact defaults to requirements)");
 
-    // Reopen: the done tasks citing a modified/removed ID are unticked, their evidence marked stale; nothing else is edited.
+    // Reopen: the done tasks citing a MODIFIED ID are unticked, their evidence marked stale; nothing else is edited. A task that
+    // implemented a REMOVED criterion (US-1.AC-3 → #3) is not redone: it stays ticked, listed in `retire` with its test rows.
     const designBefore8 = fs.readFileSync(f8("design.md"), "utf8");
     const ro8 = (await call8("spec_impact", { name: "drafts", reopen: true, projectDir: w8 })).p;
     const s8 = st8();
-    ok(ro8.ok && ro8.recorded === true && ro8.reopened.join() === "2,3" && fs.readFileSync(f8("tasks.md"), "utf8") === tasksA.replace("- [x] 2.", "- [ ] 2.").replace("- [x] 3.", "- [ ] 3.") &&
+    ok(ro8.ok && ro8.recorded === true && ro8.reopened.join() === "2" && fs.readFileSync(f8("tasks.md"), "utf8") === tasksA.replace("- [x] 2.", "- [ ] 2.") &&
       s8.evidence["2"].stale === true && !s8.evidence["1"].stale && fs.readFileSync(f8("requirements.md"), "utf8") === reqB && fs.readFileSync(f8("design.md"), "utf8") === designBefore8 &&
-      /Reopened #2, #3/.test(ro8.note), "reopen unticks the affected DONE tasks (CRLF kept), marks their evidence stale and never edits requirements.md / design.md");
+      JSON.stringify(ro8.retire) === JSON.stringify([{ id: "US-1.AC-3", tasks: [3], tests: ["T-03"] }]) &&
+      /^Reopened #2: /.test(ro8.note) && /Removed criteria are not redone — still cited: US-1\.AC-3 → tasks #3 · tests T-03/.test(ro8.note),
+      "reopen unticks the DONE tasks a modified AC reaches (CRLF kept), marks their evidence stale, never edits requirements.md / design.md; a removed AC's task (#3) stays ticked, listed in retire");
     const ch8 = s8.changes[0];
     ok(s8.changes.length === 1 && ch8.phase === "requirements" && ch8.added.join() === "US-1.AC-4" && ch8.modified.join() === "US-1.AC-2,SC-001" && ch8.removed.join() === "US-1.AC-3" &&
-      ch8.reopened.join() === "2,3" && /^\d{4}-/.test(ch8.at) && ch8.snapshot === ".history/requirements@1.md", "reopen records {at, phase, added, modified, removed, reopened} in .state.json changes");
+      ch8.reopened.join() === "2" && /^\d{4}-/.test(ch8.at) && ch8.snapshot === ".history/requirements@1.md", "reopen records {at, phase, added, modified, removed, reopened} in .state.json changes");
     const re8 = S.completeTask(w8, "drafts", 2);
     ok(re8.ok && re8.verified === false && re8.unverifiedReason === "stale-evidence" && /predates a spec change/.test(re8.note) &&
       S.specDoctor(w8, "drafts").checks.find((c) => c.id === "verification").detail.includes("#2"), "re-ticking a reopened task without new evidence: stale-evidence (unverified), doctor names it");
@@ -2938,8 +2998,16 @@ function endRun() {
     const re8b = S.completeTask(w8, "drafts", 2, { summary: "re-checked against the new AC-2" });
     ok(re8b.verified === true && !st8().evidence["2"].stale, "a task without a runnable _Verify:_: a new note clears the stale mark");
     const hi8 = S.impactReport(w8, "drafts", {});
-    ok(hi8.hint === undefined && hi8.affectedTasks.some((t) => t.number === 2 && t.done),
-      "no reopen hint once an earlier reopen against this approval covered every change (task #2, redone since, is done)");
+    ok(!!hi8.hint && !/--reopen/.test(hi8.hint) && /^Removed criteria still cited — US-1\.AC-3 → tasks #3 · tests T-03: don't redo those tasks/.test(hi8.hint) &&
+      hi8.affectedTasks.some((t) => t.number === 2 && t.done),
+      "no reopen hint once an earlier reopen against this approval covered every change (task #2, redone since, is done) — only the removed AC still cited, --reopen not offered again");
+    // doctor / trace: the task still citing the removed AC is a phantom a change request explains — named, never "(typos?)"; EN/PT/ES.
+    const trR8 = S.traceCheck(w8, "drafts");
+    const trD8 = S.specDoctor(w8, "drafts").checks.find((c) => c.id === "traceability");
+    ok(JSON.stringify(trR8.removedAcs) === JSON.stringify([{ id: "US-1.AC-3", changeRequest: 1 }]) && trR8.phantomAcsInTasks.includes("US-1.AC-3") && !S.traceGaps(trR8).some((g) => g.kind === "removedAcs") &&
+      trD8.status === "fail" && /tasks still cite ACs a change request removed \(delete or update those tasks — not a typo\): US-1\.AC-3 \(change request #1\)/.test(trD8.detail) && !/unknown ACs \(typos\?\): [^;]*US-1\.AC-3/.test(trD8.detail) &&
+      /pedido de alteração #1/.test(S.traceGapLines(trR8, "pt").join()) && /solicitud de cambio #1/.test(S.traceGapLines(trR8, "es").join()),
+      "trace_check removedAcs: a phantom AC a recorded change request removed — doctor's traceability names the request (delete or update the task), not a typo (EN/PT/ES)");
     const beforeT8 = fs.readFileSync(f8("tasks.md"), "utf8"), beforeS8 = fs.readFileSync(f8(".state.json"), "utf8");
     const ro8b = S.impactReport(w8, "drafts", { reopen: true });
     ok(ro8b.ok && ro8b.recorded === false && ro8b.reopened.length === 0 && /Nothing new since the last reopen/.test(ro8b.note) &&
@@ -2954,8 +3022,9 @@ function endRun() {
     ok(S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval").detail
       .includes("spec_impact (dev-spec impact drafts --phase requirements · dev-spec impact drafts --phase design)"), "doctor names one impact command per changed phase with a snapshot");
     const dro8 = S.impactReport(w8, "drafts", { phase: "design", reopen: true });
-    ok(dro8.reopened.join() === "1" && st8().evidence["1"].stale === true && st8().changes[1].phase === "design" && st8().changes[1].removed.join() === "Writer",
-      "design reopen: only the DONE task citing an ID of a changed section is reopened, its run marked stale");
+    ok(dro8.reopened.join() === "1" && st8().evidence["1"].stale === true && st8().changes[1].phase === "design" && st8().changes[1].removed.join() === "Writer" &&
+      /- \[x\] 3\./.test(fs.readFileSync(f8("tasks.md"), "utf8")),
+      "design reopen: only the DONE task citing an ID of a changed section is reopened, its run marked stale — the removed 'Writer' section names only US-1.AC-3, which requirements.md no longer defines: its task #3 is not redone");
     const n8 = S.completeTask(w8, "drafts", 1, { summary: "looked fine" });
     const r8 = S.completeTask(w8, "drafts", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "ok" });
     ok(n8.verified === false && n8.unverifiedReason === "stale-evidence" && r8.verified === true && !st8().evidence["1"].stale && st8().evidence["1"].history.length === 2,
@@ -2968,7 +3037,7 @@ function endRun() {
 
     // tasks: added / removed / changed numbers (checkbox state is not a change); reopen/phase validation.
     fs.writeFileSync(f8("tasks.md"), fs.readFileSync(f8("tasks.md"), "utf8").replace("[US1] Reject empty drafts", "[US1] Reject empty drafts with a message")
-      .replace("- [ ] 3. [US1] Keep CRLF\r\n  - _Requirements: US-1.AC-3_\r\n", "") + "- [ ] 5. [US1] Archive old drafts\r\n  - _Requirements: US-1.AC-4_\r\n");
+      .replace("- [x] 3. [US1] Keep CRLF\r\n  - _Requirements: US-1.AC-3_\r\n", "") + "- [ ] 5. [US1] Archive old drafts\r\n  - _Requirements: US-1.AC-4_\r\n");
     const ti8 = (await call8("spec_impact", { name: "drafts", phase: "tasks", projectDir: w8 })).p;
     ok(ti8.ok && ti8.added.map((x) => x.number).join() === "5" && ti8.modified.map((x) => x.number).join() === "4" && ti8.removed.map((x) => x.number).join() === "3" && ti8.affectedTasks === undefined,
       "tasks diff: added / changed / removed task numbers (unticked checkboxes are not a change)");
@@ -3819,6 +3888,12 @@ function endRun() {
     ok(dr0.ok && dr0.verdict === "clean" && dr0.features.length === 1 && dr0.features[0].unchanged === 3 && dr0.unbaselined.join() === "draft" &&
       drCrlf.verdict === "clean" && drCrlf.features[0].changed.length === 0 && !/⚠/.test(hook10(w10d)),
       "spec_drift right after finish: clean (unfinished features listed apart); a CRLF → LF rewrite is not a change; SessionStart shows no drift line");
+    // next_action on a FINISHED feature: not "close it with /spec-finish" again — finished (+ the execution sign-off while it is missing).
+    const naF10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
+    ok(naF10.step === "finished" && naF10.drift && naF10.drift.drifted === false && naF10.drift.files === 3 &&
+      /^'login-loop' is finished \(\d{4}-\d\d-\d\d\) — its 3 implementing file\(s\) are unchanged since\. Sign it off: \/approve login-loop execution\.$/.test(naF10.recommendation) &&
+      !/close the feature/.test(naF10.recommendation),
+      "next_action after finish {write}: step 'finished' (drift clean), asks for the execution sign-off — never 'close the feature with /spec-finish' again");
     fs.writeFileSync(path.join(w10d, "src", "auth.js"), "a\nc\n");
     fs.unlinkSync(path.join(w10d, "src", "lib", "x.js"));
     const st10 = bfState();
@@ -3831,6 +3906,12 @@ function endRun() {
     ok(dr1.ok && dr1.verdict === "drift" && dr1.drifted.join() === "login-loop" && dr1.features.length === 1 && d1.changed.join() === "src/auth.js" && d1.missing.join() === "src/lib/x.js" &&
       d1.nowPresent.join() === "src/new.js" && d1.unchanged === 1 && d1.ignored.join() === "../outside.js",
       "spec_drift after edits: changed / missing / now present per file; a recorded path outside the project is never probed (ignored)");
+    const naD10 = S.nextAction(w10d, "login-loop");
+    ok(naD10.step === "drift" && naD10.drift.drifted && naD10.drift.changed.join() === "src/auth.js" && naD10.drift.missing.join() === "src/lib/x.js" && naD10.drift.nowPresent.join() === "src/new.js" &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(dev-spec drift login-loop\)\. Decide: /.test(naD10.recommendation) &&
+      /\/spec-impact login-loop/.test(naD10.recommendation) && /re-run \/spec-finish login-loop for a fresh baseline/.test(naD10.recommendation) &&
+      /mudaram desde então/.test(S.msg("pt").next.drifted("x", "2026-01-01", 1, 2, "a.js")) && /cambiaron desde entonces/.test(S.msg("es").next.drifted("x", "2026-01-01", 1, 2, "a.js")),
+      "next_action on a finished feature whose implementing files drifted: step 'drift' with the files and the decision (spec wrong → spec_impact, code wrong → fix, harmless → re-finish); PT/ES localized");
     ok(/ {2}⚠ login-loop: 3 implementing file\(s\) changed since finish — run dev-spec drift login-loop/.test(hook10(w10d)) &&
       S.drift(w10d, null, { maxFiles: 2 }).skipped === true && S.drift(w10d, null, { maxBytes: 1 }).skipped === true && S.drift(w10d, null, { maxFiles: 2 }).features.length === 0,
       "SessionStart: one localized drift line per drifted finished feature; over the file/byte budget the check is skipped (nothing hashed)");
@@ -3846,6 +3927,14 @@ function endRun() {
       fin2.baseline.recorded && Object.keys(base2.files).join() === "src/auth.js,src/lib/y.ts" && S.drift(w10d).verdict === "clean" &&
       S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
       "drift covers archived finished features (SessionStart leaves archived ones to dev-spec drift); a later finish re-records the baseline (latest wins → clean again); the catalog shows the feature as finished");
+    // That re-finish replaced a DRIFTED baseline: it says which drift it accepted (never erased silently); once the execution
+    // phase is signed off, next_action has nothing left to ask.
+    const apEx10 = S.approvePhase(w10d, "login-loop", "execution");
+    const naE10 = S.nextAction(w10d, "login-loop");
+    ok(fin2.baseline.replaced && fin2.baseline.replaced.changed.join() === "src/auth.js" && fin2.baseline.replaced.missing.join() === "src/lib/x.js" &&
+      fin2.baseline.replaced.nowPresent.join() === "src/new.js" && /^\d{4}-/.test(fin2.baseline.replaced.at) && S.finishFeature(w10d, "login-loop", { write: true }).baseline.replaced === undefined &&
+      apEx10.ok && naE10.step === "finished" && /Nothing left to do here — \/spec-drift login-loop checks it after later changes\.$/.test(naE10.recommendation),
+      "a re-finish over a drifted baseline returns baseline.replaced {at, changed, missing, nowPresent} (a clean re-finish none); after the execution sign-off next_action says nothing is left");
     // An unreadable state is an error, never "clean".
     const draftSt = path.join(w10d, ".specs", "draft", ".state.json");
     const draftKeep = fs.readFileSync(draftSt, "utf8");
@@ -4497,11 +4586,43 @@ function endRun() {
     const ph12 = S.traceCheck(e12, "shop-a");
     const phDoc12 = S.specDoctor(e12, "shop-a").checks.find((c) => c.id === "traceability");
     const phGate12 = S.approvePhase(e12, "shop-a", "test-plan");
+    // add_track tdd on a feature whose requirements were already written (an import): the plan's rows come from ITS AC IDs
+    // (one generic row each), never the template's US-1.AC-1…4 / US-2.AC-1 — no phantom row to approve. MCP and PT alike.
+    const reqR12 = "# Feature: R\n\n## Summary\nCancel orders.\n\n### US-1 (P1 — MVP): Cancel\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a buyer cancels THE SYSTEM SHALL refund.\n" +
+      "2. **US-1.AC-2** — IF the order shipped THEN THE SYSTEM SHALL refuse.\n\n### US-3 (P2): Notify\n#### Acceptance Criteria (EARS)\n1. **US-3.AC-1** — WHEN a refund is issued THE SYSTEM SHALL email the buyer.\n";
+    const lt12 = S.createFeature(e12, "Shop R", ["core"]);
+    fs.writeFileSync(path.join(lt12.dir, "requirements.md"), reqR12);
+    S.addTrack(e12, lt12.slug, "tdd");
+    const lq12 = S.createFeature(e12, "Shop Q", ["core"]);
+    fs.writeFileSync(path.join(lq12.dir, "requirements.md"), reqR12);
+    const mL12 = payload(await rpc("tools/call", { name: "spec_add_track", arguments: { name: lq12.slug, track: "tdd", projectDir: e12 } }));
+    const lpt12 = path.join(tmp, "proj-wp12-late-tdd-pt");
+    S.initProject(lpt12, ["core"], "pt");
+    const lp12 = S.createFeature(lpt12, "Encomendas", ["core"]);
+    fs.writeFileSync(path.join(lp12.dir, "requirements.md"), reqR12);
+    S.addTrack(lpt12, lp12.slug, "tdd");
+    const rowsL12 = (dir) => (fs.readFileSync(path.join(dir, "test-plan.md"), "utf8").match(/^\| T-\d+ .*$/gm) || []).join("\n");
+    const trL12 = S.traceCheck(e12, lt12.slug);
+    ok(rowsL12(lt12.dir) === "| T-01 | unit | example | [behavior] | US-1.AC-1 | `tests/unit/...` |\n| T-02 | unit | example | [behavior] | US-1.AC-2 | `tests/unit/...` |\n| T-03 | unit | example | [behavior] | US-3.AC-1 | `tests/unit/...` |" &&
+      !trL12.phantomAcsInTests.length && !trL12.uncoveredByTests.length && mL12.ok && rowsL12(lq12.dir) === rowsL12(lt12.dir) &&
+      rowsL12(lp12.dir).includes("| T-03 | unit | example | [comportamento] | US-3.AC-1 |") && !/US-1\.AC-4|US-2\.AC-1/.test(rowsL12(lp12.dir)),
+      "add_track tdd after the requirements exist: one test-plan row per real AC (T-01…T-03), no template row for US-1.AC-4 / US-2.AC-1 — same via MCP, localized (PT) (got " + JSON.stringify(rowsL12(lt12.dir)) + ")");
+
+    // shop-a is at its requirements phase: test-plan.md is still a LATER phase's template, so doctor defers its gaps (a warn,
+    // not "typos?") — the test-plan approval gate still refuses the phantom. With the test plan as the CURRENT phase, doctor fails.
+    const sg12 = S.createFeature(e12, "Shop G", ["tdd"]);
+    fs.writeFileSync(path.join(sg12.dir, "requirements.md"), "# Feature: Shop G\n\n## Summary\nReceipts.\n\n### US-1 (P1 — MVP): Pay\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a buyer pays THE SYSTEM SHALL issue a receipt.\n\n## Success Criteria\n- **SC-001** — 99% of receipts within 1 s.\n");
+    fs.writeFileSync(path.join(sg12.dir, "design.md"), "# Design: Shop G\n\n## Overview\nA receipt service.\n\n## Constitution Check\n- [x] Principle 1 — complies\n");
+    const gDoc12 = S.specDoctor(e12, sg12.slug);
+    const gTr12 = gDoc12.checks.find((c) => c.id === "traceability");
     ok(ph12.verdict === "gaps-found" && ph12.phantomAcsInTests.join() === "US-1.AC-6" && S.traceGaps(ph12).some((g) => g.kind === "phantomAcsInTests") &&
-      phDoc12.status === "fail" && /the test plan covers unknown ACs \(typos\?\): US-1\.AC-6/.test(phDoc12.detail) &&
+      phDoc12.status === "warn" && /^not traced yet — still a later phase's template: test-plan\.md, tasks\.md/.test(phDoc12.detail) &&
       phGate12.refused && phGate12.failing.includes("traceability") && /US-1\.AC-6/.test(phGate12.error) &&
+      gDoc12.phase === "test-plan" && gTr12.status === "fail" && /the test plan covers unknown ACs \(typos\?\): US-1\.AC-2, US-1\.AC-3, US-1\.AC-4, US-2\.AC-1/.test(gTr12.detail) &&
+      !/ACs with no task|tasks reference/.test(gTr12.detail) &&
       /o plano de testes cobre ACs desconhecidos/.test(S.traceGapLines(ph12, "pt").join()) && /el plan de pruebas cubre ACs desconocidos/.test(S.traceGapLines(ph12, "es").join()),
-      "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: doctor fails, the test-plan approval is refused; a fenced example is none; EN/PT/ES)");
+      "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: the test-plan approval is refused, doctor fails once the test plan is the current phase and defers it while it is a later template; a fenced example is none; EN/PT/ES) (got " + phDoc12.detail + " | " + gTr12.status + ": " + gTr12.detail + ")");
 
     // An `_Implements:_` glob whose bounded walk stops at its cap before any match proves nothing: never a missing-file gap
     // (a warning, unresolvedImplGlobs); a glob whose walk ended without a match is still missing; the finish baseline says

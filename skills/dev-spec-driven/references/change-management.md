@@ -57,6 +57,12 @@ a file date is never evidence, so `spec_finish` only warns about such approvals;
 - refreshes the roadmap. It never edits `requirements.md` or `design.md`, and a second reopen with nothing new
   changes nothing (the digests make it idempotent).
 
+A **removed** criterion is not redone: the tasks citing it are never unticked (nor by a design section that names
+only criteria requirements.md no longer defines). `spec_impact` lists them, with the test-plan rows covering it, in
+`retire` (`[{id, tasks, tests}]`) — delete them or point them at the criterion that replaces it. Until then
+`trace_check` reports them as phantoms, and `removedAcs` (`[{id, changeRequest}]`) lets doctor, trace and the approve
+gate say which change request removed them instead of "typos?".
+
 ### The loop
 
 ```text
@@ -106,7 +112,10 @@ feature the files **changed**, **missing**, or **now present** since then; featu
 `unbaselined`, finished features whose tasks were reopened as `reopened`. The SessionStart hook prints one line
 per drifted active feature (bounded; `dev-spec drift` checks on demand). Decide per feature: the spec is now wrong
 → `spec_impact` / a new feature with `_Supersedes:_`; the code is wrong → fix it (`/spec-bugfix`); harmless →
-accept and re-run `spec_finish {write: true}` for a fresh baseline.
+accept and re-run `spec_finish {write: true}` for a fresh baseline (its `baseline.replaced` names the drift it
+accepted — a re-finish never erases it silently). `spec_next_action` on a finished feature answers `drift` (with the
+files) or `finished` (asking for the `execution` sign-off while it is missing) — never "close it with spec_finish"
+again.
 
 ## 8. Archive and restore
 

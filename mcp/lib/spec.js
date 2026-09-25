@@ -1233,8 +1233,8 @@ function tasksMd(name, tracks, lang) {
 }
 
 // tracks decide which template ACs the plan covers (one planned test each — the tasks template makes each green).
-function testPlanMd(name, lang, tracks) {
-  return i18n.testPlan(name, lang, tracks);
+function testPlanMd(name, lang, tracks, acs) {
+  return i18n.testPlan(name, lang, tracks, acs);
 }
 
 function evalPlanMd(name, lang) {
@@ -1374,7 +1374,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
     // EXISTING feature given +tdd with +saas/+ai the requirements predate those tracks, and their rows would cite
     // US-1.AC-5…AC-9 that don't exist.
-    put("test-plan.md", testPlanMd(name, lng, testPlanTracks(dir, t)));
+    put("test-plan.md", scaffoldTestPlan(dir, name, lng, t));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
@@ -1679,18 +1679,27 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 // the first task can be completed. → null (allowed) or { gated: 'root-cause', error } (localized).
 function bugfixGate(dir, kind, blocks, task, lng) {
   if (kind !== "bugfix" || !task || sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
-  const writesRootCause = (b) => {
+  const pos = blockPosition(blocks, task);
+  const rc = rootCauseTaskIndex(blocks);
+  if (pos <= Math.max(rc, 0)) return null;
+  const GT = i18n.msg(lng).gates;
+  // The root-cause task already ticked with the section still empty: "do task 2 first" would name a task shown as done.
+  const error = rc === -1 ? GT.bugGateFirst(task.number, blocks[0].number)
+    : blocks[rc].done ? GT.bugGateTicked(task.number, blocks[rc].number) : GT.bugGate(task.number, blocks[rc].number);
+  return { gated: "root-cause", error };
+}
+// The task that writes bug.md → Root Cause (bugfixGate's rule), as an index into `blocks`, or -1.
+function rootCauseTaskIndex(blocks) {
+  return blocks.findIndex((b) => {
     const t = taskProse(b).join(" ");
     const mk = taskMarkers(b);
     return RE_ROOT_CAUSE_TASK.test(t) && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(t) && !mk["makes green"].length && !mk.verify.length;
-  };
-  // The position in the WHOLE file (a brief's "next task" comes from the active view, whose objects differ).
-  let pos = blocks.indexOf(task);
-  if (pos === -1) pos = blocks.findIndex((b) => b.number === task.number && b.text === task.text && b.done === task.done);
-  const rc = blocks.findIndex(writesRootCause);
-  if (pos <= Math.max(rc, 0)) return null;
-  const GT = i18n.msg(lng).gates;
-  return { gated: "root-cause", error: rc === -1 ? GT.bugGateFirst(task.number, blocks[0].number) : GT.bugGate(task.number, blocks[rc].number) };
+  });
+}
+// A task's position in the WHOLE file (a brief's "next task" comes from the active view, whose objects differ).
+function blockPosition(blocks, task) {
+  const pos = blocks.indexOf(task);
+  return pos !== -1 ? pos : blocks.findIndex((b) => b.number === task.number && b.text === task.text && b.done === task.done);
 }
 // A task number as given by a caller → the integer, or NaN. Digits only ("01" is task 1, like the "01." it names) or a
 // safe non-negative integer: parseInt read "1.9" and "2abc" as tasks 1 and 2 (and 1e21 as 1) — the CLI's `brief 1.9`
@@ -1775,6 +1784,13 @@ function completeTask(projectDir, name, number, evidence) {
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
       : runnable ? EV.missing(n, f.slug) : EV.missingManual(n);
+  }
+  // Bugfix: the root-cause task ticked while bug.md → Root Cause is still empty — allowed (it is the task that writes it),
+  // but its deliverable is that section: say so now, not only when the next task is refused. rootCausePending: stable.
+  if (state.kind === "bugfix" && blockPosition(blocks, task) === rootCauseTaskIndex(blocks) &&
+      !sectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
+    res.rootCausePending = true;
+    res.note = [i18n.msg(lng).gates.rootCauseTaskEmpty(n), res.note].filter(Boolean).join(" ");
   }
   return res;
 }
@@ -2154,6 +2170,15 @@ function traceCheck(projectDir, name, opts = {}) {
     (result.phantomAcsInTests ? result.phantomAcsInTests.length : 0) +
     (result.phantomTestsInTasks ? result.phantomTestsInTasks.length : 0);
   result.verdict = gaps === 0 ? "pass" : "gaps-found";
+  // Phantom AC IDs that a recorded change request REMOVED from requirements.md (spec_impact --reopen): still gaps, but
+  // no typos — traceGapLines names the change request and says to delete or update what cites them. Informational.
+  const removedAt = new Map();
+  const changes = stateFromFile(projectDir, statePath(dir)).changes;
+  (Array.isArray(changes) ? changes : []).forEach((c, i) => {
+    if (isRecord(c) && c.phase === "requirements" && Array.isArray(c.removed)) for (const id of c.removed) if (typeof id === "string") removedAt.set(id, i + 1);
+  });
+  result.removedAcs = [...new Set([...phantomAcsInTasks, ...(result.phantomAcsInTests || [])])].filter((id) => removedAt.has(id))
+    .map((id) => ({ id, changeRequest: removedAt.get(id) }));
 
   // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
   // requirements.md and, with opts.code, the T-IDs of the project's test code.
@@ -2169,8 +2194,13 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs"]);
 const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
+// The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
+// tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
+const TRACE_VERDICT_KINDS = new Set(["uncoveredByTasks", "phantomAcsInTasks", "missingImplFiles", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks"]);
+const TRACE_TASK_KINDS = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
+const TRACE_PLAN_KINDS = ["uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks"];
 function traceGaps(tr) {
   const rank = (k) => (TRACE_GAP_ORDER.includes(k) ? TRACE_GAP_ORDER.indexOf(k) : TRACE_GAP_ORDER.length);
   return Object.keys(tr || {})
@@ -2178,10 +2208,19 @@ function traceGaps(tr) {
     .sort((a, b) => rank(a) - rank(b))
     .map((k) => ({ kind: k, items: tr[k].map((x) => (typeof x === "string" ? x : (x && x.id) || JSON.stringify(x))) }));
 }
-// The same gaps as localized "label: ID, ID" lines.
+// The same gaps as localized "label: ID, ID" lines. A phantom AC that a change request removed (tr.removedAcs) gets its
+// own line naming the request — "delete or update what cites it", never "(typos?)".
 function traceGapLines(tr, lang) {
   const T = i18n.msg(lang).traceGapText;
-  return traceGaps(tr).map((g) => T.gap(T.kinds[g.kind] || g.kind, g.items.join(", ")));
+  const removed = new Map((Array.isArray(tr && tr.removedAcs) ? tr.removedAcs : []).filter(isRecord).map((r) => [r.id, r.changeRequest]));
+  const out = [];
+  for (const g of traceGaps(tr)) {
+    const rem = T.removedKinds[g.kind] && removed.size ? g.items.filter((id) => removed.has(id)) : [];
+    const rest = g.items.filter((id) => !rem.includes(id));
+    if (rest.length) out.push(T.gap(T.kinds[g.kind] || g.kind, rest.join(", ")));
+    if (rem.length) out.push(T.gap(T.removedKinds[g.kind], rem.map((id) => T.removedRef(id, removed.get(id))).join(", ")));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -3774,10 +3813,26 @@ function impactReport(projectDir, name, opts = {}) {
   // for the reopen itself and for the hint offering it (a change already reopened, its task redone since, is covered).
   const prior = (state.changes || []).filter((c) => isRecord(c) && c.phase === phase && c.snapshot === snap.rel);
   const fresh = Object.keys(digests).filter((k) => !prior.some((c) => isRecord(c.digests) && c.digests[k] === digests[k]));
-  const toReopen = [...new Set(fresh.filter((k) => reach.has(k)).flatMap((k) => citing(reach.get(k))))].filter((b) => b.done)
+  // A REMOVED requirement is not redone: the tasks and test-plan rows still citing it are to be deleted or pointed at the
+  // criterion that replaces it — listed in `retire`, never unticked ("redo them with fresh evidence" re-built a feature
+  // the spec no longer has). A task also reached by a modified ID or a changed section is reopened as before.
+  const removedIds = new Set(phase === "requirements" ? res.removed.map((r) => r.id) : []);
+  if (phase === "requirements") {
+    res.retire = res.impacted.filter((x) => x.change === "removed" && (x.tasks.length || x.tests.length))
+      .map((x) => ({ id: x.id, tasks: x.tasks.map((t) => t.number), tests: x.tests.map((t) => t.id) }));
+  }
+  const retireList = (res.retire || []).map((x) => I.retireItem(x.id, x.tasks.map((n) => "#" + n), x.tests)).join("; ");
+  // The same rule for a design change: an ID its section names that requirements.md no longer defines reopens nothing.
+  const reqText = phase === "design" ? readIfExists(path.join(dir, "requirements.md")) : null;
+  const reqNow = reqText != null ? requirementIndex(reqText) : null;
+  const reopenIds = (k) => reach.get(k).filter((id) => !removedIds.has(id) && (!reqNow || id.startsWith("T-") || reqNow.has(id)));
+  const toReopen = [...new Set(fresh.filter((k) => reach.has(k) && !removedIds.has(k)).flatMap((k) => citing(reopenIds(k))))].filter((b) => b.done)
     .sort((a, b) => a.number - b.number);
   if (!reopen) {
-    if (toReopen.length) res.hint = I.reopenHint(slug, phase); // tasks: nothing reaches a task (reach is empty)
+    // tasks: nothing reaches a task (reach is empty). The retire hint offers --reopen only while the removal is unrecorded.
+    const offer = (res.retire || []).some((x) => fresh.includes(x.id));
+    const hints = [toReopen.length ? I.reopenHint(slug, phase) : null, retireList ? I.retireHint(retireList, slug, phase, offer) : null].filter(Boolean);
+    if (hints.length) res.hint = hints.join(" ");
     return res;
   }
   if (!fresh.length) {
@@ -3807,8 +3862,9 @@ function impactReport(projectDir, name, opts = {}) {
   state.changes = (state.changes || []).concat([change]);
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
-  return Object.assign(res, { reopened: change.reopened, recorded: true, changeRequest: state.changes.length,
-    note: change.reopened.length ? I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase) : I.recordedOnly(state.changes.length, slug, phase) });
+  const note = change.reopened.length ? [I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase), retireList ? I.retireNote(retireList) : null].filter(Boolean).join(" ")
+    : retireList ? I.recordedRetire(state.changes.length, retireList, slug, phase) : I.recordedOnly(state.changes.length, slug, phase);
+  return Object.assign(res, { reopened: change.reopened, recorded: true, changeRequest: state.changes.length, note });
 }
 
 // Human-readable spec_impact (CLI), in the feature's language.
@@ -4312,7 +4368,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
 
   for (const tr of trs) {
     if (tr === "tdd") {
-      put("test-plan.md", testPlanMd(name, lng, testPlanTracks(dir, after)));
+      put("test-plan.md", scaffoldTestPlan(dir, name, lng, after));
       ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
     }
     if (tr === "ai") {
@@ -4371,9 +4427,20 @@ function applyTracks(projectDir, f, name, trs, lng) {
 // The tracks whose template rows a scaffolded test plan gets: a test is planned only for the track criteria
 // requirements.md actually has (US-1.AC-5 for +saas, US-1.AC-7 for +ai) — a track added after the requirements brings
 // none. spec_add_track and spec_create (new or existing feature) share it, so both give the same plan.
-function testPlanTracks(dir, tracks) {
+function testPlanTracks(dir, tracks, reqIds) {
+  const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
+  return tracks.filter((x) => (x !== "saas" || ids.has("US-1.AC-5")) && (x !== "ai" || ids.has("US-1.AC-7")));
+}
+// The test plan a scaffold writes: the template's rows while requirements.md holds exactly the template's own AC IDs
+// (a fresh feature), else one generic row per REAL AC ID — spec_add_track tdd / spec_create +tdd on a feature whose
+// requirements were already written (an import, a finished spec): a template row would plan a test for a criterion the
+// feature doesn't have (US-1.AC-4 on a feature with three ACs) — a phantom trace_check reports (phantomAcsInTests).
+function scaffoldTestPlan(dir, name, lng, tracks) {
   const reqIds = requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
-  return tracks.filter((x) => (x !== "saas" || reqIds.has("US-1.AC-5")) && (x !== "ai" || reqIds.has("US-1.AC-7")));
+  const t = testPlanTracks(dir, tracks, reqIds);
+  const tmpl = i18n.templateAcIds(t);
+  const same = reqIds.size === tmpl.length && tmpl.every((id) => reqIds.has(id));
+  return testPlanMd(name, lng, t, same || !reqIds.size ? undefined : [...reqIds]);
 }
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
@@ -4821,6 +4888,7 @@ function nextAction(projectDir, name) {
   let recommendation;
   let gateFix = false;
   let impactPhases = [];
+  let finishedDrift = null;
   if (open) {
     step = "fill";
     const first = open.items.length ? open.items[0].text : "";
@@ -4855,10 +4923,28 @@ function nextAction(projectDir, name) {
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
       : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
+    if (step === "finish" && isObj(st.finished) && isObj(st.finished.files)) {
+      // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again — a re-finish would
+      // silently replace a drifted baseline. Drift since then → decide (change-management §7); else the sign-off, if
+      // the execution phase isn't approved yet, or nothing left to do.
+      const root = path.resolve(projectDir);
+      const dr = baselineDrift(root, realRootOf(root), st.finished);
+      const day = typeof st.finished.at === "string" ? st.finished.at.slice(0, 10) : "?";
+      const total = Object.keys(st.finished.files).length;
+      finishedDrift = { finishedAt: typeof st.finished.at === "string" ? st.finished.at : null, files: total, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
+      if (dr.drifted) {
+        step = "drift";
+        recommendation = nx.drifted(slug, day, dr.changed.length + dr.missing.length + dr.nowPresent.length, total, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
+      } else {
+        step = "finished";
+        recommendation = nx.finished(slug, day, total, !approvals.execution);
+      }
+    }
   }
 
   const res = { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
     gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
+  if (finishedDrift) res.drift = finishedDrift; // stable: {finishedAt, files, changed, missing, nowPresent, drifted}
   if (open) res.file = open.file;
   if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
@@ -5286,7 +5372,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
   const checks = [];
   const need = (id, ok, detail) => { if (!ok && !checks.some((c) => c.id === id)) checks.push({ id, detail }); };
   const noPlaceholders = (x) => { const r = artifactReport(dir, x, tracks); need("placeholders", r.state !== "placeholder", placeholderSummary([r], lang)); };
-  const gaps = (tr, kinds) => traceGapLines(Object.fromEntries(kinds.map((k) => [k, tr[k] || []])), lang).join("; ");
+  const gaps = (tr, kinds) => traceGapLines({ ...Object.fromEntries(kinds.map((k) => [k, tr[k] || []])), removedAcs: tr.removedAcs }, lang).join("; ");
   const nothing = (file) => ({ artifact: false, file, checks });
   const bugfix = kind === "bugfix";
   const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
@@ -5494,9 +5580,23 @@ function specDoctor(projectDir, name, opts = {}) {
   const tr = traceCheck(projectDir, name, greenDone.size ? { code: true, scan: opts.scan } : {});
   if (tr.ok) {
     // Name every failing kind with its IDs (the old counters read "=0" for kinds they didn't count).
-    const gapLines = traceGapLines(tr, featureLang(projectDir, name));
-    add("traceability", tr.verdict === "pass" ? "pass" : "fail",
-      tr.verdict === "pass" ? [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; ") : gapLines.join("; ") || tr.verdict);
+    // Scoped like the placeholders check: a LATER phase's artifact that is still its template (tasks.md / test-plan.md
+    // at the requirements or design gate) is not traced yet — its template rows (_Requirements: US-1.AC-3…_, T-04 →
+    // US-1.AC-4) are no typos and no gap of the phase being judged. The gap kinds that read it are deferred (a warn).
+    const laterFiles = ph.later.map((r) => r.file);
+    const deferKinds = new Set([
+      ...(laterFiles.includes("tasks.md") ? TRACE_TASK_KINDS : []),
+      ...(laterFiles.includes("test-plan.md") ? TRACE_PLAN_KINDS : []),
+    ]);
+    const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
+    const gapLines = traceGapLines(kept, lng);
+    // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
+    const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
+    const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));
+    const deferredFiles = laterFiles.filter((x) => x === "tasks.md" || x === "test-plan.md").join(", ");
+    if (failing) add("traceability", "fail", gapLines.join("; "));
+    else if (deferred) add("traceability", "warn", [G.traceDeferred(deferredFiles), ...gapLines].join("; "));
+    else add("traceability", "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
     // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
     const D = fm.deepTrace;
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
@@ -6636,6 +6736,10 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   const st = readState(projectDir, slug);
   if (st.invalid) return { recorded: false, error: st.invalid };
   const root = path.resolve(projectDir);
+  // A re-finish over a DRIFTED baseline accepts the drift: say which files it was (replaced), never erase it silently.
+  const before = isObj(st.finished) && isObj(st.finished.files) ? baselineDrift(root, realRootOf(root), st.finished) : null;
+  const replaced = before && before.drifted ? { at: typeof st.finished.at === "string" ? st.finished.at : null,
+    changed: before.changed, missing: before.missing, nowPresent: before.nowPresent } : null;
   const { files, truncated } = baselineFiles(root, tasksText, globCap);
   const map = {};
   for (const rel of files) map[rel] = fileHash(path.resolve(root, rel));
@@ -6646,6 +6750,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   maybeRefreshCatalog(projectDir); // the feature now reads as finished
   const res = { recorded: true, at, files: files.length, missing: files.filter((r) => map[r] === null).length };
   if (truncated) res.truncated = true;
+  if (replaced) res.replaced = replaced; // the drift this finish accepted: {at, changed, missing, nowPresent}
   return res;
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
@@ -6697,17 +6802,7 @@ function drift(projectDir, name, opts = {}) {
   };
   if (over()) return { ...res, skipped: true, recordedFiles: recorded, verdict: "skipped" };
   for (const { s, fin } of withBase) {
-    const changed = [], missing = [], nowPresent = [], ignored = [];
-    let unchanged = 0;
-    for (const [rel, was] of Object.entries(fin.files)) {
-      const abs = projectFile(root, rootReal, rel);
-      if (!abs || (was !== null && typeof was !== "string")) { ignored.push(rel); continue; }
-      const now = fileHash(abs);
-      if (was === null) { if (now === null) unchanged++; else nowPresent.push(rel); }
-      else if (now === null) missing.push(rel);
-      else if (now !== was) changed.push(rel);
-      else unchanged++;
-    }
+    const { unchanged, changed, missing, nowPresent, ignored } = baselineDrift(root, rootReal, fin);
     const d = { feature: s.slug, archived: s.archived, finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length,
       unchanged, changed, missing, nowPresent, drifted: changed.length + missing.length + nowPresent.length > 0 };
     if (ignored.length) d.ignored = ignored;
@@ -6717,6 +6812,22 @@ function drift(projectDir, name, opts = {}) {
   if (res.drifted.length) res.verdict = "drift";
   if (!res.features.length && !errors.length && !reopened.length) res.note = i18n.msg(lang).drift.none;
   return res;
+}
+// One finish baseline (state.finished) against the files now: the recorded files changed / missing / now present
+// (missing at finish). Shared by spec_drift, next_action and a re-finish that replaces a drifted baseline.
+function baselineDrift(root, rootReal, fin) {
+  const changed = [], missing = [], nowPresent = [], ignored = [];
+  let unchanged = 0;
+  for (const [rel, was] of Object.entries(isObj(fin && fin.files) ? fin.files : {})) {
+    const abs = projectFile(root, rootReal, rel);
+    if (!abs || (was !== null && typeof was !== "string")) { ignored.push(rel); continue; }
+    const now = fileHash(abs);
+    if (was === null) { if (now === null) unchanged++; else nowPresent.push(rel); }
+    else if (now === null) missing.push(rel);
+    else if (now !== was) changed.push(rel);
+    else unchanged++;
+  }
+  return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
 // ---------------------------------------------------------------------------

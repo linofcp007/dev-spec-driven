@@ -27,10 +27,13 @@ Use this when an **approved** artifact was edited afterwards — `spec_doctor` w
 3. **Only with the user's OK**, run it again with `reopen: true` (CLI `--reopen`; requirements/design only): it
    unticks the affected done tasks, marks their evidence **stale** (unverified until a new passing run is
    recorded), records the change request in `.state.json → changes` and refreshes the roadmap. It never edits
-   `requirements.md` or `design.md`; a second reopen with nothing new changes nothing.
+   `requirements.md` or `design.md`; a second reopen with nothing new changes nothing. A **removed** criterion is
+   not redone: its tasks are never unticked (nor by a design section that names only removed criteria) — `retire`
+   lists them with their test rows (`{id, tasks, tests}`) to delete or point at the criterion that replaces it.
 4. Update whatever else the change reaches (design sections, test-plan rows, tasks — new work goes in with
-   `spec_append_tasks`), run `spec_doctor`, then **re-approve** each changed phase with `spec_approve` — each
-   approval saves a new snapshot. Redo the reopened tasks with fresh evidence (`/executeTask`).
+   `spec_append_tasks`; the `retire` tasks and rows deleted or repointed), run `spec_doctor`, then **re-approve** each
+   changed phase with `spec_approve` — each approval saves a new snapshot. Redo the reopened tasks with fresh evidence
+   (`/executeTask`).
 
 Never reopen on your own initiative, and never treat an approved spec that changed as still approved.
 Respond in the user's language (EN/PT/ES).

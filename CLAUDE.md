@@ -203,6 +203,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   task exists; otherwise the earliest still-template chain artifact — so a fresh scaffold is phase `requirements`.
   Doctor's `placeholders` check fails for the current and earlier phases, warns for later ones;
   `ears_validate` reports code `placeholder`; the requirements.md hook never says "all clean" while any remain.
+  Doctor's `traceability` follows the same split: the gap kinds that read a LATER phase's still-template
+  tasks.md / test-plan.md (`TRACE_TASK_KINDS` / `TRACE_PLAN_KINDS`) are deferred — a warn, "not traced yet" — so the
+  template's `_Requirements: US-1.AC-3…_` rows are no "typos?" at the requirements / design gate. Only
+  `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
 - **Approve gate.** `approvePhase()` runs `approvalChecks()` for that phase and refuses (`refused`, `failing`,
   `checks`) while any fails. `force:true` (CLI `--force`) records it anyway with `forced: true` + the failing
   ids — doctor's `approval-gates` and the roadmap keep flagging it; a clean re-approval replaces it. A phase
@@ -212,13 +216,19 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   artifact changed since ITS approval; `impact` when a snapshot exists) → `fix` (failing checks of the
   current or an earlier phase, via `CHECK_PHASE`; or the approve gate's refusal of the next pending phase —
   `refusedGate` — so it never recommends an approval that would be refused) → `approve` → `implement` →
-  `finish` (or `tasks` when there are none). Doctor surfaces the same gate as `nextGate`.
+  `finish` (or `tasks` when there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`
+  exists (finish `{write}` recorded it), `finish` becomes `finished` (asks for the `execution` sign-off while it is
+  missing) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
+  nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
+  baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts.
 - **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates.
   `warnings` (EC/NFR/SC, planned-not-in-code) never block.
 - **Bugfix execution gate (`bugfixGate()`):** while bug.md → Root Cause is unfilled, no task after the one
   that writes it (names bug.md + a Root Cause synonym, carries no `_Makes green:_`/`_Verify:_`) can be ticked
-  or given evidence; `done --run` refuses before running anything.
+  or given evidence; `done --run` refuses before running anything. The root-cause task itself can be ticked
+  (`rootCauseTaskIndex()`), but then returns `rootCausePending: true` + a note; once it is ticked the refusal of a
+  later task is `bugGateTicked` ("the section is still empty"), never "do task N first".
 
 ## Evidence (v1.12, gate tightened in 1.13)
 - **`_Verify: <command>_`** is an English-stable task marker; `taskMarkers()` keeps its value whole (commas
@@ -271,6 +281,13 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   evidence `stale`, and appends the change request to `.state.json → changes` (idempotent per snapshot via
   digests). It never edits requirements.md or design.md. An approval without a snapshot → `fingerprint-only`; one
   without even a fingerprint (≤1.10, or a 1.12 bugfix design approval) → `none`, `changed: null` (unknown).
+  A REMOVED requirement is never redone: reopen skips the tasks only it reaches (and a design section's IDs that
+  requirements.md no longer defines); requirements' `retire` `[{id, tasks, tests}]` lists what still cites it.
+  `trace_check`'s informational `removedAcs` `[{id, changeRequest}]` (from `changes[].removed`) makes
+  `traceGapLines()` name the change request instead of "(typos?)" — the phantom stays a gap.
+- **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
+  template's AC IDs (`i18n.templateAcIds()`); on written requirements (add_track tdd, create +tdd on an existing
+  feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks.
 - **A file date is never a finish blocker** (`changedSinceApproval(…, {detail: true})` → `{changed, byDate,
   untracked}`): a clone, checkout, copy or unzip resets every mtime. A pre-1.11 approval (no fingerprint) still shows a
   newer phase file in next_action / doctor / roadmap (1.12 parity), but spec_finish only warns about it. A 1.12 bugfix
@@ -512,13 +529,16 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix, `backlog` action ∈ add|rm|remove|list.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
-  `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1).
+  `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
+  EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex
+  that compiles with gradeItem's flags / a rubric) and `thresholds.json` (a number in [0, 1] per set) before anything
+  runs: a dry run exits 1 naming each bad item, a live run calls no model while any set is invalid.
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(685 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(693 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 226 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 232 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
