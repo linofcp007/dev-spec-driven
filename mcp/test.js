@@ -1812,10 +1812,14 @@ function payload(res) {
     const n6c = S.nextAction(w5, f6c.slug);
     write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
     const n6d = S.nextAction(w5, f6c.slug);
-    ok(n6b.step === "fill" && n6b.file === "design.md" && n6c.step === "fix" && /traceability/.test(n6c.recommendation) && n6d.step === "approve" && /classification/.test(n6d.recommendation),
-      "next_action: requirements filled → fill design.md; all filled but a current-phase check fails → fix it; then the first pending approval");
-    ["classification"].forEach((p) => S.approvePhase(w5, f6c.slug, p, undefined, { force: true }));
-    ["requirements", "design", "tasks"].forEach((p) => S.approvePhase(w5, f6c.slug, p));
+    // classification.md is still the scaffold: the approve gate would refuse it, so next_action names what it fails on
+    write5(f6c, "classification.md", read5(f6c, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    const n6d2 = S.nextAction(w5, f6c.slug);
+    ok(n6b.step === "fill" && n6b.file === "design.md" && n6c.step === "fix" && /traceability/.test(n6c.recommendation) &&
+      n6d.step === "fix" && n6d.refusedGate.phase === "classification" && n6d.refusedGate.failing.join() === "placeholders" && /Before approving 'classification'.*classification\.md:\d+ \[/.test(n6d.recommendation) &&
+      n6d2.step === "approve" && /classification/.test(n6d2.recommendation) && !n6d2.refusedGate,
+      "next_action: requirements filled → fill design.md; a current-phase check fails → fix it; a pending gate approve would refuse → what it fails on; then approve");
+    ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(w5, f6c.slug, p));
     const n6e = S.nextAction(w5, f6c.slug);
     S.completeTask(w5, f6c.slug, 1, "built and checked");
     const n6f = S.nextAction(w5, f6c.slug);
@@ -1893,6 +1897,74 @@ function payload(res) {
     const pt10 = S.renderRoadmapMd(w10, "pt"), html10 = S.renderRoadmapHtml(w10, "es");
     ok(/#1 \(por preencher\)/.test(pt10) && /secções obrigatórias em falta\/por preencher: \[SaaS\] Orçamento de Desempenho \(por preencher\)/.test(pt10) &&
       /#1 \(sin rellenar\)/.test(html10) && /aprobado con --force/.test(html10) && /modificado desde la aprobación/.test(html10), "the roadmap markers and attention lines are localized (MD PT, HTML ES)");
+
+    // --- review fixes ---
+    // next_action never recommends an approval the approve gate refuses (it looped: approve → refused → approve…)
+    const fR = S.createFeature(w5, "No loop", ["core"]);
+    write5(fR, "classification.md", read5(fR, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(fR, "requirements.md", REQ.replace(/## Success Criteria\n[^\n]*\n\n/, ""));
+    write5(fR, "design.md", DESIGN);
+    write5(fR, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const apR0 = S.approvePhase(w5, fR.slug, "classification");
+    const nR1 = S.nextAction(w5, fR.slug);
+    const apR = S.approvePhase(w5, fR.slug, "requirements");
+    const nR2 = S.nextAction(w5, fR.slug);
+    const dR = S.specDoctor(w5, fR.slug);
+    ok(apR0.ok && nR1.step === "fix" && nR1.refusedGate.phase === "requirements" && nR1.refusedGate.failing.join() === "success-criteria" &&
+      /^Before approving 'requirements', fix what the approve gate would refuse: success-criteria \(no measurable SC-### success criteria\)/.test(nR1.recommendation) &&
+      apR.ok === false && apR.failing.join() === "success-criteria" && nR2.step === "fix" && nR2.recommendation === nR1.recommendation &&
+      chk(dR, "success-criteria").status === "warn" && dR.nextGate.phase === "requirements" && dR.nextGate.ready === false &&
+      /approving 'requirements' would be refused \(success-criteria\)/.test(chk(dR, "approval-gates").detail),
+      "next_action never recommends an approval the gate would refuse (no loop) — it names the failing check; doctor's approval-gates says so too");
+    ok(/^Antes de aprovar 'design', corrige/.test(S.msg("pt").gates.fixGate("design", "x", "f")) && /^Antes de aprobar 'design', corrige/.test(S.msg("es").gates.fixGate("design", "x", "f")),
+      "the refused-gate recommendation is localized (PT/ES)");
+
+    // clarify: TBDs are reported at their real line after a multi-line comment; one in an inactive [AI] section is not asked
+    const fT = S.createFeature(w5, "Tbd lines", ["core"]);
+    write5(fT, "requirements.md", "# Feature: Q\n<!-- guidance\n   more guidance\n   even more -->\n\n## Summary\nA thing.\n\n- Retention period: TBD\n\n" +
+      "#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL be good TBD\n\n## Edge Cases\n- none\n## Non-Functional Requirements\n- none\n");
+    const qT = S.clarify(w5, fT.slug).questions.filter((q) => /placeholder/.test(q));
+    ok(qT.length === 1 && qT[0] === "Replace the 1 template placeholder(s)/TBD in requirements.md: requirements.md:9 TBD",
+      "clarify: a TBD below a multi-line HTML comment keeps its real line; a TBD in an inactive [AI] section is not asked about");
+
+    // classifier: PT 'no uso do/de' is the contraction em+o, never a negation across filler words
+    const clsNo = ["Guia no uso do LLM", "Chatbot no uso do LLM para suporte", "Painel no uso de IA"].map((x) => S.classify(x));
+    ok(clsNo[0].tracks.includes("ai") && !clsNo[0].negated.ai.length && !clsNo[0].notes.length &&
+      clsNo[1].tracks.includes("ai") && !clsNo[1].notes.some((n) => /negated/.test(n)) && !clsNo[2].negated.ai.length && clsNo[2].possible.some((p) => p.track === "ai"),
+      "classifier: 'Guia no uso do LLM' keeps +ai ON (no negation, no false conflict note); 'no use of AI' still negates");
+
+    // bugfix gate: the template's own FIX task ("Fix the root cause") never counts as the task that writes the root cause
+    const fG = S.createFeature(w5, "Login crash", undefined, "crashes", undefined, "en", "bugfix");
+    write5(fG, "tasks.md", read5(fG, "tasks.md").replace("Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)", "Find why it crashes, with evidence, and document it in bug.md"));
+    const g1 = S.completeTask(w5, fG.slug, 1), g4 = S.completeTask(w5, fG.slug, 4), g2 = S.completeTask(w5, fG.slug, 2);
+    const brG = S.taskBrief(w5, fG.slug, 4);
+    ok(g1.ok && g4.ok === false && g4.gated === "root-cause" && /only task 1 can be completed/.test(g4.error) && g2.ok === false && !/- \[x\] [24]\./.test(read5(fG, "tasks.md")) &&
+      brG.gated === "root-cause" && brG.gateError === g4.error && S.taskBrief(w5, fG.slug, 1).gated === undefined,
+      "bugfix gate: with step 2 reworded, 'Fix the root cause' does not open the gate for itself — only the first task; spec_task_brief reports the gate");
+
+    // the scaffold's concrete track tasks are real tasks (doctor / next_action / finish); a list of ONLY template tasks can't be approved
+    const fK = S.createFeature(w5, "Track tasks kept", ["core"]);
+    write5(fK, "classification.md", read5(fK, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(fK, "requirements.md", REQ);
+    write5(fK, "design.md", DESIGN);
+    write5(fK, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n" +
+      "- [ ] 2. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const apK1 = S.approvePhase(w5, fK.slug, "tasks");
+    write5(fK, "tasks.md", "# Tasks\n\n- [x] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-2_\n" +
+      "- [ ] 3. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    const approvedK = ["classification", "requirements", "design", "tasks"].every((p) => S.approvePhase(w5, fK.slug, p).ok);
+    const nK = S.nextAction(w5, fK.slug);
+    const dK = S.specDoctor(w5, fK.slug);
+    ok(apK1.ok === false && apK1.failing.join() === "placeholders" && /only the scaffold's template tasks/.test(apK1.error) &&
+      S.featurePlaceholders(w5, fK.slug, "tasks.md").state === "filled" && approvedK && nK.phase === "executing" && nK.step === "implement" && /#2/.test(nK.recommendation) &&
+      chk(dK, "placeholders").status === "pass" && !S.finishFeature(w5, fK.slug).placeholders.length,
+      "verbatim track tasks (tenant isolation, metrics) are not placeholders mid-execution: doctor passes, next_action implements; ONLY template tasks refuse the tasks gate");
+
+    // trace: an OPEN task's path outside the project root can never be created there — it stays a gap, never 'planned'
+    write5(f3, "tasks.md", "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: ../../outside/secret.js, src/not-yet.js_\n");
+    const t3c = S.traceCheck(w5, f3.slug);
+    ok(t3c.verdict === "gaps-found" && t3c.missingImplFiles.join() === "../../outside/secret.js" && t3c.plannedImplFiles.join() === "src/not-yet.js",
+      "trace: an open task's _Implements:_ path outside the project root is missingImplFiles (only in-root files are planned)");
   }
   // @wp WP5 <<<
 

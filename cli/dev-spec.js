@@ -344,6 +344,7 @@ function main() {
         // duplicated number), so the command that runs belongs to the task that gets ticked.
         const b = spec.taskBrief(projectDir, pos[0], pos[1]);
         if (!b.ok) die(b.error);
+        if (b.gated) die(b.gateError); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
         if (!cmds.length) die(D.noRunnable(b.task.number));
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).

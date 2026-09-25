@@ -319,6 +319,8 @@ const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "
 
 // Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
 const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
+// The English ones — the only fillers a wide "no" may negate across (see isNegated).
+const NEG_FILLER_EN = new Set(["use", "usage", "of", "the", "a", "an", "any"]);
 
 // Phrases that negate a signal shortly AFTER the keyword ("auth is not needed", "auth não é preciso").
 const NEG_AFTER = /^\s*(\w+\s+)?(is |are |isn'?t |aren'?t |won'?t |é |são |sao |es |no )?(not (needed|required|necessary|used)|n[ãa]o (é |e )?(preciso|necess[áa]ri[ao]|usad[ao])|no (es )?necesari[ao]|no hace falta)\b/;
@@ -366,7 +368,10 @@ function isNegated(text, idx, kwLen, lang, cased) {
   const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
   let k = wide.length - 1;
   while (k >= 0 && NEG_FILLER.has(wide[k])) k--;
-  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k])) return true; // only across at least one filler word
+  // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
+  // contraction em+o — "Guia no uso do LLM" is a guide IN the use of the LLM, even when guessLang says 'en'.
+  const noContraction = wide[k] === "no" && !NEG_FILLER_EN.has(wide[k + 1]);
+  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction) return true; // only across at least one filler word
   // "<keyword> ... not needed/required" shortly after.
   const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
   return NEG_AFTER.test(after);
@@ -1056,6 +1061,29 @@ function parallelBatch(tasksText, max, tracks) {
 }
 
 const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(?![\p{L}])/iu;
+
+// Bugfix iron law, enforced during execution: while bug.md → Root Cause is unfilled, no task positioned AFTER the
+// one that writes it can be completed (ticked or given evidence): no fix before the root cause is written in bug.md.
+// "The one that writes it" = the first task that references the Root Cause SECTION — it names bug.md and a Root Cause
+// synonym (root cause / causa raiz / causa raíz) — and is not itself a fix: a task carrying _Makes green:_ or _Verify:_
+// never qualifies. A bare "root cause" mention is not enough: the template's own fix task ("Fix the root cause",
+// "Corrigir a causa raiz") would otherwise open the gate for itself once step 2 is reworded. Without such a task only
+// the first task can be completed. → null (allowed) or { gated: 'root-cause', error } (localized).
+function bugfixGate(dir, kind, blocks, task, lng) {
+  if (kind !== "bugfix" || !task || sectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
+  const writesRootCause = (b) => {
+    const t = [b.text, ...b.body].join(" ");
+    const mk = taskMarkers(b);
+    return RE_ROOT_CAUSE_TASK.test(t) && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(t) && !mk["makes green"].length && !mk.verify.length;
+  };
+  // The position in the WHOLE file (a brief's "next task" comes from the active view, whose objects differ).
+  let pos = blocks.indexOf(task);
+  if (pos === -1) pos = blocks.findIndex((b) => b.number === task.number && b.text === task.text && b.done === task.done);
+  const rc = blocks.findIndex(writesRootCause);
+  if (pos <= Math.max(rc, 0)) return null;
+  const GT = i18n.msg(lng).gates;
+  return { gated: "root-cause", error: rc === -1 ? GT.bugGateFirst(task.number, blocks[0].number) : GT.bugGate(task.number, blocks[rc].number) };
+}
 function completeTask(projectDir, name, number, evidence) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -1081,17 +1109,10 @@ function completeTask(projectDir, name, number, evidence) {
   const state = readState(projectDir, f.slug);
   const bad = state.invalid; // readState refuses wrong-shape JSON (evidence/approvals/tracks/top level) — checked before any write
   if (bad) return { ok: false, error: bad };
-  // Bugfix iron law, enforced during execution: while bug.md → Root Cause is unfilled, no task positioned AFTER the
-  // one that writes it — the first task mentioning the Root Cause section (root cause / causa raiz / causa raíz) —
-  // can be completed (ticked or given evidence): no fix before the root cause is written in bug.md. Without such a
-  // task only the first task can be. Checked before anything is recorded or ticked.
-  if (state.kind === "bugfix" && !sectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
-    const rc = blocks.findIndex((b) => RE_ROOT_CAUSE_TASK.test([b.text, ...b.body].join(" ")));
-    if (blocks.indexOf(task) > Math.max(rc, 0)) {
-      const GT = i18n.msg(lng).gates;
-      return { ok: false, gated: "root-cause", error: rc === -1 ? GT.bugGateFirst(n, blocks[0].number) : GT.bugGate(n, blocks[rc].number) };
-    }
-  }
+  // Bugfix iron law (bugfixGate): no fix before the root cause is written in bug.md. Checked before anything is
+  // recorded or ticked.
+  const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
+  if (gate) return { ok: false, ...gate };
   const key = String(n);
   const failed = !!ev && ev.exitCode != null && ev.exitCode !== 0;
   const alreadyDone = task.done;
@@ -1419,14 +1440,17 @@ function traceCheck(projectDir, name) {
   }
   // Clamp to the project root: paths that escape it count as missing without probing arbitrary FS.
   const projRoot = path.resolve(projectDir);
+  const outOfRoot = new Set();
   const absent = implFiles.filter((f) => {
     const abs = path.resolve(projRoot, f);
     const inRoot = abs === projRoot || abs.startsWith(projRoot + path.sep);
+    if (!inRoot) outOfRoot.add(f);
     return !inRoot || !fs.existsSync(abs);
   });
   // A file that doesn't exist YET is a gap only once a task claiming it is done: an OPEN task's _Implements:_ is
   // the plan (next --batch needs those markers before a line is written) — reported as plannedImplFiles. A marker
-  // no open task holds (a done task's, or one outside any task) stays a gap.
+  // no open task holds (a done task's, or one outside any task) stays a gap — and so does a path outside the
+  // project root: no task can ever create it there, so it is never "planned".
   const unq = (p) => p.trim().replace(/^`|`$/g, "");
   const openOnly = new Set();
   const claimed = new Set();
@@ -1436,8 +1460,9 @@ function traceCheck(projectDir, name) {
       if (b.done) { claimed.add(p); openOnly.delete(p); }
     }
   }
-  const plannedImplFiles = absent.filter((p) => openOnly.has(p));
-  const missingImplFiles = absent.filter((p) => !openOnly.has(p));
+  const planned = (p) => openOnly.has(p) && !outOfRoot.has(p);
+  const plannedImplFiles = absent.filter(planned);
+  const missingImplFiles = absent.filter((p) => !planned(p));
 
   const result = {
     ok: true,
@@ -2021,7 +2046,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const blockText = [block.text, ...block.body].join("\n");
   // A bugfix task carries the bug itself: bug.md's Reproduction and Root Cause (null while still unwritten).
   let bug = null;
-  if (readState(projectDir, slug).kind === "bugfix") {
+  const kind = readState(projectDir, slug).kind;
+  // The same gate complete_task applies — reported up front, so `done --run` refuses BEFORE running any command.
+  const gate = bugfixGate(dir, kind, blocks, block, lng);
+  if (kind === "bugfix") {
     const bugText = readIfExists(path.join(dir, "bug.md")) || "";
     const sec = (syn) => (sectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
     bug = { reproduction: sec(REPRO_SYN), rootCause: sec(ROOT_CAUSE_SYN) };
@@ -2131,6 +2159,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     wrote: write,
   };
   if (bug) res.bug = bug;
+  if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   return res;
@@ -2725,16 +2754,19 @@ function nextAction(projectDir, name) {
   // The order is the spec chain's, so a brand-new feature is told to write its requirements — not to fix the
   // checks of phases it hasn't reached ("Fix blocking checks (saas-sections, traceability)"):
   // (1) the first chain artifact still missing / a template → fill it; (2) an artifact changed since its approval →
-  // re-review; (3) failing checks of the CURRENT phase (or an earlier one) → fix; (4) the first pending approval;
-  // (5) the next task; (6) all tasks done → spec_finish.
+  // re-review; (3) failing checks of the CURRENT phase (or an earlier one) → fix; (4) the first pending approval —
+  // or, when the approve gate would refuse it, what it fails on; (5) the next task; (6) all tasks done → spec_finish.
   const open = chainArtifacts(dir, tracks, st.kind || "feature").map((a) => artifactReport(dir, a.file, tracks)).find((r) => r.state !== "filled");
   const cur = PHASE_INDEX[phase] || 0;
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && (CHECK_PHASE[c.id] || 0) <= cur) : [];
   const pending = (doc.pendingGates || [])[0];
+  // doctor already ran the approve gate's own checks for this pending phase (nextGate).
+  const refused = doc.nextGate && doc.nextGate.phase === pending && doc.nextGate.failing.length ? doc.nextGate.failing : null;
   const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements, design: nx.approveDesign,
     "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan, tasks: nx.approveTasks };
   let step;
   let recommendation;
+  let gateFix = false;
   if (open) {
     step = "fill";
     const first = open.items.length ? open.items[0].text : "";
@@ -2747,6 +2779,12 @@ function nextAction(projectDir, name) {
   } else if (fails.length) {
     step = "fix";
     recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
+  } else if (pending && approveMsg[pending] && refused) {
+    // Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…):
+    // name what it would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
+    step = "fix";
+    gateFix = true;
+    recommendation = G.fixGate(pending, refused.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; "), slug);
   } else if (pending && approveMsg[pending]) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
@@ -2762,6 +2800,7 @@ function nextAction(projectDir, name) {
   const res = { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
     gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
   if (open) res.file = open.file;
+  if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
   return res;
 }
 // The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
@@ -3016,8 +3055,11 @@ function chainArtifacts(dir, tracks, kind) {
 // `_Verify: [manual: …]_` names a human check (not a runnable command) — not a template placeholder.
 const RE_MANUAL_VERIFY = /_Verify:\s*`?\[\s*manual\b/i;
 // An artifact as the gates judge it: its ACTIVE part (a removed track's [SaaS]/[AI] sections and task blocks are
-// inactive), with each placeholder's real line number. tasks.md also counts an open template track task left
-// verbatim (isPlaceholderTask). → { file, state: missing | placeholder | filled, items: [{ line, text }], empty }
+// inactive), with each placeholder's real line number. → { file, state: missing | placeholder | filled,
+// items: [{ line, text }], empty }. The scaffold's +saas/+ai track tasks left verbatim are NOT placeholders here:
+// "Enforce tenant isolation — every query scoped by tenant_id" is a concrete, traced task (the template's T-IDs map
+// to them) — counting them made doctor FAIL and next_action say "fill tasks.md" in the middle of execution. Only the
+// tasks approval gate asks for one real task beyond them (approvalChecks, isPlaceholderTask — detectPhase's rule).
 function artifactReport(dir, file, tracks, preloaded) {
   const raw = preloaded !== undefined ? preloaded : readIfExists(path.join(dir, file)); // preloaded: null = missing
   if (raw == null) return { file, state: "missing", items: [], empty: false };
@@ -3025,14 +3067,7 @@ function artifactReport(dir, file, tracks, preloaded) {
   const drop = file === "tasks.md" ? inactiveTaskLines(raw, tracks)
     : file === "requirements.md" || file === "design.md" ? inactiveMarkerLines(raw, tracks) : new Set();
   let items = placeholderReport(raw).filter((p) => !drop.has(p.line - 1)).map((p) => ({ line: p.line, text: p.text }));
-  if (file === "tasks.md") {
-    items = items.filter((p) => !(/^\[\s*manual\b/i.test(p.text) && RE_MANUAL_VERIFY.test(lines[p.line - 1])));
-    for (const b of taskBlocks(raw)) {
-      const desc = taskDescription(b.text);
-      if (!b.done && !drop.has(b.line) && !/^\[[^\]]*\]$/.test(desc) && templateTaskSet().has(desc)) items.push({ line: b.line + 1, text: cleanTaskText(b.text) });
-    }
-    items.sort((a, b) => a.line - b.line);
-  }
+  if (file === "tasks.md") items = items.filter((p) => !(/^\[\s*manual\b/i.test(p.text) && RE_MANUAL_VERIFY.test(lines[p.line - 1])));
   const empty = headingsOnly(lines.filter((_, i) => !drop.has(i)).join("\n"));
   return { file, state: empty || items.length ? "placeholder" : "filled", items, empty };
 }
@@ -3179,6 +3214,10 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
     case "tasks": {
       if (!exists("tasks.md")) return nothing("tasks.md");
       noPlaceholders("tasks.md");
+      // No placeholder tasks: bracketed ones are in the report above; a list made ONLY of the scaffold's verbatim track
+      // tasks (isPlaceholderTask) is not a breakdown yet either — detectPhase's "tasks-ready" rule.
+      const active = parseTasks(activeTasks(read("tasks.md"), tracks));
+      need("placeholders", active.some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);
       const tr = traceCheck(projectDir, slug);
       const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
       need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
@@ -3314,8 +3353,17 @@ function specDoctor(projectDir, name) {
   const pendingGates = GATE_PHASES.filter(([ph, file]) => phaseActive(ph, tracks) && fs.existsSync(path.join(dir, file)) && !approvals[ph]).map(([ph]) => ph);
   // A forced approval (approve --force over failing checks) is recorded, but it stays visible here as a warn.
   const forcedGates = PHASES.filter((ph) => phaseActive(ph, tracks) && approvals[ph] && approvals[ph].forced);
+  // The first pending gate — the one next_action recommends — run through the approve gate itself, which is stricter
+  // than these checks (success criteria / priorities are warns here, classification.md isn't in the chain). Surfaced
+  // so doctor, next_action and approve agree instead of next_action recommending an approval approve refuses.
+  let nextGate = null;
+  if (pendingGates.length) {
+    const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
+    nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+  }
   add("approval-gates", pendingGates.length || forcedGates.length ? "warn" : "pass",
     [pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : null,
+      nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
       forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null]
       .filter(Boolean).join("; ") || m.gatesOk);
   const gatesOk = pendingGates.length === 0;
@@ -3331,6 +3379,7 @@ function specDoctor(projectDir, name) {
     approvals,
     pendingGates,
     forcedGates,
+    nextGate,
     gatesOk,
     checks,
     summary: { pass: checks.filter((c) => c.status === "pass").length, warn: warns.length, fail: fails.length },
@@ -4115,7 +4164,9 @@ function clarify(projectDir, name) {
   const active = artifactReport(dir, "requirements.md", tracks);
   const drop = inactiveMarkerLines(reqs, tracks);
   const tbd = [];
-  stripHtmlComments(reqs).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
+  // Comments are blanked, not deleted: their newlines stay, so `i` is the real line — the same index `drop` and
+  // artifactReport's items use (stripping a multi-line comment shifted every TBD below it).
+  reqs.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
   const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
   if (slots.length) {
     const shown = slots.slice(0, 8).map((p) => `requirements.md:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);

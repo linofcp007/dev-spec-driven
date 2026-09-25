@@ -500,6 +500,12 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   const bugDone = run(["done", "crash", "3", "--project", w5]);
   ok(bugDone.code === 1 && /Task 3 can't be completed yet: bug\.md → Root Cause is not filled/.test(bugDone.out) &&
     /- \[ \] 3\./.test(fs.readFileSync(path.join(w5, ".specs", "crash", "tasks.md"), "utf8")), "done on a bugfix task after the root-cause task exits 1 while bug.md → Root Cause is empty");
+  // done --run checks the same gate BEFORE running the task's _Verify:_ command (it used to run it, then refuse)
+  const crashTasks = path.join(w5, ".specs", "crash", "tasks.md");
+  fs.writeFileSync(crashTasks, fs.readFileSync(crashTasks, "utf8").replace(/_Verify: \[[^\]\n]*\]_/, "_Verify: node -e \"require('fs').writeFileSync('ran-wp5.txt','x')\"_"));
+  const bugRun = run(["done", "crash", "4", "--run", "--project", w5]);
+  ok(/_Verify: node -e/.test(fs.readFileSync(crashTasks, "utf8")) && bugRun.code === 1 && /Task 4 can't be completed yet: bug\.md → Root Cause is not filled/.test(bugRun.out) &&
+    !/\$ node/.test(bugRun.out) && !fs.existsSync(path.join(w5, "ran-wp5.txt")), "done --run on a gated bugfix task exits 1 WITHOUT running its _Verify:_ command");
   run(["create", "Plan", "core", "--project", w5]);
   fs.writeFileSync(path.join(w5, ".specs", "plan", "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
   fs.writeFileSync(path.join(w5, ".specs", "plan", "tasks.md"), "- [ ] 1. a\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/not-yet.js_\n");
