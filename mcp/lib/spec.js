@@ -122,6 +122,14 @@ const LOCK_STALE_MS = 2 * 60 * 1000;
 const LOCK_MAX_HOLD_MS = 10 * 60 * 1000;
 const LOCK_RECLAIM_SUFFIX = ".reclaim"; // `<lock>.reclaim`: held (O_EXCL) for the few microseconds of one reclaim
 const LOCK_RECLAIM_STALE_MS = 30 * 1000; // a reclaim guard this old was left by a process that died holding it
+// A lock with no readable note (empty, or not JSON) this old is stale: the note is written into place with the lock
+// (acquireLockFile), so only a process killed inside the O_EXCL fallback's microsecond window, or a foreign file, leaves one
+// — it used to block the feature for LOCK_STALE_MS.
+const LOCK_NOTELESS_STALE_MS = 5 * 1000;
+// A lock taken while this process already holds another (a folder move's roadmap lock inside its feature lock) waits only
+// for what is left of the outer acquisition's budget — at least this much — never a second full DEV_SPEC_LOCK_WAIT_MS.
+const LOCK_NESTED_MIN_MS = 500;
+let LOCK_DEADLINE = null; // the acquisition deadline of the outermost lock this process is inside (null: none)
 const HELD_LOCKS = new Map(); // lock key → this process's acquisition { token, ino, mtimeMs } (re-entrant, and what release checks)
 // The lock file as it is now: its note (raw text, null when it can't be read — a directory, a file being deleted) and
 // the stat that identifies it. null: gone, or it changed while being read (the caller just retries).
@@ -143,7 +151,7 @@ function staleLock(lock) {
   const age = Date.now() - snap.mtimeMs;
   let info = null;
   try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
-  let stale = age > LOCK_STALE_MS;
+  let stale = age > LOCK_STALE_MS || (!isObj(info) && snap.raw != null && age > LOCK_NOTELESS_STALE_MS);
   if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
     try {
       process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
@@ -205,14 +213,21 @@ function withLockFile(lock, fn, opts = {}) {
   const key = readCacheKey(lock);
   if (HELD_LOCKS.has(key)) return fn();
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
-  const deadline = Date.now() + (Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs());
-  let fd = null;
+  const waitMs = Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs();
+  const now0 = Date.now();
+  // Nested (this process already inside another lock): what is left of the outer acquisition's budget, at least
+  // LOCK_NESTED_MIN_MS — the two waits together stay one budget (they could take twice DEV_SPEC_LOCK_WAIT_MS).
+  const deadline = LOCK_DEADLINE == null ? now0 + waitMs : Math.min(now0 + waitMs, Math.max(LOCK_DEADLINE, now0 + Math.min(LOCK_NESTED_MIN_MS, waitMs)));
+  // The note (and its token) is ready BEFORE the lock exists, so the lock is never there without it.
+  const mine = { token: require("crypto").randomBytes(12).toString("hex"), ino: null, mtimeMs: null };
+  const note = JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token });
+  let acquired = false;
   let delay = 5;
   let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
   let stuck = false; // the last stale lock seen could not be removed
-  while (fd === null) {
+  while (!acquired) {
     try {
-      fd = fs.openSync(lock, "wx");
+      acquired = acquireLockFile(lock, note, mine);
     } catch (e) {
       if (e.code === "EEXIST") {
         denied = 0;
@@ -234,24 +249,52 @@ function withLockFile(lock, fn, opts = {}) {
       delay = Math.min(delay * 2, 50);
     }
   }
-  const mine = { token: require("crypto").randomBytes(12).toString("hex"), ino: null, mtimeMs: null };
-  try {
-    fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token }));
-  } catch {
-    mine.token = null; // the lock holds without its note: release recognises it by its identity instead
-  }
-  try { const st = fs.fstatSync(fd); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
-  try { fs.closeSync(fd); } catch { /* ignore */ }
   HELD_LOCKS.set(key, mine);
+  const outerDeadline = LOCK_DEADLINE;
+  if (outerDeadline == null) LOCK_DEADLINE = deadline;
   try {
     // Anything read before the lock may predate another process's write: the whole read cache (a feature's files), or
     // only what opts.forget names (the roadmap lock: roadmap.json).
     if (typeof opts.forget === "function") opts.forget(); else invalidateReadCache();
     return fn();
   } finally {
+    LOCK_DEADLINE = outerDeadline;
     HELD_LOCKS.delete(key);
     releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
   }
+}
+// Create `lock` holding `note` — atomically: the note goes to a temp file (named like writeFileAtomic's, so the maintained
+// .specs/.gitignore covers it) that is hard-linked into place — linkSync fails with EEXIST exactly like an O_EXCL create —
+// then the temp name is dropped. The lock is never there without its note: a process killed between the O_EXCL create and
+// the note's write left an EMPTY lock that blocked the feature for LOCK_STALE_MS. Where hard links are unavailable (FAT, some
+// network shares) → the O_EXCL create + write (staleLock treats a noteless lock older than LOCK_NOTELESS_STALE_MS as stale).
+// → true, or throws what the create threw (EEXIST: held; ENOENT: no folder; EPERM/EACCES: being deleted, or read-only).
+function acquireLockFile(lock, note, mine) {
+  const tmp = lock + "." + process.pid + "." + Date.now() + "." + Math.floor(Math.random() * 1e6) + ".tmp";
+  let linked = false;
+  try {
+    fs.writeFileSync(tmp, note, { encoding: "utf8", flag: "wx" });
+    fs.linkSync(tmp, lock);
+    linked = true;
+  } catch (e) {
+    if (e.code === "EEXIST" || e.code === "ENOENT") throw e; // held (or a temp name taken: retried) / no folder: the caller decides
+    // no hard links here, or the temp file couldn't be written: the O_EXCL create below throws the real reason
+  } finally {
+    try { fs.unlinkSync(tmp); } catch { /* never created */ }
+  }
+  if (linked) {
+    try { const st = fs.statSync(lock); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
+    return true;
+  }
+  const fd = fs.openSync(lock, "wx");
+  try {
+    fs.writeSync(fd, note);
+  } catch {
+    mine.token = null; // the lock holds without its note: release recognises it by its identity instead
+  }
+  try { const st = fs.fstatSync(fd); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
+  try { fs.closeSync(fd); } catch { /* ignore */ }
+  return true;
 }
 // A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
 // write (impact --reopen, finish --write, brief --write, metrics --write — a derived file written into the feature folder
@@ -297,16 +340,30 @@ function withMoveLock(projectDir, dir, slug, rel, fn) {
     }
   }, { onBusy: (b) => featureBusyResult(projectDir, slug, rel, b) });
 }
-// fs.renameSync of a folder, retried briefly on Windows: a scanner, an indexer or a lock waiter reading a file inside
-// answers EPERM / EACCES / EBUSY for a moment (writeFileAtomic's rule).
+// fs.renameSync of a folder, retried on Windows: a scanner, an indexer or a lock waiter reading a file inside answers
+// EPERM / EACCES / EBUSY for a moment. The feature lock is already held, so it waits longer than a file's rename (~1.4 s —
+// 60 ms answered a raw EPERM under contention); still refused → the caller's localized "folder in use" (moveDirOrBusy).
+const DIR_RENAME_RETRY_MS = [10, 20, 40, 80, 120, 180, 250, 300, 400];
 function renameDirSync(from, to) {
   for (let attempt = 0; ; attempt++) {
     try {
       return fs.renameSync(from, to);
     } catch (e) {
-      if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) throw e;
-      sleepSync(RENAME_RETRY_MS[attempt]);
+      if (process.platform !== "win32" || attempt >= DIR_RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) throw e;
+      sleepSync(DIR_RENAME_RETRY_MS[attempt]);
     }
+  }
+}
+// renameDirSync → null, or the localized "folder in use" result when the folder stayed locked by another program
+// (EPERM / EACCES / EBUSY after the retries) — never a raw, untranslated EPERM. Anything else is thrown as before.
+function moveDirOrBusy(projectDir, slug, from, to) {
+  try {
+    renameDirSync(from, to);
+    return null;
+  } catch (e) {
+    if (!RENAME_RETRY_CODES.has(e.code)) throw e;
+    const rel = path.relative(path.resolve(projectDir), from).split(path.sep).join("/");
+    return { ok: false, busy: true, inUse: true, error: errs(projectDir, slug).folderInUse(rel) };
   }
 }
 
@@ -323,7 +380,10 @@ const ROADMAP_LOCK_FILE = ".roadmap.lock";
 // Ensured before any lock file is created (withLockFile) and by spec_init / spec_create; an existing .specs/.gitignore
 // only gains the lines it lacks (its own lines and line endings are kept). Best-effort: it never creates .specs/ itself and
 // never fails the operation (a read-only folder just stays as it is).
-const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX];
+// Also the temp files a killed process leaves: writeFileAtomic's `<file>.<pid>.<ts>.tmp` and acquireLockFile's
+// `<lock>.<pid>.<ts>.<n>.tmp` (git listed them as untracked), and the tombstone a failed remove leaves (`.removing-*/`).
+const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX,
+  "*.[0-9]*.[0-9]*.tmp", ".removing-*/"];
 function ensureLockIgnore(specsDir) {
   if (!specsDir) return;
   const file = path.join(specsDir, ".gitignore");
@@ -4501,18 +4561,41 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo) {
 function removeFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  sweepTombstones(f.root);
   const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
+// A feature folder is removed in two steps: renamed to a dot TOMBSTONE (`.specs/.removing-<slug>-<token>/`, its .lock
+// inside), then deleted there. fs.rmSync of the folder in place deleted its .lock early while the folder still existed: a
+// waiter created a fresh lock in the half-deleted folder, got it, wrote into it — and the removed feature came back
+// (.state.json, .history/) after an ok remove. Renamed first, the old path is gone at once: a waiter's lock create answers
+// ENOENT and its re-resolve answers "not found". Dot folders are never features (list, roadmap, catalog, drift, hooks skip
+// them) and the maintained .specs/.gitignore ignores `.removing-*/`; a tombstone left by a failed delete (a file held open on
+// Windows) is swept by the next remove.
+const TOMBSTONE_PREFIX = ".removing-";
+const TOMBSTONE_SWEEP_AGE_MS = 60 * 1000; // younger: another process may still be deleting it
+function sweepTombstones(root) {
+  for (const n of safeReaddir(root)) {
+    if (!n.startsWith(TOMBSTONE_PREFIX)) continue;
+    const p = path.join(root, n);
+    try {
+      if (Date.now() - fs.statSync(p).mtimeMs < TOMBSTONE_SWEEP_AGE_MS) continue;
+      fs.rmSync(p, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 });
+    } catch { /* best-effort: still held open — the next remove tries again */ }
+  }
+}
 function removeFeatureLocked(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
-  const { slug, dir } = f;
+  const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); // its .lock (ours) goes with it
+  const tomb = path.join(root, TOMBSTONE_PREFIX + slug + "-" + require("crypto").randomBytes(4).toString("hex"));
+  const inUse = moveDirOrBusy(projectDir, slug, dir, tomb); // the folder (and its .lock, ours) leaves the feature path at once
+  if (inUse) return inUse;
+  try { fs.rmSync(tomb, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); } catch { /* left as a tombstone: swept later */ }
   pruneRoadmapRefs(projectDir, slug);
   return { ok: true, action: "remove", feature: slug };
 }
@@ -4547,7 +4630,8 @@ function archiveFeatureLocked(projectDir, name, moved) {
   const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length);
   const R = i18n.msg(featureLang(projectDir, slug)).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  renameDirSync(dir, dest);
+  const inUse = moveDirOrBusy(projectDir, slug, dir, dest);
+  if (inUse) return inUse;
   moved(dest); // the lock went with the folder: released there once the archive is done
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
@@ -4585,7 +4669,8 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const plan = renamePlan(projectDir, oldDir, oldSlug, newSlug);
   if (plan.error) return { ok: false, error: plan.error };
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  renameDirSync(oldDir, newDir);
+  const inUse = moveDirOrBusy(projectDir, oldSlug, oldDir, newDir);
+  if (inUse) return inUse;
   moved(newDir); // the lock went with the folder: released there once the rename is done
   pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
@@ -7368,7 +7453,8 @@ function restoreFeatureLocked(projectDir, name, moved) {
   if (st.invalid) return { ok: false, error: st.invalid };
   const R = i18n.msg(normalizeLang(st.lang || projectLang(projectDir))).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
-  renameDirSync(from, to);
+  const inUse = moveDirOrBusy(projectDir, slug, from, to);
+  if (inUse) return inUse;
   moved(to); // the lock went with the folder: released there once the restore is done
 
   const rec = isObj(st.archived) ? st.archived : null;

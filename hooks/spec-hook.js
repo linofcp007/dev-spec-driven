@@ -121,6 +121,8 @@ function handle(raw) {
     if (!filePath || !fwd.includes("/.specs/")) process.exit(0);
     // Subagent-execution scratch (briefs, reports, ledger) is not spec content: no lint, no roadmap churn.
     if (fwd.includes("/.execution/")) process.exit(0);
+    // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
+    if (fwd.includes("/.specs/.removing-")) process.exit(0);
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
     if (!isDevSpecProject(pdir)) process.exit(0);

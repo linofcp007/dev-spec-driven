@@ -198,6 +198,18 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   minutes before the reclaim deleted a tracked file. `brief --write` (`spec_task_brief {write}`) resolved the feature,
   and a rename / archive / remove landing before its write recreated a zombie `.specs/<old>/.execution/` that listed
   as a phantom feature and blocked renaming back — it and `metrics --write` now wait on the lock like every writer.
+  `feature remove` deleted the folder in place, so its `.lock` went early while the folder still existed: a waiter took a
+  fresh lock in the half-deleted folder and wrote into it, and the removed feature came back (`.state.json`,
+  `.history/`) after an ok remove (1 run in 12 under stress). The folder is now renamed to a dot tombstone
+  (`.specs/.removing-<slug>-…`, the lock inside) before it is deleted — waiters find nothing to lock and answer "not
+  found" — and a tombstone a failed delete leaves is swept by the next remove. A process killed between creating a lock
+  and writing its note left an EMPTY lock that blocked the feature for two minutes: the note is now written with the lock
+  (a temp file hard-linked into place; an O_EXCL fallback where links are unsupported) and a noteless lock older than 5 s
+  is stale. Archive / rename / restore / remove answered a raw, untranslated `EPERM` when another program held the folder
+  open for more than 60 ms: the rename is retried for ~1.4 s (the lock is held), then a localized "folder in use, try
+  again" (EN/PT/ES). A lock taken inside another (a folder move's roadmap lock) could wait a second full
+  `DEV_SPEC_LOCK_WAIT_MS`; it now gets what is left of the outer budget. The temp files a killed process leaves
+  (`<file>.<pid>.<ts>.tmp`) and leftover tombstones are git-ignored too.
   When a generated file couldn't be replaced
   (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
   `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is

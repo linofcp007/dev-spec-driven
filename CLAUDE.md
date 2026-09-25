@@ -438,9 +438,14 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `createFeature` re-run on an EXISTING feature (it adds tracks through
   `applyTracks`, spec_add_track's path — a NEW feature has no folder to lock). Two MCP servers (or MCP + `dev-spec done`)
   on one feature each read tasks.md + `.state.json`, wrote the whole file back and the last writer won — ticks and
-  evidence were lost while both answered ok. The lock is `.specs/<feature>/.lock` (O_EXCL, holds `{pid, host, at,
-  token}`), re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
-  `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A dead holder's lock (same host)
+  evidence were lost while both answered ok. The lock is `.specs/<feature>/.lock` (holds `{pid, host, at, token}`; created by
+  `acquireLockFile()`: the note is written to a temp file hard-linked into place — `linkSync` fails with EEXIST like O_EXCL —
+  so the lock never exists without its note; where hard links are unsupported it falls back to the O_EXCL create + write, and
+  `staleLock()` treats a noteless lock older than `LOCK_NOTELESS_STALE_MS` (5 s) as stale — a process killed in the old
+  create→write window left an EMPTY lock that blocked the feature for 2 min), re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
+  `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A lock taken while this process already
+  holds another (`LOCK_DEADLINE`: a folder move's roadmap lock inside its feature lock) waits only for the outer acquisition's
+  remaining budget, at least `LOCK_NESTED_MIN_MS` — nested waits could add up to twice the wait. A dead holder's lock (same host)
   is reclaimed at once, any other after 2 min (10 min while its pid still runs). **Mutual exclusion rules** (each one
   lost updates under contention while every call answered ok): a lock that can't be stat'ed is NEVER stale (it was
   just released — retry the create); a stale lock is removed only by `reclaimStaleLock()` — under `<lock>.reclaim`
@@ -455,15 +460,29 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   the folder away mid-write: the writer's next `writeFileAtomic` recreated a zombie `.specs/<old>/`, and ticks landed
   in one folder, the spec in the other); the lock file travels with the folder and is released at the NEW place
   (`releaseLock` with the acquisition's token — left there it kept the renamed feature "busy" while its holder lived). Folders move through
-  `renameDirSync` (Windows EPERM retry). **`roadmap.json`** read-modify-writes (depend, backlog add/rm, `pruneBacklog`,
+  `moveDirOrBusy()` → `renameDirSync` (Windows EPERM/EACCES/EBUSY retried ~1.4 s — the lock is held — then the localized
+  `err.folderInUse`, `{busy, inUse}`; 60 ms of retries answered a raw EPERM under contention). **remove** renames the folder
+  to a dot tombstone `.specs/.removing-<slug>-<rand>/` FIRST (its .lock inside) and deletes it there: `fs.rmSync` in place
+  deleted the folder's .lock early while the folder still existed, a waiter created a fresh lock in the half-deleted folder
+  and wrote into it — the removed feature came back (.state.json, .history/) after an ok remove. Dot folders are never
+  features (list / roadmap / catalog / drift skip them, the hook exits for `/.specs/.removing-`); `sweepTombstones()` deletes
+  a leftover one older than 60 s on the next remove. **`roadmap.json`** read-modify-writes (depend, backlog add/rm, `pruneBacklog`,
   `pruneRoadmapRefs`, restore, init `--lang`/`--guard`, roadmap `--lang`) hold `.specs/.roadmap.lock`
   (`withRoadmapLock`, `err.roadmapBusy`; it forgets only roadmap.json from the read cache). Lock order: a feature lock,
   then the roadmap lock — never the reverse; the ROADMAP.md refresh runs after both are released. Internal calls use
   the unwrapped functions. **The lock files are git-ignored**: `ensureLockIgnore()` keeps `.specs/.gitignore` holding
-  `.lock`, `.lock.reclaim`, `.roadmap.lock`, `.roadmap.lock.reclaim` (unanchored — every feature folder and `_archive/`),
+  `.lock`, `.lock.reclaim`, `.roadmap.lock`, `.roadmap.lock.reclaim`, the temp files a killed process leaves
+  (`*.[0-9]*.[0-9]*.tmp` — writeFileAtomic's `<file>.<pid>.<ts>.tmp` and the lock note's) and `.removing-*/` (unanchored — every
+  feature folder and `_archive/`),
   called by init, create and `withLockFile` BEFORE the lock is created; an existing file only gains the missing lines
   (its EOL kept), and it never creates `.specs/` itself. A lock leaked by a killed process was committed by `git add -A`
   and made the feature "busy" on every clone (fresh checkout mtime, foreign host → no pid probe).
+  **Known limits (documented, not fixed):** pid liveness is probed only when the note's `host` is this machine's hostname —
+  two machines (or WSL and Windows) sharing one hostname on a network folder can probe the wrong process table (a live
+  holder read as dead → its lock reclaimed; a dead one read as live → the feature waits `LOCK_MAX_HOLD_MS`); give them
+  distinct hostnames. `rename` rewrites `_Supersedes:` lines in OTHER features' requirements.md under the renamed feature's
+  lock and the roadmap lock only — not those features' own locks (taking them there would break the feature-then-roadmap
+  lock order); a concurrent edit of one of those files can lose that one line change.
 - **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**.
   `writeRoadmapMd/Html` skip a same-named file without it — the hooks run in every project; `spec_roadmap`
   returns a refused ROADMAP.md write as an error (a kept hand-written ROADMAP.html is a warning). The

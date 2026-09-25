@@ -5850,15 +5850,87 @@ function endRun() {
     const g14 = (args) => spawnSync("git", args, { cwd: gi14, encoding: "utf8" });
     if (g14(["--version"]).status === 0 && g14(["init", "-q"]).status === 0) {
       fs.writeFileSync(path.join(gif14.dir, ".lock"), holdNote14); // left by a killed process
-      const probe14 = [".specs/alpha/.lock", ".specs/alpha/.lock.reclaim", ".specs/_archive/old/.lock", ".specs/.roadmap.lock", ".specs/.roadmap.lock.reclaim"];
+      // …and the temp files a killed process leaves (writeFileAtomic's, the lock's note) and a failed remove's tombstone.
+      const leftovers14 = [path.join(gif14.dir, "tasks.md.4242.1790000000000.tmp"), path.join(gif14.dir, ".lock.4242.1790000000000.77.tmp"),
+        path.join(gi14, ".specs", ".removing-beta-0a1b2c3d", "tasks.md")];
+      for (const p of leftovers14) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, "x"); }
+      const probe14 = [".specs/alpha/.lock", ".specs/alpha/.lock.reclaim", ".specs/_archive/old/.lock", ".specs/.roadmap.lock", ".specs/.roadmap.lock.reclaim",
+        ".specs/alpha/tasks.md.4242.1790000000000.tmp", ".specs/alpha/.lock.4242.1790000000000.77.tmp", ".specs/roadmap.json.1.2.tmp"];
       const ignored14 = (g14(["check-ignore", "--", ...probe14]).stdout || "").split(/\r?\n/).filter(Boolean);
       const status14 = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
-      giGit14 = ignored14.length === probe14.length && !/\.lock/.test(status14) && /\.specs\/\.gitignore/.test(status14) ? "ok" : JSON.stringify([ignored14, status14]);
+      giGit14 = ignored14.length === probe14.length && !/\.lock|\.tmp|\.removing-/.test(status14) && /\.specs\/\.gitignore/.test(status14) && /\.specs\/alpha\/tasks\.md/.test(status14)
+        ? "ok" : JSON.stringify([ignored14, status14]);
       fs.rmSync(path.join(gif14.dir, ".lock"), { force: true });
+      for (const p of leftovers14) fs.rmSync(p, { force: true });
+      fs.rmSync(path.join(gi14, ".specs", ".removing-beta-0a1b2c3d"), { recursive: true, force: true });
     }
-    ok(giInit14 === ".lock\n.lock.reclaim\n.roadmap.lock\n.roadmap.lock.reclaim\n" && giMerged14 === "# mine\r\n.lock\r\n.lock.reclaim\r\n.roadmap.lock\r\n.roadmap.lock.reclaim\r\n" &&
+    // L1 — remove renames the folder to a dot tombstone BEFORE deleting it: when fs.rmSync runs, the feature path (and its
+    // .lock) is already gone, so a waiter can't create a fresh lock in a half-deleted folder and bring the feature back.
+    const rmPLk = path.join(tmp, "proj-wp14-remove");
+    S.initProject(rmPLk, ["core"], "en");
+    const rmFLk = S.createFeature(rmPLk, "Gone soon", ["core"]);
+    const oldTombLk = path.join(rmPLk, ".specs", ".removing-old-feature-00000000");
+    fs.mkdirSync(oldTombLk, { recursive: true });
+    fs.writeFileSync(path.join(oldTombLk, "tasks.md"), "x");
+    const pastLk = new Date(Date.now() - 5 * 60 * 1000);
+    fs.utimesSync(oldTombLk, pastLk, pastLk);
+    const freshTombLk = path.join(rmPLk, ".specs", ".removing-busy-11111111");
+    fs.mkdirSync(freshTombLk, { recursive: true });
+    const listedTombLk = !S.listFeatures(rmPLk).features.some((f) => f.name.startsWith(".removing-")) && !S.roadmap(rmPLk).features.some((f) => f.name.startsWith(".removing-")) &&
+      !S.catalog(rmPLk).features.some((f) => String(f.feature).startsWith(".removing-"));
+    const realRmLk = fs.rmSync;
+    const rmCallsLk = [];
+    fs.rmSync = function (p, o) { rmCallsLk.push({ target: path.basename(String(p)), featureGone: !fs.existsSync(rmFLk.dir) }); return realRmLk.call(fs, p, o); };
+    let rmResLk;
+    try { rmResLk = S.manageFeature(rmPLk, "remove", "gone-soon", null, { confirm: true }); } finally { fs.rmSync = realRmLk; }
+    const rmCallLk = rmCallsLk.find((c) => c.target.startsWith(".removing-gone-soon-"));
+    ok(rmResLk.ok && rmCallLk && rmCallLk.featureGone === true && !fs.existsSync(rmFLk.dir) && !fs.readdirSync(path.join(rmPLk, ".specs")).some((n) => n.startsWith(".removing-gone-soon-")) &&
+      !fs.existsSync(oldTombLk) && fs.existsSync(freshTombLk) && listedTombLk,
+      "remove: the folder is renamed to a .removing-* tombstone first (the feature path is gone before any delete — no half-deleted folder to lock), then deleted; a stale tombstone is swept, a fresh one (another remove in flight) kept; list / roadmap / catalog never show one (got " + JSON.stringify(rmCallsLk) + ")");
+    // L4 — a folder another program holds open: the rename is retried, then answered with a localized "folder in use", never a
+    // raw EPERM (archive / rename / restore / remove share it).
+    const inUseFLk = S.createFeature(rmPLk, "Held open", ["core"]);
+    const realRenLk = fs.renameSync;
+    let renCallsLk = 0;
+    fs.renameSync = function (a, b) { if (path.resolve(String(a)) === path.resolve(inUseFLk.dir)) { renCallsLk++; const e = new Error("EBUSY: resource busy or locked, rename"); e.code = "EBUSY"; throw e; } return realRenLk.call(fs, a, b); };
+    let archLk, rmBusyLk;
+    try {
+      archLk = S.manageFeature(rmPLk, "archive", "held-open");
+      rmBusyLk = S.manageFeature(rmPLk, "remove", "held-open", null, { confirm: true });
+    } finally { fs.renameSync = realRenLk; }
+    ok(archLk.ok === false && archLk.busy && archLk.inUse && /^The folder \.specs\/held-open is in use by another program/.test(archLk.error) && !/EBUSY|EPERM/.test(archLk.error) &&
+      rmBusyLk.ok === false && rmBusyLk.inUse && fs.existsSync(inUseFLk.dir) && renCallsLk === (process.platform === "win32" ? 20 : 2) &&
+      /A pasta \.specs\/x está a ser usada por outro programa/.test(S.msg("pt").err.folderInUse(".specs/x")) && /La carpeta \.specs\/x está en uso/.test(S.msg("es").err.folderInUse(".specs/x")),
+      "a folder held open by another program: archive / remove retry the rename (Windows), then answer a localized 'folder in use' (EN/PT/ES) — nothing moved or deleted, never a raw EBUSY/EPERM (got " + JSON.stringify([archLk.error, renCallsLk]) + ")");
+    // L3 — the lock's note is written into place with the lock (no empty-lock window); a noteless lock older than a few
+    // seconds (left by a killed process) is stale, a fresh one is still respected.
+    const nlFLk = S.createFeature(rmPLk, "Noteless", ["core"]);
+    const nlLockLk = path.join(nlFLk.dir, ".lock");
+    let heldNoteLk = null;
+    S.withFeatureLock(nlFLk.dir, () => { heldNoteLk = fs.readFileSync(nlLockLk, "utf8"); });
+    const leftTmpLk = fs.readdirSync(nlFLk.dir).filter((n) => /\.tmp$/.test(n));
+    fs.writeFileSync(nlLockLk, "");
+    const freshEmptyLk = S.withFeatureLock(nlFLk.dir, () => "ran", { waitMs: 60, onBusy: () => "busy" });
+    const oldLk = new Date(Date.now() - 20 * 1000);
+    fs.utimesSync(nlLockLk, oldLk, oldLk);
+    const oldEmptyLk = S.withFeatureLock(nlFLk.dir, () => "ran", { waitMs: 2000, onBusy: () => "busy" });
+    let noteLk = null;
+    try { noteLk = JSON.parse(heldNoteLk); } catch { /* not JSON */ }
+    ok(noteLk && noteLk.pid === process.pid && /^[0-9a-f]{24}$/.test(noteLk.token) && !leftTmpLk.length && freshEmptyLk === "busy" && oldEmptyLk === "ran" && !fs.existsSync(nlLockLk),
+      "the lock is created with its note in place (pid + token readable while held, no temp file left); an empty lock older than a few seconds is reclaimed, a fresh one still waits (got " + JSON.stringify([heldNoteLk, leftTmpLk, freshEmptyLk, oldEmptyLk]) + ")");
+    // L5 — a lock taken inside another waits only for what is left of the outer budget (at least ~0.5 s), never a second full wait.
+    const nestALk = S.createFeature(rmPLk, "Nest outer", ["core"]);
+    const nestBLk = S.createFeature(rmPLk, "Nest inner", ["core"]);
+    fs.writeFileSync(path.join(nestBLk.dir, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "someone-else" }));
+    const tNestLk = Date.now();
+    const nestLk = S.withFeatureLock(nestALk.dir, () => S.withFeatureLock(nestBLk.dir, () => "inner ran", { onBusy: () => "inner busy" }), { waitMs: 100 });
+    const nestMsLk = Date.now() - tNestLk;
+    fs.rmSync(path.join(nestBLk.dir, ".lock"), { force: true });
+    ok(nestLk === "inner busy" && nestMsLk < 3000, "a nested lock waits for the outer budget's remainder (~0.5 s floor), not a second full DEV_SPEC_LOCK_WAIT_MS (" + nestMsLk + " ms)");
+    const giLines14 = ".lock\n.lock.reclaim\n.roadmap.lock\n.roadmap.lock.reclaim\n*.[0-9]*.[0-9]*.tmp\n.removing-*/\n";
+    ok(giInit14 === giLines14 && giMerged14 === "# mine\r\n.lock\r\n.lock.reclaim\r\n.roadmap.lock\r\n.roadmap.lock.reclaim\r\n*.[0-9]*.[0-9]*.tmp\r\n.removing-*/\r\n" &&
       giTick14.ok && giBack14 === giInit14 && giNoneRan14 === "ran" && !fs.existsSync(path.join(giNone14, ".specs")) && (giGit14 === "ok" || giGit14 === "skipped (no git)"),
-      "the lock files are git-ignored: init writes .specs/.gitignore, create only adds the missing lines to one that exists (CRLF kept), a locked tick restores it, a lock never creates .specs/; git ignores a leaked .lock / .roadmap.lock / reclaim guard in every folder (git: " + giGit14 + ")");
+      "the lock files are git-ignored: init writes .specs/.gitignore, create only adds the missing lines to one that exists (CRLF kept), a locked tick restores it, a lock never creates .specs/; git ignores a leaked .lock / .roadmap.lock / reclaim guard, a killed process's <file>.<pid>.<ts>.tmp / lock note temp file, and a failed remove's .removing-* tombstone (git: " + giGit14 + ")");
     // Two processes adding backlog items at once: every ok add is kept (last-writer-wins used to drop about a third).
     const bl14r = path.join(tmp, "proj-wp14-roadmaprace");
     S.initProject(bl14r, ["core"], "en");
