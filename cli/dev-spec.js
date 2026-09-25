@@ -28,6 +28,9 @@
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd)
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
  *                                      (--by = who approved; --force records it anyway, flagged as forced)
+ *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
+ *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
+ *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
@@ -123,6 +126,7 @@ function withTracksFlag(list) {
 // @wp WP7 <<<
 
 // @wp WP8 value-flags >>>
+VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|tasks
 // @wp WP8 <<<
 
 // @wp WP9 value-flags >>>
@@ -666,6 +670,20 @@ function main() {
     // @wp WP7 <<<
 
     // @wp WP8 commands >>>
+    case "impact": {
+      // dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen] — the same engine call as spec_impact
+      if (!pos[0]) die("usage: dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]");
+      const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: flags.reopen === true || flags.reopen === "true" });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => spec.impactLines(r).forEach((l) => console.log(l)));
+    }
+
+    case "metrics": {
+      // dev-spec metrics [feature] [--write] — one feature (+ retro.md with --write) or the whole project; = spec_metrics
+      const r = spec.metrics(projectDir, pos[0], { write: flags.write === true || flags.write === "true" });
+      if (!r.ok) die(r.error);
+      return out(r, (r) => spec.metricsLines(r).forEach((l) => console.log(l)));
+    }
     // @wp WP8 <<<
 
     // @wp WP9 commands >>>
@@ -723,6 +741,11 @@ function helpText() {
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks)
+  impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
+                                  (--phase requirements|design|tasks, default requirements): changed ACs/sections/tasks →
+                                  tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
+  metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate (project: + avg/median);
+                                  --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes)

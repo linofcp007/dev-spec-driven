@@ -2579,6 +2579,254 @@ function payload(res) {
   // @wp WP7 <<<
 
   // @wp WP8 tests >>>
+  // --- 1.13 WP8: change requests (approval history + snapshots, spec_impact, reopen) + metrics & retro ---
+  {
+    const call8 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
+    const w8 = path.join(tmp, "proj-wp8");
+    S.initProject(w8, ["tdd"]);
+    const cr8 = S.createFeature(w8, "Drafts", ["tdd"]);
+    const f8 = (x) => path.join(cr8.dir, x);
+    const st8 = () => JSON.parse(fs.readFileSync(f8(".state.json"), "utf8"));
+    ok(typeof st8().createdAt === "string" && /^\d{4}-\d\d-\d\dT/.test(st8().createdAt) && Math.abs(Date.now() - Date.parse(st8().createdAt)) < 600000,
+      "createFeature stores createdAt (ISO) in the new .state.json");
+    ok(["spec_impact", "spec_metrics"].every((t) => list.result.tools.some((x) => x.name === t)), "tools/list advertises spec_impact and spec_metrics");
+
+    // Fixture — CRLF requirements and tasks (Windows editors), a test plan and a design that cite the ACs.
+    const reqA = ["# Feature: Drafts", "", "## Summary", "Save drafts.", "", "### US-1 (P1 — MVP): Save drafts", "", "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft", "2. **US-1.AC-2** — WHEN the parser meets a BOM THE SYSTEM SHALL skip it",
+      "3. **US-1.AC-3** — WHEN the writer runs THE SYSTEM SHALL keep CRLF endings", "", "## Success Criteria", "- **SC-001** — 95% of saves finish under 200 ms", "",
+      "## Edge Cases & Error Handling", "- **EC-1** — an empty draft is rejected with a message", ""].join("\r\n");
+    const designA = "# Design: Drafts\n\n## Data Model\nDrafts keyed by id (US-1.AC-1).\n\n## Parser\nSkips a BOM (US-1.AC-2, T-02).\n\n## Writer\nKeeps line endings (US-1.AC-3).\n";
+    const tasksA = ["# Tasks: Drafts", "", "## Story US-1 (P1 — MVP)", "- [x] 1. [US1] Store drafts", "  - _Requirements: US-1.AC-1_", '  - _Verify: node -e "process.exit(0)"_',
+      "- [x] 2. [US1] Skip the BOM", "  - _Requirements: US-1.AC-2, SC-001_", "  - _Makes green: T-02_", "- [x] 3. [US1] Keep CRLF", "  - _Requirements: US-1.AC-3_",
+      "- [ ] 4. [US1] Reject empty drafts", "  - _Requirements: EC-1_", "**Checkpoint:** drafts work.", ""].join("\r\n");
+    fs.writeFileSync(f8("requirements.md"), reqA);
+    fs.writeFileSync(f8("design.md"), designA);
+    fs.writeFileSync(f8("test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2 |\n| T-03 | US-1.AC-3 |\n");
+    fs.writeFileSync(f8("tasks.md"), tasksA);
+    S.completeTask(w8, "drafts", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "ok" });
+    S.completeTask(w8, "drafts", 2, { summary: "BOM skipped (checked by hand)" });
+
+    // 1. Approval history + snapshots.
+    const ap8 = await call8("spec_approve", { name: "drafts", phase: "requirements", force: true, projectDir: w8 });
+    const h8 = st8().approvalHistory, a8 = st8().approvals.requirements;
+    ok(!ap8.isError && ap8.p.snapshot === ".history/requirements@1.md" && h8.length === 1 && h8[0].phase === "requirements" && h8[0].at === a8.at && h8[0].by === a8.by &&
+      h8[0].fingerprint === a8.fingerprint && h8[0].snapshot === ".history/requirements@1.md" && !("snapshot" in a8) &&
+      fs.readFileSync(f8(".history/requirements@1.md"), "utf8") === reqA && !fs.existsSync(f8(".history/.gitignore")),
+      "spec_approve keeps approvals[phase] and appends approvalHistory {phase, at, by, fingerprint, snapshot}; the snapshot is the file verbatim (CRLF kept), not self-ignored");
+    const apD8 = S.approvePhase(w8, "drafts", "design", "rev", { force: true });
+    const hD8 = st8().approvalHistory[1];
+    ok(apD8.forced === true && hD8.phase === "design" && hD8.forced === true && hD8.failing.includes("constitution-check") && hD8.snapshot === ".history/design@1.md",
+      "a forced approval is recorded in the history too (forced + failing ids), with its snapshot");
+    S.approvePhase(w8, "drafts", "tasks", "rev", { force: true });
+    const snapT8 = fs.readFileSync(f8(".history/tasks@1.md"), "utf8");
+    ok(snapT8 === tasksA.replace(/- \[x\]/g, "- [ ]") && snapT8.includes("\r\n"), "the tasks snapshot stores tasks.md with its checkboxes normalized (like the fingerprint), CRLF kept");
+    S.approvePhase(w8, "drafts", "tests", "rev", { force: true });
+    const hT8 = st8().approvalHistory[3];
+    ok(hT8.phase === "tests" && hT8.snapshot === undefined && hT8.fingerprint === undefined && !fs.readdirSync(f8(".history")).some((x) => x.startsWith("tests")),
+      "a phase with no artifact (tests) is recorded in the history without a snapshot");
+    const im0 = (await call8("spec_impact", { name: "drafts", projectDir: w8 })).p;
+    ok(im0.ok && im0.baseline === "snapshot" && im0.changed === false && im0.added.length + im0.modified.length + im0.removed.length === 0 &&
+      !S.specDoctor(w8, "drafts").checks.some((c) => c.id === "changed-since-approval"), "right after the approval: spec_impact finds no change and doctor has no changed-since-approval check");
+
+    // 2. spec_impact on requirements: whitespace-only reflow of AC-1 (not a change), AC-2 + SC-001 modified, AC-3 → AC-4.
+    const reqB = reqA.replace("1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft", "1. **US-1.AC-1** — WHEN a user saves\r\n   THE SYSTEM SHALL   store the draft")
+      .replace("SHALL skip it", "SHALL strip it and log a warning").replace("3. **US-1.AC-3** — WHEN the writer runs THE SYSTEM SHALL keep CRLF endings", "3. **US-1.AC-4** — WHEN a draft is older than 30 days THE SYSTEM SHALL archive it")
+      .replace("under 200 ms", "under 150 ms");
+    fs.writeFileSync(f8("requirements.md"), reqB);
+    const im1 = (await call8("spec_impact", { name: "drafts", phase: "requirements", projectDir: w8 })).p;
+    const imp8 = (id) => im1.impacted.find((x) => x.id === id) || { tasks: [], tests: [], designSections: [] };
+    ok(im1.changed === true && im1.added.map((a) => a.id).join() === "US-1.AC-4" && im1.added[0].tasks.length === 0 && im1.modified.map((m) => m.id).join() === "US-1.AC-2,SC-001" &&
+      /skip it$/.test(im1.modified[0].before) && /strip it and log a warning$/.test(im1.modified[0].after) && im1.removed.map((r) => r.id).join() === "US-1.AC-3",
+      "requirements diff by stable ID: added / modified (a whitespace-only reflow is NOT a change) / removed — SC-/EC-/NFR- IDs too");
+    ok(imp8("US-1.AC-2").tasks.map((t) => [t.number, t.done, t.evidence].join(":")).join() === "2:true:verified" && imp8("US-1.AC-2").tests.map((t) => t.id).join() === "T-02" &&
+      imp8("US-1.AC-2").designSections.join() === "Parser" && imp8("US-1.AC-3").tasks.map((t) => [t.number, t.evidence].join(":")).join() === "3:no-evidence" &&
+      imp8("US-1.AC-3").tests.map((t) => t.id).join() === "T-03" && imp8("US-1.AC-3").designSections.join() === "Writer" && imp8("SC-001").tasks.map((t) => t.number).join() === "2" &&
+      im1.affectedTasks.map((t) => t.number + ":" + t.via.join("+")).join() === "2:US-1.AC-2+SC-001,3:US-1.AC-3" && /--reopen/.test(im1.hint),
+      "each modified/removed ID lists the tasks citing it (done + evidence state), its T-IDs and design sections; affectedTasks names each task once (+ a reopen hint)");
+    const imL8 = S.impactLines(im1).join("\n");
+    ok(/^Impact: drafts · requirements — against the approval of \d{4}-\d\d-\d\d \(\.history\/requirements@1\.md\)/.test(imL8) && imL8.includes("  ~ US-1.AC-2  WHEN the parser meets a BOM THE SYSTEM SHALL strip it") &&
+      imL8.includes("  - US-1.AC-3  WHEN the writer runs") && imL8.includes("US-1.AC-2 (modified) — tasks: #2 [x] verified · tests: T-02 · design: Parser") && /new, no task cites them yet: US-1\.AC-4/.test(imL8),
+      "impactLines: the diff, what each change reaches, the uncovered new AC");
+
+    // 3. next_action + doctor name spec_impact.
+    const na8 = S.nextAction(w8, "drafts");
+    const dc8 = S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval");
+    ok(na8.step === "re-review" && /Re-review: requirements\.md changed/.test(na8.recommendation) && /spec_impact \(dev-spec impact drafts --phase requirements\)/.test(na8.recommendation) &&
+      na8.impact && na8.impact.tool === "spec_impact" && na8.impact.phases.join() === "requirements" && dc8 && dc8.status === "warn" && /^changed after their approval: requirements\.md/.test(dc8.detail) &&
+      /spec_impact/.test(dc8.detail), "next_action's re-review recommends spec_impact (tool + command) before re-approval; doctor warns changed-since-approval with the artifacts");
+
+    // Reopen: the done tasks citing a modified/removed ID are unticked, their evidence marked stale; nothing else is edited.
+    const designBefore8 = fs.readFileSync(f8("design.md"), "utf8");
+    const ro8 = (await call8("spec_impact", { name: "drafts", reopen: true, projectDir: w8 })).p;
+    const s8 = st8();
+    ok(ro8.ok && ro8.recorded === true && ro8.reopened.join() === "2,3" && fs.readFileSync(f8("tasks.md"), "utf8") === tasksA.replace("- [x] 2.", "- [ ] 2.").replace("- [x] 3.", "- [ ] 3.") &&
+      s8.evidence["2"].stale === true && !s8.evidence["1"].stale && fs.readFileSync(f8("requirements.md"), "utf8") === reqB && fs.readFileSync(f8("design.md"), "utf8") === designBefore8 &&
+      /Reopened #2, #3/.test(ro8.note), "reopen unticks the affected DONE tasks (CRLF kept), marks their evidence stale and never edits requirements.md / design.md");
+    const ch8 = s8.changes[0];
+    ok(s8.changes.length === 1 && ch8.phase === "requirements" && ch8.added.join() === "US-1.AC-4" && ch8.modified.join() === "US-1.AC-2,SC-001" && ch8.removed.join() === "US-1.AC-3" &&
+      ch8.reopened.join() === "2,3" && /^\d{4}-/.test(ch8.at) && ch8.snapshot === ".history/requirements@1.md", "reopen records {at, phase, added, modified, removed, reopened} in .state.json changes");
+    const re8 = S.completeTask(w8, "drafts", 2);
+    ok(re8.ok && re8.verified === false && re8.unverifiedReason === "stale-evidence" && /predates a spec change/.test(re8.note) &&
+      S.specDoctor(w8, "drafts").checks.find((c) => c.id === "verification").detail.includes("#2"), "re-ticking a reopened task without new evidence: stale-evidence (unverified), doctor names it");
+    const re8b = S.completeTask(w8, "drafts", 2, { summary: "re-checked against the new AC-2" });
+    ok(re8b.verified === true && !st8().evidence["2"].stale, "a task without a runnable _Verify:_: a new note clears the stale mark");
+    const beforeT8 = fs.readFileSync(f8("tasks.md"), "utf8"), beforeS8 = fs.readFileSync(f8(".state.json"), "utf8");
+    const ro8b = S.impactReport(w8, "drafts", { reopen: true });
+    ok(ro8b.ok && ro8b.recorded === false && ro8b.reopened.length === 0 && /Nothing new since the last reopen/.test(ro8b.note) &&
+      fs.readFileSync(f8("tasks.md"), "utf8") === beforeT8 && fs.readFileSync(f8(".state.json"), "utf8") === beforeS8, "a second reopen with nothing new changes nothing (task #2, redone since, stays ticked)");
+
+    // design: section-level diff; reopen reaches the done task citing an ID of a changed section.
+    fs.writeFileSync(f8("design.md"), designA.replace("keyed by id", "keyed by uuid").replace("## Writer\nKeeps line endings (US-1.AC-3).\n", "") + "\n## Archive\nOld drafts move (US-1.AC-4).\n");
+    const di8 = (await call8("spec_impact", { name: "drafts", phase: "design", projectDir: w8 })).p;
+    ok(di8.ok && di8.added.map((x) => x.section).join() === "Archive" && di8.modified.map((x) => x.section).join() === "Data Model" && di8.removed.map((x) => x.section).join() === "Writer" &&
+      di8.impacted.find((x) => x.section === "Data Model").tasks.map((t) => t.number).join() === "1" && di8.impacted.find((x) => x.section === "Writer").ids.join() === "US-1.AC-3",
+      "design diff by ## section (added / modified by normalized body / removed) with the IDs each names and the tasks citing them");
+    const dro8 = S.impactReport(w8, "drafts", { phase: "design", reopen: true });
+    ok(dro8.reopened.join() === "1" && st8().evidence["1"].stale === true && st8().changes[1].phase === "design" && st8().changes[1].removed.join() === "Writer",
+      "design reopen: only the DONE task citing an ID of a changed section is reopened, its run marked stale");
+    const n8 = S.completeTask(w8, "drafts", 1, { summary: "looked fine" });
+    const r8 = S.completeTask(w8, "drafts", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "ok" });
+    ok(n8.verified === false && n8.unverifiedReason === "stale-evidence" && r8.verified === true && !st8().evidence["1"].stale && st8().evidence["1"].history.length === 2,
+      "a runnable _Verify:_: a note doesn't clear the stale run, a new passing run does (history keeps both runs)");
+    fs.writeFileSync(f8("requirements.md"), fs.readFileSync(f8("requirements.md"), "utf8").replace("log a warning", "log an error"));
+    const ro8c = S.impactReport(w8, "drafts", { reopen: true });
+    ok(ro8c.recorded === true && ro8c.reopened.join() === "2" && st8().changes.length === 3 && Object.keys(st8().changes[2].digests).length === 4,
+      "a NEW edit of an AC already reopened once is new: the task citing it is reopened again");
+
+    // tasks: added / removed / changed numbers (checkbox state is not a change); reopen/phase validation.
+    fs.writeFileSync(f8("tasks.md"), fs.readFileSync(f8("tasks.md"), "utf8").replace("[US1] Reject empty drafts", "[US1] Reject empty drafts with a message")
+      .replace("- [ ] 3. [US1] Keep CRLF\r\n  - _Requirements: US-1.AC-3_\r\n", "") + "- [ ] 5. [US1] Archive old drafts\r\n  - _Requirements: US-1.AC-4_\r\n");
+    const ti8 = (await call8("spec_impact", { name: "drafts", phase: "tasks", projectDir: w8 })).p;
+    ok(ti8.ok && ti8.added.map((x) => x.number).join() === "5" && ti8.modified.map((x) => x.number).join() === "4" && ti8.removed.map((x) => x.number).join() === "3" && ti8.affectedTasks === undefined,
+      "tasks diff: added / changed / removed task numbers (unticked checkboxes are not a change)");
+    const rt8 = S.impactReport(w8, "drafts", { phase: "tasks", reopen: true });
+    const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
+    const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
+    ok(rt8.ok === false && /requirements and design only/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, tasks/.test(bad8m.p.error) &&
+      bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+
+    // Never approved; an existing snapshot file is never overwritten; a pre-1.13 approval is fingerprint-only.
+    const fr8 = S.createFeature(w8, "Fresh", ["core"]);
+    const nv8 = await call8("spec_impact", { name: "fresh", projectDir: w8 });
+    fs.mkdirSync(path.join(fr8.dir, ".history"), { recursive: true });
+    fs.writeFileSync(path.join(fr8.dir, ".history", "requirements@1.md"), "hand-made\n");
+    const frAp = S.approvePhase(w8, "fresh", "requirements", "x", { force: true });
+    ok(nv8.isError && nv8.p.neverApproved === true && /'requirements' was never approved for 'fresh'/.test(nv8.p.error) && frAp.snapshot === ".history/requirements@2.md" &&
+      fs.readFileSync(path.join(fr8.dir, ".history", "requirements@1.md"), "utf8") === "hand-made\n", "never approved → a clear error; an existing snapshot file is never overwritten (@2)");
+    const lg8 = S.createFeature(w8, "Legacy", ["core"]);
+    S.approvePhase(w8, "legacy", "requirements", "old", { force: true });
+    const lgFile = path.join(lg8.dir, ".state.json");
+    const lgSt = JSON.parse(fs.readFileSync(lgFile, "utf8"));
+    delete lgSt.approvalHistory;
+    fs.writeFileSync(lgFile, JSON.stringify(lgSt));
+    fs.rmSync(path.join(lg8.dir, ".history"), { recursive: true, force: true });
+    const lf0 = S.impactReport(w8, "legacy", {});
+    fs.appendFileSync(path.join(lg8.dir, "requirements.md"), "\n- one more assumption\n");
+    const lf1 = (await call8("spec_impact", { name: "legacy", reopen: true, projectDir: w8 })).p;
+    const lgDoc = S.specDoctor(w8, "legacy").checks.find((c) => c.id === "changed-since-approval");
+    ok(lf0.baseline === "fingerprint-only" && lf0.changed === false && /Re-approve to start the history: \/approve legacy requirements/.test(lf0.hint) && lf1.baseline === "fingerprint-only" &&
+      lf1.changed === true && lf1.reopened.length === 0 && lf1.recorded === false && lf1.added === undefined && lgDoc && !/spec_impact/.test(lgDoc.detail),
+      "a pre-1.13 approval (no history) → baseline fingerprint-only, changed from the fingerprint + a re-approve hint; reopen reopens nothing; doctor doesn't point to spec_impact");
+    const lgRe = S.approvePhase(w8, "legacy", "requirements", "new", { force: true });
+    ok(lgRe.snapshot === ".history/requirements@1.md" && S.impactReport(w8, "legacy", {}).baseline === "snapshot", "re-approving a legacy phase starts its history");
+    const bh8 = S.createFeature(w8, "Badhist", ["core"]);
+    const bhFile = path.join(bh8.dir, ".state.json");
+    fs.writeFileSync(bhFile, JSON.stringify({ lang: "en", approvals: {}, approvalHistory: { requirements: 1 }, changes: "x" }));
+    const bhAp = S.approvePhase(w8, "badhist", "requirements", "x", { force: true });
+    const bhIm = S.impactReport(w8, "badhist", {});
+    const bhM = S.metrics(w8, "badhist");
+    ok(bhAp.ok === false && /'approvalHistory' must be an array; 'changes' must be an array/.test(bhAp.error) && JSON.parse(fs.readFileSync(bhFile, "utf8")).approvalHistory.requirements === 1 &&
+      bhIm.ok === false && bhM.ok === true && /approvalHistory/.test(bhM.warning) && bhM.rework === null && bhM.changeRequests === 0,
+      "a non-list approvalHistory / changes is refused by approve and impact (never replaced); metrics uses the valid parts and says so");
+
+    // PT feature: impact lines, the next_action hint, errors and the retro template are European Portuguese.
+    const pt8 = S.createFeature(w8, "Rascunhos", ["core"], undefined, undefined, "pt");
+    const ptf = (x) => path.join(pt8.dir, x);
+    const ptReq = "# Funcionalidade: Rascunhos\n\n## Resumo\nGuardar rascunhos.\n\n### US-1 (P1 — MVP): Guardar\n\n#### Critérios de Aceitação (EARS)\n1. **US-1.AC-1** — QUANDO o utilizador guarda O SISTEMA DEVE guardar o rascunho\n";
+    fs.writeFileSync(ptf("requirements.md"), ptReq);
+    fs.writeFileSync(ptf("design.md"), "# Design: Rascunhos\n\n## Modelo de dados\nRascunhos por id (US-1.AC-1).\n");
+    fs.writeFileSync(ptf("tasks.md"), "# Tarefas: Rascunhos\n\n## História US-1\n- [x] 1. [US1] Guardar rascunhos\n  - _Requirements: US-1.AC-1_\n");
+    ["requirements", "design", "tasks"].forEach((ph) => S.approvePhase(w8, "rascunhos", ph, "x", { force: true }));
+    fs.writeFileSync(ptf("requirements.md"), ptReq.replace("guardar o rascunho", "guardar o rascunho em menos de 1 segundo"));
+    const ptL8 = S.impactLines(S.impactReport(w8, "rascunhos", {})).join("\n");
+    const ptNa8 = S.nextAction(w8, "rascunhos");
+    const ptNv8 = S.impactReport(w8, "rascunhos", { phase: "design", reopen: true });
+    const ptDg = S.specDoctor(w8, "rascunhos").checks.find((c) => c.id === "changed-since-approval");
+    ok(/^Impacto: rascunhos · requirements — face à aprovação de \d{4}/.test(ptL8) && ptL8.includes("US-1.AC-1 (alterado) — tarefas: #1 [x] sem evidência") && /volta a aprovar: \/approve rascunhos requirements/.test(ptL8) &&
+      /Vê primeiro o que a edição afeta com spec_impact/.test(ptNa8.recommendation) && ptNv8.ok && ptNv8.changed === false && ptNv8.recorded === false &&
+      /^alterado\(s\) após a aprovação: requirements\.md/.test(ptDg.detail) && /nunca foi aprovada em 'fresca'/.test(S.impactReport(w8, S.createFeature(w8, "Fresca", ["core"], undefined, undefined, "pt").slug, {}).error),
+      "PT feature: impact lines, next_action's spec_impact hint, doctor's check and errors are in European Portuguese");
+
+    // K. Metrics: deterministic state (createdAt, history with a re-approval and a forced one, evidence runs, change requests).
+    const w8m = path.join(tmp, "proj-wp8m");
+    S.initProject(w8m, ["tdd"]);
+    const mt8 = S.createFeature(w8m, "Metered", ["tdd"]);
+    fs.writeFileSync(path.join(mt8.dir, "tasks.md"), "# Tasks\n\n## S\n- [x] 1. A\n- [x] 2. B\n");
+    fs.writeFileSync(path.join(mt8.dir, "requirements.md"), "# R\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y [NEEDS CLARIFICATION: which store?]\n");
+    const T8 = (d, h = "00") => `2026-01-${d}T${h}:00:00.000Z`;
+    fs.writeFileSync(path.join(mt8.dir, ".state.json"), JSON.stringify({ lang: "en", tracks: ["core", "tdd"], createdAt: T8("01"),
+      approvals: { requirements: { at: T8("02"), by: "a" }, design: { at: T8("03"), by: "a", forced: true, failing: ["constitution-check"] }, tasks: { at: T8("04"), by: "a" }, execution: { at: T8("06"), by: "a" } },
+      approvalHistory: [{ phase: "requirements", at: T8("01", "12"), by: "a" }, { phase: "requirements", at: T8("02"), by: "a" }, { phase: "design", at: T8("03"), by: "a", forced: true, failing: ["constitution-check"] },
+        { phase: "tasks", at: T8("04"), by: "a" }, { phase: "execution", at: T8("06"), by: "a" }],
+      evidence: { 1: { command: "npm test", exitCode: 0, at: T8("05"), history: [{ command: "npm test", exitCode: 1, at: T8("04", "12") }, { command: "npm test", exitCode: 0, at: T8("05") }], task: "A", verify: "" },
+        2: { summary: "checked by hand", manual: true, at: T8("04", "18"), task: "B", verify: "" } },
+      changes: [{ at: T8("05"), phase: "requirements", reopened: [1, 2] }, { at: T8("05"), phase: "design", reopened: [2] }] }));
+    const m8 = (await call8("spec_metrics", { name: "metered", projectDir: w8m })).p;
+    const lt8 = m8.leadTime;
+    ok(m8.ok && m8.scope === "feature" && m8.createdAt === T8("01") && m8.createdAtApproximate === false && lt8.requirements.hours === 12 && lt8.design.hours === 48 && lt8.tasks.hours === 72 &&
+      lt8["test-plan"] === null && lt8.complete.hours === 96 && !lt8.complete.approximate && lt8.finished.hours === 120,
+      "spec_metrics: createdAt from state; lead time (hours) to each phase's FIRST approval, to complete (latest evidence of the done tasks) and to finished (execution approved)");
+    ok(m8.approvalsTotal === 5 && m8.rework === 1 && m8.reworkByPhase.requirements === 1 && m8.forcedApprovals === 1 && m8.changeRequests === 2 && m8.reopenedTasks === 3 &&
+      m8.reopenedTasksUnique === 2 && m8.evidence.runs === 2 && m8.evidence.passing === 1 && m8.evidence.passRate === 50 && m8.tasks.done === 2 && m8.tasks.total === 2 && m8.openClarifications === 1,
+      "spec_metrics: rework (re-approvals), forced approvals, change requests + reopened tasks, evidence pass rate from the run history, tasks, open clarification markers");
+    ok(JSON.stringify(m8) === JSON.stringify(S.metrics(w8m, "metered")) && S.metricsLines(m8).join("\n").includes("lead time from creation: requirements 12h · design 2d · tasks 3d · complete 4d · finished 5d") &&
+      S.metricsLines(m8).includes("  approvals: 5 · rework: 1 (requirements 1) · forced: 1") && S.metricsLines(m8).includes("  evidence: 50% of runs passing (1/2)"),
+      "MCP spec_metrics = the engine call; metricsLines formats durations (h/d) and counts");
+    const old8 = S.createFeature(w8m, "Oldie", ["core"]);
+    fs.writeFileSync(path.join(old8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: { requirements: { at: "2026-02-01T00:00:00.000Z", by: "x" }, design: { at: "2026-02-03T00:00:00.000Z", by: "x", forced: true } } }));
+    const om8 = S.metrics(w8m, "oldie");
+    ok(om8.ok && om8.createdAt === "2026-02-01T00:00:00.000Z" && om8.createdAtApproximate === true && om8.createdAtSource === "approval" && om8.leadTime.requirements.approximate === true &&
+      om8.leadTime.design.hours === 48 && om8.rework === null && om8.approvalsTotal === null && om8.forcedApprovals === 1 && om8.changeRequests === 0 && om8.evidence.passRate === null &&
+      /rework: unknown/.test(S.metricsLines(om8).join("\n")) && /\(approximate: from the earliest approval\)/.test(S.metricsLines(om8)[0]),
+      "a legacy feature (no createdAt, no history): createdAt from the earliest approval (approximate), rework unknown (null) — never throws");
+    const bare8 = S.createFeature(w8, "Bare", ["core"]);
+    fs.writeFileSync(path.join(bare8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {} }));
+    const bm8 = S.metrics(w8, "bare");
+    ok(bm8.ok && bm8.createdAtSource === "filesystem" && bm8.createdAtApproximate === true && typeof bm8.createdAt === "string" && ["classification", "requirements", "design", "test-plan", "eval-plan", "tasks"].every((p) => bm8.leadTime[p] === null) && bm8.leadTime.complete === null,
+      "no createdAt and no approval: the folder's date, flagged approximate; no lead times");
+    const pm8 = (await call8("spec_metrics", { projectDir: w8m })).p;
+    ok(pm8.ok && pm8.scope === "project" && pm8.features.map((x) => x.feature).join() === "metered,oldie" && pm8.aggregates.rework.n === 1 && pm8.aggregates.rework.avg === 1 &&
+      pm8.aggregates.leadTimeHours.requirements.avg === 6 && pm8.aggregates.leadTimeHours.requirements.median === 6 && pm8.aggregates.leadTimeHours.design.median === 48 &&
+      pm8.aggregates.forcedApprovals.avg === 1 && pm8.aggregates.evidencePassRate.n === 1 && pm8.totals.features === 2 && pm8.totals.changeRequests === 2 && pm8.totals.evidencePassRate === 50 &&
+      /^Metrics — 2 feature\(s\)/.test(S.metricsLines(pm8)[0]) && S.metricsLines(pm8).some((l) => /^ {2}median /.test(l)),
+      "spec_metrics without name: per-feature rows + averages/medians (nulls skipped) + totals");
+
+    // 6. Retro: create-only, localized, pre-filled; never overwritten; needs a feature.
+    const rw8 = S.metrics(w8m, "metered", { write: true });
+    const retro8 = path.join(mt8.dir, "retro.md");
+    const retroTxt = fs.readFileSync(retro8, "utf8");
+    ok(rw8.retro.written === true && rw8.retro.path === ".specs/metered/retro.md" && retroTxt.startsWith("# Retrospective: metered\n") &&
+      ["## What went well", "## What hurt", "## Proposed steering or constitution amendments", "## Follow-ups", "| Rework (re-approvals) | 1 (requirements 1) |",
+        "| Evidence pass rate | 50% (1/2 runs) |", "| Lead time → complete | 4d |", "never applied automatically", "3 task(s) reopened by change requests"].every((s) => retroTxt.includes(s)) &&
+      !/NEEDS CLARIFICATION|\*\*TODO\*\*/.test(retroTxt), "metrics {write:true} creates retro.md: metrics table + What went well / What hurt / amendments (human approval) / Follow-ups");
+    fs.appendFileSync(retro8, "\nmy notes\n");
+    const rw8b = await call8("spec_metrics", { name: "metered", write: true, projectDir: w8m });
+    const pw8 = await call8("spec_metrics", { write: true, projectDir: w8m });
+    ok(!rw8b.isError && rw8b.p.retro.written === false && /already exists — left untouched/.test(rw8b.p.note) && fs.readFileSync(retro8, "utf8").endsWith("my notes\n") &&
+      pw8.isError && /write needs a feature name/.test(pw8.p.error), "an existing retro.md is never overwritten (said so); write without a feature is an error");
+    S.metrics(w8, "rascunhos", { write: true });
+    const ptRetro = fs.readFileSync(ptf("retro.md"), "utf8");
+    ok(ptRetro.startsWith("# Retrospetiva: rascunhos") && ["## O que correu bem", "## O que custou", "## Alterações propostas ao steering ou à constituição", "## Seguimento", "| Tempo até requisitos |"]
+      .every((s) => ptRetro.includes(s)) && /^Métricas: rascunhos \[core\] — criada a \d{4}/.test(S.metricsLines(S.metrics(w8, "rascunhos"))[0]), "PT feature: the retro template and metrics lines are European Portuguese");
+
+    // Every WP8 message exists in EN, PT and ES (same keys).
+    const keys8 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys8(v, pre + k + ".") : [pre + k])).sort();
+    ok(["impact", "metrics"].every((ns) => { const en = JSON.stringify(keys8(S.msg("en")[ns]).filter((k) => k !== "buildRetro")); return ["pt", "es"].every((l) => JSON.stringify(keys8(S.msg(l)[ns])) === en); }) &&
+      ["approvalHistory", "changes"].every((k) => ["en", "pt", "es"].every((l) => typeof S.msg(l).jsonShape[k] === "string")) &&
+      /^# Retrospectiva: x/.test(S.msg("es").metrics.retro({ feature: "x", leadTime: {}, evidence: { runs: 0 }, tasks: { done: 0, total: 0 }, openClarifications: 0, forcedApprovals: 0, changeRequests: 0, reopenedTasks: 0, rework: null }, { dur: String, today: "2026-01-01" })),
+      "WP8 messages (impact, metrics, retro, jsonShape) exist in EN, PT and ES with the same keys");
+  }
   // @wp WP8 <<<
 
   // @wp WP9 tests >>>

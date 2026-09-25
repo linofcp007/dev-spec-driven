@@ -735,7 +735,9 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const stored = readState(projectDir, slug).lang;
   const lng = normalizeLang(stored || lang || projectLang(projectDir));
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
-  writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", tracks: t, approvals: {} } : { lang: lng, tracks: t, approvals: {} }, null, 2));
+  // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
+  const createdAt = new Date().toISOString();
+  writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", tracks: t, approvals: {}, createdAt } : { lang: lng, tracks: t, approvals: {}, createdAt }, null, 2));
 
   const created = [];
   const skip = [];
@@ -1157,7 +1159,7 @@ function completeTask(projectDir, name, number, evidence) {
     res.note = reason === "failed-run" ? EG.failedRun(n, entry.exitCode, f.slug, runnable)
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
-      : reason === "stale-evidence" ? EG.staleEvidence(n, f.slug, runnable)
+      : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
       : EV.missing(n, f.slug);
   }
   return res;
@@ -1816,6 +1818,8 @@ function normalizeEvidence(ev) {
 // code only counts next to the command that produced it (a v1.12 record could hold a bare {exitCode: 0}).
 function evidenceIssue(e, runnable) {
   if (!e || typeof e !== "object" || Array.isArray(e)) return "no-evidence";
+  // spec_impact --reopen: the spec this record proved changed — only a new run (or, without a runnable _Verify:_, a new note) clears it.
+  if (e.stale === true) return "stale-evidence";
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
   return (e.command && e.exitCode === 0) || !!e.summary ? null : "no-evidence";
@@ -1861,7 +1865,12 @@ function recordEvidence(prev, ev, at, stamp) {
   const p = isRecord(prev) ? prev : null;
   const pRun = p && p.exitCode != null;
   const stamped = (r) => { const o = { ...r, ...stamp }; if (!stamp.shared) delete o.shared; delete o.others; return o; };
-  if (ev.exitCode == null) return stamped(pRun ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
+  if (ev.exitCode == null) {
+    const rec = stamped(pRun ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
+    if (stamp.verify) return rec; // a note never clears a stale run of a runnable _Verify:_ (only a new run does)
+    delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change
+    return rec;
+  }
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
   if (!hist.length && pRun) hist = [runOf(p)]; // a v1.12 record: its run seeds the history
   const run = runOf({ ...ev, at });
@@ -2338,6 +2347,8 @@ function readState(projectDir, name) {
   for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray]]) {
     if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
   }
+  // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
+  for (const key of ["approvalHistory", "changes"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; }
   s.approvals = s.approvals || {};
   if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
   return s;
@@ -2348,11 +2359,15 @@ function readState(projectDir, name) {
 const PHASE_FILE = { classification: "classification.md", requirements: "requirements.md", design: "design.md", "test-plan": "test-plan.md", "eval-plan": "eval-plan.md", tasks: "tasks.md" };
 function artifactFingerprint(file, phase) {
   const raw = readIfExists(file);
-  if (raw == null) return null;
-  let text = raw.replace(/\r\n/g, "\n");
-  if (phase === "tasks") text = text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
+  return raw == null ? null : textFingerprint(raw, phase);
+}
+// The same fingerprint from text (an approval snapshot is compared by it too).
+function textFingerprint(raw, phase) {
+  let text = String(raw).replace(/\r\n/g, "\n");
+  if (phase === "tasks") text = uncheckTasks(text);
   return require("crypto").createHash("sha1").update(text).digest("hex");
 }
+const uncheckTasks = (text) => text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
 
 // An approval is a GATE, not a stamp: the checks of the phase being approved run first (approvalChecks) and a
 // failure refuses it — unless opts.force, which records it anyway with `forced: true` and the failing check ids
@@ -2376,18 +2391,486 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   }
   // One default for every surface (the CLI used $USER, the MCP server 'user').
   const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
-  if (PHASE_FILE[p]) {
-    const fp = artifactFingerprint(path.join(f.dir, PHASE_FILE[p]), p);
-    if (fp) entry.fingerprint = fp;
-  }
+  // The artifact is read ONCE: its fingerprint and its snapshot are the same version.
+  const raw = PHASE_FILE[p] ? readIfExists(path.join(f.dir, PHASE_FILE[p])) : null;
+  if (raw != null) entry.fingerprint = textFingerprint(raw, p);
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
+  // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
+  // approvalHistory, with a snapshot of what it signed off (.history/<phase>@<n>.md) — the baseline spec_impact diffs.
+  const record = { phase: p, at: entry.at, by: entry.by };
+  if (entry.fingerprint) record.fingerprint = entry.fingerprint;
+  if (entry.forced) { record.forced = true; record.failing = failing; }
+  if (raw != null) record.snapshot = writeSnapshot(f.dir, p, raw, state.approvalHistory);
+  state.approvalHistory = (state.approvalHistory || []).concat([record]);
   state.approvals[p] = entry;
   state.lastApprovedPhase = p;
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
   const res = { ok: true, feature: f.slug, approved: p, approvals: state.approvals };
+  if (record.snapshot) res.snapshot = record.snapshot;
   if (failing.length) Object.assign(res, { forced: true, failing, checks: gate.checks, note: G.approveForced(failing.join(", ")) });
   return res;
+}
+
+// ---------------------------------------------------------------------------
+// Change requests (1.13) — approval snapshots, spec_impact (what an edit after approval touches) and reopen.
+// OpenSpec deltas / BMAD correct-course, done locally: the approved version is kept, the edit is diffed against it.
+// ---------------------------------------------------------------------------
+
+const HISTORY_DIR = ".history"; // spec history, meant to be committed with the spec (NOT self-ignored like .execution/)
+const IMPACT_PHASES = ["requirements", "design", "tasks"];
+// Requirement-level IDs a task cites in _Requirements:_ (ACs, success criteria, edge cases, NFRs), and T-IDs.
+const RE_REQ_REF = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?!\d)/g;
+const RE_OTHER_REQ_REF = /(?<![A-Za-z0-9])(?:SC-\d+|EC-\d+|NFR-\d+)(?!\d)/g;
+const RE_TEST_REF = /(?<![A-Za-z0-9])T-\d+(?!\d)/g;
+const RE_DEFINES_REQ_ID = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\*\*|__)?((?:SC|EC|NFR)-\d+)(?!\d)/;
+const normWs = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+const refsIn = (s, re) => [...new Set(String(s || "").match(re) || [])];
+const shortDigest = (s) => require("crypto").createHash("sha1").update(normWs(s)).digest("hex").slice(0, 12);
+
+// .history/<phase>@<n>.md — n counts that phase's approvals (1, 2, …) and never reuses a file that exists.
+function writeSnapshot(dir, phase, raw, history) {
+  let n = (Array.isArray(history) ? history : []).filter((h) => isRecord(h) && h.phase === phase).length + 1;
+  while (fs.existsSync(path.join(dir, HISTORY_DIR, `${phase}@${n}.md`))) n++;
+  writeFileAtomic(path.join(dir, HISTORY_DIR, `${phase}@${n}.md`), phase === "tasks" ? uncheckTasks(raw) : raw);
+  return `${HISTORY_DIR}/${phase}@${n}.md`;
+}
+
+// The snapshot of the phase's LATEST approval → { rel, text, at } — null when that approval has none (made before
+// 1.13, or by an older engine after a 1.13 one), or the file is gone / points outside the feature's .history.
+function latestSnapshot(dir, state, phase) {
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === phase) : [];
+  const last = hist[hist.length - 1];
+  if (!last || typeof last.snapshot !== "string") return null;
+  const appr = isRecord(state.approvals) ? state.approvals[phase] : null;
+  if (isRecord(appr) && appr.at && last.at && appr.at !== last.at) return null;
+  const abs = path.resolve(dir, last.snapshot);
+  if (!isInsideDir(path.join(dir, HISTORY_DIR), abs)) return null;
+  const text = readIfExists(abs);
+  return text == null ? null : { rel: last.snapshot, text, at: last.at || null };
+}
+
+// The spec_impact phases among changed artifacts whose approval has a snapshot (next_action / doctor name the tool).
+function snapshotPhases(dir, state, changedFiles) {
+  return IMPACT_PHASES.filter((p) => changedFiles.includes(PHASE_FILE[p]) && latestSnapshot(dir, state, p));
+}
+
+// requirements.md → every requirement-level ID with its text: acIndex() for the ACs; SC-/EC-/NFR- IDs by the same
+// rule (the item that defines it, else its first mention, else a table row).
+function requirementIndex(reqText) {
+  const map = acIndex(reqText);
+  const blocks = criterionBlocks(reqText || "").blocks;
+  const other = new Map();
+  const entry = (id, b) => ({ id, text: b.text.replace(RE_LIST_ITEM, ""), line: b.line });
+  for (const b of blocks) { const m = b.text.match(RE_DEFINES_REQ_ID); if (m && !other.has(m[1])) other.set(m[1], entry(m[1], b)); }
+  for (const b of blocks) for (const id of refsIn(b.text, RE_OTHER_REQ_REF)) if (!other.has(id)) other.set(id, entry(id, b));
+  stripHtmlComments(reqText || "").split(/\r?\n/).forEach((l, i) => {
+    if (/^\s*\|/.test(l)) for (const id of refsIn(l, RE_OTHER_REQ_REF)) if (!other.has(id)) other.set(id, { id, text: l.trim(), line: i + 1 });
+  });
+  for (const [id, e] of other) if (!map.has(id)) map.set(id, e);
+  return map;
+}
+
+// Keyed diff: added / modified (whitespace-normalized text differs) / removed, in document order.
+function diffEntries(before, after) {
+  const added = [], modified = [], removed = [];
+  for (const [k, e] of after) {
+    const o = before.get(k);
+    if (!o) added.push(e);
+    else if (normWs(o.text) !== normWs(e.text)) modified.push({ key: k, before: o, after: e });
+  }
+  for (const [k, o] of before) if (!after.has(k)) removed.push(o);
+  return { added, modified, removed };
+}
+// design.md → its `##` sections by (whitespace-normalized) title; a repeated title gets " (2)", " (3)"…
+function sectionEntries(designText) {
+  const map = new Map();
+  for (const s of designSections(designText)) {
+    const title = normWs(s.title);
+    let k = title;
+    for (let i = 2; map.has(k); i++) k = `${title} (${i})`;
+    map.set(k, { section: k, text: s.body });
+  }
+  return map;
+}
+// tasks.md → task content by number (checkbox state is not content; a duplicated number keeps both).
+function taskEntries(tasksText) {
+  const map = new Map();
+  for (const b of taskBlocks(tasksText || "")) {
+    const content = [b.text, ...b.body].join("\n");
+    const prev = map.get(b.number);
+    map.set(b.number, prev ? { ...prev, text: prev.text + "\n" + content } : { number: b.number, title: b.text, text: content });
+  }
+  return map;
+}
+// Active task blocks (a removed track's task section is inactive) with their REAL line numbers — reopen unticks them.
+function activeTaskBlocks(tasksText, tracks) {
+  if (tasksText == null) return [];
+  const drop = inactiveTaskLines(tasksText, tracks);
+  return taskBlocks(tasksText).filter((b) => !drop.has(b.line));
+}
+
+// spec_impact {name, phase?, reopen?} / `dev-spec impact <feature> [--phase p] [--reopen]`: the current artifact against
+// the snapshot of its latest approval. requirements → AC-level diff (+ SC/EC/NFR IDs) and, for every modified/removed
+// ID, the tasks citing it (done/open + evidence state), the tests covering it and the design sections mentioning it;
+// design → section-level diff and the tasks citing an ID named in a changed section; tasks → added/removed/changed task
+// numbers. reopen (requirements/design): unticks the affected DONE tasks, marks their evidence stale and records the
+// change request in .state.json `changes` — it never edits requirements.md or design.md. Idempotent: a change already
+// recorded against the same snapshot reopens nothing again.
+function impactReport(projectDir, name, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const I = i18n.msg(lng).impact;
+  const phase = opts.phase == null || String(opts.phase).trim() === "" ? "requirements" : String(opts.phase).toLowerCase().trim();
+  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), IMPACT_PHASES.join(", ")) };
+  const reopen = opts.reopen === true;
+  if (reopen && phase === "tasks") return { ok: false, error: I.reopenTasks };
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { ok: false, error: state.invalid }; // approvals/history of the wrong shape: nothing to trust
+  const file = PHASE_FILE[phase];
+  const cur = readIfExists(path.join(dir, file));
+  if (cur == null) return { ok: false, error: I.missing(file, slug) };
+  const appr = state.approvals[phase];
+  if (!isRecord(appr)) return { ok: false, neverApproved: true, error: I.neverApproved(phase, slug) };
+  const tracks = detectTracks(dir);
+  const res = { ok: true, feature: slug, lang: lng, phase, file, approvedAt: appr.at || null };
+  const snap = latestSnapshot(dir, state, phase);
+  if (!snap) {
+    // Approved before 1.13: only the fingerprint was recorded — WHETHER it changed, not what.
+    Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks).length > 0, hint: I.fingerprintOnly(phase, slug) });
+    if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
+    return res;
+  }
+  Object.assign(res, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(cur, phase) !== textFingerprint(snap.text, phase) });
+
+  const tasksFile = path.join(dir, "tasks.md");
+  const tasksText = readIfExists(tasksFile);
+  const blocks = activeTaskBlocks(tasksText, tracks);
+  const dups = new Set(duplicateTaskNumbers(blocks));
+  const evidence = isRecord(state.evidence) ? state.evidence : {};
+  const taskView = (b) => ({ number: b.number, text: b.text, done: b.done, evidence: taskEvidenceIssue(evidence, b, dups.has(b.number)) || "verified" });
+  const citing = (ids) => blocks.filter((b) => {
+    const mk = taskMarkers(b);
+    const refs = new Set([...refsIn(mk.requirements.join(" "), RE_REQ_REF), ...refsIn(mk["makes green"].join(" "), RE_TEST_REF)]);
+    return ids.some((id) => refs.has(id));
+  });
+  const mentions = (text, id) => refsIn(text, id.startsWith("T-") ? RE_TEST_REF : RE_REQ_REF).includes(id);
+
+  const digests = {}; // change key → digest of its new content ("removed") — what a reopen records, to stay idempotent
+  const reach = new Map(); // change key (modified/removed ID, changed section) → the IDs whose citing tasks it affects
+  if (phase === "requirements") {
+    const d = diffEntries(requirementIndex(snap.text), requirementIndex(cur));
+    const plan = [...testIndex(tracks.includes("tdd") ? readIfExists(path.join(dir, "test-plan.md")) || "" : "").values()];
+    const sections = designSections(activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks));
+    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
+    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
+    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
+    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({
+      id, change,
+      tasks: citing([id]).map(taskView),
+      tests: plan.filter((t) => mentions(t.row, id)).map((t) => ({ id: t.id, row: t.row })),
+      designSections: sections.filter((s) => mentions(s.title + "\n" + s.body, id)).map((s) => s.title),
+    }));
+    for (const a of res.added) digests[a.id] = shortDigest(a.text);
+    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
+    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+  } else if (phase === "design") {
+    const d = diffEntries(sectionEntries(snap.text), sectionEntries(cur));
+    const idsIn = (...texts) => [...new Set(texts.flatMap((t) => [...refsIn(t, RE_REQ_REF), ...refsIn(t, RE_TEST_REF)]))];
+    const changes = [...d.added.map((e) => [e.section, "added", idsIn(e.section, e.text), shortDigest(e.text)]),
+      ...d.modified.map((m) => [m.key, "modified", idsIn(m.key, m.before.text, m.after.text), shortDigest(m.after.text)]),
+      ...d.removed.map((e) => [e.section, "removed", idsIn(e.section, e.text), "removed"])];
+    res.added = d.added.map((e) => ({ section: e.section }));
+    res.modified = d.modified.map((m) => ({ section: m.key }));
+    res.removed = d.removed.map((e) => ({ section: e.section }));
+    // "The tasks whose brief would include a changed section", kept simple: the tasks citing an ID it names.
+    res.impacted = changes.map(([section, change, ids]) => ({ section, change, ids, tasks: citing(ids).map(taskView) }));
+    for (const [section, , ids, dg] of changes) { digests[section] = dg; reach.set(section, ids); }
+  } else {
+    const d = diffEntries(taskEntries(snap.text), taskEntries(cur));
+    res.added = d.added.map((e) => ({ number: e.number, text: e.title }));
+    res.modified = d.modified.map((m) => ({ number: m.key, before: m.before.title, after: m.after.title }));
+    res.removed = d.removed.map((e) => ({ number: e.number, text: e.title }));
+  }
+  if (phase !== "tasks") {
+    // Every task a change reaches, once, with what reaches it.
+    const byTask = new Map();
+    for (const [k, ids] of reach) for (const b of citing(ids)) {
+      const e = byTask.get(b) || { ...taskView(b), via: [] };
+      if (!e.via.includes(k)) e.via.push(k);
+      byTask.set(b, e);
+    }
+    res.affectedTasks = [...byTask.values()].sort((a, b) => a.number - b.number);
+  }
+  if (!reopen) {
+    if (res.affectedTasks && res.affectedTasks.some((t) => t.done)) res.hint = I.reopenHint(slug, phase);
+    return res;
+  }
+
+  // Reopen. Only what no earlier change request against THIS snapshot already recorded (same key, same content) counts.
+  const prior = (state.changes || []).filter((c) => isRecord(c) && c.phase === phase && c.snapshot === snap.rel);
+  const fresh = Object.keys(digests).filter((k) => !prior.some((c) => isRecord(c.digests) && c.digests[k] === digests[k]));
+  if (!fresh.length) return Object.assign(res, { reopened: [], recorded: false, note: I.nothingNew });
+  const toReopen = [...new Set(fresh.filter((k) => reach.has(k)).flatMap((k) => citing(reach.get(k))))].filter((b) => b.done)
+    .sort((a, b) => a.number - b.number);
+  if (toReopen.length) {
+    // tasks.md first: a state write that fails afterwards leaves unticked tasks a re-run records — never a record
+    // claiming tasks were reopened while they are still ticked. Line endings (CRLF too) are kept.
+    const lines = tasksText.split("\n");
+    for (const b of toReopen) {
+      const raw = lines[b.line];
+      if (/[xX]/.test(raw.charAt(b.col))) lines[b.line] = raw.slice(0, b.col) + " " + raw.slice(b.col + 1);
+    }
+    writeFileAtomic(tasksFile, lines.join("\n"));
+  }
+  for (const b of toReopen) {
+    const rec = ownRecord(evidence[String(b.number)], b, dups.has(b.number)); // this task's record, never the other "N."'s
+    if (isRecord(rec)) rec.stale = true; // mutates state.evidence in place
+  }
+  const keys = (list, k) => list.map((x) => x[k]);
+  const idKey = phase === "requirements" ? "id" : "section";
+  const change = { at: new Date().toISOString(), phase, snapshot: snap.rel, added: keys(res.added, idKey), modified: keys(res.modified, idKey),
+    removed: keys(res.removed, idKey), reopened: toReopen.map((b) => b.number), digests };
+  state.changes = (state.changes || []).concat([change]);
+  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
+  maybeRefreshRoadmap(projectDir);
+  return Object.assign(res, { reopened: change.reopened, recorded: true, changeRequest: state.changes.length,
+    note: change.reopened.length ? I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase) : I.recordedOnly(state.changes.length, slug, phase) });
+}
+
+// Human-readable spec_impact (CLI), in the feature's language.
+function impactLines(r) {
+  const I = i18n.msg(r.lang).impact;
+  const R = i18n.msg(r.lang).evidenceGate.reason;
+  const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.evidence === "verified" ? I.verified : R[t.evidence] || t.evidence}`;
+  if (r.baseline === "fingerprint-only") {
+    const out = [I.headFp(r.feature, r.phase, r.changed), "  " + r.hint];
+    if (r.note) out.push("  " + r.note);
+    return out;
+  }
+  const out = [I.head(r.feature, r.phase, String(r.approvedAt || "").slice(0, 10), r.snapshot)];
+  const label = (x) => (x.id || x.section || (x.number != null ? "#" + x.number : ""));
+  // The criterion text without its own leading "**US-1.AC-2** —" (the label already names it).
+  const body = (x) => String(x.after != null ? x.after : x.text != null ? x.text : "")
+    .replace(/^(?:\*\*|__)?(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\*\*|__)?\s*[—–:-]?\s*/, "");
+  for (const [sign, list] of [["+", r.added], ["~", r.modified], ["-", r.removed]]) {
+    for (const x of list || []) out.push(`  ${sign} ${label(x)}${body(x) && r.phase !== "design" ? "  " + cut(body(x)) : ""}`);
+  }
+  if (!(r.added || []).length && !(r.modified || []).length && !(r.removed || []).length) out.push("  " + (r.changed ? I.noStructural : I.noChanges));
+  if ((r.impacted || []).length) {
+    out.push("  " + I.affected);
+    for (const x of r.impacted) {
+      const parts = [`${I.tasksLabel}: ${x.tasks.length ? x.tasks.map(task).join(", ") : I.none}`];
+      if (x.tests) parts.push(`${I.testsLabel}: ${x.tests.length ? x.tests.map((t) => t.id).join(", ") : I.none}`);
+      if (x.designSections) parts.push(`${I.designLabel}: ${x.designSections.length ? x.designSections.join(", ") : I.none}`);
+      if (x.ids) parts.push(`${I.idsLabel}: ${x.ids.length ? x.ids.join(", ") : I.none}`);
+      out.push(`    ${x.id || x.section} (${I.change[x.change] || x.change}) — ${parts.join(" · ")}`);
+    }
+  }
+  const uncovered = (r.added || []).filter((a) => Array.isArray(a.tasks) && !a.tasks.length).map((a) => a.id);
+  if (uncovered.length) out.push("  " + I.uncovered(uncovered.join(", ")));
+  if (r.note) out.push("  " + r.note);
+  else if (r.hint) out.push("  " + r.hint);
+  if (r.changed) out.push("  → " + I.reReview(r.feature, r.phase));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Metrics & retrospective (1.13) — derived only from .state.json, .history/ and the artifacts (local, no cost).
+// Legacy state never throws: what can't be derived is null.
+// ---------------------------------------------------------------------------
+
+const METRIC_PHASES = ["classification", "requirements", "design", "test-plan", "eval-plan", "tasks"];
+const timeOf = (v) => { if (typeof v !== "string" && typeof v !== "number") return null; const t = new Date(v).getTime(); return Number.isFinite(t) && t > 0 ? t : null; };
+const round1 = (x) => Math.round(x * 10) / 10;
+const round2 = (x) => Math.round(x * 100) / 100;
+const isoOf = (t) => (t == null ? null : new Date(t).toISOString());
+// Lead time in hours (never negative: an approximate start may postdate a milestone).
+const hoursFrom = (start, t) => (start == null || t == null ? null : round2(Math.max(0, t - start) / 3600000));
+
+function featureMetrics(projectDir, slug, dir) {
+  const state = readState(projectDir, slug);
+  const tracks = detectTracks(dir);
+  const kind = state.kind || "feature";
+  const approvals = isRecord(state.approvals) ? state.approvals : {};
+  const history = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && typeof h.phase === "string") : null;
+  // Start: createdAt (1.13+), else the earliest approval, else the folder's birth/modification time — approximate.
+  let created = timeOf(state.createdAt);
+  let createdSource = created != null ? "state" : null;
+  if (created == null) {
+    const seen = [...(history || []).map((h) => timeOf(h.at)), ...Object.values(approvals).map((a) => (isRecord(a) ? timeOf(a.at) : null))].filter((t) => t != null);
+    if (seen.length) { created = Math.min(...seen); createdSource = "approval"; }
+    else {
+      try { const st = fs.statSync(dir); created = st.birthtimeMs > 0 ? st.birthtimeMs : st.mtimeMs > 0 ? st.mtimeMs : null; createdSource = created != null ? "filesystem" : null; } catch { /* unknown */ }
+    }
+  }
+  // First approval of each phase: the history; a phase approved only before 1.13 falls back to its (latest) approval.
+  const first = {}, count = {};
+  for (const h of history || []) {
+    const t = timeOf(h.at);
+    count[h.phase] = (count[h.phase] || 0) + 1;
+    if (t != null && (first[h.phase] == null || t < first[h.phase].t)) first[h.phase] = { t, approximate: false };
+  }
+  for (const [ph, a] of Object.entries(approvals)) {
+    const t = isRecord(a) ? timeOf(a.at) : null;
+    if (t != null && !first[ph]) first[ph] = { t, approximate: true };
+  }
+  const leadTime = {};
+  for (const ph of METRIC_PHASES) {
+    leadTime[ph] = first[ph] ? { at: isoOf(first[ph].t), hours: hoursFrom(created, first[ph].t), ...(first[ph].approximate ? { approximate: true } : {}) } : null;
+  }
+  // Tasks: the active view (status's). Complete = every task done — when: the latest evidence recorded for them.
+  const tasksText = readIfExists(path.join(dir, "tasks.md"));
+  const active = parseTasks(activeTasks(tasksText, tracks));
+  const done = active.filter((t) => t.done).length;
+  const evidence = isRecord(state.evidence) ? state.evidence : {};
+  leadTime.complete = null;
+  if (active.length && done === active.length) {
+    const stamps = [];
+    let everyTask = true;
+    for (const t of active) {
+      const recs = evidenceRecords(evidence[String(t.number)]);
+      if (!recs.length) everyTask = false;
+      for (const r of recs) for (const k of ["at", "noteAt"]) { const x = timeOf(r[k]); if (x != null) stamps.push(x); }
+    }
+    let t = stamps.length ? Math.max(...stamps) : null;
+    if (t == null) { try { t = fs.statSync(path.join(dir, "tasks.md")).mtimeMs; } catch { /* unknown */ } }
+    if (t != null) leadTime.complete = { at: isoOf(t), hours: hoursFrom(created, t), ...(!stamps.length || !everyTask ? { approximate: true } : {}) };
+  }
+  // Finished, when recorded: the execution phase's first approval (or a finishedAt a later tool may record).
+  const fin = first.execution ? first.execution.t : timeOf(state.finishedAt);
+  leadTime.finished = fin != null ? { at: isoOf(fin), hours: hoursFrom(created, fin) } : null;
+  // Rework: approvals of a phase beyond its first (history only — a pre-1.13 approval replaced its predecessor).
+  const reworkByPhase = history ? Object.fromEntries(Object.entries(count).filter(([, n]) => n > 1).map(([ph, n]) => [ph, n - 1])) : null;
+  const rework = reworkByPhase ? Object.values(reworkByPhase).reduce((s, n) => s + n, 0) : null;
+  const forcedApprovals = history ? history.filter((h) => h.forced === true).length : Object.values(approvals).filter((a) => isRecord(a) && a.forced === true).length;
+  // Evidence pass rate: passing runs / all recorded runs (evidence[n].history; a v1.12 record is its own single run).
+  let runs = 0, passing = 0;
+  for (const slot of Object.values(evidence)) {
+    for (const r of evidenceRecords(slot)) {
+      const list = Array.isArray(r.history) && r.history.length ? r.history.filter((h) => isRecord(h) && h.exitCode != null) : r.exitCode != null ? [r] : [];
+      runs += list.length;
+      passing += list.filter((h) => Number(h.exitCode) === 0).length;
+    }
+  }
+  const changes = (state.changes || []).filter(isRecord);
+  const reopened = changes.flatMap((c) => (Array.isArray(c.reopened) ? c.reopened : []));
+  const openClarifications = chainArtifacts(dir, tracks, kind).reduce((s, a) => s + clarificationMarkers(readIfExists(path.join(dir, a.file)) || "").length, 0);
+  const res = {
+    feature: slug, kind, tracks: trackLabel(tracks), phase: detectPhase(dir, tracks),
+    createdAt: isoOf(created), createdAtApproximate: createdSource !== "state", createdAtSource: createdSource,
+    leadTime,
+    approvalsTotal: history ? history.length : null,
+    rework, reworkByPhase, forcedApprovals,
+    changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
+    evidence: { runs, passing, passRate: runs ? round1((passing / runs) * 100) : null },
+    tasks: { done, total: active.length },
+    openClarifications,
+  };
+  if (state.invalid) res.warning = state.invalid; // the valid parts were used
+  return res;
+}
+
+// avg / median of the numbers in a list (nulls = unknown, skipped).
+function stats(values) {
+  const v = values.filter((x) => typeof x === "number" && Number.isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return { n: 0, avg: null, median: null };
+  const mid = Math.floor(v.length / 2);
+  return { n: v.length, avg: round2(v.reduce((s, x) => s + x, 0) / v.length), median: round2(v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2) };
+}
+
+// spec_metrics {name?, write?} / `dev-spec metrics [feature] [--write]`: one feature's metrics, or the project's (every
+// feature + averages/medians). write (a feature only) creates .specs/<f>/retro.md from a localized template pre-filled
+// with the metrics — create-only, never overwritten.
+function metrics(projectDir, name, opts = {}) {
+  const write = opts.write === true;
+  if (name != null && String(name).trim() !== "") {
+    const f = existingFeature(projectDir, name);
+    if (!f.ok) return { ok: false, error: f.error };
+    const lng = featureLang(projectDir, f.slug);
+    const M = i18n.msg(lng).metrics;
+    const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
+    if (write) {
+      const file = path.join(f.dir, "retro.md");
+      const rel = path.relative(projectDir, file).split(path.sep).join("/");
+      const written = writeIfAbsent(file, M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) }));
+      res.retro = { path: rel, written };
+      res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
+    }
+    return res;
+  }
+  const lng = projectLang(projectDir);
+  if (write) return { ok: false, error: i18n.msg(lng).metrics.writeNeedsName };
+  const list = listFeatures(projectDir);
+  const features = list.features.map((x) => featureMetrics(projectDir, x.name, path.join(list.specsDir, x.name)));
+  const col = (fn) => features.map(fn);
+  const aggregates = {
+    leadTimeHours: Object.fromEntries([...METRIC_PHASES, "complete", "finished"].map((ph) => [ph, stats(col((m) => (m.leadTime[ph] ? m.leadTime[ph].hours : null)))])),
+    rework: stats(col((m) => m.rework)),
+    forcedApprovals: stats(col((m) => m.forcedApprovals)),
+    changeRequests: stats(col((m) => m.changeRequests)),
+    reopenedTasks: stats(col((m) => m.reopenedTasks)),
+    evidencePassRate: stats(col((m) => m.evidence.passRate)),
+    tasksDone: stats(col((m) => m.tasks.done)),
+    tasksTotal: stats(col((m) => m.tasks.total)),
+    openClarifications: stats(col((m) => m.openClarifications)),
+  };
+  const sum = (fn) => features.reduce((s, m) => s + (fn(m) || 0), 0);
+  const runs = sum((m) => m.evidence.runs), passing = sum((m) => m.evidence.passing);
+  const totals = { features: features.length, tasksDone: sum((m) => m.tasks.done), tasksTotal: sum((m) => m.tasks.total), forcedApprovals: sum((m) => m.forcedApprovals),
+    changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
+    evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
+  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals };
+}
+
+// 0.5 → "30m", 5 → "5h", 60 → "2.5d" (same units in EN/PT/ES); null → "—".
+function fmtHours(h) {
+  if (h == null) return "—";
+  if (h < 1) return Math.round(h * 60) + "m";
+  if (h < 48) return round1(h) + "h";
+  return round1(h / 24) + "d";
+}
+
+// Human-readable spec_metrics (CLI), in the feature's / project's language.
+function metricsLines(r) {
+  const M = i18n.msg(r.lang).metrics;
+  const leads = (m) => [...METRIC_PHASES, "complete", "finished"].filter((ph) => m.leadTime[ph]).map((ph) => `${M.phase[ph] || ph} ${fmtHours(m.leadTime[ph].hours)}`);
+  const pass = (e) => (e.runs ? `${e.passRate}%` : "—");
+  if (r.scope === "feature") {
+    const out = [M.head(r.feature, r.tracks, r.createdAt ? r.createdAt.slice(0, 10) : M.unknown, r.createdAtApproximate ? M.source[r.createdAtSource] || M.unknown : null)];
+    const l = leads(r);
+    out.push(l.length ? M.leadTimes(l.join(" · ")) : M.noLeadTimes);
+    out.push(r.rework == null ? M.reworkUnknown(r.forcedApprovals)
+      : M.rework(r.approvalsTotal, r.rework, Object.entries(r.reworkByPhase).map(([ph, n]) => `${M.phase[ph] || ph} ${n}`).join(", "), r.forcedApprovals));
+    out.push(M.changes(r.changeRequests, r.reopenedTasks));
+    out.push(r.evidence.runs ? M.evidence(r.evidence.passRate, r.evidence.passing, r.evidence.runs) : M.noRuns);
+    out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
+    if (r.warning) out.push("  ⚠ " + r.warning);
+    if (r.note) out.push(r.note);
+    return out;
+  }
+  if (!r.features.length) return [M.noFeatures(r.specsDir)];
+  const out = [M.projectHead(r.features.length)];
+  const w = Math.min(28, Math.max(8, ...r.features.map((m) => m.feature.length)));
+  for (const m of r.features) {
+    out.push("  " + m.feature.padEnd(w) + "  " + M.row(m.createdAt ? m.createdAt.slice(0, 10) : "—", fmtHours(m.leadTime.complete && m.leadTime.complete.hours),
+      m.rework == null ? "—" : m.rework, m.forcedApprovals, m.changeRequests, pass(m.evidence), `${m.tasks.done}/${m.tasks.total}`));
+  }
+  const A = r.aggregates;
+  const num = (v, unit = "") => (v == null ? "—" : v + unit);
+  for (const k of ["avg", "median"]) { // no tasks column here: an average "0.33/2" says less than the totals line
+    out.push("  " + M[k].padEnd(w) + "  " + M.row("", fmtHours(A.leadTimeHours.complete[k]), num(A.rework[k]), num(A.forcedApprovals[k]),
+      num(A.changeRequests[k]), num(A.evidencePassRate[k], "%"), null));
+  }
+  const reqLead = A.leadTimeHours.requirements, desLead = A.leadTimeHours.design, taskLead = A.leadTimeHours.tasks;
+  if (reqLead.n || desLead.n || taskLead.n) {
+    out.push(M.medianLeads([["requirements", reqLead], ["design", desLead], ["tasks", taskLead]].filter(([, s]) => s.n).map(([ph, s]) => `${M.phase[ph]} ${fmtHours(s.median)}`).join(" · ")));
+  }
+  out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -3016,6 +3499,7 @@ function nextAction(projectDir, name) {
   let step;
   let recommendation;
   let gateFix = false;
+  let impactPhases = [];
   if (open) {
     step = "fill";
     const first = open.items.length ? open.items[0].text : "";
@@ -3025,6 +3509,9 @@ function nextAction(projectDir, name) {
   } else if (changed.length) {
     step = "re-review";
     recommendation = nx.reReview(changed.join(", "));
+    // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
+    impactPhases = snapshotPhases(dir, st, changed);
+    if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
   } else if (fails.length) {
     step = "fix";
     recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
@@ -3050,6 +3537,7 @@ function nextAction(projectDir, name) {
     gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
   if (open) res.file = open.file;
   if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
+  if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   return res;
 }
 // The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
@@ -3616,6 +4104,13 @@ function specDoctor(projectDir, name) {
   if (pendingGates.length) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
     nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+  }
+  // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve —
+  // spec_impact lists what the edit touches when the approval has a snapshot.
+  const changedArts = changedSinceApproval(dir, approvals, tracks);
+  if (changedArts.length) {
+    add("changed-since-approval", "warn", snapshotPhases(dir, state, changedArts).length
+      ? fm.impact.doctorChanged(changedArts.join(", "), slug) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
   add("approval-gates", pendingGates.length || forcedGates.length ? "warn" : "pass",
     [pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : null,
@@ -5790,6 +6285,10 @@ module.exports = {
   // @wp WP7 <<<
 
   // @wp WP8 exports >>>
+  impactReport, // spec_impact / `dev-spec impact` (change requests: diff vs the approved snapshot, --reopen)
+  impactLines,
+  metrics, // spec_metrics / `dev-spec metrics` (+ retro.md with write)
+  metricsLines,
   // @wp WP8 <<<
 
   // @wp WP9 exports >>>
