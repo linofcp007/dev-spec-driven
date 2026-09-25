@@ -93,7 +93,7 @@ function payload(res) {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length >= 23, "tools/list returns at least the 23 v1.12 tools (got " + list.result.tools.length + ")"); // exact count restored at release
+  ok(list.result.tools.length === 29, "tools/list returns 29 tools (got " + list.result.tools.length + ")");
 
   const cls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Stripe billing webhook for multi-tenant SaaS that also summarizes invoices with an LLM" } }));
   ok(cls.tracks.includes("tdd") && cls.tracks.includes("saas") && cls.tracks.includes("ai"), "classify detects tdd+saas+ai (" + cls.label + ")");
