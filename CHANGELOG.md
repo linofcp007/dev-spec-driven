@@ -126,6 +126,20 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   'process.exit(1)'_` exited 0 and the task was recorded as verified. A `_Verify:_` in POSIX syntax (single quotes,
   `$VAR`) is now refused before anything runs unless `--shell` picks a shell (`--shell bash`, or `--shell cmd` to
   run it under cmd.exe anyway).
+- **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
+  moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
+  feature mutators (complete, approve, append-tasks, add/remove track, impact `--reopen`, finish `--write`) now hold a
+  cross-process lock (`.specs/<feature>/.lock`, reclaimed when its process is gone) and a caller that can't get it
+  within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized "busy" error with nothing changed; tasks.md ticks are
+  written atomically (a concurrent reader no longer sees a truncated file). When a generated file couldn't be replaced
+  (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
+  `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is
+  retried). A BOM-only re-save ("UTF-8 with BOM", Windows PowerShell 5.1) of an approved artifact counted as
+  changed-since-approval and blocked `spec_finish` while `spec_impact` showed nothing changed — a BOM is ignored like
+  CRLF, and approvals recorded over a BOM file still match. SessionStart printed a dev-spec status block for a
+  `.specs/` that belongs to another tool; it now applies the PostToolUse ownership check. The MCP server refuses a
+  network `projectDir` (`\\host\share`, `//host/share`, `\\?\UNC\…`) before touching it — a tool call made the server
+  connect out over SMB to any host it named (and hang on an unreachable one); WSL paths and `\\?\C:\…` stay accepted.
 - **Docs.** SKILL.md claims match the engine (every execution loop ends in `spec_complete_task
   {evidence}`, the EARS example passes the linter, the constitution check is section presence), the
   description is trigger-accurate and under 1,024 characters, rule files stay true in the copy
@@ -207,6 +221,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `--force`.
 - **Windows: `done --run` refuses a POSIX-syntax `_Verify:_`** under the default cmd.exe — add `--shell bash` (or
   `DEV_SPEC_SHELL=bash`), or `--shell cmd` to keep cmd.exe.
+- **MCP: an explicit `projectDir` must be a local folder** — a network path (`\\host\share`, `//host/share`) is
+  refused. A project on a share can still be the server's working directory or `SPEC_PROJECT_DIR`; the CLI is
+  unchanged.
 - **Renaming a feature edits other features' requirements.md** when they `_Supersedes:_` its ACs; an approved one
   then shows as changed-since-approval (re-review, re-approve).
 - **A note no longer verifies a task with a runnable `_Verify:_`** — record the command and its exit code
@@ -220,7 +237,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 674 assertions (was 181), `node cli/test-cli.js` 221 (was 53); the tool count is
+- `node mcp/test.js` 681 assertions (was 181), `node cli/test-cli.js` 223 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

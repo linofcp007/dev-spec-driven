@@ -87,7 +87,10 @@ The server resolves the project directory in this order:
 3. the process working directory
 
 Every tool also accepts an explicit `projectDir` argument if you ever need to override it. It writes
-to `.specs/` in that project, and **never overwrites** existing files.
+to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must be a
+local folder: a network path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
+server at another machine. A project that lives on a share can still be the server's working directory
+(or `SPEC_PROJECT_DIR`) — that is your own configuration, not a tool argument.
 
 ---
 

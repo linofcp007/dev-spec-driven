@@ -65,17 +65,130 @@ function writeIfAbsent(file, content) {
 
 // Replace a file without a torn intermediate state: a concurrent reader (hook + MCP tool) sees the old
 // content or the new one, never an empty/half-written file.
+// The temp file NEVER outlives the call: when the rename and the plain-write fallback both fail (a read-only or
+// locked target on Windows, a folder where the file should be) the error is thrown with the temp file already
+// removed — the best-effort roadmap/catalog refreshes and the hook swallow it, and they used to leave one
+// full-size `<file>.<pid>.<ts>.tmp` in the committed .specs/ per call. On Windows a brief lock (a scanner, an
+// indexer, a preview pane) is retried a few times first.
+const RENAME_RETRY_MS = [5, 15, 40];
+const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 function writeFileAtomic(file, content) {
   forgetCached(file);
   ensureDir(path.dirname(file));
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
-  fs.writeFileSync(tmp, content, "utf8");
+  let moved = false;
   try {
-    fs.renameSync(tmp, file);
-  } catch {
-    fs.writeFileSync(file, content, "utf8"); // e.g. target locked on Windows — fall back to a plain write
-    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+    fs.writeFileSync(tmp, content, "utf8");
+    for (let attempt = 0; ; attempt++) {
+      try {
+        fs.renameSync(tmp, file);
+        moved = true;
+        break;
+      } catch (e) {
+        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) break;
+        sleepSync(RENAME_RETRY_MS[attempt]);
+      }
+    }
+    if (!moved) fs.writeFileSync(file, content, "utf8"); // still locked / read-only: a plain write (may throw)
+  } finally {
+    if (!moved) try { fs.unlinkSync(tmp); } catch { /* never created, or already gone */ }
   }
+}
+
+// Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
+const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
+function sleepSync(ms) {
+  Atomics.wait(SLEEP_CELL, 0, 0, ms);
+}
+
+// Cross-process lock for a feature's read-modify-write. Two MCP servers (two editors on one repo) or an MCP server
+// and `dev-spec done` completing tasks of the same feature at the same moment each read tasks.md + .state.json,
+// changed their copy and wrote the whole file back — the last writer won, so a tick or an evidence record was
+// silently lost while both calls answered ok. The mutators of a feature (featureLocked) now hold
+// `.specs/<feature>/.lock` (created with O_EXCL) for the whole read → check → write, and waiters retry for up to
+// LOCK_WAIT_MS before answering a localized "busy" error. A lock left by a crashed process is reclaimed: its pid is
+// gone (same host), or it is older than LOCK_STALE_MS (LOCK_MAX_HOLD_MS while its holder still runs). Re-entrant in
+// one process. Where the lock can't be created at all (a read-only folder) the operation runs unlocked, as before.
+const LOCK_FILE = ".lock";
+const LOCK_WAIT_MS = 10000;
+const LOCK_STALE_MS = 2 * 60 * 1000;
+const LOCK_MAX_HOLD_MS = 10 * 60 * 1000;
+const HELD_LOCKS = new Set();
+function lockIsStale(lock) {
+  let st;
+  try { st = fs.statSync(lock); } catch { return true; } // gone meanwhile: just retry the create
+  const age = Date.now() - st.mtimeMs;
+  let info = null;
+  try { info = JSON.parse(fs.readFileSync(lock, "utf8")); } catch { /* being written, or not ours */ }
+  if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
+    try {
+      process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
+      return age > LOCK_MAX_HOLD_MS;
+    } catch (e) {
+      if (e.code === "ESRCH") return true; // its holder is gone
+    }
+  }
+  return age > LOCK_STALE_MS;
+}
+// → fn()'s result, or opts.onBusy() when the lock stayed held for opts.waitMs (default: DEV_SPEC_LOCK_WAIT_MS from the
+// environment when it is an integer ≥ 0 — a slow network file system may want more — else LOCK_WAIT_MS).
+function lockWaitMs() {
+  const v = String(process.env.DEV_SPEC_LOCK_WAIT_MS || "").trim();
+  return /^\d{1,7}$/.test(v) ? Number(v) : LOCK_WAIT_MS;
+}
+function withFeatureLock(dir, fn, opts = {}) {
+  const lock = path.join(dir, LOCK_FILE);
+  const key = readCacheKey(lock);
+  if (HELD_LOCKS.has(key)) return fn();
+  const deadline = Date.now() + (Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs());
+  let fd = null;
+  let delay = 5;
+  let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
+  while (fd === null) {
+    try {
+      fd = fs.openSync(lock, "wx");
+    } catch (e) {
+      if (e.code === "EEXIST") {
+        denied = 0;
+        if (lockIsStale(lock)) {
+          try { fs.unlinkSync(lock); } catch { /* another waiter reclaimed it first */ }
+          continue;
+        }
+      } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
+        /* transient on Windows: retry below */
+      } else {
+        return fn(); // no lock possible here (missing or read-only folder, odd file system): unlocked, as before
+      }
+      if (Date.now() >= deadline) return opts.onBusy ? opts.onBusy() : { ok: false, busy: true };
+      sleepSync(delay);
+      delay = Math.min(delay * 2, 50);
+    }
+  }
+  try {
+    fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString() }));
+  } catch { /* the lock holds without its note */ }
+  try { fs.closeSync(fd); } catch { /* ignore */ }
+  HELD_LOCKS.add(key);
+  try {
+    invalidateReadCache(); // anything read before the lock may predate another process's write
+    return fn();
+  } finally {
+    HELD_LOCKS.delete(key);
+    try { fs.unlinkSync(lock); } catch { /* ignore */ }
+  }
+}
+// A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
+// write (impact --reopen, finish --write). An unknown feature runs straight through: fn reports it.
+function featureLocked(fn, when) {
+  const run = function (projectDir, name) {
+    const args = arguments;
+    if (when && !when(args)) return fn.apply(this, args);
+    const f = existingFeature(projectDir, name);
+    if (!f.ok) return fn.apply(this, args);
+    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: () => ({ ok: false, busy: true, error: errs(projectDir, f.slug).featureBusy(f.slug) }) });
+  };
+  Object.defineProperty(run, "name", { value: fn.name });
+  return run;
 }
 
 // JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
@@ -1035,7 +1148,7 @@ function guardCheck(projectDir, filePath, cwd) {
     const st = readJson(statePath(dir)).data;
     const ap = isObj(st) && isObj(st.approvals) ? st.approvals.tasks : null;
     if (!ap) pending.push(name);
-    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && textFingerprint(tasksText, "tasks") !== ap.fingerprint) stale.push(name);
+    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !fingerprintMatches(tasksText, "tasks", ap.fingerprint)) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
   }
@@ -1633,8 +1746,9 @@ function completeTask(projectDir, name, number, evidence) {
     const raw = lines[task.line];
     lines[task.line] = raw.slice(0, task.col) + "x" + raw.slice(task.col + 1);
     updated = lines.join("\n");
-    forgetCached(file); // written in place below: its cached text is dropped
-    fs.writeFileSync(file, updated, "utf8");
+    // Replaced atomically: a reader in another process (status, a hook, a second server) never catches a truncated
+    // tasks.md — it used to refuse a real task as "not found" mid-write.
+    writeFileAtomic(file, updated);
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
@@ -3296,11 +3410,26 @@ function artifactFingerprint(file, phase) {
   return raw == null ? null : textFingerprint(raw, phase);
 }
 // The same fingerprint from text (an approval snapshot is compared by it too).
+// A leading BOM is encoding, not content (like CRLF): an editor or Windows PowerShell 5.1 re-saving an approved
+// artifact as "UTF-8 with BOM" must not read as changed-since-approval (it blocked spec_finish while spec_impact
+// showed nothing changed).
 function textFingerprint(raw, phase) {
-  let text = String(raw).replace(/\r\n/g, "\n");
-  if (phase === "tasks") text = uncheckTasks(text);
-  return require("crypto").createHash("sha1").update(text).digest("hex");
+  return sha1Hex(fingerprintText(raw, phase));
 }
+function fingerprintText(raw, phase) {
+  const text = String(raw).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  return phase === "tasks" ? uncheckTasks(text) : text;
+}
+const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).digest("hex");
+// Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
+// hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
+function fingerprintMatches(raw, phase, stored) {
+  if (raw == null || typeof stored !== "string" || !stored) return false;
+  const text = fingerprintText(raw, phase);
+  return sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored;
+}
+const BOM_CHAR = String.fromCharCode(0xfeff);
+const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
 const uncheckTasks = (text) => text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
@@ -3547,7 +3676,7 @@ function impactReport(projectDir, name, opts = {}) {
     curDesign = readIfExists(path.join(dir, PHASE_FILE.design));
     designBase = designBaseline(dir, snap, appr);
     if (curDesign != null || designBase && designBase.rel) {
-      const designChanged = curDesign != null && textFingerprint(curDesign, phase) !== appr.designFingerprint;
+      const designChanged = curDesign != null && !fingerprintMatches(curDesign, phase, appr.designFingerprint);
       const designMd = { file: PHASE_FILE.design, baseline: !designBase ? "fingerprint-only" : designBase.rel ? "snapshot" : "absent", changed: designChanged };
       if (designBase && designBase.rel) designMd.snapshot = designBase.rel;
       res.designMd = designMd;
@@ -4627,7 +4756,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   maybeRefreshRoadmap(projectDir);
   // New content after an approval of the task breakdown: next_action reports tasks.md as changed-since-approval.
   const appr = state.approvals.tasks;
-  const needsReapproval = !!appr && (!appr.fingerprint || artifactFingerprint(file, "tasks") !== appr.fingerprint);
+  const needsReapproval = !!appr && (!appr.fingerprint || !artifactMatches(file, "tasks", appr.fingerprint));
   const now = parseTasks(activeTasks(updated, tracks));
   const res = {
     ok: true,
@@ -5096,14 +5225,14 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       // A bugfix's design approval signed off bug.md (`file`, see phaseFile) and design.md as it was then
       // (`designFingerprint`) — a design.md created since (a track added) is a change too.
       const bug = path.join(dir, a.file), design = path.join(dir, file);
-      if (fs.existsSync(bug) && artifactFingerprint(bug, ph) !== a.fingerprint) out.push(a.file);
-      if (fs.existsSync(design) && artifactFingerprint(design, ph) !== a.designFingerprint) out.push(file);
+      if (fs.existsSync(bug) && !artifactMatches(bug, ph, a.fingerprint)) out.push(a.file);
+      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint)) out.push(file);
       continue;
     }
     const abs = path.join(dir, file);
     if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
     if (a.fingerprint) {
-      if (artifactFingerprint(abs, ph) !== a.fingerprint) out.push(file);
+      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(file);
     } else if (a.at && ph !== "tasks") {
       try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(file); byDate.push(file); } } catch { /* ignore */ }
     }
@@ -8102,22 +8231,22 @@ module.exports = {
   listFeatures,
   statusFeature,
   nextTask,
-  completeTask,
+  completeTask: featureLocked(completeTask), // read-modify-write of tasks.md + .state.json: under the feature lock (withFeatureLock)
   earsValidate,
   earsFeature,
   traceCheck,
   taskBrief,
   taskBlocks,
   globalConstraints,
-  finishFeature,
+  finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && a[2].write)), // write: the drift baseline in .state.json
   parseTasks,
-  approvePhase,
+  approvePhase: featureLocked(approvePhase),
   readState,
   manageFeature,
   removeFeature,
   archiveFeature,
   renameFeature,
-  addTrack,
+  addTrack: featureLocked(addTrack),
   nextAction,
   specDoctor,
   phasePercent,
@@ -8151,7 +8280,7 @@ module.exports = {
   placeholderReport,
   artifactState,
   extractSection,
-  removeTrack,
+  removeTrack: featureLocked(removeTrack),
 
   existingFeature, // the eval harness resolves its feature like every other operation
 
@@ -8165,9 +8294,9 @@ module.exports = {
   isTestFile,
   implementsTargets,
 
-  appendTasks, // spec_append_tasks / `dev-spec append-tasks` (converge)
+  appendTasks: featureLocked(appendTasks), // spec_append_tasks / `dev-spec append-tasks` (converge)
 
-  impactReport, // spec_impact / `dev-spec impact` (change requests: diff vs the approved snapshot, --reopen)
+  impactReport: featureLocked(impactReport, (a) => !!(a[2] && a[2].reopen === true)), // spec_impact / `dev-spec impact` (change requests: diff vs the approved snapshot, --reopen)
   impactLines,
   metrics, // spec_metrics / `dev-spec metrics` (+ retro.md with write)
   metricsLines,
@@ -8189,6 +8318,7 @@ module.exports = {
   guardCheck,
   designSaveCheck, // the PostToolUse design.md save check
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
+  withFeatureLock, // the cross-process feature lock the mutators hold (tests drive it with a short waitMs)
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

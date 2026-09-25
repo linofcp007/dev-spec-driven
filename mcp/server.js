@@ -294,6 +294,10 @@ function runTool(name, args) {
   if (args.projectDir && RE_DOTDOT.test(String(args.projectDir))) {
     return { ok: false, error: argMessages().dotdot };
   }
+  // …nor reach out of the MACHINE: a network path is refused before any fs call (isNetworkPath).
+  if (args.projectDir && isNetworkPath(args.projectDir)) {
+    return { ok: false, error: argMessages().network(String(args.projectDir).trim()) };
+  }
   const pdir = spec.resolveProjectDir(args.projectDir);
   switch (name) {
     case "spec_init": // guard: boolean → roadmap.json meta.guard (undefined leaves it unchanged; same call as `init --guard`)
@@ -394,6 +398,28 @@ function missingArgs(toolName, args) {
 // engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
 // scanned 0 files, text 123 threw 'text.trim is not a function'. Unknown extra properties are ignored.
 const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
+// A network path in projectDir — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — made this
+// local server open an SMB/WebDAV connection to whatever host a tool call named (on Windows the redirector sends the
+// user's NTLM credentials) and, the engine being synchronous, stop answering every call while an unreachable host
+// timed out. The engine and server make no network calls, so such a projectDir is refused before any fs call — as
+// spec_import / the trace globs already refuse paths outside the project. Allowed: the local extended/device forms of
+// a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`, local to the machine).
+// Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. A default projectDir (the
+// server's cwd, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR) is the user's own config, not an argument, and the CLI is
+// user-driven: neither is restricted. (A drive letter mapped to a share can't be told apart without I/O.)
+function isNetworkPath(p) {
+  const s = String(p).trim();
+  if (!/^[\\/]{2}/.test(s)) return false;
+  let rest = s.slice(2);
+  if (/^[?.][\\/]/.test(rest)) {
+    rest = rest.slice(2);
+    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
+    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
+    rest = rest.slice(4);
+  }
+  const host = rest.split(/[\\/]/)[0].toLowerCase();
+  return host !== "wsl$" && host !== "wsl.localhost";
+}
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const TYPE_CHECK = {
   string: (v) => typeof v === "string",
@@ -406,9 +432,10 @@ const TYPE_CHECK = {
   object: (v) => v !== null && typeof v === "object" && !Array.isArray(v),
   null: (v) => v === null,
 };
-// Validation messages in the project's language (projectDir only when it is a string without '..').
+// Validation messages in the project's language (projectDir only when it is a local string without '..' — reading a
+// network projectDir's roadmap.json for its language would be the very connection runTool refuses).
 function argMessages(args) {
-  const pd = args && typeof args.projectDir === "string" && !RE_DOTDOT.test(args.projectDir) ? args.projectDir : undefined;
+  const pd = args && typeof args.projectDir === "string" && !RE_DOTDOT.test(args.projectDir) && !isNetworkPath(args.projectDir) ? args.projectDir : undefined;
   try {
     return spec.msg(spec.projectLang(spec.resolveProjectDir(pd))).args;
   } catch {

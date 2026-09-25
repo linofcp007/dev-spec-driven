@@ -92,6 +92,8 @@ function handle(raw) {
   if (event === "SessionStart") {
     try {
       const pdir = process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
+      // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
+      if (!isDevSpecProject(pdir)) process.exit(0);
       const list = spec.listFeatures(pdir);
       if (!list.exists || !list.features.length) process.exit(0);
       const m = spec.msg(spec.projectLang(pdir));

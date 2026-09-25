@@ -1931,6 +1931,7 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n) => `Task ${n} not found in tasks.md`,
+      featureBusy: (slug) => `Another dev-spec process is updating '${slug}' right now (.specs/${slug}/.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
@@ -2099,6 +2100,7 @@ const MSG = {
       atLeast: (n) => `≥ ${n}`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
+      network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
     },
     // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
     jsonShape: {
@@ -2660,6 +2662,7 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarefa ${n} não encontrada em tasks.md`,
+      featureBusy: (slug) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (.specs/${slug}/.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
       numberInt: "o número tem de ser um inteiro",
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
@@ -2830,6 +2833,7 @@ const MSG = {
       atLeast: (n) => `≥ ${n}`,
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
+      network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tem uma estrutura inesperada (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
@@ -3345,6 +3349,7 @@ const MSG = {
       tasksMissing: (slug) => `tasks.md no encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md no encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarea ${n} no encontrada en tasks.md`,
+      featureBusy: (slug) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (.specs/${slug}/.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
       numberInt: "el número debe ser un entero",
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
@@ -3515,6 +3520,7 @@ const MSG = {
       atLeast: (n) => `≥ ${n}`,
       notObject: "arguments debe ser un objeto JSON.",
       dotdot: "projectDir no puede contener segmentos de ruta '..'.",
+      network: (dir) => `projectDir debe ser una carpeta local — una ruta de red o de dispositivo (${dir}) se rechaza, para que una llamada a una herramienta nunca apunte este servidor local a otra máquina; abre el proyecto localmente (o inicia el servidor con él como carpeta de trabajo).`,
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tiene una estructura inesperada (${detail}) — corrígelo a mano; no se sobrescribirá.`,

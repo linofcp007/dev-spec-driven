@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 if (!SECTION) {
@@ -1272,6 +1272,41 @@ if (inSection("wp13")) { // 1.13 batch 4 — boolean switches read strictly, CLI
   try { esMd13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.md"), "utf8"); esHtml13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.html"), "utf8"); } catch { /* missing */ }
   ok(/Secciones de escala: /.test(esSt13) && /\| requisitos \|/.test(esMd13) && !/\| requirements \|/.test(esMd13) && /<td>requisitos<\/td>/.test(esHtml13),
     "ES: status section label, and ROADMAP.md / ROADMAP.html show the localized phase (requisitos)");
+}
+
+if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-process feature lock
+  const tmpsIn = (d) => { try { return fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x)); } catch { return ["<unreadable>"]; } };
+  // roadmap --write where ROADMAP.md can't be replaced (a folder): an error, and no ROADMAP.md.<pid>.<ts>.tmp left behind.
+  const t14 = path.join(tmp, "wp14-tmp");
+  run(["init", "--project", t14]);
+  run(["create", "Alpha", "core", "--project", t14]);
+  const specs14 = path.join(t14, ".specs");
+  fs.rmSync(path.join(specs14, "ROADMAP.md"), { force: true });
+  fs.mkdirSync(path.join(specs14, "ROADMAP.md"));
+  const rw14 = run(["roadmap", "--write", "--project", t14]);
+  const bl14 = run(["backlog", "add", "Later", "--project", t14]);
+  ok(rw14.code === 1 && /dev-spec: /.test(rw14.out) && bl14.code === 0 && tmpsIn(specs14).length === 0,
+    "roadmap --write fails cleanly when ROADMAP.md can't be replaced and neither it nor backlog add leaves a .tmp in .specs/ (left: " + tmpsIn(specs14).join(", ") + ")");
+
+  // done while another live process holds the feature's lock: waits DEV_SPEC_LOCK_WAIT_MS, then refuses (exit 1, --json
+  // prints the refusal) with nothing ticked or recorded — MCP's spec_complete_task answers the same.
+  const k14 = path.join(tmp, "wp14-lock");
+  run(["create", "Race", "core", "--project", k14]);
+  const kDir14 = path.join(k14, ".specs", "race");
+  fs.writeFileSync(path.join(kDir14, "tasks.md"), "- [ ] 1. a\n- [ ] 2. b\n");
+  const lock14 = path.join(kDir14, ".lock");
+  fs.writeFileSync(lock14, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() }));
+  const runEnv = (args) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp, DEV_SPEC_LOCK_WAIT_MS: "50" } }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
+  const busy14 = runEnv(["done", "race", "1", "--evidence", "ok", "--project", k14]);
+  const busyJson14 = runEnv(["done", "race", "1", "--json", "--project", k14]);
+  let bj14 = {};
+  try { bj14 = JSON.parse(busyJson14.stdout); } catch { /* stays {} */ }
+  const untouched14 = /- \[ \] 1\./.test(fs.readFileSync(path.join(kDir14, "tasks.md"), "utf8")) && !(JSON.parse(fs.readFileSync(path.join(kDir14, ".state.json"), "utf8")).evidence || {})["1"];
+  fs.rmSync(lock14, { force: true });
+  const free14 = run(["done", "race", "1", "--project", k14]);
+  ok(busy14.code === 1 && /Another dev-spec process is updating 'race' right now \(\.specs\/race\/\.lock\)/.test(busy14.out) && busyJson14.code === 1 && bj14.ok === false && bj14.busy === true &&
+    untouched14 && free14.code === 0 && !fs.existsSync(lock14),
+    "done under another process's feature lock: exit 1 with the busy error (--json prints {ok:false, busy:true}), nothing ticked; once released it ticks and leaves no .lock");
 }
 
 // unknown command errors

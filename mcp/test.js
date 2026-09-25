@@ -17,7 +17,7 @@ const path = require("path");
 // own project folders — so the suite runs every section in a child process of this file (MCP_TEST_SECTION=<name>),
 // each with its own server and temp dir, all at once, and prints their output in order with one total. "main" is
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
 if (!SECTION) {
   const runSection = (name) => new Promise((resolve) => {
@@ -149,7 +149,7 @@ function endRun() {
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;
     const sections = { wp1: sectionWp1, wp2: sectionWp2, wp3: sectionWp3, wp4: sectionWp4, wp5: sectionWp5, wp6: sectionWp6, wp7: sectionWp7, wp8: sectionWp8,
-      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13 };
+      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13, wp14: sectionWp14 };
     await sections[SECTION]();
     return endRun();
   }
@@ -4655,6 +4655,171 @@ function endRun() {
     const mxOk13 = await call("spec_next_task", { name: "billing", batch: true, max: 2, projectDir: n13 });
     ok(mx13.result.isError === true && /max must be an integer ≥ 1 \(got 0\)/.test(payload(mx13).error) && !mxOk13.result.isError,
       "spec_next_task {max: 0} is refused like the CLI's --max 0 (max is an integer ≥ 1)");
+  }
+
+  async function sectionWp14() { // --- 1.13 batch 5: no stray .tmp files, network projectDir refused, SessionStart gate, BOM-only re-save, cross-process feature lock ---
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const errText = (res) => { try { return JSON.parse(res.result.content[0].text).error || ""; } catch { return res.result.content[0].text; } };
+    const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const specJs = path.join(__dirname, "lib", "spec.js");
+    const tmpsIn = (d) => { try { return fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x)); } catch { return ["<unreadable " + d + ">"]; } };
+    const BOM = String.fromCharCode(0xfeff);
+
+    // 1. writeFileAtomic never leaves its temp file behind: with ROADMAP.md a folder the rename AND the plain-write fallback
+    // fail — the best-effort refreshes (mutators, the hook) swallow that, and each call used to leave a full-size
+    // `.specs/ROADMAP.md.<pid>.<ts>.tmp`. A read-only generated ROADMAP.md does the same on Windows.
+    const t14 = path.join(tmp, "proj-wp14-tmp");
+    S.initProject(t14, ["core"], "en");
+    const t14f = S.createFeature(t14, "Alpha", ["core"]);
+    const specs14 = path.join(t14, ".specs");
+    fs.rmSync(path.join(specs14, "ROADMAP.md"), { force: true });
+    fs.mkdirSync(path.join(specs14, "ROADMAP.md"));
+    const bl14a = S.backlog(t14, "add", "Later one");
+    const bl14b = payload(await call("spec_backlog", { action: "add", name: "Later two", projectDir: t14 }));
+    const post14 = (file, dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const hk14 = post14(path.join(t14f.dir, "tasks.md"), t14);
+    let thrown14 = null;
+    try { S.writeRoadmapMd(t14); } catch (e) { thrown14 = e; }
+    const r14 = path.join(tmp, "proj-wp14-ro");
+    S.initProject(r14, ["core"], "en");
+    const r14f = S.createFeature(r14, "Beta", ["core"]);
+    const ro14 = path.join(r14, ".specs", "ROADMAP.md");
+    fs.chmodSync(ro14, 0o444);
+    const blRo14 = S.backlog(r14, "add", "X");
+    const hkRo14 = post14(path.join(r14f.dir, "tasks.md"), r14);
+    fs.chmodSync(ro14, 0o644);
+    ok(bl14a.ok && bl14b.ok && hk14.status === 0 && blRo14.ok && hkRo14.status === 0 && tmpsIn(specs14).length === 0 && tmpsIn(path.join(r14, ".specs")).length === 0 &&
+      (thrown14 === null || !!thrown14.code),
+      "writeFileAtomic: when ROADMAP.md can't be replaced (a folder; read-only on Windows) the backlog mutator, spec_backlog and the hook still succeed and no *.tmp is left in .specs/ (left: " +
+      tmpsIn(specs14).concat(tmpsIn(path.join(r14, ".specs"))).join(", ") + ")");
+
+    // 2. A network projectDir (UNC and its extended forms) is refused before any fs call — the server made SMB connections
+    // to whatever host a call named and hung on an unreachable one. Argument errors don't read it either. Local extended
+    // drive paths and WSL's own hosts are not network paths.
+    const net14 = ["\\\\192.0.2.1\\share\\proj", "//192.0.2.1/share/proj", "\\\\?\\UNC\\192.0.2.1\\share\\proj", "\\\\.\\UNC\\192.0.2.1\\share", "\\\\.\\pipe\\dev-spec", " \\\\192.0.2.1\\share"];
+    const t0net14 = Date.now();
+    const netRes14 = [];
+    for (const pd of net14) netRes14.push(await call("spec_list", { projectDir: pd }));
+    const netArg14 = await call("spec_create", { name: 5, projectDir: net14[0] });
+    const netMs14 = Date.now() - t0net14;
+    const wsl14 = [await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl.localhost\\Ubuntu\\home\\me\\proj" }),
+      await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl$\\Ubuntu\\home\\me\\proj" })];
+    const ext14 = process.platform === "win32" ? payload(await call("spec_list", { projectDir: "\\\\?\\" + t14 })) : { exists: true, features: [{ name: "alpha" }] };
+    ok(netRes14.every((r) => r.result.isError && /projectDir must be a local folder — a network or device path/.test(errText(r))) &&
+      netArg14.result.isError && /name must be a string/.test(errText(netArg14)) && netMs14 < 5000 &&
+      wsl14.every((r) => !r.result.isError) && ext14.exists === true && ext14.features.some((f) => f.name === "alpha"),
+      "MCP refuses a network projectDir (\\\\host\\share, //host/share, \\\\?\\UNC\\…, \\\\.\\UNC\\…, device paths) before any fs call, argument errors don't touch it (" + netMs14 +
+      " ms); \\\\wsl$ / \\\\wsl.localhost and \\\\?\\C:\\… stay accepted (got " +
+      JSON.stringify([netRes14.map((r) => errText(r).slice(0, 60)), errText(netArg14), wsl14.map((r) => !!r.result.isError), ext14.exists, (ext14.features || []).length]) + ")");
+
+    // 3. SessionStart stays silent in a project whose .specs/ belongs to another tool (the PostToolUse gate), and speaks once
+    // dev-spec owns it.
+    const f14 = path.join(tmp, "proj-wp14-foreign");
+    ["auth", "billing"].forEach((n) => {
+      const d = path.join(f14, ".specs", n);
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, "spec.md"), "# Spec\n");
+      fs.writeFileSync(path.join(d, "tasks.md"), "- [x] 1. done thing\n- [ ] 2. open thing\n");
+    });
+    const sess14 = (dir, source) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir, source }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const fStart14 = sess14(f14, "startup"), fCompact14 = sess14(f14, "compact");
+    const fList14 = fs.readdirSync(path.join(f14, ".specs")).sort().join();
+    fs.writeFileSync(path.join(f14, ".specs", "auth", "classification.md"), "# Classification\n");
+    const fOwned14 = sess14(f14, "startup");
+    ok(fStart14.status === 0 && fStart14.stdout === "" && fCompact14.status === 0 && fCompact14.stdout === "" && fList14 === "auth,billing" &&
+      /features in \.specs/.test(fOwned14.stdout) && /auth \[core\]/.test(fOwned14.stdout),
+      "SessionStart: a foreign .specs/ (no roadmap.json, steering, generated ROADMAP.md, .state.json or classification.md) gets no status block and nothing written; a dev-spec feature brings it back");
+
+    // 4. A BOM-only re-save (Windows PowerShell 5.1, 'UTF-8 with BOM' editors) is not a change after approval — it blocked
+    // spec_finish while spec_impact showed nothing changed. An approval recorded over a BOM-prefixed file still matches.
+    const b14 = path.join(tmp, "proj-wp14-bom");
+    S.initProject(b14, ["core"], "en");
+    const b14f = S.createFeature(b14, "Widget", ["core"]);
+    const req14 = path.join(b14f.dir, "requirements.md");
+    const tasks14 = path.join(b14f.dir, "tasks.md");
+    S.approvePhase(b14, "widget", "requirements", "me", { force: true });
+    S.approvePhase(b14, "widget", "tasks", "me", { force: true });
+    const orig14 = fs.readFileSync(req14, "utf8");
+    fs.writeFileSync(req14, BOM + orig14.replace(/\n/g, "\r\n"));
+    fs.writeFileSync(tasks14, BOM + fs.readFileSync(tasks14, "utf8"));
+    const changedOf14 = () => ({ na: S.nextAction(b14, "widget").changedSinceApproval.join(), doc: S.specDoctor(b14, "widget").checks.some((c) => c.id === "changed-since-approval"),
+      fin: S.finishFeature(b14, "widget").blockers.some((b) => /changed after their approval/.test(b)), imp: S.impactReport(b14, "widget", { phase: "requirements" }) });
+    const bom14 = changedOf14();
+    const st14p = path.join(b14f.dir, ".state.json");
+    const st14 = JSON.parse(fs.readFileSync(st14p, "utf8"));
+    st14.approvals.requirements.fingerprint = require("crypto").createHash("sha1").update(BOM + orig14).digest("hex"); // as recorded over a BOM file before
+    fs.writeFileSync(st14p, JSON.stringify(st14, null, 2));
+    const legacyBom14 = S.nextAction(b14, "widget").changedSinceApproval.join();
+    fs.writeFileSync(req14, orig14);
+    const legacyNoBom14 = S.nextAction(b14, "widget").changedSinceApproval.join();
+    fs.appendFileSync(req14, "\n## Assumptions\n- Admins are logged in.\n");
+    const edited14 = S.nextAction(b14, "widget").changedSinceApproval.join();
+    ok(bom14.na === "" && !bom14.doc && !bom14.fin && bom14.imp.changed === false && bom14.imp.baseline === "snapshot" &&
+      legacyBom14 === "" && legacyNoBom14 === "" && edited14 === "requirements.md",
+      "a BOM (+CRLF) re-save of approved requirements.md / tasks.md is not changed-since-approval (next_action, doctor, finish, impact); an older BOM fingerprint still matches; a real edit is still flagged (got " +
+      JSON.stringify([bom14.na, bom14.doc, bom14.fin, bom14.imp.changed, legacyBom14, legacyNoBom14, edited14]) + ")");
+
+    // 5. Cross-process feature lock: two processes completing tasks of one feature at the same moment lost ticks and
+    // evidence while both answered ok (last writer won). Now every call that answers ok leaves its tick + evidence.
+    const k14 = path.join(tmp, "proj-wp14-lock");
+    S.initProject(k14, ["core"], "en");
+    const k14f = S.createFeature(k14, "Race", ["core"]);
+    const N14 = 16;
+    fs.writeFileSync(path.join(k14f.dir, "tasks.md"), Array.from({ length: N14 }, (_, i) => `- [ ] ${i + 1}. task ${i + 1}`).join("\n") + "\n");
+    const racer14 = (first, startAt) => new Promise((resolve) => {
+      const code = `const S=require(${JSON.stringify(specJs)});` +
+        `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,Math.max(0,${startAt}-Date.now()));` +
+        `const out=[];for(let n=${first};n<=${N14};n+=2)out.push(S.completeTask(${JSON.stringify(k14)},"race",n,{command:"npm test",exitCode:0}).ok);` +
+        `process.stdout.write(JSON.stringify(out));`;
+      let out = "";
+      const kid = spawn(process.execPath, ["-e", code], { stdio: ["ignore", "pipe", "inherit"] });
+      kid.stdout.on("data", (d) => (out += d));
+      kid.on("close", () => { try { resolve(JSON.parse(out)); } catch { resolve([]); } });
+    });
+    const start14 = Date.now() + 700;
+    const [odd14, even14] = await Promise.all([racer14(1, start14), racer14(2, start14)]);
+    const kTasks14 = fs.readFileSync(path.join(k14f.dir, "tasks.md"), "utf8");
+    const kEv14 = Object.keys(JSON.parse(fs.readFileSync(path.join(k14f.dir, ".state.json"), "utf8")).evidence || {});
+    ok(odd14.length === N14 / 2 && even14.length === N14 / 2 && odd14.concat(even14).every(Boolean) && (kTasks14.match(/- \[x\]/g) || []).length === N14 && kEv14.length === N14 &&
+      !fs.existsSync(path.join(k14f.dir, ".lock")) && tmpsIn(k14f.dir).length === 0 && tmpsIn(path.join(k14, ".specs")).length === 0,
+      "two processes completing tasks of one feature at once: every ok call's tick and evidence is kept (" + (kTasks14.match(/- \[x\]/g) || []).length + "/" + N14 + " ticked, " +
+      kEv14.length + " evidence records), no .lock or .tmp left");
+
+    // A lock held by a live process makes a mutator wait, then answer a localized "busy" error with nothing changed; a
+    // lock left by a dead process (or an old one from another host) is reclaimed; the lock is re-entrant in one process.
+    const p14 = path.join(tmp, "proj-wp14-busy");
+    S.initProject(p14, ["core"], "pt");
+    const p14f = S.createFeature(p14, "Ocupada", ["core"]);
+    const pTasks14 = path.join(p14f.dir, "tasks.md");
+    fs.writeFileSync(pTasks14, "- [ ] 1. a\n- [ ] 2. b\n- [ ] 3. c\n");
+    const lock14 = path.join(p14f.dir, ".lock");
+    fs.writeFileSync(lock14, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() }));
+    const busyKid14 = spawnSync(process.execPath, ["-e", `const S=require(${JSON.stringify(specJs)});process.stdout.write(JSON.stringify(S.completeTask(${JSON.stringify(p14)},"ocupada",1,{command:"npm test",exitCode:0})))`],
+      { encoding: "utf8", env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: "60" } });
+    let busy14 = {};
+    try { busy14 = JSON.parse(busyKid14.stdout); } catch { /* stays {} */ }
+    const pState14 = () => JSON.parse(fs.readFileSync(path.join(p14f.dir, ".state.json"), "utf8"));
+    const busyUntouched14 = /- \[ \] 1\./.test(fs.readFileSync(pTasks14, "utf8")) && !(pState14().evidence || {})["1"] && fs.existsSync(lock14);
+    const ownPidFile14 = S.withFeatureLock(p14f.dir, () => "outer", { waitMs: 30, onBusy: () => "busy" });
+    const deadPid14 = Number(spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" }).stdout);
+    fs.writeFileSync(lock14, JSON.stringify({ pid: deadPid14, host: os.hostname(), at: new Date().toISOString() }));
+    const dead14 = S.completeTask(p14, "ocupada", 1, { command: "npm test", exitCode: 0 });
+    const deadGone14 = !fs.existsSync(lock14);
+    fs.writeFileSync(lock14, JSON.stringify({ pid: 1, host: "some-other-host", at: "2020-01-01T00:00:00.000Z" }));
+    const freshOther14 = S.withFeatureLock(p14f.dir, () => "ran", { waitMs: 40, onBusy: () => "busy" });
+    const old14 = new Date(Date.now() - 3 * 60 * 1000);
+    fs.utimesSync(lock14, old14, old14);
+    const oldOther14 = S.completeTask(p14, "ocupada", 2);
+    const oldGone14 = !fs.existsSync(lock14);
+    const nested14 = S.withFeatureLock(p14f.dir, () => S.withFeatureLock(p14f.dir, () => S.completeTask(p14, "ocupada", 3).ok, { waitMs: 30, onBusy: () => "busy" }), { waitMs: 30, onBusy: () => "busy" });
+    ok(busy14.ok === false && busy14.busy === true && /Outro processo dev-spec está a atualizar 'ocupada'/.test(busy14.error || "") && busyUntouched14 && ownPidFile14 === "busy" &&
+      dead14.ok && deadGone14 && freshOther14 === "busy" && oldOther14.ok && oldGone14 && nested14 === true && !fs.existsSync(lock14),
+      "feature lock: a live holder → the mutator waits DEV_SPEC_LOCK_WAIT_MS, then a localized busy error (PT) with nothing ticked or recorded; a dead holder's lock and an old foreign one are reclaimed; a fresh foreign one (or one naming this pid that this process does not hold) is respected; re-entrant (got " +
+      JSON.stringify([busy14.ok, busy14.busy, (busy14.error || "").slice(0, 40), busyUntouched14, ownPidFile14, dead14.ok, deadGone14, freshOther14, oldOther14.ok, oldGone14, nested14]) + ")");
+    const l14 = ["en", "pt", "es"].map((l) => [S.msg(l).args.network("\\\\h\\s"), S.msg(l).err.featureBusy("f")]);
+    ok(l14.every(([n, b]) => typeof n === "string" && n.includes("\\\\h\\s") && typeof b === "string" && b.includes(".specs/f/.lock")) &&
+      /pasta local/.test(l14[1][0]) && /carpeta local/.test(l14[2][0]) && /Outro processo dev-spec/.test(l14[1][1]) && /Otro proceso de dev-spec/.test(l14[2][1]),
+      "the network-projectDir refusal and the busy-lock error exist in EN, PT and ES");
   }
 
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples
