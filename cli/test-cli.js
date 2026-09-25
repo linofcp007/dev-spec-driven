@@ -501,6 +501,15 @@ let frmJ = null;
 try { frmJ = JSON.parse(run(["feature", "remove", "doomed", "--json", "--project", w4]).out); } catch { /* invalid JSON */ }
 ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requirements\.md/.test(frm.out) && /--yes/.test(frm.out) &&
   frmJ && frmJ.needsConfirm === true && fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove without --yes deletes nothing, lists what it would delete, exits 1");
+// No hidden aliases: `feature delete` and `backlog remove` are refused like the MCP enums (spec_feature / spec_backlog)
+// refuse them — exit 1, nothing deleted.
+run(["backlog", "add", "Zeta", "--project", w4]);
+const fdel = run(["feature", "delete", "doomed", "--yes", "--project", w4]);
+const brem = run(["backlog", "remove", "Zeta", "--project", w4]);
+ok(fdel.code === 1 && /remove \| archive \| rename \| restore/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
+  brem.code === 1 && /add, rm, list/.test(brem.out) && /Zeta/.test(run(["backlog", "--project", w4]).out),
+  "feature delete / backlog remove are not aliases: exit 1 and change nothing, as over MCP (got " + JSON.stringify([fdel.code, brem.code]) + ")");
+run(["backlog", "rm", "Zeta", "--project", w4]);
 const fry = run(["feature", "remove", "doomed", "--yes", "--project", w4]);
 ok(fry.code === 0 && /Removed 'doomed'/.test(fry.out) && !fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove --yes deletes it");
 // A broken roadmap.json: the preview reports the roadmap error instead of promising a delete --yes can't do.

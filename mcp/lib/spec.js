@@ -1300,7 +1300,8 @@ function guardEnabled(projectDir) {
 // The guard's decision for ONE code edit (hooks/guard-hook.js). Cheap by design — it runs before every Write/Edit
 // while the guard is on: roadmap.json plus each feature's .state.json and tasks.md, never a repo walk.
 //   allow: guard off · the file is outside the project · inside .specs/ · not code (GUARD_CODE_EXT: the scanner's CODE_EXT
-//          plus the source languages it doesn't inventory — C++ .cc/.hpp, .mts/.cts, Scala, Dart, Elixir, shell, SQL…;
+//          plus the source languages it doesn't inventory — C++ .cc/.hpp, .mts/.cts, Scala, Dart, Elixir, shell and
+//          Windows batch, SQL, Kotlin script, CUDA, Fortran, shaders, code-bearing templates…;
 //          notebooks count as code — NotebookEdit only edits them. Docs, config, markup and styles are not code) ·
 //          some non-archived feature has an approved tasks phase and open
 //          tasks (a FORCED approval still counts, with a `note` saying so);
@@ -4169,7 +4170,9 @@ function impactLines(r) {
 // Legacy state never throws: what can't be derived is null.
 // ---------------------------------------------------------------------------
 
-const METRIC_PHASES = ["classification", "requirements", "design", "test-plan", "eval-plan", "tasks"];
+// Every gated planning phase in PHASES order — Phase 4 ('tests', the hard gate since 1.13) included; a phase a feature
+// doesn't have (or never approved) is null, so a core-only feature is unaffected.
+const METRIC_PHASES = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks"];
 const timeOf = (v) => { if (typeof v !== "string" && typeof v !== "number") return null; const t = new Date(v).getTime(); return Number.isFinite(t) && t > 0 ? t : null; };
 const round1 = (x) => Math.round(x * 10) / 10;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -4619,10 +4622,11 @@ function removePreview(projectDir, name) {
   };
 }
 
+// The actions are spec_feature's enum, exactly — no hidden alias (a CLI-only `feature delete` used to remove a folder
+// the MCP tool refused to, and the help never named it).
 function manageFeature(projectDir, action, name, arg, opts = {}) {
   switch (String(action || "").trim().toLowerCase()) {
     case "remove":
-    case "delete":
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
       if (opts.confirm !== true) return removePreview(projectDir, name);
@@ -5842,7 +5846,10 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         const planned = extractTestIds(planIdText(read("test-plan.md") || "")).size;
         const tr = planned ? traceCheck(projectDir, slug, { code: true }) : null;
         const missing = tr && tr.ok && tr.code ? tr.code.plannedNotInCode : [];
-        need("tests-in-code", planned > 0 && !missing.length, planned ? G.testsNotInCode(missing.join(", ")) : G.noPlannedTests);
+        // Once tasks are ticked (executing / complete) the code exists: the refusal is worded as next_action's sign-off
+        // (name each existing test's T-ID), never "write each failing test".
+        const started = missing.length && ["executing", "complete"].includes(detectPhase(dir, tracks));
+        need("tests-in-code", planned > 0 && !missing.length, planned ? (started ? G.testsNotInCodeSignOff : G.testsNotInCode)(missing.join(", ")) : G.noPlannedTests);
       }
       if (ai) {
         // The harness runs this feature's eval sets: evals/golden.json must be a set of its own, not the scaffold's sample.
@@ -6344,8 +6351,9 @@ function removeBacklogUnlocked(projectDir, nm) {
 function backlog(projectDir, action, name, note) {
   const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
   if (a === "add") return addBacklog(projectDir, name, note);
-  if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
-  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.
+  if (a === "rm") return removeBacklog(projectDir, name);
+  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list, and
+  // a CLI-only `backlog remove X` alias removed what spec_backlog {action: "remove"} refused.
   if (a && a !== "list") {
     const A = i18n.msg(projectLang(projectDir)).args;
     return { ok: false, error: A.invalid(A.item("action", A.oneOf("add, rm, list"), JSON.stringify(String(action)))) };
@@ -7363,12 +7371,27 @@ function baselineDrift(root, rootReal, fin) {
 const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
 const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
 // What guard mode treats as code (guardCheck). Broader than CODE_EXT on purpose: CODE_EXT is the brownfield scanner's
-// inventory (scan/coverage percentages), while the guard promises a prompt for ANY source file outside .specs/ — reusing
-// CODE_EXT waved .cc/.hpp, .mts/.cts, .sh/.ps1, .sql, Scala, Dart, Elixir… through silently as "not code".
+// inventory (scan/coverage percentages), while the guard prompts for source files in a broad list of languages outside
+// .specs/ — reusing CODE_EXT waved .cc/.hpp, .mts/.cts, .sh/.ps1, .sql, Scala, Dart, Elixir… through silently as "not
+// code", and a shorter list still did for Windows batch (.bat/.cmd), .ksh/.fish, Kotlin script, CoffeeScript, CUDA,
+// Fortran, Pascal, assembly, HDLs, shaders, Elm, Tcl, Nix, Crystal and code-bearing templates (.erb, .jsp, .razor…).
+// It is an allow-list: docs, config, data, markup and styles (.md, .json, .yaml, .html, .css…) are never code.
 const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT, ".ipynb",
   ".mts", ".cts", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".m", ".mm", ".scala", ".sc", ".dart", ".ex", ".exs", ".erl", ".hrl",
   ".hs", ".clj", ".cljs", ".cljc", ".lua", ".pl", ".pm", ".r", ".jl", ".zig", ".nim", ".groovy", ".fs", ".fsx", ".fsi", ".vb", ".ml", ".mli",
-  ".sol", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".sql"]);
+  ".sol", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".sql",
+  // shells and scripting (Windows batch included — the platform this plugin must stay safe on)
+  ".bat", ".cmd", ".ksh", ".fish", ".csh", ".tcsh", ".awk", ".vbs", ".tcl", ".raku", ".rakumod",
+  // JVM / .NET / web-compiled languages
+  ".kts", ".coffee", ".elm", ".purs", ".re", ".rei", ".hx", ".gleam", ".cr", ".nix", ".vala", ".gd", ".mojo", ".odin", ".pyi", ".pyx",
+  // Lisps and other functional languages
+  ".rkt", ".scm", ".lisp", ".el",
+  // systems, scientific, legacy
+  ".d", ".cu", ".cuh", ".f", ".f90", ".f95", ".f03", ".pas", ".dpr", ".asm", ".s", ".adb", ".ads", ".cob", ".cbl", ".bas", ".ino",
+  // hardware description and shaders
+  ".v", ".sv", ".svh", ".vhd", ".vhdl", ".glsl", ".hlsl", ".wgsl", ".vert", ".frag", ".metal",
+  // templates that carry code (not plain markup)
+  ".astro", ".razor", ".cshtml", ".jsp", ".erb"]);
 const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names, test/entrypoint hints)
 const SCAN_READ_BYTES = 200000;
 const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
@@ -8906,7 +8929,10 @@ function clarify(projectDir, name) {
   // missing structural sections (matched EN/PT/ES)
   if (!RE_EDGE_CASES.test(reqs)) add(q.edgeCases);
   if (!RE_OUT_OF_SCOPE.test(reqs)) add(q.outOfScope);
-  if (!RE_NFR.test(reqs)) add(q.nfr);
+  // A bugfix's requirements (EN/PT/ES template) have no NFR section by design — the fix restores behaviour that already
+  // existed — so asking for one kept every filled bugfix at needs-clarification forever. A feature is still asked.
+  const bugfix = (readJson(statePath(dir)).data || {}).kind === "bugfix";
+  if (!bugfix && !RE_NFR.test(reqs)) add(q.nfr);
   // Unwanted-behaviour criteria: IF…THEN / SE…ENTÃO / SI…ENTONCES (CUANDO is WHEN, not IF) — per CRITERION, so an
   // IF on one line and its THEN on the next (wrapped EARS) count.
   const RE_IF_THEN = /(?<![\p{L}\p{N}_])(IF|SE|SI)(?![\p{L}\p{N}_]).{0,400}?(?<![\p{L}\p{N}_])(THEN|ENTÃO|ENTAO|ENTONCES)(?![\p{L}\p{N}_])/iu;

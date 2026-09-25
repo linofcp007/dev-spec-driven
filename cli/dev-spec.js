@@ -494,7 +494,7 @@ function main() {
       const T = projectText();
       return out(r, (r) => {
         if (action === "add") console.log(T.backlogAdded(String(pos[1]).trim()));
-        else if (action === "rm" || action === "remove") console.log(T.backlogRemoved(String(pos[1]).trim()));
+        else if (action === "rm") console.log(T.backlogRemoved(String(pos[1]).trim()));
         console.log(T.backlogHead(r.backlog.length));
         r.backlog.forEach((b) => console.log("  - " + b.name + (b.note ? " — " + b.note : "")));
       });

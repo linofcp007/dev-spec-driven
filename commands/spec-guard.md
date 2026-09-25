@@ -17,8 +17,10 @@ to look (it scaffolds any missing core steering file).
 **What it does (Claude Code only).** The plugin's PreToolUse hook runs before Write / Edit / MultiEdit /
 NotebookEdit. While the guard is on, an edit to a **code file outside `.specs/`** gets a permission prompt
 ("ask") with a localized reason **unless some feature has an approved tasks phase and open tasks** — then it
-is silent. "Code" means any source file — every language the scanner inventories plus the ones it doesn't
-(`.mts`/`.cts`, C++ `.cc`/`.hpp`, Scala, Dart, F#, Elixir, Lua, shell, PowerShell, SQL, notebooks…). It is
+is silent. "Code" means a source file in a broad list of languages — every language the scanner inventories plus
+many it doesn't (`.mts`/`.cts`, C++ `.cc`/`.hpp`, Scala, Dart, F#, Elixir, Lua, shell including Windows
+`.bat`/`.cmd`, PowerShell, SQL, Kotlin script, CUDA, Fortran, HDL, shaders, code-bearing templates such as
+`.erb`/`.razor`, notebooks…). It is
 silent too for spec files, non-code files (docs, config, markup, styles), files outside the project, and
 whenever the guard is off. An approval recorded with `--force` still counts, with a note saying so. A tasks approval whose
 tasks.md changed afterwards (tasks appended with `spec_append_tasks` or edited by hand — ticking boxes doesn't

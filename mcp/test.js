@@ -868,6 +868,25 @@ function endRun() {
   const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
   ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
     "bugfix scaffolds are localized (PT)");
+  // clarify asks what the scaffold holds: a filled bugfix template (EN/PT/ES — no NFR section by design) is clear; a
+  // feature's requirements still get the NFR question.
+  {
+    const cq = path.join(tmp, "proj-clarify-bugfix");
+    const filled = {};
+    const verdicts = ["en", "pt", "es"].map((lg) => {
+      const b = S.createFeature(cq, "Login crash " + lg, undefined, "crash", undefined, lg, "bugfix");
+      const rq = path.join(b.dir, "requirements.md");
+      fs.writeFileSync(rq, (filled[lg] = fs.readFileSync(rq, "utf8").replace(/\[[^\]\n]+\]/g, "the session cookie is kept on login")));
+      return S.clarify(cq, b.slug);
+    });
+    // the same text in a FEATURE's requirements.md: the feature is asked for NFRs
+    const feat = S.createFeature(cq, "Reports", ["core"], "reports", undefined, "en");
+    fs.writeFileSync(path.join(feat.dir, "requirements.md"), filled.en);
+    const fq = S.clarify(cq, feat.slug);
+    ok(verdicts.every((v) => v.ok && v.verdict === "clear" && v.gapCount === 0) && fq.questions.some((x) => /non-functional/.test(x)),
+      "clarify: a filled bugfix template (EN/PT/ES) is 'clear' — no NFR question for a bugfix; a feature is still asked for NFRs (got " +
+      JSON.stringify(verdicts.map((v) => v.questions)) + ")");
+  }
 
   // --- v1.12 final-review regressions ---
   fs.writeFileSync(path.join(vf.dir, "tasks.md"), [
@@ -2333,8 +2352,13 @@ function endRun() {
       "- [ ] 2. [US1] Polish it\n  - _Requirements: US-1.AC-1_\n");
     ["classification", "requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w5, f6l.slug, p));
     const n6l0 = S.nextAction(w5, f6l.slug); // nothing ticked yet: test-first wording
+    const ap6l0 = S.approvePhase(w5, f6l.slug, "tests"); // refused: tests-in-code, worded test-first
     S.completeTask(w5, f6l.slug, 1, "built under 1.12");
     const n6l1 = S.nextAction(w5, f6l.slug); // executing, no test names the T-IDs: gate refuses → sign-off + what it checks
+    const ap6l1 = S.approvePhase(w5, f6l.slug, "tests"); // refused too — worded as the sign-off, like next_action
+    fs.writeFileSync(path.join(f6l.dir, ".state.json"), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(f6l.dir, ".state.json"), "utf8")), lang: "pt" }));
+    const ap6l1pt = S.approvePhase(w5, f6l.slug, "tests");
+    fs.writeFileSync(path.join(f6l.dir, ".state.json"), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(f6l.dir, ".state.json"), "utf8")), lang: "en" }));
     S.completeTask(w5, f6l.slug, 2, "polished");
     write5(f6l, "tests/unit/order.test.js", ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} builds it", () => {});`).join("\n") + "\n");
     const n6l2 = S.nextAction(w5, f6l.slug); // complete, tests named: approve (sign-off)
@@ -2347,6 +2371,12 @@ function endRun() {
       /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")) && /línea base \(\/eval x --set-baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
       "next_action on an executing / complete +tdd feature with `tests` pending: a sign-off for the existing tests (T-IDs in test names, what the gate checks) — never 'write failing tests first, no implementation code' (got " +
       JSON.stringify([n6l0.step, n6l1.phase, n6l1.step, n6l2.phase, n6l2.step, n6l2.recommendation.slice(0, 40)]) + ")");
+    const tic = (r) => ((r.checks || []).find((c) => c.id === "tests-in-code") || {}).detail || "";
+    ok(ap6l0.refused && /write each failing test/.test(tic(ap6l0)) &&
+      ap6l1.refused && /implementation has already started/.test(tic(ap6l1)) && /T-ID in the test's name/.test(tic(ap6l1)) && !/failing/.test(tic(ap6l1)) && /T-01/.test(tic(ap6l1)) &&
+      /a implementação já começou/.test(tic(ap6l1pt)) && !/a falhar/.test(tic(ap6l1pt)) &&
+      /la implementación ya empezó/.test(S.msg("es").gates.testsNotInCodeSignOff("T-01")) && !/que falla/.test(S.msg("es").gates.testsNotInCodeSignOff("T-01")),
+      "approve tests on an executing/complete feature: the tests-in-code refusal is the sign-off wording (EN/PT/ES) — 'write each failing test' only before any task is ticked (got " + JSON.stringify([tic(ap6l0), tic(ap6l1), tic(ap6l1pt)]) + ")");
     // +ai: the tests gate needs an eval set of the feature's own — the scaffold's sample golden.json is refused (eval-sets).
     const f6a = S.createFeature(w5, "Order ai", ["ai"], undefined, undefined, "pt");
     const aiSample = S.approvePhase(w5, f6a.slug, "tests");
@@ -3169,6 +3199,10 @@ function endRun() {
     ok(typeof st8().createdAt === "string" && /^\d{4}-\d\d-\d\dT/.test(st8().createdAt) && Math.abs(Date.now() - Date.parse(st8().createdAt)) < 600000,
       "createFeature stores createdAt (ISO) in the new .state.json");
     ok(["spec_impact", "spec_metrics"].every((t) => list.result.tools.some((x) => x.name === t)), "tools/list advertises spec_impact and spec_metrics");
+    const mtDesc = (list.result.tools.find((t) => t.name === "spec_metrics") || {}).description || "";
+    ok(/finished \(the earliest of the first execution approval and the finish spec_finish \{write\}/.test(mtDesc) && !/finished \(execution approved\)/.test(mtDesc) &&
+      /test-plan\/eval-plan → tests → tasks/.test(mtDesc),
+      "spec_metrics' description says what the engine does: finished = earliest of the execution approval and the spec_finish {write} record; Phase 4 'tests' is a measured phase");
 
     // Fixture — CRLF requirements and tasks (Windows editors), a test plan and a design that cite the ACs.
     const reqA = ["# Feature: Drafts", "", "## Summary", "Save drafts.", "", "### US-1 (P1 — MVP): Save drafts", "", "#### Acceptance Criteria (EARS)",
@@ -3397,13 +3431,28 @@ function endRun() {
     const lt8 = m8.leadTime;
     ok(m8.ok && m8.scope === "feature" && m8.createdAt === T8("01") && m8.createdAtApproximate === false && lt8.requirements.hours === 12 && lt8.design.hours === 48 && lt8.tasks.hours === 72 &&
       lt8["test-plan"] === null && lt8.complete.hours === 96 && !lt8.complete.approximate && lt8.finished.hours === 120,
-      "spec_metrics: createdAt from state; lead time (hours) to each phase's FIRST approval, to complete (latest evidence of the done tasks) and to finished (execution approved)");
+      "spec_metrics: createdAt from state; lead time (hours) to each phase's FIRST approval, to complete (latest evidence of the done tasks) and to finished (the first execution approval or the spec_finish {write} record, whichever is earlier)");
     ok(m8.approvalsTotal === 5 && m8.rework === 1 && m8.reworkByPhase.requirements === 1 && m8.forcedApprovals === 1 && m8.changeRequests === 2 && m8.reopenedTasks === 3 &&
       m8.reopenedTasksUnique === 2 && m8.evidence.runs === 2 && m8.evidence.passing === 1 && m8.evidence.passRate === 50 && m8.tasks.done === 2 && m8.tasks.total === 2 && m8.openClarifications === 1,
       "spec_metrics: rework (re-approvals), forced approvals, change requests + reopened tasks, evidence pass rate from the run history, tasks, open clarification markers");
     ok(JSON.stringify(m8) === JSON.stringify(S.metrics(w8m, "metered")) && S.metricsLines(m8).join("\n").includes("lead time from creation: requirements 12h · design 2d · tasks 3d · complete 4d · finished 5d") &&
       S.metricsLines(m8).includes("  approvals: 5 · rework: 1 (requirements 1) · forced: 1") && S.metricsLines(m8).includes("  evidence: 50% of runs passing (1/2)"),
       "MCP spec_metrics = the engine call; metricsLines formats durations (h/d) and counts");
+    // Phase 4 ('tests', the hard gate) is measured like every other gated phase: lead time, CLI line, retro row, project key.
+    const w8t = path.join(tmp, "proj-wp8m-tests"); // its own project: w8m's project view counts exactly two features
+    const tp8 = S.createFeature(w8t, "Tested", ["tdd"]);
+    fs.writeFileSync(path.join(tp8.dir, ".state.json"), JSON.stringify({ lang: "en", tracks: ["core", "tdd"], createdAt: T8("01"),
+      approvals: { "test-plan": { at: T8("02"), by: "a" }, tests: { at: T8("03"), by: "a" }, tasks: { at: T8("04"), by: "a" } },
+      approvalHistory: [{ phase: "test-plan", at: T8("02"), by: "a" }, { phase: "tests", at: T8("03"), by: "a" }, { phase: "tests", at: T8("03", "06"), by: "a" }, { phase: "tasks", at: T8("04"), by: "a" }] }));
+    const tm8 = S.metrics(w8t, "tested");
+    const tl8 = S.metricsLines(tm8).join("\n");
+    const tr8 = S.msg("en").metrics.retro(tm8, { dur: (h) => h + "h", today: "2026-01-09" });
+    const tpt8 = S.msg("pt").metrics.retro(tm8, { dur: (h) => h + "h", today: "2026-01-09" });
+    const tp8all = S.metrics(w8t);
+    ok(tm8.leadTime.tests && tm8.leadTime.tests.hours === 48 && tm8.reworkByPhase.tests === 1 && /test plan 24h · tests 2d · tasks 3d/.test(tl8) && /rework: 1 \(tests 1\)/.test(tl8) &&
+      /\| Lead time → tests \| 48h \|/.test(tr8) && /testes/.test(tpt8) && Object.keys(tp8all.aggregates.leadTimeHours).join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks,complete,finished" &&
+      m8.leadTime.tests === null,
+      "spec_metrics measures Phase 4 ('tests'): leadTime.tests, the CLI line, retro.md's 'Lead time → tests' row (PT 'testes'), rework by phase and the project's leadTimeHours key; null where never approved (got " + tl8 + ")");
     const old8 = S.createFeature(w8m, "Oldie", ["core"]);
     fs.writeFileSync(path.join(old8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: { requirements: { at: "2026-02-01T00:00:00.000Z", by: "x" }, design: { at: "2026-02-03T00:00:00.000Z", by: "x", forced: true } } }));
     const om8 = S.metrics(w8m, "oldie");
@@ -5272,12 +5321,17 @@ function endRun() {
     S.initProject(g13, ["core"], undefined, { guard: true });
     S.createFeature(g13, "Billing", ["core"]);
     const code13 = ["src/a.ts", "src/a.mts", "src/a.cts", "src/a.cc", "src/a.cxx", "src/a.hpp", "src/a.hh", "src/a.scala", "src/a.dart", "src/a.fs", "src/a.groovy",
-      "lib/a.ex", "lib/a.exs", "src/a.lua", "src/a.m", "scripts/a.sh", "scripts/a.ps1", "db/a.sql"];
-    const text13 = ["README.md", "config/app.json", "web/site.css", "web/index.html", "docs/notes.txt", ".env"];
+      "lib/a.ex", "lib/a.exs", "src/a.lua", "src/a.m", "scripts/a.sh", "scripts/a.ps1", "db/a.sql",
+      // Windows batch and the other shells, Kotlin script, CoffeeScript, CUDA, Fortran, Pascal, assembly, Elm, Tcl, Nix,
+      // Crystal, HDL, shaders and code-bearing templates — they used to pass silently as "not code"
+      "scripts/a.bat", "scripts/A.CMD", "scripts/a.ksh", "scripts/a.fish", "build.gradle.kts", "src/a.coffee", "src/k.cu", "src/a.f90", "src/a.pas",
+      "src/a.asm", "src/a.s", "src/Main.elm", "src/a.tcl", "flake.nix", "src/a.cr", "hw/a.v", "hw/a.sv", "gfx/a.glsl", "gfx/a.wgsl",
+      "web/a.astro", "Pages/a.razor", "Views/a.cshtml", "web/a.jsp", "app/views/a.html.erb"];
+    const text13 = ["README.md", "config/app.json", "web/site.css", "web/index.html", "docs/notes.txt", ".env", "config/app.yaml", "data/a.csv", "docs/a.rst", "a.toml"];
     const notAsked13 = code13.filter((f) => S.guardCheck(g13, path.join(g13, f)).decision !== "ask");
     const notText13 = text13.filter((f) => S.guardCheck(g13, path.join(g13, f)).why !== "not-code");
     ok(!notAsked13.length && !notText13.length,
-      "guard: .mts/.cts, C++ .cc/.cxx/.hpp/.hh, Scala, Dart, F#, Groovy, Elixir, Lua, Objective-C, shell, PowerShell and SQL edits ask; docs/config/markup/styles stay silent (not asked: " +
+      "guard: .mts/.cts, C++ .cc/.cxx/.hpp/.hh, Scala, Dart, F#, Groovy, Elixir, Lua, Objective-C, shell (Windows .bat/.cmd too), PowerShell, SQL, Kotlin script, CUDA, Fortran, HDL, shaders and code-bearing templates ask; docs/config/data/markup/styles stay silent (not asked: " +
       notAsked13.join(", ") + "; not 'not-code': " + notText13.join(", ") + ")");
 
     // Task numbers, kind, backlog action and scan cap: refused by the engine too, so the CLI and MCP agree.

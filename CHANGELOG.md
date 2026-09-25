@@ -97,7 +97,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   fence carries no info string and is at least as long as its opener — a `js`-tagged fence line inside an open
   block used to close it, so the rest of requirements.md read inverted and its ACs vanished from EARS and
   trace_check. `clarify` finds IF…THEN per criterion, keeps
-  real line numbers after multi-line comments and groups placeholder questions. The classifier negates
+  real line numbers after multi-line comments and groups placeholder questions, and never asks a bugfix for
+  non-functional requirements — its EN/PT/ES template has no NFR section by design, so a filled bugfix stayed
+  `needs-clarification` forever at the step next_action points to. The classifier negates
   across filler words ("sem uso de IA") while PT "no uso do LLM" stays em+o. Every template AC now has a
   task and a test row, so a fresh scaffold traces clean once filled. `spec_create` on an existing feature adding
   +tdd with +saas/+ai planned test rows for US-1.AC-5…AC-9 its requirements never had (`spec_add_track` already
@@ -126,8 +128,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   what MCP refuses: a task number like `1.9` / `2abc` (`brief 1.9` briefed task 1 — the engine now refuses it on
   both surfaces), `--cap` / `--max` that aren't integers ≥ 1 (`scan --cap -3` scanned nothing; `spec_next_task`
   `max` gets `minimum: 1` too), an unknown `--kind` (a typo scaffolded a plain feature for good) or backlog action
-  (`backlog delete X` just listed). With `--json`, a refused operation prints the engine result
-  (`{ok: false, error, recorded…}`) on stdout, as MCP returns it, and exits 1 — stdout used to be empty.
+  (`backlog delete X` just listed), and the hidden CLI-only aliases are gone: `feature delete X --yes` removed a
+  folder and `backlog remove X` an item that `spec_feature` / `spec_backlog` refused (exit 1 now, like MCP). With
+  `--json`, a refused operation prints the engine result (`{ok: false, error, recorded…}`) on stdout, as MCP
+  returns it, and exits 1 — stdout used to be empty.
 - **Localization.** CLI human output, SessionStart phase names, argument errors and the eval harness speak
   the feature's (or project's) language — EN/PT/ES; `--json` is unchanged. Leftovers fixed: status section
   labels, `depend` and `add-track` lines, usage prefixes, `unknown command`, EARS severities, doctor's ears
@@ -282,7 +286,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   (`.state.json → changes`).
 - **`spec_metrics`** (`dev-spec metrics`, `/spec-metrics`): lead time per phase, rework, forced approvals,
   change requests, reopened tasks and evidence pass rate, per feature or for the project (averages and
-  medians); `write` creates a pre-filled `retro.md`.
+  medians); `write` creates a pre-filled `retro.md`. Every gated planning phase is measured, Phase 4 (`tests`)
+  included (lead time, the CLI line, retro.md's "Lead time → tests" row, the project's `leadTimeHours.tests`); a
+  phase never approved is null. `finished` is the earliest of the first execution approval and the finish
+  `spec_finish {write}` recorded on a ready feature (the tool description said "execution approved" only).
 - **`spec_catalog`** (`dev-spec catalog`, `/spec-catalog`): the living catalog `.specs/SPECS.md`
   (AUTO-GENERATED, never over a hand-written file) — every feature's ACs, with the English-stable marker
   `_Supersedes: <feature>/US-n.AC-m_` marking criteria a later feature replaced.
@@ -301,8 +308,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
   while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
   (appended or edited) covers nothing until re-approved. Silent when off; never blocks on its own errors.
-  "Code" is any source file — not only the scanner's list, so `.mts`, `.cc`/`.hpp`, Scala, Dart, Elixir, shell,
-  PowerShell and SQL edits ask too; docs, config, markup and styles stay silent.
+  "Code" is a source file in a broad list of languages — not only the scanner's list, so `.mts`, `.cc`/`.hpp`,
+  Scala, Dart, Elixir, shell (Windows `.bat`/`.cmd`, `.ksh`, `.fish` too), PowerShell, SQL, Kotlin script,
+  CoffeeScript, CUDA, Fortran, Pascal, assembly, HDL, shaders and code-bearing templates (`.erb`, `.jsp`,
+  `.razor`, `.astro`) ask too; docs, config, data, markup and styles stay silent.
 - **Scoped steering**: Kiro-compatible front matter (`inclusion: always | fileMatch | manual`,
   `fileMatchPattern`), custom steering files via `steering_scaffold` / `dev-spec steering`, per-task
   selection in `spec_task_brief` (matching `fileMatch` bodies quoted), and a doctor warning for steering
@@ -343,7 +352,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   (+tdd) and that the eval set is the feature's own (+ai); approving `execution` needs a ready `spec_finish` — or
   `--force`. On a feature already executing or complete (an upgraded 1.12 feature), `next_action` words Phase 4 as a
   sign-off for the tests that exist — name each planned T-ID in its test's name (`test("T-01 …")`), or record the eval
-  baseline — never "write failing tests first, no implementation code until then".
+  baseline — never "write failing tests first, no implementation code until then". `approve <f> tests`' own
+  `tests-in-code` refusal uses the same sign-off wording there (EN/PT/ES) — it said "write each failing test" right
+  after next_action's sign-off.
 - **Windows: `done --run` refuses a POSIX-syntax `_Verify:_`** under the default cmd.exe — add `--shell bash` (or
   `DEV_SPEC_SHELL=bash`), or `--shell cmd` to keep cmd.exe.
 - **MCP: an explicit `projectDir` must be a local folder** — a network path (`\\host\share`, `//host/share`) is
@@ -366,7 +377,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 735 assertions (was 181), `node cli/test-cli.js` 248 (was 53); the tool count is
+- `node mcp/test.js` 739 assertions (was 181), `node cli/test-cli.js` 249 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 

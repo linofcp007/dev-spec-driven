@@ -10,8 +10,8 @@ Feature: $ARGUMENTS
 Run the `spec_clarify` MCP tool for this feature (CLI `dev-spec clarify <feature>`). It returns questions
 (`questions`, `verdict: needs-clarification | clear`), open `[NEEDS CLARIFICATION]` markers first: vague terms,
 leftover template placeholders and TBDs (one question naming each `requirements.md:line`), missing success
-criteria / priorities / independent tests, missing edge-cases / non-functional / out-of-scope sections, missing
-IF…THEN failure-path criteria, and track-specific gaps (tenant isolation and rate limits for +saas; output
+criteria / priorities / independent tests, missing edge-cases / non-functional / out-of-scope sections (a bugfix
+is never asked for non-functional requirements — its template has none by design), missing IF…THEN failure-path criteria, and track-specific gaps (tenant isolation and rate limits for +saas; output
 quality and cost for +ai). A removed track's criteria are ignored. Present the questions to the user, get
 answers, and fold them into `requirements.md` before moving to design — edge cases, NFRs and success criteria
 keep their stable IDs (`EC-1`, `NFR-1`, `SC-001`) so tasks and tests can trace them. Then re-run `ears_validate`

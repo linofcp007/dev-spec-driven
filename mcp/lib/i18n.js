@@ -2317,6 +2317,9 @@ const MSG = {
       gateWouldRefuse: (phase, ids) => `approving '${phase}' would be refused (${ids})`,
       noRealTasks: "only the scaffold's template tasks — break the design into at least one real task of your own",
       testsNotInCode: (list) => `planned tests no test file names yet: ${list} — write each failing test with its T-ID in the name (trace_check {code: true} finds them)`,
+      // An executing/complete feature (tasks ticked — e.g. a 1.12 one): the code exists, so the tests are not written first
+      // and not failing — the same sign-off wording as next_action's signOffTests.
+      testsNotInCodeSignOff: (list) => `planned tests no test file names yet: ${list} — the implementation has already started: check that each one exists with its T-ID in the test's name (test("T-01 …")) so trace_check {code: true} finds it`,
       noPlannedTests: "test-plan.md lists no T-ID — plan the tests first",
       evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
@@ -2468,7 +2471,7 @@ const MSG = {
       retroExists: (p) => `${p} already exists — left untouched (a retrospective is never overwritten).`,
       unknown: "unknown",
       source: { approval: "approximate: from the earliest approval", filesystem: "approximate: from the folder's date" },
-      phase: { classification: "classification", requirements: "requirements", design: "design", "test-plan": "test plan", "eval-plan": "eval plan", tasks: "tasks", complete: "complete", finished: "finished" },
+      phase: { classification: "classification", requirements: "requirements", design: "design", "test-plan": "test plan", "eval-plan": "eval plan", tests: "tests", tasks: "tasks", execution: "execution", complete: "complete", finished: "finished" },
       head: (slug, tracks, created, approx) => `Metrics: ${slug} [${tracks}] — created ${created}${approx ? ` (${approx})` : ""}`,
       leadTimes: (list) => `  lead time from creation: ${list}`,
       noLeadTimes: "  lead time from creation: nothing approved yet",
@@ -2525,7 +2528,7 @@ const MSG = {
       buildRetro: (T, P, m, fmt) => {
         const lt = m.leadTime || {};
         const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
-        for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tasks", "complete", "finished"]) {
+        for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
           if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
         }
         const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
@@ -3094,6 +3097,7 @@ const MSG = {
       gateWouldRefuse: (phase, ids) => `aprovar '${phase}' seria recusado (${ids})`,
       noRealTasks: "só as tarefas do template — divide o design em pelo menos uma tarefa real tua",
       testsNotInCode: (list) => `testes planeados que nenhum ficheiro de teste nomeia ainda: ${list} — escreve cada teste a falhar com o seu T-ID no nome (trace_check {code: true} encontra-os)`,
+      testsNotInCodeSignOff: (list) => `testes planeados que nenhum ficheiro de teste nomeia ainda: ${list} — a implementação já começou: confirma que cada um existe com o seu T-ID no nome do teste (test("T-01 …")) para que o trace_check {code: true} o encontre`,
       noPlannedTests: "o test-plan.md não lista nenhum T-ID — planeia os testes primeiro",
       evalSetsSample: "o evals/golden.json ainda é o conjunto de exemplo do scaffold — escreve os casos golden desta feature, corre o harness e regista a baseline",
       evalSetsMissing: "o evals/golden.json não existe ou não tem itens de eval ({\"items\": […]}) — escreve primeiro o conjunto golden desta feature",
@@ -3238,7 +3242,7 @@ const MSG = {
       retroExists: (p) => `${p} já existe — não foi alterado (uma retrospetiva nunca é substituída).`,
       unknown: "desconhecida",
       source: { approval: "aproximada: a partir da primeira aprovação", filesystem: "aproximada: a partir da data da pasta" },
-      phase: { classification: "classificação", requirements: "requisitos", design: "design", "test-plan": "plano de testes", "eval-plan": "plano de evals", tasks: "tarefas", complete: "concluída", finished: "fechada" },
+      phase: { classification: "classificação", requirements: "requisitos", design: "design", "test-plan": "plano de testes", "eval-plan": "plano de evals", tests: "testes", tasks: "tarefas", execution: "execução", complete: "concluída", finished: "fechada" },
       head: (slug, tracks, created, approx) => `Métricas: ${slug} [${tracks}] — criada a ${created}${approx ? ` (${approx})` : ""}`,
       leadTimes: (list) => `  tempo desde a criação: ${list}`,
       noLeadTimes: "  tempo desde a criação: ainda nada aprovado",
@@ -3832,6 +3836,7 @@ const MSG = {
       gateWouldRefuse: (phase, ids) => `aprobar '${phase}' sería rechazado (${ids})`,
       noRealTasks: "solo las tareas de la plantilla — divide el diseño en al menos una tarea real propia",
       testsNotInCode: (list) => `pruebas planeadas que ningún fichero de prueba nombra todavía: ${list} — escribe cada prueba que falla con su T-ID en el nombre (trace_check {code: true} las encuentra)`,
+      testsNotInCodeSignOff: (list) => `pruebas planeadas que ningún fichero de prueba nombra todavía: ${list} — la implementación ya empezó: comprueba que cada una existe con su T-ID en el nombre de la prueba (test("T-01 …")) para que trace_check {code: true} la encuentre`,
       noPlannedTests: "test-plan.md no lista ningún T-ID — planea las pruebas primero",
       evalSetsSample: "evals/golden.json sigue siendo el conjunto de ejemplo del scaffold — escribe los casos golden de esta función, ejecuta el harness y registra la baseline",
       evalSetsMissing: "evals/golden.json no existe o no tiene ítems de eval ({\"items\": […]}) — escribe primero el conjunto golden de esta función",
@@ -3976,7 +3981,7 @@ const MSG = {
       retroExists: (p) => `${p} ya existe — no se ha modificado (una retrospectiva nunca se sobrescribe).`,
       unknown: "desconocida",
       source: { approval: "aproximada: a partir de la primera aprobación", filesystem: "aproximada: a partir de la fecha de la carpeta" },
-      phase: { classification: "clasificación", requirements: "requisitos", design: "diseño", "test-plan": "plan de pruebas", "eval-plan": "plan de evals", tasks: "tareas", complete: "completada", finished: "cerrada" },
+      phase: { classification: "clasificación", requirements: "requisitos", design: "diseño", "test-plan": "plan de pruebas", "eval-plan": "plan de evals", tests: "pruebas", tasks: "tareas", execution: "ejecución", complete: "completada", finished: "cerrada" },
       head: (slug, tracks, created, approx) => `Métricas: ${slug} [${tracks}] — creada el ${created}${approx ? ` (${approx})` : ""}`,
       leadTimes: (list) => `  tiempo desde la creación: ${list}`,
       noLeadTimes: "  tiempo desde la creación: aún no hay nada aprobado",

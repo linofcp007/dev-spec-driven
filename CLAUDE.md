@@ -360,8 +360,11 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   guard is on** — guard off costs one small raw JSON read, the engine is loaded only for guarded projects —
   and `guardCheck()` reads roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. "Code" is
   `GUARD_CODE_EXT` — the scanner's `CODE_EXT` + `TEST_EXTRA_EXT` + `.ipynb` + the source languages the scanner
-  doesn't inventory (`.mts`/`.cts`, `.cc`/`.hpp`, `.sh`/`.ps1`, `.sql`…); never reuse `CODE_EXT` alone there (it
-  waved those through as "not-code"). Docs, config, markup and styles stay silent. A code
+  doesn't inventory (`.mts`/`.cts`, `.cc`/`.hpp`, `.sh`/`.ps1`, Windows `.bat`/`.cmd`, `.sql`, `.kts`, CUDA,
+  Fortran, HDL, shaders, code-bearing templates like `.erb`/`.razor`…); never reuse `CODE_EXT` alone there (it
+  waved those through as "not-code"). It is an allow-list, so the docs say "a broad list of languages", never "any
+  source file"; add a language there (and to the guard test) rather than rewording. Docs, config, data, markup and
+  styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
   `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
@@ -625,9 +628,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(735 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(739 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 248 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 249 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
