@@ -588,9 +588,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(716 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(720 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 241 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 242 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
@@ -611,9 +611,9 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
 ## When extending
 - New MCP tool → add the function to `mcp/lib/spec.js`, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
-  subcommand, a test in `mcp/test.js` (and bump the exact tool count), the README tool tables (EN/PT/ES — a
-  test rejects phantom rows and requires the 23 v1.12 tools; it does not yet require newer ones, so add the row
-  by hand), and (usually) a thin command in `commands/`.
+  subcommand, a test in `mcp/test.js` (and bump the exact tool count), the README tool tables (EN/PT/ES —
+  `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
+  the suite), and (usually) a thin command in `commands/`.
 - Any generated/returned user-facing text → put the strings in `mcp/lib/i18n.js` for all three
   languages and resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable.
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin.

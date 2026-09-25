@@ -914,6 +914,10 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   const after8 = (t) => { const a = t.indexOf("approve <feature> <phase>"), i = t.indexOf("impact <feature>"), m = t.indexOf("metrics [feature]"); return a !== -1 && i > a && m > i && m < t.indexOf("add-track <feature>"); };
   ok(after8(help8) && after8(doc8) && ["--phase", "--reopen", "--write"].every((x) => help8.includes(x) && doc8.includes(x)),
     "help and the header docblock list impact + metrics right after approve, with --phase / --reopen / --write");
+  // --reopen never unticks a REMOVED criterion's tasks (retire lists them) — help said it unticks "the affected done tasks", full stop.
+  const reopenDoc8 = (t) => { const i = t.indexOf("impact <feature>"); return t.slice(i, t.indexOf("metrics [feature]", i)).replace(/\s+/g, " "); };
+  ok([help8, doc8].every((t) => /--reopen unticks the affected done tasks.*never a removed criterion's.*retire`? lists/.test(reopenDoc8(t))),
+    "help and the header docblock: --reopen never unticks a removed criterion's tasks — retire lists them");
 }
 
 if (inSection("wp9")) { // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (exit code unchanged); --code scans test files; finish lists warnings ---

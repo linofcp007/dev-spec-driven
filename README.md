@@ -61,7 +61,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", in the chain's order: fill → re-review → fix → approve → implement → finish (then finished / drift) |
 | `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot |
-| `spec_impact` | What an edit after approval touches (changed ACs, sections, tasks → tasks, tests, design); `reopen` unticks the affected tasks |
+| `spec_impact` | What an edit after approval touches (changed ACs, sections, tasks → tasks, tests, design); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files |
@@ -105,8 +105,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   it unverified. Failed runs are kept in a short history, and a task reopened after a spec change has
   **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
   (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
-  `stale-evidence`, `no-evidence`); `doctor` and `spec_finish` list each unverified task with a localized
-  reason, and `ROADMAP.md` shows how many each feature has. CLI: `dev-spec done <feature> <n> --run`.
+  `stale-evidence`, `no-evidence`); `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
+  list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
   root-cause task can't be completed before that.
@@ -130,7 +130,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   that snapshot: added / modified / removed ACs (and SC/EC/NFR IDs), design sections or tasks, and for
   each one the tasks that cite it (done or open, with their evidence), the tests covering it and the
   design sections that mention it. `reopen` unticks the affected done tasks, marks their evidence stale
-  and records the change request. It never edits your requirements or design.
+  and records the change request — never the tasks of a removed criterion: `retire` lists them (and their
+  test rows) to delete or point at the criterion that replaces it. It never edits your requirements or design.
 - **`/spec-converge`** (`spec_append_tasks`) — when implementation drifted from the plan or a review
   found follow-up work, append new tasks (numbered after the last, under `Phase: Convergence`) with
   their `_Requirements:_`, `_Implements:_` and `_Verify:_`. Unknown AC IDs are refused, existing tasks are
@@ -287,7 +288,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", pela ordem da cadeia: preencher → rever → corrigir → aprovar → implementar → fechar (depois fechada / deriva) |
 | `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot |
-| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, tarefas alteradas → tarefas, testes, design); `reopen` desmarca as tarefas afetadas |
+| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, tarefas alteradas → tarefas, testes, design); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
 | `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste |
@@ -330,8 +331,8 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   por verificar. As execuções falhadas ficam num histórico curto, e uma tarefa reaberta depois de uma
   alteração à spec fica com evidência **desatualizada** até voltar a correr. O `spec_complete_task` devolve um
   código de motivo estável (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`,
-  `duplicate-number`, `stale-evidence`, `no-evidence`); o `doctor` e o `spec_finish` listam cada tarefa por
-  verificar com o motivo, e o `ROADMAP.md` mostra quantas há em cada funcionalidade. CLI:
+  `duplicate-number`, `stale-evidence`, `no-evidence`); o `doctor`, o `spec_finish` e a linha "Precisa de
+  atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo. CLI:
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
   regressão a falhar → correção → verificação. O `doctor` falha até a causa raiz estar escrita, e as tarefas
@@ -351,7 +352,8 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   snapshot: ACs (e IDs SC/EC/NFR), secções do design ou tarefas acrescentados, alterados ou removidos e, para
   cada um, as tarefas que o citam (feitas ou abertas, com a evidência), os testes que o cobrem e as secções do
   design que o mencionam. `reopen` desmarca as tarefas feitas afetadas, marca a evidência como desatualizada
-  e regista o pedido de alteração. Nunca edita os teus requisitos nem o design.
+  e regista o pedido de alteração — nunca as tarefas de um critério removido: o `retire` lista-as (e as linhas
+  de teste) para apagar ou apontar para o critério que o substitui. Nunca edita os teus requisitos nem o design.
 - **`/spec-converge`** (`spec_append_tasks`) — quando a implementação se afastou do plano ou uma revisão
   encontrou trabalho de seguimento, acrescenta tarefas novas (numeradas depois da última, em
   `Fase: Convergência`) com `_Requirements:_`, `_Implements:_` e `_Verify:_`. IDs de AC desconhecidos são
@@ -513,7 +515,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", en el orden de la cadena: completar → revisar → corregir → aprobar → implementar → cerrar (después cerrada / deriva) |
 | `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot |
-| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, tareas cambiadas → tareas, pruebas, diseño); `reopen` desmarca las tareas afectadas |
+| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, tareas cambiadas → tareas, pruebas, diseño); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba |
@@ -558,9 +560,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   marca, pero la deja sin verificar. Las ejecuciones fallidas quedan en un historial corto, y una tarea
   reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
   `spec_complete_task` devuelve un código de motivo estable (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`); el `doctor` y
-  `spec_finish` listan cada tarea sin verificar con su motivo, y el `ROADMAP.md` muestra cuántas tiene cada
-  función. CLI: `dev-spec done <feature> <n> --run`.
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`); el `doctor`,
+  `spec_finish` y la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su
+  motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
   regresión en rojo → corrección → verificación. El `doctor` falla hasta que la causa raíz esté escrita, y
   las tareas posteriores a la de la causa raíz no se pueden completar antes.
@@ -579,7 +581,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   snapshot: ACs (e IDs SC/EC/NFR), secciones del diseño o tareas añadidos, modificados o eliminados y, para
   cada uno, las tareas que lo citan (hechas o abiertas, con su evidencia), las pruebas que lo cubren y las
   secciones del diseño que lo mencionan. `reopen` desmarca las tareas hechas afectadas, marca su evidencia
-  como obsoleta y registra la solicitud de cambio. Nunca edita tus requisitos ni el diseño.
+  como obsoleta y registra la solicitud de cambio — nunca las tareas de un criterio eliminado: `retire` las
+  lista (con sus filas de prueba) para eliminarlas o apuntarlas al criterio que lo sustituye. Nunca edita tus
+  requisitos ni el diseño.
 - **`/spec-converge`** (`spec_append_tasks`) — cuando la implementación se ha desviado del plan o una revisión
   ha encontrado trabajo de seguimiento, añade tareas nuevas (numeradas tras la última, en
   `Fase: Convergencia`) con `_Requirements:_`, `_Implements:_` y `_Verify:_`. Los IDs de AC desconocidos se

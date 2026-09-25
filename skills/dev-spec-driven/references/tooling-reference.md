@@ -24,7 +24,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC and `phantomSupersedes`; `code: true` scans test files for T-IDs |
 | `spec_doctor` | One health-check → `readyToAdvance` (EARS, placeholders, trace, sections, steering, evidence, duplicate tasks, changed since approval, approval gates) |
 | `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot |
-| `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks affected tasks and marks their evidence stale |
+| `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint |
 | `spec_next_task` | The next open task (`batch: true` → + the `[P]` tasks that can run beside it) |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, scoped steering, DoD); `write: true` → `.specs/<feature>/.execution/` |
 | `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}` |

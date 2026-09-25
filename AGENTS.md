@@ -57,7 +57,7 @@ dev-spec next-action <feature>                 # "you are here → do this next"
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
 dev-spec approve <feature> <phase> [--force]   # record an approval gate — refused while that phase's checks fail
-dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected tasks
+dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
 dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"]   # converge: append a task (Phase: Convergence)
 dev-spec finish <feature> [--write] [--include-body]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
 dev-spec metrics [feature] [--write]           # lead times, rework, forced approvals, change requests, evidence pass rate (--write → retro.md)
@@ -106,8 +106,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   task changes (`impact --reopen`) or its `_Verify:_` command is edited. `done --json` (MCP
   `spec_complete_task`) returns a stable reason code in `unverifiedReason` (`no-evidence`, `failed-run`,
   `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`) whenever `verified` is false;
-  `doctor` and `finish` list each unverified task with a localized reason; `ROADMAP.md` shows how many each
-  feature has. A task with no runnable `_Verify:_` and nothing recorded comes back `verified: true` with
+  `doctor`, `finish` and the `ROADMAP.md` "Needs attention" line list each unverified task with a localized
+  reason. A task with no runnable `_Verify:_` and nothing recorded comes back `verified: true` with
   `nothingToVerify: true` — the same verdict doctor gives; a note records how it was checked.
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
@@ -122,8 +122,9 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Impact before re-approval.** After editing an approved artifact, run
   `dev-spec impact <feature> --phase requirements|design|tasks`: it lists the changed ACs / sections /
   tasks and, for each, the tasks that cite it, the tests covering it and the design sections mentioning
-  it. `--reopen` unticks the affected done tasks and marks their evidence stale; then re-review and
-  re-approve.
+  it. `--reopen` unticks the affected done tasks and marks their evidence stale — never the tasks of a
+  removed criterion: `retire` lists them (and their test rows) to delete or point at the criterion that
+  replaces it; then re-review and re-approve.
 - **Converge.** When implementation drifted from the plan or a review found follow-up work, append tasks
   with `dev-spec append-tasks` instead of editing the numbered list by hand: they go under
   `Phase: Convergence`, numbered after the last task; unknown AC IDs are refused, and an approved task

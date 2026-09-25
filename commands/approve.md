@@ -15,8 +15,9 @@ test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
 `saas-sections` / `ai-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
-`bug.md`); test-plan: `placeholders`, `traceability`; eval-plan: `placeholders`; tasks: `placeholders`,
-`traceability` (incl. test-plan rows citing ACs requirements.md doesn't define); tests (the Phase 4 sign-off —
+`bug.md`); test-plan: `placeholders`, `traceability` (every AC has a test row, and no row cites an AC
+requirements.md doesn't define); eval-plan: `placeholders`; tasks: `placeholders` (no placeholder tasks),
+`traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks); tests (the Phase 4 sign-off —
 failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
 +ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
 core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,

@@ -5439,7 +5439,37 @@ function endRun() {
     ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
     /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsSkill),
     "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution");
-  const docsInstall = docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
+  // Prose that lagged behind 1.13 behaviour. (a) The ROADMAP.md "needs attention" line NAMES each unverified task with its
+  // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
+  // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
+  // same sentence. (c) A test-plan row citing an undefined AC is the TEST-PLAN gate's traceability (approvalChecks), not
+  // the tasks gate's. (d) CLAUDE.md: the README tool-table test requires every live tool, not "the 23 v1.12 tools".
+  const docsWs = (t) => t.replace(/\s+/g, " ");
+  const docsSec = (h) => docsWs((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0]);
+  const docsSpecSrc = docsRead("mcp", "lib", "spec.js");
+  const docsAttn = [["## English", 'the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason', "Needs attention"],
+    ["## Português", 'a linha "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo', "Precisa de atenção"],
+    ["## Español", 'la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su motivo', "Necesita atención"]];
+  ok(docsAttn.every(([h, s, needs]) => docsSec(h).includes(s) && docsSpecSrc.includes('needs: "' + needs + '"')) &&
+    docsWs(docsAgents).includes('the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason') &&
+    ![docsReadme, docsAgents].some((t) => /shows how many each feature has|mostra quantas há|muestra cuántas tiene/.test(docsWs(t))),
+    "README (EN/PT/ES) + AGENTS.md: the ROADMAP.md needs-attention line lists each unverified task with its reason (the heading as the roadmap prints it), never 'shows how many'");
+  const docsReopen = (t) => [...docsWs(t).matchAll(/reopen(?:: true)?`? (?:unticks|desmarca)/g)].map((m) => docsWs(t).slice(m.index).split(/\.\s|\|/)[0]);
+  const docsReopenSurfaces = [["README.md", docsReadme, 6], ["AGENTS.md", docsAgents, 2], ["tooling-reference.md", docsRef("tooling-reference.md"), 1], ["SKILL.md", docsSkill, 1]];
+  const docsReopenBad = docsReopenSurfaces.flatMap(([f, t, n]) => { const s = docsReopen(t); return s.length < n ? [f + " (" + s.length + " < " + n + ")"] : s.filter((x) => !/\bretire\b/.test(x)).map((x) => f + ": " + x); });
+  ok(!docsReopenBad.length, "README (EN/PT/ES), AGENTS.md, tooling-reference and SKILL.md: every 'reopen unticks' sentence says a removed criterion's tasks are never unticked (retire) (bad: " + docsReopenBad.join(" | ") + ")");
+  const docsApprove = docsWs(docsRead("commands", "approve.md"));
+  const docsGate = (from, to) => (docsApprove.split(from)[1] || "").split(to)[0];
+  const apDesc = (list.result.tools.find((t) => t.name === "spec_approve") || {}).description || "";
+  ok(/`traceability` \(every AC has a test row, and no row cites an AC requirements\.md doesn't define\)/.test(docsGate("; test-plan: ", "; eval-plan: ")) &&
+    !/test-plan|doesn't define/.test(docsGate("; tasks: ", "; tests (")) && /`traceability` \(every AC covered by a task, no phantom AC \/ T-IDs in tasks\)/.test(docsGate("; tasks: ", "; tests (")) &&
+    /test-plan: placeholders, every AC has a test, no row citing an AC requirements\.md does not define; eval-plan:/.test(apDesc),
+    "/approve + spec_approve: a test-plan row citing an undefined AC fails the TEST-PLAN gate's traceability (approvalChecks) — never listed under the tasks gate");
+  const docsClaude = docsWs(docsRead("CLAUDE.md"));
+  ok(!/23 v1\.12 tools|does not yet require newer ones/.test(docsClaude) &&
+    /README tool tables \(EN\/PT\/ES — `mcp\/test\.js` builds the expected set from the live `tools\/list`: a missing or phantom row in any language fails the suite\)/.test(docsClaude),
+    "CLAUDE.md 'When extending': the README tool-table test requires every live tool (built from tools/list), not the 23 v1.12 tools");
+  const docsInstall =docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
   ok(!/Copy-Item -Recurse/.test(docsInstall) && /\/plugin marketplace add <path-to-your-clone>/.test(docsInstall) && /dev-spec-driven@dev-spec-driven-marketplace/.test(docsInstall) &&
     [docsInstall, docsContrib].every((t) => /claude plugin validate [^\n]*plugin\.json/.test(t) && /claude plugin validate (?:\.|"\$plugin")[\s`]/.test(t)) &&
     !/^## Pull requests/m.test(docsContrib) && /^## Before merging/m.test(docsContrib),

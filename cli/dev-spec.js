@@ -33,6 +33,7 @@
  *                                      (--by = who approved; --force records it anyway, flagged as forced)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
+ *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
  *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
@@ -839,6 +840,7 @@ function helpText() {
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|tasks, default requirements): changed ACs/sections/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
+                                  (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
