@@ -4,7 +4,8 @@
 /**
  * Smoke test for the local MCP server. Spawns server.js, drives the MCP
  * handshake over stdio, exercises every tool against a throwaway temp project,
- * and asserts the results. Run: `node mcp/test.js`
+ * and asserts the results. Run: `node mcp/test.js` (its sections run in parallel
+ * child processes — see SECTIONS; `MCP_TEST_SECTION=<name> node mcp/test.js` runs one).
  */
 
 const { spawn, spawnSync } = require("child_process");

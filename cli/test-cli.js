@@ -3,7 +3,8 @@
 
 /**
  * Smoke test for the universal CLI (cli/dev-spec.js). Exercises the subcommands against a
- * throwaway temp project and asserts on output. Run: `node cli/test-cli.js`
+ * throwaway temp project and asserts on output. Run: `node cli/test-cli.js` (its sections run in
+ * parallel child processes — see SECTIONS; `CLI_TEST_SECTION=<name> node cli/test-cli.js` runs one).
  */
 
 const { spawnSync } = require("child_process");
