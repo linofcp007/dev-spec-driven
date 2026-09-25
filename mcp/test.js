@@ -52,6 +52,12 @@ if (!SECTIONS.includes(SECTION)) {
 }
 const S = require("./lib/spec.js");
 const root = path.join(__dirname, "..");
+// Phase by phase (1.13): a phase is approved only after every earlier pending one. A test exercising ONE phase's gate
+// first records the earlier ones (with force — they may still be templates; doctor keeps them flagged as forced).
+const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
+function approveBefore(dir, slug, phase) {
+  for (const ph of S.specDoctor(dir, slug).pendingGates || []) if (GATE_ORDER.indexOf(ph) < GATE_ORDER.indexOf(phase)) S.approvePhase(dir, slug, ph, "t", { force: true });
+}
 
 const SERVER = path.join(__dirname, "server.js");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
@@ -850,17 +856,20 @@ function endRun() {
   llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
   [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
-  ["requirements", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
+  const llReq = S.approvePhase(vDir, "login-loop", "requirements");
+  // Phase by phase: the test plan and the tasks can't be approved before the design (bug.md) — refused, naming it.
+  const llEarly = ["test-plan", "tasks"].map((p) => S.approvePhase(vDir, "login-loop", p));
   // A bugfix has no design.md: its design gate signs off bug.md (Root Cause) and is pending all the same — asked for
   // by next_action (never skipped to "implement"/"finish"), counted in gatesOk, blocking spec_finish. No Phase 4 gate:
   // the bugfix's failing regression test is one of its tasks.
   const llDoc = S.specDoctor(vDir, "login-loop");
   const llNext = S.nextAction(vDir, "login-loop");
   const llFin = S.finishFeature(vDir, "login-loop");
-  ok(llDoc.pendingGates.join() === "design" && llDoc.gatesOk === false && llNext.step === "approve" && /bug\.md/.test(llNext.recommendation) &&
+  ok(llReq.ok && llEarly.every((r) => r.ok === false && r.refused && r.failing.join() === "phase-order" && /earlier phases are not approved yet: design(, test-plan)? — approve them first, in order \(\/approve login-loop design\)/.test(r.error)) &&
+    llDoc.pendingGates.join() === "design,test-plan,tasks" && llDoc.gatesOk === false && llNext.step === "approve" && /bug\.md/.test(llNext.recommendation) &&
     /\/approve login-loop design/.test(llNext.recommendation) && llFin.readyToFinish === false && llFin.blockers.some((b) => /design/.test(b)),
-    "bugfix: the design gate (bug.md) is pending until approved — next_action asks for it, gatesOk is false, finish is blocked (got " + llDoc.pendingGates.join() + " / " + llNext.step + ")");
-  S.approvePhase(vDir, "login-loop", "design");
+    "bugfix: the design gate (bug.md) comes before the test plan and the tasks — approving them first is refused (phase-order, naming design); next_action asks for it, gatesOk is false, finish is blocked (got " + llDoc.pendingGates.join() + " / " + llNext.step + " / " + llEarly.map((r) => r.failing).join(";") + ")");
+  ["design", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
   const ready = S.finishFeature(vDir, "login-loop", { write: true });
   const prFile = fs.readFileSync(ready.paths.summary, "utf8");
   ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
@@ -1490,6 +1499,7 @@ function endRun() {
     "2. **US-1.AC-2** — WHEN a user's role is one of [admin, billing-manager, read only] THE SYSTEM SHALL allow uploads up to [10 MB, 25 MB for pro].\n\n" +
     "## Success Criteria\n- **SC-001** — zero noisy-neighbour incidents.\n";
   fs.writeFileSync(path.join(quota.dir, "requirements.md"), quotaReq);
+  approveBefore(w2, quota.slug, "requirements");
   const quotaAp = S.approvePhase(w2, quota.slug, "requirements");
   const generic = S.placeholderReport("[TODO] · [TBD: pricing] · [tbc] · [FIXME later] · [...] · [ … ] · [por definir] · [todo] · [TODOs list] · [fill me in]").map((x) => x.text).join("|");
   ok(quotaAp.ok && !quotaAp.forced && !S.placeholderReport(quotaReq).length && !S.earsValidate(quotaReq).issues.some((i) => i.code === "placeholder") &&
@@ -2119,7 +2129,7 @@ function endRun() {
     write5(f1g, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Send the digest\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_\n");
     const tr1g2 = chk(S.specDoctor(w5, f1g.slug), "traceability");
     ok(d1g.phase === "design" && d1g.readyToAdvance === true && tr1g.status === "warn" && /^not traced yet — still a later phase's template: tasks\.md/.test(tr1g.detail) &&
-      !/\(typos\?\)|unknown ACs/.test(tr1g.detail) && d1g.nextGate.phase === "classification" && S.approvePhase(w5, f1g.slug, "design").ok &&
+      !/\(typos\?\)|unknown ACs/.test(tr1g.detail) && d1g.nextGate.phase === "classification" && (approveBefore(w5, f1g.slug, "design"), S.approvePhase(w5, f1g.slug, "design").ok) &&
       tr1g2.status === "fail" && /tasks reference unknown ACs \(typos\?\): US-1\.AC-3/.test(tr1g2.detail) &&
       /^ainda não rastreado/.test(S.msg("pt").gates.traceDeferred("tasks.md")) && /^aún no trazado/.test(S.msg("es").gates.traceDeferred("tasks.md")),
       "doctor at the design gate: an untouched tasks.md template's AC references are deferred (warn, 'not traced yet'), never 'typos?' — readyToAdvance, the approve gate agrees; a written tasks.md's phantom still fails (got " + tr1g.status + ": " + tr1g.detail + " | " + [d1g.phase, d1g.readyToAdvance, d1g.nextGate && d1g.nextGate.phase, tr1g2.status, tr1g2.detail].join(" · ") + ")");
@@ -2158,14 +2168,16 @@ function endRun() {
 
     // (2) approve gate: refused while the phase's checks fail; force records forced + failing ids; nothing to approve = error
     const f2 = S.createFeature(w5, "Approve gate", ["core"]);
+    approveBefore(w5, f2.slug, "requirements"); // the classification (a template: forced) — phase by phase
     const ap1 = S.approvePhase(w5, f2.slug, "requirements");
     ok(ap1.ok === false && ap1.refused && ap1.failing.join() === "placeholders,success-criteria,priorities" && /✗ placeholders — requirements\.md \(\d+\): requirements\.md:4/.test(ap1.error) &&
       /force: true/.test(ap1.error) && !stateOf(f2).approvals.requirements, "approve on the template is REFUSED, listing the failing check ids + details — nothing recorded");
     const ap2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: f2.slug, phase: "requirements", force: true, projectDir: w5 } }));
     const d2 = S.specDoctor(w5, f2.slug);
     ok(ap2.ok && ap2.forced === true && stateOf(f2).approvals.requirements.forced === true && stateOf(f2).approvals.requirements.failing.join() === "placeholders,success-criteria,priorities" &&
-      chk(d2, "approval-gates").status === "warn" && /approved with force over failing checks: requirements \(placeholders, success-criteria, priorities\)/.test(chk(d2, "approval-gates").detail) &&
-      d2.forcedGates.join() === "requirements", "spec_approve {force: true} records forced + failing ids; doctor's approval-gates shows it as a warn");
+      chk(d2, "approval-gates").status === "warn" && /approved with force over failing checks: classification \(placeholders\), requirements \(placeholders, success-criteria, priorities\)/.test(chk(d2, "approval-gates").detail) &&
+      d2.forcedGates.join() === "classification,requirements", "spec_approve {force: true} records forced + failing ids; doctor's approval-gates shows it as a warn (got " +
+      JSON.stringify([ap2.ok, ap2.forced, stateOf(f2).approvals.requirements, chk(d2, "approval-gates").detail, d2.forcedGates]) + ")");
     write5(f2, "requirements.md", REQ);
     const ap3 = S.approvePhase(w5, f2.slug, "requirements");
     ok(ap3.ok && !ap3.forced && !stateOf(f2).approvals.requirements.forced, "a clean re-approval replaces the forced one");
@@ -2218,6 +2230,7 @@ function endRun() {
     const f2t = S.createFeature(w5, "Plan gate", ["tdd"]);
     write5(f2t, "requirements.md", REQ);
     write5(f2t, "test-plan.md", "# Test Plan\n\n| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
+    approveBefore(w5, f2t.slug, "test-plan");
     const apP = S.approvePhase(w5, f2t.slug, "test-plan");
     ok(apP.ok === false && apP.failing.join() === "traceability" && /ACs with no planned test: US-1\.AC-2/.test(apP.error), "test-plan gate: every AC needs a planned test");
     const f2b = S.createFeature(w5, "Bug gate", undefined, "crash", undefined, "en", "bugfix");
@@ -2229,8 +2242,10 @@ function endRun() {
     const w5pt = path.join(tmp, "proj-wp5-pt");
     S.initProject(w5pt, ["core"], "pt");
     const fpt = S.createFeature(w5pt, "Aprovação", ["core"]);
-    ok(/Não é possível aprovar 'requirements' de 'aprovacao' — verificações a falhar: placeholders/.test(S.approvePhase(w5pt, fpt.slug, "requirements").error) &&
-      /Nada para aprovar/.test(S.approvePhase(w5pt, fpt.slug, "eval-plan").error), "the approve refusal / nothing-to-approve errors are localized (PT)");
+    const apPt = S.approvePhase(w5pt, fpt.slug, "requirements").error;
+    ok(/Não é possível aprovar 'requirements' de 'aprovacao' — verificações a falhar: phase-order, placeholders/.test(apPt) &&
+      /há fases anteriores ainda por aprovar: classification — aprova-as primeiro, por ordem \(\/approve aprovacao classification\)/.test(apPt) &&
+      /Nada para aprovar/.test(S.approvePhase(w5pt, fpt.slug, "eval-plan").error), "the approve refusal (its phase-order line naming the earlier phase too) / nothing-to-approve errors are localized (PT)");
     const apTool = list.result.tools.find((t) => t.name === "spec_approve");
     ok(apTool.inputSchema.properties.force.type === "boolean" && !apTool.inputSchema.required.includes("force") && /REFUSES/.test(apTool.description), "spec_approve advertises force: boolean (optional) and the gate");
 
@@ -2248,6 +2263,7 @@ function endRun() {
     // (4) spec_finish blocks on what next_action flags (changed since approval), placeholders anywhere, the root cause
     const f4 = S.createFeature(w5, "Finish gate", ["core"]);
     write5(f4, "requirements.md", REQ);
+    approveBefore(w5, f4.slug, "requirements");
     S.approvePhase(w5, f4.slug, "requirements");
     fs.appendFileSync(path.join(f4.dir, "requirements.md"), "\n## Assumptions\n- Admins are logged in.\n");
     const na4 = S.nextAction(w5, f4.slug);
@@ -2304,6 +2320,7 @@ function endRun() {
     const docE5 = S.specDoctor(w5, f5e.slug);
     const stE5 = (id) => (docE5.checks.find((c) => c.id === id) || {}).status;
     const phE5 = docE5.checks.find((c) => c.id === "placeholders") || { detail: "" };
+    approveBefore(w5, f5e.slug, "design");
     const apE5 = S.approvePhase(w5, f5e.slug, "design");
     S.completeTask(w5, f5e.slug, 1); S.completeTask(w5, f5e.slug, 2);
     const c3E5 = S.completeTask(w5, f5e.slug, 3);
@@ -2321,32 +2338,62 @@ function endRun() {
       "bugfix: a Reproduction / Root Cause quoting [object Object], [A-Z], [WARN] is documented (doctor, approve design, the root-cause gate, finish, placeholders; PT too); a bracket-only section and the report's own slots still count as unfilled (got " +
       JSON.stringify([stE5("reproduction"), stE5("root-cause"), phE5.detail.slice(0, 80), apE5.ok, c3E5.ok, finE5.blockers.slice(0, 2), onlyE5, slotE5, ptE5]) + ")");
 
-    // (6) next_action: the chain's order — fill → re-review → current checks → approve → implement → finish
+    // (6) next_action: phase by phase — re-review → the first unapproved phase (fill → fix → approve) → implement → finish
     const f6 = S.createFeature(w5, "Order", ["saas"]);
     const n6a = S.nextAction(w5, f6.slug);
-    ok(n6a.step === "fill" && n6a.file === "requirements.md" && /^Fill requirements\.md — \d+ template placeholder/.test(n6a.recommendation) && /\/clarify order/.test(n6a.recommendation) &&
-      !/saas-sections|traceability/.test(n6a.recommendation), "next_action on a fresh +saas feature: 'fill requirements.md' (with /clarify), never the later phases' failing checks");
+    write5(f6, "classification.md", read5(f6, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    S.approvePhase(w5, f6.slug, "classification");
+    const n6a2 = S.nextAction(w5, f6.slug);
+    ok(n6a.step === "fill" && n6a.file === "classification.md" && /^Fill classification\.md — \d+ template placeholder/.test(n6a.recommendation) && /\/classify order/.test(n6a.recommendation) &&
+      !/saas-sections|traceability/.test(n6a.recommendation) &&
+      n6a2.step === "fill" && n6a2.file === "requirements.md" && /^Fill requirements\.md — \d+ template placeholder/.test(n6a2.recommendation) && /\/clarify order/.test(n6a2.recommendation),
+      "next_action on a fresh +saas feature: 'fill classification.md' (Phase 0, /classify), then — once approved — 'fill requirements.md' (with /clarify); never the later phases' failing checks");
+    // The design is never asked for before the requirements are approved, the tasks never before the design: each phase is
+    // filled, fixed and approved before the next one starts (the requirements, filled first, wait for their approval).
     const f6c = S.createFeature(w5, "Order core", ["core"]);
     write5(f6c, "requirements.md", REQ);
     const n6b = S.nextAction(w5, f6c.slug);
+    write5(f6c, "classification.md", read5(f6c, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    const n6b2 = S.nextAction(w5, f6c.slug);
+    S.approvePhase(w5, f6c.slug, "classification");
+    const n6b3 = S.nextAction(w5, f6c.slug);
+    S.approvePhase(w5, f6c.slug, "requirements");
+    const n6b4 = S.nextAction(w5, f6c.slug);
     write5(f6c, "design.md", DESIGN);
     write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-7_\n");
     const n6c = S.nextAction(w5, f6c.slug);
+    S.approvePhase(w5, f6c.slug, "design");
+    const n6c2 = S.nextAction(w5, f6c.slug);
     write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
     const n6d = S.nextAction(w5, f6c.slug);
-    // classification.md is still the scaffold: the approve gate would refuse it, so next_action names what it fails on
-    write5(f6c, "classification.md", read5(f6c, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
-    const n6d2 = S.nextAction(w5, f6c.slug);
-    ok(n6b.step === "fill" && n6b.file === "design.md" && n6c.step === "fix" && /traceability/.test(n6c.recommendation) &&
-      n6d.step === "fix" && n6d.refusedGate.phase === "classification" && n6d.refusedGate.failing.join() === "placeholders" && /Before approving 'classification'.*classification\.md:\d+ \[/.test(n6d.recommendation) &&
-      n6d2.step === "approve" && /classification/.test(n6d2.recommendation) && !n6d2.refusedGate,
-      "next_action: requirements filled → fill design.md; a current-phase check fails → fix it; a pending gate approve would refuse → what it fails on; then approve");
-    ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(w5, f6c.slug, p));
+    ok(n6b.step === "fill" && n6b.file === "classification.md" && n6b2.step === "approve" && /\/approve order-core classification/.test(n6b2.recommendation) && !n6b2.refusedGate &&
+      n6b3.step === "approve" && /\/approve order-core requirements/.test(n6b3.recommendation) && n6b4.step === "fill" && n6b4.file === "design.md" &&
+      n6c.step === "approve" && /\/approve order-core design/.test(n6c.recommendation) &&
+      n6c2.step === "fix" && n6c2.refusedGate.phase === "tasks" && n6c2.refusedGate.failing.join() === "traceability" && /Before approving 'tasks'.*US-2\.AC-7/.test(n6c2.recommendation) &&
+      n6d.step === "approve" && /\/approve order-core tasks/.test(n6d.recommendation),
+      "next_action phase by phase: classification (fill → approve) → requirements approved BEFORE the design is asked for → design approved before the tasks' checks count → what the tasks gate refuses (traceability) → approve tasks (got " +
+      [n6b.step + ":" + n6b.file, n6b2.step, n6b3.step, n6b4.step + ":" + n6b4.file, n6c.step, n6c2.step, n6d.step].join(" · ") + ")");
+    S.approvePhase(w5, f6c.slug, "tasks");
     const n6e = S.nextAction(w5, f6c.slug);
     S.completeTask(w5, f6c.slug, 1, "built and checked");
     const n6f = S.nextAction(w5, f6c.slug);
     ok(n6e.step === "implement" && /#1/.test(n6e.recommendation) && n6f.step === "finish" && /\/spec-finish order-core \(spec_finish\)/.test(n6f.recommendation),
       "next_action: approvals done → implement the next task; all tasks done → spec_finish / /spec-finish by name");
+    // A phase approved with force over a failing check (the human's call): the walk moves on to the next phase; once every
+    // phase is approved, the check still failing is what next_action asks to fix — before any task.
+    const f6x = S.createFeature(w5, "Order forced", ["core"]);
+    write5(f6x, "classification.md", read5(f6x, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
+    write5(f6x, "requirements.md", REQ.replace("## Success Criteria", "5. **US-1.AC-5** — the export is quick.\n\n## Success Criteria"));
+    write5(f6x, "design.md", DESIGN);
+    write5(f6x, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-1.AC-5, US-2.AC-1_\n");
+    S.approvePhase(w5, f6x.slug, "classification");
+    const ap6x = S.approvePhase(w5, f6x.slug, "requirements", undefined, { force: true });
+    const n6x = S.nextAction(w5, f6x.slug);
+    S.approvePhase(w5, f6x.slug, "design"); S.approvePhase(w5, f6x.slug, "tasks");
+    const n6x2 = S.nextAction(w5, f6x.slug);
+    ok(ap6x.forced && ap6x.failing.includes("ears") && n6x.step === "approve" && /\/approve order-forced design/.test(n6x.recommendation) &&
+      n6x2.step === "fix" && /^Fix blocking checks \(ears\)/.test(n6x2.recommendation) && n6x2.gatesOk === true,
+      "a forced approval over a failing check: the walk goes on (approve design), and once every phase is approved the failing check comes before any task (got " + [n6x.step, n6x2.step, n6x2.recommendation.slice(0, 40)].join(" · ") + ")");
     // Phase 4 is the hard gate (+tdd): once test-plan.md exists, `tests` is pending — after test-plan, before tasks — so
     // next_action asks for the failing tests (/writeTests) and never jumps to "implement"; gatesOk and finish count it.
     // A core feature (order-core above) has no Phase 4.
@@ -2369,16 +2416,18 @@ function endRun() {
     const part6t = S.approvePhase(w5, f6t.slug, "tests");
     fs.appendFileSync(path.join(f6t.dir, "tests", "unit", "order.test.js"), `test("T-05 builds it", () => { throw new Error("not implemented"); });\n`);
     const ap6tT = S.approvePhase(w5, f6t.slug, "tests");
+    const ap6t3 = S.approvePhase(w5, f6t.slug, "tasks");
     const n6t3 = S.nextAction(w5, f6t.slug);
     ok(noCode6t.refused && noCode6t.failing.join() === "tests-in-code" && /planned tests no test file names yet: T-01, T-02, T-03, T-04, T-05/.test(noCode6t.error) &&
       part6t.refused && /names yet: T-05 —/.test(part6t.error) && ap6tT.ok && !ap6tT.forced,
       "approve tests (+tdd) is refused until every planned T-ID is named by a test file (tests-in-code, the missing ones listed); then approved unforced");
     ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "fix" && n6t.refusedGate.phase === "tests" && n6t.refusedGate.failing.join() === "tests-in-code" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
       /\/writeTests order-tdd/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation) &&
-      ap6t.ok && n6t2.step === "fix" && n6t2.pendingGates.join() === "tests" && fin6t.blockers.some((b) => /tests/.test(b)) &&
-      n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
+      ap6t.ok === false && ap6t.failing.join() === "phase-order" && /earlier phases are not approved yet: tests/.test(ap6t.error) &&
+      n6t2.step === "fix" && n6t2.pendingGates.join() === "tests,tasks" && fin6t.blockers.some((b) => /tests/.test(b)) &&
+      ap6t3.ok && n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
       /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")) && /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
-      "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, finish is blocked; approved → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
+      "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, the tasks can't be approved before it (phase-order), finish is blocked; approved → tasks → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
     ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
     // A feature whose tasks are already ticked (a 1.12 feature upgraded — it had no tests gate — or any executing one):
     // "write every planned test and confirm each fails … no implementation code until then" is impossible once the code
@@ -2390,7 +2439,8 @@ function endRun() {
     write5(f6l, "test-plan.md", "# Test Plan\n\n| Test ID | Covers |\n|---|---|\n" + acs6t.map((ac, i) => `| T-0${i + 1} | ${ac} |`).join("\n") + "\n");
     write5(f6l, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: " + acs6t.join(", ") + "_\n  - _Makes green: T-01, T-02, T-03, T-04, T-05_\n" +
       "- [ ] 2. [US1] Polish it\n  - _Requirements: US-1.AC-1_\n");
-    ["classification", "requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w5, f6l.slug, p));
+    ["classification", "requirements", "design", "test-plan"].forEach((p) => S.approvePhase(w5, f6l.slug, p));
+    S.approvePhase(w5, f6l.slug, "tasks", undefined, { force: true }); // 1.12 approved the tasks with no tests gate before them
     const n6l0 = S.nextAction(w5, f6l.slug); // nothing ticked yet: test-first wording
     const ap6l0 = S.approvePhase(w5, f6l.slug, "tests"); // refused: tests-in-code, worded test-first
     S.completeTask(w5, f6l.slug, 1, "built under 1.12");
@@ -2419,6 +2469,7 @@ function endRun() {
       "approve tests on an executing/complete feature: the tests-in-code refusal is the sign-off wording (EN/PT/ES) — 'write each failing test' only before any task is ticked (got " + JSON.stringify([tic(ap6l0), tic(ap6l1), tic(ap6l1pt)]) + ")");
     // +ai: the tests gate needs an eval set of the feature's own — the scaffold's sample golden.json is refused (eval-sets).
     const f6a = S.createFeature(w5, "Order ai", ["ai"], undefined, undefined, "pt");
+    approveBefore(w5, f6a.slug, "tests");
     const aiSample = S.approvePhase(w5, f6a.slug, "tests");
     fs.writeFileSync(path.join(f6a.dir, "evals", "golden.json"), JSON.stringify({ set: "golden", items: [] }));
     const aiEmpty = S.approvePhase(w5, f6a.slug, "tests");
@@ -2495,9 +2546,9 @@ function endRun() {
     const r1 = S.createFeature(w10, "Fresh one", ["saas"]);
     const r2 = S.createFeature(w10, "Designing", ["core"]);
     write5(r2, "requirements.md", REQ);
+    S.approvePhase(w10, r2.slug, "classification", undefined, { force: true });
     S.approvePhase(w10, r2.slug, "requirements");
     fs.appendFileSync(path.join(r2.dir, "requirements.md"), "\n## Assumptions\n- none.\n");
-    S.approvePhase(w10, r2.slug, "classification", undefined, { force: true });
     const md10 = S.renderRoadmapMd(w10, "en");
     const row = (n) => md10.split("\n").find((l) => l.includes("[" + n + "]")) || "";
     ok(/#1 \(placeholder\)/.test(row("fresh-one")) && /^\| ⬜ \|.* 8% /.test(row("fresh-one")) && /^\| 🟡 \|.* 16% /.test(row("designing")) && !/#1 \|/.test(md10),
@@ -2561,6 +2612,7 @@ function endRun() {
     write5(fK, "design.md", DESIGN);
     write5(fK, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n" +
       "- [ ] 2. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
+    approveBefore(w5, fK.slug, "tasks");
     const apK1 = S.approvePhase(w5, fK.slug, "tasks");
     write5(fK, "tasks.md", "# Tasks\n\n- [x] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1.AC-2_\n" +
       "- [ ] 3. [US1] Enforce tenant isolation — every query scoped by tenant_id\n  - _Requirements: US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
@@ -5206,8 +5258,10 @@ function endRun() {
     put12(e12, "tests/login.test.js", "test('T-01 opens the dashboard', () => {});\n");
     const fTr12 = S.traceCheck(e12, fp12.slug, { code: true });
     const fMcp12 = (await call12("trace_check", { name: fp12.slug, projectDir: e12 })).p;
-    const fTests12 = S.approvePhase(e12, fp12.slug, "tests");
+    approveBefore(e12, fp12.slug, "test-plan");
     const fPlan12 = S.approvePhase(e12, fp12.slug, "test-plan");
+    approveBefore(e12, fp12.slug, "tests"); // the test plan with force (phase by phase) — the tests gate is what's checked here
+    const fTests12 = S.approvePhase(e12, fp12.slug, "tests");
     ok(fTr12.verdict === "gaps-found" && fTr12.uncoveredByTests.join() === "US-1.AC-2" && fTr12.plannedTests === 1 && !fTr12.testsNotMappedToTasks.length &&
       fTr12.code.planned === 1 && !fTr12.code.plannedNotInCode.length && fMcp12.uncoveredByTests.join() === "US-1.AC-2" && fMcp12.plannedTests === 1 &&
       fPlan12.ok === false && fPlan12.failing.includes("traceability") && /US-1\.AC-2/.test(fPlan12.error) && fTests12.ok === true,
@@ -5735,6 +5789,7 @@ function endRun() {
       const f = S.createFeature(p15, name, tracks);
       const text = refText(file);
       fs.writeFileSync(path.join(f.dir, "design.md"), text.slice(text.indexOf("# Design:")));
+      approveBefore(p15, f.slug, "design");
       const ap = S.approvePhase(p15, f.slug, "design", "t");
       const cc = (S.specDoctor(p15, f.slug).checks.find((c) => c.id === "constitution-check") || {}).status;
       return { file, ok: ap.ok === true && cc === "pass", detail: ap.ok ? cc : ap.error };

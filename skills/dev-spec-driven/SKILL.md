@@ -425,10 +425,12 @@ contradictions, ambiguity, testability, scope, YAGNI) — what structural checks
 signs off, record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval
 is a gate:** that phase's checks run first and any failure refuses it, naming the failing checks. `force: true`
 (`--force`) records it anyway as a *forced* approval — only when the user explicitly accepts the failures; doctor,
-the roadmap and the metrics keep showing it. Lost? `/next-action <feature>` gives ONE next step in the chain's
-order — fill the first unwritten artifact → re-review what changed since approval → fix the current phase's
-failing checks → approve → implement the next task → verify an unverified tick → finish (once finished: `finished`,
-or `drift` to decide on).
+the roadmap and the metrics keep showing it. **Phase by phase:** a phase can't be approved while an earlier one is
+still unapproved (check `phase-order`, naming it). Lost? `/next-action <feature>` gives ONE next step — re-review
+what changed since approval → then the first phase not approved yet (classification → requirements → design →
+test/eval plan → tests → tasks): fill its artifact → fix what its gate would refuse → approve it, and only then the
+next phase → fix a check still failing after a forced approval → implement the next task → verify an unverified
+tick → finish (once finished: `finished`, or `drift` to decide on).
 
 At every gate present: **(1) what was produced · (2) key decisions + rationale · (3) tracks/sections
 affected · (4) risks to review · (5) the `spec_doctor` verdict · (6) next step** — then ask for

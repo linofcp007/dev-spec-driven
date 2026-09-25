@@ -69,6 +69,13 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   (bug.md — Reproduction + Root Cause) was never pending either, because `pendingGates` looked for a design.md:
   it wasn't asked for, finish didn't need it and a later root-cause edit went unnoticed. It is now due on bug.md,
   like approve, impact and changed-since-approval already read it.
+- **Phase by phase.** SKILL.md presents each phase for approval before the next one starts, but `next_action` went
+  from "fill requirements.md" straight to "fill design.md" and asked for approvals only once the whole chain was
+  written — and `spec_approve` took a bugfix's tasks before its design. `next_action` now walks the active phases in
+  order (classification, requirements, design, test/eval plan, tests, tasks) and, for the first one not approved yet,
+  says fill it → fix what its gate refuses → approve it; the next phase starts only after that approval (a changed
+  artifact's re-review still comes first; implement, verify, drift and finish follow). Approving a phase while an
+  earlier one is still unapproved is refused (check `phase-order`, naming the earlier phase — EN/PT/ES) unless forced.
 - **Task scanner.** Tasks inside HTML comments or fenced code were counted and ticked, `complete` ticked
   the first regex match in the file, `01.` wasn't task 1, and a stray unclosed `<!--` or fence hid every
   task below it (the feature could read as complete). One comment- and fence-aware scanner now serves
@@ -275,6 +282,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   scanner's rule): it blanked every row below it, so their T-IDs planned nothing, covered nothing and read as phantoms
   in tasks.md. requirements.md (criteria, EARS), the placeholder check and heading / design-section readers follow the
   same rule.
+- **The requirements.md hook in PT/ES** printed each EARS issue's severity in English (`[warn]`) inside an otherwise
+  localized message; it now uses the label `dev-spec ears` prints (`[aviso]` / `[erro]` · `[aviso]` / `[error]`).
 
 ### Added
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new

@@ -2291,6 +2291,7 @@ const MSG = {
       approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
       approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
+      phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
       forcedGates: (list) => `approved with force over failing checks: ${list}`,
       finishRootCause: "bug.md → Root Cause is not filled — no fix before the root cause is known",
       finishPlaceholders: (list) => `template placeholders left in the spec chain: ${list}`,
@@ -2304,6 +2305,7 @@ const MSG = {
       fillEmpty: "it has no content beyond headings",
       fillPlaceholders: (n, first) => `${n} template placeholder(s) left (first: ${first})`,
       fillHint: {
+        "classification.md": (slug) => `confirm the tracks and write the blast radius and compliance tags (/classify ${slug}), then /approve ${slug} classification`,
         "requirements.md": (slug) => `check it with /clarify ${slug} and ears_validate (dev-spec ears ${slug})`,
         "bug.md": (slug) => `write the Reproduction and the Root Cause with evidence (/spec-doctor ${slug})`,
         "design.md": (slug) => `run /spec-doctor ${slug} (mandatory sections, Constitution Check)`,
@@ -3071,6 +3073,7 @@ const MSG = {
       approveRefused: (phase, slug, ids, lines) => `Não é possível aprovar '${phase}' de '${slug}' — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}), ou passa force: true (CLI: --force) para registar a aprovação mesmo assim — fica assinalada como forçada.`,
       approveNothing: (phase, slug, file) => `Nada para aprovar: '${phase}' não tem artefacto em '${slug}' (${file} não existe, ou o track está desativado) — nem com force.`,
       approveForced: (ids) => `Aprovado com force — as verificações a falhar ficam registadas com a aprovação: ${ids}.`,
+      phaseOrder: (list, slug, first) => `há fases anteriores ainda por aprovar: ${list} — aprova-as primeiro, por ordem (/approve ${slug} ${first})`,
       forcedGates: (list) => `aprovado com force apesar de verificações a falhar: ${list}`,
       finishRootCause: "bug.md → Causa Raiz por preencher — nenhuma correção antes de se conhecer a causa",
       finishPlaceholders: (list) => `placeholders do template por preencher na cadeia da spec: ${list}`,
@@ -3084,6 +3087,7 @@ const MSG = {
       fillEmpty: "não tem conteúdo além dos títulos",
       fillPlaceholders: (n, first) => `${n} placeholder(s) do template por preencher (primeiro: ${first})`,
       fillHint: {
+        "classification.md": (slug) => `confirma os tracks e escreve o raio de impacto e as etiquetas de conformidade (/classify ${slug}), depois /approve ${slug} classification`,
         "requirements.md": (slug) => `verifica-o com /clarify ${slug} e ears_validate (dev-spec ears ${slug})`,
         "bug.md": (slug) => `escreve a Reprodução e a Causa Raiz com evidência (/spec-doctor ${slug})`,
         "design.md": (slug) => `corre /spec-doctor ${slug} (secções obrigatórias, Verificação da Constituição)`,
@@ -3810,6 +3814,7 @@ const MSG = {
       approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}), o pasa force: true (CLI: --force) para registrar la aprobación igualmente — queda marcada como forzada.`,
       approveNothing: (phase, slug, file) => `Nada que aprobar: '${phase}' no tiene artefacto en '${slug}' (${file} no existe, o su track está desactivado) — ni con force.`,
       approveForced: (ids) => `Aprobado con force — las verificaciones que fallan quedan registradas con la aprobación: ${ids}.`,
+      phaseOrder: (list, slug, first) => `hay fases anteriores aún sin aprobar: ${list} — apruébalas primero, en orden (/approve ${slug} ${first})`,
       forcedGates: (list) => `aprobado con force pese a verificaciones que fallan: ${list}`,
       finishRootCause: "bug.md → Causa Raíz sin rellenar — ninguna corrección antes de conocer la causa",
       finishPlaceholders: (list) => `placeholders de la plantilla sin rellenar en la cadena de la spec: ${list}`,
@@ -3823,6 +3828,7 @@ const MSG = {
       fillEmpty: "no tiene contenido además de los títulos",
       fillPlaceholders: (n, first) => `${n} placeholder(s) de la plantilla sin rellenar (primero: ${first})`,
       fillHint: {
+        "classification.md": (slug) => `confirma los tracks y escribe el radio de impacto y las etiquetas de cumplimiento (/classify ${slug}), luego /approve ${slug} classification`,
         "requirements.md": (slug) => `compruébalo con /clarify ${slug} y ears_validate (dev-spec ears ${slug})`,
         "bug.md": (slug) => `escribe la Reproducción y la Causa Raíz con evidencia (/spec-doctor ${slug})`,
         "design.md": (slug) => `ejecuta /spec-doctor ${slug} (secciones obligatorias, Verificación de la Constitución)`,

@@ -598,10 +598,16 @@ if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --f
   run(["init", "core", "--project", w5]);
   run(["create", "Gate", "core", "--project", w5]);
   const stateOf = (f) => JSON.parse(fs.readFileSync(path.join(w5, ".specs", f, ".state.json"), "utf8"));
+  const naFresh = run(["next-action", "gate", "--project", w5]).out;
   const refused = run(["approve", "gate", "requirements", "--project", w5]);
-  ok(refused.code === 1 && /Can't approve 'requirements' for 'gate' — failing checks: placeholders, success-criteria, priorities/.test(refused.out) &&
+  ok(refused.code === 1 && /Can't approve 'requirements' for 'gate' — failing checks: phase-order, placeholders, success-criteria, priorities/.test(refused.out) &&
+    /✗ phase-order — earlier phases are not approved yet: classification — approve them first, in order \(\/approve gate classification\)/.test(refused.out) &&
     /✗ placeholders — requirements\.md \(\d+\): requirements\.md:4 /.test(refused.out) && /--force/.test(refused.out) && !stateOf("gate").approvals.requirements,
-    "approve on a template exits 1 listing the failing checks (nothing recorded)");
+    "approve on a template exits 1 listing the failing checks — the unapproved classification before it (phase-order) too (nothing recorded)");
+  run(["approve", "gate", "classification", "--force", "--project", w5]);
+  const naReq = run(["next-action", "gate", "--project", w5]).out;
+  ok(/→ Fill classification\.md — \d+ template placeholder\(s\) left .*\/classify gate/.test(naFresh) && /→ Fill requirements\.md — \d+ template placeholder\(s\) left .*\/clarify gate/.test(naReq),
+    "next-action phase by phase: a fresh feature fills classification.md first (/classify), then — once approved — requirements.md (/clarify)");
   const forced = run(["approve", "gate", "requirements", "--force", "--project", w5]);
   let forcedJ = null;
   try { forcedJ = JSON.parse(run(["approve", "gate", "design", "--force", "--json", "--project", w5]).out); } catch { /* invalid JSON */ }
@@ -611,9 +617,10 @@ if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --f
   const nothing = run(["approve", "gate", "eval-plan", "--force", "--project", w5]);
   ok(nothing.code === 1 && /Nothing to approve: 'eval-plan'/.test(nothing.out), "approve of a phase with no artifact exits 1 even with --force");
   const docG = run(["doctor", "gate", "--project", w5]);
-  ok(/✗ placeholders — template placeholders left/.test(docG.out) && /▲ approval-gates — .*approved with force over failing checks: requirements \(placeholders/.test(docG.out),
-    "doctor lists the placeholders failure and the forced approval (warn)");
-  ok(/→ Fill requirements\.md — \d+ template placeholder\(s\) left .*\/clarify gate/.test(run(["next-action", "gate", "--project", w5]).out), "next-action on a fresh feature: fill requirements.md first");
+  ok(/✗ placeholders — template placeholders left/.test(docG.out) && /▲ approval-gates — .*approved with force over failing checks: classification \(placeholders\), requirements \(placeholders/.test(docG.out),
+    "doctor lists the placeholders failure and the forced approvals (warn)");
+  ok(/→ Fill tasks\.md — \d+ template placeholder\(s\) left .*\/createTask gate/.test(run(["next-action", "gate", "--project", w5]).out),
+    "next-action after the design approval: the tasks are the next phase (fill tasks.md)");
   ok(/approve <feature> <phase> \[--force\]/.test(run(["help"]).out) && /--by NAME \/ --force \(approve\)/.test(run(["help"]).out), "help documents approve --force");
 
   // PT: refusal, forced note and next-action are localized
@@ -622,10 +629,11 @@ if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --f
   run(["create", "Pagamentos", "core", "--project", p5]);
   const ptRef = run(["approve", "pagamentos", "requirements", "--project", p5]);
   const ptForce = run(["approve", "pagamentos", "requirements", "--force", "--project", p5]);
-  ok(ptRef.code === 1 && /Não é possível aprovar 'requirements' de 'pagamentos' — verificações a falhar: placeholders/.test(ptRef.out) &&
+  ok(ptRef.code === 1 && /Não é possível aprovar 'requirements' de 'pagamentos' — verificações a falhar: phase-order, placeholders/.test(ptRef.out) &&
+    /há fases anteriores ainda por aprovar: classification/.test(ptRef.out) &&
     ptForce.code === 0 && /Fase 'requirements' de pagamentos aprovada ✓/.test(ptForce.out) && /⚠ Aprovado com force — as verificações a falhar ficam registadas/.test(ptForce.out) &&
-    /→ Preenche requirements\.md — \d+ placeholder\(s\) do template por preencher/.test(run(["next-action", "pagamentos", "--project", p5]).out),
-    "approve refusal / --force note / next-action speak the feature language (PT)");
+    /→ Preenche classification\.md — \d+ placeholder\(s\) do template por preencher/.test(run(["next-action", "pagamentos", "--project", p5]).out),
+    "approve refusal (phase-order included) / --force note / next-action speak the feature language (PT)");
 
   // bugfix: no fix before the root cause is written; an OPEN task's planned file is no trace gap
   run(["bugfix", "Crash", "--summary", "crash on save", "--project", w5]);
@@ -1580,6 +1588,7 @@ if (inSection("wp16")) { // 1.13 batch 7 — gates at the planning phases, the b
   fs.writeFileSync(bugP16, fs.readFileSync(bugP16, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\n1. Log in.\n2. Open /profile: the header reads [object Object].")
     .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so the browser shows [object Object]; norm() only maps [A-Z]."));
   const bugDoc16 = run(["doctor", "profile-name-shows-object", "--project", w16]);
+  run(["approve", "profile-name-shows-object", "requirements", "--force", "--project", w16]); // phase by phase: requirements first
   const bugAp16 = run(["approve", "profile-name-shows-object", "design", "--project", w16]);
   ok(/✓ reproduction — reproduction documented/.test(bugDoc16.out) && /✓ root-cause — root cause documented/.test(bugDoc16.out) && !/bug\.md:\d+ \[object Object\]/.test(bugDoc16.out) && bugAp16.code === 0,
     "bugfix (CLI): a Reproduction / Root Cause quoting [object Object] / [A-Z] is documented (doctor ✓) and approve design passes (got " + bugAp16.out.slice(0, 120) + ")");

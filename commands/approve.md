@@ -23,7 +23,9 @@ failing tests / eval harness written and red): +tdd `tests-in-code` (every plann
 core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
 `root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `approval-gates`.
 `tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
-`gatesOk` stays false and `spec_next_action` asks for it until it is approved. On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
+`gatesOk` stays false and `spec_next_action` asks for it until it is approved. **Phase by phase:** a phase is
+refused while an EARLIER active phase that has an artifact is still unapproved — check `phase-order`, naming the
+phase(s) to approve first (a bugfix's tasks can't be approved before its design / `bug.md`). On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
 
 `force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only
 when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —

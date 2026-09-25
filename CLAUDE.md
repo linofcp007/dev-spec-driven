@@ -225,11 +225,18 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `checks`) while any fails. `force:true` (CLI `--force`) records it anyway with `forced: true` + the failing
   ids — doctor's `approval-gates` and the roadmap keep flagging it; a clean re-approval replaces it. A phase
   with no artifact (eval-plan without +ai, test-plan without +tdd, `tests` on a core-only feature, a missing file) is an
-  error even with force. `tests` and `execution` have checks too (see Pending gates below).
-- **next_action step order:** `fill` (first chain artifact missing / template; `file`) → `re-review` (an
-  artifact changed since ITS approval; `impact` when a snapshot exists) → `fix` (failing checks of the
-  current or an earlier phase, via `CHECK_PHASE`; or the approve gate's refusal of the next pending phase —
-  `refusedGate` — so it never recommends an approval that would be refused) → `approve` → `implement` →
+  error even with force. `tests` and `execution` have checks too (see Pending gates below). **Phase order:** approving a
+  phase while an EARLIER one is in `pendingGateList()` (doctor's pending gates — only phases with an artifact, so a
+  missing file never blocks forever) adds the failing check `phase-order` (`gates.phaseOrder`, EN/PT/ES) — refused
+  unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
+- **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval; `impact` when a
+  snapshot exists) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
+  when `testsGateDue()`; classification only when classification.md exists): `fill` (one of its `gateArtifacts()` is
+  missing / a template; `file`) → `fix` (its `approvalChecks()` fail — `refusedGate`, so it never recommends an
+  approval that would be refused) → `approve`; the next phase only after that approval (1.13 filled the whole chain
+  first and asked for the approvals at the end — "fill design.md" while the requirements were unapproved) → `fix`
+  (every phase approved, but doctor fails for the current or an earlier phase via `CHECK_PHASE` — a forced approval)
+  → `implement` →
   `verify` (all ticked, but `verificationStatus()` lists an unverified task — spec_finish and the execution gate refuse
   it; it looped "close the feature" / "finished — nothing left" → refused → the same) → `finish` (or `tasks` when
   there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`

@@ -3752,8 +3752,16 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (state.invalid) return { ok: false, error: state.invalid };
   const lng = featureLang(projectDir, f.slug);
   const G = i18n.msg(lng).gates;
-  const gate = approvalChecks(projectDir, f.slug, f.dir, p, detectTracks(f.dir), state.kind || "feature", lng);
+  const tracks = detectTracks(f.dir);
+  const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
   if (!gate.artifact) return { ok: false, nothingToApprove: true, error: G.approveNothing(p, f.slug, gate.file) };
+  // Phase by phase: an EARLIER active phase still waiting for its approval refuses this one (a bugfix's tasks before its
+  // design) — force records it anyway, flagged with `phase-order`. The execution sign-off needs no extra check: its gate
+  // is spec_finish's blockers, which already name every pending gate.
+  if (p !== "execution") {
+    const earlier = pendingGateList(f.dir, tracks, state.kind || "feature", state.approvals).filter((ph) => PHASES.indexOf(ph) < PHASES.indexOf(p));
+    if (earlier.length) gate.checks.unshift({ id: "phase-order", detail: G.phaseOrder(earlier.join(", "), f.slug, earlier[0]) });
+  }
   const failing = gate.checks.map((c) => c.id);
   if (failing.length && opts.force !== true) {
     return { ok: false, refused: true, failing, checks: gate.checks,
@@ -5174,22 +5182,33 @@ function nextAction(projectDir, name) {
   // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
   const changed = changedSinceApproval(dir, approvals, tracks, st.kind);
 
-  const fm = i18n.msg(featureLang(projectDir, name));
+  const lng = featureLang(projectDir, name);
+  const fm = i18n.msg(lng);
   const nx = fm.next;
   const G = fm.gates;
-  // The order is the spec chain's, so a brand-new feature is told to write its requirements — not to fix the
-  // checks of phases it hasn't reached ("Fix blocking checks (saas-sections, traceability)"):
-  // (1) the first chain artifact still missing / a template → fill it; (2) an artifact changed since its approval →
-  // re-review; (3) failing checks of the CURRENT phase (or an earlier one) → fix; (4) the first pending approval —
-  // or, when the approve gate would refuse it, what it fails on; (5) the next task; (6) all tasks done → a ticked task
-  // without passing evidence → verify it (spec_finish would refuse), else drift since a finish → decide, else
-  // spec_finish (again, when its baseline is stale) or finished.
-  const open = chainArtifacts(dir, tracks, st.kind || "feature").map((a) => artifactReport(dir, a.file, tracks)).find((r) => r.state !== "filled");
+  const kind = st.kind || "feature";
+  // Phase by phase (SKILL.md: each phase is presented for approval before the next one starts), so a brand-new feature
+  // is told to write its classification — never the design before the requirements are approved, and never to fix the
+  // checks of phases it hasn't reached:
+  // (1) an artifact changed since its approval → re-review;
+  // (2) the FIRST active phase not approved yet (gateWalk: the chain's order, execution apart, `tests` once due) — its
+  //     artifact missing / still a template → fill it; else the checks its approval runs failing → fix them (named —
+  //     never an approval the gate would refuse); else → approve it. Only that approval opens the next phase;
+  // (3) every phase approved: failing checks of the current phase (or an earlier one — e.g. a forced approval) → fix;
+  // (4) the next task; (5) all tasks done → a ticked task without passing evidence → verify it (spec_finish would
+  //     refuse), else drift since a finish → decide, else spec_finish (again, when its baseline is stale) or finished.
+  const pending = gateWalk(dir, tracks, kind).find((ph) => !approvals[ph]) || null;
+  let open = null;
+  let refused = null;
+  if (pending) {
+    open = gateArtifacts(dir, tracks, kind, pending).map((file) => artifactReport(dir, file, tracks)).find((r) => r.state !== "filled") || null;
+    if (!open) {
+      const g = approvalChecks(projectDir, slug, dir, pending, tracks, kind, lng);
+      if (g.checks.length) refused = g.checks;
+    }
+  }
   const cur = PHASE_INDEX[phase] || 0;
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && (CHECK_PHASE[c.id] || 0) <= cur) : [];
-  const pending = (doc.pendingGates || [])[0];
-  // doctor already ran the approve gate's own checks for this pending phase (nextGate).
-  const refused = doc.nextGate && doc.nextGate.phase === pending && doc.nextGate.failing.length ? doc.nextGate.failing : null;
   // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
   const plans = [tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md")), tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"))];
   const testsWhat = plans[0] && plans[1] ? "both" : plans[1] ? "ai" : "tdd";
@@ -5206,21 +5225,18 @@ function nextAction(projectDir, name) {
   let impactPhases = [];
   let finishedDrift = null;
   let staleBaseline = null;
-  if (open) {
-    step = "fill";
-    const first = open.items.length ? open.items[0].text : "";
-    const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
-      : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
-    recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
-  } else if (changed.length) {
+  if (changed.length) {
     step = "re-review";
     recommendation = nx.reReview(changed.join(", "));
     // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
     impactPhases = snapshotPhases(dir, st, changed);
     if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
-  } else if (fails.length) {
-    step = "fix";
-    recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
+  } else if (open) {
+    step = "fill";
+    const first = open.items.length ? open.items[0].text : "";
+    const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
+      : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
+    recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
   } else if (pending && approveMsg[pending] && refused) {
     // Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…):
     // name what it would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
@@ -5233,6 +5249,9 @@ function nextAction(projectDir, name) {
   } else if (pending && approveMsg[pending]) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
+  } else if (fails.length) {
+    step = "fix";
+    recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
   } else {
     const activeText = activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks);
     const tasks = parseTasks(activeText);
@@ -5242,7 +5261,6 @@ function nextAction(projectDir, name) {
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
       : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
     if (step === "finish") {
-      const lng = featureLang(projectDir, slug);
       const stale = staleFinish(projectDir, st, activeText || "");
       const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
       // The recorded files are hashed whether or not the baseline is stale: a stale baseline (a change request, a
@@ -5296,6 +5314,28 @@ function nextAction(projectDir, name) {
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   return res;
 }
+// The approval chain next_action walks, in order: every active phase (PHASES; `execution` is the sign-off after a
+// finish, not a planning phase), `tests` only once testsGateDue says the plan it implements exists (never a bugfix's),
+// classification only when classification.md exists (a feature folder made by hand, or by an old engine, has none —
+// it was never a gate there; every other chain artifact that is missing is "fill it").
+function gateWalk(dir, tracks, kind) {
+  return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) &&
+    (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
+}
+// The artifacts a phase's approval signs off, as next_action's "fill" step checks them: classification.md, the chain
+// artifact(s) of that phase (a bugfix's design is bug.md, plus design.md while it holds active track sections), none for `tests`.
+function gateArtifacts(dir, tracks, kind, phase) {
+  if (phase === "classification") return ["classification.md"];
+  return chainArtifacts(dir, tracks, kind).filter((a) => a.phase === phase).map((a) => a.file);
+}
+// Doctor's pending gates: the active phases whose artifact exists (phaseFile — a bugfix's design gate is due on bug.md)
+// or, for `tests` (Phase 4, no artifact), once testsGateDue() says so — not approved yet, in the chain's order. approvePhase
+// refuses a phase while an EARLIER one is still in this list (a phase with nothing to approve never blocks a later one).
+function pendingGateList(dir, tracks, kind, approvals) {
+  const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
+  return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]);
+}
+
 // The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
@@ -5408,7 +5448,7 @@ const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
 // content), and a criterion quoting real values — `[free: 60, pro: 600, enterprise: 6000]`, `[admin, billing-manager,
 // read only]`, `[10 MB, 25 MB for pro]` — read as a slot: the approval was refused and finished, upgraded 1.12 specs
 // were blocked (doctor FAIL, next_action "fill requirements.md" at 5/5 tasks, finish refused). The set
-// (templatePlaceholderSet) holds every bracket text the CURRENT templates render (templateCorpus: every builder, EN/PT/ES,
+// (templateSets) holds every bracket text the CURRENT templates render (templateCorpus: every builder, EN/PT/ES,
 // every track combination and kind, the track / import task slots, the steering stubs), every bracket text the 1.12.1
 // templates rendered (LEGACY_TEMPLATE_PLACEHOLDERS: a spec scaffolded by 1.12 still holds those), and the generic unfilled
 // tokens (isGenericSlot: TODO, TBD, TBC, FIXME, "...", "…"). Anything else in brackets is the user's own content.
@@ -6211,8 +6251,7 @@ function specDoctor(projectDir, name, opts = {}) {
   // In the chain's order (PHASES). A phase is pending once the artifact it signs off exists — phaseFile(), so a
   // bugfix's design gate is due on bug.md (its Root Cause) — or, for `tests` (Phase 4, no artifact), once
   // testsGateDue() says the plan it implements exists.
-  const gateDue = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
-  const pendingGates = PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && gateDue(ph) && !approvals[ph]);
+  const pendingGates = pendingGateList(dir, tracks, kind, approvals);
   // A forced approval (approve --force over failing checks) is recorded, but it stays visible here as a warn.
   const forcedGates = PHASES.filter((ph) => phaseActive(ph, tracks) && approvals[ph] && approvals[ph].forced);
   // The first pending gate — the one next_action recommends — run through the approve gate itself, which is stricter
