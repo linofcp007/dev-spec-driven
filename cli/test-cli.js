@@ -187,7 +187,6 @@ const fin = run(["finish", "login-loop", "--project", vp]);
 ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /Root Cause is not filled/.test(fin.out), "finish exits 1 while blocked and prints the merge summary from the spec");
 } // section main
 
-// @wp WP1 cli-tests >>>
 if (inSection("wp1")) {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
@@ -273,9 +272,7 @@ const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
 ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
   "an inline '<!--' in a task's text hides no task below it (status and done agree)");
 } // section wp1
-// @wp WP1 <<<
 
-// @wp WP2 cli-tests >>>
 if (inSection("wp2")) { // 1.13 WP2 — track input, add-track --remove, status marks (own block scope)
   const w2 = path.join(tmp, "wp2-proj");
   run(["init", "core", "--project", w2]);
@@ -324,9 +321,7 @@ if (inSection("wp2")) { // 1.13 WP2 — track input, add-track --remove, status 
     chatBriefN.code === 0 && new RegExp("task " + aiNums[0]).test(chatBriefN.out),
     "after add-track --remove, `brief` (no number) says all done like `next`; `brief <n>` still reaches the inactive task");
 }
-// @wp WP2 <<<
 
-// @wp WP3 cli-tests >>>
 if (inSection("wp3")) { // 1.13 WP3: depend parity with the MCP tool, one default approver, own-key lookups
   const dp = path.join(tmp, "wp3-dep");
   ["a", "b", "c"].forEach((n) => run(["create", n, "core", "--project", dp]));
@@ -357,9 +352,7 @@ if (inSection("wp3")) { // 1.13 WP3: depend parity with the MCP tool, one defaul
   ok(st.code === 1 && /Unknown steering file/.test(st.out) && !/TypeError|ERR_INVALID/.test(st.out) && mc.code === 1 && /unknown client/.test(mc.out),
     "steering constructor / mcp-config constructor → the normal 'unknown' errors (own-key lookups)");
 }
-// @wp WP3 <<<
 
-// @wp WP4 cli-tests >>>
 if (inSection("wp4")) {
 // 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, confirmations, rules, help, localized output.
 const S4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -507,9 +500,7 @@ ok(flagsRead.length >= 15 && flagsRead.every((x) => doc4.includes(x)) && ["--by"
 ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(x)).every((x) => help4.includes(x)) && /--md/.test(help4) && /alias: na/.test(help4),
   "help mentions every flag it owns plus the --md and na aliases");
 } // section wp4
-// @wp WP4 <<<
 
-// @wp WP5 cli-tests >>>
 if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --force / nothing to approve), next-action order, bugfix gate, planned files
   const w5 = path.join(tmp, "wp5-proj");
   run(["init", "core", "--project", w5]);
@@ -561,9 +552,7 @@ if (inSection("wp5")) { // 1.13 WP5 — gates on the CLI: approve (refused / --f
   const trP = run(["trace", "plan", "--project", w5]);
   ok(trP.code === 0 && /verdict=pass/.test(trP.out) && !/src\/not-yet\.js/.test(trP.out), "trace: an open task's not-yet-written _Implements:_ file is no gap (exit 0)");
 }
-// @wp WP5 <<<
 
-// @wp WP6 cli-tests >>>
 if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_, import (Kiro · spec-kit · OpenSpec), create --brownfield (own block scope)
   const w6 = path.join(tmp, "wp6-proj");
   const put = (rel, s) => { const p = path.join(w6, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -666,9 +655,7 @@ if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_
   ok(cov2.code === 0 && /⚠ _Implements:_ entries that name nothing on disk: src\/missing\.js$/m.test(cov2.out) && /· _Implements:_ entries naming tests or non-code files \(not counted\): tests\/orders\.test\.js/.test(cov2.out),
     "coverage: a +tdd task naming its (existing) test file is informational; only a missing path is flagged");
 }
-// @wp WP6 <<<
 
-// @wp WP7 cli-tests >>>
 // 1.13 WP7: append-tasks <feature> --task … — one task per call, same engine call as spec_append_tasks.
 if (inSection("wp7")) {
   const S7 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -767,9 +754,7 @@ if (inSection("wp7")) {
     ["--task", "--req", "--implements", "--verify", "--story", "--parallel", "--heading"].every((x) => help7.includes(x)),
     "help lists append-tasks right after finish, with every flag it reads");
 }
-// @wp WP7 <<<
 
-// @wp WP8 cli-tests >>>
 if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and metrics (+ retro.md) on the CLI, EN and PT
   const S8 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const w8 = path.join(tmp, "wp8-proj");
@@ -859,9 +844,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   ok(after8(help8) && after8(doc8) && ["--phase", "--reopen", "--write"].every((x) => help8.includes(x) && doc8.includes(x)),
     "help and the header docblock list impact + metrics right after approve, with --phase / --reopen / --write");
 }
-// @wp WP8 <<<
 
-// @wp WP9 cli-tests >>>
 if (inSection("wp9")) { // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (exit code unchanged); --code scans test files; finish lists warnings ---
   const w9 = path.join(tmp, "wp9");
   const put9 = (rel, s) => { const p = path.join(w9, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -925,9 +908,7 @@ if (inSection("wp9")) { // --- 1.13 WP9: trace prints the EC/NFR/SC warnings (ex
   ok(/tests in code: 1\/1 planned/.test(bg9.out) && !/planned tests that no test file names/.test(bg9.out) && /✓ tests-in-code/.test(bgd9.out),
     "trace --code / doctor: a bare file name File cell (`badge.test.js`) is satisfied by src/badge/badge.test.js (got " + bg9.out + ")");
 }
-// @wp WP9 <<<
 
-// @wp WP10 cli-tests >>>
 if (inSection("wp10")) {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
 const S10 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -1060,9 +1041,7 @@ ok(hFeat > 0 && hCat > hFeat && hDrift > hCat && hDrift < help10.indexOf("  road
   /rename \| restore a feature/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
   "help and the header docblock list catalog / drift (right after feature) and feature restore");
 } // section wp10
-// @wp WP10 <<<
 
-// @wp WP11 cli-tests >>>
 // 1.13 WP11: init --guard on|off (= spec_init {guard}) and custom scoped steering files (= steering_scaffold).
 if (inSection("wp11")) {
   const S11 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -1127,7 +1106,6 @@ if (inSection("wp12")) { // 1.13 WP12 — append-tasks takes the EC/NFR/SC IDs r
     tr12j && JSON.stringify(tr12j) === JSON.stringify(S12.traceCheck(p12, "login")) && tr12j.plannedImplFiles.join() === "jobs/*.js",
     "trace: a done task's glob that matches nothing is a missing file (exit 1); an open task's is planned; --json = trace_check");
 }
-// @wp WP11 <<<
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");

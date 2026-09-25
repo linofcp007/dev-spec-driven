@@ -74,19 +74,11 @@ const pos = [];
 // Flags that take a value, as `--flag value` or `--flag=value`. Any other `--flag` is a boolean switch
 // (so `depend a b --order 3` no longer turns "3" into a dependency).
 const VALUE_FLAGS = new Set(["project", "lang", "order", "cap", "by", "summary", "kind", "max", "evidence", "exit", "cmd"]);
-// @wp WP1 value-flags >>>
 VALUE_FLAGS.add("shell"); // done --run --shell bash|<path>
-// @wp WP1 <<<
 
-// @wp WP2 value-flags >>>
-// @wp WP2 <<<
-
-// @wp WP3 value-flags >>>
 VALUE_FLAGS.add("add"); // depend <f> --add x[,y]
 VALUE_FLAGS.add("rm"); // depend <f> --rm x[,y]
-// @wp WP3 <<<
 
-// @wp WP4 value-flags >>>
 VALUE_FLAGS.add("name"); // classify --name <feature name> (evidence for the classifier, like spec_classify {name})
 VALUE_FLAGS.add("text"); // ears --text "<criteria>" (raw text, like ears_validate {text})
 
@@ -111,38 +103,20 @@ function readStdin(cb) {
   process.stdin.on("end", () => { try { cb(data); } catch (e) { die(e.message); } });
   process.stdin.on("error", (e) => die(e.message));
 }
-// @wp WP4 <<<
 
-// @wp WP5 value-flags >>>
-// @wp WP5 <<<
-
-// @wp WP6 value-flags >>>
 VALUE_FLAGS.add("tracks"); // --tracks tdd,saas = the MCP `tracks` argument (import, create/bugfix, init, add-track)
 // A value flag takes ONE token: `--tracks saas ai` leaves "ai" positional, so every command that takes tracks
 // merges the flag with its positional tracks (parseTracks splits "tdd,saas") — none may drop it silently.
 function withTracksFlag(list) {
   return typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list;
 }
-// @wp WP6 <<<
 
-// @wp WP7 value-flags >>>
 // append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--story US1] [--heading "<phase>"]
 ["task", "req", "implements", "verify", "story", "heading"].forEach((k) => VALUE_FLAGS.add(k));
-// @wp WP7 <<<
 
-// @wp WP8 value-flags >>>
 VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|tasks
-// @wp WP8 <<<
 
-// @wp WP9 value-flags >>>
-// @wp WP9 <<<
-
-// @wp WP10 value-flags >>>
-// @wp WP10 <<<
-
-// @wp WP11 value-flags >>>
 VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
-// @wp WP11 <<<
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -598,16 +572,6 @@ function main() {
       });
     }
 
-    // @wp WP1 commands >>>
-    // @wp WP1 <<<
-
-    // @wp WP2 commands >>>
-    // @wp WP2 <<<
-
-    // @wp WP3 commands >>>
-    // @wp WP3 <<<
-
-    // @wp WP4 commands >>>
     case "rules": {
       // dev-spec rules <cursor|windsurf|copilot|gemini|agents> — a per-tool rule file from THIS clone, with its
       // relative paths made absolute so it works pasted into any project (like mcp-config, never committed).
@@ -636,12 +600,7 @@ function main() {
       }).replace(/ \(repo root\)/g, "");
       return process.stdout.write(text.endsWith("\n") ? text : text + "\n");
     }
-    // @wp WP4 <<<
 
-    // @wp WP5 commands >>>
-    // @wp WP5 <<<
-
-    // @wp WP6 commands >>>
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
@@ -657,9 +616,7 @@ function main() {
         r.warnings.forEach((w) => console.log("  ⚠ " + w));
       });
     }
-    // @wp WP6 <<<
 
-    // @wp WP7 commands >>>
     case "append-tasks": {
       // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
       if (!pos[0] || typeof flags.task !== "string") die('usage: dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
@@ -696,9 +653,7 @@ function main() {
         if (r.note) console.log("  ⚠ " + r.note);
       });
     }
-    // @wp WP7 <<<
 
-    // @wp WP8 commands >>>
     case "impact": {
       // dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen] — the same engine call as spec_impact
       if (!pos[0]) die("usage: dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]");
@@ -713,12 +668,7 @@ function main() {
       if (!r.ok) die(r.error);
       return out(r, (r) => spec.metricsLines(r).forEach((l) => console.log(l)));
     }
-    // @wp WP8 <<<
 
-    // @wp WP9 commands >>>
-    // @wp WP9 <<<
-
-    // @wp WP10 commands >>>
     case "catalog": {
       // dev-spec catalog [--write] — the living .specs/SPECS.md (= spec_catalog {write}). Without --write the markdown is
       // printed; a hand-written SPECS.md (no AUTO-GENERATED marker) is never overwritten → exit 1.
@@ -756,10 +706,6 @@ function main() {
         (r.errors || []).forEach((e) => console.error("dev-spec: " + e.error));
       });
     }
-    // @wp WP10 <<<
-
-    // @wp WP11 commands >>>
-    // @wp WP11 <<<
 
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));

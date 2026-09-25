@@ -192,10 +192,6 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, confirm: { type: "boolean", description: "Must be true for action 'remove' (deletion is permanent). Ignored by archive/rename/restore." }, projectDir: { type: "string" } }, required: ["action", "name"] },
   },
 
-  // @wp WP5 tools >>>
-  // @wp WP5 <<<
-
-  // @wp WP6 tools >>>
   {
     name: "spec_import",
     description:
@@ -213,9 +209,7 @@ const TOOLS = [
       required: ["tool", "path"],
     },
   },
-  // @wp WP6 <<<
 
-  // @wp WP7 tools >>>
   {
     name: "spec_append_tasks",
     description:
@@ -246,9 +240,7 @@ const TOOLS = [
       required: ["name", "tasks"],
     },
   },
-  // @wp WP7 <<<
 
-  // @wp WP8 tools >>>
   {
     name: "spec_impact",
     description:
@@ -277,12 +269,7 @@ const TOOLS = [
       },
     },
   },
-  // @wp WP8 <<<
 
-  // @wp WP9 tools >>>
-  // @wp WP9 <<<
-
-  // @wp WP10 tools >>>
   {
     name: "spec_catalog",
     description:
@@ -295,10 +282,6 @@ const TOOLS = [
       "Drift since finish: spec_finish {write: true} on a ready feature records a baseline — a CRLF-normalized sha1 of every file its `_Implements:_` markers name (a folder expands to its files; only files inside the project). spec_drift compares each finished feature's recorded files with the working tree and reports, per feature, the files changed, missing, or now present (missing at finish) since that baseline. `name` checks one feature (active or archived); features without a baseline are listed apart (`unbaselined`), not an error, and so are baselined features whose tasks are open again (`reopened` — checked once they are finished again). An unreadable .state.json is reported in `errors` (verdict `error`), never as clean. Read-only; hashes only the recorded files (never walks the tree).",
     inputSchema: { type: "object", properties: { name: { type: "string", description: "One feature (active or archived). Omit for every feature." }, projectDir: { type: "string" } } },
   },
-  // @wp WP10 <<<
-
-  // @wp WP11 tools >>>
-  // @wp WP11 <<<
 ];
 
 // --- Tool dispatch ---------------------------------------------------------
@@ -363,39 +346,21 @@ function runTool(name, args) {
     case "spec_feature":
       return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true });
 
-    // @wp WP5 dispatch >>>
-    // @wp WP5 <<<
-
-    // @wp WP6 dispatch >>>
     case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`)
       return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang });
-    // @wp WP6 <<<
 
-    // @wp WP7 dispatch >>>
     case "spec_append_tasks":
       return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
-    // @wp WP7 <<<
 
-    // @wp WP8 dispatch >>>
     case "spec_impact": // the same engine call as the CLI's `impact` (reopen only on an explicit true)
       return spec.impactReport(pdir, args.name, { phase: args.phase, reopen: args.reopen === true });
     case "spec_metrics":
       return spec.metrics(pdir, args.name, { write: args.write === true });
-    // @wp WP8 <<<
 
-    // @wp WP9 dispatch >>>
-    // @wp WP9 <<<
-
-    // @wp WP10 dispatch >>>
     case "spec_catalog": // a refused write (hand-written SPECS.md, no .specs/) is an error — same call as the CLI's `catalog`
       return spec.catalog(pdir, { write: args.write === true });
     case "spec_drift":
       return spec.drift(pdir, args.name);
-    // @wp WP10 <<<
-
-    // @wp WP11 dispatch >>>
-    // @wp WP11 <<<
-
     default:
       throw new Error("Unknown tool: " + name);
   }

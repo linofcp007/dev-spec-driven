@@ -2039,7 +2039,6 @@ const MSG = {
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tasks)`,
     },
 
-    // @wp WP1 msg-en >>>
     // Evidence gate (spec_complete_task / doctor / spec_finish). Reason codes stay English-stable.
     evidenceGate: {
       noContent: "Evidence needs a command (with its exit code) or a summary — an exit code alone proves nothing.",
@@ -2063,9 +2062,7 @@ const MSG = {
       noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
       shellHint: "Hint: this ran under the default Windows shell (cmd.exe). If the _Verify:_ command uses POSIX shell syntax, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
     },
-    // @wp WP1 <<<
 
-    // @wp WP2 msg-en >>>
     tracks: {
       unknown: (items, valid) => `Unknown track${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (did you mean '${u.suggestion}'?)` : "")).join(", ")}. Valid tracks: ${valid}.`,
       cannotRemoveCore: "'core' is always on — it can't be removed.",
@@ -2078,9 +2075,7 @@ const MSG = {
       designSections: (marker) => `design.md (${marker} sections)`,
       taskBlock: (track, start) => BUILD.en.trackTasks({ track, start }),
     },
-    // @wp WP2 <<<
 
-    // @wp WP3 msg-en >>>
     // MCP argument validation (server.js): names the argument and the type its inputSchema expects.
     args: {
       missing: (list) => `Missing required argument(s): ${list}`,
@@ -2145,9 +2140,7 @@ const MSG = {
       verdict: (below) => `\nVerdict: ${below ? "BELOW THRESHOLD ✗" : "all sets pass ✓"}`,
       crashed: (msg) => `eval harness error: ${msg}`,
     },
-    // @wp WP3 <<<
 
-    // @wp WP4 msg-en >>>
     // Every gap kind trace_check can report (CLI, hook and doctor list them all — none is dropped).
     traceGapText: {
       kinds: {
@@ -2222,9 +2215,7 @@ const MSG = {
       missingValue: (flag) => `missing value for --${flag}`,
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
     },
-    // @wp WP4 <<<
 
-    // @wp WP5 msg-en >>>
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
     // next_action's "fill <file>" step, clarify's grouped placeholder question and the requirements hook line.
     gates: {
@@ -2265,9 +2256,7 @@ const MSG = {
       clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
       hookPlaceholders: (n, list) => `Template placeholders: ${n} left in requirements.md (${list}) — replace them before approving the requirements.`,
     },
-    // @wp WP5 <<<
 
-    // @wp WP6 msg-en >>>
     // Brownfield depth: scan / coverage CLI lines and the integration-plan doctor check.
     brownfield: {
       frameworks: (list) => `  frameworks: ${list}`,
@@ -2333,9 +2322,7 @@ const MSG = {
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
-    // @wp WP6 <<<
 
-    // @wp WP7 msg-en >>>
     // spec_append_tasks / `dev-spec append-tasks` (converge). Markers, IDs and **Checkpoint:** stay English-stable.
     appendTasks: {
       heading: "Phase: Convergence",
@@ -2357,9 +2344,7 @@ const MSG = {
       oneTaskPerCall: "append-tasks takes one --task per call — run it again for the next task (spec_append_tasks takes a list).",
       oneValue: (flag) => `append-tasks takes --${flag} once per call — ${flag === "verify" ? "join the checks into one command (a && b)" : "give a single value"}. Nothing was written.`,
     },
-    // @wp WP7 <<<
 
-    // @wp WP8 msg-en >>>
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
@@ -2486,9 +2471,7 @@ const MSG = {
       },
       retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
     },
-    // @wp WP8 <<<
 
-    // @wp WP9 msg-en >>>
     // Deep traceability (trace_check warnings, doctor secondary-trace / tests-in-code, finish, hook). Never blocking.
     deepTrace: {
       kinds: {
@@ -2507,9 +2490,7 @@ const MSG = {
       codeSummary: (found, planned, scanned, truncated) => `  tests in code: ${found}/${planned} planned T-ID(s) named in ${scanned} test file(s)` + (truncated ? " (scan truncated at its cap)" : ""),
       warningsHead: "Warnings (not blocking):",
     },
-    // @wp WP9 <<<
 
-    // @wp WP10 msg-en >>>
     // Living catalog (.specs/SPECS.md) chrome. IDs, `_Supersedes:_` and the AUTO-GENERATED marker stay English-stable.
     catalog: {
       title: (proj) => `Spec catalog — ${proj}`,
@@ -2554,9 +2535,7 @@ const MSG = {
       hookLine: (f, n) => `  ⚠ ${f}: ${n} implementing file(s) changed since finish — run dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Drift baseline recorded: ${n} implementing file(s)${missing ? ` (${missing} missing)` : ""} — dev-spec drift shows what changes after this finish.`,
     },
-    // @wp WP10 <<<
 
-    // @wp WP11 msg-en >>>
     // Guard mode (hooks/guard-hook.js, PreToolUse · spec_init {guard} · `dev-spec init --guard on|off`).
     guardMode: {
       ask: (pending) => "dev-spec guard: no approved tasks cover code changes right now — approve a feature's tasks (spec_approve) or confirm to proceed." +
@@ -2594,7 +2573,6 @@ const MSG = {
       placeholders: (n, list) => `${n} template placeholder(s) left: ${list}`,
       hint: (slug) => `Fill them before approving the design — details: /spec-doctor ${slug}.`,
     },
-    // @wp WP11 <<<
   },
 
   pt: {
@@ -2766,7 +2744,6 @@ const MSG = {
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
     },
 
-    // @wp WP1 msg-pt >>>
     evidenceGate: {
       noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
       manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
@@ -2788,9 +2765,7 @@ const MSG = {
       noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
       shellHint: "Dica: isto correu na shell por omissão do Windows (cmd.exe). Se o comando _Verify:_ usa sintaxe de shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
     },
-    // @wp WP1 <<<
 
-    // @wp WP2 msg-pt >>>
     tracks: {
       unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (querias dizer '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
       cannotRemoveCore: "O 'core' está sempre ativo — não pode ser removido.",
@@ -2803,9 +2778,7 @@ const MSG = {
       designSections: (marker) => `design.md (secções ${marker})`,
       taskBlock: (track, start) => BUILD.pt.trackTasks({ track, start }),
     },
-    // @wp WP2 <<<
 
-    // @wp WP3 msg-pt >>>
     args: {
       missing: (list) => `Argumento(s) obrigatório(s) em falta: ${list}`,
       invalid: (list) => `Argumento(s) inválido(s): ${list}`,
@@ -2867,9 +2840,7 @@ const MSG = {
       verdict: (below) => `\nVeredicto: ${below ? "ABAIXO DO LIMIAR ✗" : "todos os conjuntos passam ✓"}`,
       crashed: (msg) => `erro no harness de evals: ${msg}`,
     },
-    // @wp WP3 <<<
 
-    // @wp WP4 msg-pt >>>
     traceGapText: {
       kinds: {
         uncoveredByTasks: "ACs sem tarefa",
@@ -2941,9 +2912,7 @@ const MSG = {
       missingValue: (flag) => `falta o valor de --${flag}`,
       unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
     },
-    // @wp WP4 <<<
 
-    // @wp WP5 msg-pt >>>
     gates: {
       empty: "sem conteúdo além dos títulos",
       more: (n) => `+${n} a mais`,
@@ -2982,9 +2951,7 @@ const MSG = {
       clarifyPlaceholders: (file, n, list) => `Substitui os ${n} placeholder(s)/TBD do template em ${file}: ${list}`,
       hookPlaceholders: (n, list) => `Placeholders do template: ${n} por preencher em requirements.md (${list}) — substitui-os antes de aprovar os requisitos.`,
     },
-    // @wp WP5 <<<
 
-    // @wp WP6 msg-pt >>>
     brownfield: {
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
@@ -3047,9 +3014,7 @@ const MSG = {
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondência: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
-    // @wp WP6 <<<
 
-    // @wp WP7 msg-pt >>>
     appendTasks: {
       heading: "Fase: Convergência",
       checkpoint: "as tarefas de convergência estão concluídas e verificadas — a spec e o código voltam a coincidir.",
@@ -3070,9 +3035,7 @@ const MSG = {
       oneTaskPerCall: "append-tasks aceita um --task por chamada — volta a corrê-lo para a tarefa seguinte (spec_append_tasks aceita uma lista).",
       oneValue: (flag) => `append-tasks aceita --${flag} uma só vez por chamada — ${flag === "verify" ? "junta as verificações num só comando (a && b)" : "indica um único valor"}. Nada foi escrito.`,
     },
-    // @wp WP7 <<<
 
-    // @wp WP8 msg-pt >>>
     impact: {
       badPhase: (p, known) => `Fase '${p}' desconhecida para spec_impact. Conhecidas: ${known}.`,
       reopenTasks: "reopen aplica-se só a requirements e design — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
@@ -3170,9 +3133,7 @@ const MSG = {
       },
       retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.pt.metrics.retroText, MSG.pt.metrics.phase, m, fmt),
     },
-    // @wp WP8 <<<
 
-    // @wp WP9 msg-pt >>>
     deepTrace: {
       kinds: {
         uncoveredEdgeCases: "casos limite (EC) sem tarefa nem teste que os cubra",
@@ -3190,9 +3151,7 @@ const MSG = {
       codeSummary: (found, planned, scanned, truncated) => `  testes no código: ${found}/${planned} T-ID(s) planeado(s) nomeado(s) em ${scanned} ficheiro(s) de teste` + (truncated ? " (pesquisa truncada no limite)" : ""),
       warningsHead: "Avisos (não bloqueiam):",
     },
-    // @wp WP9 <<<
 
-    // @wp WP10 msg-pt >>>
     catalog: {
       title: (proj) => `Catálogo de specs — ${proj}`,
       autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_catalog {write: true} (dev-spec catalog --write).",
@@ -3235,9 +3194,7 @@ const MSG = {
       hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
     },
-    // @wp WP10 <<<
 
-    // @wp WP11 msg-pt >>>
     guardMode: {
       ask: (pending) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
         (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
@@ -3272,7 +3229,6 @@ const MSG = {
       placeholders: (n, list) => `${n} placeholder(s) do template por substituir: ${list}`,
       hint: (slug) => `Preenche-os antes de aprovar o design — detalhes: /spec-doctor ${slug}.`,
     },
-    // @wp WP11 <<<
   },
 
   es: {
@@ -3444,7 +3400,6 @@ const MSG = {
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tareas)`,
     },
 
-    // @wp WP1 msg-es >>>
     evidenceGate: {
       noContent: "La evidencia necesita un comando (con su exit code) o un resumen — un exit code solo no prueba nada.",
       manualOnRunnable: (n, slug) => `Tarea ${n}: se registró una nota, pero su comando _Verify:_ no se ejecutó — sigue sin verificar hasta que se registre una ejecución correcta: dev-spec done ${slug} ${n} --run`,
@@ -3466,9 +3421,7 @@ const MSG = {
       noRunnable: (n) => `la tarea ${n} no tiene un marcador _Verify: <comando>_ ejecutable`,
       shellHint: "Consejo: esto se ejecutó con la shell predeterminada de Windows (cmd.exe). Si el comando _Verify:_ usa sintaxis de shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
     },
-    // @wp WP1 <<<
 
-    // @wp WP2 msg-es >>>
     tracks: {
       unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (¿querías decir '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
       cannotRemoveCore: "'core' está siempre activo — no se puede quitar.",
@@ -3481,9 +3434,7 @@ const MSG = {
       designSections: (marker) => `design.md (secciones ${marker})`,
       taskBlock: (track, start) => BUILD.es.trackTasks({ track, start }),
     },
-    // @wp WP2 <<<
 
-    // @wp WP3 msg-es >>>
     args: {
       missing: (list) => `Falta(n) argumento(s) obligatorio(s): ${list}`,
       invalid: (list) => `Argumento(s) no válido(s): ${list}`,
@@ -3545,9 +3496,7 @@ const MSG = {
       verdict: (below) => `\nVeredicto: ${below ? "POR DEBAJO DEL UMBRAL ✗" : "todos los conjuntos pasan ✓"}`,
       crashed: (msg) => `error en el harness de evals: ${msg}`,
     },
-    // @wp WP3 <<<
 
-    // @wp WP4 msg-es >>>
     traceGapText: {
       kinds: {
         uncoveredByTasks: "ACs sin tarea",
@@ -3619,9 +3568,7 @@ const MSG = {
       missingValue: (flag) => `falta el valor de --${flag}`,
       unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
     },
-    // @wp WP4 <<<
 
-    // @wp WP5 msg-es >>>
     gates: {
       empty: "sin contenido además de los títulos",
       more: (n) => `+${n} más`,
@@ -3660,9 +3607,7 @@ const MSG = {
       clarifyPlaceholders: (file, n, list) => `Sustituye los ${n} placeholder(s)/TBD de la plantilla en ${file}: ${list}`,
       hookPlaceholders: (n, list) => `Placeholders de la plantilla: ${n} sin rellenar en requirements.md (${list}) — sustitúyelos antes de aprobar los requisitos.`,
     },
-    // @wp WP5 <<<
 
-    // @wp WP6 msg-es >>>
     brownfield: {
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
@@ -3725,9 +3670,7 @@ const MSG = {
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
-    // @wp WP6 <<<
 
-    // @wp WP7 msg-es >>>
     appendTasks: {
       heading: "Fase: Convergencia",
       checkpoint: "las tareas de convergencia están completadas y verificadas — la spec y el código vuelven a coincidir.",
@@ -3748,9 +3691,7 @@ const MSG = {
       oneTaskPerCall: "append-tasks admite un --task por llamada — vuelve a ejecutarlo para la siguiente tarea (spec_append_tasks admite una lista).",
       oneValue: (flag) => `append-tasks admite --${flag} una sola vez por llamada — ${flag === "verify" ? "une las comprobaciones en un solo comando (a && b)" : "indica un único valor"}. No se ha escrito nada.`,
     },
-    // @wp WP7 <<<
 
-    // @wp WP8 msg-es >>>
     impact: {
       badPhase: (p, known) => `Fase '${p}' desconocida para spec_impact. Conocidas: ${known}.`,
       reopenTasks: "reopen solo se aplica a requirements y design — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
@@ -3848,9 +3789,7 @@ const MSG = {
       },
       retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.es.metrics.retroText, MSG.es.metrics.phase, m, fmt),
     },
-    // @wp WP8 <<<
 
-    // @wp WP9 msg-es >>>
     deepTrace: {
       kinds: {
         uncoveredEdgeCases: "casos límite (EC) sin tarea ni prueba que los cubra",
@@ -3868,9 +3807,7 @@ const MSG = {
       codeSummary: (found, planned, scanned, truncated) => `  pruebas en el código: ${found}/${planned} T-ID(s) planificado(s) nombrado(s) en ${scanned} fichero(s) de prueba` + (truncated ? " (búsqueda truncada en el límite)" : ""),
       warningsHead: "Avisos (no bloquean):",
     },
-    // @wp WP9 <<<
 
-    // @wp WP10 msg-es >>>
     catalog: {
       title: (proj) => `Catálogo de specs — ${proj}`,
       autogen: "AUTO-GENERADO por dev-spec — no editar a mano. Para regenerar: spec_catalog {write: true} (dev-spec catalog --write).",
@@ -3913,9 +3850,7 @@ const MSG = {
       hookLine: (f, n) => `  ⚠ ${f}: ${n} fichero(s) de implementación modificado(s) desde el cierre — ejecuta dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Línea base de drift registrada: ${n} fichero(s) de implementación${missing ? ` (${missing} ausente(s))` : ""} — dev-spec drift muestra lo que cambie después de este cierre.`,
     },
-    // @wp WP10 <<<
 
-    // @wp WP11 msg-es >>>
     guardMode: {
       ask: (pending) => "dev-spec guard: ninguna tarea aprobada cubre cambios de código ahora mismo — aprueba las tareas de una función (spec_approve) o confirma para continuar." +
         (pending ? ` Funciones con tareas pendientes de aprobación: ${pending}.` : "") + " (El modo guardia está activado — dev-spec init --guard off lo desactiva.)",
@@ -3950,7 +3885,6 @@ const MSG = {
       placeholders: (n, list) => `${n} placeholder(s) de la plantilla por sustituir: ${list}`,
       hint: (slug) => `Rellénalos antes de aprobar el diseño — detalles: /spec-doctor ${slug}.`,
     },
-    // @wp WP11 <<<
   },
 };
 

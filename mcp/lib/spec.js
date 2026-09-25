@@ -7820,13 +7820,10 @@ module.exports = {
   featureLang,
   msg: i18n.msg,
 
-  // @wp WP1 exports >>>
   resolveTask,
   verificationStatus,
   summarizeRunOutput,
-  // @wp WP1 <<<
 
-  // @wp WP2 exports >>>
   parseTracks,
   detectTracks,
   detectPhase,
@@ -7835,62 +7832,43 @@ module.exports = {
   artifactState,
   extractSection,
   removeTrack,
-  // @wp WP2 <<<
 
-  // @wp WP3 exports >>>
   existingFeature, // the eval harness resolves its feature like every other operation
-  // @wp WP3 <<<
 
-  // @wp WP4 exports >>>
   traceGaps,
   traceGapLines,
   roadmapReport,
-  // @wp WP4 <<<
 
-  // @wp WP5 exports >>>
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
-  // @wp WP5 <<<
 
-  // @wp WP6 exports >>>
   importSpec,
   isTestFile,
   implementsTargets,
-  // @wp WP6 <<<
 
-  // @wp WP7 exports >>>
   appendTasks, // spec_append_tasks / `dev-spec append-tasks` (converge)
-  // @wp WP7 <<<
 
-  // @wp WP8 exports >>>
   impactReport, // spec_impact / `dev-spec impact` (change requests: diff vs the approved snapshot, --reopen)
   impactLines,
   metrics, // spec_metrics / `dev-spec metrics` (+ retro.md with write)
   metricsLines,
-  // @wp WP8 <<<
 
-  // @wp WP9 exports >>>
   traceWarningLines, // trace_check warnings (EC/NFR/SC, tests in code) as localized lines — CLI, hook, finish
   scanTestCode, // the bounded walk over test files that trace_check {code: true} reads
   withinRoot, // "inside the project root?" that also holds at a drive root (C:\)
-  // @wp WP9 <<<
 
-  // @wp WP10 exports >>>
   catalog, // spec_catalog / `dev-spec catalog` (.specs/SPECS.md)
   maybeRefreshCatalog,
   supersedesMarkers,
   supersedesWarnings,
   restoreFeature, // spec_feature restore / `dev-spec feature restore`
   drift, // spec_drift / `dev-spec drift` / SessionStart
-  // @wp WP10 <<<
 
-  // @wp WP11 exports >>>
   steeringFrontMatter, // scoped steering: Kiro-compatible front matter (inclusion / fileMatchPattern)
   steeringGlobMatch,
   guardEnabled, // guard mode (roadmap.json meta.guard) — hooks/guard-hook.js
   guardCheck,
   designSaveCheck, // the PostToolUse design.md save check
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
-  // @wp WP11 <<<
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

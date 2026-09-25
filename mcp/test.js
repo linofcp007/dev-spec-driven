@@ -869,7 +869,6 @@ function endRun() {
   ok(tc.mergeTitle === "feat(title-case): Per-tenant API keys, e.g. Stripe-style secrets" && !/\n# pass/.test(tc.mergeSummary) && /`` node -e/.test(tc.mergeSummary),
     "merge title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
 
-  // @wp WP1 tests >>>
   async function sectionWp1() {
   // --- 1.13 WP1: ONE task scanner, numeric task numbers, one duplicate resolver, the evidence gate ---
   const w1 = path.join(tmp, "proj-wp1");
@@ -1086,9 +1085,7 @@ function endRun() {
     .map((f) => path.join(__dirname, "..", f)).filter((f) => fs.existsSync(f));
   ok(engineFiles.length >= 4 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files");
   }
-  // @wp WP1 <<<
 
-  // @wp WP2 tests >>>
   async function sectionWp2() { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
   const w2s = path.join(w2, ".specs");
@@ -1398,9 +1395,7 @@ function endRun() {
       "verificationStatus ignores the tasks of a removed track (inactive, not a gap)");
   }
   }
-  // @wp WP2 <<<
 
-  // @wp WP3 tests >>>
   async function sectionWp3() { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const errText = (res) => { try { return JSON.parse(res.result.content[0].text).error || ""; } catch { return res.result.content[0].text; } };
@@ -1622,9 +1617,7 @@ function endRun() {
     // 8. No invisible code points in this file (the BOM test writes it as an escape).
     ok(!fs.readFileSync(__filename, "utf8").includes(String.fromCharCode(0xfeff)), "mcp/test.js carries no literal U+FEFF");
   }
-  // @wp WP3 <<<
 
-  // @wp WP4 tests >>>
   async function sectionWp4() {
   // --- 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, destructive ops confirmed, localized phases ---
   const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
@@ -1727,9 +1720,7 @@ function endRun() {
   ok(S.classify("Webhook de faturação com resumo por um LLM").lang === "pt" && S.classify("x", { lang: "es" }).lang === "es",
     "classify returns the language its notes/reasoning are in");
   }
-  // @wp WP4 <<<
 
-  // @wp WP5 tests >>>
   async function sectionWp5() { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
     S.initProject(w5, ["core"], "en");
@@ -2037,9 +2028,7 @@ function endRun() {
     ok(t3c.verdict === "gaps-found" && t3c.missingImplFiles.join() === "../../outside/secret.js" && t3c.plannedImplFiles.join() === "src/not-yet.js",
       "trace: an open task's _Implements:_ path outside the project root is missingImplFiles (only in-root files are planned)");
   }
-  // @wp WP5 <<<
 
-  // @wp WP6 tests >>>
   async function sectionWp6() { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
     const safe6 = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
@@ -2401,9 +2390,7 @@ function endRun() {
     ok(want3.every((k) => rk3.includes(k)) && scan3.candidateEndpoints === 6 && !rk3.some((k) => /\/users src\/services|\/item_id\} app\/items\.py|^GET \/<int:id>/.test(k)),
       "scan: a wrapped APIRouter(\\n prefix=…)/Blueprint(\\n url_prefix=…) prefixes its routes; a Prettier-wrapped router.post(\\n \"/x\", …) is a route on the call's line, counted once; a wrapped client call is not (got " + rk3.join(" | ") + ")");
   }
-  // @wp WP6 <<<
 
-  // @wp WP7 tests >>>
   // --- 1.13 WP7: spec_append_tasks (converge) — appended tasks work end to end, all-or-nothing, line-exact ---
   async function sectionWp7() {
     const call7 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
@@ -2644,9 +2631,7 @@ function endRun() {
       tail2.r.ok && tail2.txt === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- a\n<!-- b -->\n- [ ] 2. new\n\n---\n",
       "no checkpoint: a '<!-- … -->' line that closes an earlier multi-line comment is its tail — the task goes after it, never inside the comment; a later '---' still trails");
   }
-  // @wp WP7 <<<
 
-  // @wp WP8 tests >>>
   // --- 1.13 WP8: change requests (approval history + snapshots, spec_impact, reopen) + metrics & retro ---
   async function sectionWp8() {
     const call8 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
@@ -3040,9 +3025,7 @@ function endRun() {
       /^# Retrospectiva: x/.test(S.msg("es").metrics.retro({ feature: "x", leadTime: {}, evidence: { runs: 0 }, tasks: { done: 0, total: 0 }, openClarifications: 0, forcedApprovals: 0, changeRequests: 0, reopenedTasks: 0, rework: null }, { dur: String, today: "2026-01-01" })),
       "WP8 messages (impact, metrics, retro, jsonShape) exist in EN, PT and ES with the same keys");
   }
-  // @wp WP8 <<<
 
-  // @wp WP9 tests >>>
   async function sectionWp9() { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
     const w9f = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -3338,9 +3321,7 @@ function endRun() {
       /\| Fichero \|/.test(fs.readFileSync(path.join(S.createFeature(sx9, "Fallo", ["tdd"], undefined, undefined, "es", "bugfix").dir, "test-plan.md"), "utf8")),
       "ES advice names both spellings of the column (the ES bugfix plan says Fichero, the feature plan Archivo)");
   }
-  // @wp WP9 <<<
 
-  // @wp WP10 tests >>>
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
   async function sectionWp10() {
     const call10 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
@@ -3649,9 +3630,7 @@ function endRun() {
     const mdEs = S.catalog(w10es).markdown;
     ok(/^# Catálogo de specs — proj-wp10-es$/m.test(mdEs) && /AUTO-GENERADO por dev-spec/.test(mdEs) && /función\(es\)/.test(mdEs) && /en curso/.test(mdEs), "ES project: catalog chrome in Spanish");
   }
-  // @wp WP10 <<<
 
-  // @wp WP11 tests >>>
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
   async function sectionWp11() {
     const call11 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
@@ -4297,9 +4276,7 @@ function endRun() {
       qm12.n3 === "notes/a.md" && qm12.w1 === "notes/a.md" && qm12.w2 === qm12.w1 && qAfter12 === "notes/a.md,notes/b.md",
       "the glob memo: repeats answer from the call's snapshot; an engine write the walk reaches (.specs/*/requirements.md) is seen at once, one it can't reach (notes/*, **/*.md skip .specs) keeps the result; the next call is fresh (got " + JSON.stringify(qm12) + ")");
   }
-  // @wp WP11 <<<
 
-  // @wp DOCS tests >>>
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples
   // pass its own linter), stay compact, and every user-facing surface must agree with it.
   const docsRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8");
@@ -4374,7 +4351,6 @@ function endRun() {
     docsNeg.every((c) => fs.readdirSync(path.join(docsEvalRoot, c, "graders")).every((g) => /^max: 0\s*$/m.test(docsRead("evals", c, "graders", g)))) &&
     !/The planning request/.test(docsRead("evals", "trigger-bugfix-en", "graders", "skill-fires.md")),
     "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call) keep the skill silent; the bugfix grader names the defect report");
-  // @wp DOCS <<<
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
