@@ -3478,8 +3478,59 @@ function endRun() {
     const rt8 = S.impactReport(w8, "drafts", { phase: "tasks", reopen: true });
     const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
-    ok(rt8.ok === false && /requirements and design only/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, tasks/.test(bad8m.p.error) &&
+    ok(rt8.ok === false && /reopen applies to requirements, design, test-plan and eval-plan/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
       bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+
+    // test-plan: T-ID row diff (a row keyed by its first cell; re-padding is no change) → the tasks making a changed test
+    // green; reopen unticks a MODIFIED test's done tasks, a REMOVED test's tasks are listed in retire (never redone);
+    // next_action / doctor name `--phase test-plan` for a changed test-plan.md (they offered only --phase design).
+    const pe8 = S.createFeature(w8, "Plan edits", ["tdd"]);
+    const tpf = (x) => path.join(pe8.dir, x);
+    fs.writeFileSync(tpf("requirements.md"), "# Feature: Plan edits\n\n## Summary\nPlans.\n\n### US-1 (P1 — MVP): Plans\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a plan is saved THE SYSTEM SHALL store it.\n2. **US-1.AC-2** — WHEN a plan is deleted THE SYSTEM SHALL archive it.\n\n## Success Criteria\n- **SC-001** — 99% saved in 1 s.\n");
+    const planA = "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | a saved plan is stored | US-1.AC-1 | `tests/unit/plan.test.js` |\n| T-02 | unit | example | a deleted plan is archived | US-1.AC-2 | `tests/unit/plan.test.js` |\n" +
+      "| T-03 | unit | property | archive keeps every field | US-1.AC-2 | `tests/unit/plan.test.js` |\n";
+    fs.writeFileSync(tpf("test-plan.md"), planA);
+    fs.writeFileSync(tpf("tasks.md"), "# Tasks\n\n- [x] 1. [US1] Store plans\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n- [x] 2. [US1] Archive plans\n  - _Requirements: US-1.AC-2_\n  - _Makes green: T-02_\n" +
+      "- [x] 3. [US1] Keep archived fields\n  - _Requirements: US-1.AC-2_\n  - _Makes green: T-03_\n");
+    approveBefore(w8, pe8.slug, "test-plan");
+    const tpAp = S.approvePhase(w8, pe8.slug, "test-plan");
+    fs.writeFileSync(tpf("test-plan.md"), planA.replace("a saved plan is stored", "a saved plan is stored with its owner").replace("| T-02 | unit | example |", "|T-02|  unit |example|")
+      .replace(/\| T-03 [^\n]*\n/, "") + "| T-04 | integration | example | a plan survives a restart | US-1.AC-1 | `tests/integration/plan.test.js` |\n");
+    const tpIm = (await call8("spec_impact", { name: pe8.slug, phase: "test-plan", projectDir: w8 })).p;
+    const tpNext = S.nextAction(w8, pe8.slug);
+    const tpDoc = S.specDoctor(w8, pe8.slug).checks.find((c) => c.id === "changed-since-approval");
+    const tpLines = S.impactLines(tpIm).join("\n");
+    ok(tpAp.ok && tpIm.ok && tpIm.phase === "test-plan" && tpIm.file === "test-plan.md" && tpIm.baseline === "snapshot" &&
+      tpIm.added.map((x) => x.id).join() === "T-04" && tpIm.modified.map((x) => x.id).join() === "T-01" && tpIm.removed.map((x) => x.id).join() === "T-03" &&
+      tpIm.impacted.find((x) => x.id === "T-01").tasks.map((t) => t.number).join() === "1" && tpIm.affectedTasks.map((t) => t.number).join() === "1,3" &&
+      JSON.stringify(tpIm.retire) === JSON.stringify([{ id: "T-03", tasks: [3], tests: [] }]) && /Removed tests still made green by tasks — T-03 → tasks #3: don't redo those tasks/.test(tpIm.hint) &&
+      /--phase test-plan --reopen/.test(tpIm.hint) && /~ T-01 {2}unit \| example \| a saved plan is stored with its owner/.test(tpLines) && /T-03 \(removed\) — tasks: #3 \[x\]/.test(tpLines) &&
+      tpNext.step === "re-review" && /dev-spec impact plan-edits --phase test-plan/.test(tpNext.recommendation) && tpNext.impact.phases.join() === "test-plan" &&
+      tpDoc && /\(dev-spec impact plan-edits --phase test-plan\)/.test(tpDoc.detail),
+      "impact --phase test-plan: added / modified / removed T-IDs (re-padding is no change), the tasks making them green, a removed test in retire; next_action and doctor name --phase test-plan (got " +
+      JSON.stringify([tpIm.added, tpIm.modified, tpIm.removed, tpIm.retire, tpNext.recommendation]).slice(0, 400) + ")");
+    const tpRo = S.impactReport(w8, pe8.slug, { phase: "test-plan", reopen: true });
+    const tpSt = JSON.parse(fs.readFileSync(tpf(".state.json"), "utf8"));
+    const tpTasks = fs.readFileSync(tpf("tasks.md"), "utf8");
+    ok(tpRo.ok && tpRo.recorded && tpRo.reopened.join() === "1" && /- \[ \] 1\./.test(tpTasks) && /- \[x\] 2\./.test(tpTasks) && /- \[x\] 3\./.test(tpTasks) &&
+      tpSt.changes.slice(-1)[0].phase === "test-plan" && tpSt.changes.slice(-1)[0].modified.join() === "T-01" && tpSt.changes.slice(-1)[0].removed.join() === "T-03" &&
+      /Removed tests are not redone — still named in _Makes green:_: T-03 → tasks #3/.test(tpRo.note) &&
+      /Testes removidos que tarefas ainda põem a verde/.test(S.msg("pt").impact.retireTests.retireHint("T-03 → tarefas #3", "x", "test-plan", false)) &&
+      /Pruebas eliminadas que aún ponen en verde/.test(S.msg("es").impact.retireTests.retireHint("T-03 → tareas #3", "x", "test-plan", false)),
+      "impact --phase test-plan --reopen: unticks only the done task making a MODIFIED test green (#1), keeps the removed test's task (#3) ticked and listed, records the change request (retire wording EN/PT/ES)");
+    // eval-plan: diffed by section like the design; next_action names --phase eval-plan.
+    const ep8 = S.createFeature(w8, "Eval edits", ["ai"]);
+    approveBefore(w8, ep8.slug, "eval-plan");
+    S.approvePhase(w8, ep8.slug, "eval-plan", "x", { force: true });
+    const epf = path.join(ep8.dir, "eval-plan.md");
+    fs.writeFileSync(epf, fs.readFileSync(epf, "utf8").replace("Every fixed production failure becomes a permanent eval case.", "Every fixed production failure becomes a permanent eval case, tagged with its incident."));
+    const epIm = S.impactReport(w8, ep8.slug, { phase: "eval-plan" });
+    const epNext = S.nextAction(w8, ep8.slug);
+    ok(epIm.ok && epIm.modified.map((x) => x.section).join() === "Regression Set" && !epIm.added.length && !epIm.removed.length &&
+      epNext.step === "re-review" && /dev-spec impact eval-edits --phase eval-plan/.test(epNext.recommendation),
+      "impact --phase eval-plan: a section-level diff like design; next_action names --phase eval-plan (got " + JSON.stringify([epIm.modified, epNext.recommendation]).slice(0, 300) + ")");
     // A ticked sub-step is progress (like the fingerprint), not a changed task; doctor names only the phase that changed.
     const sb8 = S.createFeature(w8, "Steps", ["core"]);
     const sbf = (x) => path.join(sb8.dir, x);

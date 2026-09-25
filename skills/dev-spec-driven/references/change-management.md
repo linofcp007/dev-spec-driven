@@ -31,13 +31,15 @@ re-review, then re-approve.
 
 ## 3. `spec_impact` — what the edit touches
 
-`spec_impact {name, phase?}` (CLI `dev-spec impact <feature> [--phase requirements|design|tasks]`) diffs the
+`spec_impact {name, phase?}` (CLI `dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks]`) diffs the
 current artifact against the latest approval's snapshot:
 
 | Phase | Diff | Reaches |
 |---|---|---|
 | `requirements` (default) | ACs by stable ID — added / modified (whitespace-normalized text differs) / removed — plus `SC-`/`EC-`/`NFR-` IDs | per modified/removed ID: the tasks citing it in `_Requirements:_` (done/open + evidence state), the T-IDs covering it in the test plan, the design sections naming it |
 | `design` | `##` sections by normalized body (a bugfix: `bug.md` and `design.md`, each section keyed by file) | the tasks citing an ID a changed section names |
+| `test-plan` | planned tests by T-ID (a row keyed by its first cell, compared cell by cell — re-padding is no change) | per modified/removed T-ID: the tasks making it green (`_Makes green:_`) |
+| `eval-plan` | `##` sections by normalized body, like `design` | the tasks citing an ID a changed section names |
 | `tasks` | task numbers added / removed / changed (checkbox state ignored) | — |
 
 `affectedTasks` lists every task a change reaches, once, with `via` (which IDs/sections reach it).
@@ -47,7 +49,7 @@ a file date is never evidence, so `spec_finish` only warns about such approvals;
 
 ## 4. Reopen — only with the human's OK
 
-`spec_impact {…, reopen: true}` (CLI `--reopen`; requirements or design only):
+`spec_impact {…, reopen: true}` (CLI `--reopen`; every phase but `tasks`):
 
 - **unticks** the affected DONE tasks in `tasks.md` (line endings kept);
 - marks their evidence **stale** — reason code `stale-evidence`, unverified until a new passing run (or, for a

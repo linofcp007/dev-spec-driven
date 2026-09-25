@@ -3863,7 +3863,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
 // ---------------------------------------------------------------------------
 
 const HISTORY_DIR = ".history"; // spec history, meant to be committed with the spec (NOT self-ignored like .execution/)
-const IMPACT_PHASES = ["requirements", "design", "tasks"];
+// The artifacts spec_impact diffs against their approved snapshot — every one next_action can list as changed since its
+// approval (test-plan.md / eval-plan.md were listed with only `--phase design` offered). tasks reopens nothing.
+const IMPACT_PHASES = ["requirements", "design", "test-plan", "eval-plan", "tasks"];
 // Requirement-level IDs a task cites in _Requirements:_ (ACs, success criteria, edge cases, NFRs), and T-IDs.
 const RE_REQ_REF = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?!\d)/g;
 const RE_OTHER_REQ_REF = /(?<![A-Za-z0-9])(?:SC-\d+|EC-\d+|NFR-\d+)(?!\d)/g;
@@ -3975,6 +3977,16 @@ function taskEntries(tasksText) {
   }
   return map;
 }
+// test-plan.md → its planned tests by T-ID (testIndex: a table row keyed by its FIRST cell, or a list item leading with
+// it); a table row's text is compared cell by cell (re-padding a column is no change).
+function plannedTestEntries(planText) {
+  const map = new Map();
+  for (const r of testIndex(planText || "").values()) {
+    const text = /^\s*\|/.test(r.row) ? r.row.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => normWs(c)).join(" | ") : normWs(r.row);
+    map.set(r.id, { id: r.id, text });
+  }
+  return map;
+}
 // Active task blocks (a removed track's task section is inactive) with their REAL line numbers — reopen unticks them.
 function activeTaskBlocks(tasksText, tracks) {
   if (tasksText == null) return [];
@@ -3986,7 +3998,8 @@ function activeTaskBlocks(tasksText, tracks) {
 // the snapshot of its latest approval. requirements → AC-level diff (+ SC/EC/NFR IDs) and, for every modified/removed
 // ID, the tasks citing it (done/open + evidence state), the tests covering it and the design sections mentioning it;
 // design → section-level diff and the tasks citing an ID named in a changed section; tasks → added/removed/changed task
-// numbers. reopen (requirements/design): unticks the affected DONE tasks, marks their evidence stale and records the
+// numbers; test-plan → T-ID row diff and the tasks making a changed test green; eval-plan → section diff like design.
+// reopen (all but tasks): unticks the affected DONE tasks, marks their evidence stale and records the
 // change request in .state.json `changes` — it never edits requirements.md or design.md. Idempotent: a change already
 // recorded against the same snapshot reopens nothing again.
 function impactReport(projectDir, name, opts = {}) {
@@ -4086,7 +4099,20 @@ function impactReport(projectDir, name, opts = {}) {
     for (const a of res.added) digests[a.id] = shortDigest(a.text);
     for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
     for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
-  } else if (phase === "design") {
+  } else if (phase === "test-plan") {
+    // T-ID row diff: added / modified / removed planned tests; a changed or removed test reaches the tasks that make it
+    // green (_Makes green:_). Reopen semantics are the requirements': a modified test's done tasks are unticked (their
+    // evidence proved the old test), a removed one's are listed in `retire` (drop or repoint the T-ID), never redone.
+    const d = diffEntries(plannedTestEntries(snap.text), plannedTestEntries(cur));
+    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
+    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
+    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
+    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
+    for (const a of res.added) digests[a.id] = shortDigest(a.text);
+    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
+    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+  } else if (phase === "design" || phase === "eval-plan") {
+    // eval-plan.md is diffed like the design: by `##` section, reaching the tasks that cite an ID a changed section names.
     let before = sectionEntries(snap.text), after = sectionEntries(cur);
     if (bugfixDesign) {
       const byFile = (map, name) => [...map].map(([k, e]) => [`${name}: ${k}`, { ...e, section: `${name}: ${k}`, file: name }]);
@@ -4130,14 +4156,18 @@ function impactReport(projectDir, name, opts = {}) {
   // A REMOVED requirement is not redone: the tasks and test-plan rows still citing it are to be deleted or pointed at the
   // criterion that replaces it — listed in `retire`, never unticked ("redo them with fresh evidence" re-built a feature
   // the spec no longer has). A task also reached by a modified ID or a changed section is reopened as before.
-  const removedIds = new Set(phase === "requirements" ? res.removed.map((r) => r.id) : []);
-  if (phase === "requirements") {
-    res.retire = res.impacted.filter((x) => x.change === "removed" && (x.tasks.length || x.tests.length))
-      .map((x) => ({ id: x.id, tasks: x.tasks.map((t) => t.number), tests: x.tests.map((t) => t.id) }));
+  const byId = phase === "requirements" || phase === "test-plan"; // ID-keyed diffs (sections for design / eval-plan)
+  const removedIds = new Set(byId ? res.removed.map((r) => r.id) : []);
+  if (byId) {
+    // test-plan: a removed T-ID's tasks still name it in _Makes green:_ (no test rows to list).
+    res.retire = res.impacted.filter((x) => x.change === "removed" && (x.tasks.length || (x.tests || []).length))
+      .map((x) => ({ id: x.id, tasks: x.tasks.map((t) => t.number), tests: (x.tests || []).map((t) => t.id) }));
   }
   const retireList = (res.retire || []).map((x) => I.retireItem(x.id, x.tasks.map((n) => "#" + n), x.tests)).join("; ");
-  // The same rule for a design change: an ID its section names that requirements.md no longer defines reopens nothing.
-  const reqText = phase === "design" ? readIfExists(path.join(dir, "requirements.md")) : null;
+  const RT = phase === "test-plan" ? I.retireTests : I; // a removed TEST is repointed/dropped, not a removed criterion
+  // The same rule for a design / eval-plan change: an ID its section names that requirements.md no longer defines
+  // reopens nothing.
+  const reqText = phase === "design" || phase === "eval-plan" ? readIfExists(path.join(dir, "requirements.md")) : null;
   const reqNow = reqText != null ? requirementIndex(reqText) : null;
   const reopenIds = (k) => reach.get(k).filter((id) => !removedIds.has(id) && (!reqNow || id.startsWith("T-") || reqNow.has(id)));
   const toReopen = [...new Set(fresh.filter((k) => reach.has(k) && !removedIds.has(k)).flatMap((k) => citing(reopenIds(k))))].filter((b) => b.done)
@@ -4145,7 +4175,7 @@ function impactReport(projectDir, name, opts = {}) {
   if (!reopen) {
     // tasks: nothing reaches a task (reach is empty). The retire hint offers --reopen only while the removal is unrecorded.
     const offer = (res.retire || []).some((x) => fresh.includes(x.id));
-    const hints = [toReopen.length ? I.reopenHint(slug, phase) : null, retireList ? I.retireHint(retireList, slug, phase, offer) : null].filter(Boolean);
+    const hints = [toReopen.length ? I.reopenHint(slug, phase) : null, retireList ? RT.retireHint(retireList, slug, phase, offer) : null].filter(Boolean);
     if (hints.length) res.hint = hints.join(" ");
     return res;
   }
@@ -4170,14 +4200,14 @@ function impactReport(projectDir, name, opts = {}) {
     if (isRecord(rec)) rec.stale = true; // mutates state.evidence in place
   }
   const keys = (list, k) => list.map((x) => x[k]);
-  const idKey = phase === "requirements" ? "id" : "section";
+  const idKey = byId ? "id" : "section";
   const change = { at: new Date().toISOString(), phase, snapshot: snap.rel, added: keys(res.added, idKey), modified: keys(res.modified, idKey),
     removed: keys(res.removed, idKey), reopened: toReopen.map((b) => b.number), digests };
   state.changes = (state.changes || []).concat([change]);
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
-  const note = change.reopened.length ? [I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase), retireList ? I.retireNote(retireList) : null].filter(Boolean).join(" ")
-    : retireList ? I.recordedRetire(state.changes.length, retireList, slug, phase) : I.recordedOnly(state.changes.length, slug, phase);
+  const note = change.reopened.length ? [I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase), retireList ? RT.retireNote(retireList) : null].filter(Boolean).join(" ")
+    : retireList ? RT.recordedRetire(state.changes.length, retireList, slug, phase) : I.recordedOnly(state.changes.length, slug, phase);
   return Object.assign(res, { reopened: change.reopened, recorded: true, changeRequest: state.changes.length, note });
 }
 
@@ -4195,9 +4225,9 @@ function impactLines(r) {
   const snaps = [r.snapshot, r.designMd && r.designMd.snapshot].filter(Boolean).join(", "); // a bugfix: bug.md + design.md
   const out = [I.head(r.feature, r.phase, String(r.approvedAt || "").slice(0, 10), snaps)];
   const label = (x) => (x.id || x.section || (x.number != null ? "#" + x.number : ""));
-  // The criterion text without its own leading "**US-1.AC-2** —" (the label already names it).
+  // The criterion text without its own leading "**US-1.AC-2** —" (the label already names it) — or a test row's "T-01 |".
   const body = (x) => String(x.after != null ? x.after : x.text != null ? x.text : "")
-    .replace(/^(?:\*\*|__)?(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\*\*|__)?\s*[—–:-]?\s*/, "");
+    .replace(/^(?:\*\*|__)?(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+|T-\d+)(?:\*\*|__)?\s*[—–:|-]?\s*/, "");
   for (const [sign, list] of [["+", r.added], ["~", r.modified], ["-", r.removed]]) {
     for (const x of list || []) out.push(`  ${sign} ${label(x)}${body(x) && r.phase !== "design" ? "  " + cut(body(x)) : ""}`);
   }

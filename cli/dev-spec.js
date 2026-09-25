@@ -116,7 +116,7 @@ function withTracksFlag(list) {
 // append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--story US1] [--heading "<phase>"]
 ["task", "req", "implements", "verify", "story", "heading"].forEach((k) => VALUE_FLAGS.add(k));
 
-VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|tasks
+VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
 
 VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
@@ -737,8 +737,8 @@ function main() {
     }
 
     case "impact": {
-      // dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen] — the same engine call as spec_impact
-      if (!pos[0]) usage("dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]");
+      // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact
+      if (!pos[0]) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]");
       const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: on("reopen") });
       if (!r.ok) return fail(r);
       return out(r, (r) => spec.impactLines(r).forEach((l) => console.log(l)));
@@ -841,7 +841,7 @@ function helpText() {
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks)
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
-                                  (--phase requirements|design|tasks, default requirements): changed ACs/sections/tasks →
+                                  (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
                                   (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate (project: + avg/median);

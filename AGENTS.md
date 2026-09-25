@@ -57,7 +57,7 @@ dev-spec next-action <feature>                 # "you are here → do this next"
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
 dev-spec approve <feature> <phase> [--force]   # record an approval gate — refused while that phase's checks fail
-dev-spec impact <feature> [--phase requirements|design|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
+dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
 dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"]   # converge: append a task (Phase: Convergence)
 dev-spec finish <feature> [--write] [--include-body]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
 dev-spec metrics [feature] [--write]           # lead times, rework, forced approvals, change requests, evidence pass rate (--write → retro.md)
@@ -120,8 +120,8 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Every approval is kept.** Approvals are appended to `.state.json` and snapshot the artifact into
   `.specs/<feature>/.history/<phase>@<n>.md` — commit these with the spec.
 - **Impact before re-approval.** After editing an approved artifact, run
-  `dev-spec impact <feature> --phase requirements|design|tasks`: it lists the changed ACs / sections /
-  tasks and, for each, the tasks that cite it, the tests covering it and the design sections mentioning
+  `dev-spec impact <feature> --phase requirements|design|test-plan|eval-plan|tasks`: it lists the changed ACs / sections /
+  tests / tasks and, for each, the tasks that cite it, the tests covering it and the design sections mentioning
   it. `--reopen` unticks the affected done tasks and marks their evidence stale — never the tasks of a
   removed criterion: `retire` lists them (and their test rows) to delete or point at the criterion that
   replaces it; then re-review and re-approve.

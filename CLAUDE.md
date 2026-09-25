@@ -323,12 +323,15 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `designFingerprint` and a `<phase>@<n>.design.md` snapshot when a design.md exists (it holds the
   bugfix's track sections); `spec_impact --phase design` diffs both files.
 - **`spec_impact`** diffs the current artifact with the latest snapshot (requirements: by stable ID, incl.
-  SC/EC/NFR; design: by `##` section; tasks: by number). `reopen` unticks the affected DONE tasks, marks their
+  SC/EC/NFR; design and eval-plan: by `##` section; test-plan: by T-ID row — `plannedTestEntries()`, a row keyed by its first
+  cell and compared cell by cell, reaching the tasks that make it green; tasks: by number — `IMPACT_PHASES`, so next_action's
+  hint names the right `--phase` for every changed file). `reopen` (all but tasks) unticks the affected DONE tasks, marks their
   evidence `stale`, and appends the change request to `.state.json → changes` (idempotent per snapshot via
   digests). It never edits requirements.md or design.md. An approval without a snapshot → `fingerprint-only`; one
   without even a fingerprint (≤1.10, or a 1.12 bugfix design approval) → `none`, `changed: null` (unknown).
   A REMOVED requirement is never redone: reopen skips the tasks only it reaches (and a design section's IDs that
-  requirements.md no longer defines); requirements' `retire` `[{id, tasks, tests}]` lists what still cites it.
+  requirements.md no longer defines); requirements' `retire` `[{id, tasks, tests}]` lists what still cites it — test-plan's
+  too for a REMOVED T-ID (its tasks' `_Makes green:_`, `impact.retireTests` wording).
   `trace_check`'s informational `removedAcs` `[{id, changeRequest}]` (from `changes[].removed`) makes
   `traceGapLines()` name the change request instead of "(typos?)" — the phantom stays a gap.
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the

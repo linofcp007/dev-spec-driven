@@ -166,6 +166,12 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   left it unverified, with no word on why; its refusal, its note and `next_action`'s verify step now say to move the
   command to the fix task, or drop it and record the red run as a note (`redPhaseVerify: true`, EN/PT/ES), and the
   bugfix template's tasks comment says its failing-test task carries no `_Verify:_`.
+- **`spec_impact --phase test-plan` / `eval-plan`.** `next_action` listed test-plan.md (and eval-plan.md) among the
+  artifacts changed since their approval but offered only `--phase design`. `spec_impact` (MCP enum and CLI) now takes
+  `test-plan` — the T-ID row diff (added / modified / removed planned tests; re-padding a table column is no change) with
+  the tasks making each changed test green; `--reopen` unticks a modified test's done tasks and lists a removed test's in
+  `retire` (never redone, EN/PT/ES) — and `eval-plan` (a section diff, like design); next_action and doctor name the
+  right phase for each changed file.
 - **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
   moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
   feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,

@@ -61,7 +61,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", phase by phase: re-review → fill → fix → approve (the next phase only after that approval) → implement → verify → finish (then finished / drift) |
 | `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot |
-| `spec_impact` | What an edit after approval touches (changed ACs, sections, tasks → tasks, tests, design); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
+| `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files |
@@ -131,7 +131,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Approval history.** Every approval is appended to `.state.json` (`approvalHistory`) and saves a
   snapshot of what it signed off to `.specs/<feature>/.history/<phase>@<n>.md` — commit it with the spec.
 - **`/spec-impact`** (`spec_impact`) — after an approved artifact changes, it diffs the edit against
-  that snapshot: added / modified / removed ACs (and SC/EC/NFR IDs), design sections or tasks, and for
+  that snapshot: added / modified / removed ACs (and SC/EC/NFR IDs), design or eval-plan sections, planned tests (T-IDs) or tasks, and for
   each one the tasks that cite it (done or open, with their evidence), the tests covering it and the
   design sections that mention it. `reopen` unticks the affected done tasks, marks their evidence stale
   and records the change request — never the tasks of a removed criterion: `retire` lists them (and their
@@ -292,7 +292,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", fase a fase: rever → preencher → corrigir → aprovar (a fase seguinte só depois dessa aprovação) → implementar → verificar → fechar (depois fechada / deriva) |
 | `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot |
-| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, tarefas alteradas → tarefas, testes, design); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
+| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
 | `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste |
@@ -357,7 +357,7 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
 - **Histórico de aprovações.** Cada aprovação é acrescentada ao `.state.json` (`approvalHistory`) e guarda um
   snapshot do que aprovou em `.specs/<feature>/.history/<fase>@<n>.md` — faz commit dele com a spec.
 - **`/spec-impact`** (`spec_impact`) — depois de um artefacto aprovado mudar, compara a edição com esse
-  snapshot: ACs (e IDs SC/EC/NFR), secções do design ou tarefas acrescentados, alterados ou removidos e, para
+  snapshot: ACs (e IDs SC/EC/NFR), secções do design ou do eval-plan, testes planeados (T-IDs) ou tarefas acrescentados, alterados ou removidos e, para
   cada um, as tarefas que o citam (feitas ou abertas, com a evidência), os testes que o cobrem e as secções do
   design que o mencionam. `reopen` desmarca as tarefas feitas afetadas, marca a evidência como desatualizada
   e regista o pedido de alteração — nunca as tarefas de um critério removido: o `retire` lista-as (e as linhas
@@ -523,7 +523,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", fase a fase: revisar → completar → corregir → aprobar (la fase siguiente solo tras esa aprobación) → implementar → verificar → cerrar (después cerrada / deriva) |
 | `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot |
-| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, tareas cambiadas → tareas, pruebas, diseño); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
+| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba |
@@ -590,7 +590,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Historial de aprobaciones.** Cada aprobación se añade al `.state.json` (`approvalHistory`) y guarda un
   snapshot de lo aprobado en `.specs/<feature>/.history/<fase>@<n>.md` — haz commit de él con la spec.
 - **`/spec-impact`** (`spec_impact`) — cuando cambia un artefacto aprobado, compara la edición con ese
-  snapshot: ACs (e IDs SC/EC/NFR), secciones del diseño o tareas añadidos, modificados o eliminados y, para
+  snapshot: ACs (e IDs SC/EC/NFR), secciones del diseño o del eval-plan, pruebas planificadas (T-IDs) o tareas añadidos, modificados o eliminados y, para
   cada uno, las tareas que lo citan (hechas o abiertas, con su evidencia), las pruebas que lo cubren y las
   secciones del diseño que lo mencionan. `reopen` desmarca las tareas hechas afectadas, marca su evidencia
   como obsoleta y registra la solicitud de cambio — nunca las tareas de un criterio eliminado: `retire` las

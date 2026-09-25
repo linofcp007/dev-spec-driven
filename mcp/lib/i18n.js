@@ -2438,7 +2438,14 @@ const MSG = {
     // IDs and file names stay English-stable.
     impact: {
       badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
-      reopenTasks: "reopen applies to requirements and design only — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
+      reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
+      // --phase test-plan: a REMOVED planned test — its tasks still name its T-ID in _Makes green:_.
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Removed tests still made green by tasks — ${list}: don't redo those tasks; drop the T-ID from their _Makes green:_ or point it at the test that replaces it.` +
+          (offer ? ` --reopen records the change request without unticking them (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Removed tests are not redone — still named in _Makes green:_: ${list}: drop the T-ID from those tasks, or point it at the test that replaces it.`,
+        recordedRetire: (n, list, slug, phase) => `Change request #${n} recorded — nothing unticked: a removed test's tasks are not redone. Still named in _Makes green:_: ${list}: drop the T-ID from those tasks, or point it at the test that replaces it; then re-approve: /approve ${slug} ${phase}.`,
+      },
       missing: (file, slug) => `${file} not found for '${slug}' — nothing to compare.`,
       neverApproved: (phase, slug) => `'${phase}' was never approved for '${slug}' — there is no approved version to compare with. Approve it first: /approve ${slug} ${phase}.`,
       fingerprintOnly: (phase, slug) => `This approval predates the change history: only its fingerprint was recorded, so what changed can't be listed. Re-approve to start the history: /approve ${slug} ${phase}.`,
@@ -3217,7 +3224,13 @@ const MSG = {
 
     impact: {
       badPhase: (p, known) => `Fase '${p}' desconhecida para spec_impact. Conhecidas: ${known}.`,
-      reopenTasks: "reopen aplica-se só a requirements e design — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
+      reopenTasks: "reopen aplica-se a requirements, design, test-plan e eval-plan — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Testes removidos que tarefas ainda põem a verde — ${list}: não refaças essas tarefas; tira o T-ID do _Makes green:_ delas ou aponta-o para o teste que o substitui.` +
+          (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Testes removidos não se refazem — ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui.`,
+        recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um teste removido não se refazem. Ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
+      },
       missing: (file, slug) => `${file} não encontrado em '${slug}' — nada para comparar.`,
       neverApproved: (phase, slug) => `'${phase}' nunca foi aprovada em '${slug}' — não há versão aprovada com que comparar. Aprova-a primeiro: /approve ${slug} ${phase}.`,
       fingerprintOnly: (phase, slug) => `Esta aprovação é anterior ao histórico de alterações: só ficou registada a sua impressão digital, por isso não é possível listar o que mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} ${phase}.`,
@@ -3963,7 +3976,13 @@ const MSG = {
 
     impact: {
       badPhase: (p, known) => `Fase '${p}' desconocida para spec_impact. Conocidas: ${known}.`,
-      reopenTasks: "reopen solo se aplica a requirements y design — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
+      reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Pruebas eliminadas que aún ponen en verde algunas tareas — ${list}: no rehagas esas tareas; quita el T-ID de su _Makes green:_ o apúntalo a la prueba que la sustituye.` +
+          (offer ? ` --reopen registra la solicitud de cambio sin desmarcarlas (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Las pruebas eliminadas no se rehacen — aún nombradas en _Makes green:_: ${list}: quita el T-ID de esas tareas, o apúntalo a la prueba que la sustituye.`,
+        recordedRetire: (n, list, slug, phase) => `Solicitud de cambio #${n} registrada — nada desmarcado: las tareas de una prueba eliminada no se rehacen. Aún nombradas en _Makes green:_: ${list}: quita el T-ID de esas tareas, o apúntalo a la prueba que la sustituye; después vuelve a aprobar: /approve ${slug} ${phase}.`,
+      },
       missing: (file, slug) => `No se encontró ${file} en '${slug}' — nada que comparar.`,
       neverApproved: (phase, slug) => `'${phase}' nunca se aprobó en '${slug}' — no hay versión aprobada con la que comparar. Apruébala primero: /approve ${slug} ${phase}.`,
       fingerprintOnly: (phase, slug) => `Esta aprobación es anterior al historial de cambios: solo se registró su huella, así que no se puede listar qué cambió. Vuelve a aprobar para iniciar el historial: /approve ${slug} ${phase}.`,

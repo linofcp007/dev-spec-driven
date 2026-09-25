@@ -915,7 +915,17 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   const bad8 = [["impact", "drafts", "--phase", "design"], ["impact", "drafts", "--phase", "plan"], ["impact", "drafts", "--phase"], ["impact", "drafts", "--phase", "tasks", "--reopen"], ["impact"]]
     .map((a) => run(a.concat(["--project", w8])));
   ok(bad8.every((r) => r.code === 1) && /'design' was never approved for 'drafts'/.test(bad8[0].out) && /Unknown phase 'plan'/.test(bad8[1].out) && /missing value for --phase/.test(bad8[2].out) &&
-    /requirements and design only/.test(bad8[3].out) && /usage: dev-spec impact/.test(bad8[4].out), "impact: never approved / unknown phase / missing --phase value / reopen on tasks / no feature → exit 1 with a clear message");
+    /reopen applies to requirements, design, test-plan and eval-plan/.test(bad8[3].out) && /usage: dev-spec impact/.test(bad8[4].out), "impact: never approved / unknown phase / missing --phase value / reopen on tasks / no feature → exit 1 with a clear message");
+  // --phase test-plan: the T-ID row diff, and next-action names that phase for a changed test-plan.md.
+  run(["approve", "drafts", "test-plan", "--force", "--project", w8]);
+  fs.writeFileSync(d8("test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2, SC-001 |\n| T-03 | US-1.AC-1 |\n");
+  const tp8 = run(["impact", "drafts", "--phase", "test-plan", "--project", w8]);
+  let tp8j = null;
+  try { tp8j = JSON.parse(run(["impact", "drafts", "--phase", "test-plan", "--json", "--project", w8]).out); } catch { /* invalid JSON */ }
+  ok(tp8.code === 0 && /Impact: drafts · test-plan — against the approval of/.test(tp8.out) && /\+ T-03 {2}US-1\.AC-1/.test(tp8.out) && /~ T-02 {2}US-1\.AC-2, SC-001/.test(tp8.out) &&
+    /T-02 \(modified\) — tasks: none/.test(tp8.out) && tp8j && JSON.stringify(tp8j) === JSON.stringify(S8.impactReport(w8, "drafts", { phase: "test-plan" })) &&
+    /dev-spec impact drafts --phase test-plan/.test(run(["next-action", "drafts", "--project", w8]).out),
+    "impact --phase test-plan prints the T-ID row diff (--json = spec_impact); next-action names --phase test-plan for a changed test-plan.md");
   const m8 = run(["metrics", "drafts", "--project", w8]);
   let m8j = null;
   try { m8j = JSON.parse(run(["metrics", "drafts", "--json", "--project", w8]).out); } catch { /* invalid JSON */ }
