@@ -2313,6 +2313,42 @@ function endRun() {
       /a tarefa 2 está marcada, mas o que ela entrega é essa secção/.test(S.completeTask(w5pt, f5pt.slug, 3).error),
       "no task mentions the Root Cause → only the first task can be completed; the refusal (and the ticked-root-cause-task note / refusal) is localized (PT)");
 
+    // A red-phase task (its test must FAIL) carrying a must-pass _Verify:_ can never be verified: the refusal of its red
+    // run, its unverified note and next_action's verify step say how to fix the TASK (move the command to the fix task, or
+    // drop it and record the red run as a note) — never only "re-run it" / "fix the code first". EN / PT.
+    const redBug = (d, lang) => {
+      const b = S.createFeature(d, "Red loop " + lang, undefined, "loop", undefined, lang, "bugfix");
+      const tp = path.join(b.dir, "tasks.md");
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace("  - _Makes green: T-01_\n", "  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n"));
+      // A written bugfix (every template slot filled), its phases approved in order — so next_action reaches `verify`.
+      const bp = path.join(b.dir, "bug.md");
+      fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
+      const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
+      fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
+      fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
+      ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
+      S.completeTask(d, b.slug, 1); S.completeTask(d, b.slug, 2);
+      return b;
+    };
+    const rb = redBug(w5, "en");
+    const rbRun = S.completeTask(w5, rb.slug, 3, { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" });
+    const rbNote = S.completeTask(w5, rb.slug, 3, { summary: "T-01 fails: the redirect loop" });
+    write5(rb, "tasks.md", read5(rb, "tasks.md").replace(/- \[ \] 4\./, "- [x] 4."));
+    const rbNext = S.nextAction(w5, rb.slug);
+    const rbPt = redBug(w5pt, "pt");
+    const rbPtRun = S.completeTask(w5pt, rbPt.slug, 3, { command: "node tests/t01.test.js", exitCode: 1 });
+    const plain = S.completeTask(w5, rb.slug, 4, { command: "npm test", exitCode: 1 });
+    ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 3 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
+      /move the command to the task that makes it green/.test(rbRun.error) && /dev-spec done red-loop-en 3 --evidence "T-01 fails: <the reason>"/.test(rbRun.error) &&
+      rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 3 writes a test that must FAIL/.test(rbNote.note) &&
+      rbNext.step === "verify" && /Task 3 writes a test that must FAIL/.test(rbNext.recommendation) &&
+      rbPtRun.redPhaseVerify === true && /A tarefa 3 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
+      plain.ok === false && !plain.redPhaseVerify && !/red phase/.test(plain.error) &&
+      /Task 3 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 3 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
+      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (move the command to the fix task, or a note without a _Verify:_) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
+      JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")");
+
     // Quoted evidence in bug.md is content, not a template slot: a Reproduction / Root Cause quoting `[object Object]`, a regex
     // class `[A-Z]` or a log tag `[WARN]` is documented (doctor, the requirements / design approvals, the root-cause gate,
     // finish, the placeholders check) — 1.13 reported it "not filled" in every language. The bug report's own slots, and a

@@ -270,6 +270,11 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
+- **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
+  equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
+  `evidenceGate.redPhaseVerify` (move the command to the fix task, or drop it and record the red run as a note) to the
+  failed-run refusal, the failed-run / note-only / no-evidence note and next_action's `verify` step, with the stable
+  field `redPhaseVerify: true`. The bugfix template's tasks comment says task 3 carries no `_Verify:_` (EN/PT/ES).
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses

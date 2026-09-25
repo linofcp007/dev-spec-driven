@@ -1960,8 +1960,15 @@ function completeTask(projectDir, name, number, evidence) {
     writeFileAtomic(file, updated);
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
+  // A red-phase task (it writes a test that must FAIL) with a must-pass _Verify:_ can never be verified: its refusal and
+  // its unverified note say how to fix the task (redPhaseHint) — never only "re-run it" / "fix the code first".
+  const redHint = redPhaseHint(task, f.slug, lng);
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
-  if (failed) return { ok: false, recorded: true, error: alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode) };
+  if (failed) {
+    const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (redHint ? " " + redHint : "") };
+    if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
+    return out;
+  }
   const tasks = parseTasks(activeTasks(updated, detectTracks(f.dir))); // done/total/next as status counts them
   const next = tasks.find((t) => !t.done) || null;
   const runnable = taskMarkers(task).verify.length > 0;
@@ -1987,6 +1994,10 @@ function completeTask(projectDir, name, number, evidence) {
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
       : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
+    if (redHint && ["failed-run", "manual-note-on-runnable-verify", "no-evidence"].includes(reason)) {
+      res.note += " — " + redHint;
+      res.redPhaseVerify = true;
+    }
   }
   // Bugfix: the root-cause task ticked while bug.md → Root Cause is still empty — allowed (it is the task that writes it),
   // but its deliverable is that section: say so now, not only when the next task is refused. rootCausePending: stable.
@@ -3009,6 +3020,28 @@ function duplicateTaskNumbers(tasks) {
 function taskProse(block) {
   const code = new Set(block.bodyCode || []);
   return [block.text, ...block.body.filter((_, k) => !code.has(k))];
+}
+// A RED-PHASE task: its job is a test that must FAIL ("Write regression test T-01 and watch it fail for the right reason",
+// "write the failing tests", PT "vê-lo falhar pela razão certa", ES "verla fallar por la razón correcta"). Its run is red by
+// design, so a must-pass _Verify:_ on it can never verify it — completeTask and next_action say how to fix that
+// (redPhaseVerify) instead of "re-run it" / "a failing run means fixing the code". Markers are not prose (the regex reads
+// the task's own text lines, _Verify:_ values removed).
+const RE_RED_PHASE_TASK = new RegExp([
+  "watch (?:it|them) fail", "fail(?:s|ing)? for the right reason", "(?:write|writes|writing) (?:the |a |an |every )?failing (?:regression |unit |integration |e2e )?tests?",
+  "red phase", "red before the fix",
+  "v[êe]-l[oa]s? falhar", "ver (?:o teste |os testes )?falhar", "falh(?:ar|e|a|em) pel[ao] (?:raz[ãa]o|motivo) cert[ao]", "teste(?:s)? (?:de regress[ãa]o )?a falhar", "fase vermelha",
+  "verl[ao]s? fallar", "fall(?:ar|e|a|en) por (?:la|el) (?:raz[óo]n|motivo) correct[ao]", "prueba(?:s)? (?:de regresi[óo]n )?que falla", "fase roja",
+].join("|"), "i");
+function redPhaseTask(block) {
+  return RE_RED_PHASE_TASK.test(taskProse(block).join(" ").replace(RE_TASK_MARKER, " "));
+}
+// The redPhaseVerify hint for a block (null unless it is a red-phase task with a runnable _Verify:_): the note example
+// names its first T-ID (text or _Makes green:_), else the localized "the test".
+function redPhaseHint(block, slug, lang) {
+  if (!block || !redPhaseTask(block) || !taskMarkers(block).verify.some((c) => !/^\[.*\]$/.test(c.trim()))) return null;
+  const EG = i18n.msg(lang).evidenceGate;
+  const t = (taskProse(block).join(" ").match(RE_TEST_REF) || [])[0];
+  return EG.redPhaseVerify(block.number, slug, t || EG.redPhaseTestWord);
 }
 // tasks.md as the task scanner reads it: HTML comments out and fenced code blanked line for line (the same fence
 // rules as taskBlocks — an unclosed fence in a task's body ends with the item). trace_check and implementsRefs read
@@ -5301,6 +5334,9 @@ function nextAction(projectDir, name) {
         const blk = taskBlocks(activeText || "").find((b) => b.number === n && b.done);
         const runnable = !!blk && taskMarkers(blk).verify.some((c) => !/^\[.*\]$/.test(c.trim())); // what `done --run` would run
         recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
+        // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
+        const red = redPhaseHint(blk, slug, lng);
+        if (red) recommendation += " " + red;
       } else if (dr && dr.drifted) {
         // Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it
         // also needs finishing again, after that decision.

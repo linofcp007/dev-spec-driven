@@ -249,6 +249,12 @@ fs.writeFileSync(path.join(w1p, ".specs", "nocmd", "tasks.md"), "- [ ] 1. n\n  -
 const w1No = run(["done", "nocmd", "1", "--run", "--project", w1p]);
 ok(!/--shell bash/.test(w1Dup.out) && w1No.code === 1 && (process.platform === "win32") === /--shell bash/.test(w1No.out) && /- \[ \] 1\. n/.test(w1Read("nocmd")),
   "a check that ran and failed prints no shell hint; a command cmd.exe could not run (unknown command) prints the --shell bash hint on Windows (only there)");
+// A red-phase task (its test must FAIL) with a must-pass _Verify:_: `done --run` explains how to fix the task, not only "fix the code".
+run(["create", "Red", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node -e \"process.exit(1)\"_\n");
+const w1Red = run(["done", "red", "1", "--run", "--project", w1p]);
+ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /dev-spec done red 1 --evidence "T-01 fails: <the reason>"/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
+  "done --run on a red-phase task: the refusal says to move the _Verify:_ to the fix task or record the red run as a note (no shell hint)");
 run(["create", "Pad", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");
 const w1P1 = run(["done", "pad", "01", "--run", "--project", w1p]);

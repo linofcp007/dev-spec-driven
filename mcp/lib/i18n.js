@@ -462,7 +462,9 @@ ${a.summary || "[one line: the bug being fixed]"}
       return `# Tasks: ${name}
 
 <!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
-     No fix before bug.md → Root Cause is filled with evidence. -->
+     No fix before bug.md → Root Cause is filled with evidence.
+     Task 3 is red by design (its test must FAIL): give it no _Verify:_ — record the failing run as a note
+     (--evidence) — the must-pass command belongs on the fix task (4). -->
 
 ## Global Constraints
 - [exact values the fix must respect — versions, limits, formats]
@@ -1027,7 +1029,9 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
       return `# Tasks: ${name}
 
 <!-- A ordem de um bugfix é fixa: reproduzir → causa raiz → teste de regressão a falhar → corrigir → verificar.
-     Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência. -->
+     Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência.
+     A tarefa 3 é vermelha por natureza (o teste tem de FALHAR): não lhe ponhas _Verify:_ — regista a execução
+     a falhar como nota (--evidence) — o comando que tem de passar vai na tarefa da correção (4). -->
 
 ## Restrições Globais
 - [valores exatos que a correção tem de respeitar — versões, limites, formatos]
@@ -1592,7 +1596,9 @@ ${a.summary || "[una línea: el bug a corregir]"}
       return `# Tareas: ${name}
 
 <!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
-     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia. -->
+     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia.
+     La tarea 3 es roja por diseño (su prueba debe FALLAR): no le pongas _Verify:_ — registra la ejecución que
+     falla como nota (--evidence) — el comando que debe pasar va en la tarea del arreglo (4). -->
 
 ## Restricciones Globales
 - [valores exactos que la corrección debe respetar — versiones, límites, formatos]
@@ -2073,6 +2079,9 @@ const MSG = {
     evidenceGate: {
       noContent: "Evidence needs a command (with its exit code) or a summary — an exit code alone proves nothing.",
       manualOnRunnable: (n, slug) => `Task ${n}: a note was recorded, but its _Verify:_ command was not run — it stays unverified until a passing run is recorded: dev-spec done ${slug} ${n} --run`,
+      // A red-phase task (it writes a test that must FAIL) carrying a must-pass _Verify:_ can never be verified.
+      redPhaseTestWord: "the test",
+      redPhaseVerify: (n, slug, test) => `Task ${n} writes a test that must FAIL (the red phase), so a _Verify:_ that must pass can never pass on it. Either move the command to the task that makes it green (the fix — its _Verify:_ then proves the fix), or remove the _Verify:_ from task ${n} and record the red run as a note: dev-spec done ${slug} ${n} --evidence "${test} fails: <the reason>".`,
       failedRun: (n, code, slug, runnable) => `Task ${n}: its latest recorded run failed (exit ${code}) — a note doesn't change that; it stays unverified until a passing run ` +
         (runnable ? `of its _Verify:_ command is recorded: dev-spec done ${slug} ${n} --run` : "(a command with exit code 0) is recorded."),
       duplicateNumber: (n) => `Task ${n}: another task also uses number ${n} and the recorded evidence is that task's — this one stays unverified; renumber the tasks, then record its own evidence.`,
@@ -2868,6 +2877,8 @@ const MSG = {
     evidenceGate: {
       noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
       manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
+      redPhaseTestWord: "o teste",
+      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção), ou tira o _Verify:_ da tarefa ${n} e regista a execução vermelha como nota: dev-spec done ${slug} ${n} --evidence "${test} falha: <o motivo>".`,
       failedRun: (n, code, slug, runnable) => `Tarefa ${n}: a última execução registada falhou (exit ${code}) — uma nota não muda isso; continua não verificada até se registar uma execução com sucesso ` +
         (runnable ? `do comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(um comando com exit code 0)."),
       duplicateNumber: (n) => `Tarefa ${n}: outra tarefa também usa o número ${n} e a evidência registada é dessa — esta continua não verificada; renumera as tarefas e depois regista a evidência desta.`,
@@ -3612,6 +3623,8 @@ const MSG = {
     evidenceGate: {
       noContent: "La evidencia necesita un comando (con su exit code) o un resumen — un exit code solo no prueba nada.",
       manualOnRunnable: (n, slug) => `Tarea ${n}: se registró una nota, pero su comando _Verify:_ no se ejecutó — sigue sin verificar hasta que se registre una ejecución correcta: dev-spec done ${slug} ${n} --run`,
+      redPhaseTestWord: "la prueba",
+      redPhaseVerify: (n, slug, test) => `La tarea ${n} escribe una prueba que debe FALLAR (la fase roja), así que un _Verify:_ que debe pasar nunca pasará en ella. O mueve el comando a la tarea que la pone en verde (el arreglo — su _Verify:_ prueba entonces el arreglo), o quita el _Verify:_ de la tarea ${n} y registra la ejecución en rojo como nota: dev-spec done ${slug} ${n} --evidence "${test} falla: <el motivo>".`,
       failedRun: (n, code, slug, runnable) => `Tarea ${n}: su última ejecución registrada falló (exit ${code}) — una nota no cambia eso; sigue sin verificar hasta que se registre una ejecución correcta ` +
         (runnable ? `de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(un comando con exit code 0)."),
       duplicateNumber: (n) => `Tarea ${n}: otra tarea también usa el número ${n} y la evidencia registrada es de esa — esta sigue sin verificar; renumera las tareas y luego registra la evidencia de esta.`,

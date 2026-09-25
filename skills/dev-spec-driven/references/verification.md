@@ -41,6 +41,11 @@ BEFORE claiming any status:
 - **Failed runs.** The latest failed run makes the task unverified — even an already-ticked one (a failed
   re-check is recorded and the task stays ticked but unverified). Only a later **passing** run clears it; a note
   can't paper over it.
+- **Red-phase tasks carry no must-pass `_Verify:_`.** A task whose job is a test that must FAIL ("write regression
+  test T-01 and watch it fail for the right reason") can never pass its own `_Verify:_`: put the command on the task
+  that makes it green (the fix — its passing run then proves the fix), and record the red run on the red task as a
+  note (`--evidence "T-01 fails: <reason>"`, no `_Verify:_` there). When one does carry a `_Verify:_`, the refusal of
+  its run, its unverified note and `/next-action`'s verify step say exactly that (`redPhaseVerify: true`).
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open, is recorded, and exits 1. `--shell bash` (or
   `DEV_SPEC_SHELL`) picks the shell. On Windows the default shell is cmd.exe, which has no single quotes and never

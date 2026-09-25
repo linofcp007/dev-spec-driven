@@ -161,7 +161,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `$VAR`) is now refused before anything runs unless `--shell` picks a shell (`--shell bash`, or `--shell cmd` to
   run it under cmd.exe anyway). The "retry with `--shell bash`" hint is printed only when cmd.exe itself failed (an
   unknown command — exit 9009 —, its own syntax error, a path it can't find; EN/PT/ES Windows wording), never after a
-  check that ran and failed (`node tests/x.js` → exit 1), which needs a code fix.
+  check that ran and failed (`node tests/x.js` → exit 1), which needs a code fix. A red-phase task (it writes a test
+  that must FAIL) carrying a must-pass `_Verify:_` could never be verified — `--run` refused the red run and a note
+  left it unverified, with no word on why; its refusal, its note and `next_action`'s verify step now say to move the
+  command to the fix task, or drop it and record the red run as a note (`redPhaseVerify: true`, EN/PT/ES), and the
+  bugfix template's tasks comment says its failing-test task carries no `_Verify:_`.
 - **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
   moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
   feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,
