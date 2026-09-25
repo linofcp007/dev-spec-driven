@@ -168,6 +168,18 @@ ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /ro
     fs.existsSync(path.join(w2, ".specs", "checkout", "load-test.md")) && rmCore.code === 1,
     "add-track --remove turns a track off (files kept, listed); 'core' can't be removed");
   ok(/add-track <feature> <track\.\.\.>/.test(run(["help"]).out) && /--remove/.test(run(["help"]).out), "help documents add-track --remove");
+  // the marks' words and the removal note follow the feature language (PT)
+  const ptp = path.join(tmp, "wp2-pt");
+  run(["init", "core", "--lang", "pt", "--project", ptp]);
+  run(["create", "Relatórios", "saas", "--project", ptp]);
+  const ptSt = run(["status", "relatorios", "--project", ptp]).out;
+  const ptRm = run(["add-track", "relatorios", "saas", "--remove", "--project", ptp]);
+  ok(/◐ Orçamento de Desempenho \(por preencher\)/.test(ptSt) && !/✓/.test(ptSt.split("Scale sections:")[1] || "✓") && ptRm.code === 0 && /Tracks desativados: \+saas/.test(ptRm.out),
+    "status (◐ … (por preencher)) and add-track --remove speak the feature language (PT)");
+  // a bugfix given an extra track gets it on the first run, same as on a re-run
+  const bug1 = run(["bugfix", "Login crash", "saas", "--project", w2]).out;
+  const bug2 = run(["bugfix", "Login crash", "saas", "--project", w2]).out;
+  ok(/\[core \+tdd \+saas\]/.test(bug1) && /\[core \+tdd \+saas\]/.test(bug2) && !/already existed/.test(bug2), "bugfix with a track gives the same track set on both runs");
 }
 // @wp WP2 <<<
 

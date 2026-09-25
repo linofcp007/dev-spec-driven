@@ -183,7 +183,8 @@ function normalizeTracks(tracks) {
 // Words people type for a track — suggestion only, never accepted as input.
 const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas" };
 function suggestTrack(token) {
-  if (TRACK_ALIASES[token]) return TRACK_ALIASES[token];
+  // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
+  if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
   // Optimal-string-alignment distance: a transposition ('sasa', 'ia') costs 1.
   const dist = (a, b) => {
     const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -684,15 +685,20 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
-  // path as spec_add_track below (a re-run never drops a track and never re-classifies). A NEW bugfix is
-  // always test-first (the regression test is its proof); other tracks come later via add_track.
+  // path as spec_add_track below (a re-run never drops a track and never re-classifies). A bugfix is always
+  // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
+  // through the add_track path too, so running the same command twice gives the same track set.
   const current = existed ? detectTracks(dir) : null;
   const t = existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
-    : bugfix ? normalizeTracks(["tdd"])
+    : bugfix ? VALID_TRACKS.filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
     : given ? pt.tracks
     : (cls || classify(summary || "", { name, lang })).tracks;
   const newTracks = existed ? t.filter((x) => !current.includes(x)) : [];
-  if (newTracks.length && readState(projectDir, slug).invalid) return { ok: false, error: readState(projectDir, slug).invalid };
+  const bugExtra = !existed && bugfix ? t.filter((x) => x !== "core" && x !== "tdd") : [];
+  if (newTracks.length) {
+    const bad = readState(projectDir, slug).invalid || stateShapeError(dir, slug, featureLang(projectDir, slug));
+    if (bad) return { ok: false, error: bad };
+  }
   ensureDir(dir);
 
   // Resolve the feature's language (explicit > project default > en) and persist it so later
@@ -709,13 +715,15 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind) {
     if (writeIfAbsent(path.join(dir, rel), content)) created.push(rel);
     else skip.push(rel);
   };
-  // Shared tail: new tracks on an existing feature, the backlog entry this feature fulfils, the roadmap.
+  // Shared tail: new tracks on an existing feature (or a new bugfix's extra tracks), the backlog entry this
+  // feature fulfils, the roadmap.
   const finish = (res) => {
-    if (newTracks.length) {
-      const a = applyTracks(projectDir, f, name, newTracks, lng);
+    const extra = newTracks.length ? newTracks : bugExtra;
+    if (extra.length) {
+      const a = applyTracks(projectDir, f, name, extra, lng);
       if (!a.ok) return a;
       a.added.forEach((x) => { if (!created.includes(x)) created.push(x); });
-      res.addedTracks = newTracks;
+      if (newTracks.length) res.addedTracks = newTracks;
     }
     const fromBacklog = pruneBacklog(projectDir, slug);
     if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
@@ -843,20 +851,26 @@ function parseTasks(tasksText) {
 function taskDescription(text) {
   return String(text || "").replace(/^(?:\[(?:US\d+|shared|P)\]\s*)+/i, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
-// The scaffold's own tasks (every language, every track, bugfix flow): their descriptions are template text
-// until the user edits them — "Emit metrics, add dashboard, configure alerts" is not a breakdown yet.
+// The scaffold's own +saas/+ai track tasks (every language): their descriptions are template text until the
+// user edits them — "Emit metrics, add dashboard, configure alerts" is not a breakdown yet.
 let TEMPLATE_TASKS = null;
 function templateTaskSet() {
   if (TEMPLATE_TASKS) return TEMPLATE_TASKS;
   const set = new Set();
   for (const l of i18n.LANGS) {
-    const tpl = i18n.tasks({ name: "x", tracks: VALID_TRACKS, label: "", slug: "x" }, l) + "\n" + i18n.bugTasks("x", l);
-    for (const t of parseTasks(tpl)) set.add(taskDescription(t.text));
+    for (const t of parseTasks(i18n.tasks({ name: "x", tracks: VALID_TRACKS, label: "", slug: "x" }, l))) set.add(taskDescription(t.text));
   }
   return (TEMPLATE_TASKS = set);
 }
+// The bugfix steps (every language). They ARE the method — kept verbatim, so never placeholders — but on a
+// fresh bugfix they don't mean "broken into tasks" yet: detectPhase counts them once the planning chain is filled.
+let BUG_STEPS = null;
+function isBugStep(text) {
+  if (!BUG_STEPS) BUG_STEPS = new Set(i18n.LANGS.flatMap((l) => parseTasks(i18n.bugTasks("x", l)).map((t) => taskDescription(t.text))));
+  return BUG_STEPS.has(taskDescription(text));
+}
 // A scaffold task: its whole description is a [bracketed placeholder] (after the known tags), or it is
-// still the verbatim text of a template task (the +saas/+ai track tasks, the bugfix steps).
+// still the verbatim text of a +saas/+ai template task.
 function isPlaceholderTask(text) {
   const rest = taskDescription(text);
   return /^\[[^\]]*\]$/.test(rest) || templateTaskSet().has(rest);
@@ -864,19 +878,23 @@ function isPlaceholderTask(text) {
 
 function detectPhase(dir, tracks) {
   const has = (f) => fs.existsSync(path.join(dir, f));
-  const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
+  const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
   const anyDone = tasks.some((t) => t.done);
   const allDone = tasks.length > 0 && tasks.every((t) => t.done);
   if (allDone) return "complete";
   if (anyDone) return "executing";
-  // A scaffold whose tasks are ALL still placeholders / template tasks hasn't been broken into tasks yet.
-  if (has("tasks.md") && tasks.some((t) => !isPlaceholderTask(t.text))) return "tasks-ready";
-  // Planning: the user is at the EARLIEST artifact of the chain that is still a template (artifactState), so
-  // a fresh scaffold is in "requirements" — not in its last scaffolded phase (test-plan 20%, or tasks-ready
-  // 30% for +saas/+ai). Once every artifact is filled, the last planning phase present.
+  // Planning: the EARLIEST artifact of the chain that is still a template (artifactState). design.md is judged
+  // on its active part — a removed track's [SaaS]/[AI] sections keep their TODOs, and they are inactive.
   const chain = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]]
     .filter(([ph, f]) => phaseActive(ph, tracks) && has(f));
-  const open = chain.find(([, f]) => artifactState({ file: path.join(dir, f) }) !== "filled");
+  const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesign(readIfExists(path.join(dir, f)) || "", tracks) } : { file: path.join(dir, f) });
+  const open = chain.find(([, f]) => stateOf(f) !== "filled");
+  // A scaffold whose tasks are ALL still placeholders / template track tasks hasn't been broken into tasks yet.
+  // One real task wins over an unfilled chain (the task-driven model); the verbatim bugfix steps only count
+  // once the bug's planning chain is filled.
+  if (has("tasks.md") && tasks.some((t) => !isPlaceholderTask(t.text) && !(open && isBugStep(t.text)))) return "tasks-ready";
+  // So a fresh scaffold is in "requirements" — not in its last scaffolded phase (test-plan 20%, or tasks-ready
+  // 30% for +saas/+ai). Once every artifact is filled, the last planning phase present.
   if (open) return open[0];
   if (chain.length) return chain[chain.length - 1][0];
   if (has("classification.md")) return "classified";
@@ -884,22 +902,31 @@ function detectPhase(dir, tracks) {
 }
 
 // A folder name a feature command can address (current or pre-1.11 slug). `.obsidian`, `My Notes/` are not
-// features: they used to list as 0% features that no command could reach or remove.
-function isFeatureFolder(name) {
-  return !name.startsWith(".") && !name.startsWith("_") && !RESERVED_SLUGS.has(name) && slugify(name) === name;
+// features: they used to list as 0% features that no command could reach or remove. A case-only difference
+// ("Billing/") is addressable on a case-insensitive filesystem (Windows, macOS): 'billing' resolves to it, so
+// it stays listed — but only when it IS the folder that slug reaches (never beside a real "billing/").
+function isFeatureFolder(name, root) {
+  if (name.startsWith(".") || name.startsWith("_") || RESERVED_SLUGS.has(name.toLowerCase())) return false;
+  if (slugify(name) === name) return true;
+  if (!root || slugify(name) !== name.toLowerCase()) return false;
+  try {
+    return fs.realpathSync.native(path.join(root, name.toLowerCase())) === fs.realpathSync.native(path.join(root, name));
+  } catch {
+    return false;
+  }
 }
 
 function listFeatures(projectDir) {
   const root = specsRoot(projectDir);
   if (!fs.existsSync(root)) return { specsDir: root, exists: false, features: [] };
   const dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
-  const entries = dirs.filter((d) => isFeatureFolder(d.name));
+  const entries = dirs.filter((d) => isFeatureFolder(d.name, root));
   // Visible, non-addressable folders are named (so a hand-made "My Feature/" can be renamed), never listed.
-  const ignored = dirs.filter((d) => !isFeatureFolder(d.name) && !/^[._]/.test(d.name) && !RESERVED_SLUGS.has(d.name)).map((d) => d.name);
+  const ignored = dirs.filter((d) => !isFeatureFolder(d.name, root) && !/^[._]/.test(d.name) && !RESERVED_SLUGS.has(d.name.toLowerCase())).map((d) => d.name);
   const features = entries.map((d) => {
     const dir = path.join(root, d.name);
     const tracks = detectTracks(dir);
-    const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
+    const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
     const done = tasks.filter((t) => t.done).length;
     return {
       name: d.name,
@@ -923,7 +950,7 @@ function statusFeature(projectDir, name) {
   const artifacts = fs
     .readdirSync(dir, { withFileTypes: true })
     .map((d) => d.name + (d.isDirectory() ? "/" : ""));
-  const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
+  const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
   const done = tasks.filter((t) => t.done).length;
   const next = tasks.find((t) => !t.done) || null;
 
@@ -964,8 +991,10 @@ function safeReaddir(p) {
 function nextTask(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
-  const text = readIfExists(path.join(f.dir, "tasks.md"));
-  if (text == null) return { ok: false, error: errs(projectDir, f.slug).tasksMissing(f.slug) };
+  const raw = readIfExists(path.join(f.dir, "tasks.md"));
+  if (raw == null) return { ok: false, error: errs(projectDir, f.slug).tasksMissing(f.slug) };
+  const tracks = detectTracks(f.dir);
+  const text = activeTasks(raw, tracks); // a removed track's task block is inactive, never "next"
   const tasks = parseTasks(text);
   const next = tasks.find((t) => !t.done);
   const res = {
@@ -975,7 +1004,7 @@ function nextTask(projectDir, name, opts = {}) {
     remaining: tasks.filter((t) => !t.done).length,
     total: tasks.length,
   };
-  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, detectTracks(f.dir));
+  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks);
   return res;
 }
 
@@ -1039,7 +1068,7 @@ function completeTask(projectDir, name, number, evidence) {
   if (!alreadyDone || ev) maybeRefreshRoadmap(projectDir);
   // A failed re-check of a ticked task stays recorded: the task is now unverified, and we say so.
   if (failed) return { ok: false, recorded: true, error: EV.failedTicked(n, ev.exitCode) };
-  const tasks = parseTasks(updated);
+  const tasks = parseTasks(activeTasks(updated, detectTracks(f.dir))); // done/total/next as status counts them
   const block = taskBlocks(updated).find((b) => b.number === n);
   const verified = evidenceOk((state.evidence || {})[String(n)]);
   const res = {
@@ -1742,7 +1771,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
   const doc = specDoctor(projectDir, slug);
-  const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
+  const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
   const blocks = taskBlocks(tasksText);
   const open = blocks.filter((b) => !b.done).map((b) => b.number);
   const vs = verificationStatus(projectDir, slug, dir);
@@ -1974,6 +2003,8 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const { slug, dir, root } = f;
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const shape = stateShapeError(dir, slug, lng);
+  if (shape) return { ok: false, error: shape };
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = VALID_TRACKS.filter((t) => before.includes(t) || trs.includes(t));
@@ -2038,6 +2069,14 @@ function applyTracks(projectDir, f, name, trs, lng) {
   return { ok: true, added, tracks: after };
 }
 
+// readState hands back any JSON that parses: `tracks` set on an array vanishes when it is stringified (the
+// removal "succeeded" and nothing was saved), and a scalar would be overwritten. Refuse — never repair.
+function stateShapeError(dir, slug, lng) {
+  const j = readJson(statePath(dir));
+  const bad = j.exists && !j.error && (j.data === null || typeof j.data !== "object" || Array.isArray(j.data));
+  return bad ? i18n.msg(lng).tracks.stateShape(".specs/" + slug + "/.state.json") : null;
+}
+
 // The template task block for a track, numbered after the last task — or null when the track has none or
 // tasks.md already holds it (its heading, in any language). Its _Requirements:_ cite the track's template ACs
 // (US-1.AC-6 / US-1.AC-9), which a feature escalated later may not define: keep the IDs requirements.md
@@ -2053,12 +2092,33 @@ function trackTaskBlock(tr, tasksText, reqText, lng) {
   });
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
+const normTaskHeading = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+function trackTaskHeadings(tr) {
+  return new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading));
+}
 function trackTaskHeading(tr, tasksText) {
-  const norm = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
-  const wanted = new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(norm));
+  const wanted = trackTaskHeadings(tr);
   if (!wanted.size) return null;
-  const hit = stripHtmlComments(tasksText || "").split(/\r?\n/).find((l) => /^#{1,6}\s/.test(l) && wanted.has(norm(l)));
+  const hit = stripHtmlComments(tasksText || "").split(/\r?\n/).find((l) => /^#{1,6}\s/.test(l) && wanted.has(normTaskHeading(l)));
   return hit ? hit.replace(/^#{1,6}\s+/, "").trim() : null;
+}
+// tasks.md minus the task blocks of tracks that were turned off — the same rule as activeDesign: the block stays
+// on disk (inactive) and counts again when the track is re-added. Progress, next task, phase, roadmap and finish
+// read this; completing, tracing and briefing a task read the whole file.
+function activeTasks(tasksText, tracks) {
+  if (tasksText == null) return tasksText;
+  const wanted = new Set(["saas", "ai"].filter((t) => !tracks.includes(t)).flatMap((t) => [...trackTaskHeadings(t)]));
+  if (!wanted.size) return tasksText;
+  const lines = tasksText.split(/\r?\n/);
+  const heads = headingIndex(lines);
+  const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
+  const drop = new Set();
+  for (const h of heads) {
+    if (!wanted.has(normTaskHeading(lines[h]))) continue;
+    const end = heads.find((x) => x > h && level(x) <= level(h));
+    for (let i = h; i < (end == null ? lines.length : end); i++) drop.add(i);
+  }
+  return drop.size ? lines.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -2094,6 +2154,8 @@ function removeTracks(projectDir, f, named, lng) {
   if (named.includes("core")) return { ok: false, error: T.cannotRemoveCore };
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const shape = stateShapeError(dir, slug, lng);
+  if (shape) return { ok: false, error: shape };
   if (state.kind === "bugfix" && named.includes("tdd")) return { ok: false, error: T.bugfixNeedsTdd };
   const before = detectTracks(dir);
   const gone = named.filter((t) => before.includes(t));
@@ -2203,7 +2265,7 @@ function nextAction(projectDir, name) {
   } else if (has("tasks.md") && !approvals.tasks) {
     recommendation = nx.approveTasks(slug);
   } else {
-    const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
+    const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
     const next = tasks.find((t) => !t.done);
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
@@ -2309,18 +2371,25 @@ function sectionState(design, sections, marker) {
 const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*[,;/]?\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
+// A code span unwrapped as a placeholder: bracketed WORDS only (the bugfix test plan's `[path]` / `[caminho]` /
+// `[ruta]`). Literals stay code: `[]`, `["read", "write"]`, `[0, 1]`, `[chunk:ID]`, a regex class `[a-z]`.
+const RE_CODE_PLACEHOLDER = /^\s*\[\s*\p{L}{2,}(?:[\s/-]+\p{L}{2,})*\s*\]\s*$/u;
+// A list or interval of numbers (`score in [0, 1]`) — the templates' numeric placeholders are single values
+// (`[85]%`, `$[0.03]`).
+const RE_NUMBER_LIST = /^\s*[-+]?\d+(?:\.\d+)?(?:\s*[,;]\s*[-+]?\d+(?:\.\d+)?)+\s*$/;
 
 // [{ line, text, kind }] — the template placeholders left in `text` (1-based line, the placeholder as written,
 // kind 'bracket' | 'todo'):
 //   • bracketed prose: `[trigger]`, `[1-2 sentences: what this does and why it matters]`, `[N]`, `$[0.03]`,
-//     an empty `[]` / `[ ]` slot, and a code span that is nothing but one (`` `[path]` ``);
+//     an empty `[]` / `[ ]` slot, and a code span that is nothing but bracketed words (`` `[path]` ``);
 //   • the `> **TODO**` sentinel line.
 // NOT placeholders: links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is
 // defined), footnotes `[^1]`, callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`,
 // the English-stable tags ([US1] [P] [shared] [SaaS] [AI], priorities [P1]), stable IDs ([US-1.AC-1],
 // [T-01]…), indexing glued to a word (`x[0]`), escaped `\[`, [NEEDS CLARIFICATION] (clarificationMarkers
-// tracks those), other code spans, and anything inside HTML comments or fenced code. Language-agnostic, so
-// EN/PT/ES templates behave the same.
+// tracks those), number lists / intervals `[0, 1]`, every other code span (literals such as `` `[]` `` or
+// `` `["a"]` ``), and anything inside HTML comments or fenced code. Language-agnostic, so EN/PT/ES templates
+// behave the same.
 function placeholderReport(text) {
   const lines = String(text || "").split(/\r?\n/);
   const out = [];
@@ -2354,9 +2423,9 @@ function placeholderReport(text) {
 }
 
 function bracketPlaceholders(line, refs) {
-  // Code is opaque — except a span that is only a placeholder, which is unwrapped and scanned.
+  // Code is opaque — except a span that is only bracketed words (RE_CODE_PLACEHOLDER), unwrapped and scanned.
   const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
-    /^\s*\[[^\]]*\]\s*$/.test(body) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
+    RE_CODE_PLACEHOLDER.test(body) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const found = [];
   const box = s.match(RE_LIST_CHECKBOX);
   const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
@@ -2378,7 +2447,7 @@ function bracketPlaceholders(line, refs) {
     const after = s[j + 1] || "";
     let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
       (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner);
+      refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_NUMBER_LIST.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner);
     let end = j;
     if (after === "[") { // reference link [x][y]: both halves are syntax
       const k = groupEnd(j + 1);
@@ -2743,6 +2812,8 @@ const ROADMAP_I18N = {
   pt: { roadmap: "Roadmap", progress: "Progresso", complete: "features completas", tasks: "tasks feitas", legend: "Legenda", done: "feito", inprogress: "em curso", blocked: "bloqueada", notstarted: "por começar", nextup: "A seguir", noFeatures: "Ainda sem features.", allDone: "Todas as features completas 🎉", nothingUnblocked: "Nada desbloqueado — resolve as dependências abaixo.", features: "Features", colFeature: "Feature", colTracks: "Tracks", colPhase: "Fase", colTasks: "Tasks", colDeps: "Deps", colNext: "Próxima", deps: "Dependências", noDeps: "Sem dependências declaradas.", needs: "Precisa de atenção", nothingFlagged: "Nada a assinalar ✓", blockedBy: "bloqueada por", openClar: "[NEEDS CLARIFICATION] por resolver", designTodo: "design com secções por preencher (TODO)", backlog: "Backlog (planeadas, ainda sem spec)", backlogEmpty: "(vazio)", next: "próxima", ready: "pronta para começar", cycle: "Dependência circular", none: "(nenhuma)", unverified: "tarefa(s) marcada(s) sem evidência de verificação", autogen: "AUTO-GERADO por dev-spec — não editar à mão.", theme: "Tema" },
   es: { roadmap: "Hoja de ruta", progress: "Progreso", complete: "funciones completas", tasks: "tareas hechas", legend: "Leyenda", done: "hecho", inprogress: "en curso", blocked: "bloqueada", notstarted: "sin empezar", nextup: "A continuación", noFeatures: "Aún sin funciones.", allDone: "Todas las funciones completas 🎉", nothingUnblocked: "Nada desbloqueado — resuelve las dependencias.", features: "Funciones", colFeature: "Función", colTracks: "Tracks", colPhase: "Fase", colTasks: "Tareas", colDeps: "Deps", colNext: "Siguiente", deps: "Dependencias", noDeps: "Sin dependencias declaradas.", needs: "Necesita atención", nothingFlagged: "Nada que señalar ✓", blockedBy: "bloqueada por", openClar: "[NEEDS CLARIFICATION] sin resolver", designTodo: "diseño con secciones sin rellenar (TODO)", backlog: "Backlog (planificadas, aún sin spec)", backlogEmpty: "(vacío)", next: "siguiente", ready: "lista para empezar", cycle: "Dependencia circular", none: "(ninguna)", unverified: "tarea(s) marcada(s) sin evidencia de verificación", autogen: "AUTO-GENERADO por dev-spec — no editar a mano.", theme: "Tema" },
 };
+// "planned": broken into tasks, none done yet — 30% of the way, so ⬜ "not started" next to it read as a contradiction.
+Object.entries({ en: "planned", pt: "planeada", es: "planificada" }).forEach(([l, s]) => { ROADMAP_I18N[l].planned = s; });
 function i18nLang(lang) {
   const l = String(lang || "en").toLowerCase().slice(0, 2);
   return ROADMAP_I18N[l] || ROADMAP_I18N.en;
@@ -2781,13 +2852,14 @@ function roadmapData(projectDir) {
     const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
     const design = readIfExists(path.join(dir, "design.md")) || "";
     const clar = clarificationMarkers(reqs).length;
-    const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, detectTracks(dir)));
-    const tasks = parseTasks(readIfExists(path.join(dir, "tasks.md")));
+    const tracks = detectTracks(dir);
+    const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, tracks));
+    const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
     const done = tasks.filter((t) => t.done).length;
     tasksDone += done;
     tasksTotal += tasks.length;
     const next = tasks.find((t) => !t.done);
-    const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress" : "notstarted";
+    const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress" : f.phase === "tasks-ready" ? "planned" : "notstarted";
     const unverified = verificationStatus(projectDir, f.name, dir).unverified.length;
     return { f, clar, done, total: tasks.length, next, designTodo, state, unverified };
   });
@@ -2809,7 +2881,7 @@ function renderRoadmapMd(projectDir, lang) {
   const t = i18nLang(lang);
   const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
-  const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", notstarted: "⬜" };
+  const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
   const attention = buildAttention(rows, t);
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
@@ -2818,7 +2890,7 @@ function renderRoadmapMd(projectDir, lang) {
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
-  md += `${t.legend}: ✅ ${t.done} · 🟡 ${t.inprogress} · ⛔ ${t.blocked} · ⬜ ${t.notstarted}\n`;
+  md += `${t.legend}: ✅ ${t.done} · 🟡 ${t.inprogress} · ⛔ ${t.blocked} · 📋 ${t.planned} · ⬜ ${t.notstarted}\n`;
   if (rmv.cycle) md += `\n> ⚠ **${t.cycle}:** ${rmv.cycle.join(" → ")}\n`;
 
   md += `\n## ▶ ${t.nextup}\n`;
@@ -2852,8 +2924,8 @@ function renderRoadmapHtml(projectDir, lang) {
   const { rmv, rows, tasksDone, tasksTotal } = roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const attention = buildAttention(rows, t);
-  const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", notstarted: "var(--c-muted)" };
-  const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, notstarted: t.notstarted };
+  const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
+  const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
   const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(cleanTaskText(r.next.text).slice(0, 60))}` : "…");
 
@@ -2930,6 +3002,7 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
   <span><span class="dot" style="background:var(--c-done)"></span>${t.done}</span>
   <span><span class="dot" style="background:var(--c-prog)"></span>${t.inprogress}</span>
   <span><span class="dot" style="background:var(--c-block)"></span>${t.blocked}</span>
+  <span><span class="dot" style="background:var(--accent)"></span>${t.planned}</span>
   <span><span class="dot" style="background:var(--c-muted)"></span>${t.notstarted}</span>
 </div>
 ${rmv.cycle ? `<p class="unmet">⚠ ${t.cycle}: ${htmlEsc(rmv.cycle.join(" → "))}</p>` : ""}

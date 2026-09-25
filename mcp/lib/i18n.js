@@ -1974,6 +1974,7 @@ const MSG = {
       designTitle: (name) => `# Design: ${name}`,
       acPlaceholder: (tr) => `[the +${tr} criterion this task proves]`,
       designSections: (marker) => `design.md (${marker} sections)`,
+      stateShape: (rel) => `${rel} must be a JSON object — fix it by hand; refusing to overwrite it.`,
       taskBlock: (track, start) => BUILD.en.trackTasks({ track, start }),
     },
     // @wp WP2 <<<
@@ -2194,6 +2195,7 @@ const MSG = {
       designTitle: (name) => `# Design: ${name}`,
       acPlaceholder: (tr) => `[o critério +${tr} que esta tarefa prova]`,
       designSections: (marker) => `design.md (secções ${marker})`,
+      stateShape: (rel) => `${rel} tem de ser um objeto JSON — corrige-o à mão; não o vou sobrescrever.`,
       taskBlock: (track, start) => BUILD.pt.trackTasks({ track, start }),
     },
     // @wp WP2 <<<
@@ -2414,6 +2416,7 @@ const MSG = {
       designTitle: (name) => `# Diseño: ${name}`,
       acPlaceholder: (tr) => `[el criterio +${tr} que prueba esta tarea]`,
       designSections: (marker) => `design.md (secciones ${marker})`,
+      stateShape: (rel) => `${rel} debe ser un objeto JSON — corrígelo a mano; no se sobrescribirá.`,
       taskBlock: (track, start) => BUILD.es.trackTasks({ track, start }),
     },
     // @wp WP2 <<<
