@@ -127,6 +127,24 @@ ok(brwJ.ok === true && brwJ.paths && brwJ.refs && Array.isArray(brwJ.refs.acs) &
   typeof brwFull.brief === "string" && Array.isArray(brwFull.acceptanceCriteria),
   "brief --write --json prints paths + identifiers (refs), no spec text — like spec_task_brief {write:true}; --include-brief prints everything");
 ok(run(["brief", "Invoice Summary", "999"]).code === 1, "brief on a missing task exits non-zero");
+// brief --write and metrics --write run under the feature lock (= spec_task_brief / spec_metrics {write}): a live holder →
+// busy (exit 1), nothing written; the lock file is git-ignored by the .specs/.gitignore init wrote.
+{
+  const lockBw = path.join(tmp, ".specs", "invoice-summary", ".lock");
+  fs.writeFileSync(lockBw, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString() }));
+  const env = { ...process.env, SPEC_PROJECT_DIR: tmp, DEV_SPEC_LOCK_WAIT_MS: "60" };
+  const briefBusy = spawnSync(process.execPath, [CLI, "brief", "Invoice Summary", "3", "--write", "--json"], { encoding: "utf8", env });
+  const metricsBusy = spawnSync(process.execPath, [CLI, "metrics", "Invoice Summary", "--write"], { encoding: "utf8", env });
+  let bj = {};
+  try { bj = JSON.parse(briefBusy.stdout); } catch { /* stays {} */ }
+  fs.rmSync(lockBw, { force: true });
+  ok(briefBusy.status === 1 && bj.ok === false && bj.busy === true && /Another dev-spec process is updating 'invoice-summary' right now/.test(bj.error || "") &&
+    metricsBusy.status === 1 && /Another dev-spec process is updating 'invoice-summary'/.test((metricsBusy.stdout || "") + (metricsBusy.stderr || "")) &&
+    !fs.existsSync(path.join(tmp, ".specs", "invoice-summary", ".execution", "task-3-brief.md")) && !fs.existsSync(path.join(tmp, ".specs", "invoice-summary", "retro.md")) &&
+    /^\.lock$/m.test(fs.readFileSync(path.join(tmp, ".specs", ".gitignore"), "utf8")) && /^\.roadmap\.lock$/m.test(fs.readFileSync(path.join(tmp, ".specs", ".gitignore"), "utf8")),
+    "brief --write / metrics --write wait on a held feature lock and answer busy (exit 1, nothing written); init wrote .specs/.gitignore for the lock files (got " +
+    JSON.stringify([briefBusy.status, bj.busy, metricsBusy.status]) + ")");
+}
 
 // approve
 ok(run(["approve", "Invoice Summary", "design", "--force"]).out.includes("Approved 'design'"), "approve records gate (--force: the design is still the template — 1.13 gate)");
@@ -1165,6 +1183,17 @@ ok(fail5.code === 1 && /→ All tasks are ticked, but not all are verified: #5 \
   !/close the feature|Nothing left to do/.test(naV10.out) && naVJ10 && naVJ10.step === "verify" && JSON.stringify(naVJ10) === JSON.stringify(S10.nextAction(w10f, "login-loop")) &&
   run(["finish", "login-loop", "--project", w10f]).code === 1,
   "next-action on a feature whose latest run failed: 'verify' naming #5 and `done --run` (never 'close the feature'); finish refuses too (got " + JSON.stringify(naV10.out.slice(0, 140)) + ")");
+// Archived while its baseline is stale (tasks re-approved after the finish): the drift line says restore → finish → archive
+// again (it said "finish it again", and that command answered only "not found"); finish of the archived feature names
+// the archive and the restore. A file added under it later is no stale baseline (no _Implements:_ walk for an archived one).
+run(["feature", "archive", "login-loop", "--project", w10f]);
+const drAr10 = run(["drift", "--project", w10f]);
+const finAr10 = run(["finish", "login-loop", "--write", "--project", w10f]);
+run(["feature", "restore", "login-loop", "--project", w10f]);
+ok(drAr10.code === 1 && /↻ login-loop \(archived\): changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; its baseline no longer covers it: restore it \(dev-spec feature restore login-loop\), finish it again \(dev-spec finish login-loop --write\), then archive it again/.test(drAr10.out) &&
+  !/not in the baseline/.test(drAr10.out) && finAr10.code === 1 && /Feature 'login-loop' not found under .* — it is archived \(\.specs\/_archive\/login-loop\): restore it first \(dev-spec feature restore login-loop\)\./.test(finAr10.out),
+  "drift on an archived stale feature says restore → finish → archive again (no _Implements:_ walk: no new-file reason); finish of an archived feature names the archive and the restore (got " +
+  JSON.stringify([drAr10.code, drAr10.out.slice(0, 220), finAr10.out.slice(0, 200)]) + ")");
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");

@@ -10,6 +10,9 @@ Args: $ARGUMENTS
 Call the `spec_catalog` MCP tool (CLI `dev-spec catalog [--write]`). It lists every feature — active,
 complete/finished and archived — with its status, and every AC ID with a one-line EARS text, grouped by
 feature. A criterion a later feature replaced is shown as **superseded**, naming the ID that replaces it.
+**finished** is what `spec_next_action` / `spec_finish` call finished: a current finish baseline (no change request,
+re-approval or new `_Implements:_` file since), every artifact as approved (an edit not yet re-approved reads
+**complete**) and every tick verified.
 
 - Without `write` it returns the structure plus the markdown: summarize it (features, ACs, superseded ones).
 - With `write: true` (`--write`) it (re)writes **`.specs/SPECS.md`**, carrying the AUTO-GENERATED marker, in the

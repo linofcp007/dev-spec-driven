@@ -16,8 +16,10 @@ drifted active feature.
 Report per feature: files **changed**, **missing**, or **now present** (missing at finish), and list apart the
 features without a baseline (`unbaselined` — finished before 1.13, or never finished with `write`), those whose
 tasks are open again (`reopened`), and those that changed since their finish and are done again (`stale`, with
-`why`: a change request or a re-approval after the finish, or an `_Implements:_` file the baseline never recorded —
-tell the user to finish them again with `spec_finish {write: true}`, then re-approve `execution`). A stale
+`why`: a change request or a re-approval after the finish, or — for an active feature — an `_Implements:_` file the
+baseline never recorded — tell the user to finish them again with `spec_finish {write: true}`, then re-approve
+`execution`; an ARCHIVED one (`archived: true`) can't be finished where it is: restore it first with
+`spec_feature restore`, finish, then archive it again). A stale
 feature's recorded files are still hashed: one that drifted is ALSO listed as drifted (`stale: true`, verdict
 `drift`) — decide on that drift first (below), then finish it again. A state file that can't be read is an error,
 never "clean".
@@ -30,7 +32,7 @@ For each drifted feature, look at the diff (`git log -p -- <file>`) and help the
   `spec_finish {write: true}` to record a fresh baseline — its `baseline.replaced` names the drift it accepted.
 
 `spec_next_action` on a finished feature says the same: `step: "verify"` while a ticked task's latest run failed or
-its `_Verify:_ never ran (spec_finish would refuse), `step: "drift"` (with `drift` {changed, missing, nowPresent} —
+its `_Verify:_` never ran (spec_finish would refuse), `step: "drift"` (with `drift` {changed, missing, nowPresent} —
 also when the baseline is stale, with `staleBaseline`: decide, then finish again), `step: "finish"` with
 `staleBaseline` when the feature changed since its finish and nothing recorded drifted (finish it again), or
 `step: "finished"` when nothing drifted.

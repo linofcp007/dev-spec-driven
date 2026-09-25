@@ -99,6 +99,9 @@ active and archived features alike.
 
 `spec_catalog` (CLI `dev-spec catalog`) answers "what does the system do today?": every feature (active,
 complete/finished, archived) with its status and every AC ID with a one-line EARS text, superseded ones marked.
+`finished` means what `spec_next_action` and `spec_finish` mean: a current finish baseline (no change request,
+re-approval or new `_Implements:_` file since), every artifact as approved (an edit not yet re-approved reads
+`complete`) and every tick verified — otherwise the feature reads `complete` until it is finished again.
 `write: true` (`--write`) writes `.specs/SPECS.md` in the project language with the AUTO-GENERATED marker; a
 hand-written `SPECS.md` is never overwritten. Once it exists, every mutator that refreshes the roadmap refreshes
 it too. Never hand-edit it.
@@ -111,9 +114,11 @@ inside the project). `spec_drift {name?}` (CLI `dev-spec drift [feature]`, exit 
 reports per finished feature the files **changed**, **missing**, or **now present** since then; features without a
 baseline are listed as `unbaselined`, finished features whose tasks were reopened as `reopened`, and finished features
 that changed since the finish and are done again as `stale` (a change request or a re-approval after the finish —
-the converge pass's `spec_append_tasks`, a reopened change request — or an `_Implements:_` file the baseline never
-recorded: the old baseline no longer covers them — their recorded files are still hashed, and one that drifted
-lists the feature as drifted too: a stale baseline never hides a changed file). The SessionStart hook prints one line
+the converge pass's `spec_append_tasks`, a reopened change request — or, for an active feature, an `_Implements:_`
+file the baseline never recorded: the old baseline no longer covers them — their recorded files are still hashed, and
+one that drifted lists the feature as drifted too: a stale baseline never hides a changed file). An archived feature
+is never walked for new files (it can't be finished again where it is); when it is stale the CLI line says to restore
+it first (`spec_feature restore`, finish, archive again). The SessionStart hook prints one line
 per drifted active feature (bounded; `dev-spec drift` checks on demand). Decide per feature: the spec is now wrong
 → `spec_impact` / a new feature with `_Supersedes:_`; the code is wrong → fix it (`/spec-bugfix`); harmless →
 accept and re-run `spec_finish {write: true}` for a fresh baseline (its `baseline.replaced` names the drift it

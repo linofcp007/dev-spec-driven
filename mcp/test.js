@@ -4353,6 +4353,61 @@ function endRun() {
     const naV10b = S.nextAction(w10d, "login-loop");
     ok(naV10b.step === "finished" && /Nothing left to do here/.test(naV10b.recommendation) && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
       "a passing re-run: next_action → finished (nothing left), the catalog → finished again");
+    // ONLY a new file under a folder _Implements:_ names (no change request, no re-approval): the catalog agrees with
+    // next_action (finish) and drift (stale) — complete — as the CHANGELOG says (it checked state only and kept ✅ finished).
+    const zNew10 = path.join(w10d, "src", "lib", "z2.ts");
+    fs.writeFileSync(zNew10, "helper\n");
+    const naNew10 = S.nextAction(w10d, "login-loop");
+    const drNew10 = S.drift(w10d, "login-loop");
+    const catNew10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
+    fs.unlinkSync(zNew10);
+    const catNewBack10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop").status;
+    ok(naNew10.step === "finish" && naNew10.staleBaseline && naNew10.staleBaseline.since.length === 0 && naNew10.staleBaseline.newFiles.join() === "src/lib/z2.ts" &&
+      drNew10.verdict === "stale" && catNew10.status === "complete" && catNew10.finishedAt === undefined && catNewBack10 === "finished",
+      "only a new _Implements:_ file since the finish: next_action → finish, drift → stale, the catalog → complete (not ✅ finished); the file gone → finished again (got " +
+      JSON.stringify([naNew10.step, drNew10.verdict, catNew10.status, catNewBack10]) + ")");
+    // An approved artifact edited and not re-approved (a criterion extended): next_action → re-review, finish refuses — the
+    // catalog no longer says ✅ finished while listing the unapproved text as what the system does today.
+    const reqEd10 = path.join(bf10.dir, "requirements.md");
+    const reqKeepEd10 = fs.readFileSync(reqEd10, "utf8");
+    fs.writeFileSync(reqEd10, reqKeepEd10.replace("clear the session cookie before redirecting to /login", "clear the session cookie before redirecting to /login and record an audit event"));
+    const naEd10 = S.nextAction(w10d, "login-loop");
+    const finEd10 = S.finishFeature(w10d, "login-loop");
+    const catEd10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
+    fs.writeFileSync(reqEd10, reqKeepEd10);
+    const catEdBack10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop").status;
+    ok(reqKeepEd10.includes("clear the session cookie before redirecting to /login") && naEd10.step === "re-review" && finEd10.readyToFinish === false &&
+      catEd10.status === "complete" && catEd10.finishedAt === undefined && catEdBack10 === "finished",
+      "an approved requirements.md edited without re-approval: next_action → re-review, finish not ready, the catalog → complete (not ✅ finished); the approved text back → finished (got " +
+      JSON.stringify([naEd10.step, finEd10.readyToFinish, catEd10.status, catEdBack10]) + ")");
+    // ARCHIVED finished features: a file added later under a folder it implemented is not a stale baseline (it can't be
+    // finished again where it is — drift exited 1 for good with a `finish` remedy that failed "not found"). Stale for a
+    // real reason (a change request after the finish), the CLI line says to restore it first; finish of an archived
+    // feature names the archive and the restore.
+    S.manageFeature(w10d, "archive", "login-loop");
+    const zArch10 = path.join(w10d, "src", "lib", "z3.ts");
+    fs.writeFileSync(zArch10, "later\n");
+    const drAr10 = S.drift(w10d);
+    const drArNamed10 = S.drift(w10d, "login-loop");
+    const arSt10 = path.join(w10d, ".specs", "_archive", "login-loop", ".state.json");
+    const arKeep10 = fs.readFileSync(arSt10, "utf8");
+    const arObj10 = JSON.parse(arKeep10);
+    fs.writeFileSync(arSt10, JSON.stringify({ ...arObj10, changes: [...(arObj10.changes || []), { at: new Date(Date.now() + 1000).toISOString(), phase: "requirements", reopened: [] }] }, null, 2));
+    const drArCr10 = S.drift(w10d, "login-loop");
+    fs.writeFileSync(arSt10, arKeep10);
+    const finAr10 = S.finishFeature(w10d, "login-loop", { write: true });
+    const staleLine10 = (l, a) => S.msg(l).drift.stale("login-loop", "2026-01-01", "why", a);
+    ok(drAr10.ok && drAr10.stale.length === 0 && drAr10.verdict === "clean" && drAr10.features.some((f) => f.feature === "login-loop" && f.archived && !f.drifted) &&
+      drArNamed10.verdict === "clean" && drArNamed10.stale.length === 0 &&
+      drArCr10.verdict === "stale" && drArCr10.stale.length === 1 && drArCr10.stale[0].archived === true && drArCr10.stale[0].newFiles.length === 0 &&
+      finAr10.ok === false && /not found/.test(finAr10.error) && /it is archived \(\.specs\/_archive\/login-loop\): restore it first \(dev-spec feature restore login-loop\)/.test(finAr10.error) &&
+      ["en", "pt", "es"].every((l) => staleLine10(l, true).includes("dev-spec feature restore login-loop") && staleLine10(l, true).includes("dev-spec finish login-loop --write") &&
+        !staleLine10(l, false).includes("feature restore")) &&
+      ["pt", "es"].every((l) => S.msg(l).err.archivedHint("x").includes("dev-spec feature restore x")),
+      "an archived finished feature: a later file under its implemented folder is no stale baseline (drift clean, exit 0); a change request after its finish is (stale, archived) and the line says restore → finish → archive (EN/PT/ES); finish of an archived feature names the archive and the restore (got " +
+      JSON.stringify([drAr10.verdict, drAr10.stale.map((x) => x.feature), drArCr10.verdict, finAr10.error]) + ")");
+    fs.unlinkSync(zArch10);
+    S.manageFeature(w10d, "restore", "login-loop");
 
     // PT / ES chrome.
     const w10pt = path.join(tmp, "proj-wp10-pt");
@@ -5069,6 +5124,25 @@ function endRun() {
       fPlan12.ok === false && fPlan12.failing.includes("traceability") && /US-1\.AC-2/.test(fPlan12.error) && fTests12.ok === true,
       "trace_check / gates: a ```fenced example``` row in test-plan.md covers nothing (US-1.AC-2 uncovered, the test-plan approval refused) and plans no T-ID (plannedTests 1, the tests gate asks only for T-01) — MCP trace_check agrees (got " +
       JSON.stringify([fTr12.verdict, fTr12.uncoveredByTests, fTr12.plannedTests, fTr12.code.plannedNotInCode, fPlan12.ok, fTests12.ok, fTests12.error]) + ")");
+    // ...but a fence left unclosed inside a list item ends with that item (CommonMark, and the tasks scanner's rule): it
+    // blanked every row below it — T-02 planned nothing, covered nothing and read as a phantom in tasks.md. The same
+    // shape in requirements.md keeps US-1.AC-2 a criterion (trace, EARS); an unclosed TOP-LEVEL fence still runs to the end.
+    const fl12 = S.createFeature(e12, "Shop L", ["tdd"]);
+    fs.writeFileSync(path.join(fl12.dir, "requirements.md"), "# Feature: Shop L\n\n### US-1 (P1 — MVP): Login\n#### Acceptance Criteria (EARS)\n" +
+      "- **US-1.AC-1** — WHEN a user logs in THE SYSTEM SHALL open the dashboard.\n  ```js\n  login()\n- **US-1.AC-2** — WHEN a user logs out THE SYSTEM SHALL end the session.\n");
+    fs.writeFileSync(path.join(fl12.dir, "test-plan.md"), "# Test Plan: Shop L\n\n- T-01 — US-1.AC-1 opens the dashboard\n  ```js\n  test('x')\n- T-02 — US-1.AC-2 ends the session\n");
+    fs.writeFileSync(path.join(fl12.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n");
+    const lTr12 = S.traceCheck(e12, fl12.slug);
+    const lEars12 = S.earsValidate(fs.readFileSync(path.join(fl12.dir, "requirements.md"), "utf8"));
+    fs.writeFileSync(path.join(fl12.dir, "test-plan.md"), "# Test Plan: Shop L\n\n- note\n  ```js\n  x\n\n| ID | AC | File |\n|---|---|---|\n| T-01 | US-1.AC-1 | a |\n| T-02 | US-1.AC-2 | b |\n");
+    const lTab12 = S.traceCheck(e12, fl12.slug);
+    fs.writeFileSync(path.join(fl12.dir, "test-plan.md"), "# Test Plan: Shop L\n\n| ID | AC | File |\n|---|---|---|\n| T-01 | US-1.AC-1 | a |\n\n```js\n| T-02 | US-1.AC-2 | b |\n");
+    const lTop12 = S.traceCheck(e12, fl12.slug);
+    ok(lTr12.verdict === "pass" && lTr12.totalAcs === 2 && lTr12.plannedTests === 2 && !lTr12.uncoveredByTests.length && !lTr12.phantomTestsInTasks.length &&
+      lEars12.ok && lEars12.issues.filter((i) => i.severity === "error").length === 0 && lEars12.summary.criteriaDetected === 2 &&
+      lTab12.plannedTests === 2 && !lTab12.uncoveredByTests.length && lTop12.plannedTests === 1 && lTop12.uncoveredByTests.join() === "US-1.AC-2",
+      "an unclosed fence inside a list item ends with the item: test-plan rows below it (bullets or a table) are planned and cover their ACs, the AC below it in requirements.md is a criterion; an unclosed top-level fence still hides the rest (got " +
+      JSON.stringify([lTr12.verdict, lTr12.totalAcs, lTr12.plannedTests, lTr12.uncoveredByTests, lTr12.phantomTestsInTasks, lEars12.summary.criteriaDetected, lTab12.plannedTests, lTop12.plannedTests]) + ")");
 
     // An `_Implements:_` glob whose bounded walk stops at its cap before any match proves nothing: never a missing-file gap
     // (a warning, unresolvedImplGlobs); a glob whose walk ended without a match is still missing; the finish baseline says
@@ -5485,6 +5559,56 @@ function endRun() {
     ok(cr14.ok && (cr14.addedTracks || []).join() === "saas" && JSON.parse(fs.readFileSync(path.join(bDir14, ".state.json"), "utf8")).tracks.join() === "core,saas" &&
       rn14.ok && ar14.ok && rs14.ok && leftLocks14.length === 0 && tmpsIn(bDir14).length === 0 && S.manageFeature(m14, "remove", "beta", null, { confirm: true }).ok && !fs.existsSync(bDir14),
       "once free: create adds the track, rename / archive / restore move the folder and release the lock at its NEW place (no .lock, no zombie folder left); remove deletes it (left: " + leftLocks14.join(", ") + ")");
+    // brief --write (spec_task_brief {write}) and metrics --write write into the feature folder: under its lock too. Resolved
+    // before a rename and written after it, the brief recreated a zombie .specs/<old>/.execution/ — a phantom feature in
+    // `list` that blocked renaming back. A held lock → busy with nothing written; a read-only brief / metrics never waits.
+    const bw14 = path.join(tmp, "proj-wp14-briefwrite");
+    S.initProject(bw14, ["core"], "en");
+    const bwf14 = S.createFeature(bw14, "Alpha", ["core"]);
+    const bwLock14 = path.join(bwf14.dir, ".lock");
+    fs.writeFileSync(bwLock14, holdNote14);
+    const bwKid14 = spawnSync(process.execPath, ["-e", `const S=require(${JSON.stringify(specJs)});const p=${JSON.stringify(bw14)};const pick=(r)=>({ok:r.ok,busy:r.busy,error:r.error});` +
+      `process.stdout.write(JSON.stringify([S.taskBrief(p,"alpha",1,{write:true}),S.metrics(p,"alpha",{write:true}),S.taskBrief(p,"alpha",1),S.metrics(p,"alpha")].map(pick)))`],
+      { encoding: "utf8", env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: "60" } });
+    let bw14r = [];
+    try { bw14r = JSON.parse(bwKid14.stdout); } catch { /* stays [] */ }
+    const bwNothing14 = !fs.existsSync(path.join(bwf14.dir, ".execution")) && !fs.existsSync(path.join(bwf14.dir, "retro.md"));
+    fs.rmSync(bwLock14, { force: true });
+    const bwFree14 = S.taskBrief(bw14, "alpha", 1, { write: true });
+    ok(bw14r.length === 4 && featBusy14(bw14r[0], "alpha", ".specs/alpha/.lock") && featBusy14(bw14r[1], "alpha", ".specs/alpha/.lock") && bw14r[2].ok === true && bw14r[3].ok === true &&
+      bwNothing14 && bwFree14.ok && fs.existsSync(path.join(bwf14.dir, ".execution", "task-1-brief.md")) && !fs.existsSync(bwLock14),
+      "brief --write and metrics --write wait on the feature lock (busy, nothing written, no zombie folder possible); the read-only brief / metrics don't; once free the brief is written (got " +
+      JSON.stringify(bw14r.map((r) => [r.ok, r.busy])) + ")");
+    // The lock files are git-ignored (.specs/.gitignore): a lock left by a killed process showed in `git status`, `git add -A`
+    // committed it, and on a clone its fresh checkout mtime kept the feature "busy" (then its reclaim deleted a tracked file).
+    // init / create write the rules and every lock acquisition restores them; an existing .specs/.gitignore only gains the
+    // missing lines (its CRLF kept); a lock never creates .specs/ itself.
+    const gi14 = path.join(tmp, "proj-wp14-gitignore");
+    S.initProject(gi14, ["core"], "en");
+    const giFile14 = path.join(gi14, ".specs", ".gitignore");
+    const giInit14 = fs.readFileSync(giFile14, "utf8");
+    fs.writeFileSync(giFile14, "# mine\r\n.lock\r\n");
+    const gif14 = S.createFeature(gi14, "Alpha", ["core"]);
+    const giMerged14 = fs.readFileSync(giFile14, "utf8");
+    fs.rmSync(giFile14);
+    const giTick14 = S.completeTask(gi14, "alpha", 1);
+    const giBack14 = fs.existsSync(giFile14) ? fs.readFileSync(giFile14, "utf8") : null;
+    const giNone14 = path.join(tmp, "proj-wp14-nospecs");
+    fs.mkdirSync(giNone14);
+    const giNoneRan14 = S.withFeatureLock(path.join(giNone14, ".specs", "x"), () => "ran", { waitMs: 10, onBusy: () => "busy" });
+    let giGit14 = "skipped (no git)";
+    const g14 = (args) => spawnSync("git", args, { cwd: gi14, encoding: "utf8" });
+    if (g14(["--version"]).status === 0 && g14(["init", "-q"]).status === 0) {
+      fs.writeFileSync(path.join(gif14.dir, ".lock"), holdNote14); // left by a killed process
+      const probe14 = [".specs/alpha/.lock", ".specs/alpha/.lock.reclaim", ".specs/_archive/old/.lock", ".specs/.roadmap.lock", ".specs/.roadmap.lock.reclaim"];
+      const ignored14 = (g14(["check-ignore", "--", ...probe14]).stdout || "").split(/\r?\n/).filter(Boolean);
+      const status14 = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
+      giGit14 = ignored14.length === probe14.length && !/\.lock/.test(status14) && /\.specs\/\.gitignore/.test(status14) ? "ok" : JSON.stringify([ignored14, status14]);
+      fs.rmSync(path.join(gif14.dir, ".lock"), { force: true });
+    }
+    ok(giInit14 === ".lock\n.lock.reclaim\n.roadmap.lock\n.roadmap.lock.reclaim\n" && giMerged14 === "# mine\r\n.lock\r\n.lock.reclaim\r\n.roadmap.lock\r\n.roadmap.lock.reclaim\r\n" &&
+      giTick14.ok && giBack14 === giInit14 && giNoneRan14 === "ran" && !fs.existsSync(path.join(giNone14, ".specs")) && (giGit14 === "ok" || giGit14 === "skipped (no git)"),
+      "the lock files are git-ignored: init writes .specs/.gitignore, create only adds the missing lines to one that exists (CRLF kept), a locked tick restores it, a lock never creates .specs/; git ignores a leaked .lock / .roadmap.lock / reclaim guard in every folder (git: " + giGit14 + ")");
     // Two processes adding backlog items at once: every ok add is kept (last-writer-wins used to drop about a third).
     const bl14r = path.join(tmp, "proj-wp14-roadmaprace");
     S.initProject(bl14r, ["core"], "en");

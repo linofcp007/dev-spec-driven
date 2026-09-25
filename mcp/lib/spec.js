@@ -204,6 +204,7 @@ function withFeatureLock(dir, fn, opts = {}) {
 function withLockFile(lock, fn, opts = {}) {
   const key = readCacheKey(lock);
   if (HELD_LOCKS.has(key)) return fn();
+  ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
   const deadline = Date.now() + (Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs());
   let fd = null;
   let delay = 5;
@@ -253,8 +254,10 @@ function withLockFile(lock, fn, opts = {}) {
   }
 }
 // A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
-// write (impact --reopen, finish --write). An unknown feature runs straight through: fn reports it (spec_create of a NEW
-// feature too — there is no folder to lock yet; re-run on an existing one, it adds tracks like spec_add_track, locked).
+// write (impact --reopen, finish --write, brief --write, metrics --write — a derived file written into the feature folder
+// is a write too: resolved before a rename / archive / remove and written after it, it recreated a zombie .specs/<old>/).
+// An unknown feature runs straight through: fn reports it (spec_create of a NEW feature too — there is no folder to lock
+// yet; re-run on an existing one, it adds tracks like spec_add_track, locked).
 function featureLocked(fn, when) {
   const run = function (projectDir, name) {
     const args = arguments;
@@ -313,6 +316,43 @@ function renameDirSync(from, to) {
 // back: the last writer won, silently dropping the other's dependency (a blocked feature then read as ready), backlog item
 // or meta.guard while both answered ok. Lock order: a feature lock first, then this one — never the other way round.
 const ROADMAP_LOCK_FILE = ".roadmap.lock";
+// The engine's transient files — the feature and roadmap locks and their reclaim guards — are git-ignored by
+// `.specs/.gitignore` (unanchored names: they match in every feature folder, _archive/ included). A lock left by a killed
+// process (Ctrl-C, a closed session, a crash) showed in `git status`, `git add -A` committed it, and on every clone its
+// checkout mtime made the feature "busy" for LOCK_STALE_MS — then the reclaim deleted a tracked file and dirtied the tree.
+// Ensured before any lock file is created (withLockFile) and by spec_init / spec_create; an existing .specs/.gitignore
+// only gains the lines it lacks (its own lines and line endings are kept). Best-effort: it never creates .specs/ itself and
+// never fails the operation (a read-only folder just stays as it is).
+const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX];
+function ensureLockIgnore(specsDir) {
+  if (!specsDir) return;
+  const file = path.join(specsDir, ".gitignore");
+  try {
+    let cur = null;
+    try { cur = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") return; } // a folder there, unreadable: left alone
+    if (cur == null) {
+      fs.writeFileSync(file, LOCK_IGNORE_LINES.join("\n") + "\n", { encoding: "utf8", flag: "wx" }); // ENOENT without .specs/: nothing created
+    } else {
+      const have = new Set(cur.replace(/^\uFEFF/, "").split(/\r?\n/).map((l) => l.trim()));
+      const missing = LOCK_IGNORE_LINES.filter((l) => !have.has(l));
+      if (!missing.length) return;
+      const eol = /\r\n/.test(cur) ? "\r\n" : "\n";
+      fs.appendFileSync(file, (cur === "" || /\n$/.test(cur) ? "" : eol) + missing.join(eol) + eol, "utf8");
+    }
+    forgetCached(file);
+  } catch { /* best-effort: read-only, or another process wrote it first */ }
+}
+// The `.specs` folder a lock sits in or under (.specs/, .specs/<feature>/, .specs/_archive/<feature>/) — null elsewhere.
+function specsDirOf(dir) {
+  let d = path.resolve(dir);
+  for (let i = 0; i < 3; i++) {
+    if (path.basename(d) === ".specs") return d;
+    const up = path.dirname(d);
+    if (up === d) return null;
+    d = up;
+  }
+  return null;
+}
 const roadmapBusyResult = (projectDir, b) => {
   const E = i18n.msg(projectLang(projectDir)).err;
   return b && b.stuck ? { ok: false, busy: true, stuck: true, error: E.lockStuck(".specs/" + ROADMAP_LOCK_FILE) } : { ok: false, busy: true, error: E.roadmapBusy };
@@ -448,17 +488,10 @@ function stripHtmlComments(s) {
 }
 // Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
 // is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
+// An unclosed fence inside a list item ends with the item (fenceStep).
 function stripFencedCode(s) {
-  let fence = null;
-  return String(s || "").split("\n").map((line) => {
-    if (fence) {
-      if (closesFence(line, fence)) fence = null;
-      return "";
-    }
-    const m = line.match(RE_FENCE);
-    if (m) { fence = m[1]; return ""; }
-    return line;
-  }).join("\n");
+  const st = { fence: null };
+  return String(s || "").split("\n").map((line) => (fenceStep(st, line) ? "" : line)).join("\n");
 }
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
 // references (another feature's ACs) left out.
@@ -531,7 +564,13 @@ function resolveFeature(projectDir, name) {
 // resolveFeature + "must exist".
 function existingFeature(projectDir, name) {
   const f = resolveFeature(projectDir, name);
-  if (f.ok && !existsCached(f.dir)) return { ...f, ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
+  if (f.ok && !existsCached(f.dir)) {
+    // An archived feature is not an active one — but "not found" alone sent the user nowhere (drift's finish-it-again line
+    // for an archived feature used to end right here): name the archive and the restore.
+    const E = errs(projectDir);
+    const arch = locateFeatures(projectDir, name).find((x) => x.archived);
+    return { ...f, ok: false, error: E.notFound(f.slug, f.root) + (arch ? " " + E.archivedHint(arch.slug) : "") };
+  }
   return f;
 }
 
@@ -975,6 +1014,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     if (!meta.ok) return meta;
   }
   ensureDir(steering);
+  ensureLockIgnore(root); // .specs/.gitignore: the lock files are never committable
   const lng = projectLang(projectDir);
   const wanted = steeringFilesForTracks(pt.tracks);
   const created = [];
@@ -1466,6 +1506,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     if (bad) return { ok: false, error: bad };
   }
   ensureDir(dir);
+  ensureLockIgnore(f.root); // .specs/.gitignore: the lock files are never committable
 
   // Resolve the feature's language (explicit > project default > en) and persist it so later
   // tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
@@ -2009,6 +2050,22 @@ function closesFence(line, fence) {
   const c = String(line).match(RE_FENCE_CLOSE);
   return !!c && c[1][0] === fence[0] && c[1].length >= fence.length;
 }
+// One line of a fence-aware reader (stripFencedCode, criterionBlocks, placeholderReport, headingIndex, designSections).
+// st.fence: the open fence ({ mark, indent }) or null. → "open" (this line opens a fence) | "code" (a fence line, or a line
+// inside one) | null (not code). As in CommonMark — and the tasks scanner (fenceLine) — a fence opened inside a list item
+// (indented) ends with that item: a non-blank line LESS indented than its opener (the next "- T-02 …", a heading or a
+// table row at the margin) is outside it. One unclosed fence in a test-plan bullet used to blank every row below it —
+// their T-IDs planned nothing and covered nothing (trace_check, the Phase 4 gate, the brief) — while a renderer showed them.
+function fenceStep(st, line) {
+  if (st.fence) {
+    if (closesFence(line, st.fence.mark)) { st.fence = null; return "code"; }
+    if (!(st.fence.indent > 0 && line.trim() && indentOf(line) < st.fence.indent)) return "code";
+    st.fence = null; // the list item ended, and its unclosed fence with it: this line is read as usual
+  }
+  const m = line.match(RE_FENCE);
+  if (m) { st.fence = { mark: m[1], indent: indentOf(line) }; return "open"; }
+  return null;
+}
 const B = "(?<![\\p{L}\\p{N}_])"; // unicode word boundary (before)
 const E = "(?![\\p{L}\\p{N}_])"; // unicode word boundary (after)
 const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
@@ -2046,7 +2103,7 @@ function criterionBlocks(text) {
   const cleaned = []; // every content line, comments removed — [NEEDS CLARIFICATION] scans these
   const blocks = [];
   let inComment = false;
-  let fence = null; // open code-fence marker: its body is code, never a criterion ("const shall = 1")
+  const fst = { fence: null }; // the open code fence (fenceStep): its body is code, never a criterion ("const shall = 1")
   let cur = null;
   let section = null; // the heading path the criterion sits under, "H2 / H3 / …" (null = no heading yet)
   const stack = []; // open headings [{ level, text }] — a sub-heading inherits its parents' context
@@ -2072,15 +2129,9 @@ function criterionBlocks(text) {
       inComment = true;
       line = line.slice(0, openIdx);
     }
-    if (fence) {
-      if (closesFence(line, fence)) fence = null;
-      return; // inside a fence: no content, no criteria
-    }
-    const fenceHere = line.match(RE_FENCE);
-    if (fenceHere) {
-      fence = fenceHere[1];
-      return flush();
-    }
+    const fl = fenceStep(fst, line); // an unclosed fence in a list item ends with the item
+    if (fl === "open") return flush();
+    if (fl) return; // inside a fence: no content, no criteria
     if (!line.trim()) {
       // A blank source line ends the criterion; a line that held only a comment does not.
       if (!raw.trim()) flush();
@@ -3269,12 +3320,9 @@ function testIndex(planText) {
 function designSections(designText) {
   const out = [];
   let cur = null;
-  let fence = null;
+  const fst = { fence: null };
   for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
-    const f = line.match(RE_FENCE);
-    if (fence) { if (closesFence(line, fence)) fence = null; }
-    else if (f) fence = f[1];
-    const h = !fence && !f && line.match(/^##\s+(.*?)\s*$/);
+    const h = !fenceStep(fst, line) && line.match(/^##\s+(.*?)\s*$/);
     if (h) { cur = { title: h[1], body: [] }; out.push(cur); continue; }
     if (cur) cur.body.push(line);
   }
@@ -5280,11 +5328,9 @@ const AI_SECTIONS = [
 // Heading lines outside fenced code (a "# comment" inside a bash block is not a heading).
 function headingIndex(lines) {
   const out = [];
-  let fence = null;
+  const fst = { fence: null };
   lines.forEach((l, i) => {
-    if (fence) { if (closesFence(l, fence)) fence = null; return; }
-    const f = l.match(RE_FENCE);
-    if (f) { fence = f[1]; return; }
+    if (fenceStep(fst, l)) return;
     if (/^#{1,6}\s/.test(l)) out.push(i);
   });
   return out;
@@ -5422,7 +5468,7 @@ function placeholderReport(text) {
   const refs = new Set();
   const visible = []; // [lineNo, content] outside comments and fences
   let inComment = false;
-  let fence = null;
+  const fst = { fence: null }; // fenceStep: an unclosed fence in a list item ends with the item
   const closes = closerBelow(lines); // a "<!--" that never closes is text — it hides no placeholder below it
   lines.forEach((raw, i) => {
     let line = raw;
@@ -5435,9 +5481,7 @@ function placeholderReport(text) {
     line = line.replace(/<!--.*?-->/g, "");
     const open = line.indexOf("<!--");
     if (open !== -1 && closes[i]) { inComment = true; line = line.slice(0, open); }
-    if (fence) { if (closesFence(line, fence)) fence = null; return; }
-    const fm = line.match(RE_FENCE);
-    if (fm) { fence = fm[1]; return; }
+    if (fenceStep(fst, line)) return;
     const def = line.match(RE_REF_DEFINITION);
     if (def) { refs.add(def[1].trim().toLowerCase()); return; }
     visible.push([i + 1, line]);
@@ -6889,10 +6933,20 @@ function catalogData(projectDir) {
     });
     let fin = isObj(s.state.finished) && typeof s.state.finished.at === "string" ? s.state.finished.at : null;
     const arch = isObj(s.state.archived) && typeof s.state.archived.at === "string" ? s.state.archived.at : null;
-    // Finished = complete with a CURRENT finish baseline and every tick verified: one changed since (staleFinish, state
-    // only — this runs on every refresh), or with a ticked task whose latest run failed / whose _Verify:_ never ran
-    // (verificationStatus — spec_finish refuses it), reads as complete until it is finished (verified) again.
-    if (fin && !s.archived && s.phase === "complete" && (staleFinish(projectDir, s.state, "", { newFiles: false }) || verificationStatus(projectDir, s.slug, s.dir).unverified.length)) fin = null;
+    // Finished = complete with a CURRENT finish baseline, its artifacts as approved and every tick verified — what
+    // next_action and spec_finish call finished, so SPECS.md never says ✅ while they say "finish it again" / "re-review".
+    // It reads as complete until it is finished (verified, re-approved) again when: an artifact changed after its own
+    // approval (changedSinceApproval, by CONTENT — a pre-1.11 approval judged by file date is no evidence, as in finish; an
+    // unapproved criterion edit is not "what the system does today"), a ticked task's latest run failed / its _Verify:_
+    // never ran (verificationStatus), or it changed since the finish (staleFinish: a change request or re-approval, then —
+    // the cheap checks first, only for a feature still finished — an _Implements:_ file the baseline never recorded, the
+    // bounded walk next_action and drift do).
+    if (fin && !s.archived && s.phase === "complete") {
+      const cs = changedSinceApproval(s.dir, isObj(s.state.approvals) ? s.state.approvals : {}, s.tracks, s.state.kind, { detail: true });
+      if (cs.changed.some((x) => !cs.byDate.includes(x)) || verificationStatus(projectDir, s.slug, s.dir).unverified.length ||
+        staleFinish(projectDir, s.state, "", { newFiles: false }) ||
+        staleFinish(projectDir, s.state, activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", s.tracks))) fin = null;
+    }
     const status = s.archived ? "archived" : s.phase === "complete" ? (fin ? "finished" : "complete") : "active";
     const f = { feature: s.slug, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
     if (fin) f.finishedAt = fin;
@@ -7094,16 +7148,20 @@ const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catc
 // every file under a folder, or the files a glob matches now (globFiles — trace_check's reading) — only inside the
 // project, at most BASELINE_CAP.
 const BASELINE_CAP = 500;
-function baselineFiles(projectDir, tasksText, globCap) {
+// known: a Set of fold(rel) already recorded in a baseline (staleFinish) — those are counted without the realpath check
+// (they were checked when recorded, and can never be "new"): the check is the whole cost of the walk, and the catalog
+// runs it for every finished feature on each refresh.
+function baselineFiles(projectDir, tasksText, globCap, known) {
   const root = path.resolve(projectDir);
   const rootReal = realRootOf(root);
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   const out = new Map(); // fold(rel) → rel
   let truncated = false;
   const add = (rel) => {
-    if (out.has(fold(rel))) return;
+    const k = fold(rel);
+    if (out.has(k)) return;
     if (out.size >= BASELINE_CAP) { truncated = true; return; }
-    if (projectFile(root, rootReal, rel)) out.set(fold(rel), rel);
+    if ((known && known.has(k)) || projectFile(root, rootReal, rel)) out.set(k, rel);
   };
   for (const ref of implementsRefs(tasksText)) {
     const p = implementsPath(ref).replace(/^\.\//, "");
@@ -7160,12 +7218,10 @@ function staleFinish(projectDir, st, tasksText, opts = {}) {
   const since = finAt == null ? [] : changesSince(st, finAt, "execution");
   let newFiles = [];
   if (!fin.truncated && opts.newFiles !== false) {
-    const now = baselineFiles(projectDir, tasksText || "");
-    if (!now.truncated) { // a capped walk proves nothing about what is new
-      const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
-      const had = new Set(Object.keys(fin.files).map(fold));
-      newFiles = now.files.filter((rel) => !had.has(fold(rel)));
-    }
+    const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+    const had = new Set(Object.keys(fin.files).map(fold));
+    const now = baselineFiles(projectDir, tasksText || "", undefined, had);
+    if (!now.truncated) newFiles = now.files.filter((rel) => !had.has(fold(rel))); // a capped walk proves nothing about what is new
   }
   if (!since.length && !newFiles.length) return null;
   return { finishedAt: typeof fin.at === "string" ? fin.at : null, since, newFiles };
@@ -7235,9 +7291,14 @@ function drift(projectDir, name, opts = {}) {
     if (!isObj(st.finished) || !isObj(st.finished.files)) { unbaselined.push(s.slug); continue; }
     const tracks = detectTracks(s.dir);
     if (detectPhase(s.dir, tracks) !== "complete") { reopened.push(s.slug); continue; }
-    // Budgeted (SessionStart): the state-only check — no _Implements:_ walk before the hashing budget is even known.
+    // Budgeted (SessionStart): the state-only check — no _Implements:_ walk before the hashing budget is even known. An
+    // ARCHIVED feature is never walked either (the catalog's rule): it can't be finished again where it is, so a file
+    // added later under a folder it once implemented kept drift at exit 1 for good, with a remedy (finish) that failed.
+    // Its recorded files are still hashed, and a change request / re-approval newer than its baseline still makes it
+    // stale — the CLI line then says to restore it first.
     const budgeted = opts.maxFiles != null || opts.maxBytes != null;
-    const sf = staleFinish(projectDir, st, budgeted ? "" : activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", tracks), { newFiles: !budgeted });
+    const walk = !budgeted && !s.archived;
+    const sf = staleFinish(projectDir, st, walk ? activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", tracks) : "", { newFiles: walk });
     const staleEntry = sf ? { feature: s.slug, archived: s.archived, ...sf } : null;
     if (staleEntry) stale.push(staleEntry);
     withBase.push({ s, fin: st.finished, staleEntry });
@@ -8880,7 +8941,7 @@ module.exports = {
   earsValidate,
   earsFeature,
   traceCheck,
-  taskBrief,
+  taskBrief: featureLocked(taskBrief, (a) => !!(a[3] && a[3].write)), // write: .execution/ resolved and written under the lock (a move waits)
   taskBlocks,
   globalConstraints,
   finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && a[2].write)), // write: the drift baseline in .state.json
@@ -8943,7 +9004,7 @@ module.exports = {
 
   impactReport: featureLocked(impactReport, (a) => !!(a[2] && a[2].reopen === true)), // spec_impact / `dev-spec impact` (change requests: diff vs the approved snapshot, --reopen)
   impactLines,
-  metrics, // spec_metrics / `dev-spec metrics` (+ retro.md with write)
+  metrics: featureLocked(metrics, (a) => !!(a[2] && a[2].write === true)), // spec_metrics / `dev-spec metrics` (+ retro.md with write, under the feature lock)
   metricsLines,
 
   traceWarningLines, // trace_check warnings (EC/NFR/SC, tests in code) as localized lines — CLI, hook, finish

@@ -94,6 +94,7 @@ project-root/
     ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
     ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
+    ├── .gitignore                # ignores the transient lock files (.lock, .roadmap.lock, *.reclaim) — commit it
     ├── steering/                 # shared project context (created per active tracks)
     │   ├── constitution.md       # core (always) — non-negotiable principles
     │   ├── product.md  tech.md  structure.md        # core (always)

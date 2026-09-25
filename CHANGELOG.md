@@ -143,7 +143,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
   moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
   feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,
-  impact `--reopen`, finish `--write`) now hold a cross-process lock (`.specs/<feature>/.lock`, reclaimed when its
+  impact `--reopen`, finish `--write`, brief `--write`, metrics `--write`) now hold a cross-process lock (`.specs/<feature>/.lock`, reclaimed when its
   process is gone) and a caller that can't get it within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized
   "busy" error with nothing changed; tasks.md ticks and track additions are written atomically (a concurrent reader no
   longer sees a truncated file). `spec_feature` rename / archive / remove / restore never move or delete a folder
@@ -160,7 +160,13 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   only the lock carrying its own token. A stale lock that can't be removed (held open without delete sharing by a
   scanner or sync client, a read-only folder, a folder named `.lock`) spun at 100% CPU with no deadline and froze
   the MCP server; it now waits like a held lock and answers `busy` + `stuck` with a localized "delete it by hand"
-  error. When a generated file couldn't be replaced
+  error. The lock files and their reclaim guards are git-ignored by a `.specs/.gitignore` that init, create and every
+  lock acquisition keep (an existing one only gains the missing lines): a lock left by a killed process showed in
+  `git status`, `git add -A` committed it, and on a clone its fresh checkout time kept the feature "busy" for two
+  minutes before the reclaim deleted a tracked file. `brief --write` (`spec_task_brief {write}`) resolved the feature,
+  and a rename / archive / remove landing before its write recreated a zombie `.specs/<old>/.execution/` that listed
+  as a phantom feature and blocked renaming back — it and `metrics --write` now wait on the lock like every writer.
+  When a generated file couldn't be replaced
   (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
   `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is
   retried). A BOM-only re-save ("UTF-8 with BOM", Windows PowerShell 5.1) of an approved artifact counted as
@@ -232,6 +238,14 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   said "close the feature with /spec-finish" — or "finished, nothing left to do" — while spec_finish and the
   execution sign-off refused, and the catalog showed ✅ finished; it now answers `verify`, naming each task with its
   reason and how to record a passing run (`dev-spec done <f> <n> --run`), and the catalog calls it complete.
+  The catalog's `finished` now means exactly what next_action and finish mean: it also reads `complete` when the only
+  change is an `_Implements:_` file the baseline never recorded (it checked state only and kept ✅ finished while
+  next_action said "finish it again"), and when an approved artifact was edited and not re-approved (it listed the
+  unapproved criterion as current behaviour under ✅ finished while finish refused). An ARCHIVED finished feature is
+  never walked for new files: a file added later under a folder it once implemented kept `dev-spec drift` at exit 1
+  for good with "finish it again (dev-spec finish <f> --write)", a command that answered only "not found"; a stale
+  archived feature's line now says to restore it first, then finish and archive it again (EN/PT/ES), and any
+  operation on an archived feature's name says it is archived and how to restore it.
 - **Eval sets.** The harness's dry run said "sets are valid" for items a live run then paid a model call for and
   failed: an unknown grader type, a missing `id` / `input` / `expect`, a non-object item, a regex that doesn't
   compile, `judge` without a rubric, `contains` / `equals` / `regex` without a value. Every item is validated — the
@@ -245,7 +259,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **Fenced examples in test-plan.md.** A ```fenced``` example row counted as a real one: it covered its AC (trace_check
   and the test-plan approval passed for an AC with no real test row) and planned a T-ID the Phase 4 `tests` gate then
   demanded in the test code. Every reader of test-plan.md's IDs now skips fenced code, like tasks.md and
-  requirements.md.
+  requirements.md — and a fence left unclosed inside a list item ends with that item (CommonMark, and the tasks
+  scanner's rule): it blanked every row below it, so their T-IDs planned nothing, covered nothing and read as phantoms
+  in tasks.md. requirements.md (criteria, EARS), the placeholder check and heading / design-section readers follow the
+  same rule.
 
 ### Added
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
@@ -349,7 +366,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 729 assertions (was 181), `node cli/test-cli.js` 246 (was 53); the tool count is
+- `node mcp/test.js` 735 assertions (was 181), `node cli/test-cli.js` 248 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 
