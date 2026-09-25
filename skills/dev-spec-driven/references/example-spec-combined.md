@@ -77,12 +77,16 @@ AC-5/AC-6 → eval cases (+ai). AC-7 → cost validation (+ai). AC-1 (P95) → l
 
 ## test-plan.md (excerpt) — +tdd
 
-| Test ID | Layer | Description | Covers | File |
-|---|---|---|---|---|
-| T-01 | unit | total + due date extracted verbatim | US-1.AC-2 | `tests/unit/extract.test.ts` |
-| T-02 | unit | fallback triggers after 5s timeout | US-1.AC-3 | `tests/unit/fallback.test.ts` |
-| T-03 | integration | host A cannot get host B's invoice summary | US-1.AC-4 | `tests/integration/tenant-isolation.test.ts` |
-| T-04 | integration | generation logs prompt version + tenant_id | US-1.AC-8 | `tests/integration/logging.test.ts` |
+| Test ID | Layer | Kind | Description | Covers | File |
+|---|---|---|---|---|---|
+| T-01 | unit | property | for any generated invoice, the summary carries its total + due date verbatim | US-1.AC-2 | `tests/unit/extract.test.ts` |
+| T-02 | unit | example | fallback triggers after a 5s model timeout | US-1.AC-3 | `tests/unit/fallback.test.ts` |
+| T-03 | integration | property | for any pair of tenants, host A never gets a summary built from tenant B's invoices | US-1.AC-4 | `tests/integration/tenant-isolation.test.ts` |
+| T-04 | integration | example | generation logs prompt version + model ID + tokens + tenant_id | US-1.AC-8 | `tests/integration/logging.test.ts` |
+
+Kind: `example` = one concrete case; `property` = an invariant over generated inputs (fast-check) — the
+"verbatim for every invoice" and "never another tenant's data" rules are invariants. Each test name starts with
+its T-ID (`it("T-03 …")`) so `trace_check {code: true}` finds it.
 
 ## evals — +ai
 

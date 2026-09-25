@@ -7,9 +7,19 @@ Use the **dev-spec-driven** skill to resume work on a feature.
 
 Args: $ARGUMENTS
 
-Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`) for the named feature. It
-synthesizes the single most useful next step from the feature's phase, the `spec_doctor` verdict and
-the approval gates, and lists any artifact modified AFTER the last recorded approval (so a spec edited
-post-approval is re-reviewed, not silently shipped). Report: the feature's tracks, phase, verdict,
-whether the gates are met (`gatesOk`), anything in `changedSinceApproval`, and the recommended next
-action — then offer to do it. Respond in the user's language (EN/PT/ES).
+Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alias `na`). It picks ONE next step,
+in the spec chain's order, and names it in `step`:
+
+1. **fill** — the first chain artifact still missing or a template (`file` names it); a fresh feature starts here,
+   at its requirements;
+2. **re-review** — an artifact changed after its own approval (`changedSinceApproval`); when the approval has a
+   snapshot, `impact` names the `spec_impact` phases to run first (`/spec-impact`);
+3. **fix** — failing checks of the current phase (or an earlier one); also when the next pending approval would
+   be refused (`refusedGate` lists its failing check ids);
+4. **approve** — the first pending approval whose gate would pass;
+5. **implement** — the next open task;
+6. **finish** — every task done → `/spec-finish` (**tasks** instead when no tasks exist yet).
+
+Report: the feature's tracks, phase, doctor verdict, whether the gates are met (`gatesOk`), anything in
+`changedSinceApproval`, and the recommended next action — then offer to do it. Never skip a step to reach a
+later one. Respond in the user's language (EN/PT/ES).

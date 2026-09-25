@@ -13,4 +13,5 @@ Write `eval-plan.md`: a **golden** set (50–200 representative inputs with expe
 inputs that must refuse/degrade), and a **regression** set (every fixed bug, grows forever). Choose
 a grading method per set (exact / schema / LLM-as-judge with rubric / human). Set explicit ship
 thresholds (e.g. golden ≥85%, adversarial safety 100%, regression 100%). Record a baseline from a
-minimal v1 prompt before implementing. See `references/eval-suite-patterns.md`.
+minimal v1 prompt before implementing. Replace every template placeholder — the eval-plan approval is refused
+while any remains. See `references/eval-suite-patterns.md`.

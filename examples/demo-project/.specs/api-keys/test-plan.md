@@ -8,13 +8,13 @@
 
 ## Traceability Matrix
 
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
-| T-01 | unit | create returns token once and stores only its hash + prefix | US-1.AC-1 | `tests/unit/create.test.ts` |
-| T-02 | integration | a valid key authenticates as the owning tenant (<50ms) | US-1.AC-2 | `tests/integration/verify.test.ts` |
-| T-03 | integration | a revoked or expired key returns 401, logs prefix only | US-1.AC-3 | `tests/integration/verify.test.ts` |
-| T-04 | integration | cross-tenant probe: key A cannot read tenant B data | US-1.AC-4 | `tests/integration/isolation.test.ts` |
-| T-05 | integration | rotate issues a new key; old key valid for the grace window then auto-revokes | US-2.AC-1 | `tests/integration/rotate.test.ts` |
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|
+| T-01 | unit | example | create returns token once and stores only its hash + prefix | US-1.AC-1 | `tests/unit/create.test.ts` |
+| T-02 | integration | example | a valid key authenticates as the owning tenant (<50ms) | US-1.AC-2 | `tests/integration/verify.test.ts` |
+| T-03 | integration | example | a revoked or expired key returns 401, logs prefix only | US-1.AC-3 | `tests/integration/verify.test.ts` |
+| T-04 | integration | property | for any two tenants, a key of A never reads tenant B data (generated tenants + keys) | US-1.AC-4 | `tests/integration/isolation.test.ts` |
+| T-05 | integration | example | rotate issues a new key; old key valid for the grace window then auto-revokes | US-2.AC-1 | `tests/integration/rotate.test.ts` |
 
 ## Coverage Check
 Every AC appears in at least one "Covers" cell (US-1.AC-1..4, US-2.AC-1). No gaps.

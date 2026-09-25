@@ -4386,7 +4386,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 35 && ["spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md"].every((x) => cmdFiles.includes(x)), "35 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback");
+  ok(cmdFiles.length === 42 && ["spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+    "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
+    "42 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard");
   const evalRoot = path.join(root, "evals");
   const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "results").map((e) => e.name);
   ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) &&
