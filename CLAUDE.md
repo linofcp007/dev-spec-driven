@@ -184,8 +184,9 @@ test-plan row (keyed by the FIRST table cell), design sections that mention the 
 steering), for a bugfix bug.md's Reproduction + Root Cause (and `gated`/`gateError` when the bugfix gate
 would refuse the task), and the loop's definition of done. Labels/rules live in `i18n.js` `BRIEF` +
 `renderBrief()`. `write:true` writes `.specs/<f>/.execution/` — a self-ignoring folder (`.gitignore` = `*`),
-the brief is regenerated, `ledger.md` is created once and only ever appended by the controller. The
-PostToolUse hook exits early for `/.execution/` paths. The protocol is prose in
+the brief is regenerated, `ledger.md` is created once and only ever appended by the controller; its result
+keeps paths + identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate) and drops the spec text the brief
+quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/` paths. The protocol is prose in
 `references/subagent-execution.md` + `agents/spec-implementer.md` / `agents/spec-reviewer.md`; the engine
 never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT).
 
@@ -515,9 +516,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(681 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(685 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 223 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 226 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

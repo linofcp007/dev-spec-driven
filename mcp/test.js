@@ -17,7 +17,7 @@ const path = require("path");
 // own project folders — so the suite runs every section in a child process of this file (MCP_TEST_SECTION=<name>),
 // each with its own server and temp dir, all at once, and prints their output in order with one total. "main" is
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
 if (!SECTION) {
   const runSection = (name) => new Promise((resolve) => {
@@ -149,7 +149,7 @@ function endRun() {
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;
     const sections = { wp1: sectionWp1, wp2: sectionWp2, wp3: sectionWp3, wp4: sectionWp4, wp5: sectionWp5, wp6: sectionWp6, wp7: sectionWp7, wp8: sectionWp8,
-      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13, wp14: sectionWp14 };
+      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13, wp14: sectionWp14, wp15: sectionWp15 };
     await sections[SECTION]();
     return endRun();
   }
@@ -483,6 +483,14 @@ function endRun() {
   ok(bw.ok && bw.wrote === true && bw.brief === undefined && fs.existsSync(path.join(exDir, "task-2-brief.md")) &&
     fs.readFileSync(path.join(exDir, ".gitignore"), "utf8").trim() === "*" && fs.existsSync(bw.paths.ledger) && /task-2-report\.md$/.test(bw.paths.report),
     "write:true writes the brief + self-ignoring .execution/ + ledger and returns paths, not content");
+  // "paths only (the brief never enters your context)" — references/subagent-execution.md: no spec text either (the AC
+  // EARS text, test rows, design, steering stay in the file); the controller gets the IDs it acts on. includeBrief: all.
+  const bwFull = await brief({ name: "Brief Demo", number: 2, write: true, includeBrief: true });
+  ok(!("acceptanceCriteria" in bw) && !("tests" in bw) && !("designSections" in bw) && !("steering" in bw) && !/THE SYSTEM SHALL/.test(JSON.stringify(bw)) &&
+    bw.task.number === 2 && bw.loop === "tdd" && bw.inlineOnly === false && JSON.stringify(bw.refs) === JSON.stringify({ acs: ["US-1.AC-1"], tests: ["T-01"] }) &&
+    Array.isArray(bw.unresolved.acs) && bw.implements[0] === "src/keys.js" &&
+    bwFull.brief && bwFull.acceptanceCriteria[0].id === "US-1.AC-1" && bwFull.tests[0].id === "T-01" && !("refs" in bwFull),
+    "write:true returns the paths + the task's identifiers (refs, loop, inlineOnly, markers) and no spec text; includeBrief:true returns the full result");
   fs.appendFileSync(bw.paths.ledger, "Task 2: complete (commits a..b, review clean)\n");
   await brief({ name: "Brief Demo", number: 2, write: true });
   ok(/Task 2: complete/.test(fs.readFileSync(bw.paths.ledger, "utf8")), "a second write never overwrites the ledger");
@@ -4820,6 +4828,51 @@ function endRun() {
     ok(l14.every(([n, b]) => typeof n === "string" && n.includes("\\\\h\\s") && typeof b === "string" && b.includes(".specs/f/.lock")) &&
       /pasta local/.test(l14[1][0]) && /carpeta local/.test(l14[2][0]) && /Outro processo dev-spec/.test(l14[1][1]) && /Otro proceso de dev-spec/.test(l14[2][1]),
       "the network-projectDir refusal and the busy-lock error exist in EN, PT and ES");
+  }
+
+  async function sectionWp15() { // --- 1.13 batch 6: the docs' worked examples pass the engine's own gates; no stale test counts ---
+    const refText = (f) => fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "references", f), "utf8");
+    const p15 = path.join(tmp, "proj-wp15");
+    S.initProject(p15, ["core"], "en");
+
+    // 1. "This is what a complete design.md looks like" (SKILL Phase 2, commands/design.md): copied from its `# Design:`
+    // heading, each worked design passes the design approval gate — Constitution Check included (1.13 refuses it unfilled).
+    const worked15 = [["scale-design-template.md", "Upload", ["saas"]], ["mandatory-ai-design-sections.md", "Rag Search", ["ai"]]].map(([file, name, tracks]) => {
+      const f = S.createFeature(p15, name, tracks);
+      const text = refText(file);
+      fs.writeFileSync(path.join(f.dir, "design.md"), text.slice(text.indexOf("# Design:")));
+      const ap = S.approvePhase(p15, f.slug, "design", "t");
+      const cc = (S.specDoctor(p15, f.slug).checks.find((c) => c.id === "constitution-check") || {}).status;
+      return { file, ok: ap.ok === true && cc === "pass", detail: ap.ok ? cc : ap.error };
+    });
+    const comb15 = refText("example-spec-combined.md");
+    ok(worked15.every((w) => w.ok) && /^- Base: [^\n]*Constitution Check[^\n]*Complexity Tracking/m.test(comb15),
+      "the worked designs (scale-design-template, mandatory-ai-design-sections) pass the design gate with a filled Constitution Check; example-spec-combined lists it among the base sections (got " +
+      JSON.stringify(worked15.map((w) => [w.file, w.detail])) + ")");
+
+    // 2. The improvement-spec example (SKILL routes internal-improvement work to it) uses the stable US-n.AC-m IDs the engine
+    // traces: no "no stable ID" warning, and a feature written like it traces all its criteria (a bare `AC-1` traced 0).
+    const imp15 = (refText("improvement-specs.md").match(/```markdown\r?\n([\s\S]*?)```/) || [])[1] || "";
+    const impEars15 = S.earsValidate(imp15, "en");
+    const impF15 = S.createFeature(p15, "Refactor checkout", ["tdd"]);
+    fs.writeFileSync(path.join(impF15.dir, "requirements.md"), imp15);
+    const impTr15 = S.traceCheck(p15, impF15.slug);
+    ok(imp15.length > 200 && !impEars15.issues.some((i) => i.code === "no-id" || i.severity === "error") && impTr15.totalAcs === 7 && !/^#{2,4} AC-?\d* /m.test(imp15),
+      "improvement-specs.md's example criteria carry US-1.AC-n IDs: ears reports no missing ID and trace sees all 7 ACs (got " + impTr15.totalAcs + ", issues " +
+      JSON.stringify(impEars15.issues.map((i) => i.code)) + ")");
+
+    // 3. Test counts: the user-facing docs state none (every added assertion made them stale — INSTALL said 617 / 198 at
+    // 644 / 201); the maintainer's two records of the exact figures (CLAUDE.md, the current CHANGELOG entry) agree.
+    const docText = (f) => fs.readFileSync(path.join(root, f), "utf8");
+    const RE_COUNT15 = /\b\d{2,} (?:passed|passing|assertions|asserções|aserciones)\b|badge\/tests-\d/i;
+    const stale15 = ["README.md", "INSTALL.md", "llms-install.md", "CONTRIBUTING.md"].filter((f) => RE_COUNT15.test(docText(f)));
+    const claude15 = docText("CLAUDE.md");
+    const log15 = docText("CHANGELOG.md").split(/\n## \[/)[1] || "";
+    const counts15 = [(claude15.match(/\((\d+) assertions, incl\./) || [])[1], (claude15.match(/`node cli\/test-cli\.js` adds (\d+)/) || [])[1],
+      (log15.match(/`node mcp\/test\.js` (\d+) assertions/) || [])[1], (log15.match(/`node cli\/test-cli\.js` (\d+)/) || [])[1]];
+    ok(stale15.length === 0 && counts15.every(Boolean) && counts15[0] === counts15[2] && counts15[1] === counts15[3],
+      "README / INSTALL / llms-install / CONTRIBUTING hard-code no test count; CLAUDE.md and the current CHANGELOG entry state the same mcp / cli totals (stale: " +
+      stale15.join(", ") + "; CLAUDE.md " + counts15.slice(0, 2).join("/") + " vs CHANGELOG " + counts15.slice(2).join("/") + ")");
   }
 
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples

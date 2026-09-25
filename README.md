@@ -3,7 +3,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node: >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![dependencies: 0](https://img.shields.io/badge/dependencies-0-success.svg)](./package.json)
-[![tests: 815 passing](https://img.shields.io/badge/tests-815%20passing-success.svg)](./mcp/test.js)
+[![tests: local suites](https://img.shields.io/badge/tests-local%20suites-success.svg)](./CONTRIBUTING.md#developing)
 [![CI: none (local only)](https://img.shields.io/badge/CI-none%20·%20local%20only-informational.svg)](#why-no-github-actions)
 
 **One spec-driven development skill that adapts to the project — trilingual (EN · PT · ES).**
@@ -240,8 +240,8 @@ run in your own environment when you choose, not on a paid CI runner.
 ### Develop / test
 
 ```bash
-node mcp/test.js          # smoke-test the MCP server end-to-end (617 assertions)
-node cli/test-cli.js      # smoke-test the universal CLI (198 assertions)
+node mcp/test.js          # smoke-test the MCP server end-to-end (must end `0 failed`)
+node cli/test-cli.js      # smoke-test the universal CLI (must end `0 failed`)
 ```
 
 > Replaces four predecessor skills; their content lives here as composable tracks (the originals
@@ -466,8 +466,8 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 ### Desenvolver / testar
 
 ```bash
-node mcp/test.js          # testa o servidor MCP de ponta a ponta (617 asserções)
-node cli/test-cli.js      # testa a CLI universal (198 asserções)
+node mcp/test.js          # testa o servidor MCP de ponta a ponta (tem de terminar em `0 failed`)
+node cli/test-cli.js      # testa a CLI universal (tem de terminar em `0 failed`)
 ```
 
 > Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
@@ -695,8 +695,8 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 ### Desarrollar / probar
 
 ```bash
-node mcp/test.js          # prueba el servidor MCP de extremo a extremo (617 aserciones)
-node cli/test-cli.js      # prueba la CLI universal (198 aserciones)
+node mcp/test.js          # prueba el servidor MCP de extremo a extremo (debe terminar en `0 failed`)
+node cli/test-cli.js      # prueba la CLI universal (debe terminar en `0 failed`)
 ```
 
 > Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
@@ -723,12 +723,12 @@ dev-spec-driven/                      ← plugin root
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
 │   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — 617 assertions)
+│   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, opt-in PreToolUse guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)
-├── examples/demo-project/            ← a worked feature (v1.5 shape) that passes doctor + trace
+├── examples/demo-project/            ← a worked feature (1.13 shape) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md
 └── INSTALL.md

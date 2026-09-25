@@ -441,3 +441,21 @@ See `load-test.md`. Target: 500 RPS sustained without P95 latency regression > 2
 ### Manual review
 10 random production samples per week, team-reviewed for quality and policy compliance.
 Any pattern of issues becomes a new eval case.
+
+---
+
+## Constitution Check
+
+Verified against `steering/constitution.md` — every principle holds:
+- [x] Tenant isolation is absolute — retrieval filters chunks by `tenant_id`; the rate limit and cost cap are per tenant.
+- [x] No PII leaves our control unredacted — user queries are treated as PII; sampled full-content logs are redacted (Safety & Abuse, Observability for AI).
+- [x] Every model and prompt is pinned and versioned — exact model IDs, immutable `prompts/v{N}.md`; a change ships only through the eval gate (Model Lifecycle).
+- [x] Degrade, never fail open — primary failure falls back to the secondary model, then to a generic refusal (Fallback & Degradation).
+
+## Complexity Tracking
+
+No principle violations. Deliberate complexity, justified:
+
+| What | Why it's needed | Simpler alternative rejected because |
+|---|---|---|
+| Secondary model + cost circuit breaker | the latency budget and tenant cost caps must hold when the primary is slow or rate-limited | a single model makes every provider incident a full outage |

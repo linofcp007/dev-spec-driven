@@ -144,7 +144,14 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   {evidence}`, the EARS example passes the linter, the constitution check is section presence), the
   description is trigger-accurate and under 1,024 characters, rule files stay true in the copy
   `rules <tool>` prints, PowerShell saves rule files as UTF-8, and the prose guard against PR/CI wording
-  covers EN/PT/ES.
+  covers EN/PT/ES. The worked designs "a complete design.md looks like" (`scale-design-template.md`,
+  `mandatory-ai-design-sections.md`) had no Constitution Check, so the 1.13 design gate refused a copy of
+  them — both now carry a filled Constitution Check and Complexity Tracking. The improvement-spec example
+  used bare `AC-1` headings, which trace to 0 ACs; it uses `US-1.AC-n` criteria. The demo project
+  (`examples/demo-project`) passes doctor with verdict PASS again, from a fresh clone too: its approvals carry
+  fingerprints, its steering and classification are filled, its edge cases are covered and its Phase 4 tests
+  exist; `examples/README.md` shows the real outputs, and `cli/test-cli.js` compares them on every run. README /
+  INSTALL / llms-install / CONTRIBUTING no longer hard-code test counts that go stale with every assertion.
 
 ### Added
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
@@ -228,6 +235,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   then shows as changed-since-approval (re-review, re-approve).
 - **A note no longer verifies a task with a runnable `_Verify:_`** — record the command and its exit code
   (`dev-spec done <f> <n> --run`).
+- **`spec_task_brief {write: true}` returns paths and identifiers only** (the controller's call in subagent
+  execution): the task, `loop`, `inlineOnly`, `verify`, markers, `refs` {acs, tests}, `unresolved`, the bugfix gate and
+  `paths` — no longer `acceptanceCriteria` / `tests` / `designSections` / `steering` / `bug`, the spec text the brief
+  quotes. Pass `includeBrief: true` (CLI `--include-brief`) for the full result.
 - **Track input is validated**: an unknown track name is an error with a did-you-mean instead of being
   ignored.
 - `spec_coverage` now measures code files named in `_Implements:_` (`coveragePercent`, and
@@ -237,7 +248,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 681 assertions (was 181), `node cli/test-cli.js` 223 (was 53); the tool count is
+- `node mcp/test.js` 685 assertions (was 181), `node cli/test-cli.js` 226 (was 53); the tool count is
   asserted exactly again (29).
 
 ## [1.12.1]

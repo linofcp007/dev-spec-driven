@@ -301,3 +301,22 @@ galleries widely. Without wide sharing, closer to $15/1000/mo.
 - **Load (k6):** See `load-test.md`. 200 concurrent guests, each uploading 20 photos of
   random sizes 500KB–20MB over 60 seconds.
 - **Chaos:** Kill a worker mid-job, verify resumability. Inject R2 500s, verify retry.
+
+---
+
+## Constitution Check
+
+Verified against `steering/constitution.md` — every principle holds:
+- [x] Tenant isolation is absolute — every `media` query is scoped by `event_id` (app-layer `scoped()` guard + Postgres RLS, see Multi-tenancy Model).
+- [x] Secrets are never stored or logged in plaintext — signed upload URLs expire in 15 minutes, are single-use and never logged; logs carry the `upload_id` only.
+- [x] Fail closed — a webhook whose signature doesn't match is rejected and alerted; an upload that fails validation never reaches the gallery.
+- [x] Idempotent writes — the upload-complete webhook is a no-op on a repeated `upload_id` (`media(upload_id) UNIQUE`).
+
+## Complexity Tracking
+
+No principle violations. Deliberate complexity, justified:
+
+| What | Why it's needed | Simpler alternative rejected because |
+|---|---|---|
+| tus.io chunked, resumable upload + async worker | venue WiFi drops and 500MB+ videos (Overview) | one multipart POST restarts from zero on every dropout and ties up an API worker per upload |
+| Direct-to-R2 signed URLs | bytes never pass through our API servers | proxying every byte through the API costs more than the rest of the stack at peak |

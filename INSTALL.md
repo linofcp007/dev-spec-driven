@@ -69,7 +69,8 @@ You don't need Claude to test the server — run the bundled smoke test:
 node "$plugin\mcp\test.js"
 ```
 
-Expected tail: `617 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `198 passed, 0 failed`.)
+Expected tail: `N passed, 0 failed` and exit code 0 — N is the assertion count, which grows with every release
+(the exact figure is in CHANGELOG.md); what matters is `0 failed`. The same goes for `node "$plugin\cli\test-cli.js"`.
 
 To watch the raw protocol, you can pipe a request in by hand:
 

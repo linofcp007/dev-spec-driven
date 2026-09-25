@@ -79,7 +79,9 @@ test is not yours to rule on — see "Where autonomy stops".
 
 ### 1. Brief
 
-`spec_task_brief {name, number: N, write: true}` → paths only (the brief never enters your context).
+`spec_task_brief {name, number: N, write: true}` → the paths plus the task's identifiers (number and
+text, `loop`, `inlineOnly`, its `_Verify:_` command, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
+bugfix `gated`), never the spec text the brief quotes: the brief never enters your context.
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 

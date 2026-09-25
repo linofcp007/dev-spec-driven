@@ -3200,6 +3200,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
+  else if (write) {
+    // write:true is the controller's call (references/subagent-execution.md): the brief lives in the file, so the result
+    // keeps what the controller acts on — the paths, the task's identity, its loop (inlineOnly), _Verify:_ command, the
+    // IDs it cites (refs) and the unresolved ones, markers, the bugfix gate — never the spec text the brief quotes (AC
+    // texts, test rows, design sections, steering, bug.md). includeBrief:true returns everything, brief included.
+    res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug"]) delete res[k];
+  }
   return res;
 }
 

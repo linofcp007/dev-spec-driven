@@ -1,17 +1,17 @@
 # Product
 
 ## Vision
-[One sentence: what is this product and who is it for?]
+A metered public API that small SaaS teams call from their own backends, billed per request.
 
 ## Target Users
-- Primary: [who uses this daily?]
-- Secondary: [who else touches it?]
+- Primary: backend engineers at tenant companies who call the API from their services.
+- Secondary: tenant admins who manage credentials and read usage.
 
 ## Success Metrics
-- [specific 6-month metric]
+- 200 paying tenants and a p95 API latency under 100ms six months after launch.
 
 ## Non-goals
-- [what this is explicitly NOT]
+- A consumer app or an end-user login flow — tenants authenticate machines, not people.
 
 ## Business Model
-[how it makes money]
+Monthly subscription per tenant plus usage-based overage (metered by `usage-metering`).

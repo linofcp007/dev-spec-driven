@@ -21,14 +21,17 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 ## Developing
 
 ```bash
-node mcp/test.js        # MCP server end-to-end (681 assertions)
-node cli/test-cli.js    # universal CLI (223 assertions)
+node mcp/test.js        # MCP server end-to-end (must end `0 failed`)
+node cli/test-cli.js    # universal CLI (must end `0 failed`)
 claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
 # or both:
 npm test
 ```
 
 Add an assertion whenever you add a tool or change behavior. Keep the tests dependency-free.
+The exact assertion counts live in two places only — the release's `### Tests` entry in CHANGELOG.md and the
+Tests section of CLAUDE.md — so update both when the totals change (`mcp/test.js` checks that they agree and
+that README / INSTALL / llms-install / this file state no count that could go stale).
 For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
 ## Before merging

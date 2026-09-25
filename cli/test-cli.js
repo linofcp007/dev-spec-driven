@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 if (!SECTION) {
@@ -121,6 +121,11 @@ const br = run(["brief", "Invoice Summary"]);
 ok(br.code === 0 && /# Task brief — invoice-summary · task 2/.test(br.out) && /## Definition of done/.test(br.out), "brief prints the next open task's brief");
 const brw = run(["brief", "Invoice Summary", "2", "--write"]);
 ok(/task-2-brief\.md/.test(brw.out) && fs.existsSync(path.join(tmp, ".specs", "invoice-summary", ".execution", "task-2-brief.md")), "brief --write writes .execution/task-2-brief.md");
+let brwJ = {}, brwFull = {};
+try { brwJ = JSON.parse(run(["brief", "Invoice Summary", "2", "--write", "--json"]).out); brwFull = JSON.parse(run(["brief", "Invoice Summary", "2", "--write", "--include-brief", "--json"]).out); } catch { /* stays {} */ }
+ok(brwJ.ok === true && brwJ.paths && brwJ.refs && Array.isArray(brwJ.refs.acs) && !("acceptanceCriteria" in brwJ) && !("steering" in brwJ) && !("brief" in brwJ) &&
+  typeof brwFull.brief === "string" && Array.isArray(brwFull.acceptanceCriteria),
+  "brief --write --json prints paths + identifiers (refs), no spec text — like spec_task_brief {write:true}; --include-brief prints everything");
 ok(run(["brief", "Invoice Summary", "999"]).code === 1, "brief on a missing task exits non-zero");
 
 // approve
@@ -1307,6 +1312,30 @@ if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-proc
   ok(busy14.code === 1 && /Another dev-spec process is updating 'race' right now \(\.specs\/race\/\.lock\)/.test(busy14.out) && busyJson14.code === 1 && bj14.ok === false && bj14.busy === true &&
     untouched14 && free14.code === 0 && !fs.existsSync(lock14),
     "done under another process's feature lock: exit 1 with the busy error (--json prints {ok:false, busy:true}), nothing ticked; once released it ticks and leaves no .lock");
+}
+
+if (inSection("wp15")) { // 1.13 batch 6 — examples/README.md's "Verify it yourself" outputs are what the CLI prints on a fresh copy
+  // A copy resets every file date, like a clone: the demo's approvals must hold by content fingerprint (an approval
+  // without one fell back to mtime and flagged every approved file as changed after any checkout).
+  const repo15 = path.join(__dirname, "..");
+  const demo15 = path.join(tmp, "wp15", "examples", "demo-project");
+  fs.cpSync(path.join(repo15, "examples", "demo-project"), demo15, { recursive: true });
+  const readme15 = fs.readFileSync(path.join(repo15, "examples", "README.md"), "utf8").replace(/\r\n/g, "\n");
+  const block15 = (heading) => { const at = readme15.indexOf("### `" + heading + "`"); const m = at < 0 ? null : readme15.slice(at).match(/\n```\n([\s\S]*?)\n```/); return m ? m[1] : "<no block for " + heading + ">"; };
+  const cmds15 = [["doctor api-keys", ["doctor", "api-keys"]], ["trace api-keys --code", ["trace", "api-keys", "--code"]], ["roadmap", ["roadmap"]], ["clarify api-keys", ["clarify", "api-keys"]]];
+  const diff15 = [];
+  for (const [heading, args] of cmds15) {
+    const r = run([...args, "--project", demo15]);
+    const got = r.out.replace(/\r\n/g, "\n").replace(/\s+$/, ""), want = block15(heading);
+    if (r.code !== 0 || got !== want) diff15.push(heading + " (exit " + r.code + "): " + JSON.stringify(got.slice(0, 300)));
+  }
+  ok(diff15.length === 0 && /verdict=PASS/.test(block15("doctor api-keys")) && !/[▲✗]/.test(block15("doctor api-keys")),
+    "examples/README.md: doctor (PASS, no warnings) / trace --code / roadmap / clarify print exactly the pasted outputs on a fresh copy of the demo (differs: " + diff15.join(" | ") + ")");
+  // The committed ROADMAP.md is what `roadmap --write` generates now (it said 70% while the engine said 19%).
+  run(["roadmap", "--write", "--project", demo15]);
+  const rm15 = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+  ok(rm15(path.join(demo15, ".specs", "ROADMAP.md")) === rm15(path.join(repo15, "examples", "demo-project", ".specs", "ROADMAP.md")),
+    "the demo's committed .specs/ROADMAP.md matches what roadmap --write generates");
 }
 
 // unknown command errors

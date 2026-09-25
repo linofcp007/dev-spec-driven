@@ -68,7 +68,7 @@ AC-5/AC-6 → eval cases (+ai). AC-7 → cost validation (+ai). AC-1 (P95) → l
 
 ## design.md (section map — each mandatory section is filled, no TODO sentinels left)
 
-- Base: Overview · Architecture (Mermaid: invoice → redact PII → retrieve totals → model → validate → cache → host) · Data Models · API Contracts · Security · Error Handling · Testing Strategy
+- Base: Overview · Architecture (Mermaid: invoice → redact PII → retrieve totals → model → validate → cache → host) · Data Models · API Contracts · Security · Error Handling · Testing Strategy · Constitution Check (each `steering/constitution.md` principle ticked with how the design meets it — the design approval gate refuses it unfilled) · Complexity Tracking (only what breaks a principle or adds non-obvious complexity — here: none)
 - **+tdd:** Testability Notes — clock + model client injected behind interfaces; golden invoices as fixtures.
 - **+saas:** Performance Budget (P95 1500ms, cache hit > 95%) · Scale Design (cache summaries by invoice hash, 24h TTL) · Multi-tenancy (pooled, tenant_id in every query + cache key) · Observability (`summary_duration_seconds`, `summary_cost_dollars_total`, tenant-scoped logs) · Cost Envelope ($/1000 hosts/mo, dominated by tokens).
 - **+ai:** Model Strategy (primary + cheaper fallback) · Prompt Architecture (`prompts/vN.md`) · Token Economics · Latency Budget (TTFT < 800ms) · Eval Strategy (golden 90% / adversarial safety 100%) · Safety & Abuse (delimiter + output validation of totals) · Fallback & Degradation (templated summary) · Observability for AI · Model Lifecycle (pinned IDs, eval-gated migration) · Multi-modality (text only).

@@ -17,7 +17,7 @@ no API key.
 2. **(Optional) Verify it runs** — no dependencies required:
 
    ```bash
-   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # 681 assertions, exits 0 on success
+   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # ends `N passed, 0 failed`, exits 0 on success
    ```
 
 3. **Register the server** with your MCP client. For **Cline**, add this to
