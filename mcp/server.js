@@ -37,7 +37,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Tracks in use across the project. 'core' is always included." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Tracks in use across the project. 'core' is always included." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
         projectDir: { type: "string", description: "Project root. Defaults to SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd." },
       },
@@ -65,7 +65,7 @@ const TOOLS = [
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name (human readable; slugified for the folder)." },
-        tracks: { type: "array", items: { type: "string", enum: ["core", "tdd", "saas", "ai"] }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
         summary: { type: "string", description: "Optional one-line feature summary." },
         kind: { type: "string", enum: ["feature", "bugfix"], description: "'bugfix' scaffolds the systematic-debugging flow instead: bug.md (reproduction · root cause · fix), a one-story requirements.md (IF…THEN), a regression test plan and the fixed task order (reproduce → root cause → failing regression test → fix → verify). Always +tdd." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
@@ -180,8 +180,8 @@ const TOOLS = [
   {
     name: "spec_add_track",
     description:
-      "Escalate an EXISTING feature to a new track (+tdd, +saas or +ai) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md) and appends that track's mandatory design.md sections. Use when a feature grew into needing tests, scale, or AI after it was created.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", enum: ["tdd", "saas", "ai"] }, projectDir: { type: "string" } }, required: ["name", "track"] },
+      "Escalate an EXISTING feature to a new track (+tdd, +saas or +ai) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md), appends that track's mandatory design.md sections and template tasks, adds its steering files, updates classification.md's Active Tracks line and persists the track set in .state.json. `track` takes one or several ('saas,ai', '+saas +ai'); an unknown track is an error with a did-you-mean. With `remove: true` the track is turned OFF instead - non-destructive: no file is deleted, the result lists the now-inactive artifacts, and doctor/status/next_action stop requiring them ('core' can't be removed; a bugfix keeps +tdd). Use when a feature grew into needing tests, scale, or AI after it was created (or no longer does).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai - or several: 'saas,ai' / '+saas +ai'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files are kept, listed as inactive)." }, projectDir: { type: "string" } }, required: ["name", "track"] },
   },
   {
     name: "spec_feature",
@@ -286,7 +286,7 @@ function runTool(name, args) {
     case "spec_next_action":
       return spec.nextAction(pdir, args.name);
     case "spec_add_track":
-      return spec.addTrack(pdir, args.name, args.track);
+      return spec.addTrack(pdir, args.name, args.track, { remove: !!args.remove });
     case "spec_feature":
       return spec.manageFeature(pdir, args.action, args.name, args.newName);
 

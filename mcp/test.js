@@ -544,7 +544,7 @@ function payload(res) {
 
   // Phase: a fresh scaffold (placeholder tasks only) is not "tasks-ready"; doctor warns on zero criteria.
   const fresh = S.createFeature(rDir, "Fresh", ["tdd"]);
-  ok(S.statusFeature(rDir, "fresh").phase === "test-plan", "fresh scaffold phase ignores placeholder-only template tasks");
+  ok(S.statusFeature(rDir, "fresh").phase === "requirements", "fresh scaffold phase ignores placeholder-only template tasks (and still-template artifacts → requirements)");
   fs.writeFileSync(path.join(fresh.dir, "requirements.md"), "# Feature: fresh\n");
   ok(S.specDoctor(rDir, "fresh").checks.find((c) => c.id === "ears").status === "warn", "doctor warns (not passes) when requirements.md has zero criteria");
 
@@ -1017,6 +1017,310 @@ function payload(res) {
   // @wp WP1 <<<
 
   // @wp WP2 tests >>>
+  { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
+  const w2 = path.join(tmp, "proj-wp2");
+  const w2s = path.join(w2, ".specs");
+  S.initProject(w2, ["core"], "en");
+  const readW2 = (...p) => fs.readFileSync(path.join(w2s, ...p), "utf8");
+  const stateW2 = (slug) => JSON.parse(readW2(slug, ".state.json"));
+  const headingCount = (md, marker) => md.split(/\r?\n/).filter((l) => /^#{1,6}\s/.test(l) && l.includes(marker)).length;
+
+  // (1) persisted tracks; legacy detection only trusts markers on real headings
+  const pf1 = S.createFeature(w2, "Invoice export", ["tdd"]);
+  ok(stateW2("invoice-export").tracks.join() === "core,tdd", "spec_create persists the track set in .state.json");
+  const leg = S.createFeature(w2, "Legacy Diagram", ["core"]);
+  fs.writeFileSync(path.join(leg.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {} })); // a pre-1.13 feature
+  fs.appendFileSync(path.join(leg.dir, "design.md"), "\n```mermaid\ngraph TD\n  UI --> X[AI]\n  X --> Q[SaaS]\n```\nThe [AI] helper is out of scope.\n");
+  const legDoc = S.specDoctor(w2, "legacy-diagram");
+  const legAdd = S.addTrack(w2, "legacy-diagram", "ai");
+  ok(legDoc.tracks === "core" && !legDoc.checks.some((c) => c.id === "ai-sections" || c.id === "saas-sections") && legAdd.addedTracks.join() === "ai" &&
+    headingCount(fs.readFileSync(path.join(leg.dir, "design.md"), "utf8"), "[AI]") === 10,
+    "a Mermaid node X[AI] / prose [AI] no longer switches a track on (doctor, add_track 'already on')");
+
+  // (2) track input: arrays or strings, split on space/comma/'+', case-insensitive; unknown → did-you-mean
+  ok(S.parseTracks("tdd,saas").tracks.join() === "core,tdd,saas" && S.parseTracks("+SaaS +ai").tracks.join() === "core,saas,ai" &&
+    S.parseTracks(["tdd saas"]).tracks.join() === "core,tdd,saas" && S.parseTracks(["TDD", "+ai"]).tracks.join() === "core,tdd,ai",
+    "track input is split on whitespace, commas and '+' (arrays and strings), case-insensitive, core implied");
+  const badCreate = S.createFeature(w2, "Typo Feature", "tdd,sass");
+  ok(badCreate.ok === false && /'sass'/.test(badCreate.error) && /did you mean 'saas'/.test(badCreate.error) && /core, tdd, saas, ai/.test(badCreate.error) &&
+    !fs.existsSync(path.join(w2s, "typo-feature")), "an unknown track is an error with a did-you-mean (nothing scaffolded, no silent drop)");
+  const mcpBad = await rpc("tools/call", { name: "spec_create", arguments: { name: "Typo MCP", tracks: ["sass"], projectDir: w2 } });
+  const mcpBadInit = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["ia"], projectDir: w2 } }));
+  const mcpBadAdd = payload(await rpc("tools/call", { name: "spec_add_track", arguments: { name: "invoice-export", track: "sass", projectDir: w2 } }));
+  ok(mcpBad.result.isError === true && /did you mean 'saas'/.test(mcpBad.result.content[0].text) && /did you mean 'ai'/.test(mcpBadInit.error) && /did you mean 'saas'/.test(mcpBadAdd.error),
+    "MCP spec_create / spec_init / spec_add_track reject unknown tracks the same way");
+  const ptW2 = path.join(tmp, "proj-wp2-pt");
+  S.initProject(ptW2, ["core"], "pt");
+  ok(/querias dizer 'saas'/.test(S.createFeature(ptW2, "Exportar", ["sass"]).error), "the unknown-track error is localized (PT)");
+
+  // (3) spec_create on an EXISTING feature with new tracks → the add_track path (never overwrites)
+  const reqBefore = readW2("invoice-export", "requirements.md");
+  const again3 = S.createFeature(w2, "Invoice export", "saas");
+  const des3 = readW2("invoice-export", "design.md");
+  ok(again3.ok && again3.label === "core +tdd +saas" && again3.addedTracks.join() === "saas" && headingCount(des3, "[SaaS]") === 5 &&
+    fs.existsSync(path.join(w2s, "invoice-export", "load-test.md")) && stateW2("invoice-export").tracks.join() === "core,tdd,saas" &&
+    readW2("invoice-export", "requirements.md") === reqBefore && /already existed/.test(again3.note),
+    "spec_create with a new track on an existing core+tdd feature adds it (design sections, load-test, state) — label [core +tdd +saas]");
+  const same3 = S.createFeature(w2, "Invoice export", "tdd");
+  ok(same3.ok && !same3.addedTracks && same3.created.length === 0 && same3.label === "core +tdd +saas", "spec_create with no new track keeps the plain additive behavior");
+
+  // (4) add_track completeness: Active Tracks line, steering, template tasks once, localized bugfix design title
+  const tasks4 = readW2("invoice-export", "tasks.md");
+  ok(/^## Active Tracks\ncore \+tdd \+saas$/m.test(readW2("invoice-export", "classification.md")) &&
+    ["scale.md", "observability.md", "cost.md"].every((x) => fs.existsSync(path.join(w2s, "steering", x))) &&
+    (tasks4.match(/## Story US-1 — Observability & Scale/g) || []).length === 1 && /- \[ \] 7\. \[US1\] Emit metrics/.test(tasks4),
+    "add_track path updates classification Active Tracks, scaffolds the track's steering and appends its template tasks (numbered on)");
+  const tr4 = S.traceCheck(w2, "invoice-export");
+  S.addTrack(w2, "invoice-export", "saas"); S.createFeature(w2, "Invoice export", "saas");
+  ok(tr4.phantomAcsInTasks.length === 0 && (readW2("invoice-export", "tasks.md").match(/Observability & Scale/g) || []).length === 1,
+    "appended track tasks never cite ACs the spec lacks (no phantom IDs) and are appended only once");
+  const pt4 = S.createFeature(ptW2, "Painel", ["core"]);
+  S.addTrack(ptW2, "painel", "ai");
+  ok(/^## Tracks Ativos\ncore \+ai$/m.test(fs.readFileSync(path.join(pt4.dir, "classification.md"), "utf8")) &&
+    /## História US-1 — IA/.test(fs.readFileSync(path.join(pt4.dir, "tasks.md"), "utf8")), "add_track updates the PT 'Tracks Ativos' line and appends the PT task block");
+  const esW2 = path.join(tmp, "proj-wp2-es");
+  S.initProject(esW2, ["core"], "es");
+  const esBug = S.createFeature(esW2, "Error de pago", undefined, "falla el cobro", undefined, undefined, "bugfix");
+  S.addTrack(esW2, "error-de-pago", "saas");
+  const esPagos = S.createFeature(esW2, "Pagos", ["core"]);
+  S.addTrack(esW2, "pagos", "tdd");
+  ok(/^# Diseño: /.test(fs.readFileSync(path.join(esBug.dir, "design.md"), "utf8")) && /^## Tracks Activos\ncore \+tdd$/m.test(fs.readFileSync(path.join(esPagos.dir, "classification.md"), "utf8")) &&
+    fs.existsSync(path.join(esW2, ".specs", "steering", "testing-standards.md")),
+    "add_track on a bugfix writes a localized design title (ES '# Diseño:'); the ES 'Tracks Activos' line and steering follow");
+
+  // (5) removal: non-destructive, core can't go, a bugfix keeps +tdd; doctor/status/next_action stop requiring it
+  const rmSaas = payload(await rpc("tools/call", { name: "spec_add_track", arguments: { name: "invoice-export", track: "saas", remove: true, projectDir: w2 } }));
+  const docRm = S.specDoctor(w2, "invoice-export");
+  ok(rmSaas.ok && rmSaas.removedTracks.join() === "saas" && rmSaas.tracks === "core +tdd" && rmSaas.inactive.includes("load-test.md") &&
+    rmSaas.inactive.some((x) => /\[SaaS\]/.test(x)) && fs.existsSync(path.join(w2s, "invoice-export", "load-test.md")) &&
+    headingCount(readW2("invoice-export", "design.md"), "[SaaS]") === 5 && stateW2("invoice-export").tracks.join() === "core,tdd" &&
+    /^## Active Tracks\ncore \+tdd$/m.test(readW2("invoice-export", "classification.md")),
+    "spec_add_track remove:true turns +saas off — every file kept, inactive artifacts listed, state + Active Tracks updated");
+  ok(!docRm.checks.some((c) => c.id === "saas-sections") && S.statusFeature(w2, "invoice-export").scaleSections === null &&
+    !/\*\*invoice-export\*\* — design has unfilled/.test(S.renderRoadmapMd(w2, "en")),
+    "after removal doctor/status/roadmap stop requiring the +saas sections");
+  const aiRm = S.createFeature(w2, "Ai Gone", ["ai"]);
+  S.approvePhase(w2, "ai-gone", "requirements"); S.approvePhase(w2, "ai-gone", "design");
+  S.removeTrack(w2, "ai-gone", "ai");
+  ok(!S.specDoctor(w2, "ai-gone").pendingGates.includes("eval-plan") && !/eval-plan/.test(S.nextAction(w2, "ai-gone").recommendation) && fs.existsSync(path.join(aiRm.dir, "eval-plan.md")),
+    "an inactive track's artifact is no longer an approval gate (doctor, next_action) — and it is still on disk");
+  const vBug = path.join(tmp, "proj-v112");
+  ok(S.addTrack(w2, "invoice-export", "core", { remove: true }).ok === false && /core/.test(S.addTrack(w2, "invoice-export", "core", { remove: true }).error) &&
+    S.removeTrack(vBug, "login-loop", "tdd").ok === false && /bugfix/i.test(S.removeTrack(vBug, "login-loop", "tdd").error),
+    "'core' can't be removed; a bugfix can't drop +tdd");
+
+  // (6) placeholder helpers
+  const phText = [
+    "# Feature: x", "## Summary", "[1-2 sentences: what this does and why it matters]",
+    "1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior] within $[0.03]",
+    "- [ ] tick me · - see [RFC 7519](https://x) ![img](a.png) [ref][r1] [r1] [^1] [[Wiki]] `code [x]` items[0]",
+    "- [x] done [US1][P] [shared] [SaaS] [AI] [US-1.AC-1, T-01] [NEEDS CLARIFICATION: which?] [P1] [US-2]",
+    "> **TODO** — replace me", "<!-- [inside comment] -->", "```", "[inside fence]", "```", "[r1]: https://example.com",
+    "| T-01 | unit | `[path]` |", "> [!NOTE] a callout",
+  ].join("\n");
+  const ph = S.placeholderReport(phText).map((p) => p.line + ":" + p.text);
+  ok(ph.join("|") === "3:[1-2 sentences: what this does and why it matters]|4:[trigger]|4:[behavior]|4:[0.03]|7:> **TODO** — replace me|13:[path]",
+    "placeholderReport flags bracketed prose + the TODO sentinel, never links/refs/footnotes/checkboxes/tags/IDs/NEEDS CLARIFICATION/comments/fences (got " + ph.join("|") + ")");
+  const ptReqFresh = fs.readFileSync(path.join(pt4.dir, "requirements.md"), "utf8");
+  const esReqFresh = fs.readFileSync(path.join(esBug.dir, "requirements.md"), "utf8");
+  ok(S.artifactState(path.join(w2s, "nope.md")) === "missing" && S.artifactState({ file: path.join(pt4.dir, "requirements.md") }) === "placeholder" &&
+    S.artifactState({ text: esReqFresh }) === "placeholder" && S.artifactState({ text: "# Title\n\n## Summary\n" }) === "placeholder" &&
+    S.artifactState({ text: "## Summary\nShips invoices as CSV.\n" }) === "filled" && S.artifactState({ text: "## A\nsame text\n" }, { template: "## A\n  same   text" }) === "placeholder" &&
+    S.placeholderReport(ptReqFresh).length > 10, "artifactState: missing / placeholder (EN/PT/ES templates, heading-only, == template) / filled");
+
+  // (7) phase + % for fresh scaffolds; template track tasks are placeholder tasks
+  const fr = ["saas", "ai", "tdd"].map((t) => S.createFeature(w2, "Fresh " + t, [t]));
+  const rmv7 = S.roadmap(w2).features;
+  ok(fr.every((x) => S.statusFeature(w2, x.slug).phase === "requirements") && fr.every((x) => rmv7.find((f) => f.name === x.slug).percent === 8),
+    "a fresh +saas/+ai/+tdd scaffold is in 'requirements' at 8% (not tasks-ready 30% / test-plan 20%)");
+  ok(S.isPlaceholderTask("[US1] Emit metrics, add dashboard, configure alerts") && S.isPlaceholderTask("[US1] Monitorização de custo — emitir métrica de custo + alerta") &&
+    !S.isPlaceholderTask("[shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction") && !S.isPlaceholderTask("[US1] Emit invoice metrics to Prometheus"),
+    "template track tasks count as placeholders (EN/PT) until edited; the verbatim bugfix steps are the method, not placeholders");
+  fs.writeFileSync(path.join(fr[0].dir, "requirements.md"), "## Summary\nExport invoices.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL export CSV.\n");
+  const ph7a = S.statusFeature(w2, fr[0].slug).phase;
+  fs.appendFileSync(path.join(fr[0].dir, "tasks.md"), "\n## Real\n- [ ] 20. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1_\n");
+  ok(ph7a === "design" && S.statusFeature(w2, fr[0].slug).phase === "tasks-ready", "filled requirements → 'design'; one real task → 'tasks-ready' (task-driven model kept)");
+
+  // (8) listFeatures ignores dot-folders and non-addressable names; _archive and legacy slugs keep working
+  fs.mkdirSync(path.join(w2s, ".obsidian"), { recursive: true });
+  fs.mkdirSync(path.join(w2s, "My Notes"), { recursive: true });
+  fs.mkdirSync(path.join(w2s, "fatura-o"), { recursive: true });
+  const lf8 = S.listFeatures(w2);
+  ok(!lf8.features.some((f) => f.name === ".obsidian" || f.name === "My Notes") && lf8.features.some((f) => f.name === "fatura-o") &&
+    lf8.ignored.join() === "My Notes" && !S.roadmap(w2).features.some((f) => f.name === ".obsidian"),
+    "listFeatures/roadmap skip .obsidian and 'My Notes' (reported as ignored); legacy slug folders stay listed");
+
+  // (9) extractSection never matches the H1 title
+  const wk = S.createFeature(w2, "Weekly summary email", ["core"]);
+  const ptWk = S.createFeature(ptW2, "Resumo semanal", ["core"]);
+  ok(S.finishFeature(w2, wk.slug).mergeTitle === "feat(weekly-summary-email): weekly-summary-email" && !/##/.test(S.finishFeature(ptW2, ptWk.slug).mergeTitle) &&
+    S.extractSection("# Feature: Weekly summary email\n\n## Summary\nReal one.\n", ["summary"]).trim() === "Real one." &&
+    S.extractSection("## [AI] 3. Token Economics\nx\n## Tokens\ny", ["token economics"]).trim() === "x" && S.extractSection("## Fixtures\nz", ["fix"]) === null,
+    "extractSection skips the H1 (feature names contain synonyms), matches after marker/numbering, at a word boundary");
+  const aiRef = S.createFeature(w2, "Ai Reference", ["ai"]);
+  fs.copyFileSync(path.join(root, "skills", "dev-spec-driven", "references", "mandatory-ai-design-sections.md"), path.join(aiRef.dir, "design.md"));
+  ok(S.specDoctor(w2, "ai-reference").checks.find((c) => c.id === "ai-sections").status === "pass", "the AI reference design ('## Section 1: Model Strategy' headings) still has all 10 sections filled");
+  const fx = S.createFeature(w2, "Fix login crash", undefined, "crash on login", undefined, "en", "bugfix");
+  const fxBug = path.join(fx.dir, "bug.md");
+  fs.writeFileSync(fxBug, fs.readFileSync(fxBug, "utf8").replace(/## Fix\n\[[^\n]*\]/, "## Fix\nGuard the null session."));
+  const fxSum = S.finishFeature(w2, fx.slug).mergeSummary;
+  ok(/## Fix\nGuard the null session\.\n/.test(fxSum) && !/## Reproduction/.test(fxSum) && !/# Bug:/.test(fxSum), "a bugfix named 'Fix …' gets only its Fix section in the merge summary");
+
+  // (10) status reports present AND filled, agreeing with doctor
+  const st10 = S.statusFeature(w2, fr[0].slug);
+  const doc10 = S.specDoctor(w2, fr[0].slug).checks.find((c) => c.id === "saas-sections");
+  ok(st10.scaleSections.every((s) => s.present && s.filled === false) && doc10.status === "fail" && S.statusFeature(fDir, "tpl").scaleSections.every((s) => s.filled),
+    "status scaleSections carry present + filled (fresh: present, unfilled — same as doctor; the filled template: all filled)");
+
+  // (11) creating a feature removes its backlog entry
+  S.backlog(w2, "add", "SSO Login", "SAML");
+  S.backlog(w2, "add", "Exports v2");
+  const sso = S.createFeature(w2, "sso-login", ["core"]);
+  ok(sso.removedFromBacklog.join() === "SSO Login" && S.backlog(w2).backlog.map((b) => b.name).join() === "Exports v2", "spec_create drops the backlog item with the same slug");
+
+  // --- review fixes ---
+  // placeholderReport: literals in code spans and number intervals are code/data, not placeholders
+  const lit = S.placeholderReport('returns `[]`, `["read", "write"]`, `[0, 1]`, `[chunk:ID]` or `[a-z]`; score in [0, 1]; file `[path]`; slot: []; ≥ [85]%').map((x) => x.text);
+  ok(lit.join("|") === "[path]|[]|[85]",
+    "placeholderReport: code-span literals ([], [\"a\"], [0, 1], [chunk:ID], [a-z]) and number intervals are not placeholders; `[path]`, a bare [] slot and [85] still are (got " + lit.join("|") + ")");
+  const keys = S.createFeature(w2, "Keys", ["core"]);
+  fs.writeFileSync(path.join(keys.dir, "requirements.md"), "# Feature: Keys\n\n## Summary\nList API keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a tenant has no keys THE SYSTEM SHALL return `[]`.\n");
+  ok(S.statusFeature(w2, keys.slug).phase === "design", "an AC that returns `[]` does not send a filled feature back to 'requirements'");
+  // inline code is code even when it is bracketed words; only the templates' own `[path]`/`[caminho]`/`[ruta]` open up
+  const words = S.placeholderReport("xUnit `[Fact]` · `[Authorize]` · Cargo `[dependencies]` · ini `[database]` · regex `[aeiou]` · `[Serializable]` `[HttpGet]`; PT `[caminho]`, ES `[ruta]`").map((x) => x.text);
+  ok(words.join("|") === "[caminho]|[ruta]", "placeholderReport: C# attributes, TOML/INI tables and regex classes in code spans are code; PT `[caminho]` / ES `[ruta]` still are placeholders (got " + words.join("|") + ")");
+  const auth = S.createFeature(w2, "Auth keys", ["core"]);
+  fs.writeFileSync(path.join(auth.dir, "requirements.md"), "# Feature: Auth keys\n\n## Summary\nOnly callers passing the `[Authorize]` filter may list keys.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN an admin lists keys THE SYSTEM SHALL return them.\n");
+  fs.writeFileSync(path.join(auth.dir, "design.md"), "# Design: Auth keys\n\n## Overview\nA GET endpoint on KeysController.\n");
+  ok(S.artifactState({ file: path.join(auth.dir, "requirements.md") }) === "filled" && S.statusFeature(w2, auth.slug).phase === "design" &&
+    S.roadmap(w2).features.find((x) => x.name === auth.slug).percent === 16,
+    "an `[Authorize]` code span leaves requirements.md 'filled': phase 'design' (16%), not back at 'requirements'");
+
+  // a NEW bugfix given extra tracks gets them — the same command twice gives the same track set
+  const bf1 = S.createFeature(w2, "Login crash", ["saas"], "crash", undefined, "en", "bugfix");
+  const bf2 = S.createFeature(w2, "Login crash", ["saas"], "crash", undefined, "en", "bugfix");
+  ok(bf1.label === "core +tdd +saas" && bf2.label === bf1.label && !bf2.addedTracks && stateW2("login-crash").tracks.join() === "core,tdd,saas" &&
+    /^# Design: Login crash/.test(readW2("login-crash", "design.md")) && headingCount(readW2("login-crash", "design.md"), "[SaaS]") === 5 &&
+    fs.existsSync(path.join(w2s, "login-crash", "load-test.md")) && /## Story US-1 — Observability & Scale/.test(readW2("login-crash", "tasks.md")),
+    "a new bugfix given +saas scaffolds it (design sections, load-test, tasks); a re-run gives the same [core +tdd +saas]");
+
+  // a fully planned bugfix reaches tasks-ready: its verbatim steps count once requirements + test plan are filled
+  const ns = S.createFeature(w2, "Null session", undefined, "crash on login", undefined, "en", "bugfix");
+  const ns0 = S.statusFeature(w2, ns.slug).phase;
+  const fillNs = (rel, fn) => fs.writeFileSync(path.join(ns.dir, rel), fn(fs.readFileSync(path.join(ns.dir, rel), "utf8")));
+  fillNs("requirements.md", (s) => s.replace("[the condition that triggers the bug]", "the session is null").replace("[the correct behavior]", "redirect to /login")
+    .replace("[the neighbouring behavior that already worked]", "a normal login").replace("[nearby inputs that must keep working]", "an expired session"));
+  const ns1 = S.statusFeature(w2, ns.slug).phase;
+  fillNs("test-plan.md", (s) => s.replace(/\[unit\/integration\]/g, "unit").replace(/`\[path\]`/g, "`test/session.test.js`"));
+  ok(ns0 === "requirements" && ns1 === "test-plan" && S.statusFeature(w2, ns.slug).phase === "tasks-ready" && S.roadmap(w2).features.find((x) => x.name === ns.slug).percent === 30,
+    "bugfix phase: fresh → requirements, requirements filled → test-plan, test plan filled → tasks-ready (30%) with the steps kept verbatim");
+  // the same bugfix planned with +saas, then +saas removed: its design.md held only the track's sections — out of the chain
+  const nsS = S.createFeature(w2, "Null session saas", ["saas"], "crash on login", undefined, "en", "bugfix");
+  for (const rel of ["requirements.md", "test-plan.md"]) fs.copyFileSync(path.join(ns.dir, rel), path.join(nsS.dir, rel));
+  const nsS0 = S.statusFeature(w2, nsS.slug).phase;
+  S.removeTrack(w2, nsS.slug, "saas");
+  const nsS1 = S.statusFeature(w2, nsS.slug);
+  ok(nsS0 === "design" && nsS1.phase === "tasks-ready" && nsS1.tracks === "core +tdd" && S.roadmap(w2).features.find((x) => x.name === nsS.slug).percent === 30 &&
+    fs.existsSync(path.join(nsS.dir, "design.md")),
+    "a bugfix planned with +saas waits on its [SaaS] design sections; once +saas is removed it reaches tasks-ready (30%) like a plain bugfix (design.md kept)");
+  // …but a regular feature whose design.md is only headings is still in 'design' (+tdd: a wrong skip would say 'test-plan')
+  const hd = S.createFeature(w2, "Headings only", ["tdd"]);
+  fs.writeFileSync(path.join(hd.dir, "requirements.md"), "## Summary\nX.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL answer.\n");
+  fs.writeFileSync(path.join(hd.dir, "design.md"), "# Design: Headings only\n\n## Overview\n");
+  ok(S.statusFeature(w2, hd.slug).phase === "design", "only a bugfix drops a headings-only design.md from the chain; a feature's stays open at 'design'");
+
+  // localized removal / create-on-existing messages (PT, ES)
+  const ptRel = S.createFeature(ptW2, "Relatórios", ["saas"]);
+  const ptRelRm = S.addTrack(ptW2, ptRel.slug, "saas", { remove: true });
+  ok(/^Tracks desativados: \+saas\. Nenhum ficheiro foi apagado/.test(ptRelRm.note) && S.addTrack(ptW2, ptRel.slug, "core", { remove: true }).error === "O 'core' está sempre ativo — não pode ser removido." &&
+    /^Não ativo: \+ai/.test(S.addTrack(ptW2, ptRel.slug, "ai", { remove: true }).note), "removal messages follow the feature language (PT: removed, core, not active)");
+  S.createFeature(esW2, "Exportar", ["core"]);
+  const esAgain = S.createFeature(esW2, "Exportar", ["saas"]);
+  ok(/^'exportar' ya existía — tracks añadidos: \+saas/.test(esAgain.note) && esAgain.addedTracks.join() === "saas" &&
+    S.removeTrack(esW2, "error-de-pago", "tdd").error === "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+    "create-on-existing note and the bugfix +tdd refusal are localized (ES)");
+
+  // roadmap: planned-but-not-started (tasks-ready, 0 done) is its own state — never ⬜ next to 30%
+  const pl = S.createFeature(w2, "Planned export", ["saas"]);
+  fs.appendFileSync(path.join(pl.dir, "tasks.md"), "\n- [ ] 20. [US1] Build the CSV writer\n");
+  const mdEn = S.renderRoadmapMd(w2, "en");
+  const plRow = mdEn.split("\n").find((l) => l.includes("[planned-export]")) || "";
+  ok(/^\| 📋 \|/.test(plRow) && / 30% /.test(plRow) && /📋 planned · ⬜ not started/.test(mdEn) && !mdEn.split("\n").some((l) => /^\| ⬜ \|.* 30% /.test(l)) &&
+    /📋 planeada/.test(S.renderRoadmapMd(w2, "pt")) && /planificada/.test(S.renderRoadmapHtml(w2, "es")),
+    "a planned feature (tasks-ready, nothing done) shows 📋 planned at 30% — never ⬜ (MD EN/PT, HTML ES)");
+
+  // after removing a track, its leftover [SaaS] TODO sections don't hold the phase at 'design'
+  const ex6 = S.createFeature(w2, "Export six", ["tdd", "saas"]);
+  fs.writeFileSync(path.join(ex6.dir, "requirements.md"), "## Summary\nExport.\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN asked THE SYSTEM SHALL export CSV.\n");
+  const d6 = fs.readFileSync(path.join(ex6.dir, "design.md"), "utf8");
+  fs.writeFileSync(path.join(ex6.dir, "design.md"), "# Design: Export six\n\n## Overview\nA nightly job.\n\n" + d6.slice(d6.search(/^## \[SaaS\]/m)));
+  const ph6 = S.statusFeature(w2, ex6.slug).phase;
+  S.removeTrack(w2, ex6.slug, "saas");
+  ok(ph6 === "design" && S.statusFeature(w2, ex6.slug).phase === "test-plan", "phase judges design.md on its active part: removing +saas moves 'design' on to 'test-plan'");
+
+  // a removed track's task block is inactive: not next, not progress, not a finish blocker — and back when re-added
+  const chat = S.createFeature(w2, "Chat seven", ["ai"]);
+  const t7 = path.join(chat.dir, "tasks.md");
+  const raw7 = fs.readFileSync(t7, "utf8");
+  const aiNums7 = S.parseTasks(raw7.split("## Story US-1 — AI")[1].split(/\n## /)[0]).map((t) => t.number);
+  fs.writeFileSync(t7, raw7.replace(/- \[ \] (\d+)\./g, (m, n) => (aiNums7.includes(+n) ? m : `- [x] ${n}.`)));
+  const rm7 = S.removeTrack(w2, chat.slug, "ai");
+  const st7 = S.statusFeature(w2, chat.slug);
+  const ct7 = S.completeTask(w2, chat.slug, 1);
+  ok(aiNums7.length === 2 && rm7.inactive.includes("tasks.md (Story US-1 — AI)") && S.nextTask(w2, chat.slug).next === null && st7.tasks.done === st7.tasks.total &&
+    st7.phase === "complete" && !S.finishFeature(w2, chat.slug).blockers.some((b) => /open tasks/.test(b)) && ct7.next === null && ct7.done === ct7.total &&
+    S.roadmap(w2).features.find((x) => x.name === chat.slug).percent === 100,
+    "after add_track --remove the track's template tasks stop counting (next_task, status, complete_task, finish, roadmap)");
+  const br7 = S.taskBrief(w2, chat.slug);
+  const br7n = S.taskBrief(w2, chat.slug, aiNums7[0]);
+  ok(br7.ok && br7.task === null && br7.note === "All tasks are done — nothing to brief." && br7n.ok && br7n.task.number === aiNums7[0],
+    "spec_task_brief with no number agrees with next_task (removed track's block is not 'next'); an explicit number still reaches it");
+  S.addTrack(w2, chat.slug, "ai");
+  ok(S.nextTask(w2, chat.slug).next.number === aiNums7[0] && (fs.readFileSync(t7, "utf8").match(/## Story US-1 — AI/g) || []).length === 1 &&
+    S.taskBrief(w2, chat.slug).task.number === aiNums7[0],
+    "re-adding the track brings its task block back into play (next_task and brief; never appended twice)");
+
+  // prototype keys never produce a did-you-mean
+  const ctor = S.createFeature(w2, "Ctor", ["constructor"]);
+  ok(S.parseTracks("constructor").unknown[0].suggestion === null && S.parseTracks("__proto__").unknown[0].suggestion === null && ctor.ok === false && !/did you mean/.test(ctor.error),
+    "'constructor' / '__proto__' are unknown tracks without a did-you-mean");
+
+  // a .state.json that parses but isn't an object is refused — never a removal that "succeeds" without saving
+  const arr = S.createFeature(w2, "Array state", ["saas"]);
+  fs.writeFileSync(path.join(arr.dir, ".state.json"), "[]");
+  const arrRm = S.removeTrack(w2, arr.slug, "saas");
+  const arrAdd = S.addTrack(w2, arr.slug, "ai");
+  const arrCreate = S.createFeature(w2, "Array state", ["ai"]);
+  const ptArr = S.createFeature(ptW2, "Estado lista", ["saas"]);
+  fs.writeFileSync(path.join(ptArr.dir, ".state.json"), "[1]");
+  ok(arrRm.ok === false && /array-state\/\.state\.json has an unexpected shape \(the top level must be an object\)/.test(arrRm.error) && arrAdd.ok === false && arrCreate.ok === false &&
+    readW2(arr.slug, ".state.json") === "[]" && !fs.existsSync(path.join(arr.dir, "eval-plan.md")) && /nível de topo tem de ser um objeto/.test(S.removeTrack(ptW2, ptArr.slug, "saas").error),
+    "add_track / remove / create-with-new-tracks refuse a non-object .state.json (nothing written; PT message)");
+
+  // a case-only folder name ('Billing/') stays listed where the slug reaches it (case-insensitive FS), ignored where it can't
+  const caseInsensitive = fs.existsSync(path.join(w2s, "INVOICE-EXPORT"));
+  const bil = S.createFeature(w2, "Billing", ["core"]);
+  fs.renameSync(bil.dir, path.join(w2s, "Billing"));
+  const lf11 = S.listFeatures(w2);
+  ok(caseInsensitive ? lf11.features.some((f) => f.name === "Billing") && S.statusFeature(w2, "billing").ok && !(lf11.ignored || []).includes("Billing")
+    : !lf11.features.some((f) => f.name === "Billing") && lf11.ignored.includes("Billing"),
+    "listFeatures keeps a case-only folder name when 'billing' reaches it (" + (caseInsensitive ? "case-insensitive" : "case-sensitive") + " FS)");
+  { // merge follow-up: a removed track's ticked-without-evidence task is not an unverified gap
+    const vt = S.createFeature(w2, "Verify inactive", ["saas"]);
+    const vtTasks = path.join(vt.dir, "tasks.md");
+    const allNums = S.statusFeature(w2, vt.slug).tasks.list.map((t) => t.number);
+    S.removeTrack(w2, vt.slug, "saas");
+    const activeNums = S.statusFeature(w2, vt.slug).tasks.list.map((t) => t.number);
+    const inactive = allNums.find((n) => !activeNums.includes(n));
+    // tick one of the removed track's tasks without evidence, and give it a runnable _Verify:_
+    const vl = fs.readFileSync(vtTasks, "utf8").split("\n");
+    const at = vl.findIndex((l) => new RegExp("^\\s*- \\[ \\] " + inactive + "\\.").test(l));
+    if (at >= 0) { vl[at] = vl[at].replace("- [ ]", "- [x]"); vl.splice(at + 1, 0, "  - _Verify: npm test_"); }
+    fs.writeFileSync(vtTasks, vl.join("\n"));
+    ok(inactive != null && at >= 0 && S.verificationStatus(w2, vt.slug, vt.dir).unverified.length === 0,
+      "verificationStatus ignores the tasks of a removed track (inactive, not a gap)");
+  }
+  }
   // @wp WP2 <<<
 
   // @wp WP3 tests >>>
@@ -1047,8 +1351,9 @@ function payload(res) {
     const rDepStr = await call("spec_depend", { name: "arg-check", dependsOn: "steering", projectDir: w3 });
     ok(rDepStr.result.isError && /dependsOn must be an array/.test(errText(rDepStr)), "MCP rejects dependsOn given as a string");
     const rEnum = await call("spec_create", { name: "Enum Check", tracks: ["tdd", "quantum"], projectDir: w3 });
-    ok(rEnum.result.isError && /tracks\[1\] must be one of: core, tdd, saas, ai/.test(errText(rEnum)) && !fs.existsSync(path.join(w3, ".specs", "enum-check")),
-      "array items are checked against the enum (the bad item is named)");
+    // tracks carry no schema enum (the engine splits "tdd,saas" and answers with a did-you-mean), but the bad item is still named
+    ok(rEnum.result.isError && /'quantum'/.test(errText(rEnum)) && /core, tdd, saas, ai/.test(errText(rEnum)) && !fs.existsSync(path.join(w3, ".specs", "enum-check")),
+      "an unknown track item is rejected and named (nothing scaffolded)");
     const rNested = await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
     ok(rNested.result.isError && /evidence\.exitCode must be an integer/.test(errText(rNested)) && /- \[ \] 2\./.test(fs.readFileSync(w3Tasks, "utf8")),
       "nested object properties are validated (evidence.exitCode)");

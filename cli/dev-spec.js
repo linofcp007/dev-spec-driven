@@ -151,6 +151,7 @@ function main() {
 
     case "init": {
       const r = spec.initProject(projectDir, pos.length ? pos : ["core"], flags.lang);
+      if (r.ok === false) die(r.error); // e.g. an unknown track (with a did-you-mean)
       return out(r, (r) => console.log("Created in " + r.specsDir + " [" + r.lang + "]:\n  " + (r.created.join(", ") || "(nothing new)") + (r.skipped.length ? "\n  (existing, kept: " + r.skipped.join(", ") + ")" : "")));
     }
 
@@ -180,7 +181,12 @@ function main() {
       return out(r, (r) => {
         console.log("Feature: " + r.feature + "  [" + r.tracks + "]  phase=" + r.phase);
         console.log("Tasks: " + r.tasks.done + "/" + r.tasks.total + (r.tasks.next ? "  next → #" + r.tasks.next.number + " " + r.tasks.next.text : ""));
-        if (r.scaleSections) console.log("Scale sections: " + r.scaleSections.map((s) => s.section + (s.present ? "✓" : "✗")).join(" "));
+        // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
+        const fm = spec.msg(spec.featureLang(projectDir, r.feature));
+        const marks = (list) => list.map((s) => (s.filled ? "✓ " : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
+          (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
+        if (r.scaleSections) console.log("Scale sections: " + marks(r.scaleSections));
+        if (r.aiSections && r.aiSections.sections) console.log("AI sections: " + marks(r.aiSections.sections));
       });
     }
 
@@ -429,12 +435,14 @@ function main() {
     }
 
     case "add-track": {
-      if (!pos[0] || !pos[1]) die("usage: dev-spec add-track <feature> <tdd|saas|ai>");
-      const r = spec.addTrack(projectDir, pos[0], pos[1]);
+      if (!pos[0] || !pos[1]) die("usage: dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
+      // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
+      const r = spec.addTrack(projectDir, pos[0], pos.slice(1), { remove: !!flags.remove });
       if (!r.ok) die(r.error);
       return out(r, (r) => {
         console.log("'" + r.feature + "' now [" + r.tracks + "]");
-        if (r.added.length) console.log("  + " + r.added.join(", "));
+        if (r.added && r.added.length) console.log("  + " + r.added.join(", "));
+        if (r.inactive && r.inactive.length) console.log("  ~ " + r.inactive.join(", "));
         if (r.note) console.log("  " + r.note);
       });
     }
@@ -509,7 +517,7 @@ function helpText() {
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --lang en|pt|es)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
   list                            List features (phase + task progress)
-  status [feature]                Status of a feature, or all
+  status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)
   doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)
   trace <feature>                 Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs)
   clarify <feature>               Surface ambiguities/gaps in requirements before design
@@ -522,7 +530,8 @@ function helpText() {
                                   (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
   finish <feature> [--write]      Readiness report + merge summary from the spec chain (exit 1 if not ready)
   approve <feature> <phase>       Record a phase approval (.state.json)
-  add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
+  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
+                                  --remove turns a track off (non-destructive: files kept, listed as inactive)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
