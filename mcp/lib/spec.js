@@ -673,11 +673,17 @@ function steeringFrontMatter(text) {
   let end = -1;
   for (let i = 1; i < lines.length && i < 100; i++) if (/^(?:---|\.\.\.)[ \t]*$/.test(lines[i])) { end = i; break; }
   if (end === -1) return none;
-  // Only YAML-looking lines (key: value, "- item", comments, blanks) and at least one key: a document that merely
+  // Only YAML-looking lines (key: value, "- item", comments, blanks, and — once a key was seen — indented
+  // continuation lines: a `description: |` block scalar, a nested map) with a key first: a document that merely
   // opens with a '---' rule and has another one further down is prose, not front matter.
   const inner = lines.slice(1, end);
   const isKey = (l) => /^\s*[A-Za-z_][\w-]*\s*:/.test(l);
-  if (!inner.some(isKey) || !inner.every((l) => /^\s*(?:#.*)?$/.test(l) || isKey(l) || /^\s*-\s+\S/.test(l))) return none;
+  const blank = (l) => /^\s*(?:#.*)?$/.test(l);
+  const firstKey = inner.findIndex((l) => !blank(l));
+  if (firstKey === -1 || !isKey(inner[firstKey]) || !inner.every((l) => blank(l) || isKey(l) || /^\s*-\s+\S/.test(l) || /^\s+\S/.test(l))) return none;
+  // Keys live at the first key's indentation; deeper lines are continuations (a block scalar's `inclusion: x`
+  // text must not set the mode). List items under an empty fileMatchPattern stay items at any indentation.
+  const keyIndent = inner[firstKey].match(/^\s*/)[0].length;
   // 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
   const unquote = (v) => {
     const s = String(v).trim();
@@ -709,6 +715,7 @@ function steeringFrontMatter(text) {
     const item = inList && line.match(/^\s*-\s+(.*)$/);
     if (item) { patterns.push(...values(item[1])); continue; }
     inList = false;
+    if (line.match(/^\s*/)[0].length > keyIndent) continue; // a continuation line, not a key
     const kv = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
     if (!kv) continue;
     const key = kv[1].toLowerCase();
@@ -725,36 +732,68 @@ function steeringFrontMatter(text) {
 
 // Zero-dep glob for fileMatchPattern: `**` (any depth, none included), `*` and `?` (inside one segment), `{a,b}`
 // (nested allowed; unbalanced braces are literal). Forward slashes; a leading "./" is ignored on both sides;
-// case-insensitive where the filesystem folds case (Windows, macOS).
+// case-insensitive where the filesystem folds case (Windows, macOS). The pattern is the user's, so no backtracking
+// regex: braces expand into at most GLOB_MAX_ALTS alternatives (more → no match) and each one is matched by a
+// linear DP over (token, position) — `**/**/**/x` or `*a*a*a*b` against a deep path used to hang the brief.
+const GLOB_MAX_ALTS = 256;
 function steeringGlobMatch(pattern, file) {
   const norm = (s) => String(s == null ? "" : s).trim().replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
-  const g = norm(pattern);
-  const p = norm(file);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const g = fold(norm(pattern));
+  const p = fold(norm(file));
   if (!g || !p) return false;
+  const alts = globAlternatives(g);
+  return !!alts && alts.some((a) => globDpMatch(a, p));
+}
+// "src/{a,b/{c,d}}/*.js" → ["src/a/*.js", "src/b/c/*.js", "src/b/d/*.js"]; unbalanced braces stay literal (the
+// pattern itself); a top-level comma is literal. null past GLOB_MAX_ALTS.
+function globAlternatives(g) {
   let depth = 0;
-  let balanced = true;
-  for (const c of g) { if (c === "{") depth++; else if (c === "}" && --depth < 0) { balanced = false; break; } }
-  if (depth !== 0) balanced = false;
-  let re = "";
-  depth = 0;
+  for (const c of g) { if (c === "{") depth++; else if (c === "}" && --depth < 0) return [g]; }
+  if (depth !== 0) return [g];
+  const out = [];
+  const walk = (s) => {
+    if (out.length > GLOB_MAX_ALTS) return;
+    const open = s.indexOf("{"); // the leftmost group: its prefix holds no brace, so the rest stays balanced
+    if (open === -1) { out.push(s); return; }
+    const parts = [];
+    let d = 0, from = open + 1, close = -1;
+    for (let i = open; i < s.length && close === -1; i++) {
+      if (s[i] === "{") d++;
+      else if (s[i] === "}" && --d === 0) close = i;
+      else if (s[i] === "," && d === 1) { parts.push(s.slice(from, i)); from = i + 1; }
+    }
+    parts.push(s.slice(from, close));
+    for (const part of parts) walk(s.slice(0, open) + part + s.slice(close + 1));
+  };
+  walk(g);
+  return out.length > GLOB_MAX_ALTS ? null : out;
+}
+// One brace-free glob against one path. Tokens: "**/" (nothing, or anything ending in "/"), "**" (anything),
+// "*" (anything but "/"), "?" (one char but "/"), a literal char. reach[j] = the tokens so far match p[0..j).
+function globDpMatch(g, p) {
+  const n = p.length;
+  let cur = new Uint8Array(n + 1);
+  cur[0] = 1;
   for (let i = 0; i < g.length; i++) {
     const c = g[i];
-    if (c === "*") {
-      if (g[i + 1] === "*") {
-        while (g[i + 1] === "*") i++;
-        if (g[i + 1] === "/") { i++; re += "(?:.*/)?"; } else re += ".*";
-      } else re += "[^/]*";
-    } else if (c === "?") re += "[^/]";
-    else if (balanced && c === "{") { depth++; re += "(?:"; }
-    else if (balanced && c === "}") { depth--; re += ")"; }
-    else if (balanced && c === "," && depth) re += "|";
-    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    const nxt = new Uint8Array(n + 1);
+    let r = 0;
+    if (c === "*" && g[i + 1] === "*") {
+      while (g[i + 1] === "*") i++;
+      if (g[i + 1] === "/") { // "**/"
+        i++;
+        for (let j = 0; j <= n; j++) { nxt[j] = cur[j] || (j > 0 && r && p[j - 1] === "/") ? 1 : 0; r = r || cur[j]; }
+      } else for (let j = 0; j <= n; j++) { r = r || cur[j]; nxt[j] = r; } // "**"
+    } else if (c === "*") {
+      for (let j = 0; j <= n; j++) { r = cur[j] || (r && p[j - 1] !== "/") ? 1 : 0; nxt[j] = r; }
+    } else {
+      for (let j = 1; j <= n; j++) nxt[j] = cur[j - 1] && (c === "?" ? p[j - 1] !== "/" : p[j - 1] === c) ? 1 : 0;
+    }
+    if (!nxt.includes(1)) return false;
+    cur = nxt;
   }
-  try {
-    return new RegExp("^" + re + "$", FOLD_CASE ? "i" : "").test(p);
-  } catch {
-    return false;
-  }
+  return cur[n] === 1;
 }
 
 const BRIEF_STEERING_BUDGET = 3000; // chars of scoped (fileMatch) steering quoted into one brief
@@ -771,8 +810,15 @@ function briefSteering(root, tracks, implementsList) {
     .concat(tracks.includes("ai") ? ["ai-strategy.md"] : []);
   const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
   const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
-  // _Implements:_ paths as the coverage reading has them (anchors dropped); a folder also matches "dir/**".
-  const targets = (implementsList || []).map((r) => implementsPath(r).replace(/^(?:\.\/)+/, "").replace(/\/+$/, "")).filter(Boolean);
+  // _Implements:_ paths as trace_check / coverage read them (backticks and anchors dropped; an absolute path inside
+  // the project → its project-relative path, outside → nothing); a folder also matches "dir/**".
+  const pdir = path.dirname(path.resolve(root));
+  const targets = (implementsList || []).map((r) => {
+    const p = implementsPath(String(r).trim().replace(/^`+|`+$/g, ""));
+    if (!path.isAbsolute(p)) return p.replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+    const abs = path.resolve(p);
+    return abs !== pdir && isInsideDir(pdir, abs) ? toPosix(path.relative(pdir, abs)) : "";
+  }).filter(Boolean);
   const included = [];
   const manual = [];
   let budget = BRIEF_STEERING_BUDGET;
@@ -785,8 +831,9 @@ function briefSteering(root, tracks, implementsList) {
     else if (inclusion === "fileMatch" && fm.patterns.length) {
       const matched = targets.filter((t) => fm.patterns.some((p) => steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/")));
       if (!matched.length) continue;
-      const body = fm.body.trim();
-      // Template guidance quoted into a brief would read as a binding rule: only real content is quoted.
+      // Template guidance quoted into a brief would read as a binding rule: HTML comments (the stub's guidance)
+      // never reach the brief, and only real content is quoted.
+      const body = stripHtmlComments(fm.body).replace(/(?:[ \t]*\r?\n){3,}/g, "\n\n").trim();
       const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
       if (quote) budget -= body.length;
       included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });
@@ -830,7 +877,8 @@ function guardCheck(projectDir, filePath, cwd) {
   if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
   const abs = path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath);
   if (!isInsideDir(pdir, abs)) return allow("outside");
-  if (toPosix(path.relative(pdir, abs)).split("/").includes(".specs")) return allow("specs");
+  // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
+  if (toPosix(path.relative(pdir, abs)).split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
   const ext = path.extname(abs).toLowerCase();
   if (!CODE_EXT.has(ext) && ext !== ".ipynb") return allow("not-code");
   const root = specsRoot(pdir);

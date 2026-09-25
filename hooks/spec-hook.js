@@ -150,9 +150,9 @@ function main(raw) {
       if (base === "design.md") {
         // The design's mandatory checks for the feature's ACTIVE tracks ([SaaS]/[AI] sections, Constitution Check,
         // placeholders) — one file, string checks only, in the feature's language.
+        // Not an active feature's design (an archived one, steering/design.md): fall through to the roadmap note.
         const d = spec.designSaveCheck(pdir, feature);
-        if (!d.ok) process.exit(0);
-        return emit("PostToolUse", d.text);
+        if (d.ok) return emit("PostToolUse", d.text);
       }
     } catch {
       process.exit(0);

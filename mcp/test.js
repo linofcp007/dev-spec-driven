@@ -2640,6 +2640,11 @@ function payload(res) {
       S.guardCheck(g, path.join(g, "config", "app.json")).why === "not-code" && S.guardCheck(g, path.join(tmp, "elsewhere", "x.ts")).why === "outside" &&
       S.guardCheck(g, path.join(g, "src", ".specs", "x.ts")).why === "specs",
       "guard ON: files inside .specs/, non-code files and files outside the project pass silently");
+    // Where the filesystem folds case, `.SPECS/x.ts` IS the spec folder (the engine's isInsideDir reading).
+    const foldFs = process.platform === "win32" || process.platform === "darwin";
+    const upper = runGuard(pre(g, "Write", { file_path: path.join(g, ".SPECS", "foo", "x.ts") }));
+    ok(foldFs ? silent(upper) && S.guardCheck(g, path.join(g, ".SPECS", "foo", "x.ts")).why === "specs" : !!asked(upper),
+      "guard: the .specs segment is matched case-insensitively where the filesystem folds case (Windows/macOS), exactly elsewhere");
     const hookEnv = runGuard({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: code } }, { CLAUDE_PROJECT_DIR: g });
     ok(!!asked(hookEnv), "without a payload cwd the project comes from CLAUDE_PROJECT_DIR");
     // Approved + unfinished tasks cover code changes; a forced approval covers them too, but says so.
@@ -2696,6 +2701,17 @@ function payload(res) {
       S.steeringFrontMatter("---\ninclusion: auto\n---\nx").inclusion === "manual" && !fmD.frontMatter && fmD.inclusion === null && fmD.body.startsWith("# Plain") &&
       !fmE.frontMatter && fmE.body.startsWith("---\nSome intro") && !S.steeringFrontMatter("---\n# Heading\n---\ntext").frontMatter,
       "steeringFrontMatter: CRLF + BOM + quoted list (a comma inside {…} doesn't split), YAML '- item' lists, comments; no inclusion → always; unknown (auto) → manual; front matter only at the top, and only YAML-looking (a '---' rule over prose is not)");
+    // Block scalars / nested maps are valid YAML front matter: their indented lines are continuations, never keys.
+    const fmF = S.steeringFrontMatter("---\ninclusion: manual\ndescription: |\n  API conventions. Use when\n  inclusion: always\nmeta:\n  owner: api-team\nfileMatchPattern:\n  - src/api/**\n---\n# Rules\n- Real rule.\n");
+    ok(fmF.frontMatter && fmF.inclusion === "manual" && fmF.patterns.join() === "src/api/**" && fmF.body === "# Rules\n- Real rule.\n" &&
+      !S.steeringFrontMatter("---\n  indented prose first\nkey: v\n---\nx").frontMatter,
+      "steeringFrontMatter: a 'description: |' block scalar and a nested map are continuation lines (an indented 'inclusion: always' inside one is ignored); the first line must still be a key");
+    // The glob is a linear DP (no backtracking regex): pathological user patterns answer at once.
+    const tGlob = Date.now();
+    const globFast = S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "y.ts") === false && S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "x.ts") === true &&
+      S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40)) === false && S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40) + "b") === true &&
+      S.steeringGlobMatch("a/**/**/b.ts", "a/b.ts") === true && S.steeringGlobMatch("{a,b}".repeat(9), "ab".repeat(4) + "a") === false;
+    ok(globFast && Date.now() - tGlob < 1000, "steeringGlobMatch: repeated '**/' and '*a*a*…' patterns against deep paths answer in well under a second (was minutes); > 256 brace alternatives → no match");
 
     // (H3) spec_task_brief: default files, always, fileMatch on _Implements:_ (quoted, front matter stripped), manual listed.
     const b11 = path.join(tmp, "proj-wp11-brief");
@@ -2726,6 +2742,24 @@ function payload(res) {
     const br2 = S.taskBrief(b11, "api", 2);
     ok(inc(br2) === "constitution.md:always,structure.md:always,security.md:always" && !/Scoped steering/.test(br2.brief),
       "a task whose files match no pattern gets no fileMatch steering");
+    // _Implements:_ read like trace_check / coverage: backticks dropped, an absolute in-project path made relative
+    // (outside the project → nothing). A filled custom stub is quoted WITHOUT its guidance comment. A block-scalar
+    // front matter saying manual keeps tech.md out.
+    fs.unlinkSync(path.join(stDir, "api-todo.md"));
+    const filled = S.scaffoldSteeringFile(b11, "api-filled.md");
+    fs.writeFileSync(filled.file, fs.readFileSync(filled.file, "utf8").replace(/^- \[[^\]\n]*\]$/gm, "- Handlers return RFC 7807 errors."));
+    fs.writeFileSync(path.join(stDir, "tech.md"), "---\ninclusion: manual\ndescription: |\n  Stack notes. Read when\n  touching the build.\n---\n# Tech\n- Node 20\n");
+    fs.writeFileSync(path.join(bf.dir, "tasks.md"), "- [ ] 1. [US1] Add the users endpoint\n  - _Implements: `src/api/users.ts`_\n- [ ] 2. [US1] UI\n  - _Implements: " +
+      path.join(b11, "src", "ui", "list.tsx") + ", " + path.join(tmp, "elsewhere", "src", "api", "x.ts") + "_\n");
+    const br3 = S.taskBrief(b11, "api", 1);
+    const br4 = S.taskBrief(b11, "api", 2);
+    const filledRow = br3.steering.included.find((s) => /api-filled/.test(s.file)) || {};
+    ok(inc(br3) === "constitution.md:always,structure.md:always,api-filled.md:fileMatch,api-rules.md:fileMatch,security.md:always" && filledRow.quoted === true &&
+      br3.steering.manual.join() === ".specs/steering/tech.md,.specs/steering/release.md" &&
+      inc(br4) === "constitution.md:always,structure.md:always,security.md:always,ui-rules.md:fileMatch" && (br4.steering.included.find((s) => /ui-rules/.test(s.file)) || {}).matched.join() === "src/ui/list.tsx",
+      "brief steering: a backticked _Implements:_ path matches, an absolute in-project path matches as its relative path, an outside one matches nothing; block-scalar 'manual' stays manual (got " + inc(br3) + " / " + inc(br4) + ")");
+    ok(/> - Handlers return RFC 7807 errors\./.test(br3.brief) && !/<!--|-->|Replace the example pattern/.test(br3.brief) && !/>\s*\n>\s*\n>/.test(br3.brief),
+      "a filled custom stub is quoted without its HTML guidance comment (no '<!--', no 'Replace the example pattern', no run of empty quote lines)");
 
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
     const c11 = path.join(tmp, "proj-wp11-custom");
@@ -2807,6 +2841,11 @@ function payload(res) {
     const dzBug = S.designSaveCheck(e11, "crash-on-save");
     ok(dzBug.ok && dzBug.kind === "bugfix" && dzBug.constitution === null && dzBug.clean && dzBug.text === "Design check [core +tdd]: mandatory sections filled, no template placeholders ✓",
       "a bugfix's design.md is not asked for a Constitution Check (bug.md's Root Cause replaces the design)");
+    // A design.md that is not an active feature's (archived, steering/) still reports the roadmap refresh.
+    S.createFeature(e11, "Old Design", ["core"]);
+    S.manageFeature(e11, "archive", "old-design");
+    const dzArch = runPost(path.join(e11, ".specs", "_archive", "old-design", "design.md"));
+    ok(/^Roadmap updated → \d+%/.test(dzArch) && !/Design check/.test(dzArch), "hook on an ARCHIVED feature's design.md → the roadmap note, as before (no design check, not silent)");
   }
   // @wp WP11 <<<
 
