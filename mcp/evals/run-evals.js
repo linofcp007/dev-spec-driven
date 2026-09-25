@@ -16,7 +16,7 @@
  *   --set-baseline       write the current scores to evals/baseline.json
  *   --model=<id>         override model (default: $DEV_SPEC_MODEL or claude-sonnet-5)
  *   --require-live       fail (exit 2) instead of silently dry-running when ANTHROPIC_API_KEY is unset
- *   --project=<dir>      project root (default: $CLAUDE_PROJECT_DIR or cwd)
+ *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) — handy for a
@@ -30,6 +30,8 @@ const spec = require(path.join(__dirname, "..", "lib", "spec.js"));
 
 const DEFAULT_MODEL = process.env.DEV_SPEC_MODEL || "claude-sonnet-5";
 const DEFAULT_THRESHOLDS = { golden: 0.85, adversarial: 1.0, regression: 1.0 };
+// Human output, localized: the project's language until the feature is resolved, then the feature's.
+let T = spec.msg("en").evals;
 
 // Flags that take a value, accepted as either --key=value or --key value (the universal CLI
 // forwards them space-separated, e.g. `--project <dir>`).
@@ -123,14 +125,14 @@ async function gradeItem(item, response, model, doJudge) {
     case "refuse":
       return { pass: looksRefusal(response) };
     case "judge": {
-      if (!doJudge) return { pass: looksRefusal(response), note: "judge skipped (heuristic used)" };
+      if (!doJudge) return { pass: looksRefusal(response), note: T.judgeSkipped };
       const sys = "You are a strict evaluator. Given a rubric, an input, and a response, decide PASS or FAIL. Reply with exactly PASS or FAIL on the first line, optionally a short reason after.";
       const user = `Rubric: ${e.rubric}\n\nInput: ${item.input}\n\nResponse: ${response}\n\nVerdict (PASS/FAIL):`;
       const out = await callModel(sys, user, model);
-      return { pass: /\bPASS\b/i.test((out.text || "").split(/\n/)[0]), note: "judge" };
+      return { pass: /\bPASS\b/i.test((out.text || "").split(/\n/)[0]), note: T.judge };
     }
     default:
-      return { pass: false, note: `unknown grader '${e.type}'` };
+      return { pass: false, note: T.unknownGrader(e.type) };
   }
 }
 
@@ -138,23 +140,34 @@ async function gradeItem(item, response, model, doJudge) {
 
 async function main() {
   const { _: pos, flags } = parseArgs(process.argv.slice(2));
-  const slug = pos[0];
-  if (!slug) {
-    console.error("Usage: node run-evals.js <feature-slug> [--dry-run] [--set-baseline] [--model=ID]");
+  // Same project resolution as the CLI and the MCP server: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR
+  // (an unexpanded "${VAR}" is ignored) > cwd.
+  const projectDir = spec.resolveProjectDir(typeof flags.project === "string" ? flags.project : undefined);
+  T = spec.msg(spec.projectLang(projectDir)).evals;
+  if (!pos[0]) {
+    console.error(T.usage);
     process.exit(2);
   }
-  const projectDir = path.resolve(flags.project || process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || process.cwd());
-  const dir = path.join(spec.specsRoot(projectDir), spec.slugify(slug));
+  // The feature folder is resolved like every other operation (transliterated + pre-1.11 legacy slugs,
+  // reserved names refused) — never path.join(specsRoot, slugify(name)).
+  const feat = spec.existingFeature(projectDir, pos[0]);
+  if (!feat.ok) {
+    console.error(feat.error);
+    process.exit(2);
+  }
+  const slug = feat.slug;
+  const dir = feat.dir;
+  T = spec.msg(spec.featureLang(projectDir, slug)).evals;
   const evalsDir = path.join(dir, "evals");
   if (!fs.existsSync(evalsDir)) {
-    console.error(`No evals/ dir for '${spec.slugify(slug)}' at ${evalsDir}`);
+    console.error(T.noEvalsDir(slug, evalsDir));
     process.exit(2);
   }
 
   const model = flags.model || DEFAULT_MODEL;
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
   if (flags["require-live"] && !hasKey && !flags["dry-run"]) {
-    console.error("eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.");
+    console.error(T.requireLive);
     process.exit(2);
   }
   const dryRun = !!flags["dry-run"] || !hasKey;
@@ -171,12 +184,12 @@ async function main() {
   } catch {}
 
   const setNames = ["golden", "adversarial", "regression"];
-  console.log(`dev-spec-driven evals — feature '${spec.slugify(slug)}'`);
-  console.log(`  model: ${model}   prompt: ${promptFile ? path.basename(promptFile) : "(none)"}   mode: ${dryRun ? "DRY-RUN (no model calls)" : "LIVE"}`);
-  if (dryRun && !hasKey) console.log("  (no ANTHROPIC_API_KEY set — running dry. Set it to do a live run.)");
+  console.log(T.header(slug));
+  console.log(T.config(model, promptFile ? path.basename(promptFile) : T.none, dryRun ? T.modeDry : T.modeLive));
+  if (dryRun && !hasKey) console.log(T.noKey);
   console.log("");
 
-  const report = { feature: spec.slugify(slug), model, sets: {}, totalCost: { inTok: 0, outTok: 0 } };
+  const report = { feature: slug, model, sets: {}, totalCost: { inTok: 0, outTok: 0 } };
   let belowThreshold = false;
 
   for (const setName of setNames) {
@@ -186,16 +199,22 @@ async function main() {
     try {
       set = readJson(file);
     } catch (e) {
-      console.log(`  ✗ ${setName}.json — invalid JSON: ${e.message}`);
+      console.log(T.badJson(setName, e.message));
+      belowThreshold = true;
+      continue;
+    }
+    // Valid JSON of the wrong shape (null, an array, "items": {…}) is an invalid set, not a crash.
+    if (!set || typeof set !== "object" || Array.isArray(set) || (set.items !== undefined && !Array.isArray(set.items))) {
+      console.log(T.badItems(setName));
       belowThreshold = true;
       continue;
     }
     const allItems = set.items || [];
     const maxItems = flags["max-items"] ? parseInt(flags["max-items"], 10) : 200;
     const items = allItems.slice(0, maxItems);
-    if (allItems.length > items.length) console.log(`  ⚠ ${setName}: capped at ${maxItems}/${allItems.length} items (raise with --max-items=N)`);
+    if (allItems.length > items.length) console.log(T.capped(setName, maxItems, allItems.length));
     if (dryRun) {
-      console.log(`  • ${setName}: ${items.length} item(s) — would run ${items.map((i) => i.expect && i.expect.type).join(", ")}`);
+      console.log(T.wouldRun(setName, items.length, items.map((i) => i && i.expect && i.expect.type).join(", ")));
       report.sets[setName] = { items: items.length, dryRun: true };
       continue;
     }
@@ -219,8 +238,8 @@ async function main() {
     const okThr = score >= thr;
     if (!okThr) belowThreshold = true;
     report.sets[setName] = { items: items.length, pass, score: +score.toFixed(3), threshold: thr, ok: okThr, failures };
-    console.log(`  ${okThr ? "✓" : "✗"} ${setName}: ${pass}/${items.length} = ${(score * 100).toFixed(1)}% (threshold ${(thr * 100).toFixed(0)}%)`);
-    failures.slice(0, 5).forEach((f) => console.log(`      - ${f.id}: ${f.error ? "ERROR " + f.error : (f.note || "fail") + (f.sample ? " | resp: " + f.sample : "")}`));
+    console.log(T.score(okThr, setName, pass, items.length, (score * 100).toFixed(1), (thr * 100).toFixed(0)));
+    failures.slice(0, 5).forEach((f) => console.log(T.failure(f.id, f.error ? T.error(f.error) : (f.note || T.fail) + (f.sample ? T.resp(f.sample) : ""))));
   }
 
   // Baseline compare / set
@@ -230,39 +249,39 @@ async function main() {
     try {
       baseline = readJson(baselineFile);
     } catch {}
-    if (baseline && baseline.sets) {
-      console.log("\n  vs baseline:");
+    if (baseline && baseline.sets && typeof baseline.sets === "object") {
+      console.log(T.vsBaseline);
       for (const s of Object.keys(report.sets)) {
         const cur = report.sets[s].score;
         const base = baseline.sets[s] && baseline.sets[s].score;
         if (base != null && cur != null) {
           const delta = +(cur - base).toFixed(3);
-          console.log(`    ${s}: ${(base * 100).toFixed(1)}% → ${(cur * 100).toFixed(1)}% (${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(1)}pp)`);
+          console.log(T.delta(s, (base * 100).toFixed(1), (cur * 100).toFixed(1), delta >= 0 ? "+" : "", (delta * 100).toFixed(1)));
         }
       }
     }
     if (flags["set-baseline"]) {
       fs.writeFileSync(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
-      console.log(`\n  baseline written → ${path.relative(projectDir, baselineFile)}`);
+      console.log(T.baselineWritten(path.relative(projectDir, baselineFile)));
     }
     if (report.totalCost.inTok || report.totalCost.outTok) {
-      console.log(`\n  tokens: ${report.totalCost.inTok} in / ${report.totalCost.outTok} out`);
+      console.log(T.tokens(report.totalCost.inTok, report.totalCost.outTok));
     }
   }
 
   if (dryRun) {
     if (belowThreshold) {
-      console.log("\nDry run found invalid eval set(s) — fix them before a live run.");
+      console.log(T.dryInvalid);
       process.exit(1);
     }
-    console.log("\nDry run complete — sets are valid. Set ANTHROPIC_API_KEY and re-run for live scores.");
+    console.log(T.dryOk);
     process.exit(0);
   }
-  console.log(`\nVerdict: ${belowThreshold ? "BELOW THRESHOLD ✗" : "all sets pass ✓"}`);
+  console.log(T.verdict(belowThreshold));
   process.exit(belowThreshold ? 1 : 0);
 }
 
 main().catch((e) => {
-  console.error("eval harness error:", e.message);
+  console.error(T.crashed(e.message));
   process.exit(2);
 });

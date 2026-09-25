@@ -57,6 +57,8 @@ VALUE_FLAGS.add("shell"); // done --run --shell bash|<path>
 // @wp WP2 <<<
 
 // @wp WP3 value-flags >>>
+VALUE_FLAGS.add("add"); // depend <f> --add x[,y]
+VALUE_FLAGS.add("rm"); // depend <f> --rm x[,y]
 // @wp WP3 <<<
 
 // @wp WP4 value-flags >>>
@@ -121,7 +123,8 @@ function mcpConfig(client) {
     generic: "Generic stdio MCP client:\n  command: node\n  args: [\"" + S + "\"]",
   };
   if (client && client !== "all") {
-    if (!blocks[client]) die("unknown client '" + client + "'. Known: " + Object.keys(blocks).join(", ") + ", all");
+    // Own keys only: 'constructor' / 'toString' are not clients.
+    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die("unknown client '" + client + "'. Known: " + Object.keys(blocks).join(", ") + ", all");
     return blocks[client];
   }
   return Object.values(blocks).join("\n\n");
@@ -318,7 +321,7 @@ function main() {
 
     case "approve": {
       if (!pos[0] || !pos[1]) die("usage: dev-spec approve <feature> <phase>");
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], flags.by || process.env.USER || process.env.USERNAME || "user");
+      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined); // default approver: the engine's (same as MCP)
       if (!r.ok) die(r.error);
       return out(r, (r) => console.log("Approved '" + r.approved + "' for " + r.feature + " ✓"));
     }
@@ -360,10 +363,26 @@ function main() {
     }
 
     case "depend": {
-      if (!pos[0]) die("usage: dev-spec depend <feature> [dep1 dep2 ...] [--order N]");
-      // Only --order given → keep the declared deps; no deps and no order → clear them (as before).
-      const deps = pos.slice(1).length ? pos.slice(1) : flags.order != null ? undefined : [];
-      const r = spec.setDependency(projectDir, pos[0], deps, flags.order);
+      const usage = "usage: dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
+      if (!pos[0]) die(usage);
+      // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c
+      // alone. Collect every occurrence here, walking argv with the parser's own rules.
+      const every = (name) => {
+        const vals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = argv[i];
+          if (a === "--json") continue;
+          if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === name) vals.push(a.slice(a.indexOf("=") + 1)); }
+          else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) { const v = argv[++i]; if (a.slice(2) === name) vals.push(v); }
+        }
+        return vals;
+      };
+      const adds = every("add"), rms = every("rm");
+      if (adds.concat(rms).some((v) => typeof v !== "string")) die(usage);
+      // Same semantics as the MCP tool: positional deps REPLACE the list, --clear empties it, --add/--rm edit
+      // it; with nothing at all it only shows the current deps (a bare `depend <f>` used to clear them).
+      const deps = pos.slice(1).length ? pos.slice(1) : flags.clear ? [] : undefined;
+      const r = spec.setDependency(projectDir, pos[0], deps, flags.order, { add: adds.length ? adds.join(",") : undefined, remove: rms.length ? rms.join(",") : undefined });
       if (!r.ok) die(r.error);
       return out(r, (r) => console.log(r.feature + " depends on: " + (r.dependsOn.join(", ") || "(none)") + (r.order != null ? "  order=" + r.order : "") + (r.unknownDeps.length ? "  ⚠ unknown deps: " + r.unknownDeps.join(", ") : "")));
     }
@@ -506,7 +525,8 @@ function helpText() {
   add-track <feature> <track>     Escalate a feature to +tdd/+saas/+ai (additive, never overwrites)
   feature <remove|archive|rename> <name> [new-name]   Manage a feature's lifecycle
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
-  depend <feature> [deps...]      Declare dependencies / order (rejects cycles)
+  depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
+                                  (every dep must be an existing feature; cycles are rejected)
   backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
   scan [path]                     Brownfield: inventory an existing codebase (stack, modules, endpoints)
   coverage                        Brownfield: % of code modules with specs

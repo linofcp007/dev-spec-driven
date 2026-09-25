@@ -89,6 +89,17 @@ function readJson(file) {
   }
 }
 
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+// ".specs/roadmap.json" / "<feature>/.state.json" — the same relative name readJson() reports.
+function jsonRel(file) {
+  return path.relative(path.dirname(path.dirname(file)), file);
+}
+// Localized "valid JSON, wrong shape" error from [code, key?] problems (codes = i18n jsonShape keys).
+function shapeError(lang, rel, problems) {
+  const S = i18n.msg(lang).jsonShape;
+  return S.invalid(rel, problems.map(([code, key]) => (typeof S[code] === "function" ? S[code](key) : S[code])).join("; "));
+}
+
 function readIfExists(file) {
   try {
     return fs.readFileSync(file, "utf8");
@@ -2036,10 +2047,19 @@ function statePath(dir) {
 function readState(projectDir, name) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { approvals: {} };
-  const j = readJson(statePath(f.dir));
+  const file = statePath(f.dir);
+  const j = readJson(file);
   if (j.error) return { approvals: {}, invalid: i18n.msg(projectLang(projectDir)).err.invalidJson(j.errorRel, j.errorDetail) };
-  const s = j.data && typeof j.data === "object" ? j.data : {};
+  // Valid JSON of the wrong shape is refused like unparseable JSON — an `approvals` ARRAY silently dropped
+  // every approval on the next write. Readers get the valid parts (lang kept); mutators check `invalid`.
+  const problems = [];
+  if (j.exists && !isObj(j.data)) problems.push(["topLevel"]);
+  const s = isObj(j.data) ? j.data : {};
+  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray]]) {
+    if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
+  }
   s.approvals = s.approvals || {};
+  if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
   return s;
 }
 
@@ -2061,7 +2081,8 @@ function approvePhase(projectDir, name, phase, by) {
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
-  const entry = { at: new Date().toISOString(), by: by || "user" };
+  // One default for every surface (the CLI used $USER, the MCP server 'user').
+  const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
   if (PHASE_FILE[p]) {
     const fp = artifactFingerprint(path.join(f.dir, PHASE_FILE[p]), p);
     if (fp) entry.fingerprint = fp;
@@ -2531,18 +2552,52 @@ function roadmapPath(projectDir) {
   return path.join(specsRoot(projectDir), "roadmap.json");
 }
 
-function readRoadmap(projectDir) {
-  const j = readJson(roadmapPath(projectDir));
-  const r = j.data && typeof j.data === "object" ? j.data : {};
-  r.features = r.features || {};
-  return r;
+// roadmap.json = parse + SHAPE. Valid JSON of the wrong shape ({"features":{"b":null}}) reached a mutator and
+// crashed it AFTER its destructive step (remove deleted the folder, then pruneRoadmapRefs threw). Readers get
+// a sanitized copy (bad parts dropped, unknown keys and meta kept, so messages stay in the project language);
+// roadmapError() reports every problem so each mutator refuses before touching anything.
+function loadRoadmap(projectDir) {
+  const file = roadmapPath(projectDir);
+  const j = readJson(file);
+  const problems = [];
+  const parsed = j.exists && !j.error;
+  if (parsed && !isObj(j.data)) problems.push(["topLevel"]);
+  const rm = parsed && isObj(j.data) ? { ...j.data } : {};
+  // Null prototype: a feature slugged "constructor" is a plain key, never Object.prototype.constructor.
+  const features = Object.create(null);
+  if (rm.features !== undefined && !isObj(rm.features)) problems.push(["features"]);
+  else {
+    for (const [k, v] of Object.entries(rm.features || {})) {
+      if (!isObj(v)) { problems.push(["featureEntry", k]); continue; }
+      features[k] = v;
+      if (v.dependsOn !== undefined && !(Array.isArray(v.dependsOn) && v.dependsOn.every((d) => typeof d === "string"))) {
+        problems.push(["dependsOn", k]);
+        features[k] = { ...v };
+        delete features[k].dependsOn;
+      }
+    }
+  }
+  rm.features = features;
+  if (rm.meta !== undefined && !isObj(rm.meta)) { problems.push(["meta"]); delete rm.meta; }
+  if (rm.backlog !== undefined) {
+    const okEntry = (b) => isObj(b) && typeof b.name === "string";
+    if (!Array.isArray(rm.backlog)) { problems.push(["backlog"]); delete rm.backlog; }
+    else if (!rm.backlog.every(okEntry)) { problems.push(["backlogEntry"]); rm.backlog = rm.backlog.filter(okEntry); }
+  }
+  return { rm, parseError: j.error ? j : null, problems, rel: jsonRel(file) };
 }
 
-// Non-null when roadmap.json exists but is unreadable — every mutator checks this BEFORE changing
-// anything, so a typo in the file is reported instead of being "repaired" into an empty roadmap.
+function readRoadmap(projectDir) {
+  return loadRoadmap(projectDir).rm;
+}
+
+// Non-null when roadmap.json exists but is unreadable OR has the wrong shape — every mutator checks this
+// BEFORE changing anything, so a typo in the file is reported instead of being "repaired" into data loss.
 function roadmapError(projectDir) {
-  const j = readJson(roadmapPath(projectDir));
-  return j.error ? i18n.msg(projectLang(projectDir)).err.invalidJson(j.errorRel, j.errorDetail) : null;
+  const l = loadRoadmap(projectDir);
+  if (!l.parseError && !l.problems.length) return null;
+  const lang = projectLang(projectDir); // meta survives sanitizing, so this is still the project language
+  return l.parseError ? i18n.msg(lang).err.invalidJson(l.parseError.errorRel, l.parseError.errorDetail) : shapeError(lang, l.rel, l.problems);
 }
 
 function writeRoadmap(projectDir, rm) {
@@ -2552,13 +2607,16 @@ function writeRoadmap(projectDir, rm) {
 }
 
 function findCycle(depsMap) {
-  const color = {}; // undefined=white, 1=gray, 2=black
+  // Own-key lookups and a null-prototype colour map: a dependency named "constructor" used to resolve to
+  // Object.prototype.constructor, and iterating that threw.
+  const color = Object.create(null); // undefined=white, 1=gray, 2=black
+  const depsOf = (n) => (Object.prototype.hasOwnProperty.call(depsMap, n) && Array.isArray(depsMap[n]) ? depsMap[n] : []);
   const stack = [];
   let cycle = null;
   function dfs(n) {
     color[n] = 1;
     stack.push(n);
-    for (const d of depsMap[n] || []) {
+    for (const d of depsOf(n)) {
       if (color[d] === 1) {
         cycle = stack.slice(stack.indexOf(d)).concat(d);
         return true;
@@ -2575,41 +2633,68 @@ function findCycle(depsMap) {
   return cycle;
 }
 
-function setDependency(projectDir, name, dependsOn, order) {
+// dependsOn REPLACES the list ([] clears it); edits.add / edits.remove change it incrementally (applied in
+// that order, after a replacement); order sets the position. Nothing requested = a read: the current deps
+// come back and roadmap.json is not touched (the CLI's bare `depend <f>` used to clear them).
+function setDependency(projectDir, name, dependsOn, order, edits) {
+  edits = edits || {};
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const slug = f.slug;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  const D = i18n.msg(projectLang(projectDir)).depend;
+  const names = (v) => (v == null ? [] : Array.isArray(v) ? v : String(v).split(/[\s,]+/)).map((d) => String(d).trim()).filter(Boolean);
+  // Every dependency named here must be an existing feature (reserved names like `steering` included): an
+  // unknown name used to be stored and then read as a dependency that could never be met.
+  const unknownNames = [];
+  const resolveDeps = (list) => {
+    const out = [];
+    for (const d of names(list)) {
+      const r = existingFeature(projectDir, d);
+      if (!r.ok) unknownNames.push(d);
+      else if (!out.includes(r.slug)) out.push(r.slug);
+    }
+    return out;
+  };
+  const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
+  const added = resolveDeps(edits.add);
+  if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
+  if (order != null && !/^-?\d+$/.test(String(order).trim())) return { ok: false, error: D.orderInt(order) };
+  // Removals match the slug as typed, transliterated or legacy — a stale dep on a deleted feature can go too.
+  const drop = new Set(names(edits.remove).flatMap((d) => [d, slugify(d), resolveFeature(projectDir, d).slug]).filter(Boolean));
+
   const rm = readRoadmap(projectDir);
-  // Order-only calls ("do X before Y") keep the declared dependencies.
-  const deps = dependsOn === undefined || dependsOn === null
-    ? ((rm.features[slug] || {}).dependsOn || [])
-    : (Array.isArray(dependsOn) ? dependsOn : String(dependsOn).split(/[\s,]+/)).map((d) => resolveFeature(projectDir, d).slug).filter(Boolean);
+  const current = (rm.features[slug] && rm.features[slug].dependsOn) || [];
+  const deps = (replaced || current).slice();
+  added.forEach((d) => { if (!deps.includes(d)) deps.push(d); });
+  const finalDeps = deps.filter((d) => !drop.has(d));
+  const known = listFeatures(projectDir).features.map((x) => x.name);
+  const unknown = finalDeps.filter((d) => !known.includes(d)); // stale entries from an earlier hand edit
+  if (replaced === null && !added.length && !drop.size && order == null) {
+    return { ok: true, feature: slug, dependsOn: finalDeps, order: (rm.features[slug] || {}).order, unknownDeps: unknown };
+  }
 
   // Build the candidate dependency map (existing + this change) and reject cycles.
-  const map = {};
-  for (const [f, v] of Object.entries(rm.features)) map[f] = (v.dependsOn || []).slice();
-  map[slug] = deps;
+  const map = Object.create(null);
+  for (const [k, v] of Object.entries(rm.features)) map[k] = (v.dependsOn || []).slice();
+  map[slug] = finalDeps;
   const cycle = findCycle(map);
   if (cycle) return { ok: false, error: errs(projectDir).cycle(cycle.join(" → ")) };
 
-  const known = listFeatures(projectDir).features.map((f) => f.name);
-  const unknown = deps.filter((d) => !known.includes(d));
-
   rm.features[slug] = rm.features[slug] || {};
-  rm.features[slug].dependsOn = deps;
-  if (order != null && Number.isFinite(parseInt(order, 10))) rm.features[slug].order = parseInt(order, 10);
+  rm.features[slug].dependsOn = finalDeps;
+  if (order != null) rm.features[slug].order = parseInt(String(order).trim(), 10);
   writeRoadmap(projectDir, rm);
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, feature: slug, dependsOn: deps, order: rm.features[slug].order, unknownDeps: unknown };
+  return { ok: true, feature: slug, dependsOn: finalDeps, order: rm.features[slug].order, unknownDeps: unknown };
 }
 
 function roadmap(projectDir) {
   const list = listFeatures(projectDir);
   if (!list.exists) return { ok: true, specsDir: list.specsDir, features: [], overallPercent: 0, complete: 0, total: 0, cycle: null, backlog: [] };
   const rm = readRoadmap(projectDir);
-  const pctByName = {};
+  const pctByName = Object.create(null); // a dep named "constructor" must not read Object.prototype's
   const feats = list.features.map((f) => {
     const meta = rm.features[f.name] || {};
     const pct = featurePercent(f.phase, f.tasksDone, f.tasks);
@@ -2921,7 +3006,11 @@ function writeRoadmapMd(projectDir, lang) {
   if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
   const file = path.join(root, "ROADMAP.md");
   if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated("ROADMAP.md") };
-  if (lang) setRoadmapLang(projectDir, lang, "roadmapLang");
+  if (lang) {
+    const bad = roadmapError(projectDir); // persisting roadmapLang writes roadmap.json: refuse on a broken one
+    if (bad) return { ok: false, error: bad };
+    setRoadmapLang(projectDir, lang, "roadmapLang");
+  }
   const md = renderRoadmapMd(projectDir, lang || roadmapChromeLang(projectDir));
   writeFileAtomic(file, md);
   const rmv = roadmap(projectDir);
@@ -2933,7 +3022,11 @@ function writeRoadmapHtml(projectDir, lang) {
   if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
   const file = path.join(root, "ROADMAP.html");
   if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated("ROADMAP.html") };
-  if (lang) setRoadmapLang(projectDir, lang, "roadmapLang");
+  if (lang) {
+    const bad = roadmapError(projectDir);
+    if (bad) return { ok: false, error: bad };
+    setRoadmapLang(projectDir, lang, "roadmapLang");
+  }
   const html = renderRoadmapHtml(projectDir, lang || roadmapChromeLang(projectDir));
   writeFileAtomic(file, html);
   const rmv = roadmap(projectDir);
@@ -3187,6 +3280,7 @@ module.exports = {
   // @wp WP2 <<<
 
   // @wp WP3 exports >>>
+  existingFeature, // the eval harness resolves its feature like every other operation
   // @wp WP3 <<<
 
   // @wp WP4 exports >>>
