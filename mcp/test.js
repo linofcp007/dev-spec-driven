@@ -2758,6 +2758,32 @@ function payload(res) {
       xAcs("table-row")[0].supersedes.join() === "billing/US-1.AC-3" && xAcs("table-row")[0].text === "WHEN a card expires THE SYSTEM SHALL text the owner" &&
       xAcs("open").length === 1 && xAcs("open")[0].text === "WHEN a thing THE SYSTEM SHALL do it" && catX.totals.superseded === 3,
       "catalog: punctuated and table-row markers mark their targets superseded with the replacing ID; no phantom AC row; the one-line text drops the marker cleanly");
+    // A marker hard-wrapped onto its next line is ONE marker (trace, acIndex and catalog agree); one that wraps and
+    // never closes is one `unterminated` warning whose continuation IDs stay foreign; emphasis around it leaves no `** **`.
+    const w10w = path.join(tmp, "proj-wp10-wrap");
+    S.initProject(w10w, ["core"]);
+    ["Billing", "Wrapped", "Open Wrap", "Bold"].forEach((n) => S.createFeature(w10w, n, ["core"]));
+    req10(w10w, "billing", billing10x + "5. **US-1.AC-5** — WHEN v THE SYSTEM SHALL u\n");
+    req10(w10w, "wrapped", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days\n   - _Supersedes: billing/US-1.AC-2, billing/US-1.AC-3,\n     billing/US-1.AC-4_\n");
+    fs.writeFileSync(path.join(w10w, ".specs", "wrapped", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1_\n");
+    req10(w10w, "open-wrap", "1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n   - _Supersedes: billing/US-1.AC-2,\n     billing/US-1.AC-3\n2. **US-1.AC-2** — WHEN c THE SYSTEM SHALL d\n");
+    req10(w10w, "bold", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt **_Supersedes: billing/US-1.AC-1_**\n" +
+      "2. **US-1.AC-2** — WHEN v THE SYSTEM SHALL u (*_Supersedes: billing/US-1.AC-5_*).\n");
+    const trW10 = S.traceCheck(w10w, "wrapped");
+    const trOW10 = S.traceCheck(w10w, "open-wrap");
+    const docW10 = S.specDoctor(w10w, "wrapped").checks.find((c) => c.id === "traceability");
+    ok(trW10.verdict === "pass" && trW10.totalAcs === 1 && !trW10.uncoveredByTasks.length && trW10.phantomSupersedes.length === 0 && docW10.status === "pass" &&
+      trW10.supersedes.map((s) => s.by + ">" + s.ref + "@" + s.line).join() === "US-1.AC-1>billing/US-1.AC-2@10,US-1.AC-1>billing/US-1.AC-3@10,US-1.AC-1>billing/US-1.AC-4@10" &&
+      trOW10.totalAcs === 2 && trOW10.supersedes.length === 0 && trOW10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by + "@" + p.line).join() === "unterminated:billing/US-1.AC-2, billing/US-1.AC-3:US-1.AC-1@10",
+      "a _Supersedes:_ marker wrapped onto its next line resolves whole (no gap, no phantom, doctor traceability passes); a wrapped marker that never closes is ONE `unterminated` warning and its continuation ID is never an own AC");
+    const catW10 = S.catalog(w10w);
+    const wAcs = (n) => catW10.features.find((f) => f.feature === n).acs;
+    ok(wAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:bold/US-1.AC-1,US-1.AC-2:wrapped/US-1.AC-1,US-1.AC-3:wrapped/US-1.AC-1,US-1.AC-4:wrapped/US-1.AC-1,US-1.AC-5:bold/US-1.AC-2" &&
+      wAcs("wrapped").length === 1 && wAcs("wrapped")[0].supersedes.join() === "billing/US-1.AC-2,billing/US-1.AC-3,billing/US-1.AC-4" &&
+      wAcs("open-wrap").map((a) => a.id).join() === "US-1.AC-1,US-1.AC-2" && wAcs("open-wrap")[0].text === "WHEN a THE SYSTEM SHALL b" &&
+      wAcs("bold").map((a) => a.text).join("|") === "WHEN a user pays THE SYSTEM SHALL store the receipt|WHEN v THE SYSTEM SHALL u." &&
+      !/\*\s\*/.test(catW10.markdown) && catW10.totals.superseded === 5,
+      "catalog: a wrapped marker strikes all its targets through; emphasis around a marker (**_…_**, (*_…_*).) leaves no stray `** **` in the one-liner");
     if (process.platform === "win32" || process.platform === "darwin") {
       // A case-different folder (made by hand / on another OS) is the same feature: its ACs are still marked, and its own
       // marker naming itself is `self`, never a supersession.

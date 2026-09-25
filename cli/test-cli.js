@@ -835,6 +835,21 @@ ok(/# Catálogo de specs — wp10-pt/.test(catPt10) && /AUTO-GERADO por dev-spec
   /Não há nada arquivado como 'x'/.test(run(["feature", "restore", "x", "--project", w10pt]).out) &&
   /Nenhuma feature fechada tem ainda uma baseline de drift/.test(run(["drift", "--project", w10pt]).out), "PT: catalog chrome, restore error and drift note are localized");
 
+// A _Supersedes:_ list hard-wrapped onto the next line: trace passes with no "never closed" warning, doctor's
+// traceability passes, the catalog strikes every target through.
+const w10w = path.join(tmp, "wp10-wrap");
+S10.initProject(w10w, ["core"]);
+["Billing", "Wrapped"].forEach((n) => S10.createFeature(w10w, n, ["core"]));
+const reqW10 = (f, body) => fs.writeFileSync(path.join(w10w, ".specs", f, "requirements.md"), "# Requirements\n\n## Summary\n" + f + ".\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n" + body);
+reqW10("billing", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n2. **US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days\n3. **US-1.AC-3** — WHEN z THE SYSTEM SHALL w\n");
+reqW10("wrapped", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days\n   - _Supersedes: billing/US-1.AC-2,\n     billing/US-1.AC-3_\n");
+fs.writeFileSync(path.join(w10w, ".specs", "wrapped", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1_\n");
+const trW10 = run(["trace", "wrapped", "--project", w10w]);
+const catWr10 = run(["catalog", "--project", w10w]).out;
+ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never closed/.test(trW10.out) && !/✗ traceability/.test(run(["doctor", "wrapped", "--project", w10w]).out) &&
+  catWr10.includes("~~**US-1.AC-3** — WHEN z THE SYSTEM SHALL w~~ — superseded by `wrapped/US-1.AC-1`") && catWr10.includes("_(supersedes `billing/US-1.AC-2`, `billing/US-1.AC-3`)_"),
+  "a _Supersedes:_ marker wrapped onto its next line: trace exit 0 with no phantom warning, doctor traceability passes, catalog strikes both targets through");
+
 // help + docblock: catalog / drift right after the feature line, restore on it.
 const help10 = run(["help"]).out;
 const doc10 = fs.readFileSync(CLI, "utf8").split("*/")[0];

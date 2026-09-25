@@ -1948,14 +1948,18 @@ function isPromptTask(block, mk, tracks) {
 const RE_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/;
 function acIndex(reqText) {
   const map = new Map();
-  const blocks = criterionBlocks(reqText || "").blocks;
+  const { cleaned, blocks } = criterionBlocks(reqText || "");
   const entry = (id, b) => ({ id, text: b.text.replace(RE_LIST_ITEM, ""), line: b.line });
   for (const b of blocks) {
     const m = b.text.match(RE_DEFINES_AC);
     if (m && !map.has(m[1])) map.set(m[1], entry(m[1], b));
   }
-  // A `_Supersedes: other/US-1.AC-2_` reference is another feature's AC, not one of this feature's.
-  for (const b of blocks) for (const id of extractAcIds(stripSupersedes(b.text))) if (!map.has(id)) map.set(id, entry(id, b));
+  // A `_Supersedes: other/US-1.AC-2_` reference is another feature's AC, not one of this feature's — stripped over the
+  // criterion's own lines (joined by "\n"), so a marker wrapped onto the next line follows traceCheck's wrap rule.
+  const byLine = lineMap(cleaned);
+  for (const b of blocks) {
+    for (const id of extractAcIds(stripSupersedes(blockLines(byLine, b).map((l) => l.text).join("\n")))) if (!map.has(id)) map.set(id, entry(id, b));
+  }
   stripHtmlComments(reqText || "").split(/\r?\n/).forEach((l, i) => {
     if (!/^\s*\|/.test(l)) return;
     for (const id of extractAcIds(stripSupersedes(l))) if (!map.has(id)) map.set(id, { id, text: l.trim(), line: i + 1 });
@@ -4321,12 +4325,27 @@ function locateFeatures(projectDir, name) {
 // and fenced code never count, the value runs to the first underscore followed by whitespace, punctuation or the end
 // (requirements are prose: `…_.`, `(…_)`, `**…_**`, `…_|`) and is kept whole (then split on , / ;). The referenced ID
 // is ANOTHER feature's — stripped before this feature's own AC IDs are read.
-const RE_SUPERSEDES_SRC = "_Supersedes:\\s*(.+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
-// Safety net: a marker never closed runs to the end of its line — its foreign ID must never become one of this
+// A long list wraps like any criterion: a newline continues the value unless the next line is blank or opens a new
+// list item / block (heading, quote, table row, rule, fence) — criterionBlocks' boundaries, so traceCheck (whole
+// text), acIndex and supersedesMarkers (one criterion at a time, lines joined by "\n") all read the same marker.
+const SUP_NL = "\\r?\\n(?![ \\t]*(?:\\r?\\n|$|(?:[-*+]|\\d+[.)])[ \\t]|#{1,6}[ \\t]|[>|]|```|~~~|(?:-{3,}|={3,}|\\*{3,})[ \\t]*(?:\\r?\\n|$)))";
+// The value never runs into a second marker (an unclosed one before it stays unclosed).
+const RE_SUPERSEDES_SRC = "_Supersedes:[ \\t]*((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
+// Safety net: a marker never closed runs to the end of its criterion — its foreign ID must never become one of this
 // feature's ACs; supersedesMarkers reports it (reason `unterminated`).
-const RE_SUPERSEDES_OPEN_SRC = "_Supersedes:[^\\n]*";
+const RE_SUPERSEDES_OPEN_SRC = "_Supersedes:[ \\t]*((?:[^\\r\\n]|" + SUP_NL + ")*)";
 function stripSupersedes(text) {
   return String(text || "").replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "").replace(new RegExp(RE_SUPERSEDES_OPEN_SRC, "gi"), "");
+}
+// A criterion block's lines joined by "\n" (criterionBlocks joins them with spaces, which would erase the line starts
+// the wrap rule above reads). `byLine` = line number → its cleaned text; every cleaned line in the range is a part.
+function blockLines(byLine, b) {
+  const out = [];
+  for (let l = b.line; l <= b.endLine; l++) if (byLine.has(l)) out.push({ line: l, text: byLine.get(l) });
+  return out;
+}
+function lineMap(cleaned) {
+  return new Map(cleaned.map((c) => [c.line, c.text]));
 }
 // The AC a criterion block defines (its leading ID, else the first own ID it names), or null.
 function criterionAc(text) {
@@ -4334,26 +4353,42 @@ function criterionAc(text) {
   return m ? m[1] : [...extractAcIds(stripSupersedes(text))][0] || null;
 }
 // → [{ ref, feature, ac, by, line[, unterminated] }] — `by` = the AC of the criterion carrying the marker (null outside
-// one). A table row is a block break for criterionBlocks, yet acIndex reads table-row ACs: there the row itself is it.
+// one); `line` = where the marker starts. Read per criterion, so a marker wrapped onto its next line is ONE marker.
+// A table row is a block break for criterionBlocks, yet acIndex reads table-row ACs: there the row itself is it (and
+// any other line outside a criterion is its own unit).
 function supersedesMarkers(reqText) {
   const { cleaned, blocks } = criterionBlocks(reqText || "");
+  const byLine = lineMap(cleaned);
+  const inBlock = new Set();
+  const units = blocks.map((b) => {
+    const ls = blockLines(byLine, b);
+    ls.forEach((l) => inBlock.add(l.line));
+    return { ls, block: true };
+  });
+  for (const c of cleaned) if (!inBlock.has(c.line)) units.push({ ls: [c], block: false });
   const out = [];
-  for (const c of cleaned) {
-    if (!/_Supersedes:/i.test(c.text)) continue;
-    const b = blocks.find((x) => c.line >= x.line && c.line <= x.endLine);
-    const by = b ? criterionAc(b.text) : c.text.startsWith("|") ? criterionAc(c.text) : null;
+  const fold = (s) => s.replace(/\s+/g, " ").trim();
+  for (const u of units) {
+    const text = u.ls.map((l) => l.text).join("\n");
+    if (!/_Supersedes:/i.test(text)) continue;
+    const by = u.block ? criterionAc(text) : text.startsWith("|") ? criterionAc(text) : null;
+    const lineAt = (i) => u.ls[(text.slice(0, i).match(/\n/g) || []).length].line;
     const re = new RegExp(RE_SUPERSEDES_SRC, "gi");
     let m;
-    while ((m = re.exec(c.text)) !== null) {
-      for (const ref of m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
+    while ((m = re.exec(text)) !== null) {
+      for (const ref of m[1].split(/[,;]/).map((s) => fold(s).replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
         const mm = ref.match(/^(.+?)\s*\/\s*(US-\d+\.AC-\d+)$/);
-        out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: c.line });
+        out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: lineAt(m.index) });
       }
     }
-    const open = c.text.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "").match(/_Supersedes:\s*(.*)$/i);
-    if (open) out.push({ ref: open[1].trim(), feature: null, ac: null, by, line: c.line, unterminated: true });
+    // Whatever opens and never closes, once the closed markers are blanked out (same length, so positions hold).
+    const rest = text.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), (s) => s.replace(/[^\n]/g, " "));
+    const reOpen = new RegExp(RE_SUPERSEDES_OPEN_SRC, "gi");
+    while ((m = reOpen.exec(rest)) !== null) {
+      out.push({ ref: fold(m[1]), feature: null, ac: null, by, line: lineAt(m.index), unterminated: true });
+    }
   }
-  return out;
+  return out.sort((a, b) => a.line - b.line);
 }
 // Folder identity for keys and comparisons: on a case-insensitive file system `.specs/Billing` IS `.specs/billing`.
 const dirKey = (d) => (FOLD_CASE ? path.resolve(d).toLowerCase() : path.resolve(d));
@@ -4399,8 +4434,10 @@ const day = (iso) => String(iso || "").slice(0, 10);
 // One line of an AC for the catalog: whitespace folded, its own leading ID and the _Supersedes:_ marker dropped.
 function acOneLine(text, id) {
   // A sub-list bullet that only carried the marker ("… owner - _Supersedes: x/US-1.AC-3_") goes with it, and so do the
-  // parentheses around it / the space before the punctuation after it ("… days (_Supersedes: …_)." → "… days.").
+  // emphasis around it ("**_Supersedes: …_**"), the parentheses around it and the space before the punctuation after
+  // it ("… days (_Supersedes: …_)." → "… days.").
   let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?(?:" + RE_SUPERSEDES_SRC + "|" + RE_SUPERSEDES_OPEN_SRC + ")", "gi"), "\u0000")
+    .replace(/(\*\*|__|\*|~~)\s*\u0000\s*\1/g, "\u0000")
     .replace(/\s*\(\s*\u0000\s*\)/g, "").replace(/\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim();
   if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
   const esc = id.replace(/\./g, "\\.");
