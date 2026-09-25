@@ -697,14 +697,15 @@ function main() {
 
     case "drift": {
       // dev-spec drift [feature] — implementing files changed / missing / now present since spec_finish recorded the
-      // baseline (= spec_drift {name}); exit 1 when any finished feature drifted (scriptable, like trace).
+      // baseline (= spec_drift {name}); exit 1 when any finished feature drifted or a state file couldn't be read (a check
+      // that didn't run is not "clean" — scriptable, like trace).
       const r = spec.drift(projectDir, pos[0]);
       if (!r.ok) die(r.error);
-      if (r.drifted.length) process.exitCode = 1;
+      if (r.drifted.length || (r.errors && r.errors.length)) process.exitCode = 1;
       const D = spec.msg(r.lang).drift;
       const day = (iso) => String(iso || "").slice(0, 10);
       return out(r, (r) => {
-        if (!r.features.length) console.log(D.none);
+        if (r.note) console.log(r.note);
         for (const f of r.features) {
           const n = f.changed.length + f.missing.length + f.nowPresent.length;
           if (!f.drifted) { console.log(D.clean(f.feature, f.files, day(f.finishedAt), f.archived)); continue; }
@@ -713,6 +714,7 @@ function main() {
           if (f.missing.length) console.log(D.missing(f.missing.join(", ")));
           if (f.nowPresent.length) console.log(D.nowPresent(f.nowPresent.join(", ")));
         }
+        if (r.reopened.length) console.log(D.reopened(r.reopened.join(", ")));
         if (r.unbaselined.length) console.log(D.unbaselined(r.unbaselined.join(", ")));
         (r.errors || []).forEach((e) => console.error("dev-spec: " + e.error));
       });

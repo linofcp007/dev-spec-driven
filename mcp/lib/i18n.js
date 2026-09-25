@@ -2351,7 +2351,7 @@ const MSG = {
     // `_Supersedes:_` references trace_check can't resolve — warnings, never an AC gap (reason codes stay English).
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (on ${by})` : ""} — ${reason}`,
-      reason: { "bad-ref": "not <feature>/US-n.AC-m", "unknown-feature": "no such feature (active or archived)", "unknown-ac": "that feature has no such AC", self: "a feature can't supersede its own AC" },
+      reason: { "bad-ref": "not <feature>/US-n.AC-m", "unknown-feature": "no such feature (active or archived)", "unknown-ac": "that feature has no such AC", self: "a feature can't supersede its own AC", unterminated: "the marker is never closed — end it with an underscore: _Supersedes: <feature>/US-n.AC-m_" },
     },
     restore: {
       notArchived: (slug) => `Nothing is archived as '${slug}' (.specs/_archive/${slug}/ not found).`,
@@ -2360,8 +2360,9 @@ const MSG = {
       noRecord: "It was archived before archive recorded its roadmap entry — re-declare its dependencies with spec_depend if it had any.",
       skipDependsOn: (d, reason) => `its dependency '${d}' (${reason})`,
       skipDependent: (k, reason) => `'${k}', which depended on it (${reason})`,
+      skipRecord: (field, reason) => `the archive record's ${field} (${reason})`,
       skipped: (list) => `Not restored: ${list}.`,
-      reason: { gone: "no longer exists", cycle: "would close a dependency cycle" },
+      reason: { gone: "no longer exists", cycle: "would close a dependency cycle", invalid: "unexpected shape — left out" },
     },
     drift: {
       none: "No finished feature has a drift baseline yet — spec_finish {write: true} (dev-spec finish <feature> --write) records one when a feature is ready to finish.",
@@ -2370,6 +2371,7 @@ const MSG = {
       changed: (list) => `      changed: ${list}`,
       missing: (list) => `      missing: ${list}`,
       nowPresent: (list) => `      now present (missing at finish): ${list}`,
+      reopened: (list) => `  · reopened since finish (tasks open again — checked once finished again): ${list}`,
       unbaselined: (list) => `  · no finish baseline yet: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} implementing file(s) changed since finish — run dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Drift baseline recorded: ${n} implementing file(s)${missing ? ` (${missing} missing)` : ""} — dev-spec drift shows what changes after this finish.`,
@@ -2877,7 +2879,7 @@ const MSG = {
     },
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (em ${by})` : ""} — ${reason}`,
-      reason: { "bad-ref": "não está no formato <feature>/US-n.AC-m", "unknown-feature": "essa feature não existe (ativa ou arquivada)", "unknown-ac": "essa feature não tem esse critério", self: "uma feature não pode substituir um critério seu" },
+      reason: { "bad-ref": "não está no formato <feature>/US-n.AC-m", "unknown-feature": "essa feature não existe (ativa ou arquivada)", "unknown-ac": "essa feature não tem esse critério", self: "uma feature não pode substituir um critério seu", unterminated: "o marcador nunca é fechado — termina-o com um underscore: _Supersedes: <feature>/US-n.AC-m_" },
     },
     restore: {
       notArchived: (slug) => `Não há nada arquivado como '${slug}' (.specs/_archive/${slug}/ não existe).`,
@@ -2886,8 +2888,9 @@ const MSG = {
       noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_depend, se as tinha.",
       skipDependsOn: (d, reason) => `a sua dependência '${d}' (${reason})`,
       skipDependent: (k, reason) => `'${k}', que dependia dela (${reason})`,
+      skipRecord: (field, reason) => `o campo ${field} do registo de arquivo (${reason})`,
       skipped: (list) => `Não restaurado: ${list}.`,
-      reason: { gone: "já não existe", cycle: "fecharia um ciclo de dependências" },
+      reason: { gone: "já não existe", cycle: "fecharia um ciclo de dependências", invalid: "formato inesperado — deixado de fora" },
     },
     drift: {
       none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (dev-spec finish <feature> --write) regista uma quando a feature está pronta para fechar.",
@@ -2896,6 +2899,7 @@ const MSG = {
       changed: (list) => `      alterados: ${list}`,
       missing: (list) => `      em falta: ${list}`,
       nowPresent: (list) => `      agora presentes (em falta no fecho): ${list}`,
+      reopened: (list) => `  · reabertas depois do fecho (há tarefas por fazer — verificadas quando voltarem a fechar): ${list}`,
       unbaselined: (list) => `  · ainda sem baseline de fecho: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
@@ -3403,7 +3407,7 @@ const MSG = {
     },
     supersedes: {
       phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (en ${by})` : ""} — ${reason}`,
-      reason: { "bad-ref": "no tiene el formato <función>/US-n.AC-m", "unknown-feature": "esa función no existe (activa o archivada)", "unknown-ac": "esa función no tiene ese criterio", self: "una función no puede sustituir un criterio propio" },
+      reason: { "bad-ref": "no tiene el formato <función>/US-n.AC-m", "unknown-feature": "esa función no existe (activa o archivada)", "unknown-ac": "esa función no tiene ese criterio", self: "una función no puede sustituir un criterio propio", unterminated: "el marcador nunca se cierra — termínalo con un guion bajo: _Supersedes: <función>/US-n.AC-m_" },
     },
     restore: {
       notArchived: (slug) => `No hay nada archivado como '${slug}' (.specs/_archive/${slug}/ no existe).`,
@@ -3412,8 +3416,9 @@ const MSG = {
       noRecord: "Se archivó antes de que el archivado registrara su entrada en la hoja de ruta — vuelve a declarar sus dependencias con spec_depend, si las tenía.",
       skipDependsOn: (d, reason) => `su dependencia '${d}' (${reason})`,
       skipDependent: (k, reason) => `'${k}', que dependía de ella (${reason})`,
+      skipRecord: (field, reason) => `el campo ${field} del registro de archivado (${reason})`,
       skipped: (list) => `No restaurado: ${list}.`,
-      reason: { gone: "ya no existe", cycle: "cerraría un ciclo de dependencias" },
+      reason: { gone: "ya no existe", cycle: "cerraría un ciclo de dependencias", invalid: "formato inesperado — se omite" },
     },
     drift: {
       none: "Ninguna función cerrada tiene todavía una línea base de drift — spec_finish {write: true} (dev-spec finish <función> --write) registra una cuando la función está lista para cerrar.",
@@ -3422,6 +3427,7 @@ const MSG = {
       changed: (list) => `      modificados: ${list}`,
       missing: (list) => `      ausentes: ${list}`,
       nowPresent: (list) => `      ahora presentes (ausentes en el cierre): ${list}`,
+      reopened: (list) => `  · reabiertas después del cierre (hay tareas pendientes — se comprueban al volver a cerrar): ${list}`,
       unbaselined: (list) => `  · aún sin línea base de cierre: ${list}`,
       hookLine: (f, n) => `  ⚠ ${f}: ${n} fichero(s) de implementación modificado(s) desde el cierre — ejecuta dev-spec drift ${f}`,
       baselineRecorded: (n, missing) => `Línea base de drift registrada: ${n} fichero(s) de implementación${missing ? ` (${missing} ausente(s))` : ""} — dev-spec drift muestra lo que cambie después de este cierre.`,

@@ -2713,6 +2713,61 @@ function payload(res) {
       badArch.ok === false && /unexpected shape/.test(badArch.error) && fs.existsSync(path.join(w10Specs, "accounts")) && fs.readFileSync(liveState, "utf8") === "[]",
       "a broken archived .state.json refuses restore; a pre-1.13 archive restores with a note; archive refuses a broken .state.json (never rewritten, nothing moved)");
     fs.writeFileSync(liveState, JSON.stringify({ lang: "en", tracks: ["core"], approvals: {} }));
+    // A hand-edited archive record of the wrong shape: the bad parts are left out (reported); roadmap.json stays valid.
+    ["Rec A", "Rec B"].forEach((n) => S.createFeature(w10, n, ["core"]));
+    S.setDependency(w10, "rec-a", ["rec-b"]);
+    S.manageFeature(w10, "archive", "rec-a");
+    const recSt = path.join(w10Specs, "_archive", "rec-a", ".state.json");
+    const recJ = JSON.parse(fs.readFileSync(recSt, "utf8"));
+    recJ.archived.entry.dependsOn = "rec-b";
+    recJ.archived.dependents = "nope";
+    fs.writeFileSync(recSt, JSON.stringify(recJ));
+    const recR = S.manageFeature(w10, "restore", "rec-a");
+    ok(recR.ok && recR.restored.entry === true && recR.restored.dependsOn.length === 0 &&
+      recR.skipped.map((s) => s.kind + ":" + s.field + ":" + s.reason).join() === "record:entry.dependsOn:invalid,record:dependents:invalid" &&
+      !("dependsOn" in S.readRoadmap(w10).features["rec-a"]) && S.setDependency(w10, "rec-b", []).ok === true && S.manageFeature(w10, "archive", "rec-b").ok === true &&
+      /the archive record's entry\.dependsOn \(unexpected shape — left out\)/.test(recR.note),
+      "restore of a hand-edited archive record: a wrong-shape dependsOn / dependents is left out and reported — roadmap.json stays valid, later mutators still work");
+
+    // _Supersedes:_ edge cases: punctuation after the marker (`…_.`, `(…_)`), a table-row criterion, an unterminated
+    // marker, a case-different folder — the foreign ID never becomes one of the feature's own ACs.
+    const w10x = path.join(tmp, "proj-wp10-sup");
+    S.initProject(w10x, ["core"]);
+    ["Billing", "Paren", "Table Row", "Open"].forEach((n) => S.createFeature(w10x, n, ["core"]));
+    const billing10x = "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n2. **US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days\n" +
+      "3. **US-1.AC-3** — WHEN x THE SYSTEM SHALL y\n4. **US-1.AC-4** — WHEN z THE SYSTEM SHALL w\n";
+    req10(w10x, "billing", billing10x);
+    req10(w10x, "paren", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days (_Supersedes: billing/US-1.AC-2_).\n" +
+      "2. **US-1.AC-2** — WHEN a thing THE SYSTEM SHALL do _Supersedes: billing/US-1.AC-4_.\n");
+    fs.writeFileSync(path.join(w10x, ".specs", "paren", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n");
+    req10(w10x, "table-row", "| ID | Criterion |\n|---|---|\n| US-1.AC-1 | WHEN a card expires THE SYSTEM SHALL text the owner _Supersedes: billing/US-1.AC-3_ |\n");
+    req10(w10x, "open", "1. **US-1.AC-1** — WHEN a thing THE SYSTEM SHALL do it _Supersedes: billing/US-1.AC-7 and more\n");
+    const trP10 = S.traceCheck(w10x, "paren");
+    const trT10 = S.traceCheck(w10x, "table-row");
+    const trO10 = S.traceCheck(w10x, "open");
+    ok(trP10.verdict === "pass" && trP10.totalAcs === 2 && !trP10.uncoveredByTasks.length && trP10.phantomSupersedes.length === 0 &&
+      trP10.supersedes.map((s) => s.by + ">" + s.ref).join() === "US-1.AC-1>billing/US-1.AC-2,US-1.AC-2>billing/US-1.AC-4" &&
+      trT10.totalAcs === 1 && trT10.supersedes.length === 1 && trT10.supersedes[0].by === "US-1.AC-1" &&
+      trO10.totalAcs === 1 && trO10.supersedes.length === 0 && trO10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by).join() === "unterminated:billing/US-1.AC-7 and more:US-1.AC-1" &&
+      /never closed/.test(S.supersedesWarnings(trO10, "en")[0]) && /nunca é fechado/.test(S.supersedesWarnings(trO10, "pt")[0]),
+      "_Supersedes:_ followed by punctuation resolves (no spurious gap); a table-row marker's `by` is its row's AC; an unterminated marker is an `unterminated` warning and its ID is never an own AC");
+    const catX = S.catalog(w10x);
+    const xAcs = (n) => catX.features.find((f) => f.feature === n).acs;
+    ok(xAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2" &&
+      xAcs("paren").map((a) => a.id + "=" + a.text).join("|") === "US-1.AC-1=WHEN a refund is asked THE SYSTEM SHALL refund within 14 days.|US-1.AC-2=WHEN a thing THE SYSTEM SHALL do." &&
+      xAcs("table-row")[0].supersedes.join() === "billing/US-1.AC-3" && xAcs("table-row")[0].text === "WHEN a card expires THE SYSTEM SHALL text the owner" &&
+      xAcs("open").length === 1 && xAcs("open")[0].text === "WHEN a thing THE SYSTEM SHALL do it" && catX.totals.superseded === 3,
+      "catalog: punctuated and table-row markers mark their targets superseded with the replacing ID; no phantom AC row; the one-line text drops the marker cleanly");
+    if (process.platform === "win32" || process.platform === "darwin") {
+      // A case-different folder (made by hand / on another OS) is the same feature: its ACs are still marked, and its own
+      // marker naming itself is `self`, never a supersession.
+      fs.renameSync(path.join(w10x, ".specs", "billing"), path.join(w10x, ".specs", "Billing"));
+      req10(w10x, "Billing", billing10x + "5. **US-1.AC-5** — WHEN q THE SYSTEM SHALL r _Supersedes: billing/US-1.AC-1_\n");
+      const catXc = S.catalog(w10x);
+      const bXc = catXc.features.find((f) => f.feature === "Billing");
+      ok(bXc && bXc.acs.map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2,US-1.AC-5:" &&
+        catXc.totals.superseded === 3, "catalog on a case-insensitive file system: a case-different feature folder still gets its superseded ACs; a self-reference is not one");
+    }
 
     // Drift: finish {write} on a READY feature records the baseline; drift reports changed / missing / now present.
     const w10d = path.join(tmp, "proj-wp10-drift");
@@ -2769,12 +2824,32 @@ function payload(res) {
       /No finished feature has a drift baseline yet/.test(S.drift(w10d, "draft").note), "drift: an unknown feature is an error; an unfinished one is listed as unbaselined, not an error");
     S.manageFeature(w10d, "archive", "login-loop");
     const drArch = S.drift(w10d);
+    const hookArch = hook10(w10d); // "draft" is still active, so the hook runs
     S.manageFeature(w10d, "restore", "login-loop");
     const fin2 = S.finishFeature(w10d, "login-loop", { write: true });
     const base2 = bfState().finished;
-    ok(drArch.features.length === 1 && drArch.features[0].archived === true && drArch.drifted.join() === "login-loop" && fin2.baseline.recorded &&
-      Object.keys(base2.files).join() === "src/auth.js,src/lib/y.ts" && S.drift(w10d).verdict === "clean" && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
-      "drift covers archived finished features; a later finish re-records the baseline (latest wins → clean again); the catalog shows the feature as finished");
+    ok(drArch.features.length === 1 && drArch.features[0].archived === true && drArch.drifted.join() === "login-loop" && /draft/.test(hookArch) && !/⚠/.test(hookArch) &&
+      fin2.baseline.recorded && Object.keys(base2.files).join() === "src/auth.js,src/lib/y.ts" && S.drift(w10d).verdict === "clean" &&
+      S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
+      "drift covers archived finished features (SessionStart leaves archived ones to dev-spec drift); a later finish re-records the baseline (latest wins → clean again); the catalog shows the feature as finished");
+    // An unreadable state is an error, never "clean".
+    const draftSt = path.join(w10d, ".specs", "draft", ".state.json");
+    const draftKeep = fs.readFileSync(draftSt, "utf8");
+    fs.writeFileSync(draftSt, "{ broken");
+    const drBadNamed = S.drift(w10d, "draft");
+    const drBadAll = S.drift(w10d);
+    const drBadMcp = await call10("spec_drift", { name: "draft", projectDir: w10d });
+    fs.writeFileSync(draftSt, draftKeep);
+    ok(drBadNamed.ok === false && /not valid JSON/.test(drBadNamed.error) && drBadMcp.isError && drBadAll.ok && drBadAll.verdict === "error" &&
+      drBadAll.errors.length === 1 && drBadAll.note === undefined && drBadAll.features.length === 1,
+      "drift: a named feature whose .state.json can't be read → error; project-wide → verdict `error` (never `clean`), no 'no baseline yet' note");
+    // Reworked after finish (append_tasks): `reopened` — the catalog's "active", so no drift and no SessionStart line.
+    const ap10d = S.appendTasks(w10d, "login-loop", [{ text: "Also handle the remember-me cookie", requirements: ["US-1.AC-1"], implements: ["src/auth.js"] }]);
+    fs.writeFileSync(path.join(w10d, "src", "auth.js"), "reworked\n");
+    const drRe = (await call10("spec_drift", { projectDir: w10d })).p;
+    ok(ap10d.ok && drRe.ok && drRe.verdict === "clean" && drRe.reopened.join() === "login-loop" && drRe.drifted.length === 0 && drRe.features.length === 0 &&
+      !/⚠/.test(hook10(w10d)) && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "active",
+      "a finished feature reworked after finish is `reopened`: not hashed, no drift, no SessionStart line — the catalog calls it active too");
 
     // PT / ES chrome.
     const w10pt = path.join(tmp, "proj-wp10-pt");

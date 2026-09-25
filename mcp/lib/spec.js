@@ -4318,38 +4318,48 @@ function locateFeatures(projectDir, name) {
 
 // `_Supersedes: <feature>/US-n.AC-m[, …]_` — English-stable, on a criterion of requirements.md (its line or a sub-line):
 // that criterion replaces an AC of an earlier feature, active or archived. Read like the task markers: HTML comments
-// and fenced code never count, the value runs to the LAST underscore before whitespace/end and is kept whole
-// (then split on , / ;). The referenced ID is ANOTHER feature's — stripped before this feature's own AC IDs are read.
-const RE_SUPERSEDES_SRC = "_Supersedes:\\s*(.+?)_(?=\\s|$)";
+// and fenced code never count, the value runs to the first underscore followed by whitespace, punctuation or the end
+// (requirements are prose: `…_.`, `(…_)`, `**…_**`, `…_|`) and is kept whole (then split on , / ;). The referenced ID
+// is ANOTHER feature's — stripped before this feature's own AC IDs are read.
+const RE_SUPERSEDES_SRC = "_Supersedes:\\s*(.+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
+// Safety net: a marker never closed runs to the end of its line — its foreign ID must never become one of this
+// feature's ACs; supersedesMarkers reports it (reason `unterminated`).
+const RE_SUPERSEDES_OPEN_SRC = "_Supersedes:[^\\n]*";
 function stripSupersedes(text) {
-  return String(text || "").replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "");
+  return String(text || "").replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "").replace(new RegExp(RE_SUPERSEDES_OPEN_SRC, "gi"), "");
 }
 // The AC a criterion block defines (its leading ID, else the first own ID it names), or null.
 function criterionAc(text) {
   const m = String(text || "").match(RE_DEFINES_AC);
   return m ? m[1] : [...extractAcIds(stripSupersedes(text))][0] || null;
 }
-// → [{ ref, feature, ac, by, line }] — `by` = the AC of the criterion carrying the marker (null outside one).
+// → [{ ref, feature, ac, by, line[, unterminated] }] — `by` = the AC of the criterion carrying the marker (null outside
+// one). A table row is a block break for criterionBlocks, yet acIndex reads table-row ACs: there the row itself is it.
 function supersedesMarkers(reqText) {
   const { cleaned, blocks } = criterionBlocks(reqText || "");
   const out = [];
   for (const c of cleaned) {
+    if (!/_Supersedes:/i.test(c.text)) continue;
+    const b = blocks.find((x) => c.line >= x.line && c.line <= x.endLine);
+    const by = b ? criterionAc(b.text) : c.text.startsWith("|") ? criterionAc(c.text) : null;
     const re = new RegExp(RE_SUPERSEDES_SRC, "gi");
     let m;
     while ((m = re.exec(c.text)) !== null) {
-      const b = blocks.find((x) => c.line >= x.line && c.line <= x.endLine);
-      const by = b ? criterionAc(b.text) : null;
       for (const ref of m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
         const mm = ref.match(/^(.+?)\s*\/\s*(US-\d+\.AC-\d+)$/);
         out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: c.line });
       }
     }
+    const open = c.text.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), "").match(/_Supersedes:\s*(.*)$/i);
+    if (open) out.push({ ref: open[1].trim(), feature: null, ac: null, by, line: c.line, unterminated: true });
   }
   return out;
 }
+// Folder identity for keys and comparisons: on a case-insensitive file system `.specs/Billing` IS `.specs/billing`.
+const dirKey = (d) => (FOLD_CASE ? path.resolve(d).toLowerCase() : path.resolve(d));
 // Markers → { valid: [{…, feature (slug), ac, archived, dir}], phantom: [{…, reason}] }. Reasons (English-stable):
-// bad-ref (not <feature>/US-n.AC-m) · unknown-feature (no active or archived folder) · unknown-ac · self.
-// `cache` (dir → acIndex) is shared across features by the catalog.
+// bad-ref (not <feature>/US-n.AC-m) · unterminated (no closing `_`) · unknown-feature (no active or archived folder) ·
+// unknown-ac · self. `cache` (dir → acIndex) is shared across features by the catalog.
 function resolveSupersedes(projectDir, fromDir, markers, cache) {
   const acsOf = (t) => {
     if (!cache.has(t.dir)) cache.set(t.dir, acIndex(readIfExists(path.join(t.dir, "requirements.md")) || ""));
@@ -4359,10 +4369,11 @@ function resolveSupersedes(projectDir, fromDir, markers, cache) {
   const phantom = [];
   for (const mk of markers) {
     const base = { ref: mk.ref, by: mk.by, line: mk.line };
+    if (mk.unterminated) { phantom.push({ ...base, reason: "unterminated" }); continue; }
     if (!mk.feature || !mk.ac) { phantom.push({ ...base, reason: "bad-ref" }); continue; }
     const targets = locateFeatures(projectDir, mk.feature);
     if (!targets.length) { phantom.push({ ...base, feature: slugify(mk.feature), ac: mk.ac, reason: "unknown-feature" }); continue; }
-    const others = targets.filter((t) => path.resolve(t.dir) !== path.resolve(fromDir));
+    const others = targets.filter((t) => dirKey(t.dir) !== dirKey(fromDir));
     if (!others.length) { phantom.push({ ...base, feature: targets[0].slug, ac: mk.ac, reason: "self" }); continue; }
     const hit = others.find((t) => acsOf(t).has(mk.ac));
     if (!hit) { phantom.push({ ...base, feature: others[0].slug, ac: mk.ac, reason: "unknown-ac" }); continue; }
@@ -4387,8 +4398,10 @@ function supersedesWarnings(tr, lang) {
 const day = (iso) => String(iso || "").slice(0, 10);
 // One line of an AC for the catalog: whitespace folded, its own leading ID and the _Supersedes:_ marker dropped.
 function acOneLine(text, id) {
-  // A sub-list bullet that only carried the marker ("… owner - _Supersedes: x/US-1.AC-3_") goes with it.
-  let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?" + RE_SUPERSEDES_SRC, "gi"), " ").replace(/\s+/g, " ").trim();
+  // A sub-list bullet that only carried the marker ("… owner - _Supersedes: x/US-1.AC-3_") goes with it, and so do the
+  // parentheses around it / the space before the punctuation after it ("… days (_Supersedes: …_)." → "… days.").
+  let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?(?:" + RE_SUPERSEDES_SRC + "|" + RE_SUPERSEDES_OPEN_SRC + ")", "gi"), "\u0000")
+    .replace(/\s*\(\s*\u0000\s*\)/g, "").replace(/\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim();
   if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
   const esc = id.replace(/\./g, "\\.");
   s = s.replace(new RegExp("^(?:\\*\\*|__|\\*|_)?" + esc + "(?:\\*\\*|__|\\*|_)?\\s*(?:[—–:-]\\s*)?"), "").replace(new RegExp("\\s*\\(" + esc + "\\)"), "");
@@ -4403,12 +4416,13 @@ function catalogData(projectDir) {
     const reqRaw = readIfExists(path.join(s.dir, "requirements.md")) || "";
     return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
   });
-  // Superseded ACs, keyed by the target folder + ID → the "<feature>/<AC>" that replaces them.
+  // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
+  // "<feature>/<AC>" that replaces them.
   const supBy = new Map();
   for (const s of srcs) {
     s.sup = resolveSupersedes(projectDir, s.dir, supersedesMarkers(s.reqRaw), cache).valid;
     for (const v of s.sup) {
-      const k = path.resolve(v.dir) + "\n" + v.ac;
+      const k = dirKey(v.dir) + "\n" + v.ac;
       const who = s.slug + (v.by ? "/" + v.by : "");
       if (!supBy.has(k)) supBy.set(k, []);
       if (!supBy.get(k).includes(who)) supBy.get(k).push(who);
@@ -4419,7 +4433,7 @@ function catalogData(projectDir) {
     const acs = [...acIndex(activeDesign(s.reqRaw, s.tracks)).values()].sort((a, b) => a.line - b.line).map((e) => {
       const o = { id: e.id, text: acOneLine(e.text, e.id) };
       if (placeholderReport(e.text).length) o.template = true;
-      const by = supBy.get(path.resolve(s.dir) + "\n" + e.id);
+      const by = supBy.get(dirKey(s.dir) + "\n" + e.id);
       if (by) o.supersededBy = by;
       const mine = s.sup.filter((v) => v.by === e.id).map((v) => v.feature + "/" + v.ac);
       if (mine.length) o.supersedes = mine;
@@ -4531,17 +4545,26 @@ function restoreFeature(projectDir, name) {
   const skipped = [];
   if (rec) {
     const rm = readRoadmap(projectDir);
+    // The record is hand-editable JSON and writeRoadmap only vets the file already on disk: every part that doesn't
+    // have loadRoadmap's shape is left out (reported as `invalid`) so restore never writes a roadmap.json every other
+    // mutator would then refuse.
+    const invalid = (field) => skipped.push({ feature: slug, kind: "record", field, reason: "invalid" });
     // Only references to features that still exist come back (by their folder, as at archive time).
     const exists = (k) => typeof k === "string" && k !== slug && isFeatureFolder(k, f.root) && isDirSafe(path.join(f.root, k));
+    if (rec.entry != null && !isObj(rec.entry)) invalid("entry");
     if (isObj(rec.entry) && !rm.features[slug]) {
       const entry = JSON.parse(JSON.stringify(rec.entry));
+      if (entry.dependsOn !== undefined && !Array.isArray(entry.dependsOn)) { invalid("entry.dependsOn"); delete entry.dependsOn; }
       if (Array.isArray(entry.dependsOn)) {
-        entry.dependsOn = entry.dependsOn.filter((d) => exists(d) || (skipped.push({ feature: String(d), kind: "dependsOn", reason: "gone" }), false));
+        if (!entry.dependsOn.every((d) => typeof d === "string")) invalid("entry.dependsOn");
+        entry.dependsOn = entry.dependsOn.filter((d) => typeof d === "string" && (exists(d) || (skipped.push({ feature: d, kind: "dependsOn", reason: "gone" }), false)));
         restored.dependsOn = entry.dependsOn.slice();
       }
       rm.features[slug] = entry;
       restored.entry = true;
     }
+    if (rec.dependents !== undefined && !Array.isArray(rec.dependents)) invalid("dependents");
+    else if (Array.isArray(rec.dependents) && !rec.dependents.every((d) => isObj(d) && typeof d.feature === "string")) invalid("dependents");
     for (const dep of Array.isArray(rec.dependents) ? rec.dependents : []) {
       if (!isObj(dep) || typeof dep.feature !== "string") continue;
       const k = dep.feature;
@@ -4565,8 +4588,9 @@ function restoreFeature(projectDir, name) {
   maybeRefreshRoadmap(projectDir);
   const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
   if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
-  const notes = [rec ? null : R.noRecord,
-    skipped.length ? R.skipped(skipped.map((s) => (s.kind === "dependsOn" ? R.skipDependsOn : R.skipDependent)(s.feature, R.reason[s.reason] || s.reason)).join("; ")) : null].filter(Boolean);
+  const skipLine = (s) => s.kind === "record" ? R.skipRecord(s.field, R.reason[s.reason] || s.reason)
+    : (s.kind === "dependsOn" ? R.skipDependsOn : R.skipDependent)(s.feature, R.reason[s.reason] || s.reason);
+  const notes = [rec ? null : R.noRecord, skipped.length ? R.skipped(skipped.map(skipLine).join("; ")) : null].filter(Boolean);
   if (notes.length) res.note = notes.join(" ");
   return res;
 }
@@ -4637,8 +4661,12 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText) {
   return res;
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
-// present since the finish baseline. Only the recorded files are hashed. opts.maxFiles / opts.maxBytes bound the work
-// (SessionStart): over budget, nothing is hashed and the result says `skipped`.
+// present since the finish baseline. Only the recorded files are hashed. "Finished" is the catalog's definition —
+// phase complete AND a baseline: a baselined feature whose tasks are open again (append_tasks after finish) is
+// `reopened`, listed apart and not hashed until it is finished again. A state file that can't be read is an error
+// (verdict `error` unless something drifted; a named feature that can't be read at all → ok:false), never "clean".
+// opts.maxFiles / opts.maxBytes bound the work (SessionStart): over budget, nothing is hashed and the result says
+// `skipped`. opts.activeOnly leaves archived features out (the SessionStart line is about the work in .specs/).
 function drift(projectDir, name, opts = {}) {
   const root = path.resolve(projectDir);
   const named = name != null && String(name).trim() !== "";
@@ -4649,8 +4677,10 @@ function drift(projectDir, name, opts = {}) {
     sources = locateFeatures(projectDir, name);
     if (!sources.length) return { ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
   } else sources = featureDirs(projectDir);
+  if (opts.activeOnly) sources = sources.filter((s) => !s.archived);
   const withBase = [];
   const unbaselined = [];
+  const reopened = [];
   const errors = [];
   let lang = projectLang(projectDir);
   for (const s of sources) {
@@ -4658,9 +4688,11 @@ function drift(projectDir, name, opts = {}) {
     if (named && typeof st.lang === "string") lang = normalizeLang(st.lang);
     if (st.invalid) { errors.push({ feature: s.slug, error: st.invalid }); continue; }
     if (!isObj(st.finished) || !isObj(st.finished.files)) { unbaselined.push(s.slug); continue; }
+    if (detectPhase(s.dir, detectTracks(s.dir)) !== "complete") { reopened.push(s.slug); continue; }
     withBase.push({ s, fin: st.finished });
   }
-  const res = { ok: true, lang, features: [], drifted: [], unbaselined, verdict: "clean" };
+  if (named && errors.length && errors.length === sources.length) return { ok: false, error: errors[0].error, errors };
+  const res = { ok: true, lang, features: [], drifted: [], unbaselined, reopened, verdict: errors.length ? "error" : "clean" };
   if (errors.length) res.errors = errors;
   const recorded = withBase.reduce((n, x) => n + Object.keys(x.fin.files).length, 0);
   const rootReal = realRootOf(root);
@@ -4695,7 +4727,7 @@ function drift(projectDir, name, opts = {}) {
     if (d.drifted) res.drifted.push(s.slug);
   }
   if (res.drifted.length) res.verdict = "drift";
-  if (!res.features.length) res.note = i18n.msg(lang).drift.none;
+  if (!res.features.length && !errors.length && !reopened.length) res.note = i18n.msg(lang).drift.none;
   return res;
 }
 

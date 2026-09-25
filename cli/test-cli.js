@@ -773,20 +773,24 @@ ok(rest2.code === 1 && /Nothing is archived as 'billing'/.test(rest2.out) && /re
 // drift: no baseline yet → a note, exit 0; a baseline + an edited implementing file → exit 1 with the file named.
 const dr10 = r10(["drift"]);
 ok(dr10.code === 0 && /No finished feature has a drift baseline yet/.test(dr10.out) && /no finish baseline yet: accounts, billing, billing-v2/.test(dr10.out), "drift without any baseline: a note + the unbaselined features, exit 0");
+// A baseline on a feature whose tasks aren't all done (reworked after finish) is `reopened`: listed, never hashed, exit 0.
 fs.mkdirSync(path.join(w10, "src"), { recursive: true });
-fs.writeFileSync(path.join(w10, "src", "a.js"), "one\r\n");
-const sha10 = require("crypto").createHash("sha1").update("one\n").digest("hex"); // CRLF-normalized, like the engine
-const bSt = path.join(w10s, "billing", ".state.json");
-fs.writeFileSync(bSt, JSON.stringify({ ...JSON.parse(fs.readFileSync(bSt, "utf8")), finished: { at: "2026-01-02T03:04:05.000Z", files: { "src/a.js": sha10 } } }, null, 2));
-const drClean = r10(["drift", "billing"]);
 fs.writeFileSync(path.join(w10, "src", "a.js"), "two\n");
-const drDirty = r10(["drift", "billing"]);
-let drJ = null;
-try { drJ = JSON.parse(r10(["drift", "--json"]).out); } catch { /* invalid JSON */ }
-ok(drClean.code === 0 && /✓ billing: 1 implementing file\(s\) unchanged since finish \(2026-01-02\)/.test(drClean.out) &&
-  drDirty.code === 1 && /⚠ billing: 1 of 1 implementing file\(s\) changed since finish \(2026-01-02\)/.test(drDirty.out) && /changed: src\/a\.js/.test(drDirty.out) &&
-  drJ && drJ.drifted.join() === "billing" && JSON.stringify(drJ) === JSON.stringify(S10.drift(w10)) && r10(["drift", "nope"]).code === 1,
-  "drift <feature>: clean after finish (CRLF-normalized), exit 1 naming the changed file after an edit; --json = spec_drift; an unknown feature exits 1");
+const bSt = path.join(w10s, "billing", ".state.json");
+const bStKeep = fs.readFileSync(bSt, "utf8");
+fs.writeFileSync(bSt, JSON.stringify({ ...JSON.parse(bStKeep), finished: { at: "2026-01-02T03:04:05.000Z", files: { "src/a.js": "0".repeat(40) } } }, null, 2));
+const drRe10 = r10(["drift", "billing"]);
+ok(drRe10.code === 0 && /reopened since finish \(tasks open again — checked once finished again\): billing/.test(drRe10.out) && !/⚠/.test(drRe10.out) &&
+  !/No finished feature has a drift baseline yet/.test(drRe10.out) && r10(["drift", "nope"]).code === 1,
+  "drift <feature> on a baselined feature whose tasks are open again: listed as reopened, not drift (exit 0); an unknown feature exits 1");
+// An unreadable .state.json is not "clean": named → error, project-wide → the error printed, exit 1.
+fs.writeFileSync(bSt, "{ broken");
+const drBad10 = r10(["drift", "billing"]);
+const drBadAll10 = r10(["drift"]);
+fs.writeFileSync(bSt, bStKeep);
+ok(drBad10.code === 1 && /not valid JSON/.test(drBad10.out) && !/No finished feature has a drift baseline yet/.test(drBad10.out) &&
+  drBadAll10.code === 1 && /billing\/\.state\.json is not valid JSON/.test(drBadAll10.out),
+  "drift with an unreadable .state.json exits 1 (named or project-wide) and never claims 'no baseline yet'");
 
 // finish --write on a READY feature records the drift baseline (and says so).
 const w10f = path.join(tmp, "wp10-finish");
@@ -810,6 +814,17 @@ const fin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
 const fin10State = JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
 ok(fin10.code === 0 && /Drift baseline recorded: 1 implementing file\(s\)/.test(fin10.out) && Object.keys(fin10State.finished.files).join() === "src/auth.js" &&
   run(["drift", "--project", w10f]).code === 0, "finish --write on a ready feature records the drift baseline (and prints it); drift is then clean");
+const finDay10 = fin10State.finished.at.slice(0, 10);
+fs.writeFileSync(path.join(w10f, "src", "auth.js"), "fix\r\n");
+const drClean = run(["drift", "login-loop", "--project", w10f]);
+fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");
+const drDirty = run(["drift", "login-loop", "--project", w10f]);
+let drJ = null;
+try { drJ = JSON.parse(run(["drift", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+ok(drClean.code === 0 && new RegExp("✓ login-loop: 1 implementing file\\(s\\) unchanged since finish \\(" + finDay10 + "\\)").test(drClean.out) &&
+  drDirty.code === 1 && new RegExp("⚠ login-loop: 1 of 1 implementing file\\(s\\) changed since finish \\(" + finDay10 + "\\)").test(drDirty.out) && /changed: src\/auth\.js/.test(drDirty.out) &&
+  drJ && drJ.drifted.join() === "login-loop" && JSON.stringify(drJ) === JSON.stringify(S10.drift(w10f)),
+  "drift <feature>: clean after finish (CRLF-normalized), exit 1 naming the changed file after an edit; --json = spec_drift");
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");

@@ -9,7 +9,7 @@
  *     when a `.specs/.../tasks.md` is saved, run a traceability check. Surfaces gaps in
  *     the moment, with zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
- *     feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
+ *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
  * `hookSpecificOutput.additionalContext` so Claude sees it as context, not as a user message.
@@ -90,10 +90,12 @@ function main(raw) {
       const h = m.hook;
       const phase = (p) => (m.phaseNames && m.phaseNames[p]) || p; // 'executing' → 'em execução' / 'en ejecución'
       const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, phase(f.phase), f.tasksDone, f.tasks));
-      // Drift since finish (finished features only). Bounded: over DRIFT_MAX_FILES recorded files (or ~8 MB of them)
-      // nothing is hashed — `dev-spec drift` still checks on demand. Never blocks or breaks the session line.
+      // Drift since finish (finished features only — a reopened one is not; archived ones are left to `dev-spec drift`,
+      // like the feature lines above, so a set-aside feature can't nag every session). Bounded: over DRIFT_MAX_FILES
+      // recorded files (or ~8 MB of them) nothing is hashed — `dev-spec drift` still checks on demand. Never blocks or
+      // breaks the session line.
       try {
-        const d = spec.drift(pdir, null, { maxFiles: DRIFT_MAX_FILES, maxBytes: 8 * 1024 * 1024 });
+        const d = spec.drift(pdir, null, { maxFiles: DRIFT_MAX_FILES, maxBytes: 8 * 1024 * 1024, activeOnly: true });
         if (d && d.ok && !d.skipped) d.features.filter((x) => x.drifted).forEach((x) => lines.push(m.drift.hookLine(x.feature, x.changed.length + x.missing.length + x.nowPresent.length)));
       } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
