@@ -22,7 +22,43 @@ testing standards — so each feature spec doesn't relitigate the basics.
 | `ai-strategy.md` | `+ai` | when the AI track is used |
 
 At project start, create at least the four `core` files. Add the others the first time a
-feature pulls in that track. Fill them in once, revisit once a quarter.
+feature pulls in that track. Fill them in once, revisit once a quarter. `spec_doctor`'s `steering` check warns,
+by name, about every steering file still holding template placeholders — a stub steers nothing.
+
+## Scoped steering — front matter and custom files
+
+Not every rule applies everywhere. A steering file may start with Kiro-compatible front matter that decides
+when `spec_task_brief` puts it in front of an implementer:
+
+```markdown
+---
+inclusion: fileMatch
+fileMatchPattern: "src/api/**"
+---
+
+# Api Conventions
+
+## Rules
+- Every handler validates its body with the shared zod schema before touching the service layer.
+```
+
+| `inclusion` | The brief… |
+|---|---|
+| `always` | lists it for every task (also the default when the front matter has no `inclusion`) |
+| `fileMatch` | lists it — and quotes its body, front matter stripped, when it holds real content and fits the budget — only for tasks whose `_Implements:_` paths match `fileMatchPattern` |
+| `manual` | never includes it automatically; lists it as available on request (an unknown mode, Kiro's `auto` included, is treated as `manual`) |
+
+`fileMatchPattern` is a glob (`**` any depth, `*` and `?` within one path segment, `{a,b}` alternatives) or a
+list: `["src/api/**", "src/routes/**"]` (YAML `- item` lines work too). A folder in `_Implements:_` also
+matches `folder/**`. The default steering files (constitution, tech, structure and the active tracks' files)
+count as `always` while they have no front matter — the pre-1.13 behaviour; any other file without front
+matter stays out of briefs.
+
+**Custom files.** `steering_scaffold {file: "api-conventions.md"}` (CLI `dev-spec steering api-conventions.md`)
+creates a stub for any name matching `^[a-z0-9][a-z0-9-]{0,62}\.md$` — lowercase, no folders, not a Windows device
+name (`nul.md`, `com1.md`) — with a `fileMatch` front matter and guidance in a comment. Replace the example pattern
+and the bracketed lines. Good candidates: API conventions, UI component rules, migration rules, a module's
+invariants. Keep each one short; it is quoted into briefs.
 
 ---
 
@@ -352,13 +388,14 @@ Features projecting > $0.10/user/month additional cost need explicit approval be
 
 ## Applying These Templates
 
-1. **At project start:** create the three `core` files with real content. Edit every line —
+1. **At project start:** create the four `core` files with real content. Edit every line —
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
    `testing-standards.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
+   Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.
 4. **Quarterly:** review with the team. Targets shift, SLAs tighten, costs drift, models change.
 5. **In code review:** a change that contradicts a steering file (new service without `cost.md` update,
    new endpoint without observability, prompt change without eval) is blocked.

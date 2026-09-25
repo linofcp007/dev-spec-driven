@@ -9,4 +9,4 @@ Feature / request: $ARGUMENTS
 
 Begin at Phase 0 (Classification) — pick the mode (Vibe / Bounded / Spec; a defect → `/spec-bugfix`) and the composable track set
 (core/+tdd/+saas/+ai) via `spec_classify`, then run the phased pipeline. If a `.specs/<feature>/`
-already exists, run `spec_status` and resume. Respond in the user's language (EN/PT/ES).
+already exists, run `spec_next_action` and resume from the step it names. Respond in the user's language (EN/PT/ES).

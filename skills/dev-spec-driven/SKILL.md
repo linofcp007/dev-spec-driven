@@ -64,8 +64,11 @@ their most recent message.
 6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the
    final code. Tick tasks only through `spec_complete_task {evidence}` — never by editing the checkbox.
    A task whose `_Verify:_` names a runnable command counts as verified only with `{command, exitCode: 0}`;
-   a text note ticks it but leaves it unverified (`references/verification.md`). The thoughts that
+   a text note ticks it but leaves it unverified; a failed run is recorded and refuses the tick; evidence goes
+   stale when the spec it proved changes (`references/verification.md`). The thoughts that
    precede skipping a phase are listed in `references/red-flags.md`.
+7. **An approved spec that changed is not approved.** Every approval snapshots what it signed off; an edit
+   afterwards is diffed (`spec_impact`), reviewed with the human and re-approved — never silently shipped.
 
 ---
 
@@ -74,9 +77,10 @@ their most recent message.
 The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over
 hand-rolled edits for the structural steps. Which tool when:
 
-- **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering) → `spec_create` (one feature; `kind: "bugfix"` for a defect).
-- **Gates:** `ears_validate` · `spec_clarify` · `trace_check` · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` · `spec_next_action` (you are here + what changed since approval).
-- **Execute:** `spec_next_task` · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_finish`.
+- **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering; opt-in `guard`) → `spec_create` (one feature; `kind: "bugfix"` for a defect, `brownfield: true` in existing code) — or `spec_import` (a Kiro / spec-kit / OpenSpec spec).
+- **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail) · `spec_next_action` (you are here, one ordered next step).
+- **Execute:** `spec_next_task` · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
+- **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_drift` · `spec_metrics` · `spec_catalog`.
 - **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold`.
 
 Full tool table: `references/tooling-reference.md`. The tools produce **skeletons and checks** (never
@@ -121,9 +125,12 @@ tenant boundary, a payment path, or an LLM call, say so and offer to classify.
 When the project already has code (no `.specs/` yet, or "document/spec our existing app"): **scan**
 (`/scan`, `spec_scan`) → **infer steering + a constitution that acknowledges the existing patterns** →
 reverse-engineer specs for the core modules, describing what the code does *today* (`/reverse`) →
-**coverage** (`/coverage`, `spec_coverage`) → spec new features integration-aware
-(`integration-plan.md`, `_Implements:_`). Adopt incrementally; prove value on one module first. Full
-flow and strategies: `references/brownfield.md`.
+**coverage** (`/coverage`, `spec_coverage`: the share of code files named by `_Implements:_`) → spec new
+features integration-aware (`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). The scan
+lists routes, tests, entrypoints, env var names and migrations. Specs already written for Kiro, spec-kit or
+OpenSpec come in with `/spec-import` (IDs remapped to `US-N.AC-M`; confirm the tracks, then the normal gates).
+Adopt incrementally; prove value on one module first. Full flow, strategies and import mappings:
+`references/brownfield.md`.
 
 ---
 
@@ -132,17 +139,24 @@ flow and strategies: `references/brownfield.md`.
 All artifacts live in `.specs/` at the project root: `steering/` (shared context, per active track),
 `roadmap.json`, and one folder per feature — `classification.md`, `requirements.md`, `design.md`,
 `tasks.md`, `quickstart.md`, `checklist.md`, plus `test-plan.md` + `tests/` (+tdd), `eval-plan.md` +
-`prompts/` + `evals/` (+ai) and `load-test.md` (+saas). Annotated tree: `references/tooling-reference.md`.
+`prompts/` + `evals/` (+ai) and `load-test.md` (+saas); `integration-plan.md` (brownfield), `bug.md` (bugfix),
+`retro.md`, and `.history/` (approval snapshots — commit them). Generated at the root: `ROADMAP.md` and the
+living catalog `SPECS.md`. Annotated tree: `references/tooling-reference.md`.
 
 ### Steering Files
 Before any spec work, read whatever exists in `.specs/steering/`. Steering depends on the tracks, so
 missing files are created **after Phase 0 approval** (see Phase 0, step 4); add a track's steering file
 (`steering_scaffold`) the first time a later feature pulls in that track. They're short and
-dramatically improve every downstream spec. Templates: `references/steering-templates.md`.
+dramatically improve every downstream spec; one still full of template placeholders steers nothing (`spec_doctor`
+names it). **Scoped steering:** rules for one area go in a custom file (`steering_scaffold {file:
+"api-conventions.md"}`) whose front matter says when a task brief includes it — `inclusion: always`,
+`fileMatch` (+ `fileMatchPattern: "src/api/**"`, matched against the task's `_Implements:_` paths) or `manual`.
+Templates and inclusion modes: `references/steering-templates.md`.
 
 **`constitution.md` is core (always).** It holds the project's non-negotiable principles
 (e.g. "every write is idempotent", "no PII in logs", "errors fail closed"). Every design carries a
-**Constitution Check** section; `spec_doctor` only checks that the section is there. Whether the design
+**Constitution Check** section; `spec_doctor` only checks that the section is there (the design approval also
+refuses it empty). Whether the design
 actually honours each principle is judged by the human at the gate and by the `spec-critic` agent
 (`/spec-doctor --deep`); `/prReview` checks the code against it. Keep the principles few, concrete, and
 testable.
@@ -164,7 +178,8 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
    autonomy / volume / compliance. If the user disagrees with the track set, adjust it now.
 4. **After Phase 0 approval:** `spec_init {tracks, lang}` if steering is missing, then
    `spec_create {name, tracks, lang}` **once** — it seeds `classification.md` (record the fields from
-   step 3 there) and every artifact skeleton the tracks need. Record the gate with `spec_approve`.
+   step 3 there) and every artifact skeleton the tracks need, and persists the track set and language in
+   `.state.json` (change tracks later with `spec_add_track`, `--remove` to drop one). Record the gate with `spec_approve`.
 
 Worked examples: `references/classification-examples-saas.md`, `references/classification-examples-ai.md`.
 
@@ -180,9 +195,11 @@ dashboards, and alerts all reference them, so assign them even on the lightest t
 where **P1 is the MVP** that delivers value on its own; give each a one-line *Independent Test*.
 Add a **Success Criteria** section with measurable, **technology-agnostic** outcomes
 (`SC-001`, … — e.g. "90% complete checkout in <30s") — these sit alongside the EARS ACs (system
-behavior), not instead of them. **Mark any ambiguity inline** with `[NEEDS CLARIFICATION: question]`;
+behavior), not instead of them. Give edge cases and NFRs stable IDs too (`EC-1`, `NFR-1`) — `trace_check`
+warns when no task or test covers them. **Mark any ambiguity inline** with `[NEEDS CLARIFICATION: question]`;
 **the design phase is gated — it cannot start while any such marker remains** (`spec_doctor` fails
-the `clarifications` check until they're resolved).
+the `clarifications` check until they're resolved). Replace every template placeholder: the gates treat a
+scaffold that is still a template as unwritten (`placeholders` check; approval refused).
 
 Steps: read steering → ask clarifying questions (don't guess) → fill the scaffolded `requirements.md`
 → run `ears_validate` to catch missing SHALL / missing IDs / vague words → **run `spec_clarify`**
@@ -252,8 +269,10 @@ patterns over novelty. Present for approval before proceeding.
 ## Phase 3: Test Plan & Eval Plan (`/testPlan`, `/evalPlan`) — track-conditional
 
 **+tdd → Test Plan.** Enumerate every test (≥1 per AC; negative tests for every IF/THEN; boundary
-tests). Each test gets a stable ID (`T-01`) mapped to AC IDs, and a layer (unit/integration/E2E)
-following the pyramid. The Coverage Check section must show every AC appears in ≥1 test. On +saas,
+tests). Each test gets a stable ID (`T-01`) mapped to AC IDs, a layer (unit/integration/E2E)
+following the pyramid, and a **Kind**: `example` (one concrete case — event-driven WHEN / IF…THEN) or `property`
+(an invariant over generated inputs — ubiquitous, WHILE, "never / for every" rules like tenant isolation).
+The Coverage Check section must show every AC appears in ≥1 test. On +saas,
 add tenant-isolation, rate-limit, idempotency, authorization-matrix, and audit-log tests. Approve
 before writing test code. References: `references/test-patterns.md`.
 
@@ -272,7 +291,9 @@ A feature with both tracks has both artifacts.
 
 **+tdd:** Write every planned test. Each must exist and **fail for the right reason** (assertion /
 NotImplementedError, not a typo or missing import). Scaffold only stubs/signatures so tests
-compile — no business logic. Confirm: N written, N red, 0 green, 0 erroring. Commit
+compile — no business logic. Confirm: N written, N red, 0 green, 0 erroring. Put the T-ID in each test's
+name (`test("T-01 …")`, `def test_T01_…`) and run `trace_check {code: true}` (`dev-spec trace <f> --code`):
+every planned T-ID found in the test code. Commit
 `test(feature): scaffold failing tests …`. **No implementation code until this gate is approved.**
 
 **+ai:** Write deterministic tests (validation, schema, rate limiting, logging, fallback, cost
@@ -309,7 +330,9 @@ Traceability markers per task:
 - brownfield/integration: `_Implements: path/to/file_` to tie a task to a real source file (checked by `trace`)
 
 Run `trace_check` after writing tasks: every AC must map to ≥1 task (and, on +tdd, the test plan;
-every planned T-ID should map to a task). Present for review.
+every planned T-ID should map to a task). Keep task numbers unique and replace every scaffold placeholder task
+(the tasks gate refuses them). Present for review. Work found after approval is appended, never renumbered in
+(`spec_append_tasks`, below).
 
 ---
 
@@ -363,6 +386,15 @@ tokens. Invariants:
 Full protocol (preconditions incl. a green baseline, ledger, review packages, fix loop, model selection,
 final review): `references/subagent-execution.md`.
 
+### Converge pass (`/spec-converge`)
+
+When implementation drifted, a review found follow-up work, or every task is ticked but you doubt every AC is
+delivered: dispatch `dev-spec-driven:spec-reviewer` in **converge** mode (or run its checklist inline) — the
+whole feature, AC by AC: implemented where? tested by what? It proposes the missing work as tasks; gaps that
+need a different AC or design go back to their phase instead. **The human approves the list**, then
+`spec_append_tasks` adds them under "Phase: Convergence" (existing tasks untouched), you re-approve the tasks
+phase and execute them with evidence.
+
 ### User commands during execution
 "implement"/"next" (next task) · "implement N" (jump) · "continue" (resume) · "status" (progress +
 test/eval state) · "pause" (stop after current task).
@@ -371,14 +403,19 @@ test/eval state) · "pause" (stop after current task).
 
 ## Gates (`/spec-doctor`, `/approve`, `/next-action`)
 
-Before advancing a phase, run `/spec-doctor` (the `spec_doctor` tool): EARS lint, traceability,
-steering presence, design + Mermaid + Constitution Check section, per-track mandatory sections present
-AND filled (no leftover `TODO` sentinel), verification evidence, and the **approval gates** (any artifact
-that exists but whose phase isn't approved: `gatesOk`, `pendingGates`) → a `readyToAdvance` verdict.
+Before advancing a phase, run `/spec-doctor` (the `spec_doctor` tool): EARS lint, template placeholders,
+traceability (+ EC/NFR/SC warnings), steering (present and filled), design + Mermaid + Constitution Check
+section, per-track mandatory sections present AND filled (no leftover `TODO` sentinel), verification evidence,
+duplicate task numbers, artifacts changed since their approval, and the **approval gates** (`gatesOk`,
+`pendingGates`, forced approvals) → a `readyToAdvance` verdict.
 `--deep` adds a semantic review by the `dev-spec-driven:spec-critic` agent (completeness,
 contradictions, ambiguity, testability, scope, YAGNI) — what structural checks can't see. When the user
-signs off, record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). Lost?
-`/next-action <feature>` gives the single next step and flags any artifact edited *after* its approval.
+signs off, record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval
+is a gate:** that phase's checks run first and any failure refuses it, naming the failing checks. `force: true`
+(`--force`) records it anyway as a *forced* approval — only when the user explicitly accepts the failures; doctor,
+the roadmap and the metrics keep showing it. Lost? `/next-action <feature>` gives ONE next step in the chain's
+order — fill the first unwritten artifact → re-review what changed since approval → fix the current phase's
+failing checks → approve → implement the next task → finish.
 
 At every gate present: **(1) what was produced · (2) key decisions + rationale · (3) tracks/sections
 affected · (4) risks to review · (5) the `spec_doctor` verdict · (6) next step** — then ask for
@@ -386,24 +423,51 @@ approval. Keep it tight.
 
 ---
 
+## After approval: changes, drift, metrics
+
+- **Change request (`/spec-impact`).** Every approval saves a snapshot (`.history/<phase>@<n>.md`) and joins
+  `approvalHistory`. An approved artifact edited later is flagged everywhere (`changed-since-approval`;
+  `next_action` → re-review; `spec_finish` blocks). `spec_impact` diffs it against the snapshot — ACs (by ID),
+  design sections or tasks — and lists the tasks, tests and design sections each change reaches. Show that to the
+  user; only with their OK, `reopen: true` unticks the affected done tasks, marks their evidence stale and records
+  the change request (`state.changes`). Then update what the change reaches and re-approve (a new snapshot).
+- **Superseding.** A later feature that replaces an earlier criterion marks its new AC
+  `_Supersedes: <feature>/US-n.AC-m_` instead of rewriting finished specs. `/spec-catalog` (`spec_catalog
+  {write: true}`) keeps `.specs/SPECS.md` — every feature and AC, superseded ones marked — current.
+- **Drift (`/spec-drift`).** `spec_finish {write: true}` on a ready feature records a hash of every
+  `_Implements:_` file; `spec_drift` (and a session-start line) reports what changed since. Decide with the user:
+  update the spec (`/spec-impact`, or a new feature with `_Supersedes:_`), fix the code, or accept and re-baseline.
+- **Metrics & retro (`/spec-metrics`).** Lead times, rework, forced approvals, change requests, evidence pass rate;
+  `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
+- **Archive, don't delete.** `/feature archive` is reversible (`restore` puts the roadmap deps back).
+
+Depth: `references/change-management.md`.
+
+---
+
 ## Supporting Workflows
 
 | Command | What it does | Reference |
 |---|---|---|
-| `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}`): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan; `spec_doctor` fails until the root cause is written with evidence. After three failed fixes, question the design. | `references/bugfix.md` |
-| `/spec-finish` | Blockers (doctor fails, open tasks, tasks without evidence, pending approvals), the checks to run fresh, and a merge title + summary built from the spec chain. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |
+| `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}`): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan; `spec_doctor` fails, the design approval (it signs off `bug.md`) is refused and every task after the root-cause task is refused until the root cause is written with evidence. After three failed fixes, question the design. | `references/bugfix.md` |
+| `/spec-finish` | Blockers (doctor fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, placeholders, a missing root cause) and warnings, the checks to run fresh, a merge title + summary built from the spec chain, and the drift baseline. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |
+| `/spec-impact` · `/spec-converge` · `/spec-drift` · `/spec-metrics` · `/spec-catalog` | Change requests, the AC-by-AC converge pass, drift since finish, metrics + retro, the living catalog (sections above). | `references/change-management.md` |
+| `/spec-import` | A Kiro / spec-kit / OpenSpec spec → a NEW feature (IDs remapped, `mapping` + `warnings` shown); then Phase 0 track confirmation and the normal gates. | `references/brownfield.md` |
+| `/spec-guard` | Opt-in guard mode (`spec_init {guard: true}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks; silent otherwise. | — |
 | `/spec-review-feedback` | Every review comment judged against the spec: fix AC violations, send spec changes back to their phase, push back on out-of-scope asks citing `Out of Scope`, ask about unclear ones. | `references/review-feedback.md` |
 | `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · security. | — |
 | `/spec-commit` | Conventional commit referencing the task, `Makes T-xx green`, the eval delta and emitted metrics; Phase-4 commits use `test:`. | `references/tooling-reference.md` |
 | `/promptReview` (+ai) | Prompt changes are blocked without eval results (golden up, adversarial held, version bumped, cost delta noted). | `references/eval-suite-patterns.md` |
 | `/migrateModel` (+ai) | Eval-gated only: run the current sets on the new model, switch only if equal-or-better (or tune the prompt to recover), record it in Model Lifecycle. Never migrate blind. | `references/model-provider-guide.md` |
-| `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · rename (deps follow) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
+| `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · restore · rename (deps follow) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
 | `/roadmap` · `/depend` · `/backlog` | Order and dependencies between features (cycles rejected), %, blocked status, planned-but-unspecced work. Don't start a feature whose dependencies aren't met without saying so. `.specs/ROADMAP.md` is regenerated automatically — never hand-edit it. | `references/tooling-reference.md` |
 | `/spec-status` | Mode, tracks, phase, task progress, test/eval state, section completeness (`spec_status` / `spec_list`). | — |
 
-**Local automation, not CI:** saving `requirements.md` lints EARS, saving `tasks.md` checks
-traceability, session start prints feature status; the optional `pre-commit` validator blocks staged
-EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`,
+**Local automation, not CI:** saving `requirements.md` lints EARS (and names leftover placeholders), saving
+`tasks.md` checks traceability, saving `design.md` checks the active tracks' mandatory sections and the
+Constitution Check; session start prints feature status plus a line per finished feature whose files drifted;
+with guard mode on, a code edit asks first while nothing is approved; the optional `pre-commit` validator blocks
+staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`,
 `/guardian-scan`) and UI work to **ui-ux-pro-max** when present — route to them, don't duplicate them.
 
 **Commands:** entry `/spec` (alias `/ds`), execute `/executeTask` (`/dsx`), status `/spec-status`
@@ -420,19 +484,20 @@ EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardia
 ## References (read on demand — don't preload everything)
 - `references/classification-matrix.md` — track-routing brain (the decision procedure)
 - `references/classification-examples-saas.md` / `references/classification-examples-ai.md` — worked examples
-- `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration)
+- `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration) + importing Kiro / spec-kit / OpenSpec specs
+- `references/change-management.md` — after approval: snapshots + approval history, `spec_impact` + reopen, `_Supersedes:_`, the SPECS.md catalog, drift, archive/restore, metrics
 - `references/improvement-specs.md` — spec'ing internal-improvement work (the metric delta is the acceptance criterion; closes the dev-guardian loop)
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 9 steering-file templates
-- `references/tooling-reference.md` — MCP tool table, command table, annotated `.specs/` tree, roadmap generation, commit format
-- `references/verification.md` — evidence before claims: the gate, `_Verify:_`, recorded evidence
+- `references/steering-templates.md` — all 9 steering-file templates + scoped steering (front matter inclusion modes, custom files)
+- `references/tooling-reference.md` — the 29 MCP tools, the CLI, the hooks, command table, annotated `.specs/` tree, roadmap generation, commit format
+- `references/verification.md` — evidence before claims: the gate, `_Verify:_`, recorded evidence, unverified reason codes
 - `references/bugfix.md` — systematic debugging as a light spec (reproduce → root cause → regression test → fix)
 - `references/review-feedback.md` — handling review comments against the spec
 - `references/red-flags.md` — the rationalizations that precede skipping each phase
-- `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → fix loop, ledger, checkpoints, model selection
-- `references/example-spec.md` — end-to-end example (requirements → design → tasks), core/auth
+- `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → fix loop, ledger, checkpoints, model selection, converge mode
+- `references/example-spec.md` — end-to-end example (requirements → design → test plan → tasks), `core +tdd` auth
 - `references/example-spec-combined.md` — worked example with all four tracks (`core +tdd +saas +ai`)
-- `references/test-patterns.md` — naming, AAA, table-driven tests, anti-patterns
+- `references/test-patterns.md` — naming, T-IDs in test names, AAA, table-driven and property-based tests, anti-patterns
 - `references/scale-design-template.md` — filled-in 5 mandatory +saas sections
 - `references/saas-patterns.md` — caching, queues, rate limiting, idempotency, circuit breakers, multi-tenancy
 - `references/load-testing-patterns.md` — k6/Artillery templates, scenarios, interpretation

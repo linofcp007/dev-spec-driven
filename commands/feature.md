@@ -1,18 +1,25 @@
 ---
-description: Manage a feature's lifecycle - remove, archive, or rename (keeps roadmap deps consistent). PT - gere a feature (apagar/arquivar/renomear). ES - gestiona la feature (eliminar/archivar/renombrar).
-argument-hint: "[remove|archive|rename] [feature name] [new name]"
+description: Manage a feature's lifecycle - archive, restore, rename, or remove (keeps roadmap deps consistent). PT - gere a feature (arquivar/restaurar/renomear/apagar). ES - gestiona la feature (archivar/restaurar/renombrar/eliminar).
+argument-hint: "[archive|restore|rename|remove] [feature name] [new name]"
 ---
 
 Use the **dev-spec-driven** skill to manage a feature's lifecycle.
 
 Args: $ARGUMENTS
 
-Call the `spec_feature` MCP tool (CLI `dev-spec feature <action> <name> [new-name]`) with one of:
+Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
+`dev-spec feature <action> <name> [new-name] [--yes]`) with one of:
 
-- **archive** — move `.specs/<slug>/` to `.specs/_archive/<slug>/`, out of the active roadmap (reversible). **Prefer this** over remove.
+- **archive** — move `.specs/<slug>/` to `.specs/_archive/<slug>/`, out of the active roadmap. Its roadmap entry
+  and the `dependsOn` references it prunes are recorded in its `.state.json` (`archived`). **Prefer this** over remove.
+- **restore** — move `.specs/_archive/<slug>/` back and put back its roadmap entry and the `dependsOn` references
+  archive pruned — only for features that still exist (and never one that would now close a cycle); the rest are
+  listed in `skipped`. An error when an active feature already has that slug or nothing is archived under the name.
 - **rename** — change the slug + folder + `roadmap.json` key, updating every `dependsOn` reference to it.
-- **remove** — permanently delete the feature's folder. **Destructive** — the tool refuses without `confirm: true` (CLI `--yes`); look at the feature and confirm with the user before passing it.
+- **remove** — permanently delete the feature's folder. **Destructive**: without `confirm: true` (CLI `--yes`)
+  nothing is deleted and the result lists what would be (`needsConfirm`). Show that list to the user and pass
+  `confirm: true` only after they confirm (or were explicit) — suggest archive instead.
 
-All three keep `roadmap.json` dependencies consistent and regenerate the roadmap. For **remove**, since
-it's hard to reverse, confirm intent first unless the user was explicit — only then pass `confirm: true`. Report what changed. Respond
-in the user's language (EN/PT/ES).
+Every action keeps `roadmap.json` dependencies consistent and regenerates the roadmap (and `.specs/SPECS.md`
+when it exists). Report what changed, including any `skipped` references on restore. Respond in the user's
+language (EN/PT/ES).

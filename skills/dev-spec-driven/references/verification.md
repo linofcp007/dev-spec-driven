@@ -21,22 +21,48 @@ BEFORE claiming any status:
   proves it. The scaffold seeds one; give every task that changes behaviour a real one
   (`npm test -- keys.test.js`, `pytest tests/test_keys.py`, `k6 run load.js`).
 - **`spec_complete_task {…, evidence: {command, exitCode, summary}}`** records the result in
-  `.state.json → evidence`. A non-zero `exitCode` **refuses the tick**. A task with `_Verify:_` ticked
-  without evidence gets a warning, and `spec_doctor` (check `verification`), `ROADMAP.md` ("needs
-  attention") and `spec_finish` (a blocker) keep surfacing it until evidence is back-filled.
+  `.state.json → evidence[<n>]` — the latest run `{command, exitCode, summary, at}` plus a short `history` of
+  runs (for the pass rate), stamped with the task's text and its `_Verify:_` command. A non-zero `exitCode`
+  **refuses the tick**, and the failed run is **recorded** anyway. `spec_doctor` (check `verification`),
+  `ROADMAP.md` ("needs attention") and `spec_finish` (a blocker) keep surfacing every unverified ticked task.
 - **Tick only through the engine.** `spec_complete_task` (CLI `dev-spec done`) is the only way a task
   gets ticked — never edit the `- [ ]` checkbox by hand; the evidence lives next to the tick.
-- **What counts as verified:** a task whose `_Verify:_` names a runnable command is verified only by
-  `{command, exitCode: 0}` — a text note alone ticks it but leaves it **unverified**. A summary-only
-  manual attestation ("checked the login page by hand") verifies only a task with no runnable command
-  (no `_Verify:_`, or a `[placeholder]`). A command given without its exit code, or a non-integer exit
-  code, is rejected. A failed re-check of an already-ticked task is **recorded** and the task becomes
-  unverified until a passing run is recorded.
+- **What counts as verified:**
+  - a task whose `_Verify:_` names a **runnable command** is verified only by `{command, exitCode: 0}` — a text
+    note alone ticks it but leaves it **unverified**;
+  - a summary-only manual attestation ("checked the login page by hand") verifies only a task with **no runnable
+    command** (no `_Verify:_`, or a `[bracketed]` manual check);
+  - a command without its exit code, a non-integer exit code, or a bare `{exitCode: 0}` with nothing else is
+    **rejected**; "exit 0" without a command is a note, never a run;
+  - a note given after a run is attached to it (`note`) — it never overwrites or clears the run's result.
+- **Failed runs.** The latest failed run makes the task unverified — even an already-ticked one (a failed
+  re-check is recorded and the task stays ticked but unverified). Only a later **passing** run clears it; a note
+  can't paper over it.
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
-  and records the evidence; any failure leaves the task open and exits 1. Or report it by hand:
-  `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
+  and records the evidence; any failure leaves the task open, is recorded, and exits 1. `--shell bash` (or
+  `DEV_SPEC_SHELL`) picks the shell. Or report it by hand: `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
 - **Briefs** (`spec_task_brief`) carry the `_Verify:_` command and require the implementer to paste the
   command, exit code and output tail in the report; the reviewer checks it is there.
+
+### Why a task is unverified — stable reason codes
+
+`spec_complete_task` returns `verified` and, when false, `unverifiedReason` (branch on the code, never on the
+localized `note`); doctor, finish and the roadmap label each task the same way.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `no-evidence` | Nothing recorded for this task | Run its `_Verify:_` and record the run |
+| `failed-run` | The latest recorded run exited non-zero | Fix, re-run, record the passing run |
+| `manual-note-on-runnable-verify` | Only a note was given, but `_Verify:_` holds a command | Run the command; record `{command, exitCode}` |
+| `stale-evidence` | The record no longer proves this task: `spec_impact --reopen` marked it stale (the spec it proved changed), or it was recorded for an earlier `_Verify:_` command / another task that held the number | Run the check again on the current code |
+| `duplicate-number` | Another task shares this number and the record isn't this task's | Renumber the tasks (doctor warns `duplicate-tasks`) |
+
+**Duplicate numbers.** `spec_complete_task`, `spec_task_brief` and `done --run` resolve a duplicated number to
+its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.
+Humans still read them as one task — renumber when doctor warns. `01` is task 1.
+
+**Bugfix gate.** In a bugfix, tasks after the root-cause task are refused (nothing recorded, nothing ticked)
+until `bug.md → Root Cause` is filled (`references/bugfix.md`).
 
 ## Claims and what proves them
 

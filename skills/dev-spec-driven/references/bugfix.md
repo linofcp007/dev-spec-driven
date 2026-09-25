@@ -15,6 +15,20 @@ Adapted from the `systematic-debugging` skill of [obra/superpowers](https://gith
 `bug.md → Root Cause` holds real content — the cause *with evidence*, never "probably". A symptom fix
 that makes the error go away without explaining it is a new bug waiting.
 
+The engine enforces it at every step, not only in doctor:
+
+- **Approvals.** A bugfix has no design of its own: `bug.md` stands in for it. The **requirements** gate checks
+  `bug.md → Reproduction`; the **design** approval signs off `bug.md` (and any track sections in `design.md`) and
+  is refused until `Root Cause` is filled. Its snapshot and fingerprint are `bug.md`'s, so an edit to the root
+  cause after approval shows up as `changed-since-approval` and in `spec_impact --phase design` (sections keyed
+  `bug.md: Root Cause`).
+- **Execution gate.** While `Root Cause` is unfilled, `spec_complete_task` (and `dev-spec done --run`, which then
+  runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
+  test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the
+  first task naming `bug.md` and the root cause that carries no `_Makes green:_` / `_Verify:_` (the scaffold's
+  task 2); without one, only the first task can be completed.
+- **Finish.** `spec_finish` blocks on an unwritten root cause; the merge summary quotes the Root Cause and Fix.
+
 ## The four phases (= the scaffolded tasks)
 
 1. **Reproduce** (task 1). Read the error completely — message, stack trace, line numbers. Find the exact
