@@ -582,11 +582,23 @@ function main() {
       // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
       if (!pos[0] || typeof flags.task !== "string") die('usage: dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
       const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
-      // The parser keeps only the last value of a repeated flag: a second --task would be dropped silently.
-      if (argv.filter((a) => a === "--task" || a.startsWith("--task=")).length > 1) die(T.oneTaskPerCall);
+      // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a.
+      // Collect every occurrence, walking argv with the parser's own rules (as `depend` does for --add/--rm).
+      const every = (name) => {
+        const vals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = argv[i];
+          if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === name) vals.push(a.slice(a.indexOf("=") + 1)); }
+          else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2)) && argv[i + 1] !== undefined && !/^--[A-Za-z]/.test(argv[i + 1])) { const v = argv[++i]; if (a.slice(2) === name) vals.push(v); }
+        }
+        return vals;
+      };
+      // A second --task is a second task: refused (one per call) rather than merged or dropped.
+      if (every("task").length > 1) die(T.oneTaskPerCall);
       const task = { text: flags.task };
-      if (typeof flags.req === "string") task.requirements = [flags.req]; // the engine splits "a,b" — same as over MCP
-      if (typeof flags.implements === "string") task.implements = [flags.implements];
+      const reqs = every("req"), impls = every("implements");
+      if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
+      if (impls.length) task.implements = impls;
       if (typeof flags.verify === "string") task.verify = flags.verify;
       if (typeof flags.story === "string") task.story = flags.story;
       if (flags.parallel != null) task.parallel = flags.parallel === true || flags.parallel === "true";

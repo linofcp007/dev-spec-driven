@@ -2604,7 +2604,14 @@ function removeTrack(projectDir, name, track) {
 // ---------------------------------------------------------------------------
 
 const RE_NEW_TASK_TAGS = /^(?:\[(?:US\d+|shared|P)\]\s*)+/i; // the known-tag run taskBlocks reads
-const RE_CONSTRAINTS_HEADING = /^(?:global constraints|restri[çc][õo]es globais|restricciones globales)$/i;
+const RE_THEMATIC_BREAK = /^\s{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/; // '---' / '***' / '___'
+// `npm test` — ONE code span around the whole value (no inner backtick run as long as its fence) — is the command
+// npm test, as taskMarkers reads it. Anything else (`a` && `b`, test -n `echo ok`) is the command itself.
+function unwrapCodeSpan(v) {
+  const m = v.match(/^(`+)(?!`)([\s\S]*[^`])\1$/);
+  if (!m || (m[2].match(/`+/g) || []).some((r) => r.length === m[1].length)) return v;
+  return m[2].trim();
+}
 
 // One task of a spec_append_tasks call → its normalized fields and rendered text/sub-lines, or { error }.
 // `i` is its 1-based position in the call (errors name it).
@@ -2628,29 +2635,39 @@ function newTaskSpec(t, i, A) {
   const files = [];
   for (const given of list(t.implements, /[,;]/)) {
     const p = given.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
-    // Project-relative only (trace_check resolves them from the project root): no absolute path, drive, home or '..'.
-    if (!p || p === "." || p.startsWith("/") || /^[A-Za-z]:/.test(p) || /^~(?:\/|$)/.test(p) || p.split("/").includes("..")) return { error: A.badPath(i, given) };
+    // Project-relative only (trace_check resolves them from the project root): no absolute path, drive or URI scheme
+    // (C:, file:), no home in any form (~, ~/x, ~user/x), no '..'.
+    if (!p || p === "." || p.startsWith("/") || p.startsWith("~") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(p) || p.split("/").includes("..")) return { error: A.badPath(i, given) };
     if (!files.includes(p)) files.push(p);
   }
   let verify = null;
+  let stored = null;
   if (t.verify != null && String(t.verify).trim()) {
     const v = String(t.verify).trim();
     if (/[\r\n]/.test(v)) return { error: A.badVerify(i) };
-    verify = v.replace(/^`+|`+$/g, "").trim() || null; // taskMarkers reads `npm test` as npm test
+    verify = unwrapCodeSpan(v) || null; // "` `" is no command
+    // Every reader drops a [bracketed] value as a placeholder: the evidence gate would never apply to it.
+    if (verify && /^\[.*\]$/.test(verify)) return { error: A.placeholderVerify(i, verify) };
+    if (verify) {
+      // taskMarkers strips a leading/trailing backtick run, so a command that starts or ends with one (`make` && x,
+      // test -n `echo ok`) is stored inside a longer code span — it reads back, and runs, exactly as given.
+      const fence = "`".repeat(Math.max(0, ...(verify.match(/`+/g) || []).map((r) => r.length)) + 1);
+      stored = /^`|`$/.test(verify) ? `${fence} ${verify} ${fence}` : verify;
+    }
   }
   const tags = (story ? `[${story}]` : "") + (parallel ? "[P]" : "");
   const lineText = (tags ? tags + " " : "") + text;
   const body = [];
   if (requirements.length) body.push(`_Requirements: ${requirements.join(", ")}_`);
   if (files.length) body.push(`_Implements: ${files.join(", ")}_`);
-  if (verify) body.push(`_Verify: ${verify}_`);
+  if (stored) body.push(`_Verify: ${stored}_`);
   // Round trip: the markers must read back exactly as given — a "_ " inside a path or command, a marker typed in
   // the text… would make trace/brief/complete see something other than what was asked for.
   const mk = taskMarkers({ text: lineText, body });
   const same = (a, b) => a.length === b.length && a.every((x, k) => x === b[k]);
   if (!same(mk.requirements, requirements)) return { error: A.unstorable(i, "_Requirements:_") };
   if (!same(mk.implements, files)) return { error: A.unstorable(i, "_Implements:_") };
-  if (!same(mk.verify, verify && !/^\[.*\]$/.test(verify) ? [verify] : [])) return { error: A.unstorable(i, "_Verify:_") };
+  if (!same(mk.verify, verify ? [verify] : [])) return { error: A.unstorable(i, "_Verify:_") };
   return { text, lineText, body, story, parallel, requirements, implements: files, verify, markers: mk };
 }
 
@@ -2695,7 +2712,9 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     heading = h.replace(/^#{1,6}(?:\s+|$)/, "").replace(/\s+/g, " ").trim();
     if (/[\r\n]/.test(h) || !heading) return { ok: false, error: A.badHeading };
   }
-  if (RE_CONSTRAINTS_HEADING.test(heading)) return { ok: false, error: A.constraintsHeading(heading) };
+  // Refused by the SAME test globalConstraints() finds that section with (any heading containing the words), so
+  // appended tasks can never be read into every brief as "binding" constraints.
+  if (RE_GLOBAL_CONSTRAINTS.test(heading)) return { ok: false, error: A.constraintsHeading(heading) };
   const tracks = detectTracks(dir);
   const norm = normTaskHeading(heading);
   // A turned-off track's task heading is hidden wherever it appears (activeTasks matches it by text).
@@ -2727,13 +2746,32 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const taskLines = numbered.flatMap((t) => [`- [ ] ${t.number}. ${t.lineText}`, ...t.body.map((b) => "  - " + b)]);
   let at;
   let insert;
+  let closingCp = null; // the checkpoint the new tasks must read back with when an existing phase is reused
   if (target) {
-    // End of that phase (up to the next heading of any level — taskBlocks starts a phase at each one), before its
-    // closing **Checkpoint:** when that is the phase's last line.
+    // End of that phase (up to the next heading of any level — taskBlocks starts a phase at each one). Its closing
+    // **Checkpoint:** is the first one after the phase's LAST task, as taskBlocks reads it: a comment, a '---' or a
+    // note after it doesn't move it, and the new tasks go right before it (so they join that section).
     const next = heads.find((h) => h.i > target.i);
     const end = next ? next.i : lines.length;
-    const last = lastContent(target.i + 1, end);
-    const closing = last !== -1 && !scan[last].code && RE_CHECKPOINT.test(scan[last].vis) ? last : end;
+    let lastTask = target.i;
+    for (let i = target.i + 1; i < end; i++) if (!scan[i].code && scan[i].task) lastTask = i;
+    let closing = -1;
+    for (let i = lastTask + 1; i < end && closing === -1; i++) if (!scan[i].code && RE_CHECKPOINT.test(scan[i].vis)) closing = i;
+    if (closing !== -1) {
+      closingCp = scan[closing].vis.replace(RE_CHECKPOINT, "").trim();
+    } else {
+      // No checkpoint: the end a reader sees — trailing blank lines, '---' rules and comments that START on their own
+      // line stay after the new tasks. (A comment line without its "<!--" may be the tail of a multi-line one: the
+      // tasks go after it, never inside it.)
+      closing = end;
+      while (closing > target.i + 1) {
+        const i = closing - 1;
+        const s = lines[i].trim();
+        const trailer = !s || (!scan[i].code && (RE_THEMATIC_BREAK.test(scan[i].vis) || (!scan[i].vis.trim() && s.startsWith("<!--"))));
+        if (!trailer) break;
+        closing = i;
+      }
+    }
     at = lastContent(target.i, closing) + 1;
     insert = taskLines;
   } else {
@@ -2767,7 +2805,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     const b = hits[0];
     const mk = b && taskMarkers(b);
     const fits = hits.length === 1 && !b.done && b.text === t.lineText && b.phase === phase && active.has(t.number) &&
-      (target || b.checkpoint === A.checkpoint) && ["requirements", "implements", "verify"].every((k) => same(mk[k], t.markers[k]));
+      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "implements", "verify"].every((k) => same(mk[k], t.markers[k]));
     if (!fits) return { ok: false, error: A.unsafe(t.number) };
   }
 

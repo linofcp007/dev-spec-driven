@@ -1802,6 +1802,65 @@ function payload(res) {
     ok(evR.ok && evR.appended[0].number === 3 && S.statusFeature(w7, "leftover").tasks.list.find((t) => t.number === 3).verified === false,
       "a number that still has a removed task's evidence is skipped (the new task never inherits that run)");
   }
+  // --- 1.13 WP7 review fixes: closing checkpoint as a reader sees it, verify/paths/heading read back as given ---
+  {
+    const w7r = path.join(tmp, "proj-wp7-review");
+    S.initProject(w7r, ["core"]);
+    const mk7 = (name, body, lang) => { const f = S.createFeature(w7r, name, ["core"], undefined, undefined, lang); const p = path.join(f.dir, "tasks.md"); fs.writeFileSync(p, body); return p; };
+    // A comment, a '---' or a note after a reused phase's checkpoint: the task still goes BEFORE it (same section,
+    // so next --batch pairs it with #1), and the trailer stays where it was.
+    const trailers = ["<!-- guidance: keep this phase small -->\n", "\n---\n", "Note: ship it after QA.\n"];
+    const cpRes = trailers.map((tr, k) => {
+      const file = mk7("Cp " + k, "# Tasks: f\n\n## Phase: Build\n- [ ] 1. [P] a\n  - _Implements: src/a.js_\n**Checkpoint:** build works.\n" + tr + "\n## Phase: Polish\n- [ ] 2. b\n");
+      const r = S.appendTasks(w7r, "cp-" + k, [{ text: "c", parallel: true, implements: ["src/c.js"] }], { heading: "Phase: Build" });
+      const txt = fs.readFileSync(file, "utf8");
+      const b3 = S.taskBlocks(txt).find((b) => b.number === 3);
+      return r.ok && txt.includes("  - _Implements: src/a.js_\n- [ ] 3. [P] c\n  - _Implements: src/c.js_\n**Checkpoint:** build works.\n" + tr) && b3 && b3.checkpoint === "build works." &&
+        S.nextTask(w7r, "cp-" + k, { batch: true }).batch.map((b) => b.number).join() === "1,3";
+    });
+    ok(cpRes.every(Boolean), "reused phase: a comment / '---' / note after its checkpoint doesn't move it — the task goes before it, keeps that checkpoint and batches with #1");
+    // The tool's own default phase, reused after the user added '---' below it (CRLF file): still before the checkpoint.
+    const dfFile = mk7("Cp default", "# Tasks\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n**Checkpoint:** converged.\r\n\r\n---\r\n");
+    const dfR = S.appendTasks(w7r, "cp-default", [{ text: "b" }]);
+    ok(dfR.ok && dfR.headingCreated === false && fs.readFileSync(dfFile, "utf8") === "# Tasks\r\n\r\n## Phase: Convergence\r\n- [ ] 1. a\r\n- [ ] 2. b\r\n**Checkpoint:** converged.\r\n\r\n---\r\n",
+      "the default 'Phase: Convergence' reused after a '---' was added below it (CRLF): the task lands before its checkpoint, CRLF kept");
+    // No checkpoint: trailing '---' / own-line comments stay after the new task; a multi-line comment's tail is never entered.
+    const ncFile = mk7("No cp", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n\n---\n<!-- keep small -->\n\n## Phase: Ship\n- [ ] 2. b\n");
+    const ncR = S.appendTasks(w7r, "no-cp", [{ text: "c" }], { heading: "Phase: Build" });
+    const mlFile = mk7("Multi", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- guidance\n  more -->\n");
+    const mlR = S.appendTasks(w7r, "multi", [{ text: "c" }], { heading: "Phase: Build" });
+    ok(ncR.ok && fs.readFileSync(ncFile, "utf8").includes("- [ ] 1. a\n- [ ] 3. c\n\n---\n<!-- keep small -->\n") && S.taskBlocks(fs.readFileSync(ncFile, "utf8")).find((b) => b.number === 3).checkpoint === null &&
+      mlR.ok && fs.readFileSync(mlFile, "utf8") === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- guidance\n  more -->\n- [ ] 2. c\n",
+      "a phase without a checkpoint: trailing '---' and own-line comments stay after the new task; a multi-line comment is never split");
+
+    // _Verify:_ is stored so it reads back — and runs — exactly as given: one code span around the whole command is
+    // unwrapped, a command that starts/ends with a backtick is stored inside a longer span, a [placeholder] is refused.
+    const tkFile = mk7("Ticks", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n");
+    const tk = S.appendTasks(w7r, "ticks", [{ text: "subst", verify: "test -n `echo ok`" }, { text: "wrapped", verify: "`npm test`" }, { text: "ends", verify: "`true` && echo `date`" }]);
+    const tkTxt = fs.readFileSync(tkFile, "utf8");
+    ok(tk.ok && JSON.stringify(tk.appended.map((t) => t.verify)) === JSON.stringify(["test -n `echo ok`", "npm test", "`true` && echo `date`"]) &&
+      tkTxt.includes("  - _Verify: `` test -n `echo ok` ``_\n") && tkTxt.includes("  - _Verify: npm test_\n") && tkTxt.includes("  - _Verify: `` `true` && echo `date` ``_\n") &&
+      S.taskBrief(w7r, "ticks", 2).verify.join() === "test -n `echo ok`" && S.taskBrief(w7r, "ticks", 4).verify.join() === "`true` && echo `date`",
+      "a _Verify:_ starting/ending with a backtick (command substitution) reads back as given via task_brief; `npm test` still unwraps");
+    const tkFrozen = fs.readFileSync(tkFile, "utf8");
+    const phV = S.appendTasks(w7r, "ticks", [{ text: "p", verify: "[run tests]" }]);
+    const phV2 = S.appendTasks(w7r, "ticks", [{ text: "p", verify: "`[ -f dist/app.js ]`" }]);
+    mk7("Marcador", "# Tarefas\n\n## Fase 1\n- [ ] 1. a\n", "pt");
+    const phVpt = S.appendTasks(w7r, "marcador", [{ text: "p", verify: "[correr testes]" }]);
+    ok(!phV.ok && /'\[run tests\]' reads as a placeholder/.test(phV.error) && !phV2.ok && /'\[ -f dist\/app\.js \]' reads as a placeholder/.test(phV2.error) &&
+      !phVpt.ok && /lê-se como um marcador de posição/.test(phVpt.error) && fs.readFileSync(tkFile, "utf8") === tkFrozen,
+      "a [bracketed] _Verify:_ (ignored by every reader, so the evidence gate would never apply) is refused, localized — nothing written");
+    // _Implements:_ is project-relative only: URI schemes and home paths in any form are refused; a tilde inside a path is fine.
+    const badP = ["file:///etc/passwd", "~user/x.js", "~", "https://example.com/a.js"].map((p) => S.appendTasks(w7r, "ticks", [{ text: "t", implements: [p] }]));
+    const tildeIn = S.appendTasks(w7r, "ticks", [{ text: "t", implements: ["src/~tmp/x.js"] }]);
+    ok(badP.every((r) => r.ok === false && /relative to the project root/.test(r.error)) && tildeIn.ok && tildeIn.appended[0].implements.join() === "src/~tmp/x.js",
+      "_Implements:_ refuses file:// / https:// and ~user / ~ paths; a '~' inside a relative path is kept");
+    // Any heading globalConstraints() would read as the constraints section is refused (EN/PT/ES substrings).
+    const gcFile = mk7("Gc", "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n");
+    const gcR = ["Global constraints follow-up", "Restrições globais — revisão", "Revisar restricciones globales"].map((h) => S.appendTasks(w7r, "gc", [{ text: "Bump Node floor" }], { heading: h }));
+    ok(gcR.every((r) => r.ok === false && /holds the constraints every task respects/.test(r.error)) && fs.readFileSync(gcFile, "utf8") === "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n" &&
+      !/Bump Node floor/.test(S.taskBrief(w7r, "gc", 1).brief), "a heading containing 'Global constraints' (EN/PT/ES) is refused — appended tasks never become brief constraints");
+  }
   // @wp WP7 <<<
 
   // @wp WP8 tests >>>

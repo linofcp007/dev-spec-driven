@@ -530,6 +530,24 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
     /\n## Fase: Convergência\n- \[ \] \d+\. Corrigir o desvio\n  - _Requirements: US-1\.AC-1_\n\*\*Checkpoint:\*\* as tarefas/.test(fs.readFileSync(path.join(pt7, ".specs", "pagamentos", "tasks.md"), "utf8")) &&
     /Critérios de aceitação desconhecidos/.test(run(["append-tasks", "pagamentos", "--task", "x", "--req", "US-8.AC-8", "--project", pt7]).out),
     "append-tasks (PT): 'Fase: Convergência', localized output and errors");
+  // Repeated --req / --implements (both spellings) are all kept — the shared parser alone kept only the last one.
+  const w7e = path.join(tmp, "wp7-rep");
+  const w7ef = mk7(w7e);
+  const rep7 = run(["append-tasks", "conv", "--task", "rep req", "--req", "US-1.AC-1", "--req=US-1.AC-2", "--implements", "a.js", "--implements=b.js", "--json", "--project", w7e]);
+  let repJ = null;
+  try { repJ = JSON.parse(rep7.out); } catch { /* invalid JSON */ }
+  const repPh = run(["append-tasks", "conv", "--task", "x", "--req", "US-1.AC-1", "--req", "US-9.AC-9", "--project", w7e]);
+  const repTwo = run(["append-tasks", "conv", "--task=a", "--task", "b", "--project", w7e]);
+  ok(rep7.code === 0 && repJ && repJ.appended[0].requirements.join() === "US-1.AC-1,US-1.AC-2" && repJ.appended[0].implements.join() === "a.js,b.js" &&
+    fs.readFileSync(path.join(w7ef, "tasks.md"), "utf8").includes("- [ ] 2. rep req\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Implements: a.js, b.js_\n") &&
+    repPh.code === 1 && /Unknown acceptance criteria \(not in requirements\.md\): US-9\.AC-9\./.test(repPh.out) && repTwo.code === 1 && /one --task per call/.test(repTwo.out),
+    "append-tasks keeps every repeated --req / --implements (a phantom in any of them still refuses); --task=a --task b is still two tasks");
+  // A command substitution at the end of --verify reads back intact (append-tasks --json and brief --json).
+  const tick7 = run(["append-tasks", "conv", "--task", "check", "--verify", "test -n `echo ok`", "--json", "--project", w7e]);
+  let tickJ = null, tickB = null;
+  try { tickJ = JSON.parse(tick7.out); tickB = JSON.parse(run(["brief", "conv", String(tickJ.appended[0].number), "--json", "--project", w7e]).out); } catch { /* invalid JSON */ }
+  ok(tick7.code === 0 && tickJ && tickJ.appended[0].verify === "test -n `echo ok`" && tickB && tickB.verify.join() === "test -n `echo ok`",
+    "append-tasks --verify 'test -n `echo ok`': the stored command reads back exactly as given (what done --run would execute)");
   const help7 = run(["help"]).out;
   const fin7 = help7.indexOf("finish <feature>");
   ok(fin7 !== -1 && help7.indexOf("append-tasks <feature>") > fin7 && help7.indexOf("append-tasks <feature>") < help7.indexOf("approve <feature>") &&
