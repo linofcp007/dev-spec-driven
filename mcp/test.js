@@ -1861,6 +1861,38 @@ function payload(res) {
     ok(gcR.every((r) => r.ok === false && /holds the constraints every task respects/.test(r.error)) && fs.readFileSync(gcFile, "utf8") === "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n" &&
       !/Bump Node floor/.test(S.taskBrief(w7r, "gc", 1).brief), "a heading containing 'Global constraints' (EN/PT/ES) is refused — appended tasks never become brief constraints");
   }
+  // --- 1.13 WP7 review round 2: a no-checkpoint phase's trailers never cut into the last task or a comment ---
+  {
+    const w7s = path.join(tmp, "proj-wp7-r2");
+    S.initProject(w7s, ["core"]);
+    // Appends one task to a fresh feature → [result, tasks.md after]; the last task's body must read back unchanged.
+    const r2 = (name, body, opts) => {
+      const f = S.createFeature(w7s, name, ["core"]);
+      const p = path.join(f.dir, "tasks.md");
+      fs.writeFileSync(p, body);
+      const lastBody = JSON.stringify(S.taskBlocks(body).slice(-1)[0].body);
+      const r = S.appendTasks(w7s, S.slugify(name), [{ text: "new" }], opts);
+      const txt = fs.readFileSync(p, "utf8");
+      const kept = JSON.stringify(S.taskBlocks(txt).find((b) => b.number === S.taskBlocks(body).slice(-1)[0].number).body) === lastBody;
+      return { r, txt, kept };
+    };
+    // A rule right under the last task line / sub-line (or an indented one after a blank, or after its fenced body)
+    // is that task's lazy-continuation body: the new task goes after it (round-2 placed it before → refused as unsafe).
+    const bodyRules = [
+      ["Rule task", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n---\n\n## Phase: Ship\n- [ ] 2. b\n", { heading: "Phase: Build" }, "- [ ] 1. a\n---\n- [ ] 3. new\n\n## Phase: Ship\n"],
+      ["Rule sub", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n  - _Implements: src/a.js_\n---\n\n## Phase: Ship\n- [ ] 2. b\n", { heading: "Phase: Build" }, "  - _Implements: src/a.js_\n---\n- [ ] 3. new\n\n## Phase: Ship\n"],
+      ["Rule default", "# Tasks\n\n## Phase: Convergence\n- [ ] 1. a\n***\n", undefined, "## Phase: Convergence\n- [ ] 1. a\n***\n- [ ] 2. new\n"],
+      ["Rule indented", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n\n  ---\n", { heading: "Phase: Build" }, "- [ ] 1. a\n\n  ---\n- [ ] 2. new\n"],
+      ["Rule fence", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n  ```\n  code\n  ```\n---\n", { heading: "Phase: Build" }, "  ```\n  code\n  ```\n---\n- [ ] 2. new\n"],
+    ].map(([name, body, opts, want]) => { const x = r2(name, body, opts); return x.r.ok && x.r.headingCreated === false && x.txt.includes(want) && x.kept; });
+    ok(bodyRules.every(Boolean), "no checkpoint: a '---'/'***' directly under the last task or its sub-line (also indented after a blank, or after a fenced body — incl. the default 'Phase: Convergence') stays its body; the task goes after it");
+    // A line starting with "<!--" inside an open multi-line comment is that comment's tail, not an own-line trailer.
+    const tail = r2("Tail", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- draft:\n  maybe split this\n\n<!-- see notes -->\n", { heading: "Phase: Build" });
+    const tail2 = r2("Tail two", "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- a\n<!-- b -->\n\n---\n", { heading: "Phase: Build" });
+    ok(tail.r.ok && tail.txt === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- draft:\n  maybe split this\n\n<!-- see notes -->\n- [ ] 2. new\n" &&
+      tail2.r.ok && tail2.txt === "# Tasks\n\n## Phase: Build\n- [ ] 1. a\n<!-- a\n<!-- b -->\n- [ ] 2. new\n\n---\n",
+      "no checkpoint: a '<!-- … -->' line that closes an earlier multi-line comment is its tail — the task goes after it, never inside the comment; a later '---' still trails");
+  }
   // @wp WP7 <<<
 
   // @wp WP8 tests >>>

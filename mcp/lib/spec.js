@@ -1493,6 +1493,7 @@ function scanTaskLines(tasksText) {
   let comment = false;
   for (let i = 0; i < n; i++) {
     const src = lines[i];
+    const inComment = comment; // the line starts inside a multi-line comment (a "<!--" on it is comment text)
     // An open fence never coexists with a comment: neither opens inside the other.
     const fl = !comment && fenceLine(st, lines, i, below);
     if (fl) { out.push({ vis: src, code: true, fenceOpen: fl === "open" }); continue; }
@@ -1523,9 +1524,9 @@ function scanTaskLines(tasksText) {
     }
     const vis = masked.split(COMMENT_MASK).join("");
     const t = masked.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
-    if (!t) { out.push({ vis, code: false, task: null }); continue; }
+    if (!t) { out.push({ vis, code: false, task: null, inComment }); continue; }
     const text = masked.slice(masked.length - t[4].length).split(COMMENT_MASK).join("").trim();
-    out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text } });
+    out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text }, inComment });
   }
   return out;
   // Does a "<!--" on line i that doesn't close on its own line have a closer within its reach?
@@ -2761,16 +2762,23 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
       closingCp = scan[closing].vis.replace(RE_CHECKPOINT, "").trim();
     } else {
       // No checkpoint: the end a reader sees — trailing blank lines, '---' rules and comments that START on their own
-      // line stay after the new tasks. (A comment line without its "<!--" may be the tail of a multi-line one: the
-      // tasks go after it, never inside it.)
+      // line stay after the new tasks. (A comment line without its "<!--", or one that starts inside an open comment
+      // — "<!-- a" … "<!-- b -->" — is the tail of a multi-line one: the tasks go after it, never inside it.)
       closing = end;
       while (closing > target.i + 1) {
         const i = closing - 1;
         const s = lines[i].trim();
-        const trailer = !s || (!scan[i].code && (RE_THEMATIC_BREAK.test(scan[i].vis) || (!scan[i].vis.trim() && s.startsWith("<!--"))));
+        const trailer = !s || (!scan[i].code && (RE_THEMATIC_BREAK.test(scan[i].vis) || (!scan[i].vis.trim() && !scan[i].inComment && s.startsWith("<!--"))));
         if (!trailer) break;
         closing = i;
       }
+      // …but never inside the last task's block: a rule right under its line or a sub-line (or an indented one after
+      // a blank) is that task's lazy-continuation body to taskBlocks, and would move into the new task's. Its body
+      // is the next body.length lines a reader sees (the lines between them are blank or comment-only).
+      const last = before.find((b) => b.line === lastTask);
+      let bodyEnd = lastTask;
+      for (let i = lastTask + 1, seen = 0; last && seen < last.body.length && i < end; i++) if (scan[i].vis.trim()) { seen++; bodyEnd = i; }
+      closing = Math.max(closing, bodyEnd + 1);
     }
     at = lastContent(target.i, closing) + 1;
     insert = taskLines;

@@ -548,6 +548,17 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   try { tickJ = JSON.parse(tick7.out); tickB = JSON.parse(run(["brief", "conv", String(tickJ.appended[0].number), "--json", "--project", w7e]).out); } catch { /* invalid JSON */ }
   ok(tick7.code === 0 && tickJ && tickJ.appended[0].verify === "test -n `echo ok`" && tickB && tickB.verify.join() === "test -n `echo ok`",
     "append-tasks --verify 'test -n `echo ok`': the stored command reads back exactly as given (what done --run would execute)");
+  // A repeated --verify / --story / --heading (either spelling) is refused — never last-wins (a dropped check would
+  // never be asked for by the evidence gate). Localized; nothing written.
+  const repBefore = fs.readFileSync(path.join(w7ef, "tasks.md"), "utf8");
+  const vTwice = run(["append-tasks", "conv", "--task", "two checks", "--verify", "npm test", "--verify=npm run lint", "--project", w7e]);
+  const sTwice = run(["append-tasks", "conv", "--task", "x", "--story", "US1", "--story", "shared", "--project", w7e]);
+  const hTwice = run(["append-tasks", "conv", "--task", "x", "--heading=Phase A", "--heading", "Phase B", "--project", w7e]);
+  const vTwicePt = run(["append-tasks", "pagamentos", "--task", "x", "--verify", "a", "--verify", "b", "--project", pt7]);
+  ok(vTwice.code === 1 && /takes --verify once per call — join the checks into one command/.test(vTwice.out) && sTwice.code === 1 && /--story once per call/.test(sTwice.out) &&
+    hTwice.code === 1 && /--heading once per call/.test(hTwice.out) && vTwicePt.code === 1 && /aceita --verify uma só vez por chamada/.test(vTwicePt.out) &&
+    fs.readFileSync(path.join(w7ef, "tasks.md"), "utf8") === repBefore,
+    "append-tasks refuses a repeated --verify / --story / --heading (localized), writing nothing");
   const help7 = run(["help"]).out;
   const fin7 = help7.indexOf("finish <feature>");
   ok(fin7 !== -1 && help7.indexOf("append-tasks <feature>") > fin7 && help7.indexOf("append-tasks <feature>") < help7.indexOf("approve <feature>") &&

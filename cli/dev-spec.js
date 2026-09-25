@@ -595,6 +595,10 @@ function main() {
       };
       // A second --task is a second task: refused (one per call) rather than merged or dropped.
       if (every("task").length > 1) die(T.oneTaskPerCall);
+      // Single-valued like over MCP: a second --verify would silently drop the first check (the evidence gate would
+      // never ask for it), a second --story/--heading the first choice — refused, never last-wins.
+      const twice = ["verify", "story", "heading"].find((k) => every(k).length > 1);
+      if (twice) die(T.oneValue(twice));
       const task = { text: flags.task };
       const reqs = every("req"), impls = every("implements");
       if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
