@@ -242,7 +242,13 @@ const w1Dup = run(["done", "dup", "3", "--run", "--project", w1p]);
 ok(w1Dup.code === 1 && /process\.exit\(7\)/.test(w1Dup.out) && !/process\.exit\(0\)/.test(w1Dup.out) && /- \[ \] 3\. b/.test(w1Read("dup")) &&
   JSON.parse(fs.readFileSync(path.join(w1p, ".specs", "dup", ".state.json"), "utf8")).evidence["3"].exitCode === 7,
   "done --run on a duplicated number runs the _Verify:_ of the task it would tick (exit 7 → recorded, stays open, exit 1)");
-ok((process.platform === "win32") === /--shell bash/.test(w1Dup.out), "a failure under the default shell prints the --shell bash hint on Windows (only there)");
+// The cmd.exe / --shell bash hint only when cmd.exe itself failed (an unknown command, its own syntax error) — a check that
+// ran and failed (exit 7 above) needs a code fix, not another shell: it used to print the hint on every failed run.
+run(["create", "Nocmd", "core", "--project", w1p]);
+fs.writeFileSync(path.join(w1p, ".specs", "nocmd", "tasks.md"), "- [ ] 1. n\n  - _Verify: no-such-command-dsd --check_\n");
+const w1No = run(["done", "nocmd", "1", "--run", "--project", w1p]);
+ok(!/--shell bash/.test(w1Dup.out) && w1No.code === 1 && (process.platform === "win32") === /--shell bash/.test(w1No.out) && /- \[ \] 1\. n/.test(w1Read("nocmd")),
+  "a check that ran and failed prints no shell hint; a command cmd.exe could not run (unknown command) prints the --shell bash hint on Windows (only there)");
 run(["create", "Pad", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");
 const w1P1 = run(["done", "pad", "01", "--run", "--project", w1p]);

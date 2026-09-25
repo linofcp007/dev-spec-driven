@@ -1104,6 +1104,13 @@ function endRun() {
     px("echo ${HOME} $(pwd) 'x'") === "single-quotes+variable" && px("node -e \"process.exit(0)\"") === "" && px("node -e \"console.log('it is')\"") === "" &&
     px("echo it's done") === "" && px("grep -q \"foo$\" out.txt") === "" && px("awk '{print $1}' f") === "single-quotes" && px("npm test") === "" && px(undefined) === "",
     "posixShellSyntax: single-quoted strings outside double quotes and $VAR/${…}/$(…) are POSIX-only; an apostrophe in double quotes, a lone one, a regex '$\"' are not");
+  const wsf = S.windowsShellFailure;
+  ok(wsf("'grep' is not recognized as an internal or external command,\r\noperable program or batch file.", 1) && wsf("", 9009) &&
+    wsf("'grep' não é reconhecido como um comando interno", 1) && wsf("\"grep\" no se reconoce como un comando interno o externo", 1) &&
+    wsf("The syntax of the command is incorrect.", 1) && wsf("& was unexpected at this time.", 255) && wsf("The system cannot find the path specified.", 1) &&
+    wsf("A sintaxe do comando está incorreta.", 1) && wsf("La sintaxis del comando no es correcta.", 1) &&
+    !wsf("AssertionError: expected 2 to equal 3\n    at tests/x.test.js:4", 1) && !wsf("1 failing", 1) && !wsf("Error: Cannot find module './x'", 1),
+    "windowsShellFailure: cmd.exe's own failures (unknown command / exit 9009, its syntax errors, a path it can't find; EN/PT/ES) — never a check that ran and failed");
   // Review fixes. A line that only LOOKS like a fence opener must not hide the tasks below it (CommonMark):
   // "```npm test```" is inline code; a fence left open in a task's body ends with that list item; a fence
   // that never closes is plain text — the feature must not read as complete with real tasks still open.

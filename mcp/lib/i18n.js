@@ -2090,7 +2090,7 @@ const MSG = {
       allDone: "  — all done ✓",
       numberInt: "task number must be an integer",
       noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
-      shellHint: "Hint: this ran under the default Windows shell (cmd.exe). If the _Verify:_ command uses POSIX shell syntax, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
+      shellHint: "Hint: the default Windows shell (cmd.exe) could not run this command line as written. If the _Verify:_ command is written for a POSIX shell, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
     },
 
@@ -2884,7 +2884,7 @@ const MSG = {
       allDone: "  — tudo feito ✓",
       numberInt: "o número da tarefa tem de ser um inteiro",
       noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
-      shellHint: "Dica: isto correu na shell por omissão do Windows (cmd.exe). Se o comando _Verify:_ usa sintaxe de shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
+      shellHint: "Dica: a shell por omissão do Windows (cmd.exe) não conseguiu correr esta linha de comando tal como está escrita. Se o comando _Verify:_ foi escrito para uma shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `o comando _Verify:_ \`${cmd}\` usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar: não tem plicas e nunca expande $VAR, por isso uma verificação partida podia ficar registada como execução bem-sucedida. Nada foi executado; a tarefa continua aberta. Corre de novo com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para o correr mesmo assim no cmd.exe.`,
     },
 
@@ -3628,7 +3628,7 @@ const MSG = {
       allDone: "  — todo hecho ✓",
       numberInt: "el número de tarea debe ser un entero",
       noRunnable: (n) => `la tarea ${n} no tiene un marcador _Verify: <comando>_ ejecutable`,
-      shellHint: "Consejo: esto se ejecutó con la shell predeterminada de Windows (cmd.exe). Si el comando _Verify:_ usa sintaxis de shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
+      shellHint: "Consejo: la shell predeterminada de Windows (cmd.exe) no pudo ejecutar esta línea de comandos tal como está escrita. Si el comando _Verify:_ está escrito para una shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `el comando _Verify:_ \`${cmd}\` usa sintaxis de shell POSIX (${kinds.map((k) => ({ "single-quotes": "comillas simples '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) que cmd.exe — la shell predeterminada de --run en Windows — interpreta de otra forma, a menudo sin fallar: no tiene comillas simples y nunca expande $VAR, así que una comprobación rota podría registrarse como ejecución correcta. No se ejecutó nada; la tarea sigue abierta. Vuelve a ejecutarlo con --shell bash (Git Bash; o define DEV_SPEC_SHELL=bash) — o con --shell cmd para ejecutarlo igualmente en cmd.exe.`,
     },
 

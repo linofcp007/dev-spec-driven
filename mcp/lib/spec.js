@@ -3222,6 +3222,22 @@ function summarizeRunOutput(output, max = 500) {
 // literal and exits 0) and never expands `$VAR` / `${…}` / `$(…)`. Quote state is tracked the way cmd.exe does it (every
 // `"` toggles), so an apostrophe inside double quotes, or a lone one (`it's`), is not a single-quoted string.
 // → the stable codes found, in order: "single-quotes" | "variable" ([] = nothing POSIX-only).
+// A failure cmd.exe itself reported — the command line never ran as written — the only case where `done --run`'s
+// "--shell bash" hint helps (POSIX quoting / $VAR is refused before anything runs): an unknown command (exit 9009,
+// "… is not recognized as an internal or external command"), a syntax error cmd.exe raised ("The syntax of the command is
+// incorrect", "… was unexpected at this time"), a path it could not resolve ("The system cannot find the path specified").
+// EN / PT / ES Windows wording. A check that ran and failed (`node tests/x.js` → exit 1) is none: it printed the hint on
+// every failed run.
+const RE_CMD_SHELL_FAILURE = new RegExp([
+  "is not recognized as an internal or external command", "n[ãa]o [ée] reconhecido como (?:um )?comando interno", "no se reconoce como (?:un )?comando interno",
+  "the syntax of the command is incorrect", "a sintaxe do comando est[áa] incorreta", "la sintaxis del comando no es correcta",
+  "was unexpected at this time", "n[ãa]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
+  "cannot find the path specified", "n[ãa]o (?:pode|consegue) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
+  "the filename, directory name, or volume label syntax is incorrect",
+].join("|"), "i");
+function windowsShellFailure(output, code) {
+  return code === 9009 || RE_CMD_SHELL_FAILURE.test(String(output == null ? "" : output).slice(0, 200000));
+}
 function posixShellSyntax(cmd) {
   const s = String(cmd == null ? "" : cmd);
   const found = new Set();
@@ -9230,6 +9246,7 @@ module.exports = {
   verificationStatus,
   summarizeRunOutput,
   posixShellSyntax, // `done --run` on Windows: POSIX-only syntax cmd.exe would misread (refused unless --shell)
+  windowsShellFailure, // `done --run` on Windows: did cmd.exe itself fail (unknown command / its syntax error)? — the --shell hint
 
   parseTracks,
   detectTracks,

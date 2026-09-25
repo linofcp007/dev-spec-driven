@@ -45,7 +45,9 @@ BEFORE claiming any status:
   and records the evidence; any failure leaves the task open, is recorded, and exits 1. `--shell bash` (or
   `DEV_SPEC_SHELL`) picks the shell. On Windows the default shell is cmd.exe, which has no single quotes and never
   expands `$VAR` — `node -e 'process.exit(1)'` exits 0 there — so a `_Verify:_` in POSIX syntax is refused before
-  anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. Or report it by hand: `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
+  anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. A failed run
+  suggests `--shell bash` only when cmd.exe itself could not run the line (an unknown command, its syntax error); a
+  check that ran and failed means fixing the code. Or report it by hand: `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
 - **Briefs** (`spec_task_brief`) carry the `_Verify:_` command and require the implementer to paste the
   command, exit code and output tail in the report; the reviewer checks it is there.
 

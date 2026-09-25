@@ -159,7 +159,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
 - **`done --run` on Windows.** cmd.exe (the default shell) has no single quotes, so `_Verify: node -e
   'process.exit(1)'_` exited 0 and the task was recorded as verified. A `_Verify:_` in POSIX syntax (single quotes,
   `$VAR`) is now refused before anything runs unless `--shell` picks a shell (`--shell bash`, or `--shell cmd` to
-  run it under cmd.exe anyway).
+  run it under cmd.exe anyway). The "retry with `--shell bash`" hint is printed only when cmd.exe itself failed (an
+  unknown command — exit 9009 —, its own syntax error, a path it can't find; EN/PT/ES Windows wording), never after a
+  check that ran and failed (`node tests/x.js` → exit 1), which needs a code fix.
 - **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
   moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
   feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,

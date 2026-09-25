@@ -266,7 +266,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
-  and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway.
+  and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway. After a failed
+  run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
+  cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
+  find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses

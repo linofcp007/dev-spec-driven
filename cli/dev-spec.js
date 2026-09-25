@@ -445,12 +445,15 @@ function main() {
           // trust as an npm script) — a shell is the point: the marker is a shell command line.
           // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
           const run = spawnSync(cmd, { shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-          const summary = spec.summarizeRunOutput((run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : ""));
+          const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
+          const summary = spec.summarizeRunOutput(output);
           if (summary) say(summary.replace(/^/gm, "  "));
           const code = run.status == null ? 1 : run.status;
           if (code !== 0) {
             evidence = { command: cmd, exitCode: code, summary };
-            if (process.platform === "win32" && shell === true) hint = D.shellHint;
+            // The cmd.exe / --shell bash hint only when cmd.exe itself failed (unknown command, its syntax error) — a check
+            // that ran and failed (node tests/x.js → exit 1) needs a code fix, not another shell.
+            if (process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) hint = D.shellHint;
             break;
           }
           evidence = { command: cmds.join(" && "), exitCode: 0, summary };
