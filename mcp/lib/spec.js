@@ -832,8 +832,10 @@ function briefSteering(root, tracks, implementsList) {
       const matched = targets.filter((t) => fm.patterns.some((p) => steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/")));
       if (!matched.length) continue;
       // Template guidance quoted into a brief would read as a binding rule: HTML comments (the stub's guidance)
-      // never reach the brief, and only real content is quoted.
-      const body = stripHtmlComments(fm.body).replace(/(?:[ \t]*\r?\n){3,}/g, "\n\n").trim();
+      // never reach the brief, and only real content is quoted. Read as a markdown reader does (scanTaskLines'
+      // `vis`) — a plain regex strip also ate a "<!-- -->" inside fenced code or an `inline code span`, so a
+      // rule about comments was quoted saying something else.
+      const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?:[ \t]*\n){3,}/g, "\n\n").trim();
       const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
       if (quote) budget -= body.length;
       included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });

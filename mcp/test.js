@@ -2760,6 +2760,28 @@ function payload(res) {
       "brief steering: a backticked _Implements:_ path matches, an absolute in-project path matches as its relative path, an outside one matches nothing; block-scalar 'manual' stays manual (got " + inc(br3) + " / " + inc(br4) + ")");
     ok(/> - Handlers return RFC 7807 errors\./.test(br3.brief) && !/<!--|-->|Replace the example pattern/.test(br3.brief) && !/>\s*\n>\s*\n>/.test(br3.brief),
       "a filled custom stub is quoted without its HTML guidance comment (no '<!--', no 'Replace the example pattern', no run of empty quote lines)");
+    // The quote is read as a markdown reader sees it: a comment inside fenced code or an `inline code span` is
+    // CONTENT and survives (a regex strip turned "never write `<!-- -->`" into "never write ``"); the stub's
+    // guidance comment still goes, in every language.
+    const q11 = path.join(tmp, "proj-wp11-quote");
+    S.initProject(q11, ["core"], "en");
+    const qf = S.createFeature(q11, "Ui", ["core"]);
+    const qDir = path.join(q11, ".specs", "steering");
+    fs.writeFileSync(path.join(qDir, "ui-jsx.md"), "---\ninclusion: fileMatch\nfileMatchPattern: \"src/ui/**\"\n---\n# JSX rules\n- Never write `<!-- -->` comments in JSX; use `{/* */}` instead.\n- A doc comment starts with `<!--` on its own line.\n");
+    fs.writeFileSync(path.join(qDir, "ui-partials.md"), "---\r\ninclusion: fileMatch\r\nfileMatchPattern: \"src/ui/**\"\r\n---\r\n# Template rules\r\n- Every partial starts with a marker comment naming it:\r\n\r\n```html\r\n<!-- partial: header -->\r\n<header></header>\r\n```\r\n- Keep partials short. <!-- a note for maintainers -->\r\n");
+    for (const [lang, nm] of [["en", "ui-en.md"], ["pt", "ui-pt.md"], ["es", "ui-es.md"]]) {
+      const st = S.scaffoldSteeringFile(q11, nm, lang);
+      fs.writeFileSync(st.file, fs.readFileSync(st.file, "utf8").replace(/src\/api\/\*\*/, "src/ui/**").replace(/^- \[[^\]\n]*\]$/gm, "- Rule " + lang + "."));
+    }
+    fs.writeFileSync(path.join(qf.dir, "tasks.md"), "- [ ] 1. [US1] t\n  - _Implements: src/ui/a.tsx_\n");
+    const qb = S.taskBrief(q11, "ui", 1);
+    const qRows = qb.steering.included.filter((s) => /ui-/.test(s.file));
+    const qText = qb.brief.split("## Global constraints")[1] || "";
+    ok(qRows.length === 5 && qRows.every((s) => s.quoted === true) &&
+      qText.includes("> - Never write `<!-- -->` comments in JSX; use `{/* */}` instead.") && qText.includes("> - A doc comment starts with `<!--` on its own line.") &&
+      /> ```html\n> <!-- partial: header -->\n> <header><\/header>\n> ```/.test(qText) && qText.includes("> - Keep partials short.") && !/maintainers/.test(qText) &&
+      ["en", "pt", "es"].every((l) => qText.includes("> - Rule " + l + ".")) && !/Replace the example pattern|Substitui o padrão|Sustituye el patrón|inclusion: always/.test(qText),
+      "brief steering quotes keep a '<!--' inside fenced code or an inline code span (and an unclosed one in backticks); an inline trailing comment and the EN/PT/ES stub guidance comment are removed (got " + qRows.map((s) => s.file + ":" + s.quoted).join(",") + ")");
 
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
     const c11 = path.join(tmp, "proj-wp11-custom");
