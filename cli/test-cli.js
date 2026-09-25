@@ -745,6 +745,8 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
   ok(/First see what the edit touches with spec_impact \(dev-spec impact drafts --phase requirements\)/.test(run(["next-action", "drafts", "--project", w8]).out) &&
     /▲ changed-since-approval — changed after their approval: requirements\.md/.test(run(["doctor", "drafts", "--project", w8]).out),
     "next-action recommends impact before re-approval; doctor shows the changed-since-approval warn");
+  ok(/changed-since-approval — .*\(dev-spec impact drafts --phase requirements\)/.test(run(["doctor", "drafts", "--project", w8]).out),
+    "doctor's changed-since-approval hint names the phase to pass to impact");
   const ro8 = run(["impact", "drafts", "--reopen", "--project", w8]);
   const ro8b = run(["impact", "drafts", "--reopen", "--project", w8]);
   ok(ro8.code === 0 && /Reopened #2: unticked, their evidence marked stale/.test(ro8.out) && fs.readFileSync(d8("tasks.md"), "utf8").includes("- [x] 1. [US1] Store drafts\r\n") &&
@@ -785,6 +787,10 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
     /Vê primeiro o que a edição afeta com spec_impact/.test(run(["na", "rascunhos", "--project", p8]).out) && /^Métricas: rascunhos \[core\] — criada a /.test(pmw8.out) &&
     /Retrospetiva → \.specs\/rascunhos\/retro\.md/.test(pmw8.out) && fs.readFileSync(pd8("retro.md"), "utf8").startsWith("# Retrospetiva: rascunhos") &&
     /nunca foi aprovada/.test(run(["impact", "rascunhos", "--phase", "design", "--project", p8]).out), "impact / next-action / metrics --write / errors (PT) are in European Portuguese");
+  run(["create", "Nova", "core", "--project", p8]);
+  const pn8 = run(["metrics", "nova", "--project", p8]);
+  ok(pn8.code === 0 && pn8.out.includes("  aprovações: 0 · retrabalho: 0 · forçadas: 0") && !/desconhecido/.test(pn8.out),
+    "metrics on a feature never approved: rework 0, not unknown (PT)");
   const help8 = run(["help"]).out;
   const doc8 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   const after8 = (t) => { const a = t.indexOf("approve <feature> <phase>"), i = t.indexOf("impact <feature>"), m = t.indexOf("metrics [feature]"); return a !== -1 && i > a && m > i && m < t.indexOf("add-track <feature>"); };

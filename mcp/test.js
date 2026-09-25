@@ -2655,6 +2655,7 @@ function payload(res) {
     ok(na8.step === "re-review" && /Re-review: requirements\.md changed/.test(na8.recommendation) && /spec_impact \(dev-spec impact drafts --phase requirements\)/.test(na8.recommendation) &&
       na8.impact && na8.impact.tool === "spec_impact" && na8.impact.phases.join() === "requirements" && dc8 && dc8.status === "warn" && /^changed after their approval: requirements\.md/.test(dc8.detail) &&
       /spec_impact/.test(dc8.detail), "next_action's re-review recommends spec_impact (tool + command) before re-approval; doctor warns changed-since-approval with the artifacts");
+    ok(/spec_impact \(dev-spec impact drafts --phase requirements\)/.test(dc8.detail), "doctor's changed-since-approval names the phase to diff (dev-spec impact defaults to requirements)");
 
     // Reopen: the done tasks citing a modified/removed ID are unticked, their evidence marked stale; nothing else is edited.
     const designBefore8 = fs.readFileSync(f8("design.md"), "utf8");
@@ -2669,8 +2670,18 @@ function payload(res) {
     const re8 = S.completeTask(w8, "drafts", 2);
     ok(re8.ok && re8.verified === false && re8.unverifiedReason === "stale-evidence" && /predates a spec change/.test(re8.note) &&
       S.specDoctor(w8, "drafts").checks.find((c) => c.id === "verification").detail.includes("#2"), "re-ticking a reopened task without new evidence: stale-evidence (unverified), doctor names it");
+    const vd8 = S.specDoctor(w8, "drafts").checks.find((c) => c.id === "verification").detail;
+    const sv8 = S.impactReport(w8, "drafts", {});
+    const tv8 = sv8.affectedTasks.find((t) => t.number === 2);
+    ok(vd8.includes("#2 (the spec changed since this evidence; spec_impact reopened the task)") && !/evidence is for another task/.test(vd8) && tv8.evidence === "stale-evidence" &&
+      tv8.specChanged === true && S.impactLines(sv8).join("\n").includes("#2 [x] the spec changed since this evidence") &&
+      S.finishFeature(w8, "drafts").blockers.some((b) => b.includes("#2 (the spec changed since this evidence")),
+      "evidence staled by a reopen keeps the stale-evidence code but says the spec changed (doctor, impact, finish) — not 'evidence is for another task'");
     const re8b = S.completeTask(w8, "drafts", 2, { summary: "re-checked against the new AC-2" });
     ok(re8b.verified === true && !st8().evidence["2"].stale, "a task without a runnable _Verify:_: a new note clears the stale mark");
+    const hi8 = S.impactReport(w8, "drafts", {});
+    ok(hi8.hint === undefined && hi8.affectedTasks.some((t) => t.number === 2 && t.done),
+      "no reopen hint once an earlier reopen against this approval covered every change (task #2, redone since, is done)");
     const beforeT8 = fs.readFileSync(f8("tasks.md"), "utf8"), beforeS8 = fs.readFileSync(f8(".state.json"), "utf8");
     const ro8b = S.impactReport(w8, "drafts", { reopen: true });
     ok(ro8b.ok && ro8b.recorded === false && ro8b.reopened.length === 0 && /Nothing new since the last reopen/.test(ro8b.note) &&
@@ -2682,6 +2693,8 @@ function payload(res) {
     ok(di8.ok && di8.added.map((x) => x.section).join() === "Archive" && di8.modified.map((x) => x.section).join() === "Data Model" && di8.removed.map((x) => x.section).join() === "Writer" &&
       di8.impacted.find((x) => x.section === "Data Model").tasks.map((t) => t.number).join() === "1" && di8.impacted.find((x) => x.section === "Writer").ids.join() === "US-1.AC-3",
       "design diff by ## section (added / modified by normalized body / removed) with the IDs each names and the tasks citing them");
+    ok(S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval").detail
+      .includes("spec_impact (dev-spec impact drafts --phase requirements · dev-spec impact drafts --phase design)"), "doctor names one impact command per changed phase with a snapshot");
     const dro8 = S.impactReport(w8, "drafts", { phase: "design", reopen: true });
     ok(dro8.reopened.join() === "1" && st8().evidence["1"].stale === true && st8().changes[1].phase === "design" && st8().changes[1].removed.join() === "Writer",
       "design reopen: only the DONE task citing an ID of a changed section is reopened, its run marked stale");
@@ -2690,6 +2703,7 @@ function payload(res) {
     ok(n8.verified === false && n8.unverifiedReason === "stale-evidence" && r8.verified === true && !st8().evidence["1"].stale && st8().evidence["1"].history.length === 2,
       "a runnable _Verify:_: a note doesn't clear the stale run, a new passing run does (history keeps both runs)");
     fs.writeFileSync(f8("requirements.md"), fs.readFileSync(f8("requirements.md"), "utf8").replace("log a warning", "log an error"));
+    ok(/--phase requirements --reopen/.test(S.impactReport(w8, "drafts", {}).hint), "a NEW edit reaching a done task brings the reopen hint back");
     const ro8c = S.impactReport(w8, "drafts", { reopen: true });
     ok(ro8c.recorded === true && ro8c.reopened.join() === "2" && st8().changes.length === 3 && Object.keys(st8().changes[2].digests).length === 4,
       "a NEW edit of an AC already reopened once is new: the task citing it is reopened again");
@@ -2705,6 +2719,18 @@ function payload(res) {
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
     ok(rt8.ok === false && /requirements and design only/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, tasks/.test(bad8m.p.error) &&
       bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+    // A ticked sub-step is progress (like the fingerprint), not a changed task; doctor names only the phase that changed.
+    const sb8 = S.createFeature(w8, "Steps", ["core"]);
+    const sbf = (x) => path.join(sb8.dir, x);
+    fs.writeFileSync(sbf("tasks.md"), "# Tasks\n\n## S\n- [ ] 1. Do A\n  - [ ] 1.1 first sub-step\n  - _Requirements: US-1.AC-1_\n");
+    ["requirements", "design", "tasks"].forEach((ph) => S.approvePhase(w8, "steps", ph, "x", { force: true }));
+    fs.writeFileSync(sbf("tasks.md"), "# Tasks\n\n## S\n- [ ] 1. Do A\n  - [x] 1.1 first sub-step\n  - _Requirements: US-1.AC-1_\n");
+    const sbT = S.impactReport(w8, "steps", { phase: "tasks" });
+    fs.appendFileSync(sbf("design.md"), "\n## Extra\nmore\n");
+    const sbD = S.specDoctor(w8, "steps").checks.find((c) => c.id === "changed-since-approval");
+    ok(sbT.ok && sbT.changed === false && sbT.modified.length === 0 && sbD && /^changed after their approval: design\.md —/.test(sbD.detail) &&
+      sbD.detail.includes("(dev-spec impact steps --phase design)") && !sbD.detail.includes("--phase requirements"),
+      "impact tasks: a ticked sub-step is not a changed task; doctor's hint names --phase design when only design.md changed");
 
     // Never approved; an existing snapshot file is never overwritten; a pre-1.13 approval is fingerprint-only.
     const fr8 = S.createFeature(w8, "Fresh", ["core"]);
@@ -2795,6 +2821,19 @@ function payload(res) {
     const bm8 = S.metrics(w8, "bare");
     ok(bm8.ok && bm8.createdAtSource === "filesystem" && bm8.createdAtApproximate === true && typeof bm8.createdAt === "string" && ["classification", "requirements", "design", "test-plan", "eval-plan", "tasks"].every((p) => bm8.leadTime[p] === null) && bm8.leadTime.complete === null,
       "no createdAt and no approval: the folder's date, flagged approximate; no lead times");
+    // A feature with no approval yet has an empty history (createFeature doesn't seed approvalHistory) — rework 0, not unknown.
+    const nw8 = S.createFeature(w8, "Brand new", ["core"]);
+    const nm8 = S.metrics(w8, nw8.slug, { write: true });
+    ok(nm8.approvalsTotal === 0 && nm8.rework === 0 && nm8.forcedApprovals === 0 && nm8.createdAtApproximate === false && bm8.rework === 0 &&
+      S.metricsLines(nm8).includes("  approvals: 0 · rework: 0 · forced: 0") && fs.readFileSync(path.join(nw8.dir, "retro.md"), "utf8").includes("| Rework (re-approvals) | 0 |"),
+      "a feature never approved: approvals 0, rework 0 (not 'unknown — the approvals predate the change history'), in the lines and retro.md");
+    // Pass rate follows the evidence gate: a bare {exitCode: 0} (v1.12) is no run; a non-zero exit code is a failed run.
+    const lr8 = S.createFeature(w8, "Legacy runs", ["core"]);
+    fs.writeFileSync(path.join(lr8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {}, evidence: { 1: { exitCode: 0 }, 2: { exitCode: 2, summary: "crashed" },
+      3: { command: "npm test", exitCode: 0, history: [{ exitCode: 0 }, { command: "npm test", exitCode: 0 }] } } }));
+    const lrm8 = S.metrics(w8, "legacy-runs");
+    ok(lrm8.evidence.runs === 2 && lrm8.evidence.passing === 1 && lrm8.evidence.passRate === 50,
+      "evidence pass rate: a bare exit code 0 (record or history entry) is not a passing run — only {command, exitCode: 0} is; a non-zero exit is a failed run");
     const pm8 = (await call8("spec_metrics", { projectDir: w8m })).p;
     ok(pm8.ok && pm8.scope === "project" && pm8.features.map((x) => x.feature).join() === "metered,oldie" && pm8.aggregates.rework.n === 1 && pm8.aggregates.rework.avg === 1 &&
       pm8.aggregates.leadTimeHours.requirements.avg === 6 && pm8.aggregates.leadTimeHours.requirements.median === 6 && pm8.aggregates.leadTimeHours.design.median === 48 &&
@@ -2810,6 +2849,7 @@ function payload(res) {
       ["## What went well", "## What hurt", "## Proposed steering or constitution amendments", "## Follow-ups", "| Rework (re-approvals) | 1 (requirements 1) |",
         "| Evidence pass rate | 50% (1/2 runs) |", "| Lead time → complete | 4d |", "never applied automatically", "3 task(s) reopened by change requests"].every((s) => retroTxt.includes(s)) &&
       !/NEEDS CLARIFICATION|\*\*TODO\*\*/.test(retroTxt), "metrics {write:true} creates retro.md: metrics table + What went well / What hurt / amendments (human approval) / Follow-ups");
+    ok(retroTxt.includes("'requirements' approved 2 time(s)") && !/re-approved/.test(retroTxt), "the retro signal counts approvals (rework 1 = approved 2 times), like PT/ES — never 're-approved 2 time(s)'");
     fs.appendFileSync(retro8, "\nmy notes\n");
     const rw8b = await call8("spec_metrics", { name: "metered", write: true, projectDir: w8m });
     const pw8 = await call8("spec_metrics", { write: true, projectDir: w8m });
@@ -2819,6 +2859,30 @@ function payload(res) {
     const ptRetro = fs.readFileSync(ptf("retro.md"), "utf8");
     ok(ptRetro.startsWith("# Retrospetiva: rascunhos") && ["## O que correu bem", "## O que custou", "## Alterações propostas ao steering ou à constituição", "## Seguimento", "| Tempo até requisitos |"]
       .every((s) => ptRetro.includes(s)) && /^Métricas: rascunhos \[core\] — criada a \d{4}/.test(S.metricsLines(S.metrics(w8, "rascunhos"))[0]), "PT feature: the retro template and metrics lines are European Portuguese");
+
+    // Bugfix: the design approval signs off bug.md (its Root Cause) — snapshot, fingerprint, impact and doctor follow it.
+    const bf8 = S.createFeature(w8, "Crash on save", ["core"], undefined, undefined, undefined, "bugfix");
+    const bff = (x) => path.join(bf8.dir, x);
+    const bug8 = fs.readFileSync(bff("bug.md"), "utf8");
+    const bfAp = S.approvePhase(w8, "crash-on-save", "design", "x", { force: true });
+    const bfSt = JSON.parse(fs.readFileSync(bff(".state.json"), "utf8"));
+    ok(bfAp.ok && bfAp.snapshot === ".history/design@1.md" && fs.readFileSync(bff(".history/design@1.md"), "utf8") === bug8 && !fs.existsSync(bff("design.md")) &&
+      bfSt.approvals.design.file === "bug.md" && bfSt.approvalHistory[0].file === "bug.md" && typeof bfSt.approvals.design.fingerprint === "string" && S.finishFeature(w8, "crash-on-save").changedSinceApproval.length === 0,
+      "a bugfix's design approval snapshots and fingerprints bug.md (the artifact its gate signs off), recorded as file: bug.md");
+    fs.writeFileSync(bff("bug.md"), bug8.replace(/## Root Cause[^\n]*\n/, (h) => h + "The save handler swallowed ENOSPC (US-1.AC-1).\n"));
+    const bfIm = S.impactReport(w8, "crash-on-save", { phase: "design" });
+    const bfDc = S.specDoctor(w8, "crash-on-save").checks.find((c) => c.id === "changed-since-approval");
+    ok(bfIm.ok && bfIm.file === "bug.md" && bfIm.baseline === "snapshot" && bfIm.changed === true && bfIm.modified.map((x) => x.section).join() === "Root Cause" &&
+      bfDc && /^changed after their approval: bug\.md —/.test(bfDc.detail) && bfDc.detail.includes("(dev-spec impact crash-on-save --phase design)"),
+      "an edit to bug.md after a bugfix's design approval: spec_impact --phase design diffs bug.md's sections; doctor flags bug.md and names --phase design");
+    S.addTrack(w8, "crash-on-save", "saas");
+    const ob8 = S.createFeature(w8, "Old bug", ["core"], undefined, undefined, undefined, "bugfix");
+    const obFile = path.join(ob8.dir, ".state.json");
+    fs.writeFileSync(obFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(obFile, "utf8")), approvals: { design: { at: "2026-01-01T00:00:00.000Z", by: "x" } } }));
+    fs.appendFileSync(path.join(ob8.dir, "bug.md"), "\nmore\n");
+    ok(S.finishFeature(w8, "crash-on-save").changedSinceApproval.join() === "bug.md,design.md" && S.finishFeature(w8, "old-bug").changedSinceApproval.length === 0 &&
+      S.impactReport(w8, "old-bug", { phase: "design" }).baseline === "fingerprint-only",
+      "a design.md created after a bugfix's design approval (track added) counts as changed too; a pre-1.13 bugfix approval (no file) keeps its old meaning");
 
     // Every WP8 message exists in EN, PT and ES (same keys).
     const keys8 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys8(v, pre + k + ".") : [pre + k])).sort();

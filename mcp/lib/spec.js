@@ -1911,7 +1911,8 @@ function verificationStatus(projectDir, slug, dir) {
     // no command and nothing recorded (for THIS task — a duplicated number's record may be the other's)
     if (!runnable && ownEvidence(evidence, b, dups.has(b.number)) == null) continue;
     const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
-    if (reason) unverifiedDetail.push({ number: b.number, reason });
+    // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
+    if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
   }
   return { withVerify: withVerify.length, evidence, unverified: unverifiedDetail.map((d) => d.number), unverifiedDetail };
 }
@@ -1940,7 +1941,15 @@ function summarizeRunOutput(output, max = 500) {
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
-  return vs.unverifiedDetail.map((d) => "#" + d.number + (d.reason === "no-evidence" ? "" : ` (${R[d.reason] || d.reason})`)).join(", ");
+  const label = (d) => (d.specChanged ? i18n.msg(lang).impact.staleSpec : R[d.reason] || d.reason);
+  return vs.unverifiedDetail.map((d) => "#" + d.number + (d.reason === "no-evidence" ? "" : ` (${label(d)})`)).join(", ");
+}
+// stale-evidence because the spec changed (spec_impact --reopen marked this task's own record), not because the
+// record belongs to another task / an earlier _Verify:_ — the reason code stays stale-evidence either way.
+function specChangedSince(evidence, block, dup, reason) {
+  if (reason !== "stale-evidence") return false;
+  const own = ownEvidence(evidence, block, dup);
+  return isRecord(own) && own.stale === true;
 }
 
 // +ai prompt work (touches prompts/, or an _Affects evals:_ task about a prompt) stays with the controller.
@@ -2368,6 +2377,10 @@ function textFingerprint(raw, phase) {
   return require("crypto").createHash("sha1").update(text).digest("hex");
 }
 const uncheckTasks = (text) => text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
+// The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
+// (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
+// compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
+const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : PHASE_FILE[phase]);
 
 // An approval is a GATE, not a stamp: the checks of the phase being approved run first (approvalChecks) and a
 // failure refuses it — unless opts.force, which records it anyway with `forced: true` and the failing check ids
@@ -2392,12 +2405,20 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // One default for every surface (the CLI used $USER, the MCP server 'user').
   const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
   // The artifact is read ONCE: its fingerprint and its snapshot are the same version.
-  const raw = PHASE_FILE[p] ? readIfExists(path.join(f.dir, PHASE_FILE[p])) : null;
+  const file = phaseFile(p, state.kind || "feature");
+  const raw = file ? readIfExists(path.join(f.dir, file)) : null;
   if (raw != null) entry.fingerprint = textFingerprint(raw, p);
+  if (file && file !== PHASE_FILE[p]) {
+    entry.file = file;
+    // A bugfix's design.md holds only track sections ([SaaS]/[AI]) the gate checked too: an edit to it still counts.
+    const design = readIfExists(path.join(f.dir, PHASE_FILE[p]));
+    if (design != null) entry.designFingerprint = textFingerprint(design, p);
+  }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
   // approvalHistory, with a snapshot of what it signed off (.history/<phase>@<n>.md) — the baseline spec_impact diffs.
   const record = { phase: p, at: entry.at, by: entry.by };
+  if (entry.file) record.file = entry.file;
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   if (entry.forced) { record.forced = true; record.failing = failing; }
   if (raw != null) record.snapshot = writeSnapshot(f.dir, p, raw, state.approvalHistory);
@@ -2452,7 +2473,7 @@ function latestSnapshot(dir, state, phase) {
 
 // The spec_impact phases among changed artifacts whose approval has a snapshot (next_action / doctor name the tool).
 function snapshotPhases(dir, state, changedFiles) {
-  return IMPACT_PHASES.filter((p) => changedFiles.includes(PHASE_FILE[p]) && latestSnapshot(dir, state, p));
+  return IMPACT_PHASES.filter((p) => changedFiles.includes(phaseFile(p, state.kind || "feature")) && latestSnapshot(dir, state, p));
 }
 
 // requirements.md → every requirement-level ID with its text: acIndex() for the ACs; SC-/EC-/NFR- IDs by the same
@@ -2529,7 +2550,7 @@ function impactReport(projectDir, name, opts = {}) {
   if (reopen && phase === "tasks") return { ok: false, error: I.reopenTasks };
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid }; // approvals/history of the wrong shape: nothing to trust
-  const file = PHASE_FILE[phase];
+  const file = phaseFile(phase, state.kind || "feature"); // a bugfix's design approval signed off bug.md
   const cur = readIfExists(path.join(dir, file));
   if (cur == null) return { ok: false, error: I.missing(file, slug) };
   const appr = state.approvals[phase];
@@ -2550,7 +2571,10 @@ function impactReport(projectDir, name, opts = {}) {
   const blocks = activeTaskBlocks(tasksText, tracks);
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
-  const taskView = (b) => ({ number: b.number, text: b.text, done: b.done, evidence: taskEvidenceIssue(evidence, b, dups.has(b.number)) || "verified" });
+  const taskView = (b) => {
+    const reason = taskEvidenceIssue(evidence, b, dups.has(b.number));
+    return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
+  };
   const citing = (ids) => blocks.filter((b) => {
     const mk = taskMarkers(b);
     const refs = new Set([...refsIn(mk.requirements.join(" "), RE_REQ_REF), ...refsIn(mk["makes green"].join(" "), RE_TEST_REF)]);
@@ -2589,7 +2613,8 @@ function impactReport(projectDir, name, opts = {}) {
     res.impacted = changes.map(([section, change, ids]) => ({ section, change, ids, tasks: citing(ids).map(taskView) }));
     for (const [section, , ids, dg] of changes) { digests[section] = dg; reach.set(section, ids); }
   } else {
-    const d = diffEntries(taskEntries(snap.text), taskEntries(cur));
+    // Both sides normalized like the fingerprint: a ticked sub-step ("  - [x] 1.1 …") is progress, not a change of task 1.
+    const d = diffEntries(taskEntries(uncheckTasks(snap.text)), taskEntries(uncheckTasks(cur)));
     res.added = d.added.map((e) => ({ number: e.number, text: e.title }));
     res.modified = d.modified.map((m) => ({ number: m.key, before: m.before.title, after: m.after.title }));
     res.removed = d.removed.map((e) => ({ number: e.number, text: e.title }));
@@ -2604,17 +2629,17 @@ function impactReport(projectDir, name, opts = {}) {
     }
     res.affectedTasks = [...byTask.values()].sort((a, b) => a.number - b.number);
   }
-  if (!reopen) {
-    if (res.affectedTasks && res.affectedTasks.some((t) => t.done)) res.hint = I.reopenHint(slug, phase);
-    return res;
-  }
-
-  // Reopen. Only what no earlier change request against THIS snapshot already recorded (same key, same content) counts.
+  // Only what no earlier change request against THIS snapshot already recorded (same key, same content) counts —
+  // for the reopen itself and for the hint offering it (a change already reopened, its task redone since, is covered).
   const prior = (state.changes || []).filter((c) => isRecord(c) && c.phase === phase && c.snapshot === snap.rel);
   const fresh = Object.keys(digests).filter((k) => !prior.some((c) => isRecord(c.digests) && c.digests[k] === digests[k]));
-  if (!fresh.length) return Object.assign(res, { reopened: [], recorded: false, note: I.nothingNew });
   const toReopen = [...new Set(fresh.filter((k) => reach.has(k)).flatMap((k) => citing(reach.get(k))))].filter((b) => b.done)
     .sort((a, b) => a.number - b.number);
+  if (!reopen) {
+    if (toReopen.length) res.hint = I.reopenHint(slug, phase); // tasks: nothing reaches a task (reach is empty)
+    return res;
+  }
+  if (!fresh.length) return Object.assign(res, { reopened: [], recorded: false, note: I.nothingNew });
   if (toReopen.length) {
     // tasks.md first: a state write that fails afterwards leaves unticked tasks a re-run records — never a record
     // claiming tasks were reopened while they are still ticked. Line endings (CRLF too) are kept.
@@ -2645,7 +2670,7 @@ function impactLines(r) {
   const I = i18n.msg(r.lang).impact;
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
-  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.evidence === "verified" ? I.verified : R[t.evidence] || t.evidence}`;
+  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
   if (r.baseline === "fingerprint-only") {
     const out = [I.headFp(r.feature, r.phase, r.changed), "  " + r.hint];
     if (r.note) out.push("  " + r.note);
@@ -2696,7 +2721,11 @@ function featureMetrics(projectDir, slug, dir) {
   const tracks = detectTracks(dir);
   const kind = state.kind || "feature";
   const approvals = isRecord(state.approvals) ? state.approvals : {};
-  const history = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && typeof h.phase === "string") : null;
+  // No approvalHistory: nothing approved yet is an empty history (rework 0 — createFeature doesn't seed the key);
+  // approvals without it predate the change history → unknown (null). So is a state whose shape was refused
+  // (readState drops a non-list approvalHistory).
+  const history = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && typeof h.phase === "string")
+    : !state.invalid && !Object.values(approvals).some(isRecord) ? [] : null;
   // Start: createdAt (1.13+), else the earliest approval, else the folder's birth/modification time — approximate.
   let created = timeOf(state.createdAt);
   let createdSource = created != null ? "state" : null;
@@ -2748,12 +2777,17 @@ function featureMetrics(projectDir, slug, dir) {
   const rework = reworkByPhase ? Object.values(reworkByPhase).reduce((s, n) => s + n, 0) : null;
   const forcedApprovals = history ? history.filter((h) => h.forced === true).length : Object.values(approvals).filter((a) => isRecord(a) && a.forced === true).length;
   // Evidence pass rate: passing runs / all recorded runs (evidence[n].history; a v1.12 record is its own single run).
+  // The evidence gate's rules: a pass is {command, exitCode: 0} — a bare {exitCode: 0} (v1.12) proves nothing, so it
+  // is no run at all — while any non-zero exit code is a failed run (the gate's failed-run), with or without a command.
+  const exitOf = (h) => (h.exitCode == null ? null : Number(h.exitCode));
+  const isPass = (h) => !!h.command && exitOf(h) === 0;
+  const isRun = (h) => isPass(h) || (exitOf(h) != null && exitOf(h) !== 0);
   let runs = 0, passing = 0;
   for (const slot of Object.values(evidence)) {
     for (const r of evidenceRecords(slot)) {
-      const list = Array.isArray(r.history) && r.history.length ? r.history.filter((h) => isRecord(h) && h.exitCode != null) : r.exitCode != null ? [r] : [];
+      const list = (Array.isArray(r.history) && r.history.length ? r.history.filter(isRecord) : [r]).filter(isRun);
       runs += list.length;
-      passing += list.filter((h) => Number(h.exitCode) === 0).length;
+      passing += list.filter(isPass).length;
     }
   }
   const changes = (state.changes || []).filter(isRecord);
@@ -3844,6 +3878,14 @@ function changedSinceApproval(dir, approvals, tracks) {
   const out = [];
   for (const [ph, file] of Object.entries(PHASE_FILE)) {
     const a = approvals && approvals[ph];
+    if (a && a.file !== file && a.file === phaseFile(ph, "bugfix") && phaseActive(ph, tracks)) {
+      // A bugfix's design approval signed off bug.md (`file`, see phaseFile) and design.md as it was then
+      // (`designFingerprint`) — a design.md created since (a track added) is a change too.
+      const bug = path.join(dir, a.file), design = path.join(dir, file);
+      if (fs.existsSync(bug) && artifactFingerprint(bug, ph) !== a.fingerprint) out.push(a.file);
+      if (fs.existsSync(design) && artifactFingerprint(design, ph) !== a.designFingerprint) out.push(file);
+      continue;
+    }
     const abs = path.join(dir, file);
     if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
     if (a.fingerprint) {
@@ -4109,8 +4151,10 @@ function specDoctor(projectDir, name) {
   // spec_impact lists what the edit touches when the approval has a snapshot.
   const changedArts = changedSinceApproval(dir, approvals, tracks);
   if (changedArts.length) {
-    add("changed-since-approval", "warn", snapshotPhases(dir, state, changedArts).length
-      ? fm.impact.doctorChanged(changedArts.join(", "), slug) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
+    // One `impact --phase` command per phase with a snapshot (the CLI defaults to requirements) — next_action's hint.
+    const impactPhases = snapshotPhases(dir, state, changedArts);
+    add("changed-since-approval", "warn", impactPhases.length
+      ? fm.impact.doctorChanged(changedArts.join(", "), slug, impactPhases) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
   add("approval-gates", pendingGates.length || forcedGates.length ? "warn" : "pass",
     [pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : null,
