@@ -248,6 +248,34 @@ const TOOLS = [
   // @wp WP7 <<<
 
   // @wp WP8 tools >>>
+  {
+    name: "spec_impact",
+    description:
+      "Change request: what an edit made AFTER an approval touches. Compares the current artifact with the snapshot saved by its latest approval (.specs/<feature>/.history/<phase>@<n>.md — every spec_approve appends to .state.json approvalHistory and saves one). `phase` 'requirements' (default): AC-level diff via stable IDs — added / modified (whitespace-normalized text differs) / removed ACs, plus SC-/EC-/NFR- IDs — and, for each modified or removed ID, the tasks citing it in _Requirements:_ (done/open + evidence state), the T-IDs covering it in the test plan and the design sections mentioning it. 'design': section-level diff (## headings, by normalized body — of design.md; for a bugfix, of bug.md and design.md, which its design approval signs off, each section keyed by its file ('bug.md: Root Cause'), with `designMd` giving design.md's baseline) and the tasks citing an ID named in a changed section. 'tasks': added / removed / changed task numbers. An approval made before the change history has only a fingerprint → `baseline: 'fingerprint-only'` with `changed` and a hint to re-approve (which starts the history); a phase never approved is an error. `reopen: true` (requirements/design): unticks the affected DONE tasks, marks their evidence stale (they count as unverified until a new run is recorded), records the change request in .state.json `changes` and refreshes the roadmap — it never edits requirements.md or design.md, and a second reopen with nothing new changes nothing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Feature name/slug." },
+        phase: { type: "string", enum: ["requirements", "design", "tasks"], description: "Which approved artifact to compare (default requirements)." },
+        reopen: { type: "boolean", description: "requirements/design only: untick the affected done tasks, mark their evidence stale and record the change request." },
+        projectDir: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "spec_metrics",
+    description:
+      "Metrics & retrospective, derived locally from .state.json, .history/ and the artifacts (no model, no cost). With `name`: that feature's createdAt (older features: the earliest approval, else the folder's date — flagged approximate), lead time in hours from creation to the first approval of each phase (classification → requirements → design → test-plan/eval-plan → tasks) and to complete (all tasks done) / finished (execution approved), rework (approvals of a phase beyond its first, from approvalHistory; approvals made before the change history are counted once and listed in `legacyPhases`, their rework unknown — `rework` is then a lower bound (`reworkLowerBound`), or null when nothing was approved under the history), forced approvals, change requests (spec_impact reopen) and reopened tasks, evidence pass rate (passing runs / all recorded runs, percent), tasks done/total and open [NEEDS CLARIFICATION] markers. Without `name`: every feature plus averages/medians and totals. `write: true` (with `name`) creates .specs/<feature>/retro.md — a localized retrospective pre-filled with the metrics (What went well / What hurt / Proposed steering or constitution amendments for human approval, never applied automatically / Follow-ups as candidate backlog items); an existing retro.md is never overwritten.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Feature name/slug. Omit for the whole project." },
+        write: { type: "boolean", description: "Create .specs/<feature>/retro.md (needs name; never overwrites)." },
+        projectDir: { type: "string" },
+      },
+    },
+  },
   // @wp WP8 <<<
 
   // @wp WP9 tools >>>
@@ -336,6 +364,10 @@ function runTool(name, args) {
     // @wp WP7 <<<
 
     // @wp WP8 dispatch >>>
+    case "spec_impact": // the same engine call as the CLI's `impact` (reopen only on an explicit true)
+      return spec.impactReport(pdir, args.name, { phase: args.phase, reopen: args.reopen === true });
+    case "spec_metrics":
+      return spec.metrics(pdir, args.name, { write: args.write === true });
     // @wp WP8 <<<
 
     // @wp WP9 dispatch >>>
