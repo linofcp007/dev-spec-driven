@@ -103,9 +103,10 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with
   that command and exit code 0. A note ticks it but leaves it unverified; a failed run is recorded and
   keeps the task unverified until a later passing run; evidence goes stale when the spec behind the
-  task changes (`impact --reopen`) or its `_Verify:_` command is edited. `doctor`, `ROADMAP.md` and
-  `finish` name each unverified task with a reason code (`no-evidence`, `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`).
+  task changes (`impact --reopen`) or its `_Verify:_` command is edited. `done` (`spec_complete_task`)
+  returns a stable reason code in `unverifiedReason` (`no-evidence`, `failed-run`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`); `doctor` and `finish` list
+  each unverified task with a localized reason; `ROADMAP.md` shows how many each feature has.
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders

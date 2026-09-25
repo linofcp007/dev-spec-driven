@@ -101,9 +101,10 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   command, exit code and output summary, and refuses the tick on a failure. A task with a runnable
   `_Verify:_` counts as verified only with the command and exit code 0 — a text note ticks it but leaves
   it unverified. Failed runs are kept in a short history, and a task reopened after a spec change has
-  **stale** evidence until it is re-run. Every unverified task carries a reason code (`failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`) that `doctor`,
-  `ROADMAP.md` and `spec_finish` show. CLI: `dev-spec done <feature> <n> --run`.
+  **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
+  (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
+  `stale-evidence`, `no-evidence`); `doctor` and `spec_finish` list each unverified task with a localized
+  reason, and `ROADMAP.md` shows how many each feature has. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
   root-cause task can't be completed before that.
@@ -323,9 +324,11 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   o comando, o código de saída e um resumo, e recusa a marcação quando falha. Uma tarefa com um `_Verify:_`
   executável só fica verificada com o comando e o código de saída 0 — uma nota de texto marca-a, mas deixa-a
   por verificar. As execuções falhadas ficam num histórico curto, e uma tarefa reaberta depois de uma
-  alteração à spec fica com evidência **desatualizada** até voltar a correr. Cada tarefa por verificar tem um
-  código de motivo (`failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`,
-  `no-evidence`) que o `doctor`, o `ROADMAP.md` e o `spec_finish` mostram. CLI: `dev-spec done <feature> <n> --run`.
+  alteração à spec fica com evidência **desatualizada** até voltar a correr. O `spec_complete_task` devolve um
+  código de motivo estável (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`,
+  `duplicate-number`, `stale-evidence`, `no-evidence`); o `doctor` e o `spec_finish` listam cada tarefa por
+  verificar com o motivo, e o `ROADMAP.md` mostra quantas há em cada funcionalidade. CLI:
+  `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
   regressão a falhar → correção → verificação. O `doctor` falha até a causa raiz estar escrita, e as tarefas
   depois da tarefa da causa raiz não podem ser concluídas antes disso.
@@ -388,7 +391,7 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   dentro do projeto e só é lida.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
-  `def test_T01_…`). Os planos de testes têm uma coluna **Kind** (`example` | `property`) com orientação
+  `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
   para testes baseados em propriedades.
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
@@ -547,10 +550,11 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   registra el comando, el código de salida y un resumen, y rechaza la marca si falla. Una tarea con un
   `_Verify:_` ejecutable solo queda verificada con el comando y el código de salida 0 — una nota de texto la
   marca, pero la deja sin verificar. Las ejecuciones fallidas quedan en un historial corto, y una tarea
-  reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse. Cada tarea sin
-  verificar lleva un código de motivo (`failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
-  `stale-evidence`, `no-evidence`) que muestran el `doctor`, el `ROADMAP.md` y `spec_finish`. CLI:
-  `dev-spec done <feature> <n> --run`.
+  reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
+  `spec_complete_task` devuelve un código de motivo estable (`unverifiedReason`: `failed-run`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`); el `doctor` y
+  `spec_finish` listan cada tarea sin verificar con su motivo, y el `ROADMAP.md` muestra cuántas tiene cada
+  función. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
   regresión en rojo → corrección → verificación. El `doctor` falla hasta que la causa raíz esté escrita, y
   las tareas posteriores a la de la causa raíz no se pueden completar antes.
@@ -614,7 +618,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   lee.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
-  `def test_T01_…`). Los planes de pruebas tienen una columna **Kind** (`example` | `property`) con
+  `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con
   orientación para pruebas basadas en propiedades.
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`

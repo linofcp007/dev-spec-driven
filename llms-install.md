@@ -40,7 +40,7 @@ no API key.
 
    ```bash
    node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config generic
-   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | all
+   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
 4. **Reload the MCP client.** The server advertises **29 tools** over stdio — `spec_init`,

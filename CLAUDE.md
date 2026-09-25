@@ -58,7 +58,10 @@ and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USE
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
 never hardcoded in spec.js — see the Trilingual section. The CLI's human output is localized too
 (`cliText(lang)` over `i18n.msg(lang).cliOutput`: the feature's language for feature commands, the
-project's otherwise); `--json` prints the structured result, which is never localized.
+project's otherwise). `--json` prints the same structured result the MCP tool returns: keys and stable
+codes (`step`, `code`, `unverifiedReason`, check ids) never change, while message fields (`recommendation`,
+`note`, `error`, doctor `detail`, finish `blockers`/`warnings`…) are in the feature's language, as on MCP.
+`cliText` only localizes the human-readable CLI output.
 
 ## The track model
 `core` is always on. `+tdd`, `+saas`, `+ai` are independent and composable, chosen in Phase 0 by
@@ -184,7 +187,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `[trigger]`, empty `[]` slots, the templates' own code-span slots `` `[path]` ``, the `> **TODO**`
   sentinel) and deliberately ignores links, checkboxes, stable tags/IDs, `[NEEDS CLARIFICATION]`, number
   intervals, other code spans, comments and fences. `artifactState()` = missing / placeholder / filled.
-  `detectPhase()` is the earliest still-template artifact, so a fresh scaffold is phase `requirements`.
+  `detectPhase()`: `complete` / `executing` once tasks are ticked, `tasks-ready` once a real (non-placeholder)
+  task exists; otherwise the earliest still-template chain artifact — so a fresh scaffold is phase `requirements`.
   Doctor's `placeholders` check fails for the current and earlier phases, warns for later ones;
   `ears_validate` reports code `placeholder`; the requirements.md hook never says "all clean" while any remain.
 - **Approve gate.** `approvePhase()` runs `approvalChecks()` for that phase and refuses (`refused`, `failing`,
@@ -212,9 +216,12 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
-- **Reason codes** (stable, `unverifiedReason` / `unverifiedDetail`): `no-evidence` · `failed-run` ·
-  `manual-note-on-runnable-verify` · `duplicate-number` · `stale-evidence`. Callers branch on these, never
-  on the localized note.
+- **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
+  `duplicate-number` · `stale-evidence`. The only RETURNED field carrying them is `spec_complete_task`'s
+  `unverifiedReason` (set only for a task with a runnable `_Verify:_` or recorded evidence); callers branch on
+  it, never on the localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and
+  `spec_finish` render it through `unverifiedLabel()` (localized labels, none for `no-evidence`), and the
+  ROADMAP.md attention line only counts unverified tasks per feature.
 - **Record shape** (`.state.json → evidence[<n>]`): the latest run `{command, exitCode, summary, at}` plus
   `history` (last `EVIDENCE_HISTORY` = 5 runs, for pass-rate metrics), stamps `task` (text) and `verify`
   (the command) — an edited `_Verify:_` makes the old run `stale-evidence`; a record made while the number
@@ -444,7 +451,8 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
 - New MCP tool → add the function to `mcp/lib/spec.js`, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
   subcommand, a test in `mcp/test.js` (and bump the exact tool count), the README tool tables (EN/PT/ES — a
-  test checks them), and (usually) a thin command in `commands/`.
+  test rejects phantom rows and requires the 23 v1.12 tools; it does not yet require newer ones, so add the row
+  by hand), and (usually) a thin command in `commands/`.
 - Any generated/returned user-facing text → put the strings in `mcp/lib/i18n.js` for all three
   languages and resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable.
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin.

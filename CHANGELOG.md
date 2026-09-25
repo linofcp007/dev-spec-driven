@@ -17,9 +17,10 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   discarded — every run is now recorded (never ticked) with a short history (last 5), and a later note
   can't clear it. Evidence records are stamped with their task's text and `_Verify:_` command, so the
   second of two tasks numbered `3.` never borrows the first one's passing run and an edited command's old
-  run no longer counts. Stable reason codes (`failed-run`, `manual-note-on-runnable-verify`,
-  `duplicate-number`, `stale-evidence`, `no-evidence`) surface in `spec_complete_task`, doctor,
-  `spec_finish` and ROADMAP.md. A `.state.json` whose evidence/approvals aren't objects is refused
+  run no longer counts. `spec_complete_task` returns a stable reason code (`unverifiedReason`:
+  `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`);
+  doctor and `spec_finish` list each unverified task with a localized reason, and ROADMAP.md counts them
+  per feature. A `.state.json` whose evidence/approvals aren't objects is refused
   before tasks.md is touched.
 - **Placeholder and approve gates.** An untouched scaffold passed `doctor` with `readyToAdvance: true`,
   and `spec_approve` stamped anything. Doctor has a `placeholders` check (fail for the current and earlier
