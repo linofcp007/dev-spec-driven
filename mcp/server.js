@@ -743,7 +743,19 @@ function handle(msg) {
   }
 }
 
+// stdout errors (C4). A client that closes its read end first (it quit, `… | head -1`) made the next reply write fail with
+// EPIPE — an unhandled 'error' event: a stack trace on stderr and exit 1. Nobody is left to read a reply, so that is a quiet
+// exit 0 (EOF: Windows' wording for the same closed pipe; ERR_STREAM_DESTROYED: a write after it). Any other stdout error
+// is real: one line on stderr, exit 1.
+function onStdoutError(e) {
+  const code = e && e.code;
+  if (code === "EPIPE" || code === "EOF" || code === "ERR_STREAM_DESTROYED") process.exit(0);
+  try { process.stderr.write("dev-spec MCP server: stdout error: " + ((e && e.message) || String(e)) + "\n"); } catch { /* stderr gone too */ }
+  process.exit(1);
+}
+
 function main() {
+  process.stdout.on("error", onStdoutError);
   const rl = readline.createInterface({ input: process.stdin, terminal: false });
   rl.on("line", (line) => {
     const trimmed = line.trim();

@@ -8549,6 +8549,137 @@ function endRun() {
   // @pkg C3 <<<
 
   // @pkg C4 tests >>>
+  { // 1.14 C4 — the fixes from the independent review of the first 1.14 packages.
+    const c4Root = path.join(tmp, "proj-c4");
+    const c4 = (n) => path.join(c4Root, n);
+    const cls = (d, lang) => S.classify(d, lang ? { lang } : {});
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+
+    // C4.2.1 — '-compliant' (and -compliance / -certified / -grade) compounds keep the keyword a signal; '-aware' does not.
+    const gdprC = cls("A GDPR-compliant signup form"), hipaaC = cls("HIPAA-compliant storage"), socC = cls("SOC2-certified audit export"), gradeC = cls("enterprise-grade SSO");
+    ok(gdprC.tracks.includes("privacy") && gdprC.signals.privacy.includes("gdpr") && hipaaC.tracks.includes("privacy") && socC.tracks.includes("saas") && gradeC.tracks.includes("saas") &&
+      cls("Ship the .claude-plugin manifest").tracks.join() === "core" && !cls("Fix the author-name field").signals.tdd.length &&
+      cls("Session-aware routing for the load balancer").signals.tdd.length === 0 && cls("PCI-compliance report").tracks.includes("saas"),
+      "C4.2.1 classify: 'GDPR-compliant' / 'HIPAA-compliant' turn +privacy on, 'SOC2-certified' / 'enterprise-grade' +saas (they were core only); '-<letter>' identifiers (claude-plugin, author-name) stay rejected (" +
+      [gdprC, hipaaC, socC, gradeC].map((r) => r.label).join(" · ") + ")");
+
+    // C4.2.2 — EN / PT / ES aligned: consent-family words, encryption in transit, security testing.
+    const consEs = cls("Registrar el consentimiento del usuario para el boletín"), consPt = cls("Registar o consentimento do utilizador para a newsletter"), consEn = cls("Record the user's consent for the newsletter");
+    const trEs = cls("Cifrado en tránsito para la API de pagos"), trPt = cls("Cifragem em trânsito na API de pagamentos"), trEn = cls("Encryption in transit for the payments API");
+    const stEs = cls("Pruebas de seguridad de la API de subida"), stPt = cls("Testes de segurança da API de carregamento"), stEn = cls("Security testing of the upload API");
+    ok([consEs, consPt, consEn].every((r) => !r.tracks.includes("privacy") && r.possible.some((p) => p.track === "privacy")) &&
+      consEs.signals.privacy.includes("consentimiento") && consPt.signals.privacy.includes("consentimento") && consEn.signals.privacy.includes("consent") &&
+      [trEs, trPt, trEn, stEs, stPt, stEn].every((r) => r.tracks.includes("sec") && !r.weak.includes("sec")) &&
+      trEs.signals.sec.includes("cifrado en tránsito") && trPt.signals.sec.includes("cifragem em trânsito") && stEs.signals.sec.includes("prueba de seguridad") && stPt.signals.sec.includes("teste de segurança") &&
+      cls("Consentimiento explícito y datos personales").tracks.includes("privacy"),
+      "C4.2.2 classify: consent / consentimento / consentimiento are the same (weak) signal in EN / PT / ES; cifrado en tránsito / cifragem em trânsito and pruebas de seguridad / testes de segurança are strong like their EN twins (" +
+      [consEs, trEs, trPt, stEs, stPt].map((r) => r.label).join(" · ") + ")");
+
+    // C4.2.3 — no +privacy / +sec (and its mandatory sections) from one generic word.
+    const soft = cls("Soft-delete with a 30-day retention period for trashed files"), oauthC = cls("Google sign-in with an OAuth consent screen"), arch = cls("Admin can set a retention period for archived projects");
+    const stride = cls("array stride"), perm = cls("file permission bits"), both = cls("array stride and file permission bits");
+    const strideTm = cls("STRIDE threat model for the upload API"), strideAlone = cls("Run STRIDE on the upload flow"), rbacPerm = cls("Login with a password, RBAC permissions for admins");
+    const negPerm = cls("No permission checks are needed here"), corroborated = cls("Retention period and consent records for account deletion");
+    ok([soft, oauthC, arch].every((r) => !r.tracks.includes("privacy") && r.possible.some((p) => p.track === "privacy" && /retention period|consent/.test(p.signal))) &&
+      oauthC.tracks.includes("tdd") && corroborated.tracks.includes("privacy") && corroborated.weak.includes("privacy"),
+      "C4.2.3 classify: 'retention period' / 'consent' alone → only a 'possible +privacy' note (was core +privacy with 6 mandatory sections); two privacy signals together still turn it on (" + [soft, oauthC, arch, corroborated].map((r) => r.label).join(" · ") + ")");
+    ok([stride, perm, both].every((r) => !r.tracks.includes("sec") && !r.signals.sec.length && !r.possible.some((p) => p.track === "sec") && !r.notes.some((n) => /\+sec/.test(n))) &&
+      strideTm.tracks.includes("sec") && strideTm.signals.sec.includes("STRIDE") && strideTm.signals.sec.includes("threat model") && strideAlone.possible.some((p) => p.track === "sec" && p.signal === "STRIDE") &&
+      rbacPerm.tracks.includes("sec") && rbacPerm.signals.sec.includes("permission") && !negPerm.notes.some((n) => /\+sec/.test(n)) &&
+      S.trackSignals("sec").context.includes("permission") && !S.trackSignals("sec").weak.includes("permission") && !S.trackSignals("sec").weak.includes("stride"),
+      "C4.2.3 classify: 'array stride' / 'file permission bits' (alone or together) give no +sec signal or note; upper-case STRIDE is the methodology (weak; strong with 'threat model'); 'permission' corroborates another +sec signal (RBAC permissions) but is no evidence alone, negated or not (" +
+      [both, strideTm, strideAlone, rbacPerm].map((r) => r.label).join(" · ") + ")");
+    const mcpC4 = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "A GDPR-compliant signup form with an array stride", projectDir: c4("mcp") } }));
+    ok(mcpC4.label === "core +privacy" && !mcpC4.signals.sec.length, "C4.2.1/3 spec_classify (MCP) = the engine (" + mcpC4.label + ")");
+
+    // C4.2.4 — track markers are case-sensitive: `### Timeout [sec]` is no [SEC] section.
+    const legacy = S.createFeature(c4("markers"), "Timeouts", ["core"], "", undefined, "en");
+    fs.appendFileSync(path.join(legacy.dir, "design.md"), "\n### Timeout [sec]\n30\n\n### Budget [saas]\n5\n");
+    fs.appendFileSync(path.join(legacy.dir, "requirements.md"), "\n### Limits [privacy]\n- [TBD]\n");
+    const lst = JSON.parse(fs.readFileSync(path.join(legacy.dir, ".state.json"), "utf8"));
+    delete lst.tracks; // a pre-1.13 feature: the tracks are inferred from its files
+    fs.writeFileSync(path.join(legacy.dir, ".state.json"), JSON.stringify(lst, null, 2));
+    const upper = S.createFeature(c4("markers"), "Upper", ["core"], "", undefined, "en");
+    fs.appendFileSync(path.join(upper.dir, "design.md"), "\n## [SEC] Threat Model\nSTRIDE per element.\n");
+    const ust = JSON.parse(fs.readFileSync(path.join(upper.dir, ".state.json"), "utf8"));
+    delete ust.tracks;
+    fs.writeFileSync(path.join(upper.dir, ".state.json"), JSON.stringify(ust, null, 2));
+    const reqPh = S.featurePlaceholders(c4("markers"), legacy.slug, "requirements.md").items.map((x) => x.text);
+    ok(S.detectTracks(legacy.dir).join() === "core" && S.detectTracks(upper.dir).join() === "core,sec" && reqPh.some((x) => /TBD/.test(x)) &&
+      S.extractSection("## Threat Model [sec]\nx\n## [SEC] Threat Model\ny\n", ["threat model"], "[SEC]").trim() === "y",
+      "C4.2.4 markers are case-sensitive: a legacy feature with '### Timeout [sec]' / '### Budget [saas]' stays core (was +sec +saas), '## [SEC] …' still infers +sec, a '[privacy]'-suffixed requirements section is no longer hidden while +privacy is off (its [TBD] is reported), the exact marker wins in extractSection (got " +
+      S.detectTracks(legacy.dir).join() + " / " + JSON.stringify(reqPh) + ")");
+
+    // C4.2.5 — a deleted [PRIVACY] heading is not satisfied by an unrelated core heading.
+    const pv = S.createFeature(c4("sections"), "Accounts", ["privacy"], "", undefined, "en");
+    const pvDesign = path.join(pv.dir, "design.md");
+    const filledDesign = fs.readFileSync(pvDesign, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n")
+      .replace(/\[([^\]\n]*)\]/g, (m, x) => (/^(?:PRIVACY|SEC|SaaS|AI|x| )$/.test(x) ? m : "filled"));
+    fs.writeFileSync(pvDesign, filledDesign);
+    const pvFilled = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    fs.writeFileSync(pvDesign, filledDesign.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "") + "\n## Processors and queues\nBullMQ workers.\n");
+    const pvDeleted = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    fs.writeFileSync(pvDesign, filledDesign.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "## [PRIVACY] Processing\n\n### Processors\nStripe (US, SCCs).\n"));
+    const pvNested = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    const RET = { syn: ["retention & deletion", "retention", "conservação", "conservação e eliminação"], loose: ["retention", "conservação"] };
+    ok(pvFilled.status === "pass" && pvDeleted.status === "fail" && /Processors & International Transfers:missing/.test(pvDeleted.detail) && pvNested.status === "pass" &&
+      S.extractSection("## Retention\nx\n", RET.syn, "[PRIVACY]", RET.loose) === null && S.extractSection("## Conservação de ficheiros\nx\n", RET.syn, "[PRIVACY]", RET.loose) === null &&
+      S.extractSection("## Retention & Deletion\nx\n", RET.syn, "[PRIVACY]", RET.loose).trim() === "x" && S.extractSection("## [PRIVACY] Retention\nx\n", RET.syn, "[PRIVACY]", RET.loose).trim() === "x" &&
+      S.extractSection("## Observability\nm\n", ["observability"], "[SaaS]").trim() === "m",
+      "C4.2.5 extractSection: a generic synonym ('Processors', 'Retention', 'Conservação …') on an unmarked core heading no longer satisfies a [PRIVACY] section (doctor fails 'Processors & International Transfers:missing' — it passed); under a [PRIVACY] heading or spelled unambiguously it still does; unmarked SaaS headings unchanged (" +
+      pvDeleted.detail + ")");
+
+    // C4.2.6 — the _Verify:_ pipe check: pipefail must really be set BEFORE the pipe; scripts handed to a shell; a Windows path's trailing "\".
+    const vpC4 = S.verifyPipeMasked;
+    const pipeYes = ["set +o pipefail; npm test | tee log", "npm test | tee pipefail.log", "npm test | tee log # pipefail later", "npm test | tee log; set -o pipefail",
+      'bash -c "npm test | tee log"', "sh -c 'pytest | tee out'", 'pwsh -Command "npm test | Tee-Object log"', 'powershell -NoProfile -c "a | b"', 'cmd /c "npm test | more"',
+      '"C:\\Program Files\\" | more', 'dir "C:\\" | more', '/usr/bin/env bash -lc "a | b"', 'C:\\Windows\\System32\\cmd.exe /s /c "a | b"',
+      'set -o pipefail; bash -c "npm test | tee log"', "(set -o pipefail); npm test | tee log"];
+    const pipeNo = ["set -euo pipefail; npm test | tee log", "set -eo pipefail && pytest | tee out", "set -e -o pipefail; a | b", 'bash -c "set -o pipefail; npm test | tee log"',
+      "bash -lc 'set -euo pipefail; npm test | tee log'", 'bash -eo pipefail -c "a | b"', 'node -e "console.log(1|2)"', 'echo "say \\"hi\\" | x"', 'test "$(echo "a|b")" = x',
+      'dir "C:\\Program Files\\" && echo ok', 'grep "a|b" file', "echo a^|b", "a \\| b"];
+    const vpWrongC4 = pipeYes.filter((c) => !vpC4(c)).map((c) => "missed: " + c).concat(pipeNo.filter((c) => vpC4(c)).map((c) => "flagged: " + c));
+    const pp4 = c4("pipes");
+    S.initProject(pp4, ["core"], "en");
+    const pf4 = S.createFeature(pp4, "Shell pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(pf4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Wrapped pipe\n  - _Verify: bash -c \"npm test | tee test.log\"_\n- [ ] 2. [US1] Real pipefail\n  - _Verify: set -o pipefail; npm test | tee test.log_\n");
+    const c4d = chk(S.specDoctor(pp4, pf4.slug), "verify-pipes");
+    const c4done = S.completeTask(pp4, pf4.slug, 1, { command: 'bash -c "npm test | tee test.log"', exitCode: 0 });
+    ok(!vpWrongC4.length && c4d.status === "warn" && /#1 /.test(c4d.detail) && !/#2 /.test(c4d.detail) && c4done.ok && c4done.pipeMasked === true,
+      "C4.2.6 verifyPipeMasked: only a `set -o pipefail` run BEFORE the pipe (or the shell's -o pipefail) silences it — not the word (set +o pipefail, tee pipefail.log, a comment); a pipe inside bash -c / sh -c / pwsh -Command / cmd /c is flagged; a Windows path ending in \\ before the closing quote no longer hides the pipe; doctor + spec_complete_task follow (" +
+      vpWrongC4.join(" · ") + ")");
+
+    // C4.2.7 — the server survives a client that closes its read end first: EPIPE → quiet exit 0; another stdout error → one stderr line, exit 1.
+    const runServer = (stdio, drive) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: c4("epipe") }, stdio });
+      let err = "";
+      kid.stderr.on("data", (d) => (err += d));
+      if (kid.stdin) kid.stdin.on("error", () => {});
+      const timer = setTimeout(() => { kid.kill(); resolve({ code: "timeout", err }); }, 10000);
+      kid.on("close", (code) => { clearTimeout(timer); resolve({ code, err }); });
+      drive(kid);
+    });
+    const req = (id) => JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list", params: {} }) + "\n";
+    const epipe = await runServer(["pipe", "pipe", "pipe"], (kid) => {
+      kid.stdout.once("data", () => {
+        kid.stdout.destroy(); // the client closes its read end, then keeps talking
+        let n = 0;
+        const t = setInterval(() => {
+          if (++n > 15 || kid.exitCode !== null) { clearInterval(t); try { kid.stdin.end(); } catch {} return; }
+          try { kid.stdin.write(req(100 + n)); } catch {}
+        }, 20);
+      });
+      kid.stdin.write(req(1));
+    });
+    const roFile = path.join(tmp, "c4-readonly-stdout.txt");
+    fs.writeFileSync(roFile, "");
+    const roFd = fs.openSync(roFile, "r");
+    const badFd = await runServer(["pipe", roFd, "pipe"], (kid) => { kid.stdin.write(req(1)); setTimeout(() => { try { kid.stdin.end(); } catch {} }, 1500); });
+    fs.closeSync(roFd);
+    ok(epipe.code === 0 && !/Unhandled|EPIPE|at /.test(epipe.err) && badFd.code === 1 && /^dev-spec MCP server: stdout error: /.test(badFd.err) && !/Unhandled 'error' event|\n\s+at /.test(badFd.err),
+      "C4.2.7 mcp/server.js: a client closing its read end first → quiet exit 0 (was an unhandled EPIPE stack trace, exit 1); a non-EPIPE stdout error (read-only fd) → one stderr line and exit 1 (got " +
+      JSON.stringify([epipe.code, epipe.err.slice(0, 120), badFd.code, badFd.err.slice(0, 120)]) + ")");
+  }
   // @pkg C4 <<<
 
   // Release hygiene: the three version fields agree.

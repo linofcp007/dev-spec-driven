@@ -821,61 +821,79 @@ const SIGNALS = {
       "testes de penetração", "gestão de segredos", "gestão de secrets", "cifragem em repouso", "encriptação em repouso",
       "auditoria de segurança", "revisão de segurança", "superfície de ataque", "escalada de privilégios",
       "escalonamento de privilégios", "ataque de força bruta", "sequestro de sessão",
+      // C4 — aligned with the EN strong ones (encryption in transit / at rest, security test): they were weak here
+      "cifragem em trânsito", "cifragem em transito", "encriptação em trânsito", "criptografia em trânsito", "criptografia em repouso",
+      "teste de segurança",
       // ES
       "modelo de amenazas", "modelado de amenazas", "inyección sql", "inyección de sql", "inyección de código",
       "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
       "gestión de secretos", "cifrado en reposo", "auditoría de seguridad", "revisión de seguridad", "superficie de ataque",
       "escalada de privilegios", "escalamiento de privilegios", "ataque de fuerza bruta", "secuestro de sesión",
+      // C4 — aligned with EN (encryption in transit / at rest, security test)
+      "cifrado en tránsito", "cifrado en transito", "encriptación en tránsito", "encriptación en reposo", "prueba de seguridad",
     ],
     weak: [
-      "authentication", "authorization", "rbac", "abac", "access control", "permission", "access token", "refresh token",
+      "authentication", "authorization", "rbac", "abac", "access control", "access token", "refresh token",
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
-      "input validation", "security", "hardening", "least privilege", "stride", "mfa", "2fa", "two-factor", "firewall", "secrets",
+      "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "firewall", "secrets",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
+      // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
+      // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
+      // "threat model".
+      "STRIDE",
       // PT
-      "autenticação", "autenticacao", "autorização", "autorizacao", "permissão", "controlo de acesso", "controle de acesso",
+      "autenticação", "autenticacao", "autorização", "autorizacao", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
       "registo de auditoria", "trilho de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
       // ES
-      "autenticación", "autorización", "permiso", "control de acceso", "token de acceso", "clave de api",
+      "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
     ],
+    // C4: CORROBORATING-only — evidence for +sec only beside another +sec signal ("RBAC permissions"); alone it is no hint at
+    // all, not even a "possible" note (file permission bits, app permissions, "permiso" = a leave of absence).
+    context: ["permission", "permissão", "permiso"],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
   privacy: {
     strong: [
       "gdpr", "rgpd", "lgpd", "ccpa", "cpra", "hipaa", "personal data", "personally identifiable", "pii", "dpia",
-      "data protection", "data subject", "right to erasure", "right to be forgotten", "data portability", "consent",
-      "data retention", "retention period", "retention policy", "retention policies", "anonymiz", "anonymis", "pseudonymiz",
+      "data protection", "data subject", "right to erasure", "right to be forgotten", "data portability",
+      "data retention", "anonymiz", "anonymis", "pseudonymiz",
       "pseudonymis", "data minimi", "data processing agreement", "privacy by design", "privacy policy", "privacy notice",
       "special category data", "data controller", "data processor", "international transfer", "standard contractual clauses",
       // PT
       "dados pessoais", "dado pessoal", "proteção de dados", "protecao de dados", "titular dos dados", "titulares dos dados",
       "direito ao apagamento", "direito ao esquecimento", "direito de apagamento", "portabilidade dos dados",
-      "portabilidade de dados", "consentimento", "retenção de dados", "prazo de conservação", "conservação de dados",
+      "portabilidade de dados", "retenção de dados", "conservação de dados",
       "anonimiza", "pseudonimiza", "aipd", "cnpd", "categorias especiais de dados", "dados sensíveis", "subcontratante",
       "responsável pelo tratamento", "transferência internacional", "transferências internacionais",
-      "política de privacidade", "minimização de dados",
+      "política de privacidade", "minimização de dados", "aviso de privacidade",
       // ES
       "datos personales", "dato personal", "protección de datos", "titular de los datos",
       "derechos arco", "derecho de supresión", "derecho al olvido", "portabilidad de datos", "portabilidad de los datos",
-      "retención de datos", "plazo de conservación", "seudonimiza", "eipd", "aepd", "categorías especiales de datos",
+      "retención de datos", "conservación de datos", "seudonimiza", "eipd", "aepd", "categorías especiales de datos",
       "datos sensibles", "encargado del tratamiento", "responsable del tratamiento", "transferencia internacional",
-      "transferencias internacionales", "política de privacidad", "minimización de datos",
+      "transferencias internacionales", "política de privacidad", "minimización de datos", "aviso de privacidad",
     ],
     weak: [
       "user data", "customer data", "user profile", "customer profile", "email address", "phone number", "date of birth",
       "cookie", "user tracking", "geolocation", "location data", "biometric", "health data", "contact details", "opt-out",
       "opt-in", "unsubscribe", "privacy", "delete account", "account deletion", "data export", "dpa",
+      // C4: generic alone — an OAuth consent screen, a trash folder's retention period, an archive's retention policy are no
+      // personal-data processing. WEAK (EN / PT / ES alike): +privacy only once another privacy signal corroborates them.
+      "consent", "retention period", "retention policy", "retention policies",
       // PT
       "dados do utilizador", "dados dos utilizadores", "dados de utilizador", "dados do cliente", "dados dos clientes",
       "perfil do utilizador", "perfil de utilizador", "perfil do cliente", "endereço de email", "endereço de e-mail",
       "número de telefone", "número de telemóvel", "data de nascimento", "geolocalização", "dados de saúde",
       "dados biométricos", "privacidade", "apagar conta", "eliminar conta", "exportar dados", "avaliação de impacto",
+      "consentimento", "prazo de conservação", "período de retenção", "política de retenção", "política de conservação", // C4 (see EN)
       // ES
       "datos del usuario", "datos de usuario", "datos de los usuarios", "datos del cliente", "perfil de usuario",
       "perfil del usuario", "perfil del cliente", "dirección de correo", "número de teléfono", "fecha de nacimiento",
       "datos de salud", "datos biométricos", "privacidad", "eliminar cuenta", "borrar cuenta", "exportar datos", "evaluación de impacto",
+      "consentimiento", "plazo de conservación", "periodo de retención", "período de retención", "política de retención", // C4 (see EN)
+      "política de conservación",
     ],
   },
 };
@@ -960,8 +978,11 @@ const INFLECTION = "(?:e?s|ed|ing|d)?";
 // this, 'rag' + 'ing' would make "raging" a strong +ai signal.
 const ACRONYM_INFLECTION = "s?";
 // Hyphen compounds that keep the head word a real signal ('AI-powered', 'LLM-based') rather than
-// turning it into an identifier ('claude-plugin').
-const ADJ_SUFFIX = "(?:-(?:based|powered|driven|generated|assisted|enabled|native|ready|first))?";
+// turning it into an identifier ('claude-plugin'). C4: compliance / certification / grade compounds too — "GDPR-compliant",
+// "HIPAA-compliant", "PCI-compliance", "SOC2-certified", "enterprise-grade" name the keyword's concept ('-compliant' used to
+// be a rejected '-<letter>' compound: "A GDPR-compliant signup form" classified as core only). Not '-aware': "session-aware
+// routing" (sticky sessions) would read as an auth session.
+const ADJ_SUFFIX = "(?:-(?:based|powered|driven|generated|assisted|enabled|native|ready|first|compliant|compliance|certified|grade))?";
 
 const KW_RE = new Map();
 // PT/ES plurals the English inflections can't produce: migração→migrações, sessão→sessões,
@@ -1040,15 +1061,18 @@ function classify(description, opts = {}) {
   const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
 
   for (const track of OPTIONAL_TRACKS) {
-    for (const tier of ["strong", "weak"]) {
-      for (const kw of SIGNALS[track][tier]) {
+    for (const tier of ["strong", "weak", "context"]) {
+      for (const kw of SIGNALS[track][tier] || []) {
+        // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
+        // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
+        const hay = kw === kw.toLowerCase() ? text : cased;
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
-        if (!text.includes(keywordLiteral(kw))) continue;
+        if (!hay.includes(keywordLiteral(kw))) continue;
         const re = keywordRe(kw);
         re.lastIndex = 0;
         let m;
-        while ((m = re.exec(text)) !== null) {
+        while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
           seenSpan[track].add(m.index);
           hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: isNegated(text, m.index, m[0].length, lang, cased) });
@@ -1059,12 +1083,19 @@ function classify(description, opts = {}) {
   // A WEAK signal inside a longer STRONG signal of another track is part of that phrase, not evidence of its own:
   // 'model' in "threat model" / "modelo de ameaças" (+sec) is no +ai hint, 'security' in "row-level security" (+saas)
   // no +sec one. The same word in two tracks ('authentication': +tdd strong, +sec weak) is not shadowed — equal spans.
-  const shadowed = (h) => h.tier === "weak" && hits.some((s) => s.track !== h.track && s.tier === "strong" &&
+  const shadowed = (h) => h.tier !== "strong" && hits.some((s) => s.track !== h.track && s.tier === "strong" &&
     s.start <= h.start && h.end <= s.end && s.end - s.start > h.end - h.start);
-  for (const h of hits) {
-    if (shadowed(h)) continue;
+  // CORROBORATING-only signals (tier `context`, C4 — 'permission' for +sec) are weak evidence only beside another
+  // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
+  // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
+  const counted = hits.filter((h) => !shadowed(h));
+  const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
+  const backedBy = own((h) => !h.neg), mentionedBy = own(() => true);
+  for (const h of counted) {
+    if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) continue;
+    const tier = h.tier === "context" ? "weak" : h.tier;
     if (h.neg) { if (!negated[h.track].includes(h.kw)) negated[h.track].push(h.kw); }
-    else if (!matched[h.track][h.tier].includes(h.kw)) matched[h.track][h.tier].push(h.kw);
+    else if (!matched[h.track][tier].includes(h.kw)) matched[h.track][tier].push(h.kw);
   }
 
   // De-dupe by containment: a keyword that is a substring of another matched keyword in the same
@@ -2287,7 +2318,7 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
       const marker = TRACK_MARKER[tr];
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
       for (const sec of TRACK_SECTIONS[tr]) {
-        const body = extractSection(raw, sec.syn, marker);
+        const body = extractSection(raw, sec.syn, marker, sec.loose);
         const name = (i18n.msg(fileLang || lng).sectionNames || {})[sec.name] || sec.name;
         if (body == null) add("error", "missing-section", P["missing-section"](marker, name));
         else if (!RE_TODO_SENTINEL.test(body) && stripHtmlComments(body).trim()) add("warn", "no-sentinel", P["no-sentinel"](marker, name));
@@ -2423,10 +2454,12 @@ function savedTracks(st) {
 }
 
 // A markdown heading (outside fenced code and HTML comments) carrying a track marker.
+// Track markers are English-stable, CASE-SENSITIVE tokens (C4): `[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]` exactly. A heading
+// that merely ends in a lower-case "[sec]" / "[privacy]" (`### Timeout [sec]` — seconds) is no track section: matched
+// case-insensitively it was hidden while the track was off (inactiveMarkerLines) and made detectTracks infer +sec.
 function headingHasMarker(md, marker) {
   const lines = stripHtmlComments(md).split(/\r?\n/);
-  const m = marker.toLowerCase();
-  return headingIndex(lines).some((i) => lines[i].toLowerCase().includes(m));
+  return headingIndex(lines).some((i) => lines[i].includes(marker));
 }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
@@ -4113,29 +4146,163 @@ function posixShellSyntax(cmd) {
 // A _Verify:_ command that PIPES into another one (`npm test | tee log`, `pytest | grep passed`): a pipeline's exit code is
 // its LAST command's, so a failing check exits 0 and would be recorded as a passing run. → true for an unquoted single `|`
 // (`|&` too); never `||` (or), a `|` inside '…' / "…", an escaped one (`\|`, cmd.exe's `^|`), the `>|` redirection, or one
-// inside $(…) / `…` (a substitution's status is not the command's). A command that sets pipefail is not flagged.
+// inside $(…) / `…` (a substitution's status is not the command's).
+// C4 — what used to be false negatives:
+// - pipefail counts only when a `set -o pipefail` (`set -eo pipefail`, `set -euo pipefail`, `set -e -o pipefail` …) RUNS
+//   BEFORE the pipe, or the shell is started with `-o pipefail`. The bare word anywhere (`set +o pipefail; …`, `tee
+//   pipefail.log`, a trailing `# pipefail later`) switched the check off.
+// - a pipeline inside the SCRIPT handed to a shell is still a pipeline: `bash -c "npm test | tee log"`, `sh -c 'pytest |
+//   tee out'`, `pwsh -Command "…|…"`, `cmd /c "…|…"` (analysed recursively, with that shell's own pipefail).
+// - `"C:\Program Files\" | more`: inside "…", `\"` after a Windows path (a literal backslash before it, or a bare drive /
+//   %VAR% / . / ..) is that path's last backslash plus the CLOSING quote (cmd.exe has no backslash escapes) — read as an
+//   escaped quote it swallowed the pipe into a string that never closed.
 function verifyPipeMasked(cmd) {
-  const s = String(cmd == null ? "" : cmd);
-  if (/(?<![\p{L}\p{N}_])pipefail(?![\p{L}\p{N}_])/u.test(s)) return false;
-  let sq = false, dq = false, bq = false, sub = 0;
+  return pipeMaskedIn(String(cmd == null ? "" : cmd), false, "posix", 0);
+}
+const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
+const PWSH_SHELLS = new Set(["pwsh", "powershell"]);
+const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl"]);
+const WRAPPER_ARG_OPTS = new Set(["-u", "-C", "-d", "--unset", "--chdir", "--distribution", "--user", "--cd"]); // env -u NAME · wsl -d Ubuntu
+// Split a command line into words and operators the way a shell reads it — enough to find pipes, `set` and shell scripts.
+// A word keeps its unquoted value `v` and its spelling as written (`raw`, quotes and escapes included — programName reads it).
+function lexShell(s) {
+  const toks = [];
+  let w = null, raw = "";
+  const put = (ch, r) => { if (w === null) { w = ""; raw = ""; } w += ch; raw += r == null ? ch : r; };
+  const end = () => { if (w !== null) toks.push({ t: "w", v: w, raw }); w = null; };
+  const op = (v) => { end(); toks.push({ t: "op", v }); };
+  // $(…) — balanced parentheses, quotes inside honoured; returns the index after its ")" (or the end).
+  const skipSubst = (i) => {
+    let depth = 0;
+    for (let k = i; k < s.length; k++) {
+      const c = s[k];
+      if (c === "\\") { k++; continue; }
+      if (c === "'") { const e = s.indexOf("'", k + 1); k = e < 0 ? s.length : e; continue; }
+      if (c === '"') { let e = k + 1; while (e < s.length && s[e] !== '"') e += s[e] === "\\" ? 2 : 1; k = e; continue; }
+      if (c === "(") depth++;
+      else if (c === ")" && --depth === 0) return k + 1;
+    }
+    return s.length;
+  };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (sq) { if (c === "'") sq = false; continue; }
-    if (c === "\\") { i++; continue; }
-    if (dq) { if (c === '"') dq = false; continue; }
-    if (c === "^") { i++; continue; }
-    if (c === "'") sq = true;
-    else if (c === '"') dq = true;
-    else if (c === "`") bq = !bq;
-    else if (c === "$" && s[i + 1] === "(") { sub++; i++; }
-    else if (c === ")" && sub) sub--;
-    else if (c === "|") {
-      if (s[i + 1] === "|") { i++; continue; } // `||`
-      if (s[i - 1] === ">" || bq || sub) continue; // `>|` redirection · inside a command substitution
-      return true;
+    if (c === " " || c === "\t") { end(); continue; }
+    if (c === "\n" || c === "\r") { op("\n"); continue; }
+    if (c === "\\" || c === "^") { put(i + 1 < s.length ? s[i + 1] : c, s.slice(i, i + 2)); i++; continue; } // POSIX \x · cmd.exe ^x
+    if (c === "'") { const e = s.indexOf("'", i + 1); const stop = e < 0 ? s.length : e; put(s.slice(i + 1, stop), s.slice(i, stop + 1)); i = stop; continue; }
+    if (c === '"') {
+      let k = i + 1, val = "", literalBs = false;
+      for (; k < s.length && s[k] !== '"'; k++) {
+        if (s[k] === "\\" && k + 1 < s.length) {
+          const n = s[k + 1];
+          if (n === '"' && (literalBs || /^(?:[A-Za-z]:|%[^%\s]+%|\.{1,2})$/.test(val))) { val += "\\"; k++; break; } // a Windows path's last "\" + the closing quote
+          if (n === '"' || n === "\\" || n === "$" || n === "`") { val += n; k++; continue; }
+          literalBs = true; val += "\\"; continue;
+        }
+        if (s[k] === "$" && s[k + 1] === "(") { const e = skipSubst(k + 1); val += s.slice(k, e); k = e - 1; continue; }
+        val += s[k];
+      }
+      put(val, s.slice(i, Math.min(k + 1, s.length)));
+      i = k;
+      continue;
     }
+    if (c === "`") { const e = s.indexOf("`", i + 1); const stop = e < 0 ? s.length : e; put(s.slice(i, stop + 1)); i = stop; continue; }
+    if (c === "$" && s[i + 1] === "(") { const e = skipSubst(i + 1); put(s.slice(i, e)); i = e - 1; continue; }
+    if (c === "|") {
+      if (s[i - 1] === ">") { put(c); continue; } // `>|` — a redirection, not a pipe
+      if (s[i + 1] === "|") { op("||"); i++; continue; }
+      if (s[i + 1] === "&") i++; // `|&` pipes stderr too
+      op("|");
+      continue;
+    }
+    if (c === "&") {
+      if (s[i - 1] === ">" || s[i - 1] === "<" || s[i + 1] === ">") { put(c); continue; } // 2>&1 · >&2 · &>file
+      if (s[i + 1] === "&") { op("&&"); i++; continue; }
+      op("&");
+      continue;
+    }
+    if (c === ";" || c === "(" || c === ")") { op(c); continue; }
+    put(c);
   }
-  return false;
+  end();
+  return toks;
+}
+// The program a command's words run, as a lower-case basename without .exe (quotes and the path dropped — read from the raw
+// spelling: an unquoted `C:\Windows\System32\cmd.exe` has no backslashes left in its POSIX value).
+const programName = (tok) => (tok ? tok.raw : "").replace(/["']/g, "").split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, "");
+// `set -o pipefail` → true, `set +o pipefail` → false, anything else → null.
+function setPipefail(words) {
+  if (!words.length || words[0].v !== "set") return null;
+  let res = null;
+  for (let k = 1; k < words.length - 1; k++) {
+    const w = words[k].v;
+    if (words[k + 1].v !== "pipefail") continue;
+    if (/^-[A-Za-z]*o$/.test(w)) res = true;
+    else if (/^\+[A-Za-z]*o$/.test(w)) res = false;
+  }
+  return res;
+}
+// A shell started with a script (`bash -c "<script>"`, `pwsh -Command <script>`, `cmd /c <script>`) → { script, kind,
+// pipefail } (a POSIX shell's own `-o pipefail`), else null.
+function shellScript(words) {
+  let i = 0, wrapped = false; // skip `VAR=value`, `env` / `exec` / `wsl`… and the options that follow a wrapper
+  for (; i < words.length; i++) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i].v)) continue;
+    if (SHELL_WRAPPERS.has(programName(words[i]))) { wrapped = true; continue; }
+    if (wrapped && words[i].v.startsWith("-")) { if (WRAPPER_ARG_OPTS.has(words[i].v)) i++; continue; }
+    break;
+  }
+  if (i >= words.length) return null;
+  const prog = programName(words[i]);
+  const rest = words.slice(i + 1).map((t) => t.v);
+  if (POSIX_SHELLS.has(prog)) {
+    let pipefail = false, c = false;
+    for (let k = 0; k < rest.length; k++) {
+      const a = rest[k];
+      if (a === "--") return c && k + 1 < rest.length ? { script: rest[k + 1], kind: "posix", pipefail } : null;
+      if (!/^[-+]/.test(a) || a === "-" || a === "+") return c ? { script: a, kind: "posix", pipefail } : null;
+      if (/^[-+][A-Za-z]*[oO]$/.test(a)) { // -o / +o / -eo … take the next word (an option name)
+        if (/o$/.test(a) && rest[k + 1] === "pipefail") pipefail = a[0] === "-";
+        if (/^-[A-Za-z]*c/.test(a)) c = true;
+        k++;
+        continue;
+      }
+      if (/^-[A-Za-z]*c[A-Za-z]*$/.test(a) || a === "--command") c = true; // fish spells it --command too
+    }
+    return null;
+  }
+  if (PWSH_SHELLS.has(prog)) {
+    const k = rest.findIndex((a) => /^[-/]c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$/i.test(a));
+    return k >= 0 && k + 1 < rest.length ? { script: rest.slice(k + 1).join(" "), kind: "pwsh", pipefail: false } : null;
+  }
+  if (prog === "cmd") {
+    const k = rest.findIndex((a) => /^\/[ck]$/i.test(a));
+    return k >= 0 && k + 1 < rest.length ? { script: rest.slice(k + 1).join(" "), kind: "cmd", pipefail: false } : null;
+  }
+  return null;
+}
+function pipeMaskedIn(s, pipefailAtStart, kind, depth) {
+  if (depth > 4) return false; // a script inside a script inside a script… — enough
+  let pf = pipefailAtStart;
+  const scopes = []; // ( … ) subshells: pipefail set inside one ends with it
+  let words = [];
+  // Runs at the end of every simple command: `set` changes pipefail (POSIX shells only), a shell script is analysed on its own.
+  const finish = () => {
+    if (!words.length) return false;
+    const set = kind === "posix" ? setPipefail(words) : null;
+    if (set !== null) pf = set;
+    const sc = shellScript(words);
+    words = [];
+    return !!sc && pipeMaskedIn(sc.script, sc.pipefail, sc.kind, depth + 1);
+  };
+  for (const t of lexShell(s)) {
+    if (t.t === "w") { words.push(t); continue; }
+    if (finish()) return true;
+    if (t.v === "|" && !pf) return true;
+    if (t.v === "(") scopes.push(pf);
+    else if (t.v === ")" && scopes.length) pf = scopes.pop();
+  }
+  return finish();
 }
 // The runnable _Verify:_ commands of a block that pipe (verifyPipeMasked) — brief, doctor and `done --run` name them.
 function verifyPipes(block) {
@@ -4696,7 +4863,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const impFiles = mk.implements.map(implementsRel).filter(Boolean);
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
-  const trackMarks = ["sec", "privacy"].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => TRACK_MARKER[tr].toLowerCase());
+  const trackMarks = ["sec", "privacy"].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => TRACK_MARKER[tr]);
   const want = (s) => {
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
@@ -4704,7 +4871,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
-    if (trackMarks.some((m) => title.includes(m))) return true;
+    if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker (C4)
     return false;
   };
   let budget = BRIEF_DESIGN_BUDGET;
@@ -6562,8 +6729,7 @@ function trackAcIds(reqText, tr) {
   const marker = TRACK_MARKER[tr];
   if (!marker || !reqText) return out;
   const inSection = inactiveMarkerLines(reqText, VALID_TRACKS.filter((t) => t !== tr)); // exactly that track's sections
-  const m = marker.toLowerCase();
-  for (const [id, e] of acIndex(reqText)) if (inSection.has(e.line - 1) || e.text.toLowerCase().includes(m)) out.add(id);
+  for (const [id, e] of acIndex(reqText)) if (inSection.has(e.line - 1) || e.text.includes(marker)) out.add(id); // case-sensitive marker (C4)
   return out;
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
@@ -6610,10 +6776,11 @@ function inactiveTaskLines(tasks, tracks) {
   return sectionDropLines(lines, (l) => { const hit = off.find(([, wanted]) => wanted.has(normTaskHeading(l))); return hit && hit[0]; });
 }
 // design.md / requirements.md: the [SaaS] / [AI] / [SEC] / [PRIVACY] headed sections of tracks that are off.
+// The marker is matched case-sensitively (C4, see headingHasMarker): `### Timeout [sec]` is never a [SEC] section.
 function inactiveMarkerLines(md, tracks) {
-  const off = MARKER_TRACKS.filter((t) => !tracks.includes(t)).map((t) => [t, TRACK_MARKER[t].toLowerCase()]);
+  const off = MARKER_TRACKS.filter((t) => !tracks.includes(t)).map((t) => [t, TRACK_MARKER[t]]);
   if (!off.length) return new Map();
-  return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.toLowerCase().includes(m)); return hit && hit[0]; });
+  return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.includes(m)); return hit && hit[0]; });
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -7197,18 +7364,22 @@ const SEC_SECTIONS = [
     "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves"] },
   { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"] },
 ];
-// +privacy (1.14) — GDPR / RGPD.
+// +privacy (1.14) — GDPR / RGPD. `loose` (C4, see extractSection): the synonyms that are ordinary design words — they
+// count only on a [PRIVACY] heading or under one, never on a core heading ("## Processors and queues", "## Retention").
 const PRIVACY_SECTIONS = [
   { name: "Personal Data Inventory", syn: ["personal data inventory", "data inventory", "inventário de dados pessoais", "inventario de dados pessoais", "inventário de dados",
-    "inventario de datos personales", "inventario de datos"] },
+    "inventario de datos personales", "inventario de datos"], loose: ["data inventory", "inventário de dados", "inventario de datos"] },
   { name: "Lawful Basis & Purpose", syn: ["lawful basis", "legal basis", "fundamento de licitude", "fundamento jurídico", "fundamento juridico", "base de licitude",
     "base jurídica", "base juridica", "base legal", "base de legitimación", "base de legitimacion"] },
   { name: "Retention & Deletion", syn: ["retention & deletion", "retention and deletion", "retention", "data retention", "conservação e eliminação", "conservacao e eliminacao",
-    "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion"] },
+    "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion"],
+  loose: ["retention", "conservação", "retenção", "retencao", "conservación", "retención", "retencion"] },
   { name: "Data Subject Rights", syn: ["data subject rights", "direitos dos titulares", "direitos do titular", "derechos de los interesados", "derechos del interesado", "derechos arco"] },
   { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
-    "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales"] },
-  { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto"] },
+    "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales"],
+  loose: ["processors", "sub-processors"] },
+  { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto"],
+    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto"] },
 ];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
@@ -7245,21 +7416,41 @@ function headingMatches(line, syns) {
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
-// designs), but never one that carries the OTHER track's marker.
-function extractSection(md, synonyms, marker) {
+// designs), but never one that carries the OTHER track's marker. Markers are case-sensitive tokens (C4).
+// `loose` (C4): the synonyms of a track section that are ordinary words in a design ("Processors", "Retention",
+// "Conservação", "Data inventory", "Avaliação de impacto") — they name the section only on a heading that carries the
+// marker, or on an unmarked heading nested under a heading that does (the track's context: `## [PRIVACY] Processing` →
+// `### Processors`). Without that, deleting a `[PRIVACY]` heading let a core heading like "## Processors and queues"
+// satisfy "Processors & International Transfers" and doctor passed a section nobody wrote. The other synonyms are
+// unambiguous and keep the unmarked fallback anywhere (hand-written and PT/ES designs without markers, the reference
+// templates' "## Observability" / "## Section 1: Model Strategy").
+function extractSection(md, synonyms, marker, loose) {
   const syns = (Array.isArray(synonyms) ? synonyms : [synonyms]).map((s) => s.toLowerCase());
+  const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
+  const strict = looseSet.size ? syns.filter((s) => !looseSet.has(s)) : syns;
   const lines = (md || "").split(/\r?\n/);
   const heads = headingIndex(lines);
-  const matches = (i) => headingMatches(lines[i], syns);
-  const MARKERS = MARKER_TRACKS.map((t) => TRACK_MARKER[t].toLowerCase());
+  const matches = (i, list) => headingMatches(lines[i], list || syns);
+  const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
+  // The nearest enclosing heading (a lower level, above i) carries the marker: the heading sits in the track's context.
+  const inTrackContext = (i) => {
+    let lv = level(i);
+    for (let k = heads.indexOf(i) - 1; k >= 0 && lv > 1; k--) {
+      const h = heads[k];
+      if (level(h) >= lv) continue;
+      if (lines[h].includes(marker)) return true;
+      lv = level(h);
+    }
+    return false;
+  };
+  const MARKERS = MARKER_TRACKS.map((t) => TRACK_MARKER[t]);
   let start = -1;
-  if (marker) start = heads.find((i) => lines[i].toLowerCase().includes(marker.toLowerCase()) && matches(i));
+  if (marker) start = heads.find((i) => lines[i].includes(marker) && matches(i));
   if (start == null || start === -1) {
-    const other = marker ? MARKERS.filter((m) => m !== marker.toLowerCase()) : [];
-    start = heads.find((i) => matches(i) && !other.some((m) => lines[i].toLowerCase().includes(m)));
+    const other = marker ? MARKERS.filter((m) => m !== marker) : [];
+    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)));
   }
   if (start == null || start === -1) return null;
-  const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
   const end = heads.find((i) => i > start && level(i) <= level(start));
   return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
 }
@@ -7269,7 +7460,7 @@ const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
 function sectionState(design, sections, marker) {
   return sections.map((sec) => {
-    const body = extractSection(design, sec.syn, marker);
+    const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return { section: sec.name, status: "missing" };
     // Unfilled = the scaffold sentinel is still there, or nothing real was written (blank is not an answer).
     if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return { section: sec.name, status: "unfilled" };
@@ -12640,7 +12831,7 @@ module.exports = {
   // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
   trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
   // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
-  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice() } : undefined),
+  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
   // @pkg A2 <<<
 
   // @pkg A3 exports >>>
