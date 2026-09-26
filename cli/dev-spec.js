@@ -17,6 +17,7 @@
  *                                      --guard on|off → guard mode: code edits ask while no approved tasks)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
+ *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
@@ -842,6 +843,15 @@ function main() {
     // @pkg A4 <<<
 
     // @pkg B1 commands >>>
+    case "templates": {
+      // dev-spec templates [list|init|check] [artifact] [--lang en|pt|es] — the project's own scaffolds in .specs/templates/
+      // (= spec_templates {action, artifact, lang}). check exits 1 when a template has an error (scriptable, like doctor).
+      if (pos.length > 2) usage("dev-spec templates [list|init|check] [artifact] [--lang en|pt|es]");
+      const r = spec.templates(projectDir, pos[0], { artifact: pos[1], lang: flags.lang });
+      if (!r.ok) return fail(r);
+      if (r.action === "check" && r.errors) process.exitCode = 1;
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+    }
     // @pkg B1 <<<
 
     // @pkg B2 commands >>>
@@ -893,6 +903,9 @@ function helpText() {
                                   --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
+  templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
+                                  replace the built-in ones for new features / steering; init copies the built-in ones to
+                                  edit; check validates them (exit 1 on an error)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
