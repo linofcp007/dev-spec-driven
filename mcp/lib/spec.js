@@ -242,7 +242,11 @@ function withLockFile(lock, fn, opts = {}) {
       } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
         /* transient on Windows: retry below */
       } else {
-        return fn(); // no lock possible here (missing or read-only folder, odd file system): unlocked, as before
+        // No lock possible here (the folder vanished while we waited — removed / renamed / archived — or is read-only, or an
+        // odd file system): run unlocked, as before, but on FRESH reads — the caller's pre-lock check ("the feature exists")
+        // is stale once its folder moved, and a write from it recreated a zombie .specs/<old>/ (it now answers not-found).
+        invalidateReadCache();
+        return fn();
       }
       if (Date.now() >= deadline) return opts.onBusy ? opts.onBusy({ stuck }) : { ok: false, busy: true, ...(stuck ? { stuck: true } : {}) };
       sleepSync(delay);
@@ -3325,7 +3329,7 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
   "is not recognized as an internal or external command", "n[ãa]o [ée] reconhecido como (?:um )?comando interno", "no se reconoce como (?:un )?comando interno",
   "the syntax of the command is incorrect", "a sintaxe do comando est[áa] incorreta", "la sintaxis del comando no es correcta",
   "was unexpected at this time", "n[ãa]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
-  "cannot find the path specified", "n[ãa]o (?:pode|consegue) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
+  "cannot find the path specified", "n[ãa]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
   "the filename, directory name, or volume label syntax is incorrect",
 ].join("|"), "i");
 function windowsShellFailure(output, code) {
@@ -5391,11 +5395,17 @@ function nextAction(projectDir, name) {
   let impactPhases = [];
   let finishedDrift = null;
   let staleBaseline = null;
-  if (changed.length) {
+  // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
+  // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
+  // chain reaches it again once the earlier gate is approved.
+  const walk = gateWalk(dir, tracks, kind);
+  const phaseOfFile = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === "design.md" ? "design" : null);
+  const reReviewNow = pending ? changed.filter((file) => { const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); }) : changed;
+  if (reReviewNow.length) {
     step = "re-review";
-    recommendation = nx.reReview(changed.join(", "));
+    recommendation = nx.reReview(reReviewNow.join(", "));
     // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
-    impactPhases = snapshotPhases(dir, st, changed);
+    impactPhases = snapshotPhases(dir, st, reReviewNow);
     if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
   } else if (open) {
     step = "fill";

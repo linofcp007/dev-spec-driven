@@ -229,8 +229,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   phase while an EARLIER one is in `pendingGateList()` (doctor's pending gates — only phases with an artifact, so a
   missing file never blocks forever) adds the failing check `phase-order` (`gates.phaseOrder`, EN/PT/ES) — refused
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
-- **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval; `impact` when a
-  snapshot exists) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
+- **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval and re-approvable
+  now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
+  when a snapshot exists) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
   when `testsGateDue()`; classification only when classification.md exists): `fill` (one of its `gateArtifacts()` is
   missing / a template; `file`) → `fix` (its `approvalChecks()` fail — `refusedGate`, so it never recommends an
   approval that would be refused) → `approve`; the next phase only after that approval (1.13 filled the whole chain
@@ -676,9 +677,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(753 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(754 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 252 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 253 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

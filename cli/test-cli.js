@@ -893,6 +893,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   fs.writeFileSync(d8("design.md"), "# Design: Drafts\n\n## Parser\nSkips a BOM (US-1.AC-2).\n");
   fs.writeFileSync(d8("test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2 |\n");
   fs.writeFileSync(d8("tasks.md"), "# Tasks\r\n\r\n## Story US-1\r\n- [x] 1. [US1] Store drafts\r\n  - _Requirements: US-1.AC-1_\r\n- [x] 2. [US1] Skip the BOM\r\n  - _Requirements: US-1.AC-2_\r\n");
+  run(["approve", "drafts", "classification", "--force", "--project", w8]); // next_action re-reviews only what can be re-approved now
   const ap8 = run(["approve", "drafts", "requirements", "--force", "--project", w8]);
   fs.writeFileSync(d8("requirements.md"), req8.replace("SHALL skip it", "SHALL strip it"));
   const im8 = run(["impact", "drafts", "--project", w8]);
@@ -916,7 +917,10 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
     .map((a) => run(a.concat(["--project", w8])));
   ok(bad8.every((r) => r.code === 1) && /'design' was never approved for 'drafts'/.test(bad8[0].out) && /Unknown phase 'plan'/.test(bad8[1].out) && /missing value for --phase/.test(bad8[2].out) &&
     /reopen applies to requirements, design, test-plan and eval-plan/.test(bad8[3].out) && /usage: dev-spec impact/.test(bad8[4].out), "impact: never approved / unknown phase / missing --phase value / reopen on tasks / no feature → exit 1 with a clear message");
-  // --phase test-plan: the T-ID row diff, and next-action names that phase for a changed test-plan.md.
+  // --phase test-plan: the T-ID row diff, and next-action names that phase for a changed test-plan.md (the earlier gates —
+  // requirements re-approved after the change, design — are approved, so the test plan is what can be re-approved now).
+  run(["approve", "drafts", "requirements", "--force", "--project", w8]);
+  run(["approve", "drafts", "design", "--force", "--project", w8]);
   run(["approve", "drafts", "test-plan", "--force", "--project", w8]);
   fs.writeFileSync(d8("test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n| T-02 | US-1.AC-2, SC-001 |\n| T-03 | US-1.AC-1 |\n");
   const tp8 = run(["impact", "drafts", "--phase", "test-plan", "--project", w8]);
@@ -929,7 +933,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   const m8 = run(["metrics", "drafts", "--project", w8]);
   let m8j = null;
   try { m8j = JSON.parse(run(["metrics", "drafts", "--json", "--project", w8]).out); } catch { /* invalid JSON */ }
-  ok(m8.code === 0 && /^Metrics: drafts \[core \+tdd\] — created \d{4}-\d\d-\d\d\n/.test(m8.out) && /lead time from creation: requirements /.test(m8.out) && /change requests: 1 · reopened tasks: 1/.test(m8.out) &&
+  ok(m8.code === 0 && /^Metrics: drafts \[core \+tdd\] — created \d{4}-\d\d-\d\d\n/.test(m8.out) && /lead time from creation: classification \S+ · requirements /.test(m8.out) && /change requests: 1 · reopened tasks: 1/.test(m8.out) &&
     m8j && m8j.scope === "feature" && m8j.changeRequests === 1 && m8j.createdAtApproximate === false, "metrics <feature>: lead times, change requests, reopened tasks (--json = spec_metrics)");
   const mw8 = run(["metrics", "drafts", "--write", "--project", w8]);
   const retro8 = fs.readFileSync(d8("retro.md"), "utf8");
@@ -949,6 +953,7 @@ if (inSection("wp8")) { // 1.13 WP8 — change requests (impact / --reopen) and 
   fs.writeFileSync(pd8("requirements.md"), preq8);
   fs.writeFileSync(pd8("design.md"), "# Design\n\n## Modelo\nPor id (US-1.AC-1).\n");
   fs.writeFileSync(pd8("tasks.md"), "# Tarefas\n\n## US-1\n- [x] 1. [US1] Guardar\n  - _Requirements: US-1.AC-1_\n");
+  run(["approve", "rascunhos", "classification", "--force", "--project", p8]);
   run(["approve", "rascunhos", "requirements", "--force", "--project", p8]);
   fs.writeFileSync(pd8("requirements.md"), preq8.replace("o rascunho", "o rascunho cifrado"));
   const pim8 = run(["impact", "rascunhos", "--project", p8]);
@@ -1491,6 +1496,28 @@ if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-proc
     stuckJ14.code === 1 && sj14.busy === true && sj14.stuck === true && /- \[ \] 2\./.test(fs.readFileSync(path.join(k14, ".specs", "sprint", "tasks.md"), "utf8")),
     "done on a stale lock that can't be removed (a folder named .lock): exit 1 with the localized 'delete it by hand' error (--json {busy, stuck}) within DEV_SPEC_LOCK_WAIT_MS, nothing ticked (got " +
     JSON.stringify([stuck14.code, stuck14.out.slice(0, 90), stuckJ14.code]) + ")");
+
+  // A command waiting on a feature's lock whose folder is removed meanwhile (remove's tombstone rename) answers not-found:
+  // its pre-lock "the feature exists" read was stale, and its write recreated a zombie .specs/<slug>/.
+  const lr14 = path.join(tmp, "wp14-lock-race");
+  run(["create", "Imp", "core", "--project", lr14]);
+  const imp14 = path.join(lr14, ".specs", "imp");
+  fs.writeFileSync(path.join(imp14, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "held-by-test" })); // a live holder
+  const race14 = path.join(tmp, "wp14-lock-race.js");
+  fs.writeFileSync(race14, [
+    "const { spawn } = require('child_process'); const fs = require('fs'); const path = require('path');",
+    "const [cli, proj, dir] = process.argv.slice(2);",
+    "const p = spawn(process.execPath, [cli, 'add-track', 'imp', 'saas', '--project', proj], { env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: '8000' } });",
+    "let out = ''; p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d));",
+    "setTimeout(() => { const t = path.join(path.dirname(dir), '.removing-imp-test'); fs.renameSync(dir, t); fs.rmSync(t, { recursive: true, force: true }); }, 1200);",
+    "p.on('close', (code) => console.log(JSON.stringify({ code, out, exists: fs.existsSync(dir) })));",
+  ].join("\n"));
+  const rr14 = spawnSync(process.execPath, [race14, CLI, lr14, imp14], { encoding: "utf8", timeout: 30000 });
+  let rj14 = null;
+  try { rj14 = JSON.parse(rr14.stdout.trim().split("\n").pop()); } catch { /* stays null */ }
+  ok(rj14 && rj14.code !== 0 && rj14.exists === false && /not found/i.test(rj14.out),
+    "a command waiting on a feature's lock whose folder is removed meanwhile answers not-found and never recreates .specs/<slug>/ (got " +
+    (rj14 ? JSON.stringify(rj14).slice(0, 200) : (rr14.stdout + rr14.stderr).slice(0, 200)) + ")");
 }
 
 if (inSection("wp15")) { // 1.13 batch 6 — examples/README.md's "Verify it yourself" outputs are what the CLI prints on a fresh copy

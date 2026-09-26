@@ -1109,6 +1109,7 @@ function endRun() {
     wsf("'grep' não é reconhecido como um comando interno", 1) && wsf("\"grep\" no se reconoce como un comando interno o externo", 1) &&
     wsf("The syntax of the command is incorrect.", 1) && wsf("& was unexpected at this time.", 255) && wsf("The system cannot find the path specified.", 1) &&
     wsf("A sintaxe do comando está incorreta.", 1) && wsf("La sintaxis del comando no es correcta.", 1) &&
+    wsf("O sistema não conseguiu localizar o caminho especificado.", 1) && // this machine's own pt-PT cmd.exe wording
     !wsf("AssertionError: expected 2 to equal 3\n    at tests/x.test.js:4", 1) && !wsf("1 failing", 1) && !wsf("Error: Cannot find module './x'", 1),
     "windowsShellFailure: cmd.exe's own failures (unknown command / exit 9009, its syntax errors, a path it can't find; EN/PT/ES) — never a check that ran and failed");
   // Review fixes. A line that only LOOKS like a fence opener must not hide the tasks below it (CommonMark):
@@ -3397,7 +3398,9 @@ function endRun() {
       imL8.includes("  - US-1.AC-3  WHEN the writer runs") && imL8.includes("US-1.AC-2 (modified) — tasks: #2 [x] verified · tests: T-02 · design: Parser") && imL8.includes("tasks: #3 [x] nothing to verify (no _Verify:_ command, nothing recorded)") && /new, no task cites them yet: US-1\.AC-4/.test(imL8),
       "impactLines: the diff, what each change reaches, the uncovered new AC");
 
-    // 3. next_action + doctor name spec_impact.
+    // 3. next_action + doctor name spec_impact. (The classification gate comes first: re-review asks only for what can be
+    //    re-approved now — an earlier pending gate would refuse the re-approval on phase-order.)
+    S.approvePhase(w8, "drafts", "classification", "rev", { force: true });
     const na8 = S.nextAction(w8, "drafts");
     const dc8 = S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval");
     ok(na8.step === "re-review" && /Re-review: requirements\.md changed/.test(na8.recommendation) && /spec_impact \(dev-spec impact drafts --phase requirements\)/.test(na8.recommendation) &&
@@ -3588,7 +3591,7 @@ function endRun() {
     fs.writeFileSync(ptf("requirements.md"), ptReq);
     fs.writeFileSync(ptf("design.md"), "# Design: Rascunhos\n\n## Modelo de dados\nRascunhos por id (US-1.AC-1).\n");
     fs.writeFileSync(ptf("tasks.md"), "# Tarefas: Rascunhos\n\n## História US-1\n- [x] 1. [US1] Guardar rascunhos\n  - _Requirements: US-1.AC-1_\n");
-    ["requirements", "design", "tasks"].forEach((ph) => S.approvePhase(w8, "rascunhos", ph, "x", { force: true }));
+    ["classification", "requirements", "design", "tasks"].forEach((ph) => S.approvePhase(w8, "rascunhos", ph, "x", { force: true }));
     fs.writeFileSync(ptf("requirements.md"), ptReq.replace("guardar o rascunho", "guardar o rascunho em menos de 1 segundo"));
     const ptL8 = S.impactLines(S.impactReport(w8, "rascunhos", {})).join("\n");
     const ptNa8 = S.nextAction(w8, "rascunhos");
@@ -6194,6 +6197,28 @@ function endRun() {
     "the PR/CI guard catches EN/PT/ES steering and allows negations (missed: " + guardMissed.join(" | ") + "; wrongly flagged: " + guardFlagged.join(" | ") + ")");
   ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI; README's PT block is read as PT (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
+
+  { // Final verification: a changed artifact of a phase AFTER the first pending gate never loops next_action on a
+    // re-review that approve would refuse (phase-order) — the pending gate (here the test plan +tdd just added) comes first.
+    const lp = path.join(tmp, "proj-reloop");
+    const lf = S.createFeature(lp, "Loop check", ["core"], "", undefined, "en");
+    for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(lp, lf.slug, ph, "tester", { force: true });
+    S.addTrack(lp, lf.slug, "tdd");
+    fs.appendFileSync(path.join(lf.dir, "tasks.md"), "\n<!-- edited after approval -->\n- [ ] 99. [US1] a later task\n");
+    let na = S.nextAction(lp, lf.slug);
+    const seen = [na.step + ":" + (na.recommendation || "").slice(0, 60)];
+    // add_track also rewrote classification.md (Active Tracks) and added design.md's Testability section — EARLIER phases than
+    // the pending test plan: those are re-reviewed (and re-approved) first.
+    for (let i = 0; i < 3 && na.step === "re-review" && /classification\.md|design\.md/.test(na.recommendation); i++) {
+      for (const ph of ["classification", "design"]) if (na.recommendation.includes(ph + ".md")) S.approvePhase(lp, lf.slug, ph, "tester", { force: true });
+      na = S.nextAction(lp, lf.slug);
+      seen.push(na.step + ":" + (na.recommendation || "").slice(0, 60));
+    }
+    const reapTasks = S.approvePhase(lp, lf.slug, "tasks", "tester");
+    ok(na.step !== "re-review" && /test-plan\.md/.test(na.recommendation) && na.changedSinceApproval.includes("tasks.md") &&
+      reapTasks.ok === false && reapTasks.failing.includes("phase-order"),
+      "next_action never recommends re-reviewing tasks.md while the earlier test-plan gate is pending (approve would refuse it on phase-order) — it points at test-plan.md (got " + seen.join(" | ") + ")");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");

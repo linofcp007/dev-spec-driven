@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.13.0] — 2026-09-25
+## [1.13.0] — 2026-09-26
 
 A full audit of the engine, then gates you can trust and the change-management layer that comes after
 a spec is approved: impact analysis, convergence, a living catalog, drift, metrics, import from other
@@ -74,7 +74,9 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   written — and `spec_approve` took a bugfix's tasks before its design. `next_action` now walks the active phases in
   order (classification, requirements, design, test/eval plan, tests, tasks) and, for the first one not approved yet,
   says fill it → fix what its gate refuses → approve it; the next phase starts only after that approval (a changed
-  artifact's re-review still comes first; implement, verify, drift and finish follow). Approving a phase while an
+  artifact's re-review still comes first — for the artifacts that can be re-approved now: one of a phase after the
+  first pending gate waits for that gate, since approve would refuse it on `phase-order` and next_action looped;
+  implement, verify, drift and finish follow). Approving a phase while an
   earlier one is still unapproved is refused (check `phase-order`, naming the earlier phase — EN/PT/ES) unless forced.
   A finished feature whose `execution` approval exists but predates a later approval or change request (an upgraded
   1.12 feature after its new tests sign-off) was told the final approval was missing; it is now asked to re-confirm
@@ -177,7 +179,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,
   impact `--reopen`, finish `--write`, brief `--write`, metrics `--write`) now hold a cross-process lock (`.specs/<feature>/.lock`, reclaimed when its
   process is gone) and a caller that can't get it within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized
-  "busy" error with nothing changed; tasks.md ticks and track additions are written atomically (a concurrent reader no
+  "busy" error with nothing changed (a caller whose feature folder was removed, renamed or archived while it waited
+  answers not-found on fresh reads — it recreated a zombie folder from its stale pre-lock check); tasks.md ticks and track additions are written atomically (a concurrent reader no
   longer sees a truncated file). `spec_feature` rename / archive / remove / restore never move or delete a folder
   another process is writing (they moved it away mid-write: a zombie `.specs/<old>/` came back and a feature's ticks
   and its spec split between two folders) — they wait on the same lock, which moves with the folder and is released
@@ -421,7 +424,7 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 753 assertions (was 181), `node cli/test-cli.js` 252 (was 53); the tool count is
+- `node mcp/test.js` 754 assertions (was 181), `node cli/test-cli.js` 253 (was 53); the tool count is
   asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 
