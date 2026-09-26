@@ -9,12 +9,16 @@
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
  * 30 tools, verify with an `initialize` + `tools/list` handshake.
+ * Prompts: one per plugin command (commands/*.md) — slash commands in MCP clients without the skill
+ * (SPEC_MCP_PROMPTS=off drops them). Resources: the project's spec artifacts, read-only, as specs:// URIs.
+ * Both live in lib/prompts-resources.js.
  */
 
 const readline = require("readline");
 const fs = require("fs");
 const path = require("path");
 const spec = require("./lib/spec.js");
+const content = require("./lib/prompts-resources.js"); // MCP prompts + resources
 
 let VERSION = "0.0.0";
 try {
@@ -24,7 +28,7 @@ try {
 }
 const SERVER_INFO = { name: "dev-spec-driven", version: VERSION };
 const DEFAULT_PROTOCOL = "2024-11-05";
-// Protocol revisions this tools-only server speaks. A client asking for another one gets the latest.
+// Protocol revisions this server speaks. A client asking for another one gets the latest.
 const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18"];
 
 // --- Tool catalogue --------------------------------------------------------
@@ -467,8 +471,8 @@ function result(id, value) {
   send({ jsonrpc: "2.0", id, result: value });
 }
 
-function error(id, code, message) {
-  send({ jsonrpc: "2.0", id, error: { code, message } });
+function error(id, code, message, data) {
+  send({ jsonrpc: "2.0", id, error: data === undefined ? { code, message } : { code, message, data } });
 }
 
 // Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
@@ -588,6 +592,46 @@ function argError(id, message) {
   return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }, null, 2) }], isError: true });
 }
 
+// --- MCP prompts + resources (lib/prompts-resources.js) ----------------------
+// Prompts are the plugin's commands/*.md — slash commands in Cursor, VS Code/Copilot, Windsurf, Zed… The Claude Code
+// plugin already ships those files as its own slash commands, so mcp/servers.json sets SPEC_MCP_PROMPTS=off there:
+// without the prompts capability Claude Code doesn't list every command a second time (/mcp__…__spec-impact).
+// Resources and prompts use the default project (SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd — the tools' default):
+// neither request carries a projectDir. Messages are in that project's language.
+const PROMPTS_ON = !/^(off|0|false|no)$/i.test(String(process.env.SPEC_MCP_PROMPTS || "").trim());
+function handleContent(id, method, params) {
+  if (method.startsWith("prompts/") && !PROMPTS_ON) return error(id, -32601, "Method not found: " + method);
+  const p = TYPE_CHECK.object(params) ? params : {};
+  const pdir = spec.resolveProjectDir();
+  const lang = spec.projectLang(pdir);
+  switch (method) {
+    case "prompts/list": // argumentHint is the CLI's; a prompt carries name / description / arguments
+      return result(id, { prompts: content.listPrompts({ lang }).map((x) => ({ name: x.name, description: x.description, arguments: x.arguments })) });
+    case "prompts/get": {
+      const a = content.promptArgs(p.arguments, lang);
+      const r = a.ok ? content.getPrompt(p.name, a.args, { lang }) : a;
+      if (!r.ok) return error(id, -32602, r.error); // unknown prompt / bad arguments: Invalid params (MCP)
+      return result(id, { description: r.description, messages: r.messages });
+    }
+    case "resources/list": {
+      const r = content.listResources(pdir);
+      const out = { resources: r.resources };
+      if (r.truncated) out._meta = { truncated: true, total: r.total, cap: r.cap, note: r.note }; // capped — and says so
+      return result(id, out);
+    }
+    case "resources/templates/list":
+      return result(id, { resourceTemplates: content.resourceTemplates(pdir) });
+    case "resources/read": {
+      const r = content.readResource(pdir, p.uri);
+      // An invalid / refused URI is Invalid params (-32602); a valid one naming nothing is Resource not found (-32002).
+      if (!r.ok) return error(id, r.reason === "not-found" ? -32002 : -32602, r.error, { uri: typeof p.uri === "string" ? p.uri : null });
+      return result(id, { contents: r.contents });
+    }
+    default:
+      return error(id, -32601, "Method not found: " + method);
+  }
+}
+
 function handle(msg) {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
@@ -603,15 +647,21 @@ function handle(msg) {
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
-          capabilities: { tools: { listChanged: false } },
+          capabilities: PROMPTS_ON
+            ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false } }
+            : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false } },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). ears_validate, trace_check and spec_doctor enforce quality gates. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory.",
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). ears_validate, trace_check and spec_doctor enforce quality gates. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
+            (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
+            " Resources (read-only): the project's spec artifacts — specs://roadmap, specs://catalog, specs://steering/{file}, specs://feature/{slug}/{artifact}.",
         });
       }
       case "ping":
         return result(id, {});
       case "tools/list":
         return result(id, { tools: TOOLS });
+      case "prompts/list": case "prompts/get": case "resources/list": case "resources/templates/list": case "resources/read":
+        return handleContent(id, method, params);
       case "tools/call": {
         const toolName = params && params.name;
         const rawArgs = params ? params.arguments : undefined;
