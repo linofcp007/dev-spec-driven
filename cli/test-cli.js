@@ -1762,6 +1762,15 @@ if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy t
   ok(typo.code === 1 && /did you mean 'sec'/.test(typo.out) && add.code === 0 && /core \+sec \+privacy/.test(add.out) &&
     rm.code === 0 && /design\.md \(\[PRIVACY\] sections\)/.test(rm.out) && /Security sections: ◐ Threat Model \(unfilled\)/.test(stPlain) && !/Privacy sections/.test(stPlain),
     "add-track: 'secc' gets a did-you-mean, sec+privacy are added, --remove privacy lists its inactive [PRIVACY] sections and status stops showing them");
+  const stSec = run(["steering", "security.md", "--lang", "pt", "--project", path.join(tmp, "pa2-steer")]);
+  const kiro = path.join(a2, ".kiro", "specs", "accounts");
+  fs.mkdirSync(kiro, { recursive: true });
+  fs.writeFileSync(path.join(kiro, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to delete my account.\n\n#### Acceptance Criteria\n\n1. WHEN the user confirms THEN the system SHALL delete the account\n");
+  const imp = run(["import", "kiro", ".kiro/specs/accounts", "--tracks", "sec,privacy", "--lang", "en", "--project", a2]); // the project default is ES (init above)
+  const impDesign = fs.existsSync(path.join(a2, ".specs", "accounts", "design.md")) ? fs.readFileSync(path.join(a2, ".specs", "accounts", "design.md"), "utf8") : "";
+  ok(stSec.code === 0 && /^# Padrões de Segurança/.test(fs.readFileSync(path.join(tmp, "pa2-steer", ".specs", "steering", "security.md"), "utf8")) &&
+    imp.code === 0 && /## \[SEC\] Threat Model/.test(impDesign) && /## \[PRIVACY\] Data Subject Rights/.test(impDesign),
+    "steering security.md (PT template, not a custom file) and import --tracks sec,privacy (the [SEC] / [PRIVACY] design sections)");
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", a2]).out;
   ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy>/.test(usage),

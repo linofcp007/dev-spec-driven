@@ -793,7 +793,7 @@ const SIGNALS = {
       "command injection", "code injection", "pentest", "pen test", "penetration test", "vulnerabili", "cve", "asvs",
       "secrets management", "secret management", "secrets manager", "encryption at rest", "encryption in transit",
       "security audit", "security review", "security test", "security hardening", "sast", "dast", "attack surface",
-      "privilege escalation", "ssrf", "remote code execution", "brute force", "brute-force", "credential stuffing",
+      "privilege escalation", "ssrf", "remote code execution", "brute force attack", "brute-force attack", "credential stuffing",
       "session hijack", "clickjacking", "zero trust", "zero-trust", "mtls", "content security policy",
       // PT
       "modelo de ameaças", "modelação de ameaças", "modelagem de ameaças", "injeção de sql", "injeção sql",
@@ -801,24 +801,25 @@ const SIGNALS = {
       "injeção de código", "injeção de comandos", "teste de intrusão", "testes de intrusão", "teste de penetração",
       "testes de penetração", "gestão de segredos", "gestão de secrets", "cifragem em repouso", "encriptação em repouso",
       "auditoria de segurança", "revisão de segurança", "superfície de ataque", "escalada de privilégios",
-      "escalonamento de privilégios", "força bruta", "sequestro de sessão",
+      "escalonamento de privilégios", "ataque de força bruta", "sequestro de sessão",
       // ES
       "modelo de amenazas", "modelado de amenazas", "inyección sql", "inyección de sql", "inyección de código",
       "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
       "gestión de secretos", "cifrado en reposo", "auditoría de seguridad", "revisión de seguridad", "superficie de ataque",
-      "escalada de privilegios", "escalamiento de privilegios", "fuerza bruta", "secuestro de sesión",
+      "escalada de privilegios", "escalamiento de privilegios", "ataque de fuerza bruta", "secuestro de sesión",
     ],
     weak: [
       "authentication", "authorization", "rbac", "abac", "access control", "permission", "access token", "refresh token",
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
       "input validation", "security", "hardening", "least privilege", "stride", "mfa", "2fa", "two-factor", "firewall", "secrets",
+      "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
       // PT
       "autenticação", "autenticacao", "autorização", "autorizacao", "permissão", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
-      "registo de auditoria", "trilho de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada",
+      "registo de auditoria", "trilho de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
       // ES
       "autenticación", "autorización", "permiso", "control de acceso", "token de acceso", "clave de api",
-      "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada",
+      "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
     ],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
@@ -957,12 +958,15 @@ function pluralize(body, kw) {
 
 // The part of a keyword its regex (keywordRe) always matches verbatim: pluralize() only rewrites the last 3 characters
 // (-ção / -ão / -ión) or inserts a plural right after the FIRST word — so the leading characters up to both are literal.
+// A keyword pluralize() leaves alone is matched verbatim WHOLE (only an inflection is appended): the whole keyword is the
+// literal — "data retention" no longer compiles a regex for every text that merely says "data".
 const KW_LITERAL = new Map();
 function keywordLiteral(kw) {
   let lit = KW_LITERAL.get(kw);
   if (lit != null) return lit;
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const first = (kw.match(/^[\p{L}\p{N}]+/u) || [""])[0];
-  const n = Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
+  const n = pluralize(escaped, kw) === escaped ? kw.length : Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
   lit = kw.slice(0, Math.max(1, n));
   KW_LITERAL.set(kw, lit);
   return lit;
@@ -5922,8 +5926,11 @@ const LEGACY_TEMPLATE_PLACEHOLDERS = [
 function templateCorpus() {
   const out = [];
   const add = (fn) => { try { const t = fn(); if (typeof t === "string") out.push(t); } catch { /* a builder's trouble never breaks placeholder detection */ } };
-  // Every combination of the optional tracks (their blocks are independent — a new track's text joins automatically).
-  const combos = OPTIONAL_TRACKS.reduce((acc, t) => acc.concat(acc.map((c) => [...c, t])), [[]]).map((x) => ["core", ...x]);
+  // Every set of at most TWO optional tracks, plus all of them — the builders compose per track, and the only interplay
+  // they have is pairwise (+tdd's test IDs / green lines with another track, "+saas or +ai"), so pairs render every text
+  // a larger set does (for three tracks this IS the full power set; it grows quadratically, not 2^n, as tracks are added).
+  const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS]
+    .map((x) => ["core", ...x]);
   const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] };
   for (const l of i18n.LANGS) {
     const M = i18n.msg(l);

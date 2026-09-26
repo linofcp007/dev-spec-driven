@@ -6454,16 +6454,21 @@ function endRun() {
       "A2: two weak +sec signals turn it on (flagged weak-only) beside +tdd; one weak +privacy signal is only 'possible'");
     const negated = cls("Internal sales dashboard: no personal data, no authentication needed");
     const negPt = cls("Relatório interno de vendas, sem dados pessoais");
+    const negEs = cls("Informe interno de ventas, sin datos personales ni autenticación");
     const onAlthough = cls("OWASP review of the export API — no authentication changes");
     ok(!negated.tracks.includes("privacy") && !negated.tracks.includes("sec") && negated.notes.some((n) => /\+privacy kept off — 'personal data'/.test(n)) &&
       negated.notes.some((n) => /\+sec kept off — 'authentication'/.test(n)) && !negPt.tracks.includes("privacy") && negPt.notes.some((n) => /\+privacy mantido inativo/.test(n)) &&
+      negEs.lang === "es" && !negEs.tracks.includes("privacy") && negEs.negated.privacy.includes("datos personales") && negEs.notes.some((n) => /\+privacy/.test(n)) &&
       onAlthough.tracks.includes("sec") && onAlthough.notes.some((n) => /\+sec is ON although 'authentication' appeared negated/.test(n)),
-      "A2: negation never vetoes a track, it annotates it — +privacy / +sec kept off with a note (EN, PT) and '+sec is ON although …' when a strong signal wins");
+      "A2: negation never vetoes a track, it annotates it — +privacy / +sec kept off with a note (EN, PT, ES) and '+sec is ON although …' when a strong signal wins");
     ok(/\+sec: ON/.test(secEn.reasoning) && /\+privacy: off/.test(secEn.reasoning) && /\+privacy: ON \[high confidence\]/.test(privEn.reasoning),
       "A2: the reasoning has a line per track, sec and privacy included");
     const nonSec = cls("Dependency injection container for the services layer; store uploads in object storage");
-    ok(nonSec.tracks.join() === "core" && !nonSec.signals.sec.length && !nonSec.signals.privacy.length,
-      "A2: no phantom +sec from 'dependency injection' and no +privacy from 'storage'");
+    const bruteAlgo = cls("Replace the brute-force search with an index");
+    const bruteAttack = cls("Lock accounts after repeated brute-force attacks");
+    ok(nonSec.tracks.join() === "core" && !nonSec.signals.sec.length && !nonSec.signals.privacy.length &&
+      !bruteAlgo.tracks.includes("sec") && bruteAlgo.possible.some((p) => p.track === "sec") && bruteAttack.tracks.includes("sec"),
+      "A2: no phantom +sec from 'dependency injection' or a brute-force SEARCH (weak, possible only) — a brute-force ATTACK is strong; no +privacy from 'storage'");
     const sweep = [];
     for (const tr of ["sec", "privacy"]) {
       const sg = S.trackSignals(tr);
@@ -6573,6 +6578,19 @@ function endRun() {
       (reTasks.match(/## Story US-1 — Security/g) || []).length === 1 && S.statusFeature(at, plain.slug).tasks.total === tasksBefore + 7 &&
       chk(S.specDoctor(at, plain.slug), "privacy-sections").status === "fail",
       "A2: remove privacy then re-add both — the kept sections and tasks count again, nothing duplicated");
+
+    // --- core + saas + sec + privacy (no +tdd): the three section checks side by side, the design gate names all three
+    const c3 = a2("combined-3");
+    const three = S.createFeature(c3, "Tenant Accounts", ["saas", "sec", "privacy"], "", undefined, "es");
+    const d3 = S.specDoctor(c3, three.slug);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(c3, three.slug, ph, "t", { force: true }));
+    const g3 = S.approvePhase(c3, three.slug, "design", "t");
+    const t3 = S.traceCheck(c3, three.slug);
+    ok(three.label === "core +saas +sec +privacy" && ["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(d3, id).status === "fail") &&
+      !fs.existsSync(path.join(three.dir, "test-plan.md")) && fs.existsSync(path.join(three.dir, "load-test.md")) && !g3.ok &&
+      ["saas-sections", "sec-sections", "privacy-sections"].every((id) => g3.failing.includes(id)) && !t3.uncoveredByTasks.length && !t3.phantomAcsInTasks.length &&
+      /## Historia US-1 — Seguridad[\s\S]*## Historia US-1 — Privacidad/.test(fs.readFileSync(path.join(three.dir, "tasks.md"), "utf8")),
+      "A2: core+saas+sec+privacy (ES) — saas/sec/privacy section checks all fail while TODO, the design approval names all three, every template AC is tasked");
 
     // --- the combined feature: core + tdd + saas + sec + privacy
     const cb = a2("combined");
