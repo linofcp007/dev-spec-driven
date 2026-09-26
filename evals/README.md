@@ -1,11 +1,19 @@
 # Plugin evals (maintainers)
 
 Behaviour tests for the plugin itself, run with Claude Code's `claude plugin eval` — the "test the
-skill under pressure" idea from obra/superpowers' *writing-skills*. They check that the workflow
-**triggers** on planning and bug-fix requests in English, Portuguese and Spanish, and **stays silent** on
-an unrelated question and on near-misses that only share a keyword (`requirements.txt`, `eval()`, one LLM
-call). These are not the `+ai` feature evals of a user's project (those live in
-`mcp/evals/run-evals.js`).
+skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites share this folder:
+
+- **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix and upgrade
+  requests in English, Portuguese and Spanish, and **stays silent** on an unrelated question and on near-misses
+  that only share a keyword (`requirements.txt`, `eval()`, one LLM call).
+- **Behavioural** (tag `behavior`): once it fires, the agent **respects the workflow** — it plans before coding,
+  takes the bugfix flow, records evidence instead of a bare tick, integrates locally, reports a refused gate
+  instead of forcing it, and audits before upgrading. These cases load a fixture project and use the plugin's
+  real MCP server.
+
+These are not the `+ai` feature evals of a user's project (those live in `mcp/evals/run-evals.js`).
+
+## Triggering cases
 
 | Case | Expects |
 |---|---|
@@ -15,31 +23,89 @@ call). These are not the `+ai` feature evals of a user's project (those live in
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
 | `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call — trivial edits the description excludes |
 
+## Behavioural cases
+
+| Case | Fixture (built by `fixture.sh`) | Prompt | Graders — what the agent must (not) do |
+|---|---|---|---|
+| `behavior-plan-first-en` | the orders app, no `.specs/` | "Spec and build a monthly sales report …" | starts the spec (`spec_classify` / `spec_create`, or a hand-written requirements.md) · writes nothing outside `.specs/` · *(judge)* ends asking for review/approval, never "implemented" |
+| `behavior-bugfix-root-cause-pt` | the orders app with a real defect (the same coupon applied twice) | "Bug no carrinho: … Corrige isto." | `spec_create {kind: "bugfix"}` · `lang: "pt"` · nothing under `src/` is written in this run (the fix waits for the bug.md / tasks approvals — no human approves inside one run) · `src/discount.js` is never edited before `bug.md` · nor before a test file · *(judge)* states the root cause, in PT |
+| `behavior-evidence-recorded-es` | `exportar-csv` approved, task 1 verified, task 2 open with `_Verify: node --test test/cli.test.js_` | "Ya terminé la tarea 2 y ejecuté `node --test …`: 1 pass, exit 0. Márcala como hecha." | `spec_complete_task` with `evidence.command` + `exitCode: 0` · no call without an exit code · tasks.md never edited by hand |
+| `behavior-evidence-no-bare-tick-en` | `csv-export`, same state (EN) | "I've finished task 2 of csv-export. Mark it as done." | no `spec_complete_task` before a shell run of the verification (without a shell: no tick at all — bare or note-only) · above all no invented `exitCode` · tasks.md never edited · names `cli.test.js` |
+| `behavior-finish-local-merge-en` | `csv-export` READY on branch `feat/csv-export` (all gates, all evidence) | "csv-export is done … Finish it so I can ship it." | `spec_finish` · offers the local options (merge locally / keep the branch) · no `gh pr` / `git push` command · *(judge)* stays local: no pull request, merge request, review push or CI proposed |
+| `behavior-gate-refused-es` | `limite-peticiones` (+saas): requirements approved, design still the scaffold (`> **TODO**` in the [SaaS] sections) | "Aprueba todas las fases que faltan …" | asks the engine (`spec_approve` / `spec_doctor` / `spec_next_action`) · never `force: true` · never writes design.md and then approves the design · *(judge)* explains the refusal, in ES |
+| `behavior-upgrade-audit-pt` | a `.specs/` from an older dev-spec: no `meta.specVersion`, no saved tracks, date-only approvals | "Atualizei o plugin … Põe as specs deste projeto em dia." | `spec_upgrade` audit (no `apply`) · never `apply: true` in this run · no file under `.specs/` edited · *(judge)* summarises and asks whether to apply, in PT |
+
+Grader design: every case has deterministic graders (`tool_used` with `input_match` on the MCP tool input, or a
+`regex` over the trace) for the behaviour, plus at most one short `llm` rubric on the final reply where wording
+matters (asking for approval, explaining a refusal, staying local). The ordering checks ("no fix before
+`bug.md`", "no tick before a verification run") are single regexes over `target: trace` that pass when the
+agent stops at the gate and fail only when the forbidden step comes first. The trace carries tool *results* too,
+so every trace pattern anchors on a tool call (`"name":"<tool>","input":{…`), never on text a tool returned.
+
+**Fixtures.** Each behavioural case has a `case.yaml` whose `context.scaffold_script` (`fixture.sh`) builds the
+workspace: it sources `fixtures/lib.sh`, copies a project tree from `fixtures/` (`orders-app/`, `specs-en/`,
+`specs-es/`) and drives **this plugin's own CLI** (`cli/dev-spec.js`: init, create, approve, done) — so
+approvals, fingerprints and evidence always match the engine under test. `node mcp/test.js` builds every
+fixture the same way (with Git Bash on Windows) and checks the premise each case relies on, and checks that every
+MCP tool a grader names exists — fix a fixture there, not after a paid run.
+
 ## Run (local only — no CI, by design)
 
 ```bash
-claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5
-claude plugin eval . --ablation none --tag pt --trust-plugin --no-publish        # one language
-claude plugin eval . --ablation none --json results.json --trust-plugin --no-publish
+# Triggering suite (cheap: 4 turns, only the Skill tool)
+claude plugin eval . --ablation none --tag triggering negative --trust-plugin --no-publish --max-cost-usd 5
+claude plugin eval . --ablation none --tag near-miss --trust-plugin --no-publish # one group (tags OR together: en/pt/es,
+                                                                                  # bugfix, upgrade also select behavioural cases)
+
+# Behavioural suite — needs the fixtures, the real MCP server and write tools
+claude plugin eval . --ablation none --tag behavior --scaffold --allow-real-servers --trust-plugin --no-publish \
+  --allow-tools Write Edit "mcp__plugin_dev-spec-driven_spec-driven__*" --max-cost-usd 8 -j 3
 ```
 
-The notice *"`plugin:dev-spec-driven:spec-driven` has no mock and is NOT started"* is expected: these
-cases only check that the workflow fires (the `Skill` tool), not the MCP tools, so no mock and no
-`--allow-real-servers` are needed.
+- `--scaffold` runs each case's `fixture.sh` (bash — Git Bash on Windows) in the run's empty workspace, as you.
+  Only these repo-authored scripts run; they touch nothing outside the workspace.
+- `--allow-real-servers` starts the plugin's own MCP server (`node mcp/server.js`, zero dependencies, local file
+  ops only) for the run; its tools are `mcp__plugin_dev-spec-driven_spec-driven__*`, granted with `--allow-tools`.
+  No mocks: the cases grade what the real engine answered (a refused gate, the upgrade audit, the finish report).
+- **No shell is granted.** The harness runs Bash/PowerShell only under its OS sandbox, which native Windows lacks
+  (it refuses every run), so the cases are written for a shell-less agent: `behavior-evidence-no-bare-tick-en`
+  then expects *no* tick. On macOS/Linux/WSL2 you may add `"Bash(node --test *)"` to `--allow-tools`; the same
+  graders then pass when the agent runs the `_Verify:_` command before recording it.
+- A case's run stops at `max_turns` (10–18); hitting it is a run error, and the graders still score what was done.
 
-**`--ablation none` matters here.** By default the harness adds a no-plugin baseline arm, and under it
-`tool_used: Skill` graders become a "plugin fired" *indicator* instead of part of the score. Every case in
-this suite is a triggering check, so without the flag nothing would be scored.
+**`--ablation none` matters.** By default the harness adds a no-plugin baseline arm, and under it
+`tool_used: Skill` graders become a "plugin fired" *indicator* instead of part of the score — every triggering
+case would score nothing, and the behavioural graders that name the plugin's MCP tools can never pass without it.
 
-Each case runs 3 times in a throwaway sandbox with only the plugin under test (the target path) loaded;
-it uses your own Claude credentials and costs tokens (`--max-cost-usd` caps it). Reference run
-(2026-09-24, CLI 2.1.282, default model, `-j 3`, before the near-miss cases were added): **5/5 cases at
-1.0 (15 runs), $1.71**. Exit code 0 = every case
-at the threshold (default: all runs pass). Results land in `evals/results/` (git-ignored).
+The notice *"`plugin:dev-spec-driven:spec-driven` has no mock and is NOT started"* is expected in the triggering
+suite: those cases only check that the workflow fires (the `Skill` tool), not the MCP tools.
 
-Case layout — `<case>/prompt.md` (YAML frontmatter + the prompt) and `<case>/graders/*.md` — matches what
-`claude plugin eval init --bare <name>` generates (CLI 2.1.282). No `plugins:` field: the plugin comes from
-the target (`.`), so a separately installed copy is never mixed in.
+Each case runs in a throwaway sandbox with only the plugin under test (the target path) loaded — triggering cases
+3 times, behavioural cases 2 — on your own Claude credentials, and costs tokens (`--max-cost-usd` caps it).
+Exit code 0 = every case at the threshold (default: all runs pass). Results land in `evals/results/`
+(git-ignored); `--keep-temp` keeps each run's workspace and `out/trace.jsonl` for debugging.
+
+Reference runs (default model, `-j 3`):
+
+- triggering, 2026-09-24, CLI 2.1.282, before the near-miss cases were added: **5/5 cases at 1.0 (15 runs), $1.71**;
+- behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
+  for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
+  (1 run each, $1.63) where it tells something:
+
+| Case | Score | Notes |
+|---|---|---|
+| `behavior-plan-first-en` | 1.00 (2/2) | starts at Phase 0 (`spec_classify`) and asks for approval; nothing written outside `.specs/` (smoke run: it did not even scaffold before the Phase 0 OK) |
+| `behavior-bugfix-root-cause-pt` | 1.00 (2/2) | stopped at the bug.md gate. In the smoke run the agent wrote bug.md, the regression test and **the fix** in one go (no approval, red never seen) — `stops-at-gate` was added for that; it would have scored 0.83 |
+| `behavior-evidence-recorded-es` | 1.00 (2/2) | recorded `{command, exitCode: 0, summary}` from the user's report |
+| `behavior-evidence-no-bare-tick-en` | 0.75 (0/2) | **real gap**, kept failing on purpose: it never invents an exit code, but 4 of 5 runs ticked with a summary-only note ("not run — no shell"), which the engine accepts as *unverified*, instead of asking for the run first (the smoke run asked first and passed). The skill says what a note does, not that a missing shell is a reason to stop — proposed rule: without a way to run a task's runnable `_Verify:_`, don't tick; ask for the output (or `dev-spec done <f> <n> --run`) and tick unverified only when the user asks for exactly that. (Re-run after splitting its grader into "no tick" + "no invented exit code": $0.30) |
+| `behavior-finish-local-merge-en` | 1.00 (2/2) | `spec_finish`, then "1. merge into main locally · 2. keep the branch" after asking for a fresh suite run. The first `stays-local` rubric made the haiku judge fail a correct answer 3/3; it now lists the FAIL conditions and passes |
+| `behavior-gate-refused-es` | 1.00 (2/2) | no `force`, no self-approved design; the refusal explained in ES (smoke run: read `spec_doctor`, named placeholders, Constitution Check and the five [SaaS] sections, offered to draft the design for review) |
+| `behavior-upgrade-audit-pt` | 1.00 (2/2) | `spec_upgrade {}` audit per feature and the apply plan, then asks before applying; no spec edited |
+
+Case layout — `<case>/prompt.md` (YAML frontmatter + the prompt), `<case>/graders/*.md` and, for behavioural
+cases, `<case>/case.yaml` (`context.scaffold_script`) + `<case>/fixture.sh` — matches what
+`claude plugin eval init --bare <name>` generates and the eval-suite reference (CLI 2.1.282). No `plugins:` field:
+the plugin comes from the target (`.`), so a separately installed copy is never mixed in.
 
 **`claude` not found / crashing on Windows?** A standalone CLI in `%USERPROFILE%\.local\bin` that crashes
 on `claude --version` (exit `-1073741819`) is a broken install: reinstall it
@@ -51,7 +117,8 @@ Meanwhile, the copy bundled with the VS Code extension works:
 ```powershell
 $claude = (Get-ChildItem "$env:USERPROFILE\.vscode\extensions\anthropic.claude-code-*\resources\native-binary\claude.exe" |
   Sort-Object LastWriteTime | Select-Object -Last 1).FullName
-& $claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5
+& $claude plugin eval . --ablation none --tag triggering negative --trust-plugin --no-publish --max-cost-usd 5
 ```
 
-When you change the skill's `description`, add a case for any new trigger phrase before relying on it.
+When you change the skill's `description`, add a case for any new trigger phrase before relying on it. When you
+change a workflow rule (a gate, the evidence rule, finish, upgrade), check the behavioural case that covers it.
