@@ -2938,7 +2938,7 @@ const MSG = {
       forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
       on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard).",
       off: "Guard mode OFF — code edits are not gated.",
-      badValue: (v) => `--guard takes on or off (got '${v}').`,
+      badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
     },
     // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
     scopedSteering: {
@@ -3320,6 +3320,78 @@ const MSG = {
     // @pkg B5 <<<
 
     // @pkg C1 msg-en >>>
+    // 1.14 C1 — the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
+    // scope guard (roadmap.json meta.guard = "scope"). claims / negators / admissions are regex sources the engine applies from
+    // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
+    // on purpose: a claim counts only outside code and quotes, not in a question, and not after a negator or a condition.
+    stopGate: {
+      claims: [
+        String.raw`all\s+(?:done|finished|complete|completed)`,
+        String.raw`(?:tasks?|steps?)\s+#?\d+(?:\s*(?:,|and|&)\s*#?\d+)*\s+(?:(?:is|are|has\s+been|have\s+been)\s+)?(?:now\s+)?(?:done|finished|complete|completed|implemented|verified)`,
+        String.raw`[\p{L}\p{N}_]+(?:['’](?:s|m|re)|\s+is|\s+are|\s+am|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?(?:done|finished|complete|completed|implemented|verified)`,
+        String.raw`(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+)?(?:finished|completed|implemented|verified)`,
+        String.raw`^[ \t*_#>-]*(?:all\s+)?(?:done|finished|complete|completed|implemented|verified)[*_]*(?=[ \t]*(?:[.,!:—–-]|$))`,
+        String.raw`status\W{0,8}done(?:_with_concerns)?`,
+        String.raw`(?:all\s+(?:the\s+)?(?:\d+\s+)?|the\s+)?(?:unit\s+|integration\s+|e2e\s+)?tests?\s+(?:(?:are|now|all|still)\s+)*(?:pass|passes|passed|passing|green)`,
+        String.raw`[1-9]\d*\s*(?:\/\s*\d+\s+)?(?:tests?\s+)?(?:passing|passed)`,
+        String.raw`(?:everything|it|all|this)\s+(?:now\s+)?works`,
+        String.raw`(?:fully|thoroughly)\s+tested|tested\s+and\s+(?:working|verified)`,
+        String.raw`verified|implemented|finished|completed`,
+      ],
+      // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
+      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes).
+      negators: ["not", "never", "no", "nothing", "nor", "none", "without", "cannot", "will", "would", "should", "must", "need", "needs", "to",
+        "going", "gonna", "can", "could", "may", "might", "until", "unless", "before", "once", "when", "whenever", "after", "if", "whether",
+        "almost", "nearly", "partially", "partly", "yet"],
+      // The message says plainly that something is NOT verified (or fails): never sent back.
+      admissions: [
+        String.raw`(?:not|never|\p{L}+n['’]t)\s+(?:(?:been|yet|fully|actually|be|all|really)\s+){0,2}(?:verified|tested|run)`,
+        String.raw`unverified|untested`,
+        String.raw`(?:without|no)\s+(?:passing\s+)?evidence`,
+        String.raw`[1-9]\d*\s+(?:tests?\s+)?(?:failing|failed|failures?)`,
+        String.raw`tests?\s+(?:(?:are|is|still)\s+)*(?:failing|fail|fails|failed)`,
+        String.raw`status\W{0,8}(?:blocked|needs_context)`,
+      ],
+      head: "dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:",
+      taskLine: (slug, list) => `  - ${slug}: ${list}`,
+      suiteLine: (slug, list) => `  - ${slug}: project checks without a passing run since the last task activity: ${list}`,
+      more: (n) => `+${n} more`,
+      todoTasks: (slug, n) => `Record the evidence before claiming it: run each listed task's _Verify:_ on the final code — \`dev-spec done ${slug} ${n} --run\` — or record the run you made with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `Run the project checks: \`dev-spec finish ${slug} --run\` (or record the runs with spec_finish {evidence}).`,
+      plainly: "Or say plainly which of these are not verified.",
+      implementer: {
+        head: (n, slug) => `dev-spec evidence gate: you report task ${n} of '${slug}' as DONE, but`,
+        noReport: (file) => `its report (${file}) does not exist.`,
+        noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
+        todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
+      },
+      // `dev-spec stop-check` when nothing is sent back (the why code → one line).
+      allow: {
+        off: () => "evidence gate: off (roadmap.json meta.stopCheck: false) — nothing checked.",
+        "stop-hook-active": () => "evidence gate: this stop was already sent back once (stop_hook_active) — allowed.",
+        "no-specs": () => "evidence gate: no dev-spec .specs/ here — nothing to check.",
+        "no-claim": () => "evidence gate: the message claims no completion or verification — allowed.",
+        admitted: () => "evidence gate: the message says plainly what is not verified (or failing) — allowed.",
+        "no-recent": (i) => `evidence gate: no feature was active in the last ${i.hours} h (a task ticked, evidence recorded or tasks.md edited) — allowed.`,
+        verified: (i) => `evidence gate: every ticked task of the recently active features has passing evidence (${i.list}) — allowed.`,
+        "not-done": () => "evidence gate: the implementer reports BLOCKED / NEEDS_CONTEXT — allowed.",
+        "no-task": () => "evidence gate: the message names no task report (.specs/<feature>/.execution/task-N-report.md) — allowed.",
+        "nothing-to-verify": (i) => `evidence gate: task ${i.n} of '${i.slug}' has no runnable _Verify:_ command — allowed.`,
+        "report-ok": (i) => `evidence gate: the report of task ${i.n} of '${i.slug}' shows its _Verify:_ run — allowed.`,
+      },
+      on: "Evidence gate ON — a turn that ends saying the work is done or verified is sent back while a recently active feature has ticked tasks without verification evidence (roadmap.json meta.stopCheck; hooks/stop-hook.js).",
+      off: "Evidence gate OFF — the end-of-turn claim check is disabled (roadmap.json meta.stopCheck: false).",
+      badValue: (v) => `--stop-check takes on or off (got '${v}').`,
+    },
+    scopeGuard: {
+      on: "Guard mode SCOPE — Write/Edit on a code file outside .specs/ asks unless an open task of an approved feature names it in _Implements:_ (the file, its folder or a glob; test files excepted), and asks for every code edit while no feature has approved, unfinished tasks (roadmap.json meta.guard: \"scope\").",
+      ask: (file, features, hint) => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is scope — dev-spec init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
+      hint: {
+        "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
+        nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
+        next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
+      },
+    },
     // @pkg C1 <<<
 
     // @pkg C2 msg-en >>>
@@ -4058,7 +4130,7 @@ const MSG = {
       forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
       on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard).",
       off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
-      badValue: (v) => `--guard aceita on ou off (recebido '${v}').`,
+      badValue: (v) => `--guard aceita on, off ou scope (recebido '${v}').`,
     },
     scopedSteering: {
       customHint: "— ou um ficheiro de steering próprio, com âmbito: letras minúsculas, algarismos e '-', a terminar em .md (ex.: api-conventions.md).",
@@ -4432,6 +4504,64 @@ const MSG = {
     // @pkg B5 <<<
 
     // @pkg C1 msg-pt >>>
+    stopGate: {
+      claims: [
+        String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?)`,
+        String.raw`tarefas?\s+#?\d+(?:\s*(?:,|e)\s*#?\d+)*\s+(?:(?:est[áa]|est[ãa]o|foi|foram|ficou|ficaram)\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?)`,
+        String.raw`^[ \t*_#>-]*(?:tudo\s+)?(?:feito|conclu[íi]do|terminado|implementado|verificado|finalizado)[*_]*(?=[ \t]*(?:[.,!:—–-]|$))`,
+        String.raw`tudo\s+(?:feito|pronto|conclu[íi]do|terminado|verde|funciona|a\s+funcionar)`,
+        String.raw`(?:todos\s+os\s+(?:\d+\s+)?|os\s+)?testes?\s+(?:(?:já|agora|todos)\s+)*(?:passam|passaram|passa|passou|est[ãa]o\s+a\s+passar|a\s+passar|est[ãa]o\s+verdes|ficaram\s+verdes|verdes)`,
+        String.raw`(?:isto|já)\s+funciona`,
+        String.raw`terminei|concluí|implementei|verifiquei|acabei|finalizei`,
+        String.raw`conclu[íi]d[oa]s?|verificad[oa]s?|implementad[oa]s?`,
+      ],
+      negators: ["não", "nunca", "nem", "nada", "sem", "falta", "faltam", "ser", "quando", "depois", "antes", "se", "até", "vou", "vamos", "irei",
+        "devo", "deve", "devem", "precisa", "precisam", "tenho", "temos", "quase", "parcialmente", "possa", "possam", "ainda"],
+      admissions: [
+        String.raw`(?:não|nunca)\s+(?:(?:foi|foram|está|estão|ficou|ainda|totalmente|chegou|a|ser)\s+){0,2}(?:verificad[oa]s?|testad[oa]s?|corrid[oa]s?)`,
+        String.raw`por\s+verificar|sem\s+evid[êe]ncia|sem\s+verifica[çc][ãa]o`,
+        String.raw`[1-9]\d*\s+(?:testes?\s+)?(?:a\s+falhar|falharam|falhas?)`,
+        String.raw`testes?\s+(?:(?:ainda|estão)\s+)*(?:falham|falharam|a\s+falhar)`,
+      ],
+      head: "dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:",
+      taskLine: (slug, list) => `  - ${slug}: ${list}`,
+      suiteLine: (slug, list) => `  - ${slug}: verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list}`,
+      more: (n) => `+${n} mais`,
+      todoTasks: (slug, n) => `Regista a evidência antes de o afirmar: corre o _Verify:_ de cada tarefa listada no código final — \`dev-spec done ${slug} ${n} --run\` — ou regista a execução que fizeste com spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `Corre as verificações do projeto: \`dev-spec finish ${slug} --run\` (ou regista as execuções com spec_finish {evidence}).`,
+      plainly: "Ou diz claramente quais destas não estão verificadas.",
+      implementer: {
+        head: (n, slug) => `dev-spec — gate de evidência: reportas a tarefa ${n} de '${slug}' como DONE, mas`,
+        noReport: (file) => `o relatório (${file}) não existe.`,
+        noRun: (file, cmds) => `o relatório (${file}) não mostra a execução do _Verify:_ — o comando exato e o seu exit code: ${cmds}.`,
+        todo: "Corre o comando no código final e põe no relatório o comando, o exit code e as últimas linhas do output — ou reporta BLOCKED / NEEDS_CONTEXT se não puder passar. (Evidência antes de afirmações: o controlador só marca a tarefa com essa execução.)",
+      },
+      allow: {
+        off: () => "gate de evidência: desligado (roadmap.json meta.stopCheck: false) — nada verificado.",
+        "stop-hook-active": () => "gate de evidência: este fim de turno já foi devolvido uma vez (stop_hook_active) — permitido.",
+        "no-specs": () => "gate de evidência: não há aqui uma .specs/ do dev-spec — nada a verificar.",
+        "no-claim": () => "gate de evidência: a mensagem não afirma conclusão nem verificação — permitido.",
+        admitted: () => "gate de evidência: a mensagem diz claramente o que não está verificado (ou falha) — permitido.",
+        "no-recent": (i) => `gate de evidência: nenhuma feature teve atividade nas últimas ${i.hours} h (tarefa marcada, evidência registada ou tasks.md editado) — permitido.`,
+        verified: (i) => `gate de evidência: todas as tarefas marcadas das features com atividade recente têm evidência de sucesso (${i.list}) — permitido.`,
+        "not-done": () => "gate de evidência: o implementador reporta BLOCKED / NEEDS_CONTEXT — permitido.",
+        "no-task": () => "gate de evidência: a mensagem não nomeia nenhum relatório de tarefa (.specs/<feature>/.execution/task-N-report.md) — permitido.",
+        "nothing-to-verify": (i) => `gate de evidência: a tarefa ${i.n} de '${i.slug}' não tem um comando _Verify:_ executável — permitido.`,
+        "report-ok": (i) => `gate de evidência: o relatório da tarefa ${i.n} de '${i.slug}' mostra a execução do _Verify:_ — permitido.`,
+      },
+      on: "Gate de evidência LIGADO — um turno que termina a dizer que o trabalho está feito ou verificado é devolvido enquanto uma feature com atividade recente tiver tarefas marcadas sem evidência de verificação (roadmap.json meta.stopCheck; hooks/stop-hook.js).",
+      off: "Gate de evidência DESLIGADO — a verificação das afirmações no fim do turno está desativada (roadmap.json meta.stopCheck: false).",
+      badValue: (v) => `--stop-check aceita on ou off (recebido '${v}').`,
+    },
+    scopeGuard: {
+      on: "Modo guarda SCOPE (âmbito) — Write/Edit num ficheiro de código fora de .specs/ pede confirmação, a menos que uma tarefa por concluir de uma feature aprovada o nomeie em _Implements:_ (o ficheiro, a sua pasta ou um glob; ficheiros de teste excetuados), e pede-a em todas as alterações de código enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard: \"scope\").",
+      ask: (file, features, hint) => `dev-spec guard (scope): ${file} não está no plano — nenhuma tarefa por concluir de ${features} o nomeia em _Implements:_. ${hint} (O modo guarda está em scope — dev-spec init --guard on permite todos os ficheiros de código enquanto houver tarefas aprovadas; --guard off desliga-o.)`,
+      hint: {
+        "same-folder": (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — mesma pasta que ${ref}) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
+        nearby: (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — planeia ${ref}, ali perto) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
+        next: (n, slug) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug}, a próxima tarefa por concluir) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
+      },
+    },
     // @pkg C1 <<<
 
     // @pkg C2 msg-pt >>>
@@ -5170,7 +5300,7 @@ const MSG = {
       forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
       on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard).",
       off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
-      badValue: (v) => `--guard admite on u off (recibido '${v}').`,
+      badValue: (v) => `--guard admite on, off o scope (recibido '${v}').`,
     },
     scopedSteering: {
       customHint: "— o un fichero de steering propio, con alcance: letras minúsculas, dígitos y '-', terminado en .md (p. ej. api-conventions.md).",
@@ -5544,6 +5674,64 @@ const MSG = {
     // @pkg B5 <<<
 
     // @pkg C1 msg-es >>>
+    stopGate: {
+      claims: [
+        String.raw`(?:está|están|esta|quedó|quedaron|fue|fueron|ya\s+está|ya\s+están)\s+(?:todo\s+)?(?:hech[oa]s?|list[oa]s?|terminad[oa]s?|completad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resuelt[oa]s?)`,
+        String.raw`tareas?\s+#?\d+(?:\s*(?:,|y)\s*#?\d+)*\s+(?:(?:est[áa]|est[áa]n|fue|fueron|quedó|quedaron)\s+)?(?:hech[oa]s?|terminad[oa]s?|completad[oa]s?|implementad[oa]s?|verificad[oa]s?)`,
+        String.raw`^[ \t*_#>-]*(?:todo\s+)?(?:hecho|listo|terminado|completado|implementado|verificado|finalizado)[*_]*(?=[ \t]*(?:[.,!:—–-]|$))`,
+        String.raw`todo\s+(?:hecho|listo|terminado|en\s+verde|funciona)`,
+        String.raw`(?:todas\s+las\s+(?:\d+\s+)?|las\s+)?(?:pruebas|tests?)\s+(?:(?:ya|ahora|todas)\s+)*(?:pasan|pasaron|pasa|pasó|est[áa]n\s+pasando|est[áa]n\s+en\s+verde|en\s+verde)`,
+        String.raw`ya\s+funciona`,
+        String.raw`terminé|completé|implementé|verifiqué|acabé|finalicé`,
+        String.raw`completad[oa]s?|verificad[oa]s?|implementad[oa]s?`,
+      ],
+      negators: ["no", "nunca", "ni", "nada", "sin", "falta", "faltan", "ser", "cuando", "después", "antes", "si", "hasta", "voy", "vamos", "debo", "debe",
+        "deben", "necesita", "necesitan", "tengo", "tenemos", "hay", "casi", "parcialmente", "pueda", "puedan", "aún", "todavía"],
+      admissions: [
+        String.raw`(?:no|nunca)\s+(?:(?:fue|fueron|está|están|ha|han|sido|se|todavía|aún)\s+){0,2}(?:verificad[oa]s?|probad[oa]s?|ejecutad[oa]s?)`,
+        String.raw`sin\s+verificar|sin\s+evidencia|sin\s+verificación`,
+        String.raw`[1-9]\d*\s+(?:pruebas?\s+|tests?\s+)?(?:fallan|fallaron|fallando|fallos?)`,
+        String.raw`(?:pruebas|tests?)\s+(?:(?:todavía|aún|están)\s+)*(?:fallan|fallaron|fallando)`,
+      ],
+      head: "dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:",
+      taskLine: (slug, list) => `  - ${slug}: ${list}`,
+      suiteLine: (slug, list) => `  - ${slug}: verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list}`,
+      more: (n) => `+${n} más`,
+      todoTasks: (slug, n) => `Registra la evidencia antes de afirmarlo: ejecuta el _Verify:_ de cada tarea listada sobre el código final — \`dev-spec done ${slug} ${n} --run\` — o registra la ejecución que hiciste con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `Ejecuta las verificaciones del proyecto: \`dev-spec finish ${slug} --run\` (o registra las ejecuciones con spec_finish {evidence}).`,
+      plainly: "O di claramente cuáles de ellas no están verificadas.",
+      implementer: {
+        head: (n, slug) => `dev-spec — gate de evidencia: informas la tarea ${n} de '${slug}' como DONE, pero`,
+        noReport: (file) => `su informe (${file}) no existe.`,
+        noRun: (file, cmds) => `su informe (${file}) no muestra la ejecución del _Verify:_ — el comando exacto y su exit code: ${cmds}.`,
+        todo: "Ejecuta el comando sobre el código final y pon en el informe el comando, su exit code y las últimas líneas de su salida — o informa BLOCKED / NEEDS_CONTEXT si no puede pasar. (Evidencia antes que afirmaciones: el controlador solo marca la tarea con esa ejecución.)",
+      },
+      allow: {
+        off: () => "gate de evidencia: desactivado (roadmap.json meta.stopCheck: false) — nada comprobado.",
+        "stop-hook-active": () => "gate de evidencia: este fin de turno ya se devolvió una vez (stop_hook_active) — permitido.",
+        "no-specs": () => "gate de evidencia: aquí no hay una .specs/ de dev-spec — nada que comprobar.",
+        "no-claim": () => "gate de evidencia: el mensaje no afirma que algo esté terminado ni verificado — permitido.",
+        admitted: () => "gate de evidencia: el mensaje dice claramente qué no está verificado (o falla) — permitido.",
+        "no-recent": (i) => `gate de evidencia: ninguna función tuvo actividad en las últimas ${i.hours} h (tarea marcada, evidencia registrada o tasks.md editado) — permitido.`,
+        verified: (i) => `gate de evidencia: todas las tareas marcadas de las funciones con actividad reciente tienen evidencia correcta (${i.list}) — permitido.`,
+        "not-done": () => "gate de evidencia: el implementador informa BLOCKED / NEEDS_CONTEXT — permitido.",
+        "no-task": () => "gate de evidencia: el mensaje no nombra ningún informe de tarea (.specs/<función>/.execution/task-N-report.md) — permitido.",
+        "nothing-to-verify": (i) => `gate de evidencia: la tarea ${i.n} de '${i.slug}' no tiene un comando _Verify:_ ejecutable — permitido.`,
+        "report-ok": (i) => `gate de evidencia: el informe de la tarea ${i.n} de '${i.slug}' muestra la ejecución de su _Verify:_ — permitido.`,
+      },
+      on: "Gate de evidencia ACTIVADO — un turno que termina diciendo que el trabajo está hecho o verificado se devuelve mientras una función con actividad reciente tenga tareas marcadas sin evidencia de verificación (roadmap.json meta.stopCheck; hooks/stop-hook.js).",
+      off: "Gate de evidencia DESACTIVADO — la comprobación de las afirmaciones al final del turno está desactivada (roadmap.json meta.stopCheck: false).",
+      badValue: (v) => `--stop-check admite on u off (recibido '${v}').`,
+    },
+    scopeGuard: {
+      on: "Modo guardia SCOPE (alcance) — Write/Edit en un fichero de código fuera de .specs/ pide confirmación salvo que una tarea sin terminar de una función aprobada lo nombre en _Implements:_ (el fichero, su carpeta o un glob; ficheros de prueba exceptuados), y la pide en todo cambio de código mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard: \"scope\").",
+      ask: (file, features, hint) => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en scope — dev-spec init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
+      hint: {
+        "same-folder": (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — misma carpeta que ${ref}) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
+        nearby: (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — planifica ${ref}, cerca) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
+        next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
+      },
+    },
     // @pkg C1 <<<
 
     // @pkg C2 msg-es >>>

@@ -1,14 +1,14 @@
 ---
-description: Turn guard mode on or off — Claude Code asks before editing code while no feature has approved tasks. PT - liga/desliga o modo guarda. ES - activa/desactiva el modo guardia.
-argument-hint: "[on|off]"
+description: Turn guard mode on, off or to scope — Claude Code asks before editing code while no feature has approved tasks (scope - also outside the plan's files). PT - liga/desliga o modo guarda. ES - activa/desactiva el modo guardia.
+argument-hint: "[on|off|scope]"
 ---
 
 Use the **dev-spec-driven** skill, guard mode (opt-in).
 
 Args: $ARGUMENTS
 
-Call the `spec_init` MCP tool with `guard: true` (on) or `guard: false` (off) — CLI
-`dev-spec init --guard on|off`. It can be combined with tracks or used alone, writes `roadmap.json → meta.guard`,
+Call the `spec_init` MCP tool with `guard: true` (on), `guard: "scope"` (scope) or `guard: false` (off) — CLI
+`dev-spec init --guard on|off|scope`. It can be combined with tracks or used alone, writes `roadmap.json → meta.guard`,
 scaffolds any missing core steering file like every `spec_init` (never overwrites one), and the result always
 reports the current `guard` state. With no argument, read
 `.specs/roadmap.json → meta.guard` (absent = off), report the state and explain it — don't call `spec_init` just
@@ -26,6 +26,12 @@ whenever the guard is off. An approval recorded with `--force` still counts, wit
 tasks.md changed afterwards (tasks appended with `spec_append_tasks` or edited by hand — ticking boxes doesn't
 count) no longer covers code edits: the prompt names the feature until its tasks phase is re-approved. It
 never blocks on its own error, and the human can always confirm the edit.
+
+**Scope level (`scope`).** Everything above, plus: once tasks are approved, an edit to a code file that **no open
+task of an approved feature names in `_Implements:_`** (the file itself, a folder above it, or a glob that matches
+it) also asks — the reason names the likely task to add it to (one planning a file in the same folder, else the next
+open task) or points to `/spec-converge` (`spec_append_tasks`). Test files are not asked (tests are planned by T-ID
+in test-plan.md). Adding the file to a task changes tasks.md, so re-approve the tasks phase afterwards.
 
 Explain it to the user in those terms: it is a reminder to plan before coding, not a lock. Other hosts (Cursor,
 Windsurf, Copilot, Gemini) have no PreToolUse hook — there the rule lives in the workflow text only.

@@ -1211,7 +1211,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const fresh = featureDirs(projectDir).length === 0;
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
-  const setsGuard = typeof opts.guard === "boolean";
+  const guardValue = guardInput(opts.guard); // true | false | "scope" (1.14 C1) — anything else leaves the guard unchanged
+  const setsGuard = guardValue !== undefined;
+  const setsStop = typeof opts.stopCheck === "boolean"; // 1.14 C1: roadmap.json meta.stopCheck (the end-of-turn evidence gate)
   // B5: meta.checks (named project commands) — {name: command} adds/replaces, "" removes; validated before any write.
   const nc = checksInput(opts.checks, lang || projectLang(projectDir));
   if (nc && nc.error) return { ok: false, error: nc.error };
@@ -1219,14 +1221,15 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const setsRoles = opts.approvalRoles !== undefined && opts.approvalRoles !== null;
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
-  if (lang || setsGuard || nc || setsRoles) {
+  if (lang || setsGuard || nc || setsRoles || setsStop) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
       // Seed/refresh the project language (single source of truth) if one was requested.
       if (lang) setRoadmapLang(projectDir, lang);
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
-      if (setsGuard) setGuard(projectDir, opts.guard);
+      if (setsGuard) setGuard(projectDir, guardValue);
+      if (setsStop) setStopCheck(projectDir, opts.stopCheck);
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
       return { ok: true };
@@ -1255,12 +1258,14 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     created,
     skipped,
     note: i18n.msg(lng).initNote,
-    guard: guardEnabled(projectDir), // the CURRENT guard state, whether or not this call changed it
+    guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope"), whether or not this call changed it
+    stopCheck: stopCheckEnabled(projectDir), // 1.14 C1: the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // B5: the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
   };
   if (Object.keys(templates).length) res.templates = templates;
-  if (setsGuard) res.guardNote = i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   // The CURRENT approval roles, when the project has some or this call set them (+ a note when it did).
   const current = approvalRolesOf(projectDir);
   if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
@@ -1523,10 +1528,10 @@ function steeringPlaceholders(root) {
   return out;
 }
 
-// roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse).
+// roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
+// stricter level, guardLevel()).
 function guardEnabled(projectDir) {
-  const l = loadRoadmap(projectDir);
-  return !l.parseError && isObj(l.rm.meta) && l.rm.meta.guard === true;
+  return guardLevel(projectDir) !== false;
 }
 
 // The guard's decision for ONE code edit (hooks/guard-hook.js). Cheap by design — it runs before every Write/Edit
@@ -1541,9 +1546,11 @@ function guardEnabled(projectDir) {
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
 // it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
 // "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts.
+// meta.guard "scope" (1.14 C1): once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
-  if (!guardEnabled(pdir)) return { guard: false, decision: "allow", why: "off" };
+  const level = guardLevel(pdir);
+  if (!level) return { guard: false, decision: "allow", why: "off" };
   const G = i18n.msg(projectLang(pdir)).guardMode;
   const allow = (why, extra) => Object.assign({ guard: true, decision: "allow", why }, extra);
   if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
@@ -1555,18 +1562,24 @@ function guardCheck(projectDir, filePath, cwd) {
   if (!GUARD_CODE_EXT.has(ext)) return allow("not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [];
+  const texts = new Map(); // feature → tasks.md (the scope level reads its open tasks' _Implements:_)
   for (const name of safeReaddir(root).sort()) {
     if (!isFeatureFolder(name, root)) continue; // _archive, steering, dot folders are not features
     const dir = path.join(root, name);
     const tasksText = readIfExists(path.join(dir, "tasks.md"));
     if (tasksText == null) continue;
     if (!parseTasks(activeTasks(tasksText, detectTracks(dir))).some((t) => !t.done)) continue; // complete (or no tasks)
+    texts.set(name, tasksText);
     const st = readJson(statePath(dir)).data;
     const ap = isObj(st) && isObj(st.approvals) ? st.approvals.tasks : null;
     if (!ap) pending.push(name);
     else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !fingerprintMatches(tasksText, "tasks", ap.fingerprint)) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
+  }
+  // scope: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
+  if (level === "scope" && (covering.length || forced.length)) {
+    return scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
   }
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
@@ -1623,6 +1636,278 @@ function setGuard(projectDir, on) {
     return { ok: true };
   });
 }
+
+// @pkg C1 evidence stop gate + scope guard >>>
+// ---------------------------------------------------------------------------
+// 1.14 C1 — "evidence before claims" at the END OF A TURN (hooks/stop-hook.js on Stop / SubagentStop; `dev-spec stop-check`)
+// and the scope guard (roadmap.json meta.guard = "scope": a code edit no open task plans in _Implements:_ asks).
+// ---------------------------------------------------------------------------
+
+const STOP_RECENT_HOURS = 4; // "recently active": a task ticked, evidence recorded or tasks.md edited within these hours
+const STOP_MESSAGE_MAX = 20000; // the message's LAST characters are read (the claim sits in the closing lines)
+const STOP_MAX_FEATURES = 50; // feature folders looked at, at most (bounded: the hook runs at the end of every turn)
+const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
+const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
+const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
+
+// roadmap.json meta.guard → false | true | "scope" (anything else: off). hooks/guard-hook.js reads the same value raw.
+function guardLevel(projectDir) {
+  const l = loadRoadmap(projectDir);
+  const g = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
+  return g === true ? true : g === "scope" ? "scope" : false;
+}
+// spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope" (strings case-insensitive);
+// anything else → undefined (unchanged).
+function guardInput(v) {
+  if (v === true || v === false) return v;
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
+}
+// roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`).
+function stopCheckEnabled(projectDir) {
+  const l = loadRoadmap(projectDir);
+  return !(!l.parseError && isObj(l.rm.meta) && l.rm.meta.stopCheck === false);
+}
+// Inside initProject's roadmap lock. ON is the default (absent = on): no write when the effective value doesn't change.
+function setStopCheck(projectDir, on) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  if ((rm.meta.stopCheck !== false) === on) return;
+  rm.meta.stopCheck = on;
+  writeRoadmap(projectDir, rm);
+}
+
+// The claim patterns of every language (i18n stopGate.claims / negators / admissions), compiled once: whole words (unicode
+// boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line.
+let STOP_PATTERNS = null;
+function stopPatterns() {
+  if (STOP_PATTERNS) return STOP_PATTERNS;
+  const word = (src) => new RegExp("(?<![\\p{L}\\p{N}_])(?:" + src + ")(?![\\p{L}\\p{N}_])", "gimu");
+  const all = (k) => i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []);
+  STOP_PATTERNS = {
+    claims: all("claims").map(word),
+    admissions: all("admissions").map(word),
+    negators: new Set(all("negators").map((w) => w.toLowerCase())),
+  };
+  return STOP_PATTERNS;
+}
+// The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
+// lines (> …) — a pasted command output or a quoted instruction claims nothing.
+function stopProse(message) {
+  const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");
+  return s.slice(-STOP_MESSAGE_MAX)
+    .replace(/(^|\n)[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/`[^`\n]*`/g, " ")
+    .split("\n").filter((l) => !/^[ \t]*>/.test(l)).join("\n");
+}
+// Does the message claim the work is done / verified? → { claim, admitted, claims: [matched text] }. A match does not count
+// when a negator or condition sits up to STOP_WINDOW words before it in the same sentence ("not done", "once the tests
+// pass", "I'll verify"; words ending in n't / 'll too), nor when its sentence is a question. `admitted`: the message says
+// plainly that something is NOT verified or fails ("task 3 is not verified", "2 failing") — the honest answer is never sent back.
+function stopClaims(message) {
+  const P = stopPatterns();
+  const text = stopProse(message);
+  const found = [];
+  const wordsOf = (s) => s.split(/[^\p{L}\p{N}_'’]+/u).filter(Boolean);
+  for (const re of P.claims) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0] === "") { re.lastIndex++; continue; }
+      const start = m.index, end = m.index + m[0].length;
+      const before = text.slice(0, start);
+      const cut = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"), before.lastIndexOf(";"));
+      // …and the claim's own first word ("Nothing is done", "None of the tests pass" match from their subject on).
+      const words = wordsOf(before.slice(cut + 1)).slice(-STOP_WINDOW).concat(wordsOf(m[0]).slice(0, 1)).map((w) => w.toLowerCase());
+      if (words.some((w) => P.negators.has(w) || /n['’]t$/.test(w) || /['’]ll$/.test(w))) continue;
+      const tail = text.slice(end).match(/^[^\n.!?]*([.!?]?)/);
+      if (tail && tail[1] === "?") continue; // a question claims nothing
+      if (found.length < 10) found.push(m[0].trim());
+    }
+  }
+  const admitted = P.admissions.some((re) => { re.lastIndex = 0; return re.test(text); });
+  return { claim: found.length > 0, admitted, claims: [...new Set(found)] };
+}
+// The feature's last activity (ms, or null): lastTickAt, every ticks[n], every evidence record's run / note time (history and
+// the records kept aside under `others` included) and tasks.md's modification time — a box ticked by hand leaves no stamp.
+function stopActivity(state, tasksFile) {
+  let best = null;
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && (best == null || t > best)) best = t; };
+  see(state.lastTickAt);
+  if (isRecord(state.ticks)) Object.values(state.ticks).forEach(see);
+  for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
+    for (const r of evidenceRecords(slot)) {
+      see(r.at);
+      see(r.noteAt);
+      (Array.isArray(r.history) ? r.history : []).forEach((h) => { if (isRecord(h)) see(h.at); });
+    }
+  }
+  try { const t = fs.statSync(tasksFile).mtimeMs; if (best == null || t > best) best = t; } catch { /* no tasks.md */ }
+  return best;
+}
+// One unverified task as the reason lists it: "#3 (latest run failed)".
+function stopTaskLabel(d, lng) {
+  const M = i18n.msg(lng);
+  const why = d.specChanged ? M.impact.staleSpec : M.evidenceGate.reason[d.reason] || d.reason;
+  return "#" + d.number + ` (${why})`;
+}
+// The evidence gate at the end of a turn — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`. It sends the
+// turn back ({block: true, reason}) ONLY when (a) the message claims the work is done or verified (stopClaims — conservative;
+// never when it says plainly what is not verified) AND (b) a feature active in the last STOP_RECENT_HOURS has ticked tasks
+// verificationStatus reports unverified (a failed run, a note on a runnable _Verify:_, stale evidence, an unexpected pass,
+// no evidence for a runnable _Verify:_…) or, every active task done, project checks without a passing run since the last
+// task activity (suiteStatus). opts: { message, agent (the subagent type — a spec-implementer is checked on its REPORT: it
+// never ticks tasks), stopHookActive (the hook already sent this stop back once: never twice in a row) }. The reason is in
+// the project language (an implementer's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
+// is skipped — the gate never blocks on its own trouble.
+// → { ok, block, why, lang, claims, features: [{feature, unverified: [{number, reason}], suite: [{name, status}]}], reason? }
+function stopCheck(projectDir, opts = {}) {
+  const pdir = path.resolve(projectDir);
+  const lng = projectLang(pdir);
+  const res = (block, why, extra) => Object.assign({ ok: true, block, why, lang: lng, claims: [], features: [] }, extra);
+  if (opts.stopHookActive === true) return res(false, "stop-hook-active");
+  const root = specsRoot(pdir);
+  if (!isDirSafe(root)) return res(false, "no-specs");
+  if (!stopCheckEnabled(pdir)) return res(false, "off");
+  const cl = stopClaims(opts.message);
+  const agent = typeof opts.agent === "string" ? opts.agent.trim() : "";
+  if (agent && /(?:^|:)spec-implementer$/i.test(agent)) return implementerStopCheck(pdir, String(opts.message == null ? "" : opts.message), cl, res);
+  if (!cl.claim) return res(false, "no-claim");
+  if (cl.admitted) return res(false, "admitted", { claims: cl.claims });
+  const since = Date.now() - STOP_RECENT_HOURS * 3600 * 1000;
+  const features = [];
+  const clean = [];
+  for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, STOP_MAX_FEATURES)) {
+    const tasksFile = path.join(f.dir, "tasks.md");
+    const state = readState(pdir, f.slug);
+    if (state.invalid) continue; // unreadable state: never block on it (doctor reports it)
+    const last = stopActivity(state, tasksFile);
+    if (last == null || last < since) continue;
+    const tracks = detectTracks(f.dir);
+    const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
+    const vs = verificationStatus(pdir, f.slug, f.dir);
+    const suite = blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state).missing : [];
+    if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
+    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite });
+  }
+  if (!features.length) return res(false, clean.length ? "verified" : "no-recent", { claims: cl.claims, verifiedFeatures: clean });
+  const S = i18n.msg(lng).stopGate;
+  const lines = [S.head];
+  for (const f of features) {
+    if (f.unverified.length) {
+      const shown = f.unverified.slice(0, STOP_TASKS_SHOWN).map((d) => stopTaskLabel(d, lng));
+      lines.push(S.taskLine(f.feature, shown.join(", ") + (f.unverified.length > shown.length ? ", " + S.more(f.unverified.length - shown.length) : "")));
+    }
+    if (f.suite.length) lines.push(S.suiteLine(f.feature, suiteLabel(f.suite, lng)));
+  }
+  const firstTasks = features.find((f) => f.unverified.length);
+  if (firstTasks) lines.push(S.todoTasks(firstTasks.feature, firstTasks.unverified[0].number));
+  const firstSuite = features.find((f) => f.suite.length);
+  if (firstSuite) lines.push(S.todoSuite(firstSuite.feature));
+  lines.push(S.plainly);
+  return res(true, "unverified", {
+    claims: cl.claims,
+    features: features.map((f) => ({ feature: f.feature, unverified: f.unverified.map((d) => ({ number: d.number, reason: d.reason, ...(d.specChanged ? { specChanged: true } : {}) })),
+      suite: f.suite.map((s) => ({ name: s.name, status: s.status })) })),
+    reason: lines.join("\n"),
+  });
+}
+// A spec-implementer's stop (SubagentStop): it never ticks tasks (the controller does, after review), so its gate is its
+// REPORT — reporting DONE (or DONE_WITH_CONCERNS) for a task whose _Verify:_ holds a runnable command needs the report file
+// (.specs/<feature>/.execution/task-N-report.md, named in the reply as the protocol asks) to carry each command and an exit
+// code. BLOCKED / NEEDS_CONTEXT, no report path in the reply, or no runnable _Verify:_ → allowed.
+function implementerStopCheck(pdir, message, cl, res) {
+  if (/(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu.test(stopProse(message))) return res(false, "not-done");
+  if (!cl.claim) return res(false, "no-claim");
+  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(?:report|brief)\.md/i);
+  if (!m) return res(false, "no-task", { claims: cl.claims });
+  const f = existingFeature(pdir, m[1]);
+  if (!f.ok) return res(false, "no-task", { claims: cl.claims });
+  const lng = featureLang(pdir, f.slug);
+  const n = parseInt(m[2], 10);
+  const task = resolveTask(taskBlocks(readIfExists(path.join(f.dir, "tasks.md")) || ""), n);
+  const verify = task ? taskMarkers(task).verify : [];
+  const info = { claims: cl.claims, lang: lng, feature: f.slug, task: n };
+  if (!verify.length) return res(false, "nothing-to-verify", info);
+  const file = path.join(f.dir, ".execution", `task-${n}-report.md`);
+  const rel = toPosix(path.relative(pdir, file));
+  let report = null;
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, fs.fstatSync(fd).size));
+      report = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, 0));
+    } finally { fs.closeSync(fd); }
+  } catch { report = null; }
+  const X = i18n.msg(lng).stopGate.implementer;
+  const flat = (s) => s.replace(/`/g, "").replace(/\s+/g, " ").trim();
+  let problem = null;
+  if (report == null) problem = X.noReport(rel);
+  else {
+    const body = flat(report);
+    // "exit 0", "exit code: 1", "exitCode 0", "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0"
+    const exitShown = /(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}-?\d+/iu.test(body);
+    const missing = verify.filter((c) => !body.includes(flat(c)));
+    if (missing.length || !exitShown) problem = X.noRun(rel, (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", "));
+  }
+  if (!problem) return res(false, "report-ok", info);
+  return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
+}
+
+// The scope guard's decision for a code file once some feature has approved, unfinished tasks (guardCheck, level "scope"):
+// allowed when an OPEN task of one of those features names it in _Implements:_ — the file itself (implementsKey: anchors,
+// backticks, ./ and case where the file system folds it dropped), a folder above it, or a glob matching it — and for a test
+// file (tests are planned by T-ID in test-plan.md, not in _Implements:_); otherwise "ask", naming the likely task: one that
+// plans a file in the same folder, else the nearest folder, else the next open task. Text reads only.
+function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
+  const rel = toPosix(path.relative(pdir, abs));
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const key = fold(rel);
+  if (isTestFile(rel)) return allow("test-file", { level: "scope", covering: features, ...extra });
+  const usable = (k) => !!k && k !== "." && !/^\[.*\]$/.test(k) && !/^(?:tbd|todo|n\/?a|none|-+|…|\.{3})$/i.test(k) && !k.split("/").includes("..");
+  const open = [];
+  for (const name of features) {
+    const dir = path.join(specsRoot(pdir), name);
+    for (const b of taskBlocks(activeTasks(texts.get(name) || "", detectTracks(dir)) || "")) {
+      if (b.done) continue;
+      const refs = [];
+      for (const ref of taskMarkers(b).implements) {
+        let r = implementsRel(ref);
+        if (path.isAbsolute(r)) { const a = path.resolve(r); r = isInsideDir(pdir, a) ? toPosix(path.relative(pdir, a)) : ""; }
+        if (usable(r)) refs.push({ rel: r, key: fold(r), glob: isImplementsGlob(r) });
+      }
+      open.push({ feature: name, number: b.number, refs });
+    }
+  }
+  const covers = (r) => (r.glob ? globMatcher(r.key)(key) : r.key === key || key.startsWith(r.key + "/"));
+  const hit = open.find((t) => t.refs.some(covers));
+  if (hit) return allow("in-scope", { level: "scope", covering: features, task: { feature: hit.feature, number: hit.number }, ...extra });
+  // The likely task: a planned file (or a glob's literal folders) in the same folder, else the longest shared folder prefix.
+  const globBase = (k) => { const parts = k.split("/"), lit = []; for (let i = 0; i < parts.length - 1 && !/[*?{]/.test(parts[i]); i++) lit.push(parts[i]); return lit.join("/") || "."; };
+  const folderOf = (r) => (r.glob ? globBase(r.key) : path.posix.dirname(r.key));
+  const fileDir = path.posix.dirname(key);
+  const shared = (a) => { const x = a === "." ? [] : a.split("/"), y = fileDir === "." ? [] : fileDir.split("/"); let i = 0; while (i < x.length && i < y.length && x[i] === y[i]) i++; return i; };
+  let likely = null;
+  for (const t of open) {
+    for (const r of t.refs) {
+      const d = folderOf(r);
+      const score = d === fileDir ? Infinity : shared(d);
+      if (score > 0 && (!likely || score > likely.score)) likely = { t, r, score };
+    }
+  }
+  const S = i18n.msg(projectLang(pdir)).scopeGuard;
+  const next = open[0] || null;
+  const hint = likely ? S.hint[likely.score === Infinity ? "same-folder" : "nearby"](likely.t.number, likely.t.feature, likely.r.rel)
+    : next ? S.hint.next(next.number, next.feature) : "";
+  const pick = likely ? likely.t : next;
+  const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
+  return { guard: true, level: "scope", decision: "ask", why: "out-of-scope", file: rel, covering: features,
+    ...(pick ? { likely: { feature: pick.feature, number: pick.number, via: likely ? (likely.score === Infinity ? "same-folder" : "nearby") : "next" } } : {}),
+    ...(extra.forced ? { forced: extra.forced } : {}),
+    reason: S.ask(rel, list(features), hint).replace(/ {2,}/g, " ") + (extra.note ? " " + extra.note : "") };
+}
+// @pkg C1 <<<
 
 // ---------------------------------------------------------------------------
 // Feature artifact skeletons
@@ -12876,6 +13161,11 @@ module.exports = {
   // @pkg B5 <<<
 
   // @pkg C1 exports >>>
+  stopCheck, // the end-of-turn evidence gate — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`
+  stopClaims, // does a message claim the work is done / verified? (EN / PT / ES, conservative) → { claim, admitted, claims }
+  stopCheckEnabled, // roadmap.json meta.stopCheck (on unless false)
+  guardLevel, // roadmap.json meta.guard → false | true | "scope"
+  STOP_RECENT_HOURS, // the gate's "recently active" window, in hours
   // @pkg C1 <<<
 
   // @pkg C2 exports >>>
