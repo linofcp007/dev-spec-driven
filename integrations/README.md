@@ -42,7 +42,7 @@ machine when this repo is the open project — no editing needed.
   To pin a project explicitly, add `"env": { "SPEC_PROJECT_DIR": "/path/to/your/project" }` to the
   server entry.
 - After editing a config, restart the tool (or restart the MCP server from its UI). Verify the
-  `spec-driven` tools appear (29 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+  `spec-driven` tools appear (30 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
 - Every tool works the same in any MCP client. The plugin's hooks — the save checks, the SessionStart
   status and the opt-in guard mode — are Claude Code only.
 - The workflow rules for your own project are generated the same way:

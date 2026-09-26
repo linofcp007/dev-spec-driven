@@ -17,6 +17,7 @@ obra/superpowers (MIT).
 - **Design gate.** Before approving `design.md`: does the design satisfy every AC, respect the constitution, and fill the track sections with real decisions?
 - **Plan gate.** Before approving `test-plan.md` / `eval-plan.md` / `tasks.md`: does every AC have a test (or eval) that would actually catch its violation? Are tasks right-sized and correctly ordered?
 - **Bugfix gate.** Before the fix: does `bug.md` show a reproducible failure and a root cause backed by evidence — not a guess?
+- **Upgrade review.** After a plugin update, `/spec-upgrade` recommends you (`review: "critic"`) for a spec created but not implemented yet: review each artifact it lists, phase by phase, as you would at its gate — against the current rules, even where it was approved under older ones.
 
 ## Inputs
 

@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its 29 tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 30 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 43 commands, the 3 agents, the
-hooks and the `spec-driven` MCP server (29 tools) load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 44 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (30 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell
@@ -114,7 +114,8 @@ validate the plugin through its `plugin.json`.
 NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): saving a
 `requirements.md` lints EARS (and reports template placeholders), saving a `tasks.md` checks
 traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
-prints feature status plus one line per finished feature whose files drifted since `/spec-finish`. To
+prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (and one
+line while `.specs/` comes from an older dev-spec — see *Updating*). To
 turn them off, disable the plugin (or empty `hooks/hooks.json`).
 
 **Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
@@ -162,6 +163,26 @@ To save a rule file into your project, use the recipe in INTEGRATIONS.md → *Ru
 project*. In Windows PowerShell 5.1, a plain `>` writes UTF-16.
 
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
+
+## Updating
+
+1. **Update the plugin.** Options A and C: `/plugin marketplace update dev-spec-driven-marketplace` (for C, `git pull`
+   in the clone first), then restart Claude Code. Option B or another tool: `git pull` in the clone, then restart the
+   session / MCP client.
+2. **Upgrade each project that already has a `.specs/`.** The session-start hook prints one line while `.specs/`
+   comes from an older version (`roadmap.json → meta.specVersion` absent or older than the plugin). Run
+   `/spec-upgrade` in Claude Code, or from any shell:
+
+   ```powershell
+   node "$plugin\cli\dev-spec.js" upgrade           # the audit, read-only: every active feature against the new rules
+   node "$plugin\cli\dev-spec.js" upgrade --apply   # the safe migrations + the checklist .specs/UPGRADE.md
+   ```
+
+   The audit groups the features (blocked · needs attention · ok) with their status, what the current rules flag,
+   the next step and the review to run (the `spec-critic` agent for specs not implemented yet, the converge pass for
+   half-done ones). `--apply` saves inferred tracks, gives each pre-1.13 approval a history baseline when its file
+   still matches what was approved, completes `.specs/.gitignore` and stamps `meta.specVersion`. It never edits a
+   spec, approves, ticks or deletes anything, and a second run changes nothing.
 
 ## Uninstall
 

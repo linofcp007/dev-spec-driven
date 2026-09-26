@@ -7,7 +7,8 @@ this project versions the plugin as a whole.
 
 A full audit of the engine, then gates you can trust and the change-management layer that comes after
 a spec is approved: impact analysis, convergence, a living catalog, drift, metrics, import from other
-spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 43 commands (was 35).
+spec tools, an opt-in guard, scoped steering and an upgrade path for projects made by an older version. 30 MCP tools
+(was 23), 44 commands (was 35).
 
 ### Fixed — audit of 1.12 (every fix has a regression test)
 - **Evidence gate.** A task whose `_Verify:_` names a runnable command was "verified" by a text note, and a
@@ -316,6 +317,25 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 43 comma
   localized message; it now uses the label `dev-spec ears` prints (`[aviso]` / `[erro]` · `[aviso]` / `[error]`).
 
 ### Added
+- **Upgrading an existing project: `spec_upgrade`** (`dev-spec upgrade [--apply]`, `/spec-upgrade`). After a plugin update,
+  a project's `.specs/` from an older version kept working, but nothing said so, nothing reviewed the specs created but not
+  implemented yet against the new rules, and approvals made before 1.13 had no history baseline (`spec_impact` answered
+  `fingerprint-only`). `roadmap.json → meta.specVersion` now records the dev-spec version that last upgraded or created the
+  project — `spec_init` / `spec_create` stamp a brand-new project only (creating one feature in an older project stamps
+  nothing); versions are compared numerically. While it is absent or older than the plugin, the SessionStart hook prints one
+  line pointing at `/spec-upgrade` (EN/PT/ES). The audit (read-only) groups every active feature — blocked (doctor fails) ·
+  needs attention · ok — with its status (not started · planning · executing · complete · finished), the failing and
+  warning checks, pending gates, artifacts changed since approval, approvals without a fingerprint or a history baseline,
+  unverified tasks with their reason codes, drift, next_action's step and a review recommendation: the read-only
+  `spec-critic` agent for specs with no task ticked, the spec-reviewer converge pass for half-done ones, none once complete.
+  `apply` runs the safe migrations only — it never edits an artifact, approves, ticks or deletes: inferred tracks saved to
+  `.state.json` (when none are), earlier approvals recorded in `approvalHistory`, a `.history/<phase>@<n>.md` baseline for each
+  approval whose fingerprint still matches its file (a changed or date-only approval is listed: re-approve to start its
+  history), the maintained `.specs/.gitignore`, the stamp (only once every feature migrated — each under its lock) and the
+  checklist `.specs/UPGRADE.md` (AUTO-GENERATED, in the project language; a hand-written one is left alone). A second apply
+  changes nothing. `/spec-upgrade` shows the audit, asks before applying, then offers the critic / converge reviews and turns
+  their findings into a proposed action list that goes through the normal gates. README (EN/PT/ES), INSTALL, INTEGRATIONS and
+  AGENTS.md gain an "Updating" step: update the plugin, then upgrade each project.
 - **`/spec-superpowers`** and a "Using it alongside superpowers" section (README EN/PT/ES, INTEGRATIONS,
   AGENTS.md, SKILL.md): superpowers' planning / TDD / debugging / execution / verification / review /
   branch-finishing skills overlap this plugin, and its own instructions defer to CLAUDE.md — the command writes
@@ -429,8 +449,8 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 43 comma
   `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
 
 ### Tests
-- `node mcp/test.js` 754 assertions (was 181), `node cli/test-cli.js` 253 (was 53); the tool count is
-  asserted exactly again (29), and the README tool tables are checked against the live `tools/list` (a hand-kept
+- `node mcp/test.js` 766 assertions (was 181), `node cli/test-cli.js` 257 (was 53); the tool count is
+  asserted exactly again (30), and the README tool tables are checked against the live `tools/list` (a hand-kept
   list of 23 names had gone stale).
 
 ## [1.12.1]

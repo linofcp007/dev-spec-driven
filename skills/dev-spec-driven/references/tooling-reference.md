@@ -3,7 +3,7 @@
 Read on demand from `SKILL.md`. The workflow itself lives in `SKILL.md`; this file holds the lookup
 tables.
 
-## MCP tools (`spec-driven` server — 29 tools)
+## MCP tools (`spec-driven` server — 30 tools)
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
@@ -40,6 +40,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_backlog` | Planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` | Brownfield inventory: stack, frameworks, routes (method + path + file:line), tests, entrypoints, env var names, migrations |
 | `spec_coverage` | Brownfield: share of code files named in any `_Implements:_` marker, per folder, + unmatched markers |
+| `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, doctor fails/warns, pending gates, changed since approval, approvals without history, unverified tasks, drift, next step, `review` critic / converge / none, grouped blocked · attention · ok); `apply: true` saves inferred tracks, seeds pre-1.13 approval baselines (`.history/`), completes `.specs/.gitignore`, stamps `roadmap.json → meta.specVersion` and writes `.specs/UPGRADE.md` — never edits an artifact, approves or ticks |
 
 ## CLI (`dev-spec`, same engine, same behaviour)
 
@@ -48,7 +49,7 @@ result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1,
 `--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which
 `evals` forwards. `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
-unreadable state) exit 1, so they are scriptable.
+unreadable state) exit 1, so they are scriptable; `upgrade` exits 0 with its report, 1 only on an error.
 
 ```
 classify "<description>" [--name n]      init [tracks...] [--lang] [--guard on|off]
@@ -62,7 +63,7 @@ approve <feature> <phase> [--by NAME] [--force]
 impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]
 next-action|na <feature>                 finish <feature> [--write] [--include-body]
 append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared] [--parallel] [--heading "…"]
-metrics [feature] [--write]              catalog [--write] · drift [feature]
+metrics [feature] [--write]              catalog [--write] · drift [feature] · upgrade [--apply]
 add-track <feature> <track...> [--remove]
 feature <remove|archive|rename|restore> <name> [new] [--yes]
 roadmap [--write] [--html] [--lang]      depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]
@@ -80,7 +81,7 @@ absolute paths, to paste into another project; `mcp-config <client>` prints a re
 |---|---|---|
 | `hooks/guard-hook.js` | PreToolUse (Write/Edit/MultiEdit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks; silent otherwise |
 | `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → the active tracks' mandatory sections, Constitution Check, placeholders; any spec file → roadmap refresh |
-| `hooks/spec-hook.js` | SessionStart | One status line per feature, plus one line per finished feature whose implementing files drifted |
+| `hooks/spec-hook.js` | SessionStart | One status line per feature, plus one line per finished feature whose implementing files drifted, and one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`) |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references).
 
@@ -91,9 +92,10 @@ All artifacts live in `.specs/` at the project root:
 ```
 project-root/
 └── .specs/
-    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard)
+    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, specVersion)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
     ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
+    ├── UPGRADE.md                # generated upgrade checklist (spec_upgrade apply) — tick its boxes as you go
     ├── .gitignore                # ignores the transient files (.lock, .roadmap.lock, *.reclaim, a killed process's *.tmp, .removing-*/ tombstones) — commit it
     ├── steering/                 # shared project context (created per active tracks)
     │   ├── constitution.md       # core (always) — non-negotiable principles
@@ -151,7 +153,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (43 commands)
+## Command reference (44 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -159,6 +161,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard` (uses `spec_init`) |
 | `/spec-guard` | setup | Guard mode on/off: code edits ask while no feature has approved tasks (uses `spec_init {guard}`) |
 | `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
+| `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
 | `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |
 | `/createSpec` | 1 | Requirements in EARS with stable AC IDs (uses `ears_validate`) |
 | `/clarify` | 1 | Surface requirement ambiguities/gaps before design (uses `spec_clarify`) |

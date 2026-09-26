@@ -87,7 +87,7 @@ hand-rolled edits for the structural steps. Which tool when:
 - **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail) · `spec_next_action` (you are here, one ordered next step).
 - **Execute:** `spec_next_task` · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_drift` · `spec_metrics` · `spec_catalog`.
-- **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold`.
+- **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade` (after a plugin update).
 
 Full tool table: `references/tooling-reference.md`. The tools produce **skeletons and checks** (never
 overwriting your files); *you* fill them with real content from the `references/` templates. No MCP
@@ -148,6 +148,7 @@ All artifacts live in `.specs/` at the project root: `steering/` (shared context
 `prompts/` + `evals/` (+ai) and `load-test.md` (+saas); `integration-plan.md` (brownfield), `bug.md` (bugfix),
 `retro.md`, and `.history/` (approval snapshots — commit them). Generated in `.specs/`: `ROADMAP.md` and the
 living catalog `SPECS.md`. Annotated tree: `references/tooling-reference.md`.
+**An existing `.specs/` from an older dev-spec** (the session-start line says so): run `/spec-upgrade` first — audit → apply (after an OK) → review.
 
 ### Steering Files
 Before any spec work, read whatever exists in `.specs/steering/`. Steering depends on the tracks, so
@@ -473,6 +474,7 @@ Depth: `references/change-management.md`.
 | `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}`): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan; `spec_doctor` fails, the design approval (it signs off `bug.md`) is refused and every task after the root-cause task is refused until the root cause is written with evidence. After three failed fixes, question the design. | `references/bugfix.md` |
 | `/spec-finish` | Blockers (doctor fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, placeholders, a missing root cause) and warnings, the checks to run fresh, a merge title + summary built from the spec chain, and the drift baseline. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |
 | `/spec-impact` · `/spec-converge` · `/spec-drift` · `/spec-metrics` · `/spec-catalog` | Change requests, the AC-by-AC converge pass, drift since finish, metrics + retro, the living catalog (sections above). | `references/change-management.md` |
+| `/spec-upgrade` | After a plugin update: `spec_upgrade` audits every active feature against the current rules (status, what doctor flags, next step; review `critic` before any task is ticked, `converge` mid-execution); with an OK, `apply` saves inferred tracks, seeds pre-1.13 approval baselines, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec. | `references/change-management.md` |
 | `/spec-import` | A Kiro / spec-kit / OpenSpec spec → a NEW feature (IDs remapped, `mapping` + `warnings` shown); then Phase 0 track confirmation and the normal gates. | `references/brownfield.md` |
 | `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
 | `/spec-guard` | Opt-in guard mode (`spec_init {guard: true}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks; silent otherwise. | — |
@@ -487,7 +489,7 @@ Depth: `references/change-management.md`.
 
 **Local automation, not CI:** saving `requirements.md` lints EARS (and names leftover placeholders), saving
 `tasks.md` checks traceability, saving `design.md` checks the active tracks' mandatory sections and the
-Constitution Check; session start prints feature status plus a line per finished feature whose files drifted;
+Constitution Check; session start prints feature status plus a line per finished feature whose files drifted (and one when `.specs/` predates the plugin version);
 with guard mode on, a code edit asks first while no feature has approved, unfinished tasks; the optional `pre-commit` validator blocks
 staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`,
 `/guardian-scan`) and UI work to **ui-ux-pro-max** when present — route to them, don't duplicate them.
@@ -507,11 +509,11 @@ staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/
 - `references/classification-matrix.md` — track-routing brain (the decision procedure)
 - `references/classification-examples-saas.md` / `references/classification-examples-ai.md` — worked examples
 - `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration) + importing Kiro / spec-kit / OpenSpec specs
-- `references/change-management.md` — after approval: snapshots + approval history, `spec_impact` + reopen, `_Supersedes:_`, the SPECS.md catalog, drift, archive/restore, metrics
+- `references/change-management.md` — after approval: snapshots + approval history, `spec_impact` + reopen, `_Supersedes:_`, the SPECS.md catalog, drift, archive/restore, metrics, upgrading after a plugin update
 - `references/improvement-specs.md` — spec'ing internal-improvement work (the metric delta is the acceptance criterion; closes the dev-guardian loop)
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
 - `references/steering-templates.md` — all 9 steering-file templates + scoped steering (front matter inclusion modes, custom files)
-- `references/tooling-reference.md` — the 29 MCP tools, the CLI, the hooks, command table, annotated `.specs/` tree, roadmap generation, commit format
+- `references/tooling-reference.md` — the 30 MCP tools, the CLI, the hooks, command table, annotated `.specs/` tree, roadmap generation, commit format
 - `references/verification.md` — evidence before claims: the gate, `_Verify:_`, recorded evidence, unverified reason codes
 - `references/bugfix.md` — systematic debugging as a light spec (reproduce → root cause → regression test → fix)
 - `references/review-feedback.md` — handling review comments against the spec

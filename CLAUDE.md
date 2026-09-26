@@ -19,12 +19,12 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
 skills/.../references/          deep library, read on demand
-commands/*.md                  43 slash commands (thin wrappers that invoke the skill/MCP)
+commands/*.md                  44 slash commands (thin wrappers that invoke the skill/MCP)
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
 evals/                         plugin evals for `claude plugin eval` (triggering EN/PT/ES) — maintainer-side, results ignored
 mcp/server.js                  MCP stdio protocol (JSON-RPC 2.0, newline-delimited) + argument validation against each inputSchema
-mcp/lib/spec.js                ALL domain logic (classify, scaffold, lint, trace, doctor, gates, state, impact, catalog, drift, import, scan)
+mcp/lib/spec.js                ALL domain logic (classify, scaffold, lint, trace, doctor, gates, state, impact, catalog, drift, upgrade, import, scan)
 mcp/lib/i18n.js                ALL localized content EN/PT/ES (artifact + steering builders, tool/CLI/hook messages)
 mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry-run offline)
 mcp/test.js                    smoke test — `node mcp/test.js`
@@ -32,7 +32,7 @@ cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; a
 cli/test-cli.js                smoke test for the CLI — `node cli/test-cli.js` (never a top-level bin/, see below)
 hooks/hooks.json               PreToolUse → guard-hook.js · PostToolUse + SessionStart → spec-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks)
-hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status and drift line
+hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status, drift and upgrade lines
 hooks/precommit-check.js       optional git pre-commit validator
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
@@ -121,13 +121,13 @@ round-trip a PT and an ES scaffold through doctor green.
 `steering_scaffold` · `spec_roadmap` · `spec_backlog` · `spec_depend` · `spec_scan` ·
 `spec_coverage` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` ·
 `spec_task_brief` · `spec_finish` · `spec_import` · `spec_append_tasks` · `spec_impact` ·
-`spec_metrics` · `spec_catalog` · `spec_drift` (**29 total**; `mcp/test.js` asserts the exact count —
+`spec_metrics` · `spec_catalog` · `spec_drift` · `spec_upgrade` (**30 total**; `mcp/test.js` asserts the exact count —
 verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). The server is
 **tools-only** — it advertises `capabilities: { tools: { listChanged: false } }` and exposes no
 `resources`/`prompts`. All tools are pure-local file ops on `.specs/` (or a read-only codebase scan for
 brownfield / `trace --code` / import); none hit the network. Scaffolders never overwrite an existing file;
 mutators edit only what they own (checkboxes, appended tasks and track sections, `.state.json` /
-`roadmap.json`, generated `ROADMAP.*` / `SPECS.md`) and never rewrite spec prose. Roadmap/deps persist in
+`roadmap.json`, generated `ROADMAP.*` / `SPECS.md` / `UPGRADE.md`) and never rewrite spec prose. Roadmap/deps persist in
 `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
@@ -409,6 +409,43 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   backtracking regex. Custom names (`steering_scaffold`) must match `^[a-z0-9][a-z0-9-]{0,62}\.md$` and not be
   a Windows device name or a prototype key. Doctor's `steering` check warns about files still templates.
 
+## Upgrade (1.13) — `meta.specVersion` and `spec_upgrade`
+- **The engine's version** is `engineVersion()`: `package.json` two levels above `spec.js`, read once; not readable or not
+  x.y.z → `null`, and then nothing is stamped and no notice is shown (never a guessed version). Versions are compared by
+  `compareSemver()` — numerically (1.9.0 < 1.13.0), a pre-release before its release; never a string compare.
+- **`roadmap.json → meta.specVersion`** = the dev-spec version that last upgraded or created the project (`stampOf()`: a
+  string that parses, else absent). `stampSpecVersion()` writes it under the roadmap lock, never lowers it and never writes
+  over a broken roadmap.json. Three writers only: `spec_init` and `spec_create` when the project had NO feature before the
+  call (`featureDirs()` — active or archived — counted BEFORE anything is written; best-effort), and `spec_upgrade {apply}`
+  (last, and only once every feature migrated — a busy or broken feature keeps the notice until a retry). A brand-new
+  project must never get the upgrade notice; a legacy project must never be stamped by creating one feature or re-running init.
+- **SessionStart** adds ONE line (`msg.upgrade.hookLine`) while `specVersionStatus().behind` (no stamp, or an older one) —
+  roadmap.json is already read for the language; wrapped in try/catch. The PostToolUse hook treats `.specs/UPGRADE.md` as a
+  generated file (no roadmap refresh on its edits).
+- **The audit** (`specUpgrade`, default, read-only) reuses the engine's verdicts per ACTIVE feature (archived ones are counted
+  in `archived`): `specDoctor` once (`nextAction(…, {doctor})` reuses it — never run twice), `verificationStatus`,
+  `changedSinceApproval` (via next_action), the finish baseline (`baselineDrift`, `staleFinish` state-only). One test-code walk
+  for the whole call: `traceTestCode()` accepts a function for `scan`, called only when a feature needs it. Stable codes (never
+  localized): `status` not-started · planning · executing · complete · finished (= phase complete + a finish baseline),
+  `review` critic (no task ticked) · converge (some done, some open) · none, `group` blocked (doctor fail) · attention · ok,
+  `attention` codes, history skip `reason`s. `lines` (and UPGRADE.md) are rendered in the PROJECT language by
+  `upgradeLines()` / `renderUpgradeMd()` over one item list (`upgradeItems()`); next_action's recommendation stays in the
+  feature's language, as everywhere.
+- **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
+  `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` only when absent (`undefined` or `[]` — a
+  malformed list is left alone), the approvals whose latest version isn't in `approvalHistory` as `legacy` records
+  (`legacyRecord()`, the builder `approvePhase` seeds with), and for an approval WITHOUT a snapshot whose recorded fingerprint
+  still matches its artifact (`fingerprintMatches`) that artifact saved through `writeSnapshot()` (next free
+  `.history/<phase>@<n>.md`, never a renumber; a bugfix design approval's design.md too when its `designFingerprint` matches)
+  on that very record, stamped `seededAt`. Skipped with a stable reason: `no-fingerprint` (date-only), `changed`, `missing`,
+  `untracked` (a 1.12 bugfix design approval — `file` absent, so any fingerprint is design.md's), `snapshot-missing`. Then
+  `.specs/.gitignore` (`missingIgnoreLines()` computed BEFORE any lock — every lock ensures it), the stamp, a roadmap refresh,
+  the audit of the result and `.specs/UPGRADE.md` (the `RE_AUTOGEN` marker family, `isGeneratedOrAbsent` — a hand-written one
+  is reported, never overwritten). **Idempotent:** UPGRADE.md is written only when something migrated, and it carries no
+  date, so a second apply writes nothing at all and says so (`migrations.changed: false`).
+- CLI `dev-spec upgrade [--apply] [--json]` prints `lines`; exit 0 with a report, 1 on an error (no .specs/, a broken
+  roadmap.json, a feature that couldn't be migrated).
+
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
   never `path.join(specsRoot, slugify(name))`. An empty slug (non-Latin names, `...`, `undefined`)
@@ -677,9 +714,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(754 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(766 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 253 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 257 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 

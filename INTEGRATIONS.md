@@ -2,11 +2,11 @@
 
 The methodology travels through **three portable layers**, so it works far beyond Claude Code:
 
-1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 29
+1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 30
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
-   `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift`. They are plain local file operations,
-   so they behave the same in every client.
+   `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` — and `spec_upgrade` (after a plugin update). They are
+   plain local file operations, so they behave the same in every client.
 2. **Universal CLI** (`cli/dev-spec.js`) — the same engine from any terminal or tool, even without MCP.
 3. **Instructions files** — `AGENTS.md` (cross-tool) plus per-tool rule files, so the agent follows
    the workflow.
@@ -53,7 +53,7 @@ prints the config with that path already filled in for your machine.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 43 commands, the 3 agents, the hooks (PostToolUse + SessionStart, plus
+Native — it's a plugin. Skills, the 44 commands, the 3 agents, the hooks (PostToolUse + SessionStart, plus
 the opt-in PreToolUse guard) and the MCP server all load:
 
 ```bash
@@ -168,16 +168,31 @@ node "<PLUGIN>/cli/dev-spec.js" evals "Invoice Summary" --dry-run
 Optionally put it on PATH (`npm link` in this folder gives you a global `dev-spec`), then just
 `dev-spec classify "…"`. Run `dev-spec help` for the full command list.
 
+## Updating to a new version (every tool)
+
+`git pull` in your clone (a Claude Code marketplace install: `/plugin marketplace update dev-spec-driven-marketplace`),
+restart the tool or MCP client, then run the upgrade in each project that already has a `.specs/`:
+
+```bash
+node "<PLUGIN>/cli/dev-spec.js" upgrade           # the audit (read-only): every active feature against the new rules
+node "<PLUGIN>/cli/dev-spec.js" upgrade --apply   # after the user agrees: the safe migrations + .specs/UPGRADE.md
+```
+
+Over MCP it is `spec_upgrade {}` then `spec_upgrade {apply: true}`. Claude Code runs it as `/spec-upgrade`, and its
+session-start hook reminds you while `.specs/` comes from an older version; in other tools, run the audit yourself
+after each update. Apply never edits a spec, approves or ticks anything. The review the audit recommends (the critic
+for specs not implemented yet, the converge pass for half-done ones) runs inline where the tool has no subagents.
+
 ---
 
 ## What transfers where
 
 | Capability | Claude Code | Other MCP tools | CLI / any tool |
 |---|---|---|---|
-| Engine tools (classify, scaffold, doctor, trace, EARS, approval gates, evidence, impact, converge, import, catalog, drift, metrics) | ✅ MCP | ✅ MCP | ✅ CLI |
+| Engine tools (classify, scaffold, doctor, trace, EARS, approval gates, evidence, impact, converge, import, catalog, drift, metrics, upgrade) | ✅ MCP | ✅ MCP | ✅ CLI |
 | Workflow methodology | ✅ skill | ✅ `AGENTS.md` / rules file | ✅ `AGENTS.md` |
 | Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | — (use the CLI instead) | — (use the CLI) |
-| Hooks on save (EARS / traceability / design checks) + SessionStart status and drift line | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`) | ✅ git pre-commit |
+| Hooks on save (EARS / traceability / design checks) + SessionStart status, drift and upgrade lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`) | ✅ git pre-commit |
 | Guard mode (asks before code edits while no feature has approved tasks) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
 | Subagent execution (`/executeTask --subagents`) | ✅ | — (`dev-spec brief` per task, run inline) | — (`dev-spec brief`) |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
@@ -188,7 +203,7 @@ invocation surface differs. The one exception is guard mode: it is a Claude Code
 wired in `hooks/hooks.json`), so other tools can store the setting but only Claude Code asks before a code
 edit — elsewhere, follow the rule in `AGENTS.md` (no implementation before the tasks are approved).
 The PostToolUse and SessionStart hooks are Claude Code only too; everything they report is also
-available on demand through `dev-spec ears` / `trace` / `doctor` / `status` / `drift`.
+available on demand through `dev-spec ears` / `trace` / `doctor` / `status` / `drift` / `upgrade`.
 
 Two CLI helpers set up the other tools: `dev-spec mcp-config <client>` prints the MCP config with this
 clone's absolute path, and `dev-spec rules <tool>` prints the workflow rule file for your project (see

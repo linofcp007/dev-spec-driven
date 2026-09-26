@@ -36,7 +36,7 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 29 tools.
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 30 tools.
 
 Key operations (CLI form):
 
@@ -65,6 +65,7 @@ dev-spec add-track <feature> <track> [--remove]   # add a track (additive, never
 dev-spec feature <archive|restore|rename|remove> <name> [new-name] [--yes]   # lifecycle; remove is destructive and needs --yes
 dev-spec catalog [--write]                     # living catalog of every feature's ACs (_Supersedes:_ marks replaced ones) → .specs/SPECS.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
+dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
 dev-spec backlog [add|rm "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
@@ -136,6 +137,13 @@ next, `dev-spec next-action <feature>` names the single next step.
   files; `dev-spec drift` later reports the files changed, missing or new since then.
 - **Archive, don't delete.** `dev-spec feature archive` is reversible (`feature restore` brings back the
   roadmap entry and the dependencies archive pruned); `feature remove` deletes and needs `--yes`.
+- **After updating dev-spec-driven.** `git pull` the clone and restart your tool (or MCP client), then in each
+  project with an existing `.specs/` run `dev-spec upgrade` (MCP `spec_upgrade`): a read-only audit — per feature its
+  status, what the new rules flag, the next step and the review to run (the critic review for specs not implemented
+  yet, the converge pass for half-done ones). With the user's OK, `dev-spec upgrade --apply` saves inferred tracks,
+  gives pre-1.13 approvals a history baseline when the file still matches, stamps `meta.specVersion` in
+  `.specs/roadmap.json` and writes the checklist `.specs/UPGRADE.md`; it never edits a spec, approves or ticks
+  anything. Every fix it leads to still goes through the gates.
 
 ## Steering, import and guard mode
 
