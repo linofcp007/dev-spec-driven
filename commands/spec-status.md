@@ -7,7 +7,7 @@ Use the **dev-spec-driven** skill status workflow.
 
 Target: $ARGUMENTS
 
-If a feature name is given, run the `spec_status` MCP tool and report: active tracks, current
+If a feature name is given, run the `spec_status` MCP tool and report: the feature's kind and flow, active tracks, current
 phase, artifacts present, task progress (done/total, with each task's `verified` flag) and the next task,
 plus each active track's mandatory design sections — +saas / +ai / +sec (`secSections`) / +privacy
 (`privacySections`), each one **present** vs **filled** (the same rule `spec_doctor` uses) — and the +ai

@@ -59,14 +59,14 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
 | `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
-| `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present |
+| `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
 | `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run); `batch` for parallel `[P]` tasks |
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
 | `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones |
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `evidence` records the project checks' runs; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", phase by phase: re-review → fill → fix → approve (the next phase only after that approval) → implement → verify → finish (then finished / drift) |
-| `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot; `role` signs off for one role when the phase needs several, `through` fast-forwards every phase up to it, each through its own gate |
-| `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
+| `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot; `role` signs off as one of the roles `approvalRoles` lists for that phase (required there), `through` fast-forwards every phase up to it, each through its own gate |
+| `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`), or set its `flow` |
 | `spec_decide` | Append a decision (or a discovery) to the feature's `decisions.md` — `D-n`, with the ACs, tests or design sections it affects (checked) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
@@ -109,22 +109,25 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   while any fails. `force: true` (CLI `--force`) records it anyway as a **forced** approval with the
   failing checks, and `doctor` and the roadmap keep flagging it.
 - **A template is not content.** `doctor` has a `placeholders` check (it fails for the current and
-  earlier phases), a fresh feature starts at phase `requirements`, and `ears_validate` reports a
+  earlier phases), a fresh feature starts at its first phase (`requirements`; `design` on the design-first flow), and `ears_validate` reports a
   `placeholder` code. A bracket counts only when its text is one the templates write (or TODO / TBD / FIXME / `…`):
   real values such as `[free: 60, pro: 600]` or `[admin, billing-manager]` are your content.
 - **`next_action` goes phase by phase:** re-review → for the first phase not approved yet, fill → fix → approve (the
-  next phase only after that approval — the design is never asked for before the requirements are approved, and
+  next phase only after that approval — on the default flow the design is never asked for before the requirements are approved, and
   `approve` refuses a phase while an earlier one is unapproved) → implement → verify → finish. It never
   recommends an approval the gate would refuse; it names what the gate fails on instead — nor `spec_finish` while a
   ticked task is unverified (`verify` names it and its `dev-spec done <f> <n> --run`). On +tdd / +ai, Phase 4
   (failing tests / eval harness, `approve <f> tests`) is a gate it asks for before any task is implemented.
 - **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
-  command, exit code and output summary, and refuses the tick on a failure. A task with a runnable
-  `_Verify:_` counts as verified only with the command and exit code 0 — a text note ticks it but leaves
-  it unverified. Failed runs are kept in a short history, and a task reopened after a spec change has
-  **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
+  command, exit code and output summary. A task with a runnable `_Verify:_` counts as verified only with a
+  recorded run of it: a passing one — or, for a task marked `_Expect: fail_` (a red test, such as a bugfix's
+  task 3), a failing one (a passing run of it is refused: `unexpected-pass`); any other failure refuses the
+  tick. **Can't run the command yourself?** Don't tick — not bare, not with a note: name the command and ask
+  for its output (or `dev-spec done <feature> <n> --run`); a note-only tick stays unverified and is for when
+  the user explicitly asks for one. Failed runs are kept in a short history, and a task reopened after a spec
+  change has **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
   (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
-  `stale-evidence`, `no-evidence`); `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
+  `stale-evidence`, `unexpected-pass`, `no-evidence`); `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
@@ -165,7 +168,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   `.specs/SPECS.md` (never over a hand-written file), refreshed with the roadmap from then on.
 - **`/spec-drift`** (`spec_drift`) — `spec_finish` with `write` on a ready feature records a hash of every
   file its `_Implements:_` markers name; drift reports the files changed, missing or new since then. The
-  SessionStart hook adds one line per drifted feature.
+  SessionStart hook adds one line per drifted active feature.
 - **Restore** — `spec_feature archive` records the dependencies it prunes, and `restore` brings the
   feature back with its roadmap entry and those dependencies.
 
@@ -387,14 +390,14 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
 | `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
-| `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes |
+| `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
 | `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha); `batch` para tarefas paralelas `[P]` |
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
 | `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes |
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `evidence` regista as execuções das verificações do projeto; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", fase a fase: rever → preencher → corrigir → aprovar (a fase seguinte só depois dessa aprovação) → implementar → verificar → fechar (depois fechada / deriva) |
-| `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot; `role` aprova por um papel quando a fase precisa de vários, `through` avança todas as fases até essa, cada uma pelo seu gate |
-| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
+| `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot; `role` valida como um dos papéis que o `approvalRoles` indica para essa fase (obrigatório aí), `through` avança todas as fases até essa, cada uma pelo seu gate |
+| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`), ou define o seu `flow` |
 | `spec_decide` | Acrescenta uma decisão (ou uma descoberta) ao `decisions.md` da funcionalidade — `D-n`, com os ACs, testes ou secções do design que afeta (verificados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
@@ -426,7 +429,8 @@ envia o diff ao agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID 
 track), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
 uma história, para em cada `**Checkpoint:**` para a tua revisão e nunca muda um AC, o design ou um teste sem
 voltar a essa fase. Gasta cerca de 2–3× os tokens da execução inline, por isso compensa em funcionalidades
-com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/subagent-execution.md`.
+com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/subagent-execution.md`. Adaptado da
+skill `subagent-driven-development` do [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Gates e evidência
 
@@ -436,22 +440,25 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   bloqueios do `spec_finish`) e recusa enquanto alguma falhar. `force: true` (CLI `--force`) regista-a na mesma como aprovação
   **forçada**, com as verificações que falharam, e o `doctor` e o roadmap continuam a assinalá-la.
 - **Um template não é conteúdo.** O `doctor` tem a verificação `placeholders` (falha na fase atual e nas
-  anteriores), uma funcionalidade nova começa na fase `requirements` e o `ears_validate` reporta o código
+  anteriores), uma funcionalidade nova começa na sua primeira fase (`requirements`; `design` no fluxo design-first) e o `ears_validate` reporta o código
   `placeholder`. Um parêntese reto só conta quando o texto é um dos que os templates escrevem (ou TODO / TBD / FIXME /
   `…`): valores reais como `[free: 60, pro: 600]` ou `[admin, billing-manager]` são conteúdo teu.
 - **O `next_action` avança fase a fase:** rever → na primeira fase ainda por aprovar, preencher → corrigir → aprovar (a
-  fase seguinte só depois dessa aprovação — nunca pede o design antes de os requisitos estarem aprovados, e o `approve`
+  fase seguinte só depois dessa aprovação — no fluxo por omissão nunca pede o design antes de os requisitos estarem aprovados, e o `approve`
   recusa uma fase enquanto uma anterior estiver por aprovar) → implementar → verificar → fechar. Nunca
   recomenda uma aprovação que o gate recusaria; em vez disso, diz em que falha — nem o `spec_finish` enquanto houver
   uma tarefa marcada por verificar (o passo `verify` nomeia-a com o seu `dev-spec done <f> <n> --run`). Em +tdd / +ai, a Fase 4
   (testes a falhar / harness de evals, `approve <f> tests`) é um gate que pede antes de implementar qualquer tarefa.
 - **Evidência antes de afirmações.** As tarefas declaram `_Verify: <comando>_`; `spec_complete_task` regista
-  o comando, o código de saída e um resumo, e recusa a marcação quando falha. Uma tarefa com um `_Verify:_`
-  executável só fica verificada com o comando e o código de saída 0 — uma nota de texto marca-a, mas deixa-a
-  por verificar. As execuções falhadas ficam num histórico curto, e uma tarefa reaberta depois de uma
-  alteração à spec fica com evidência **desatualizada** até voltar a correr. O `spec_complete_task` devolve um
-  código de motivo estável (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`,
-  `duplicate-number`, `stale-evidence`, `no-evidence`); o `doctor`, o `spec_finish` e a linha "Precisa de
+  o comando, o código de saída e um resumo. Uma tarefa com um `_Verify:_` executável só fica verificada com uma
+  execução registada: uma que passe — ou, numa tarefa marcada `_Expect: fail_` (um teste vermelho, como a tarefa 3
+  de um bugfix), uma que falhe (uma que passe é recusada: `unexpected-pass`); qualquer outra falha recusa a
+  marcação. **Não consegues correr o comando?** Não marques a tarefa — nem sem nada, nem com uma nota: indica o
+  comando e pede o output (ou `dev-spec done <feature> <n> --run`); uma marcação só com nota fica por verificar e é
+  para quando o utilizador a pede explicitamente. As execuções falhadas ficam num histórico curto, e uma tarefa
+  reaberta depois de uma alteração à spec fica com evidência **desatualizada** até voltar a correr. O
+  `spec_complete_task` devolve um código de motivo estável (`unverifiedReason`: `failed-run`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); o `doctor`, o `spec_finish` e a linha "Precisa de
   atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo. CLI:
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
@@ -463,6 +470,11 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   branch — sem pull requests, sem CI.
 - **`/spec-review-feedback`** — comentários de revisão avaliados contra a spec. **`/spec-doctor --deep`** —
   o agente `spec-critic` revê o *significado* da spec no respetivo gate.
+- **Modo bounded** entre Vibe e Spec (design curto no chat + um sim explícito), **Restrições Globais** incluídas em
+  cada brief de tarefa, **tarefas `[P]` em paralelo** em worktrees separadas e **evals do plugin** (`evals/`,
+  `claude plugin eval`) que verificam que a skill dispara em EN/PT/ES — e, na suite de comportamento, que o agente
+  respeita depois o fluxo (planeia primeiro, regista evidência, nunca força um gate). Ideias adaptadas do
+  [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Gestão de alterações
 
@@ -487,7 +499,7 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   gera `.specs/SPECS.md` (nunca por cima de um ficheiro escrito à mão), atualizado com o roadmap a partir daí.
 - **`/spec-drift`** (`spec_drift`) — o `spec_finish` com `write` numa funcionalidade pronta regista um hash de
   cada ficheiro indicado nos marcadores `_Implements:_`; o drift reporta os ficheiros alterados, em falta ou
-  novos desde então. O hook de SessionStart acrescenta uma linha por cada funcionalidade com drift.
+  novos desde então. O hook de SessionStart acrescenta uma linha por cada funcionalidade ativa com drift.
 - **Restauro** — `spec_feature archive` regista as dependências que remove, e `restore` traz a
   funcionalidade de volta com a entrada no roadmap e essas dependências.
 
@@ -719,14 +731,14 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
-| `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes |
+| `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
 | `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla); `batch` para tareas paralelas `[P]` |
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
 | `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes |
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `evidence` registra las ejecuciones de las comprobaciones del proyecto; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", fase a fase: revisar → completar → corregir → aprobar (la fase siguiente solo tras esa aprobación) → implementar → verificar → cerrar (después cerrada / deriva) |
-| `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot; `role` aprueba por un rol cuando la fase necesita varios, `through` avanza todas las fases hasta esa, cada una por su gate |
-| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
+| `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot; `role` valida como uno de los roles que `approvalRoles` indica para esa fase (obligatorio ahí), `through` avanza todas las fases hasta esa, cada una por su gate |
+| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`), o fija su `flow` |
 | `spec_decide` | Añade una decisión (o un descubrimiento) al `decisions.md` de la función — `D-n`, con los ACs, pruebas o secciones del diseño que afecta (comprobados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
@@ -759,7 +771,8 @@ comprobaciones del track), hace un ciclo de correcciones de como máximo 5 ronda
 tarea. Avanza solo dentro de una historia, se detiene en cada `**Checkpoint:**` para tu revisión y nunca
 cambia un AC, el diseño o una prueba sin volver a esa fase. Usa unas 2–3× los tokens de la ejecución inline,
 así que compensa en funciones con ~6+ tareas independientes. Protocolo:
-`skills/dev-spec-driven/references/subagent-execution.md`.
+`skills/dev-spec-driven/references/subagent-execution.md`. Adaptado de la skill `subagent-driven-development` de
+[obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Gates y evidencia
 
@@ -770,22 +783,25 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   como aprobación **forzada**, con las comprobaciones que fallaron, y el `doctor` y la hoja de ruta siguen
   señalándola.
 - **Una plantilla no es contenido.** El `doctor` tiene la comprobación `placeholders` (falla en la fase
-  actual y en las anteriores), una función nueva empieza en la fase `requirements` y `ears_validate` informa
+  actual y en las anteriores), una función nueva empieza en su primera fase (`requirements`; `design` en el flujo design-first) y `ears_validate` informa
   del código `placeholder`. Un corchete solo cuenta cuando su texto es uno de los que escriben las plantillas (o TODO /
   TBD / FIXME / `…`): valores reales como `[free: 60, pro: 600]` o `[admin, billing-manager]` son tu contenido.
 - **`next_action` avanza fase a fase:** revisar → en la primera fase aún sin aprobar, completar → corregir → aprobar
-  (la fase siguiente solo tras esa aprobación — nunca pide el diseño antes de que los requisitos estén aprobados, y
+  (la fase siguiente solo tras esa aprobación — en el flujo por defecto nunca pide el diseño antes de que los requisitos estén aprobados, y
   `approve` rechaza una fase mientras una anterior siga sin aprobar) → implementar → verificar → cerrar. Nunca
   recomienda una aprobación que el gate rechazaría; en su lugar, dice en qué falla — ni `spec_finish` mientras haya
   una tarea marcada sin verificar (el paso `verify` la nombra con su `dev-spec done <f> <n> --run`). En +tdd / +ai, la Fase 4
   (pruebas en rojo / harness de evals, `approve <f> tests`) es un gate que pide antes de implementar ninguna tarea.
 - **Evidencia antes que afirmaciones.** Las tareas declaran `_Verify: <comando>_`; `spec_complete_task`
-  registra el comando, el código de salida y un resumen, y rechaza la marca si falla. Una tarea con un
-  `_Verify:_` ejecutable solo queda verificada con el comando y el código de salida 0 — una nota de texto la
-  marca, pero la deja sin verificar. Las ejecuciones fallidas quedan en un historial corto, y una tarea
-  reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
+  registra el comando, el código de salida y un resumen. Una tarea con un `_Verify:_` ejecutable solo queda
+  verificada con una ejecución registrada: una que pase — o, en una tarea marcada `_Expect: fail_` (una prueba en
+  rojo, como la tarea 3 de un bugfix), una que falle (una que pase se rechaza: `unexpected-pass`); cualquier otro
+  fallo rechaza la marca. **¿No puedes ejecutar el comando?** No marques la tarea — ni sin nada, ni con una nota:
+  indica el comando y pide su salida (o `dev-spec done <feature> <n> --run`); una marca solo con nota queda sin
+  verificar y es para cuando el usuario la pide explícitamente. Las ejecuciones fallidas quedan en un historial
+  corto, y una tarea reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
   `spec_complete_task` devuelve un código de motivo estable (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`); el `doctor`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); el `doctor`,
   `spec_finish` y la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
@@ -797,6 +813,11 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   sin pull requests, sin CI.
 - **`/spec-review-feedback`** — comentarios de revisión evaluados contra la spec. **`/spec-doctor --deep`** —
   el agente `spec-critic` revisa el *significado* de la spec en su gate.
+- **Modo bounded** entre Vibe y Spec (diseño corto en el chat + un sí explícito), **Restricciones Globales**
+  incluidas en cada brief de tarea, **tareas `[P]` en paralelo** en worktrees separados y **evals del plugin**
+  (`evals/`, `claude plugin eval`) que comprueban que la skill se activa en EN/PT/ES — y, en la suite de
+  comportamiento, que el agente respeta después el flujo (planifica primero, registra evidencia, nunca fuerza un
+  gate). Ideas adaptadas de [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Gestión de cambios
 
@@ -823,7 +844,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   entonces.
 - **`/spec-drift`** (`spec_drift`) — `spec_finish` con `write` en una función lista registra un hash de cada
   archivo nombrado en sus marcadores `_Implements:_`; el drift informa de los archivos cambiados, ausentes o
-  nuevos desde entonces. El hook de SessionStart añade una línea por cada función con drift.
+  nuevos desde entonces. El hook de SessionStart añade una línea por cada función activa con drift.
 - **Restauración** — `spec_feature archive` registra las dependencias que elimina, y `restore` devuelve la
   función con su entrada en la hoja de ruta y esas dependencias.
 

@@ -64,7 +64,8 @@ ask the user to run the test and paste the red output — don't write the fix on
 - **Stale evidence.** `spec_impact --reopen` (the spec the run proved changed) marks a task's evidence stale, and a
   run recorded for an earlier `_Verify:_` command no longer proves the task: run the check again.
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
-  and records the evidence; any failure leaves the task open, is recorded, and exits 1. `--shell bash` (or
+  and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
+  task, where the failing run is the proof and a passing one is refused). `--shell bash` (or
   `DEV_SPEC_SHELL`) picks the shell. On Windows the default shell is cmd.exe, which has no single quotes and never
   expands `$VAR` — `node -e 'process.exit(1)'` exits 0 there — so a `_Verify:_` in POSIX syntax is refused before
   anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. A failed run
@@ -155,9 +156,10 @@ The plugin's **Stop** hook reads your closing message. When it **claims** the wo
 tasks without verification evidence — or, every task done, project checks without a passing run — it sends the turn
 back with the reason: which feature, which tasks and why (`#3 (latest run failed)`), and what to do. It never fires on
 a question, a negated or conditional claim ("not verified yet", "once the tests pass"), quoted or code text, or an
-honest admission ("task 3 is not verified", "2 failing") — the right answer is to run the check
-(`dev-spec done <f> <n> --run`), record the evidence, or **say plainly what is not verified**; never reword a claim
-to slip past it.
+honest admission ("task 3 is not verified", "2 failing") — the right answer is to read the task's `_Verify:_` in
+tasks.md, run it if it is safe to run, record the evidence, or **say plainly what is not verified**; never reword a
+claim to slip past it. "Active" means activity the engine recorded (ticks, evidence) — never a file date, so a fresh
+clone of someone else's repo doesn't trip it — and the reason never hands you a `--run` command to execute blindly.
 
 - **SubagentStop** (the `spec-implementer` agent only): its DONE is checked against its report — the report file
   `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each runnable `_Verify:_` command of the

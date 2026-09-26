@@ -106,6 +106,13 @@ Exit code 0 = every case at the threshold (default: all runs pass). Results land
 Reference runs (default model, `-j 3`):
 
 - triggering, 2026-09-24, CLI 2.1.282, before the near-miss cases were added: **5/5 cases at 1.0 (15 runs), $1.71**;
+- **1.14.0 release check, 2026-09-26** (CLI 2.1.282, Windows, no shell): triggering **9/9 at 1.0** (27 runs, $3.58) with
+  the new description (bug reports in EN/PT/ES); behavioural — plan-first, gate-refused, upgrade-audit and
+  evidence-recorded at 1.0 in the full run ($2.94). `behavior-evidence-no-bare-tick-en` was still **0/2** after the skill
+  fix: the traces showed the agent calling `spec_complete_task` straight from ToolSearch, never loading the skill — the
+  rule now also opens the tool's description and the MCP `initialize` instructions → **2/2** ($0.60).
+  `behavior-bugfix-root-cause-pt` went 1/2 (a run fixed the bug directly, no skill) → **2/2** once the description named
+  bug reports ($1.33); `behavior-finish-local-merge-en` 1/2 (a judge vote) → 2/2 on a re-run ($0.67).
 - behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
   for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
   (1 run each, $1.63) where it tells something:

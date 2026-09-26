@@ -63,7 +63,7 @@ dev-spec trace <feature> [--code]              # AC ↔ task ↔ test ↔ code (
 dev-spec next <feature> [--batch]              # next task (--batch: + the [P] tasks that can run beside it)
 dev-spec next-action <feature>                 # "you are here → do this next", phase by phase: re-review → fill → fix → approve (then the next phase) → implement → verify → finish
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
-dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
+dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open; an _Expect: fail_ task: its failing run is the proof)
 dev-spec approve <feature> <phase> [--force] [--role <role>]   # record an approval gate — refused while that phase's checks fail
 dev-spec approve <feature> --through tasks     # fast-forward: every filled phase in order, each through its own gate; stops at the first refusal
 dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
@@ -120,13 +120,17 @@ next, `dev-spec next-action <feature>` names the single next step.
   the missing role. `approve <f> --through tasks` approves the filled phases in order, each through its own gate, and
   stops at the first refusal — only when the user asked for it.
 - **A template is not content.** `doctor`'s `placeholders` check fails while the current (or an earlier)
-  phase's artifact still holds template placeholders; a fresh feature starts at phase `requirements`.
-- **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with
-  that command and exit code 0. A note ticks it but leaves it unverified; a failed run is recorded and
+  phase's artifact still holds template placeholders; a fresh feature starts at its first phase (`requirements`; `design`
+  on the design-first flow).
+- **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with a recorded
+  run of it: exit code 0 — or, on an `_Expect: fail_` task (a red test, such as a bugfix's task 3), a failing run (see
+  Red → green). **Can't run the command yourself?** Don't tick the task — not bare, not with a note: name the command
+  and ask the user for its output (or to run `dev-spec done <feature> <n> --run`), then record what they report; a
+  note-only tick (it stays unverified) is for when the user explicitly asks for one. A failed run is recorded and
   keeps the task unverified until a later passing run; evidence goes stale when the spec behind the
   task changes (`impact --reopen`) or its `_Verify:_` command is edited. `done --json` (MCP
   `spec_complete_task`) returns a stable reason code in `unverifiedReason` (`no-evidence`, `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`) whenever `verified` is false;
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`) whenever `verified` is false;
   `doctor`, `finish` and the `ROADMAP.md` "Needs attention" line list each unverified task with a localized
   reason. A task with no runnable `_Verify:_` and nothing recorded comes back `verified: true` with
   `nothingToVerify: true` — the same verdict doctor gives; a note records how it was checked.
@@ -205,14 +209,16 @@ next, `dev-spec next-action <feature>` names the single next step.
   implementation before the tasks are approved, and no code outside the plan without a converge task.
 - **Alongside superpowers.** If the superpowers skills are installed in your tool too, this workflow replaces
   their planning, TDD, debugging, execution, verification, review and branch-finishing skills for feature work.
-  Put the precedence block from `commands/spec-superpowers.md` into your rules / `AGENTS.md` to make it stick.
+  Put the precedence block of the `spec-superpowers` command (`dev-spec prompts spec-superpowers` prints it) into your
+  tool's rules file or your project's instructions file to make it stick.
 
 ## Non-negotiables
 
 - **No implementation without approval** at each gate.
 - **Traceability end-to-end**: code → tasks → (tests/evals) → design → requirements → need.
 - **Mandatory track sections are mandatory** — an honest "not needed because X" is fine; blank is not.
-- **Evidence before claims** — a task is done when its `_Verify:_` run passed, not when someone says so.
+- **Evidence before claims** — a task is done when its `_Verify:_` run is on record (passed; for an `_Expect: fail_`
+  task, failed before the fix), not when someone says so. No run you can see → don't tick; ask for the output.
 - **Everything is local. No GitHub Actions, no paid CI, no pull requests** — integrate by merging locally. Tests/load/evals run in the user's own env.
 
 See `skills/dev-spec-driven/references/` for EARS, scale, eval, safety, and prompt-engineering guides.

@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.14.0] — 2026-09-27
+## [1.14.0] — 2026-09-26
 
 Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project
 templates, a stakeholder export and release notes, approvals by role and a fast-forward, roadmap forecasts, red → green
@@ -19,7 +19,7 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   Transfers, DPIA), task blocks, test rows, checklist items and the steering stubs `security.md` / `privacy.md`
   (EN/PT/ES). Doctor checks `sec-sections` / `privacy-sections`, the design gate refuses them unfilled, `spec_finish`
   lists their fresh checks, and a task proving one of their criteria gets those design sections in its brief. The
-  classifier has EN/PT/ES strong, weak and corroborating signals for both. New references: `security-track.md` (STRIDE,
+  classifier has EN/PT/ES strong and weak signals for both (+sec also a corroborating-only tier). New references: `security-track.md` (STRIDE,
   ASVS, OWASP Top 10, abuse cases, local security testing) and `privacy-track.md` (GDPR, CNPD, Lei 58/2019 — not legal
   advice).
 - **MCP prompts and resources.** The server was tools-only; it now also serves one prompt per plugin command
@@ -137,6 +137,17 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   `cmd /c` are flagged, a Windows path ending in `\` before the closing quote no longer hides the pipe); the export's
   approvals table flags a change by content only and shows a `## US-n` story once; classify is back to its 1.13 cost
   (a literal precheck before compiling ~300 keyword regexes).
+- Final adversarial review (each with a regression test): the **Stop gate** counts only activity the engine recorded
+  (a fresh clone's tasks.md date or a future stamp in a committed `.state.json` made it fire on unrelated work) and its
+  reason never hands the agent a `--run` command — it names the `_Verify:_` / `meta.checks` to read, run only if safe,
+  and record; `spec_decide` refuses a `decisions.md` that is a symlink, and export / changelog / catalog never copy a
+  linked artifact out of `.specs/`; the pt-BR transform leaves a text holding its private-use sentinels as it is (a
+  planted one grew the string until the heap ran out); the overlap check, the `_Verify:_` lexer and the export's inline
+  markdown are bounded (they were quadratic); an exit-127 re-run of an `_Expect: fail_` task keeps its red proof; a
+  re-finish keeps `finished.firstAt` (release notes no longer list a shipped feature again) and a zone-less `since` is
+  UTC; a blank plan imports nothing; CLI `decide` keeps repeated `--affects` / `--supersedes` and honours `--kind`,
+  `spike` passes `--flow`, `approve --through` labels a forced step in the feature's language; pt-BR keeps descriptive
+  verbs descriptive ("que faz T-01 passar", "segue") and says "gerado em <data>".
 
 ### Changed (heads-up)
 - **GDPR / RGPD / HIPAA now point to `+privacy`**, not `+saas` (classifier and classification matrix). Stored tracks
@@ -160,13 +171,13 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   tool and ticking with a "no shell, not run" note. The skill's description names bug reports (EN/PT/ES triggers) and
   the +sec / +privacy tracks.
 - `spec_status` returns the feature's `kind` (feature · bugfix · spike) and `flow` (requirements-first ·
-  design-first), like the `spec_list` rows; the task brief's reply line asks the implementer for the report path
+  design-first; `spec_list` rows name `flow` only when design-first); the task brief's reply line asks the implementer for the report path
   (the SubagentStop gate finds its evidence through it).
 - `initialize` advertises `prompts` and `resources` besides `tools`; `spec_import`'s `tool` gains `plan` · `execplan` ·
   `bmad`, `spec_create`'s `kind` gains `spike`, `spec_feature`'s `action` gains `flow`.
 
 ### Tests
-- `node mcp/test.js` 1037 assertions (was 766), `node cli/test-cli.js` 341 (was 257); the README tool tables are
+- `node mcp/test.js` 1067 assertions (was 766), `node cli/test-cli.js` 353 (was 257); the README tool tables are
   checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
   (`npm run test:docker`).
 
