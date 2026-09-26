@@ -6523,6 +6523,9 @@ function renderBrief(d, lang) {
 // byte-identical (mcp/test.js lints every pt-BR string for both). Known limits: GDPR vocabulary stays GDPR (no LGPD
 // mapping — the +privacy track cites GDPR articles), "pedido" (request) is kept, and the imperative rule can only see a
 // clause start — an imperative in the middle of a sentence is left as the European form.
+// WHEN YOU ADD OR EDIT A pt STRING, read its Brazilian twin once: node -e "console.log(require('./mcp/lib/i18n.js').toPtBr('…'))".
+// A clause-start 3rd person read as an order ("— liberta o nome" → "libere") goes into RE_PTBR_NOT_IMPERATIVE; a word the
+// maps miss into PTBR_WORDS / PTBR_PHRASES; anything else into PTBR_OVERRIDES. mcp/test.js (pD1) lints every string.
 // ===========================================================================
 const PTBR_KEEP = "\uE000", PTBR_END = "\uE001"; // private-use sentinels around a protected segment's index
 const PTBR_W = "\\p{L}\\p{N}_"; // word characters
@@ -6755,7 +6758,7 @@ function ptbrRes() {
     gerund: new RegExp(`(?<![${PTBR_W}\\-])(a)[ \\t]+(${[...PTBR_GERUND_VERBS].map(ptbrEscape).join("|")})(?![${PTBR_W}\\-])`, "giu"),
     green: new RegExp(`(?<![${PTBR_W}\\-])(${Object.keys(PTBR_GREEN_VERB).join("|")})[ \\t]+((?:[^\\s.,;:!?—]+[ \\t]+){0,4}?)a[ \\t]+verde(?![${PTBR_W}])`, "giu"),
     greenLeft: new RegExp(`(?<![${PTBR_W}\\-])(?:([\\p{L}-]*[sS])[ \\t]+)?a[ \\t]+(verde|vermelho)(?![${PTBR_W}])`, "gu"),
-    onDate: new RegExp(`(?<![${PTBR_W}\\-])(fechad[oa]s?|criad[oa]s?|terminou|terminad[oa]|pelo dev-spec)[ \\t]+a[ \\t]+(?=${PTBR_KEEP})`, "giu"),
+    onDate: new RegExp(`(?<![${PTBR_W}\\-])(fechad[oa]s?|criad[oa]s?|terminou|terminad[oa]|pelo dev-spec)[ \\t]+a[ \\t]+(?=${PTBR_KEEP}|\\d{4}-\\d{2}-\\d{2})`, "giu"), // a masked arg or an ISO date
     tooMuch: new RegExp(`(?<![${PTBR_W}\\-])demasiad(o|a|os|as)[ \\t]+([\\p{L}]+)(?![${PTBR_W}\\-])`, "giu"),
     why: new RegExp(`(?<![${PTBR_W}\\-])(o[ \\t]+)?(porquê)(?![${PTBR_W}])([ \\t]*)(?=([\\p{L}\\[]?))`, "giu"),
   });
@@ -6920,7 +6923,8 @@ function ptbrArgStrings(args) {
   const out = new Set();
   const walk = (v, depth) => {
     if (out.size > 400 || depth > 4) return;
-    if (typeof v === "string") { if (v.length >= 3 && /\p{L}/u.test(v)) out.add(v); return; }
+    // two letters and up (masking is whole-word: a feature slug 'tu' stays 'tu'; a lone "a" / "o" would block the grammar rules)
+    if (typeof v === "string") { if (v.length >= 2 && /\p{L}/u.test(v)) out.add(v); return; }
     if (Array.isArray(v)) { for (const x of v.slice(0, 400)) walk(x, depth + 1); return; }
     if (v && typeof v === "object" && !(v instanceof RegExp)) for (const k of Object.keys(v).slice(0, 200)) walk(v[k], depth + 1);
   };

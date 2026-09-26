@@ -1700,7 +1700,7 @@ let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
   const word = (src) => new RegExp("(?<![\\p{L}\\p{N}_])(?:" + src + ")(?![\\p{L}\\p{N}_])", "gimu");
-  const all = (k) => i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []);
+  const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
   STOP_PATTERNS = {
     claims: all("claims").map(word),
     admissions: all("admissions").map(word),

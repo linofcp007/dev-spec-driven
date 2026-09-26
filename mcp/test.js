@@ -560,6 +560,8 @@ function endRun() {
       "pD1: pt stays European Portuguese (Histórias de Utilizador, 'Preenche … volta a correr'), pt-BR is its Brazilian twin ('Preencha … volte a executar')");
     // the caller's own strings (feature names, paths) are never transformed; a track name never masks part of a word
     ok(I.msg("pt-BR").addTrackNote("sec", "registo-de-utilizadores") === "+sec adicionado. Preencha as novas seções de design e volte a executar /spec-doctor registo-de-utilizadores." &&
+      I.msg("pt-BR").addTrackNote("ai", "tu").endsWith("/spec-doctor tu.") &&
+      I.msg("pt-BR").spike.doctor.timeboxPassed("2026-09-01").startsWith("o timebox terminou em 2026-09-01 e não há decisão registrada — decida com a evidência que você tem") &&
       I.toPtBr("O utilizador guarda o ficheiro `src/ficheiro.js` em .specs/utilizador/ — corre `npm test` e regista o resultado.") ===
       "O usuário guarda o arquivo `src/ficheiro.js` em .specs/utilizador/ — execute `npm test` e registre o resultado.",
       "pD1: arguments, code spans and paths are kept verbatim; mid-sentence 3rd person vs clause-start imperative (corre → execute, regista → registre)");
