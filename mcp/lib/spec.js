@@ -493,6 +493,25 @@ function withReadCache(fn) {
 const readCacheKey = (p) => { const r = path.resolve(String(p)); return FOLD_CASE ? r.toLowerCase() : r; };
 const EXISTS_KEY = "\u0000exists:";
 const DIR_KEY = "\u0000dir:";
+// A spec file whose CONTENT is copied out — decisions.md (appended and rewritten), the export's documents, the release notes —
+// must be a regular file whose real path stays inside the project's .specs/: a committed symlink out (decisions.md ->
+// ~/.ssh/id_rsa) is never followed (the specs:// resources refuse it the same way). Absent → true (nothing to follow).
+function specsFileContained(projectDir, file) {
+  let st;
+  try { st = fs.lstatSync(file); } catch { return true; }
+  if (st.isSymbolicLink() || !st.isFile()) return false;
+  try {
+    const realRoot = fs.realpathSync.native(specsRoot(projectDir));
+    const real = fs.realpathSync.native(file);
+    return real !== realRoot && withinRoot(realRoot, real);
+  } catch {
+    return false;
+  }
+}
+// readIfExists for such a file: null when it is not contained (skipped, as if absent).
+function readContained(projectDir, file) {
+  return specsFileContained(projectDir, file) ? readIfExists(file) : null;
+}
 function readIfExists(file) {
   const k = READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
@@ -1746,10 +1765,13 @@ function stopClaims(message) {
   return { claim: found.length > 0, admitted, claims: [...new Set(found)] };
 }
 // The feature's last activity (ms, or null): lastTickAt, every ticks[n], every evidence record's run / note time (history and
-// the records kept aside under `others` included) and tasks.md's modification time — a box ticked by hand leaves no stamp.
-function stopActivity(state, tasksFile) {
+// the records kept aside under `others` included) — only what the engine RECORDED. Never a file date: a fresh clone stamps
+// every tasks.md "now", and a repo someone else wrote then made the gate fire on unrelated work and hand the agent that repo's
+// _Verify:_ commands. A stamp in the future (a committed .state.json can hold any date) is ignored.
+function stopActivity(state) {
   let best = null;
-  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && (best == null || t > best)) best = t; };
+  const horizon = Date.now() + 5 * 60 * 1000; // clock skew tolerated
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t <= horizon && (best == null || t > best)) best = t; };
   see(state.lastTickAt);
   if (isRecord(state.ticks)) Object.values(state.ticks).forEach(see);
   for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
@@ -1759,7 +1781,6 @@ function stopActivity(state, tasksFile) {
       (Array.isArray(r.history) ? r.history : []).forEach((h) => { if (isRecord(h)) see(h.at); });
     }
   }
-  try { const t = fs.statSync(tasksFile).mtimeMs; if (best == null || t > best) best = t; } catch { /* no tasks.md */ }
   return best;
 }
 // One unverified task as the reason lists it: "#3 (latest run failed)".
@@ -1798,7 +1819,7 @@ function stopCheck(projectDir, opts = {}) {
     const tasksFile = path.join(f.dir, "tasks.md");
     const state = readState(pdir, f.slug);
     if (state.invalid) continue; // unreadable state: never block on it (doctor reports it)
-    const last = stopActivity(state, tasksFile);
+    const last = stopActivity(state);
     if (last == null || last < since) continue;
     const tracks = detectTracks(f.dir);
     const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
@@ -3116,7 +3137,12 @@ function completeTask(projectDir, name, number, evidence) {
   const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup)) : null;
   // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
   // pass after the red run: a plain passing run that keeps the red run as the record's proof (recordEvidence).
-  if (xf && ev && ev.exitCode != null) { if (xf.passAfterRed) ev.keepRed = true; else ev.expected = "fail"; }
+  // Any run that is not itself the red proof (a pass after it, a could-not-run exit, a refused pass) carries the red run on
+  // record forward: one exit 127 used to drop it, and every later (fixed, passing) run was then refused as unexpected-pass.
+  if (xf && ev && ev.exitCode != null) {
+    if (xf.passAfterRed) ev.keepRed = true;
+    else { ev.expected = "fail"; if (!xf.red) ev.keepRed = true; }
+  }
   const failed = !!ev && ev.exitCode != null && (xf ? xf.refused : ev.exitCode !== 0);
   const alreadyDone = task.done;
   const now = new Date().toISOString();
@@ -4539,7 +4565,9 @@ function lexShell(s) {
       for (; k < s.length && s[k] !== '"'; k++) {
         if (s[k] === "\\" && k + 1 < s.length) {
           const n = s[k + 1];
-          if (n === '"' && (literalBs || /^(?:[A-Za-z]:|%[^%\s]+%|\.{1,2})$/.test(val))) { val += "\\"; k++; break; } // a Windows path's last "\" + the closing quote
+          // a Windows path's last "\" + the closing quote. The prefix test is bounded (C:, %VAR%, . and .. are short): re-testing
+          // the whole value at every \" made one long _Verify:_ quadratic.
+          if (n === '"' && (literalBs || (val.length <= 260 && /^(?:[A-Za-z]:|%[^%\s]+%|\.{1,2})$/.test(val)))) { val += "\\"; k++; break; }
           if (n === '"' || n === "\\" || n === "$" || n === "`") { val += n; k++; continue; }
           literalBs = true; val += "\\"; continue;
         }
@@ -4681,7 +4709,10 @@ function redProof(e) {
 // fix made it pass); a passing run with no red run before it is `unexpected-pass` (the test doesn't fail: it tests nothing
 // yet); a could-not-run exit is a failed run; a note never proves a runnable _Verify:_; without one a note attests.
 function expectFailIssue(e, runnable) {
-  if (redProof(e)) return null;
+  // A could-not-run latest run is a failed re-check even while the red run it carries forward stays on record (so the
+  // pass after the fix is still accepted as the green one).
+  const cantRun = typeof e.command === "string" && e.command.trim() !== "" && Number.isInteger(e.exitCode) && CANT_RUN_EXIT.has(e.exitCode);
+  if (!cantRun && redProof(e)) return null;
   if (e.command && e.exitCode === 0) return "unexpected-pass";
   if (e.command && e.exitCode != null) return "failed-run";
   if (runnable) return "manual-note-on-runnable-verify";
@@ -9735,11 +9766,14 @@ function roadmapTailLines(r, lang) {
 // feature recorded in its drift baseline (state.finished.files): they land on the same files at merge time and one of
 // them drifts silently. Not an overlap: two active features already ordered by a dependency (either way, transitively),
 // or either one declaring `_Supersedes:_` of the other's criteria (a finished one: the active one declaring it). Bounded:
-// OVERLAP_MAX_KEYS entries per feature, OVERLAP_MAX_GLOB_CHECKS glob comparisons, OVERLAP_MAX_PAIRS pairs listed.
+// OVERLAP_MAX_KEYS entries per feature (each at most OVERLAP_MAX_REF_LEN characters), OVERLAP_MAX_GLOB_CHECKS glob comparisons
+// whose cost (pattern length × path length) stays under OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS pairs listed.
 // Text reads only — nothing is hashed (the SessionStart hook runs it).
 // ---------------------------------------------------------------------------
 const OVERLAP_MAX_KEYS = 500;
 const OVERLAP_MAX_GLOB_CHECKS = 200000;
+const OVERLAP_MAX_REF_LEN = 512; // a longer reference is no path anyone plans — skipped (truncated)
+const OVERLAP_MAX_GLOB_WORK = 20000000; // DP cells over all glob comparisons (~0.2 s): the SessionStart hook runs this
 const OVERLAP_MAX_PAIRS = 50;
 const OVERLAP_FILES_SHOWN = 5;
 // feats: roadmap() features ({ name, phase, dependsOn }; default: roadmap(projectDir)'s). opts.only: the pairs one feature
@@ -9760,7 +9794,7 @@ function featureOverlaps(projectDir, feats, opts = {}) {
     const push = (rel, glob) => {
       const key = fold(rel);
       if (!okKey(key) || seen.has(key)) return;
-      if (seen.size >= OVERLAP_MAX_KEYS) { truncated = true; return; }
+      if (key.length > OVERLAP_MAX_REF_LEN || seen.size >= OVERLAP_MAX_KEYS) { truncated = true; return; }
       seen.add(key);
       (glob ? s.globs : s.lit).push({ key, rel, glob });
     };
@@ -9805,17 +9839,18 @@ function featureOverlaps(projectDir, feats, opts = {}) {
       g.base = litParts.join("/"); // the glob's literal folders ("src/api" of "src/api/**/*.js")
     }
   }
-  let checks = 0;
+  let checks = 0, work = 0;
+  const spend = (a, b) => { work += (a.length + 1) * (b.length + 1); return ++checks > OVERLAP_MAX_GLOB_CHECKS || work > OVERLAP_MAX_GLOB_WORK; };
   outer: for (const s of srcs) {
     for (const g of s.globs) {
       for (const o of srcs) {
         if (o === s) continue;
         for (const e of o.lit) {
-          if (++checks > OVERLAP_MAX_GLOB_CHECKS) { truncated = true; break outer; }
+          if (spend(g.key, e.key)) { truncated = true; break outer; }
           if (g.match(e.key) || (g.base && (g.base === e.key || g.base.startsWith(e.key + "/")))) hit(s, g, o, e);
         }
         for (const e of o.globs) {
-          if (++checks > OVERLAP_MAX_GLOB_CHECKS) { truncated = true; break outer; }
+          if (spend(g.key, e.key) || (work += (e.key.length + 1) * (g.key.length + 1)) > OVERLAP_MAX_GLOB_WORK) { truncated = true; break outer; }
           if (e.key === g.key || g.match(e.key) || e.match(g.key)) hit(s, g, o, e);
         }
       }
@@ -10038,7 +10073,7 @@ function catalogData(projectDir) {
   const cache = new Map();
   const srcs = featureDirs(projectDir).map((s) => {
     const tracks = detectTracks(s.dir);
-    const reqRaw = readIfExists(path.join(s.dir, "requirements.md")) || "";
+    const reqRaw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
     return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
   });
   // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
@@ -10396,6 +10431,7 @@ function decide(projectDir, name, input) {
   const inp = decisionInput(input, D);
   if (inp.error) return { ok: false, error: inp.error };
   const file = path.join(dir, DECISIONS_FILE);
+  if (!specsFileContained(projectDir, file)) return { ok: false, error: D.unsafeFile(".specs/" + slug + "/" + DECISIONS_FILE) };
   const raw = readIfExists(file);
   const log = decisionLog(raw || "");
   const known = new Set(log.map((e) => e.id));
@@ -10793,7 +10829,8 @@ function expInline(text) {
   const slots = [];
   const put = (html) => "\u0001" + (slots.push(html) - 1) + "\u0002";
   let s = String(text == null ? "" : text).replace(/[\u0001\u0002]/g, "");
-  s = s.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"));
+  // Spans are bounded (4000 / 2000 chars): an unclosed `, * or ~~ used to rescan the rest of the paragraph from every opener.
+  s = s.replace(/(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"));
   const target = "(<[^<>\\s]*>|[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)(?:\\s+\"[^\"]*\")?";
   s = s.replace(new RegExp("!\\[([^\\]]*)\\]\\(" + target + "\\)", "g"), (m, alt) => alt);
   s = s.replace(new RegExp("\\[([^\\]]+)\\]\\(" + target + "\\)", "g"), (m, label, url) => {
@@ -10801,11 +10838,11 @@ function expInline(text) {
     return /^(?:https?:\/\/|mailto:)/i.test(u) ? put(`<a href="${htmlEsc(u)}" rel="noopener noreferrer">`) + label + put("</a>") : label;
   });
   s = htmlEsc(s)
-    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
-    .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]*?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
-    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>")
-    .replace(/(?<![*\p{L}\p{N}\\])\*(?=[^\s*])([\s\S]*?[^\s*\\])\*(?![*\p{L}\p{N}])/gu, "<em>$1</em>")
-    .replace(/(?<![\p{L}\p{N}_\\])_(?=[^\s_])([\s\S]*?[^\s_\\])_(?![\p{L}\p{N}_])/gu, "<em>$1</em>")
+    .replace(/\*\*(?=\S)([\s\S]{0,2000}?\S)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]{0,2000}?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
+    .replace(/~~(?=\S)([\s\S]{0,2000}?\S)~~/g, "<del>$1</del>")
+    .replace(/(?<![*\p{L}\p{N}\\])\*(?=[^\s*])([\s\S]{0,2000}?[^\s*\\])\*(?![*\p{L}\p{N}])/gu, "<em>$1</em>")
+    .replace(/(?<![\p{L}\p{N}_\\])_(?=[^\s_])([\s\S]{0,2000}?[^\s_\\])_(?![\p{L}\p{N}_])/gu, "<em>$1</em>")
     .replace(/\\([\\`*_~|#[\]])/g, "$1");
   return s.replace(/\u0001(\d+)\u0002/g, (m, k) => slots[+k]);
 }
@@ -11046,7 +11083,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const X = M.stakeholderExport;
   const P = M.phaseNames || {};
   const { slug, dir } = f;
-  const read = (n) => readIfExists(path.join(dir, n));
+  const read = (n) => readContained(projectDir, path.join(dir, n)); // a linked artifact is skipped, never copied out
   const tracks = detectTracks(dir);
   const st = stateFromFile(projectDir, statePath(dir));
   const kind = st.kind === "bugfix" || st.kind === "spike" ? st.kind : "feature"; // 1.14 C2: + spike
@@ -11154,11 +11191,11 @@ function exportProjectDoc(projectDir, lang, cat) {
     const dir = path.join(root, f.name);
     const tracks = detectTracks(dir);
     const kind = f.kind === "bugfix" || f.kind === "spike" ? f.kind : "feature"; // 1.14 C2: + spike (its question is the summary)
-    const reqRaw = readIfExists(path.join(dir, "requirements.md")) || "";
+    const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
     const reqs = activeDesign(reqRaw, tracks);
     const c = counts(f.name);
     const catF = cat.features.find((x) => x.feature === f.name && !x.archived);
-    const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readIfExists(path.join(dir, "bug.md")), SUMMARY_SYN) : null) ||
+    const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")), SUMMARY_SYN) : null) ||
       (kind === "spike" ? spikeInfo(dir).question : null);
     const line = [X.kind[kind] || M.spike.kind, f.tracks, P[f.phase] || f.phase, X.progress(c.tasksDone, c.tasks, f.percent)].concat(f.blocked ? [X.blocked(f.unmetDeps.join(", "))] : []).join(" · ");
     const stories = exportStories(reqs, X, new Map((catF ? catF.acs : []).map((a) => [a.id, a])));
@@ -11332,7 +11369,8 @@ function isoTime(s) {
   const probe = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
   if (probe.getUTCFullYear() !== +m[1] || probe.getUTCMonth() !== +m[2] - 1 || probe.getUTCDate() !== +m[3]) return null;
   if (m[4] != null && (+m[4] > 23 || +m[5] > 59 || (m[6] != null && +m[6] > 59))) return null;
-  const iso = m[4] == null ? `${m[1]}-${m[2]}-${m[3]}T00:00:00Z` : String(s).trim().replace(" ", "T").toUpperCase().replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  // A timestamp without a zone is UTC, like a bare date — Date.parse would read it in the machine's local time.
+  const iso = m[4] == null ? `${m[1]}-${m[2]}-${m[3]}T00:00:00Z` : String(s).trim().replace(" ", "T").toUpperCase().replace(/([+-]\d{2})(\d{2})$/, "$1:$2") + (m[7] ? "" : "Z");
   const t = Date.parse(iso);
   return Number.isFinite(t) ? t : null;
 }
@@ -11372,18 +11410,19 @@ function changelogData(projectDir, since) {
     const events = [fin, exe].filter(inWin);
     if (!events.length) continue;
     const hist = Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
-    const before = since != null && ([fin, exe].some((t) => t != null && t <= since) ||
+    const firstFin = isObj(st.finished) ? timeOf(st.finished.firstAt) : null; // a re-finished feature shipped at its first finish
+    const before = since != null && ([fin, firstFin, exe].some((t) => t != null && t <= since) ||
       hist.some((h) => isRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since));
     if (before) continue;
     shipped.add(s.dir);
     const at = Math.max(...events);
     const tracks = detectTracks(s.dir);
-    const reqRaw = readIfExists(path.join(s.dir, "requirements.md")) || "";
+    const reqRaw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
     const reqs = activeDesign(reqRaw, tracks);
     const entry = { feature: s.slug, title: specTitle(reqRaw, s.slug), kind: st.kind === "bugfix" ? "bugfix" : "feature", at: new Date(at).toISOString(), event: at === fin ? "finished" : "execution-approved" };
     if (s.archived) entry.archived = true;
     if (entry.kind === "bugfix") {
-      const bug = readIfExists(path.join(s.dir, "bug.md")) || "";
+      const bug = readContained(projectDir, path.join(s.dir, "bug.md")) || "";
       entry.summary = sectionFirstParagraph(reqs, SUMMARY_SYN) || sectionFirstParagraph(bug, SUMMARY_SYN);
       entry.rootCause = oneLiner(sectionFirstParagraph(bug, ROOT_CAUSE_SYN));
       fixed.push(entry);
@@ -11408,7 +11447,7 @@ function changelogData(projectDir, since) {
       const cr = { feature: s.slug, n: i + 1, at: new Date(timeOf(c.at)).toISOString(), phase: typeof c.phase === "string" ? c.phase : "requirements",
         added: ids("added"), modified: ids("modified"), removed: ids("removed"), reopened: Array.isArray(c.reopened) ? c.reopened.filter((n) => Number.isSafeInteger(n)) : [] };
       if (cr.phase === "requirements") { // the current text of the requirement IDs it added or modified
-        const idx = requirementIndex(readIfExists(path.join(s.dir, "requirements.md")) || "");
+        const idx = requirementIndex(readContained(projectDir, path.join(s.dir, "requirements.md")) || "");
         cr.acs = [...cr.added, ...cr.modified].filter((id) => idx.has(id)).map((id) => ({ id, text: acOneLine(idx.get(id).text, id) }));
       }
       if (s.archived) cr.archived = true;
@@ -11670,7 +11709,11 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   const map = {};
   for (const rel of files) map[rel] = fileHash(path.resolve(root, rel));
   const at = new Date().toISOString();
-  st.finished = { at, files: map };
+  // firstAt: when the feature was FIRST finished — a re-finish (a stale baseline, a change request) keeps it, so the release
+  // notes never list a feature that already shipped as new again (spec_changelog's shipped-before test).
+  const prevFin = isObj(st.finished) ? st.finished : null;
+  const firstAt = prevFin && typeof prevFin.firstAt === "string" ? prevFin.firstAt : prevFin && typeof prevFin.at === "string" ? prevFin.at : null;
+  st.finished = firstAt ? { at, firstAt, files: map } : { at, files: map };
   if (truncated) st.finished.truncated = true;
   writeFileAtomic(statePath(dir), JSON.stringify(st, null, 2));
   maybeRefreshCatalog(projectDir); // the feature now reads as finished
@@ -13922,7 +13965,8 @@ function parsePlan(dir, read, W, src) {
   if (!doc) return null;
   if (doc.several) return { error: P.several(toPosix(path.relative(src.root, dir)) || ".", doc.several.join(", ")) };
   const text = read(doc.file);
-  if (text == null) return null;
+  // An empty plan (blank, or only comments) is nothing to import — the other importers answer "nothing found" too.
+  if (text == null || !stripHtmlComments(text).replace(/^\uFEFF/, "").trim()) return null;
   const model = newImportModel();
   model.sourceFile = doc.file;
   const lines = stripHtmlComments(text).split(/\r?\n/);

@@ -558,7 +558,7 @@ function main() {
         if (r.through) { // the fast-forward: its summary, then one line per phase it reached
           console.log(r.message);
           (r.steps || []).forEach((s) => console.log("  " + (s.approved ? "✓" : "◐") + " " + s.phase + (s.role ? " [" + s.role + "]" : "") +
-            (s.missingRoles && s.missingRoles.length ? " — " + GV.missing(s.missingRoles) : "") + (s.forced ? " (forced: " + s.failing.join(", ") + ")" : "")));
+            (s.missingRoles && s.missingRoles.length ? " — " + GV.missing(s.missingRoles) : "") + (s.forced ? GV.stepForced(s.failing || []) : "")));
           return;
         }
         console.log(r.approved ? featureText(r.feature).approved(r.approved, r.feature) : GV.signedOff(r.signedOff, r.feature, r.role));
@@ -1059,7 +1059,7 @@ function main() {
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox });
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield") }); // = create --kind spike (a flow gets its note)
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         const T = cliText(r.lang);
@@ -1073,9 +1073,21 @@ function main() {
     case "decide": {
       // dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03]
       // [--supersedes D-1] [--discovery] — append one entry to decisions.md (= spec_decide; unknown _Affects:_ → exit 1, nothing written).
-      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery]');
+      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery] (--affects / --supersedes repeatable)');
+      // A repeated --affects / --supersedes adds to the list (the shared parser kept only the last one); --kind decision|discovery
+      // is the MCP `kind` (the engine validates it), --discovery its shorthand.
+      const every = (name) => {
+        const vals = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = argv[i];
+          if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === name) vals.push(a.slice(a.indexOf("=") + 1)); }
+          else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2)) && argv[i + 1] !== undefined && !/^--[A-Za-z]/.test(argv[i + 1])) { const v = argv[++i]; if (a.slice(2) === name) vals.push(v); }
+        }
+        return vals;
+      };
+      const list = (name) => { const v = every(name); return v.length ? v : undefined; };
       const r = spec.decide(projectDir, pos[0], { title: flags.title, decision: flags.decision, context: flags.context, consequences: flags.consequences,
-        affects: flags.affects, supersedes: flags.supersedes, kind: on("discovery") ? "discovery" : undefined });
+        affects: list("affects"), supersedes: list("supersedes"), kind: on("discovery") ? "discovery" : flags.kind });
       if (!r.ok) return fail(r);
       const D = spec.msg(spec.featureLang(projectDir, r.feature)).decisions;
       return out(r, (r) => {

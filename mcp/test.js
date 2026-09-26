@@ -1053,6 +1053,21 @@ function endRun() {
       "bugfix: task 3 scaffolds with _Verify:_ + _Expect: fail_ and T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
       JSON.stringify([rgLl && rgLl.status, rgLl && rgLl.detail, stBug.kind, stBug.flow, stDf.flow, (brLl.brief || "").slice(-400)]) + ")");
   }
+  // 1.14 final review — engine: a re-finish keeps the FIRST finish (release notes don't list a shipped feature again), and a
+  // zone-less `since` timestamp is UTC (like a bare date), never the machine's local time.
+  {
+    const stPath = path.join(vDir, ".specs", "login-loop", ".state.json");
+    const t1 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished.at;
+    const until = Date.now() + 5; while (Date.now() < until) { /* the second finish gets a later stamp */ }
+    const again = S.finishFeature(vDir, "login-loop", { write: true });
+    const fin2 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished;
+    const notes = S.changelog(vDir, { since: new Date(Date.parse(t1) + 1).toISOString() });
+    const zNo = S.changelog(vDir, { since: "2026-09-20T10:00" }), zZ = S.changelog(vDir, { since: "2026-09-20T10:00Z" });
+    ok(again.readyToFinish === true && fin2.firstAt === t1 && fin2.at > t1 && notes.ok && !notes.fixed.some((x) => x.feature === "login-loop") &&
+      zNo.ok && zNo.since === "2026-09-20T10:00:00.000Z" && zNo.since === zZ.since,
+      "final review: a re-finish keeps finished.firstAt, so spec_changelog since the first finish doesn't list the feature again; a zone-less since is UTC (got " +
+      JSON.stringify([again.readyToFinish, fin2.firstAt === t1, notes.fixed.map((x) => x.feature), zNo.since, zZ.since]) + ")");
+  }
   const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
   ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
     "bugfix scaffolds are localized (PT)");
@@ -8740,9 +8755,10 @@ function endRun() {
     ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
       JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
       /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
-      /`dev-spec done billing 1 --run`/.test(sBlock.reason) && /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
+      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\), run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
+      /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
       sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
-      "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (done --run / spec_complete_task evidence / say it plainly); no claim, stop_hook_active or an honest admission → allowed (got " +
+      "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
       JSON.stringify([sBlock.why, sBlock.features, sNoClaim.why, sActive.why, sAdmit.why]) + ")");
     // Every reason verificationStatus reports: a failed run, a note on a runnable _Verify:_, an unexpected pass (_Expect: fail_), stale evidence.
     c1Tasks(fEn, "- [x] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [x] 3. [US1] Receipt\n" +
@@ -8758,7 +8774,8 @@ function endRun() {
     ok(sMany.block && byN(1) === "failed-run" && byN(2) === "manual-note-on-runnable-verify" && byN(4) === "unexpected-pass" && byN(5) === "stale-evidence" && !byN(3) &&
       /#1 \(latest run failed\), #2 \(note only, _Verify:_ command not run\), #4 \(run passed, but _Expect: fail_ needs a red run\), #5 \(the spec changed since this evidence; spec_impact reopened the task\)/.test(sMany.reason),
       "C1 stopCheck lists every unverified reason: failed run, note on a runnable _Verify:_, unexpected pass, stale evidence (a noted task without _Verify:_ is verified) (got " + JSON.stringify(sMany.features) + ")");
-    // Verified → allowed; old activity (state stamps AND tasks.md older than the window) → allowed; a hand-tick is recent activity.
+    // Verified → allowed; old activity → allowed; a tasks.md file date is NO activity (a fresh clone stamps it "now" — the gate
+    // would fire on unrelated work in a repo someone else wrote): only what the engine recorded counts.
     const pOk = c1Dir("ok");
     S.initProject(pOk, ["core"], "en");
     const fOk = S.createFeature(pOk, "Search", ["core"], "", undefined, "en");
@@ -8772,13 +8789,13 @@ function endRun() {
     c1SetState(fOld, { lastTickAt: hoursAgo(10), ticks: { 1: hoursAgo(10) } });
     ageTasks(fOld, 10);
     const sOld = S.stopCheck(pOld, { message: claimMsg });
-    ageTasks(fOld, 0.1); // tasks.md edited a few minutes ago (a box ticked by hand leaves no other stamp)
+    ageTasks(fOld, 0.1); // tasks.md edited a few minutes ago — a file date, not an engine stamp
     const sHand = S.stopCheck(pOld, { message: claimMsg });
     ok(sVer.block === false && sVer.why === "verified" && JSON.stringify(sVer.verifiedFeatures) === JSON.stringify(["search"]) &&
-      sOld.block === false && sOld.why === "no-recent" && sHand.block === true && sHand.features[0].feature === "legacy" && sHand.features[0].unverified[0].reason === "no-evidence",
-      "C1 stopCheck: every ticked task verified → allowed ('verified'); activity older than the window → allowed ('no-recent'); a tasks.md edited just now (hand-ticked box) is recent activity → block (got " +
+      sOld.block === false && sOld.why === "no-recent" && sHand.block === false && sHand.why === "no-recent",
+      "C1 stopCheck: every ticked task verified → allowed ('verified'); activity older than the window → allowed ('no-recent'); a tasks.md edited just now is no recorded activity → still 'no-recent' (got " +
       JSON.stringify([sVer.why, sOld.why, sHand.why]) + ")");
-    // Suite evidence: every task done, meta.checks without a passing run since the last task activity → block with the finish --run hint.
+    // Suite evidence: every task done, meta.checks without a passing run since the last task activity → block (read the checks, run if safe, record).
     const pSu = c1Dir("suite");
     S.initProject(pSu, ["core"], "en", { checks: { test: "npm test" } });
     const fSu = S.createFeature(pSu, "Export", ["core"], "", undefined, "en");
@@ -8786,8 +8803,8 @@ function endRun() {
     S.completeTask(pSu, "export", 1, { summary: "downloaded a CSV" });
     const sSuite = S.stopCheck(pSu, { message: "Finished — the feature is complete." });
     ok(sSuite.block && JSON.stringify(sSuite.features[0].suite) === JSON.stringify([{ name: "test", status: "no-run" }]) && !sSuite.features[0].unverified.length &&
-      /- export: project checks without a passing run since the last task activity: test \(no run recorded\)/.test(sSuite.reason) && /`dev-spec finish export --run`/.test(sSuite.reason) && !/dev-spec done/.test(sSuite.reason),
-      "C1 stopCheck: a complete feature whose project checks (meta.checks) have no passing run since the last task activity → block with `dev-spec finish <f> --run` (got " + JSON.stringify(sSuite.features) + ")");
+      /- export: project checks without a passing run since the last task activity: test \(no run recorded\)/.test(sSuite.reason) && /Project checks for export have no passing run: read them in \.specs\/roadmap\.json \(meta\.checks\)/.test(sSuite.reason) && !/--run|dev-spec done/.test(sSuite.reason),
+      "C1 stopCheck: a complete feature whose project checks (meta.checks) have no passing run since the last task activity → block naming meta.checks to read, run if safe and record — never a `--run` command (got " + JSON.stringify(sSuite.features) + ")");
     // meta.stopCheck: spec_init {stopCheck} over MCP (the result always reports it; a note when set); off → allowed; no .specs/; a broken .state.json is skipped.
     const i1 = await c1Call("spec_init", { projectDir: pEn });
     const i2 = await c1Call("spec_init", { projectDir: pEn, stopCheck: false });
@@ -8821,7 +8838,7 @@ function endRun() {
     c1Tasks(fEs, "- [x] 1. [US1] Cobrar\n  - _Verify: npm test_\n"); // ticked by hand after the failed run
     const sEs = S.stopCheck(pEs, { message: "Listo: todas las pruebas pasan." });
     ok(sPt.block && sPt.lang === "pt" && /^dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:\n {2}- pagamentos: #1 \(sem evidência\)/.test(sPt.reason) &&
-      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /`dev-spec done pagamentos 1 --run`/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
+      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\); corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
       sEs.block && /^dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:\n {2}- pagos: #1 \(la última ejecución falló\)/.test(sEs.reason) &&
       /O di claramente/.test(sEs.reason) && S.stopCheck(pPt, { message: "Os testes ainda não passam; a tarefa 1 não está verificada." }).block === false,
       "C1 stopCheck PT / ES: the claim is read in either language and the reason is in the project language (PT: no evidence; ES: failed run); an honest PT answer is allowed (got " +
@@ -9740,6 +9757,91 @@ function endRun() {
     ok(epipe.code === 0 && !/Unhandled|EPIPE|at /.test(epipe.err) && badFd.code === 1 && /^dev-spec MCP server: stdout error: /.test(badFd.err) && !/Unhandled 'error' event|\n\s+at /.test(badFd.err),
       "C4.2.7 mcp/server.js: a client closing its read end first → quiet exit 0 (was an unhandled EPIPE stack trace, exit 1); a non-EPIPE stdout error (read-only fd) → one stderr line and exit 1 (got " +
       JSON.stringify([epipe.code, epipe.err.slice(0, 120), badFd.code, badFd.err.slice(0, 120)]) + ")");
+  }
+
+  // 1.14 final review — one regression per confirmed finding (engine, security, pt-BR).
+  {
+    const fr = path.join(tmp, "proj-final-review");
+    S.initProject(fr, ["core"], "en");
+    const mkF = (name, tasks) => { const c = S.createFeature(fr, name, ["core"], "x", undefined, "en"); fs.writeFileSync(path.join(c.dir, "tasks.md"), tasks); return c; };
+    // E1: a could-not-run exit on an _Expect: fail_ task keeps the red run on record — the pass after the fix still verifies it.
+    mkF("Red keep", "# Tasks\n\n- [ ] 1. [US1] Write T-01 red\n  - _Verify: npm test_\n  - _Expect: fail_\n- [ ] 2. [US1] Implement\n  - _Verify: npm test_\n");
+    const r1 = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 1 });
+    S.completeTask(fr, "red-keep", 2, { command: "npm test", exitCode: 0 });
+    const r127 = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 127 });
+    const v127 = S.statusFeature(fr, "red-keep").tasks.list.find((t) => t.number === 1).verified;
+    const rPass = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 0 });
+    ok(r1.ok && r1.verified && r127.ok === false && v127 === false && rPass.ok === true && rPass.verified === true,
+      "final review E1: an exit 127 re-run of an _Expect: fail_ task is a failed re-check but keeps the red proof — the next (fixed, passing) run verifies it again, never unexpected-pass forever (got " +
+      JSON.stringify([r1.verified, r127.ok, v127, rPass.ok, rPass.verified, rPass.unverifiedReason, rPass.error && rPass.error.slice(0, 80)]) + ")");
+    // E4: an empty plan is nothing to import (no feature created).
+    fs.mkdirSync(path.join(fr, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(fr, "docs", "empty.md"), "  \n\n");
+    const imp = S.importSpec(fr, "plan", "docs/empty.md");
+    ok(imp.ok === false && !fs.existsSync(path.join(fr, ".specs", "empty")), "final review E4: importing a blank plan answers 'nothing found' and creates no feature (got " + JSON.stringify([imp.ok, imp.error]) + ")");
+    // S1: the Stop gate counts only activity the engine recorded — a fresh tasks.md (a clone) or a future stamp never makes it
+    // fire, and its reason never hands the agent a `--run` command.
+    const sg = mkF("Stop clone", "# Tasks\n\n- [x] 1. [US1] Ship\n  - _Verify: node evil.js_\n");
+    const claim = "I fixed the typo in README. All done.";
+    const sClone = S.stopCheck(fr, { message: claim });
+    const sgState = path.join(sg.dir, ".state.json");
+    const sgSt = JSON.parse(fs.readFileSync(sgState, "utf8"));
+    fs.writeFileSync(sgState, JSON.stringify({ ...sgSt, lastTickAt: "2099-01-01T00:00:00.000Z" }, null, 2));
+    const sFuture = S.stopCheck(fr, { message: claim });
+    fs.writeFileSync(sgState, JSON.stringify({ ...sgSt, lastTickAt: new Date().toISOString() }, null, 2));
+    const sNow = S.stopCheck(fr, { message: claim });
+    const reasons = ["en", "pt", "es", "pt-BR"].map((l) => { const G = S.msg(l).stopGate; return G.todoTasks("f", 1) + G.todoSuite("f"); });
+    ok(sClone.block === false && sFuture.block === false && sNow.block === true && !/--run/.test(sNow.reason) && reasons.every((t) => !/--run/.test(t)),
+      "final review S1: stop gate — a hand-fresh tasks.md or a future lastTickAt is no recent activity; a real recent tick still blocks, and no reason (EN/PT/ES/pt-BR) suggests `--run` (got " +
+      JSON.stringify([sClone.why, sFuture.why, sNow.block]) + ")");
+    // S2: a planted private-use sentinel never makes the pt-BR transform expand (it used to double the string per pass).
+    const tS2 = Date.now();
+    const planted = S.msg("pt-BR").stopGate.taskLine("a00", "x");
+    ok(typeof planted === "string" && planted.length < 200 && Date.now() - tS2 < 1000, "final review S2: pt-BR text holding the transform's sentinels is left as it is, in bounded time (got " + JSON.stringify([planted && planted.length, Date.now() - tS2]) + ")");
+    // S3: decisions.md / an exported artifact that is a symlink out of the project is never followed.
+    const outside = path.join(tmp, "final-review-secret.txt");
+    fs.writeFileSync(outside, "TOP-SECRET-KEY");
+    const lk = mkF("Linked", "# Tasks\n\n- [ ] 1. [US1] a\n");
+    let linked = true;
+    try {
+      fs.symlinkSync(outside, path.join(lk.dir, "decisions.md"), "file");
+      fs.renameSync(path.join(lk.dir, "requirements.md"), path.join(lk.dir, "requirements.orig.md"));
+      fs.symlinkSync(outside, path.join(lk.dir, "requirements.md"), "file");
+    } catch { linked = false; }
+    if (linked) {
+      const dz = S.decide(fr, "linked", { title: "t", decision: "d" });
+      const ex = S.exportSpecs(fr, { name: "linked", format: "md" });
+      const exText = JSON.stringify(ex);
+      ok(dz.ok === false && /regular file inside \.specs/.test(dz.error) && fs.readFileSync(outside, "utf8") === "TOP-SECRET-KEY" && fs.lstatSync(path.join(lk.dir, "decisions.md")).isSymbolicLink() &&
+        !/TOP-SECRET-KEY/.test(exText), "final review S3: spec_decide refuses a decisions.md symlink (nothing written through it); spec_export never copies a linked artifact's content (got " +
+        JSON.stringify([dz.ok, dz.error && dz.error.slice(0, 80), /TOP-SECRET-KEY/.test(exText)]) + ")");
+    } else ok(true, "final review S3: symlinks unavailable here (Windows without the privilege) — skipped");
+    // S4: long _Implements:_ references never stall the overlap check (SessionStart runs it).
+    const longSeg = "a".repeat(120);
+    mkF("Long globs", "# Tasks\n\n" + Array.from({ length: 150 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/**/${longSeg}${i}*/x*.js_\n`).join(""));
+    mkF("Long paths", "# Tasks\n\n" + Array.from({ length: 100 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/${longSeg}/${longSeg}${i}/x.js_\n`).join(""));
+    mkF("Too long", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Implements: src/" + "b".repeat(600) + ".js_\n");
+    const tS4 = Date.now();
+    const ov = S.featureOverlaps(fr);
+    ok(Date.now() - tS4 < 3000 && ov.truncated === true, "final review S4: the overlap check is budgeted by work (pattern × path) and a reference over 512 chars is skipped — bounded time, marked truncated (got " + JSON.stringify([Date.now() - tS4, ov.truncated]) + ")");
+    // S5 + S6: a long _Verify:_ with many \" and a huge unclosed-emphasis paragraph stay linear.
+    const longVerify = "echo \"" + "%\\\"".repeat(20000) + "\"";
+    mkF("Long verify", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Verify: " + longVerify + "_\n");
+    const tS5 = Date.now();
+    S.specDoctor(fr, "long-verify");
+    const dS5 = Date.now() - tS5;
+    const big = mkF("Big para", "# Tasks\n\n- [ ] 1. [US1] t\n");
+    fs.writeFileSync(path.join(big.dir, "requirements.md"), "# Big\n\n## Summary\n" + "a *b _c ~~d **e ".repeat(15000) + "\n");
+    const tS6 = Date.now();
+    const bigEx = S.exportSpecs(fr, { name: "big-para", format: "html" });
+    const dS6 = Date.now() - tS6;
+    ok(dS5 < 5000 && bigEx.ok && dS6 < 5000, "final review S5/S6: a 60 KB _Verify:_ full of \\\" and a 240 KB paragraph of unclosed * _ ~~ ** render in bounded time (got " + JSON.stringify([dS5, dS6]) + ")");
+    // pt-BR: descriptive 3rd-person verbs stay descriptive; "gerado/arquivado a <date>" → "em".
+    const BR = S.msg("pt-BR");
+    const brTexts = [BR.gitLog.implFirst(3, "T-01", "abc", "def", "t.js"), BR.gitLog.testNotCommitted(3, "T-01", "abc", "t.js"), BR.flow.kindRefused("erro", "bugfix"), BR.spike.noGate("design", "x")];
+    const brDate = require("./lib/i18n.js").toPtBr("_Notas geradas a 2026-09-26_ · arquivada a 2026-09-26");
+    ok(!/faça T-01|siga a sua|— siga/.test(brTexts.join(" ")) && /que faz T-01 passar/.test(brTexts[0]) && /que faz T-01 passar/.test(brTexts[1]) && /geradas em 2026-09-26/.test(brDate) && /arquivada em 2026-09-26/.test(brDate),
+      "final review pt-BR: 'põe … a verde' / 'segue' stay descriptive (no 'faça' / 'siga'); 'geradas / arquivada a <date>' → 'em' (got " + JSON.stringify(brTexts.map((t) => t.slice(0, 70)).concat(brDate)) + ")");
   }
 
   // Release hygiene: the three version fields agree.

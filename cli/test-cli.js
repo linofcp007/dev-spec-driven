@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1", "pfr"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -2404,7 +2404,7 @@ if (inSection("pc1")) { // 1.14 package C1 (CLI tests) — `init --guard scope` 
   const scPos = rc1(["stop-check", "All", "done!", "--project", p2]);
   const scNo = rc1(["stop-check", "--message", "I renamed the variable.", "--project", p2]);
   const scAdm = rc1(["stop-check", "--message", "Done, but task 1 is not verified.", "--project", p2]);
-  ok(sc.code === 1 && sc.stdout.trim() === eng.reason && /billing: #1 \(no evidence\)/.test(sc.out) && /`dev-spec done billing 1 --run`/.test(sc.out) &&
+  ok(sc.code === 1 && sc.stdout.trim() === eng.reason && /billing: #1 \(no evidence\)/.test(sc.out) && /read each listed task's _Verify:_ command/.test(sc.out) && !/--run/.test(sc.out) &&
     scJ && JSON.stringify(scJ) === JSON.stringify(eng) && scIn.code === 1 && scIn.stdout.trim() === eng.reason && scInFlag.code === 1 && scPos.code === 1 &&
     scNo.code === 0 && /^evidence gate: the message claims no completion or verification — allowed\./.test(scNo.stdout) &&
     scAdm.code === 0 && /says plainly what is not verified/.test(scAdm.stdout),
@@ -2716,6 +2716,25 @@ if (inSection("pd1")) { // 1.14 package D1 (CLI tests) — Brazilian Portuguese 
   ok(clsBr && clsBr.lang === "pt-BR" && clsBr.tracks.join() === "core,tdd" && JSON.stringify(clsBr) === JSON.stringify(SD1.classify("Cadastro de usuários com senha, sem LLM", { lang: "pt-BR" })) &&
     clsGuess && clsGuess.lang === "pt" && clsGuess.tracks.join() === "core,tdd,ai",
     "classify --lang pt-BR answers in pt-BR (= spec_classify); Brazilian words alone guess 'pt' — 'no LLM' is em+o, +ai on");
+}
+
+if (inSection("pfr")) { // 1.14 final review — CLI parity findings
+  const fr = path.join(tmp, "pfr-proj");
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  run(["init", "tdd", "--lang", "pt", "--project", fr]);
+  run(["create", "Alfa", "core", "tdd", "--project", fr]);
+  // decide: a repeated --affects / --supersedes adds to the list (= spec_decide's arrays); --kind is honoured.
+  const d1 = jsonOf(run(["decide", "alfa", "--title", "t1", "--decision", "d1", "--affects", "US-1.AC-1", "--affects", "T-01", "--json", "--project", fr]));
+  const d2 = jsonOf(run(["decide", "alfa", "--title", "t2", "--decision", "d2", "--kind", "discovery", "--json", "--project", fr]));
+  const d3 = jsonOf(run(["decide", "alfa", "--title", "t3", "--decision", "d3", "--supersedes", "D-1", "--supersedes", "D-2", "--json", "--project", fr]));
+  ok(d1 && d1.affects.join() === "US-1.AC-1,T-01" && d2 && d2.kind === "discovery" && d3 && d3.supersedes.join() === "D-1,D-2",
+    "decide: repeated --affects / --supersedes are all kept (the parser kept only the last), --kind discovery is honoured (got " + JSON.stringify([d1 && d1.affects, d2 && d2.kind, d3 && d3.supersedes]) + ")");
+  // approve --through: a forced step is labelled in the feature's language.
+  const ff = run(["approve", "alfa", "--through", "requirements", "--force", "--project", fr]);
+  ok(ff.code === 0 && /\(forçada: /.test(ff.out) && !/\(forced: /.test(ff.out), "approve --through --force labels a forced step in PT ('forçada'), never the English '(forced: …)' (got " + ff.out.trim().split("\n").slice(-2).join(" | ") + ")");
+  // spike: the shortcut passes --flow through like create --kind spike (its note says the flow is ignored).
+  const sp = jsonOf(run(["spike", "Cache", "--flow", "design-first", "--json", "--project", fr]));
+  ok(sp && sp.ok && sp.kind === "spike" && typeof sp.note === "string" && /fluxo ignorado/.test(sp.note), "spike --flow design-first gets create's 'flow ignored' note (got " + JSON.stringify(sp && [sp.kind, sp.note]) + ")");
 }
 
 // unknown command errors

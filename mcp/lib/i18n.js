@@ -3230,6 +3230,7 @@ const MSG = {
       roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — say which role you sign for: /approve ${slug} ${phase} --role <role> (spec_approve {role}). Nothing recorded.`,
       roleNotListed: (role, phase, roles) => `'${role}' is not a role that signs off '${phase}' (roles: ${roles}) — nothing recorded.`,
       missing: (list) => `${list.length > 1 ? "missing roles" : "missing role"}: ${list.join(", ")}`,
+      stepForced: (ids) => ` (forced: ${ids.join(", ")})`,
       signedOff: (phase, slug, role) => `Signed off '${phase}' for ${slug} as ${role} ✓`,
       signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
@@ -3366,8 +3367,8 @@ const MSG = {
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: project checks without a passing run since the last task activity: ${list}`,
       more: (n) => `+${n} more`,
-      todoTasks: (slug, n) => `Record the evidence before claiming it: run each listed task's _Verify:_ on the final code — \`dev-spec done ${slug} ${n} --run\` — or record the run you made with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
-      todoSuite: (slug) => `Run the project checks: \`dev-spec finish ${slug} --run\` (or record the runs with spec_finish {evidence}).`,
+      todoTasks: (slug, n) => `Record the evidence before claiming it: read each listed task's _Verify:_ command in .specs/${slug}/tasks.md (task ${n} first), run it on the final code only if it is safe to run, and record that run with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `Project checks for ${slug} have no passing run: read them in .specs/roadmap.json (meta.checks), run them only if they are safe to run, and record the runs with spec_finish {evidence}.`,
       plainly: "Or say plainly which of these are not verified.",
       implementer: {
         head: (n, slug) => `dev-spec evidence gate: you report task ${n} of '${slug}' as DONE, but`,
@@ -3422,6 +3423,7 @@ const MSG = {
       badKind: (v) => `kind must be decision or discovery (got ${v}).`,
       badAffects: (list) => `unknown _Affects:_ reference(s): ${list} — an AC ID must be defined in requirements.md, a T-ID planned in test-plan.md, an EC/NFR/SC ID written in requirements.md; anything else must be a section heading of design.md (bug.md / design.md for a bugfix, spike.md for a spike). Nothing was written.`,
       badSupersedes: (list) => `_Supersedes:_ must name decisions already in this log (D-n): ${list}. Nothing was written.`,
+      unsafeFile: (rel) => `${rel} is not a regular file inside .specs/ (a symbolic link, or it resolves outside the project) — replace it with a plain file first. Nothing was written.`,
       recorded: (id, kind, file) => `Recorded ${id} (${kind}) in ${file}.`,
       briefHeading: "## Decisions",
       briefIntro: "Decisions and discoveries (decisions.md) that cite this task's criteria or tests — respect them:",
@@ -4542,6 +4544,7 @@ _Outcome: [go | no-go | pivot]_
       roleRequired: (phase, slug, roles) => `'${phase}' é validada por papel (${roles}) — indica o papel com que validas: /approve ${slug} ${phase} --role <papel> (spec_approve {role}). Nada foi registado.`,
       roleNotListed: (role, phase, roles) => `'${role}' não é um papel que valide '${phase}' (papéis: ${roles}) — nada foi registado.`,
       missing: (list) => `${list.length > 1 ? "faltam os papéis" : "falta o papel"}: ${list.join(", ")}`,
+      stepForced: (ids) => ` (forçada: ${ids.join(", ")})`,
       signedOff: (phase, slug, role) => `'${phase}' de ${slug} validada como ${role} ✓`,
       signedForced: (ids) => `Validado com force — as verificações a falhar ficam registadas com a validação: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' continua pendente até todos os papéis validarem o seu conteúdo atual — ${missing}.`,
@@ -4634,8 +4637,8 @@ _Outcome: [go | no-go | pivot]_
       commitRef: (short, subject, via) => `${short} ${subject} (${via})`,
       more: (n) => `+${n} mais`,
       noCommit: "nenhum commit a cita",
-      implFirst: (n, tests, taskC, testC, files) => `red-first: a tarefa ${n} (põe ${tests} a verde) teve o primeiro commit em ${taskC}, antes de qualquer commit que toque num ficheiro de teste que nomeie ${tests} (${files} — primeiro em ${testC}): a implementação veio antes do teste.`,
-      testNotCommitted: (n, tests, taskC, files) => `red-first: a tarefa ${n} (põe ${tests} a verde) tem commit (${taskC}), mas nenhum commit lido toca num ficheiro de teste que nomeie ${tests} (${files}) — faz primeiro o commit do teste.`,
+      implFirst: (n, tests, taskC, testC, files) => `red-first: a tarefa ${n} (que põe ${tests} a verde) teve o primeiro commit em ${taskC}, antes de qualquer commit que toque num ficheiro de teste que nomeie ${tests} (${files} — primeiro em ${testC}): a implementação veio antes do teste.`,
+      testNotCommitted: (n, tests, taskC, files) => `red-first: a tarefa ${n} (que põe ${tests} a verde) tem commit (${taskC}), mas nenhum commit lido toca num ficheiro de teste que nomeie ${tests} (${files}) — faz primeiro o commit do teste.`,
       redFirstStatus: (n, tests, status) => `red-first: tarefa ${n} (${tests}) — ` + ({ ok: "o teste teve commit primeiro ✓", "no-test-file": "ainda nenhum ficheiro de teste o nomeia (nada para comparar)", "no-task-commit": "ainda nenhum commit cita a tarefa", "outside-window": "impossível saber: a janela do log está cheia (--max N)" })[status],
       conventions: (slug) => `Nenhum commit cita uma tarefa de '${slug}'. Convenções: nomeia a feature e a tarefa — "Part of .specs/${slug}/ task #N." (o que o /spec-commit escreve) — ou os IDs que cobre: "Makes T-01 green", US-1.AC-2.`,
       noGit: "o git não está disponível aqui, ou isto não é um repositório git com commits — o dev-spec log lê o `git log`. Ou passa um log pelo stdin: git log --name-only --relative | dev-spec log <feature> -",
@@ -4664,8 +4667,8 @@ _Outcome: [go | no-go | pivot]_
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list}`,
       more: (n) => `+${n} mais`,
-      todoTasks: (slug, n) => `Regista a evidência antes de o afirmar: corre o _Verify:_ de cada tarefa listada no código final — \`dev-spec done ${slug} ${n} --run\` — ou regista a execução que fizeste com spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
-      todoSuite: (slug) => `Corre as verificações do projeto: \`dev-spec finish ${slug} --run\` (ou regista as execuções com spec_finish {evidence}).`,
+      todoTasks: (slug, n) => `Regista a evidência antes de o afirmar: lê o comando _Verify:_ de cada tarefa listada em .specs/${slug}/tasks.md (primeiro a tarefa ${n}); corre esse comando no código final só se for seguro; regista essa execução com spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `As verificações do projeto de ${slug} não têm nenhuma execução que passe: lê-as em .specs/roadmap.json (meta.checks); corre essas verificações só se for seguro; regista as execuções com spec_finish {evidence}.`,
       plainly: "Ou diz claramente quais destas não estão verificadas.",
       implementer: {
         head: (n, slug) => `dev-spec — gate de evidência: reportas a tarefa ${n} de '${slug}' como DONE, mas`,
@@ -4718,6 +4721,7 @@ _Outcome: [go | no-go | pivot]_
       badKind: (v) => `kind tem de ser decision ou discovery (recebido: ${v}).`,
       badAffects: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — um AC ID tem de estar definido em requirements.md, um T-ID planeado em test-plan.md, um ID EC/NFR/SC escrito em requirements.md; qualquer outra tem de ser um título de secção do design.md (bug.md / design.md num bugfix, spike.md num spike). Nada foi escrito.`,
       badSupersedes: (list) => `_Supersedes:_ tem de indicar decisões que já estão neste registo (D-n): ${list}. Nada foi escrito.`,
+      unsafeFile: (rel) => `${rel} não é um ficheiro normal dentro de .specs/ (é uma ligação simbólica, ou aponta para fora do projeto) — substitui-o primeiro por um ficheiro normal. Nada foi escrito.`,
       recorded: (id, kind, file) => `${id} (${kind}) registada em ${file}.`,
       briefHeading: "## Decisões",
       briefIntro: "Decisões e descobertas (decisions.md) que citam os critérios ou testes desta tarefa — respeita-as:",
@@ -4780,7 +4784,7 @@ _Outcome: [go | no-go | pivot]_
       spikeOnly: (arg) => `${arg} só se aplica a um spike (kind: "spike").`,
       tracksIgnored: (list) => `Um spike é só core — tracks ignorados (${list}); dá-os à feature que especificares depois de um 'go'.`,
       noTracks: (slug) => `'${slug}' é um spike — não tem tracks. Depois de um 'go', especifica a feature real com os seus tracks (spec_create).`,
-      noGate: (phase, slug) => `'${slug}' é um spike: não tem gate de ${phase} — segue pergunta → investigar → decidir. Regista a decisão em spike.md → Decisão (o spec_decide regista-a no log); o spec_finish fecha-o.`,
+      noGate: (phase, slug) => `'${slug}' é um spike: não tem gate de ${phase} — o seu percurso é pergunta → investigar → decidir. Regista a decisão em spike.md → Decisão (o spec_decide regista-a no log); o spec_finish fecha-o.`,
       doctor: {
         missing: "falta o spike.md — é lá que vivem a pergunta, a evidência e a decisão de um spike.",
         questionOk: "a pergunta está escrita",
@@ -4829,7 +4833,7 @@ _Outcome: [go | no-go | pivot]_
 
     flow: {
       required: (slug, known) => `fluxo em falta — um de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
-      kindRefused: (slug, kind) => `'${slug}' é um ${kind}: segue a sua própria ordem de fases fixa — o fluxo só se aplica a features.`,
+      kindRefused: (slug, kind) => `'${slug}' é um ${kind}, que segue a sua própria ordem de fases fixa — o fluxo só se aplica a features.`,
       kindIgnored: (kind) => `fluxo ignorado: um ${kind} segue a sua própria ordem de fases fixa (o fluxo só se aplica a features).`,
       kept: (slug, cur, asked) => `fluxo mantido: '${slug}' segue ${cur} (pedido: ${asked}) — muda-o com spec_feature {action: "flow"} (CLI: dev-spec feature flow ${slug} ${asked}).`,
       set: (slug, flow, prev, order) => `'${slug}' segue agora o fluxo ${flow} (antes: ${prev}) — ordem das fases: ${order}.`,
@@ -5836,6 +5840,7 @@ _Outcome: [go | no-go | pivot]_
       roleRequired: (phase, slug, roles) => `'${phase}' se valida por rol (${roles}) — indica el rol con el que validas: /approve ${slug} ${phase} --role <rol> (spec_approve {role}). No se ha registrado nada.`,
       roleNotListed: (role, phase, roles) => `'${role}' no es un rol que valide '${phase}' (roles: ${roles}) — no se ha registrado nada.`,
       missing: (list) => `${list.length > 1 ? "faltan los roles" : "falta el rol"}: ${list.join(", ")}`,
+      stepForced: (ids) => ` (forzada: ${ids.join(", ")})`,
       signedOff: (phase, slug, role) => `'${phase}' de ${slug} validada como ${role} ✓`,
       signedForced: (ids) => `Validado con force — las verificaciones que fallan quedan registradas con la validación: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' sigue pendiente hasta que todos los roles validen su contenido actual — ${missing}.`,
@@ -5958,8 +5963,8 @@ _Outcome: [go | no-go | pivot]_
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list}`,
       more: (n) => `+${n} más`,
-      todoTasks: (slug, n) => `Registra la evidencia antes de afirmarlo: ejecuta el _Verify:_ de cada tarea listada sobre el código final — \`dev-spec done ${slug} ${n} --run\` — o registra la ejecución que hiciste con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
-      todoSuite: (slug) => `Ejecuta las verificaciones del proyecto: \`dev-spec finish ${slug} --run\` (o registra las ejecuciones con spec_finish {evidence}).`,
+      todoTasks: (slug, n) => `Registra la evidencia antes de afirmarlo: lee el comando _Verify:_ de cada tarea listada en .specs/${slug}/tasks.md (primero la tarea ${n}), ejecútalo sobre el código final solo si es seguro hacerlo y registra esa ejecución con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoSuite: (slug) => `Las verificaciones del proyecto de ${slug} no tienen ninguna ejecución que pase: léelas en .specs/roadmap.json (meta.checks), ejecútalas solo si es seguro hacerlo y registra las ejecuciones con spec_finish {evidence}.`,
       plainly: "O di claramente cuáles de ellas no están verificadas.",
       implementer: {
         head: (n, slug) => `dev-spec — gate de evidencia: informas la tarea ${n} de '${slug}' como DONE, pero`,
@@ -6012,6 +6017,7 @@ _Outcome: [go | no-go | pivot]_
       badKind: (v) => `kind debe ser decision o discovery (recibido: ${v}).`,
       badAffects: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un AC ID debe estar definido en requirements.md, un T-ID planificado en test-plan.md, un ID EC/NFR/SC escrito en requirements.md; cualquier otra debe ser un título de sección de design.md (bug.md / design.md en un bugfix, spike.md en un spike). No se escribió nada.`,
       badSupersedes: (list) => `_Supersedes:_ debe indicar decisiones que ya están en este registro (D-n): ${list}. No se escribió nada.`,
+      unsafeFile: (rel) => `${rel} no es un archivo normal dentro de .specs/ (es un enlace simbólico, o apunta fuera del proyecto) — sustitúyelo primero por un archivo normal. No se escribió nada.`,
       recorded: (id, kind, file) => `${id} (${kind}) registrada en ${file}.`,
       briefHeading: "## Decisiones",
       briefIntro: "Decisiones y descubrimientos (decisions.md) que citan los criterios o pruebas de esta tarea — respétalos:",
@@ -6681,7 +6687,7 @@ function ptbrRes() {
     gerund: new RegExp(`(?<![${PTBR_W}\\-])(a)[ \\t]+(${[...PTBR_GERUND_VERBS].map(ptbrEscape).join("|")})(?![${PTBR_W}\\-])`, "giu"),
     green: new RegExp(`(?<![${PTBR_W}\\-])(${Object.keys(PTBR_GREEN_VERB).join("|")})[ \\t]+((?:[^\\s.,;:!?—]+[ \\t]+){0,4}?)a[ \\t]+verde(?![${PTBR_W}])`, "giu"),
     greenLeft: new RegExp(`(?<![${PTBR_W}\\-])(?:([\\p{L}-]*[sS])[ \\t]+)?a[ \\t]+(verde|vermelho)(?![${PTBR_W}])`, "gu"),
-    onDate: new RegExp(`(?<![${PTBR_W}\\-])(fechad[oa]s?|criad[oa]s?|terminou|terminad[oa]|pelo dev-spec)[ \\t]+a[ \\t]+(?=${PTBR_KEEP}|\\d{4}-\\d{2}-\\d{2})`, "giu"), // a masked arg or an ISO date
+    onDate: new RegExp(`(?<![${PTBR_W}\\-])(fechad[oa]s?|criad[oa]s?|gerad[oa]s?|arquivad[oa]s?|terminou|terminad[oa]|pelo dev-spec)[ \\t]+a[ \\t]+(?=${PTBR_KEEP}|\\d{4}-\\d{2}-\\d{2})`, "giu"), // a masked arg or an ISO date
     tooMuch: new RegExp(`(?<![${PTBR_W}\\-])demasiad(o|a|os|as)[ \\t]+([\\p{L}]+)(?![${PTBR_W}\\-])`, "giu"),
     why: new RegExp(`(?<![${PTBR_W}\\-])(o[ \\t]+)?(porquê)(?![${PTBR_W}])([ \\t]*)(?=([\\p{L}\\[]?))`, "giu"),
   });
@@ -6718,7 +6724,9 @@ function ptbrProtect(text, masks, store) {
 }
 function ptbrRestore(s, store) {
   let out = s, prev;
-  do { prev = out; out = out.replace(/\uE000(\d+)\uE001/g, (m, i) => store[+i]); } while (out !== prev && out.includes(PTBR_KEEP));
+  // Nested holds (a masked arg inside a code span\u2026) take a few passes; never more than the stages that can nest.
+  let pass = 0;
+  do { prev = out; out = out.replace(/\uE000(\d+)\uE001/g, (m, i) => (+i < store.length ? store[+i] : m)); } while (out !== prev && out.includes(PTBR_KEEP) && ++pass < 12);
   return out;
 }
 // The word before offset `i` (lower-case), or "".
@@ -6810,6 +6818,9 @@ function ptbrImperatives(s) {
 // European Portuguese → Brazilian Portuguese. masks: strings to leave exactly as they are (a derived function's args).
 function toPtBr(text, masks) {
   if (typeof text !== "string" || !text) return text;
+  // The private-use sentinels are the transform's own: a text that already holds one (a planted "0" in a task
+  // line or a path) is left as it is — restoring it expanded the string twice per pass until the heap ran out.
+  if (text.includes(PTBR_KEEP) || text.includes(PTBR_END)) return text;
   const R = ptbrRes();
   const store = [];
   let s = ptbrProtect(text, masks || [], store);

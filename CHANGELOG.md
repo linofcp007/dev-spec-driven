@@ -154,6 +154,11 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
 - **The bugfix scaffold's task 3 carries `_Verify: [command that runs T-01]_` + `_Expect: fail_`** (its red run is
   the proof), and guard test T-02 — green before and after the fix — is no longer in task 4's `_Makes green:_`, so
   doctor's `red-green` stops warning about it on every bugfix. Existing bugfixes keep their tasks.md.
+- **The evidence rule now reaches agents that never load the skill**: `spec_complete_task`'s description and the MCP
+  server's `initialize` instructions open with it — no run of a runnable `_Verify:_` → don't call the tool (not bare,
+  not with a note); name the command and ask for its output. The behavioural eval caught agents going straight to the
+  tool and ticking with a "no shell, not run" note. The skill's description names bug reports (EN/PT/ES triggers) and
+  the +sec / +privacy tracks.
 - `spec_status` returns the feature's `kind` (feature · bugfix · spike) and `flow` (requirements-first ·
   design-first), like the `spec_list` rows; the task brief's reply line asks the implementer for the report path
   (the SubagentStop gate finds its evidence through it).
