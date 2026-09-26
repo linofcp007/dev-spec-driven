@@ -1162,14 +1162,18 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
   const setsGuard = typeof opts.guard === "boolean";
-  if (lang || setsGuard) {
+  // B5: meta.checks (named project commands) — {name: command} adds/replaces, "" removes; validated before any write.
+  const nc = checksInput(opts.checks, lang || projectLang(projectDir));
+  if (nc && nc.error) return { ok: false, error: nc.error };
+  if (lang || setsGuard || nc) {
     const meta = withRoadmapLock(projectDir, () => {
-      const bad = roadmapError(projectDir);
+      const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
       // Seed/refresh the project language (single source of truth) if one was requested.
       if (lang) setRoadmapLang(projectDir, lang);
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
       if (setsGuard) setGuard(projectDir, opts.guard);
+      if (nc) writeChecks(projectDir, nc);
       return { ok: true };
     });
     if (!meta.ok) return meta;
@@ -1196,6 +1200,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     skipped,
     note: i18n.msg(lng).initNote,
     guard: guardEnabled(projectDir), // the CURRENT guard state, whether or not this call changed it
+    // B5: the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
+    checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
   };
   if (setsGuard) res.guardNote = i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
   return res;
@@ -2114,17 +2120,29 @@ function completeTask(projectDir, name, number, evidence) {
   const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
   if (gate) return { ok: false, ...gate };
   const key = String(n);
-  const failed = !!ev && ev.exitCode != null && ev.exitCode !== 0;
+  // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
+  // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
+  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup)) : null;
+  // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
+  // pass after the red run: a plain passing run that keeps the red run as the record's proof (recordEvidence).
+  if (xf && ev && ev.exitCode != null) { if (xf.passAfterRed) ev.keepRed = true; else ev.expected = "fail"; }
+  const failed = !!ev && ev.exitCode != null && (xf ? xf.refused : ev.exitCode !== 0);
   const alreadyDone = task.done;
+  const now = new Date().toISOString();
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
-    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, new Date().toISOString());
-    writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, now);
   }
-  if (!alreadyDone && !failed) recordTick(f.dir, state, key); // @pkg B4 — when it was ticked (state.ticks[n]; roadmap forecasts), before the tick
+  const ticks = !alreadyDone && !failed;
+  if (ticks) {
+    state.lastTickAt = now; // spec_finish's suite-evidence needs every project check run AFTER the last tick
+    // when this task was ticked (state.ticks[n]) — the roadmap forecasts' completion times; a hand-broken ticks value is left alone
+    if (state.ticks === undefined || isRecord(state.ticks)) state.ticks = { ...(state.ticks || {}), [key]: now };
+  }
+  if (ev || ticks) writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2)); // one write, before the tick
   let updated = text;
-  if (!alreadyDone && !failed) {
+  if (ticks) {
     // Tick the resolved line at its checkbox column (line endings, CRLF included, are kept).
     const lines = text.split("\n");
     const raw = lines[task.line];
@@ -2139,6 +2157,7 @@ function completeTask(projectDir, name, number, evidence) {
   // its unverified note say how to fix the task (redPhaseHint) — never only "re-run it" / "fix the code first".
   const redHint = redPhaseHint(task, f.slug, lng);
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
+  if (failed && xf) return expectFailRefusal(n, ev, alreadyDone, lng); // B5: a pass (unexpected-pass) or a command that couldn't run
   if (failed) {
     const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (redHint ? " " + redHint : "") };
     if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
@@ -2168,6 +2187,7 @@ function completeTask(projectDir, name, number, evidence) {
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
+      : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
       : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
     if (redHint && ["failed-run", "manual-note-on-runnable-verify", "no-evidence"].includes(reason)) {
       res.note += " — " + redHint;
@@ -2187,6 +2207,7 @@ function completeTask(projectDir, name, number, evidence) {
     res.pipeMasked = true;
     res.note = [res.note, i18n.msg(lng).verifyPipe.completeNote(n, ev.command)].filter(Boolean).join(" ");
   }
+  if (xf) expectFailResult(res, xf, n, lng); // B5: expected: "fail" (+ redRecorded / the pass-after-red note)
   return res;
 }
 
@@ -3217,10 +3238,11 @@ const RE_RED_PHASE_TASK = new RegExp([
 function redPhaseTask(block) {
   return RE_RED_PHASE_TASK.test(taskProse(block).join(" ").replace(RE_TASK_MARKER, " "));
 }
-// The redPhaseVerify hint for a block (null unless it is a red-phase task with a runnable _Verify:_): the note example
-// names its first T-ID (text or _Makes green:_), else the localized "the test".
+// The redPhaseVerify hint for a block (null unless it is a red-phase task with a runnable _Verify:_ and no _Expect: fail_ —
+// with it, the red run IS the proof): the hint points at _Expect: fail_ and names its first T-ID (text or _Makes green:_),
+// else the localized "the test".
 function redPhaseHint(block, slug, lang) {
-  if (!block || !redPhaseTask(block) || !taskMarkers(block).verify.some((c) => !/^\[.*\]$/.test(c.trim()))) return null;
+  if (!block || expectsFail(block) || !redPhaseTask(block) || !taskMarkers(block).verify.some((c) => !/^\[.*\]$/.test(c.trim()))) return null;
   const EG = i18n.msg(lang).evidenceGate;
   const t = (taskProse(block).join(" ").match(RE_TEST_REF) || [])[0];
   return EG.redPhaseVerify(block.number, slug, t || EG.redPhaseTestWord);
@@ -3234,10 +3256,10 @@ function tasksProseText(tasksText) {
 
 // `_Label: value_` markers on the task line or its sub-lines. The value runs to the LAST underscore
 // before whitespace/end, so paths like `src/keys_util.js` survive.
-const RE_TASK_MARKER = /_(Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify):\s*(.+?)_(?=\s|$)/gi;
-const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify"]); // commas belong to the value
+const RE_TASK_MARKER = /_(Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Expect):\s*(.+?)_(?=\s|$)/gi;
+const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
 function taskMarkers(block) {
-  const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [] };
+  const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [] };
   for (const line of taskProse(block)) {
     let m;
     RE_TASK_MARKER.lastIndex = 0;
@@ -3280,6 +3302,7 @@ function normalizeEvidence(ev) {
     out.exitCode = parseInt(raw, 10);
   }
   if (ev.summary != null && String(ev.summary).trim()) out.summary = String(ev.summary).slice(0, 2000);
+  Object.assign(out, gitEvidence(ev)); // B5: the commit the run was made on (+ dirty) — `done --run` fills it; a malformed value is dropped
   if (out.command && out.exitCode == null) return { error: "needsExit" };
   // A bare exit code proves nothing ({exitCode: 0} used to verify a task on its own).
   if (!out.command && !out.summary) return out.exitCode != null ? { error: "noContent" } : null;
@@ -3299,10 +3322,11 @@ function normalizeEvidence(ev) {
 // {exitCode: 0}). A task with no runnable _Verify:_ is outside the run gate — with no record at all it passes —
 // so the v1.12 bare {exitCode: 0} (1.12's "done (verified)") passes there too: legacy evidence must never leave
 // a task worse off than none (it used to block spec_finish, and neither a note nor --run could clear it).
-function evidenceIssue(e, runnable) {
+function evidenceIssue(e, runnable, expectFail) {
   if (!e || typeof e !== "object" || Array.isArray(e)) return "no-evidence";
   // spec_impact --reopen: the spec this record proved changed — only a new run (or, without a runnable _Verify:_, a new note) clears it.
   if (e.stale === true) return "stale-evidence";
+  if (expectFail) return expectFailIssue(e, runnable); // _Expect: fail_ (B5): a red run is the proof, a pass is unexpected-pass
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
   return e.exitCode === 0 || !!e.summary ? null : "no-evidence";
@@ -3333,7 +3357,7 @@ function ownEvidence(evidence, block, dup) {
 }
 function taskEvidenceIssue(evidence, block, dup) {
   const e = ownEvidence(evidence, block, dup);
-  const reason = evidenceIssue(e, taskMarkers(block).verify.length > 0);
+  const reason = evidenceIssue(e, taskMarkers(block).verify.length > 0, expectsFail(block));
   if (reason !== "no-evidence" || e !== undefined || !evidenceRecords(evidence[String(block.number)]).length) return reason;
   // The number HAS records, none of them this task's: another task shares the number (duplicate-number), or
   // they are for an earlier _Verify:_ command / a task that held the number before a renumbering.
@@ -3371,7 +3395,11 @@ function recordEvidence(prev, ev, at, stamp) {
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
   if (!hist.length && pRun) hist = [runOf(p)]; // a v1.12 record: its run seeds the history
   const run = runOf({ ...ev, at });
-  return stamped({ ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) });
+  const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+  // B5: an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
+  const keep = ev.keepRed === true ? redProof(p) : null;
+  if (keep) rec.red = keep;
+  return stamped(rec);
 }
 // evidence[n] after a run/note for `block`: its own record, updated, becomes the latest; every OTHER task's
 // record under that number is kept in `others` (newest first, bounded) — never discarded, so a renumbering
@@ -3386,7 +3414,8 @@ function storeEvidence(slot, block, dup, ev, at) {
 }
 function runOf(e) {
   const r = {};
-  for (const k of ["command", "exitCode", "summary", "at"]) if (e[k] != null) r[k] = e[k];
+  // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw) — B5; absent on older records
+  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty"]) if (e[k] != null) r[k] = e[k];
   return r;
 }
 function stateEvidence(projectDir, slug) {
@@ -3496,6 +3525,389 @@ function verifyPipeMasked(cmd) {
 function verifyPipes(block) {
   return taskMarkers(block).verify.filter(verifyPipeMasked);
 }
+
+// @pkg B5 evidence >>>
+// ---------------------------------------------------------------------------
+// 1.14 B5 — evidence: red → green (_Expect: fail_), the project's check commands (roadmap.json meta.checks) with a recorded
+// full-suite run at finish, and git-linked evidence. The engine never runs a command nor git: `dev-spec done --run` /
+// `finish --run` execute, `dev-spec log` feeds `git log` text to taskCommits() — an agent can pass the same text.
+// ---------------------------------------------------------------------------
+
+// _Expect: fail_ — an English-stable task marker, its value kept whole like _Verify:_: the task's run must FAIL (a test
+// written before its fix). Only `fail` (any case, backticks dropped) sets it; any other value leaves a must-pass task.
+function expectsFail(block) {
+  return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(v.replace(/^`+|`+$/g, "").trim()));
+}
+// Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
+// found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
+const CANT_RUN_EXIT = new Set([126, 127, 9009]);
+// A run that proves a red test: a command that ran and exited non-zero (not a could-not-run code).
+function isRedRun(r) {
+  return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !CANT_RUN_EXIT.has(r.exitCode);
+}
+// The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
+// stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more.
+function redProof(e) {
+  if (!isRecord(e) || e.stale === true) return null;
+  return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
+}
+// evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
+// fix made it pass); a passing run with no red run before it is `unexpected-pass` (the test doesn't fail: it tests nothing
+// yet); a could-not-run exit is a failed run; a note never proves a runnable _Verify:_; without one a note attests.
+function expectFailIssue(e, runnable) {
+  if (redProof(e)) return null;
+  if (e.command && e.exitCode === 0) return "unexpected-pass";
+  if (e.command && e.exitCode != null) return "failed-run";
+  if (runnable) return "manual-note-on-runnable-verify";
+  return e.exitCode === 0 || !!e.summary ? null : "no-evidence";
+}
+// completeTask's reading of one run on an _Expect: fail_ task (prev = the task's own record before it): `refused` — a pass
+// with no red run of this _Verify:_ on record, or a command that could not run; `red` — this run is the red proof;
+// `passAfterRed` — a pass once the red run is on record (the fix made the test green: the red run stays the proof).
+function expectFailRun(ev, prev) {
+  const run = !!ev && ev.exitCode != null && !!ev.command;
+  const before = redProof(prev);
+  const red = run && isRedRun(ev);
+  const pass = run && ev.exitCode === 0;
+  return { refused: run && (pass ? !before : !red), red, passAfterRed: pass && before ? before : null };
+}
+function expectFailRefusal(n, ev, ticked, lng) {
+  const X = i18n.msg(lng).redGreen;
+  if (ev.exitCode === 0) return { ok: false, recorded: true, expected: "fail", unexpectedPass: true, error: ticked ? X.passTicked(n) : X.passRefused(n) };
+  return { ok: false, recorded: true, expected: "fail", error: X.cantRun(n, ev.exitCode, ticked) };
+}
+function expectFailResult(res, xf, n, lng) {
+  res.expected = "fail"; // stable: the task carries _Expect: fail_
+  if (xf.red) res.redRecorded = true; // this call recorded the red run
+  if (xf.passAfterRed) res.note = [res.note, i18n.msg(lng).redGreen.passAfterRed(n, String(xf.passAfterRed.at || "?").slice(0, 10))].filter(Boolean).join(" ");
+}
+// red-green (doctor, +tdd): the T-IDs DONE tasks make green (_Makes green:_) against those an _Expect: fail_ task citing
+// them (anywhere in its own text / markers) has a red run recorded for (its own record: same _Verify:_, not stale).
+function redGreenGaps(blocks, evidence) {
+  const dups = new Set(duplicateTaskNumbers(blocks));
+  const greened = new Map();
+  for (const b of blocks) if (b.done) for (const id of extractTestIds(taskMarkers(b)["makes green"].join(" "))) if (!greened.has(tKey(id.slice(2)))) greened.set(tKey(id.slice(2)), id);
+  const proven = new Set();
+  for (const b of blocks) {
+    if (!expectsFail(b) || !redProof(ownEvidence(evidence, b, dups.has(b.number)))) continue;
+    for (const id of extractTestIds(taskProse(b).join(" "))) proven.add(tKey(id.slice(2)));
+  }
+  return { greened: [...greened.values()], missing: [...greened].filter(([k]) => !proven.has(k)).map(([, id]) => id) };
+}
+
+// The git state a run was made on (read-only, by `done --run` / `finish --run`): commit = a hex sha, dirty = uncommitted
+// changes outside .specs/. Context, not proof: a malformed value is dropped, never an error.
+function gitEvidence(ev) {
+  const out = {};
+  if (ev && typeof ev.commit === "string" && /^[0-9a-f]{4,40}$/i.test(ev.commit.trim())) out.commit = ev.commit.trim().toLowerCase();
+  if (out.commit && typeof ev.dirty === "boolean") out.dirty = ev.dirty;
+  return out;
+}
+// The feature's last task activity (ms): the last tick completeTask stamped (lastTickAt) or the newest recorded task run. A
+// box ticked by hand in tasks.md leaves no time; null = nothing known (then any passing check run counts).
+function lastTaskActivity(state) {
+  let best = null;
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && (best == null || t > best)) best = t; };
+  see(state.lastTickAt);
+  for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
+    for (const r of evidenceRecords(slot)) {
+      if (r.exitCode != null) see(r.at);
+      (Array.isArray(r.history) ? r.history : []).forEach((h) => { if (isRecord(h)) see(h.at); });
+    }
+  }
+  return best;
+}
+
+// roadmap.json → meta.checks: named project commands ({"test": "npm test", "lint": "npm run lint"}). A name is letters,
+// digits and . _ : - (≤ 40, never a prototype key); a command one line of ≤ 500 characters.
+const CHECK_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$/;
+const CHECKS_MAX = 20;
+const validCheckName = (k) => typeof k === "string" && CHECK_NAME_RE.test(k) && !PROTO_KEYS.has(k.toLowerCase());
+const validCheckCmd = (v) => typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) && v.trim().length <= 500;
+// → { checks: [{name, command}] (stored order), invalid: [names of malformed entries — ignored] }
+function projectChecks(projectDir) {
+  const l = loadRoadmap(projectDir);
+  const raw = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.checks : undefined;
+  if (raw === undefined) return { checks: [], invalid: [] };
+  if (!isObj(raw)) return { checks: [], invalid: ["meta.checks"] };
+  const checks = [], invalid = [];
+  for (const [name, cmd] of Object.entries(raw)) (validCheckName(name) && validCheckCmd(cmd) ? checks.push({ name, command: cmd.trim() }) : invalid.push(name));
+  return { checks, invalid };
+}
+// spec_init {checks} / `init --check name=cmd`: {name: command} adds or replaces those checks, an empty command (or null)
+// removes one, the others are kept. → null (not given) · { set, remove } · { error } — validated before anything is written.
+function checksInput(input, lng) {
+  if (input === undefined || input === null) return null;
+  const P = i18n.msg(normalizeLang(lng)).projectChecks;
+  if (!isObj(input)) return { error: P.badInput };
+  const set = {}, remove = [];
+  for (const [k, v] of Object.entries(input)) {
+    if (!validCheckName(k)) return { error: P.badName(k) };
+    if (v == null || (typeof v === "string" && v.trim() === "")) { remove.push(k); continue; }
+    if (!validCheckCmd(v)) return { error: P.badCommand(k) };
+    set[k] = v.trim();
+  }
+  return { set, remove };
+}
+// Under the roadmap lock, before any write of initProject: the merged meta.checks (nc.merged) or the refusal — a stored
+// meta.checks that is not an object of strings is reported, never "repaired"; more than CHECKS_MAX checks is refused.
+function checksPlanError(projectDir, nc) {
+  const l = loadRoadmap(projectDir);
+  const lng = projectLang(projectDir);
+  const P = i18n.msg(lng).projectChecks;
+  const raw = isObj(l.rm.meta) ? l.rm.meta.checks : undefined;
+  if (raw !== undefined && !(isObj(raw) && Object.values(raw).every((v) => typeof v === "string"))) return P.badStored(l.rel);
+  const merged = { ...(raw || {}) };
+  for (const k of nc.remove) delete merged[k];
+  Object.assign(merged, nc.set);
+  if (Object.keys(merged).length > CHECKS_MAX) return P.tooMany(CHECKS_MAX);
+  nc.merged = merged;
+  return null;
+}
+function writeChecks(projectDir, nc) {
+  return withRoadmapLock(projectDir, () => {
+    const rm = readRoadmap(projectDir);
+    rm.meta = isObj(rm.meta) ? rm.meta : {};
+    if (JSON.stringify(rm.meta.checks || {}) === JSON.stringify(nc.merged)) return { ok: true }; // unchanged: no write
+    if (Object.keys(nc.merged).length) rm.meta.checks = nc.merged;
+    else delete rm.meta.checks;
+    writeRoadmap(projectDir, rm);
+    return { ok: true };
+  });
+}
+// spec_finish {evidence: [{name, command, exitCode, summary}]} — the project checks' runs as the agent (or `finish --run`)
+// ran them, validated all-or-nothing, then recorded in .state.json → finishChecks[name]: the latest run {command, exitCode,
+// summary, at, commit?, dirty?} stamped `check` (the meta.checks command it ran for — an edited command makes it `changed`)
+// plus a short history. A failed run is recorded too (it stays a blocker). → { recorded } | { error }
+function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
+  const P = i18n.msg(lng).projectChecks;
+  if (!Array.isArray(evidence)) return { error: P.evidenceNotList };
+  if (!evidence.length) return { recorded: [] };
+  const { checks } = projectChecks(projectDir);
+  if (!checks.length) return { error: P.noChecks };
+  const byName = new Map(checks.map((c) => [c.name, c.command]));
+  const runs = [];
+  for (let i = 0; i < evidence.length; i++) {
+    const it = evidence[i];
+    const bad = (why) => ({ error: P.evidenceItem(i, why) });
+    if (!isObj(it)) return bad(P.itemNotObject);
+    if (typeof it.name !== "string" || !byName.has(it.name)) return bad(P.unknownCheck(String(it.name), checks.map((c) => c.name).join(", ")));
+    if (typeof it.command !== "string" || !it.command.trim()) return bad(P.needsCommand);
+    const code = it.exitCode == null ? "" : String(it.exitCode).trim();
+    if (!/^-?\d+$/.test(code)) return bad(P.needsExit);
+    const run = { command: it.command.trim().slice(0, 500), exitCode: parseInt(code, 10), ...gitEvidence(it) };
+    if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
+    runs.push({ name: it.name, check: byName.get(it.name), run });
+  }
+  const state = readState(projectDir, slug);
+  if (state.invalid) return { error: state.invalid };
+  const at = new Date().toISOString();
+  const fc = isObj(state.finishChecks) ? state.finishChecks : {};
+  for (const r of runs) {
+    const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
+    const run = runOf({ ...r.run, at });
+    const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
+    fc[r.name] = { ...run, check: r.check, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+  }
+  state.finishChecks = fc;
+  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
+  return { recorded: runs.map((r) => ({ name: r.name, exitCode: r.run.exitCode })) };
+}
+// Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
+// the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
+// command changed since the run) · before-last-tick. → { items, missing (not pass), invalid, lastActivity }
+function suiteStatus(projectDir, state) {
+  const { checks, invalid } = projectChecks(projectDir);
+  const last = lastTaskActivity(state);
+  const fc = isObj(state.finishChecks) ? state.finishChecks : {};
+  const items = checks.map(({ name, command }) => {
+    const r = Object.prototype.hasOwnProperty.call(fc, name) && isRecord(fc[name]) ? fc[name] : null;
+    if (!r || typeof r.command !== "string" || !Number.isInteger(r.exitCode)) return { name, command, status: "no-run" };
+    const it = { name, command, exitCode: r.exitCode, at: typeof r.at === "string" ? r.at : null, ranCommand: r.command, ...runOf({ summary: r.summary, ...gitEvidence(r) }) };
+    const t = Date.parse(r.at);
+    it.status = r.check !== command ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick" : "pass";
+    return it;
+  });
+  return { items, missing: items.filter((i) => i.status !== "pass"), invalid, lastActivity: last != null ? new Date(last).toISOString() : null };
+}
+function suiteLabel(items, lng) {
+  const P = i18n.msg(lng).projectChecks;
+  return items.map((i) => `${i.name} (${P.status(i)})`).join(", ");
+}
+// "@1a2b3c4" (+ "-dirty", as git describe writes it) for a run recorded with its commit — the merge summary's evidence tail.
+function commitTag(r) {
+  return isRecord(r) && typeof r.commit === "string" && r.commit ? "@" + r.commit + (r.dirty === true ? "-dirty" : "") : "";
+}
+// The merge summary's "Project checks" section: each check with its latest recorded run (or none) and, unless it passes, why.
+function suiteSummaryLines(items, lng) {
+  const P = i18n.msg(lng).projectChecks;
+  return [P.prChecks, ...items.map((i) => {
+    const run = i.status === "no-run" ? P.prNoRun : [codeSpan(i.ranCommand || i.command) + " → exit " + i.exitCode, oneLine(i.summary), commitTag(i)].filter(Boolean).join(" · ");
+    return `- ${i.name}: ${run}` + (i.status !== "pass" && i.status !== "no-run" ? ` (${P.status(i)})` : "");
+  })];
+}
+// spec_doctor's B5 checks — warns only: red-green (+tdd, once a task that makes a T-ID green is done) and suite-evidence
+// (meta.checks set and every active task done: the finish blocker, shown before finish).
+function b5DoctorChecks(projectDir, slug, dir, tracks, lng) {
+  const out = [];
+  const X = i18n.msg(lng);
+  const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
+  const state = readState(projectDir, slug);
+  if (tracks.includes("tdd")) {
+    const rg = redGreenGaps(blocks, isRecord(state.evidence) ? state.evidence : {});
+    if (rg.greened.length) out.push({ id: "red-green", status: rg.missing.length ? "warn" : "pass", detail: rg.missing.length ? X.redGreen.doctorMissing(rg.missing.join(", ")) : X.redGreen.doctorOk(rg.greened.length) });
+  }
+  if (blocks.length && blocks.every((b) => b.done)) {
+    const s = suiteStatus(projectDir, state);
+    if (s.items.length) out.push({ id: "suite-evidence", status: s.missing.length ? "warn" : "pass", detail: s.missing.length ? X.projectChecks.doctorWarn(suiteLabel(s.missing, lng), slug) : X.projectChecks.doctorOk(s.items.length) });
+  }
+  return out;
+}
+
+// `git log` text → commits, newest first as git prints them: { hash, short, date, author, subject, message, files }. Reads
+// git's default ("medium") format — `git log --name-only` (or --name-status; with --relative the paths are project-relative)
+// — and, when no "commit <sha>" header is present, `git log --oneline` lines (no files then). At most GITLOG_MAX_COMMITS.
+const GITLOG_MAX_COMMITS = 5000;
+function parseGitLog(text) {
+  const lines = String(text == null ? "" : text).replace(/^\uFEFF/, "").split(/\r?\n/);
+  const RE_HEAD = /^commit ([0-9a-f]{4,64})(?:\s|$)/i;
+  const commits = [];
+  const mk = (hash, subject) => ({ hash: hash.toLowerCase(), short: hash.slice(0, 7).toLowerCase(), date: null, author: null, subject, message: subject, files: [] });
+  if (!lines.some((l) => RE_HEAD.test(l))) {
+    for (const l of lines) {
+      const m = l.match(/^([0-9a-f]{4,64})\s+(\S.*)$/i);
+      if (m && commits.length < GITLOG_MAX_COMMITS) commits.push(mk(m[1], m[2].trim()));
+    }
+    return commits;
+  }
+  let cur = null, part = null, msg = [];
+  const close = () => { if (cur) { cur.message = msg.join("\n").trim(); cur.subject = (msg.find((x) => x.trim()) || "").trim(); } };
+  for (const l of lines) {
+    const h = l.match(RE_HEAD);
+    if (h) {
+      close();
+      cur = null;
+      if (commits.length >= GITLOG_MAX_COMMITS) break;
+      cur = mk(h[1], "");
+      commits.push(cur);
+      msg = [];
+      part = "head";
+      continue;
+    }
+    if (!cur) continue;
+    if (part === "head") {
+      if (!l.trim()) { part = "msg"; continue; }
+      const kv = l.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+      if (kv && /^author$/i.test(kv[1])) cur.author = kv[2].trim();
+      else if (kv && /^(?:author)?date$/i.test(kv[1])) cur.date = kv[2].trim();
+      continue;
+    }
+    if (part === "msg" && /^ {4}/.test(l)) { msg.push(l.slice(4)); continue; }
+    if (!l.trim()) continue;
+    part = "files"; // --name-only "path" · --name-status "M\tpath" / "R100\told\tnew"
+    const ns = l.match(/^[ACDMRTUXB]\d*\t(.+)$/);
+    let file = (ns ? ns[1].split("\t").pop() : l).trim();
+    if (/^".*"$/.test(file)) file = file.slice(1, -1);
+    cur.files.push(file.replace(/\\/g, "/").replace(/^(?:\.\/)+/, ""));
+  }
+  close();
+  return commits;
+}
+// `dev-spec log <feature>` (the CLI feeds it `git log` output; an agent can pass the same text): the commits whose message
+// cites each ACTIVE task, plus — +tdd — a red-first check. Conventions (what /spec-commit writes: "Part of .specs/<feature>/
+// task #N." · "Makes T-01, T-02 green."): a message cites task N when it names the feature — its slug as a word:
+// `.specs/<slug>/`, `feat(<slug>):` … — AND "task #N" / "task N" / "#N" (PT "tarefa N", ES "tarea N"); it cites every task
+// whose own text / markers name one of its T-IDs (T-01 = T-1) or AC IDs (US-1.AC-2) — unless the message names another
+// feature and not this one (IDs restart in every feature). Red-first: a task with _Makes green: T-xx_ whose first commit
+// citing it (by number or by one of those T-IDs) is OLDER than the first commit touching a test file that names T-xx (the
+// trace --code scan of this feature's plan) — or when no commit read touches one — gets a warning. opts.max: the window the
+// log was read with (a full window means older commits were not read: an order that can't be known is `outside-window`).
+function taskCommits(projectDir, name, logText, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const tasksText = readIfExists(path.join(dir, "tasks.md"));
+  if (tasksText == null) return { ok: false, error: errs(projectDir, slug).tasksMissing(slug) };
+  const lng = featureLang(projectDir, slug);
+  const G = i18n.msg(lng).gitLog;
+  const tracks = detectTracks(dir);
+  const blocks = taskBlocks(activeTasks(tasksText, tracks) || "");
+  const commits = parseGitLog(logText);
+  const truncated = commits.length >= GITLOG_MAX_COMMITS || (Number.isInteger(opts.max) && commits.length >= opts.max); // the parser's cap is a window too
+  const wordRe = (s) => new RegExp("(?<![\\p{L}\\p{N}_-])" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}_-])", "iu");
+  const self = wordRe(slug);
+  const others = featureDirs(projectDir).map((d) => d.slug).filter((s) => s !== slug).map(wordRe);
+  const RE_NUM = /(?<![\p{L}\p{N}_])(?:tasks?|tarefas?|tareas?)\s*#?\s*(\d+)(?!\d)|(?<![\p{L}\p{N}_#&/])#(\d+)(?!\d)/giu;
+  const info = blocks.map((b) => {
+    const prose = taskProse(b).join(" ");
+    return { b, tids: new Map([...extractTestIds(prose)].map((id) => [tKey(id.slice(2)), id])), acs: extractAcIds(prose),
+      green: [...extractTestIds(taskMarkers(b)["makes green"].join(" "))], commits: [] };
+  });
+  let citing = 0;
+  commits.forEach((c, idx) => {
+    const text = c.message || c.subject;
+    const mine = self.test(text);
+    const foreign = !mine && others.some((re) => re.test(text));
+    const nums = new Set(mine ? [...text.matchAll(RE_NUM)].map((m) => parseInt(m[1] || m[2], 10)) : []);
+    const tids = new Set(foreign ? [] : [...extractTestIds(text)].map((id) => tKey(id.slice(2))));
+    const acs = foreign ? new Set() : extractAcIds(text);
+    let cites = false;
+    for (const t of info) {
+      const byNumber = nums.has(t.b.number);
+      const tkeys = [...t.tids.keys()].filter((k) => tids.has(k));
+      const acIds = [...t.acs].filter((a) => acs.has(a));
+      if (!byNumber && !tkeys.length && !acIds.length) continue;
+      t.commits.push({ idx, byNumber, tkeys, via: [...(byNumber ? ["#" + t.b.number] : []), ...tkeys.map((k) => t.tids.get(k)), ...acIds] });
+      cites = true;
+    }
+    if (cites) citing++;
+  });
+  const ref = (i) => (i < 0 ? null : { hash: commits[i].hash, short: commits[i].short, subject: commits[i].subject, date: commits[i].date });
+  // Red-first (+tdd): test files are found once, by the trace --code scan of this feature's plan.
+  const redFirst = [];
+  let testFiles = null;
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  for (const t of tracks.includes("tdd") ? info.filter((x) => x.green.length) : []) {
+    if (!testFiles) {
+      const tc = traceTestCode(projectDir, dir, planIdText(readIfExists(path.join(dir, "test-plan.md")) || ""), new Set(), opts.scan);
+      testFiles = new Map(Object.entries(tc.testsInCode).map(([id, files]) => [tKey(id.slice(2)), files]));
+    }
+    const keys = t.green.map((id) => tKey(id.slice(2)));
+    const files = [...new Set(keys.flatMap((k) => testFiles.get(k) || []))];
+    const strong = t.commits.filter((c) => c.byNumber || c.tkeys.some((k) => keys.includes(k)));
+    const first = strong.length ? Math.max(...strong.map((c) => c.idx)) : -1; // newest first: the oldest has the highest index
+    const want = new Set(files.map(fold));
+    let testIdx = -1;
+    commits.forEach((c, i) => { if (c.files.some((p) => want.has(fold(p)))) testIdx = i; });
+    // A full window hides the older commits: the first commit of either side may be older than what was read — no order is known.
+    const status = !files.length ? "no-test-file" : first < 0 ? "no-task-commit" : truncated ? "outside-window" : testIdx < 0 ? "test-not-committed" : first > testIdx ? "impl-first" : "ok";
+    redFirst.push({ task: t.b.number, tests: t.green, status, taskCommit: ref(first), testCommit: ref(testIdx), testFiles: files });
+  }
+  const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+  const lines = [G.head(slug, commits.length, citing, truncated)];
+  for (const t of info) {
+    const list = t.commits.slice(0, 5).map((c) => G.commitRef(commits[c.idx].short, cut(commits[c.idx].subject, 60), c.via.join(", ")));
+    if (t.commits.length > 5) list.push(G.more(t.commits.length - 5));
+    lines.push(G.taskLine(t.b.number, cut(cleanTaskText(t.b.text), 60), t.b.done, list.length ? list.join("; ") : G.noCommit));
+  }
+  const warnings = [];
+  for (const r of redFirst) {
+    const tests = r.tests.join(", ");
+    const files = r.testFiles.slice(0, 3).join(", ");
+    if (r.status === "impl-first") warnings.push(G.implFirst(r.task, tests, r.taskCommit.short, r.testCommit.short, files));
+    else if (r.status === "test-not-committed") warnings.push(G.testNotCommitted(r.task, tests, r.taskCommit.short, files));
+    else lines.push("  · " + G.redFirstStatus(r.task, tests, r.status));
+  }
+  warnings.forEach((w) => lines.push("  ▲ " + w));
+  if (!citing) lines.push(G.conventions(slug));
+  return {
+    ok: true, feature: slug, lang: lng, commits: commits.length, truncated, citing,
+    tasks: info.map((t) => ({ number: t.b.number, text: t.b.text, done: t.b.done,
+      commits: t.commits.map((c) => ({ hash: commits[c.idx].hash, short: commits[c.idx].short, subject: commits[c.idx].subject, date: commits[c.idx].date, via: c.via })) })),
+    redFirst, warnings, lines,
+  };
+}
+// @pkg B5 <<<
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
@@ -3699,6 +4111,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   };
   // The runnable _Verify:_ commands that pipe into another one: their exit code is the pipeline's LAST command's.
   const pipes = verifyPipes(block);
+  const expectFail = expectsFail(block); // B5: _Expect: fail_ — the brief's Verification section says the run must fail
+  const checks = projectChecks(projectDir).checks; // B5: roadmap.json meta.checks — part of the definition of done
 
   const md = i18n.renderBrief({
     feature: slug,
@@ -3720,6 +4134,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     steeringManual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     verify: mk.verify,
     verifyPipes: pipes, // a pipe masks the check's exit code — the brief says so
+    expectFail,
+    projectChecks: checks,
     globalConstraints: globalConstraints(tasksText),
     reportPath: rel(paths.report),
   }, lng);
@@ -3762,6 +4178,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
+  if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
+  if (checks.length) res.projectChecks = checks; // B5: [{name, command}] the definition of done names
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -3819,6 +4237,14 @@ function finishFeature(projectDir, name, opts = {}) {
   const lng = featureLang(projectDir, slug);
   const F = i18n.msg(lng).finish;
   const tracks = detectTracks(dir);
+  // B5: spec_finish {evidence} — the project checks' runs, recorded BEFORE the readiness is computed (the same call can make
+  // the feature ready); all-or-nothing, under the feature lock.
+  let recordedChecks = null;
+  if (opts.evidence != null) {
+    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng);
+    if (rc.error) return { ok: false, error: rc.error };
+    recordedChecks = rc.recorded;
+  }
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
   // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
@@ -3856,6 +4282,10 @@ function finishFeature(projectDir, name, opts = {}) {
   if (!blocks.length) block("tasks", F.noTasks);
   if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
   if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
+  // B5: meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
+  const suite = suiteStatus(projectDir, state);
+  if (suite.missing.length) block("suite-evidence", i18n.msg(lng).projectChecks.blocker(suiteLabel(suite.missing, lng), slug));
+  if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.join(", ")));
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
@@ -3891,12 +4321,13 @@ function finishFeature(projectDir, name, opts = {}) {
       const hasVerify = taskMarkers(b).verify.length > 0;
       // A record with nothing to show (a v1.12 bare {exitCode: 0}) prints its exit code — never a dangling " — ".
       const shown = ev ? [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") : ev.exitCode != null ? "exit " + ev.exitCode : "",
-        oneLine(ev.summary)].filter(Boolean) : [];
+        oneLine(ev.summary), commitTag(ev)].filter(Boolean) : [];
       const tail = shown.length ? " — " + shown.join(" · ") : hasVerify ? " — " + F.noEvidence : "";
       body.push(`- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}${tail}`);
     }
     body.push("");
   }
+  if (suite.items.length) body.push(...suiteSummaryLines(suite.items, lng), ""); // B5: the project checks' recorded runs
   const testIds = [...testIndex(readIfExists(path.join(dir, "test-plan.md")) || "").keys()];
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
@@ -3937,6 +4368,8 @@ function finishFeature(projectDir, name, opts = {}) {
     wrote: write,
   };
   if (baseline) res.baseline = baseline;
+  if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
+  if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
@@ -3965,7 +4398,7 @@ function stateFromFile(projectDir, file) {
   const problems = [];
   if (j.exists && !isObj(j.data)) problems.push(["topLevel"]);
   const s = isObj(j.data) ? j.data : {};
-  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray]]) {
+  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray], ["finishChecks", isObj]]) {
     if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
   }
   // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
@@ -4570,8 +5003,9 @@ function featureMetrics(projectDir, slug, dir) {
   // The evidence gate's rules: a pass is {command, exitCode: 0} — a bare {exitCode: 0} (v1.12) proves nothing, so it
   // is no run at all — while any non-zero exit code is a failed run (the gate's failed-run), with or without a command.
   const exitOf = (h) => (h.exitCode == null ? null : Number(h.exitCode));
-  const isPass = (h) => !!h.command && exitOf(h) === 0;
-  const isRun = (h) => isPass(h) || (exitOf(h) != null && exitOf(h) !== 0);
+  // B5: an _Expect: fail_ run (expected: "fail") passes when it FAILED as expected — its red run met the expectation.
+  const isPass = (h) => !!h.command && (h.expected === "fail" ? isRedRun({ ...h, exitCode: exitOf(h) }) : exitOf(h) === 0);
+  const isRun = (h) => isPass(h) || (exitOf(h) != null && (exitOf(h) !== 0 || (h.expected === "fail" && !!h.command))); // B5: an unexpected pass is a failed run
   let runs = 0, passing = 0;
   for (const slot of Object.values(evidence)) {
     for (const r of evidenceRecords(slot)) {
@@ -5643,6 +6077,7 @@ function nextAction(projectDir, name, opts = {}) {
         // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
         const red = redPhaseHint(blk, slug, lng);
         if (red) recommendation += " " + red;
+        if (expectsFail(blk)) recommendation += " " + i18n.msg(lng).redGreen.naVerify(n, slug); // B5: its proof is a FAILING run, not a passing one
       } else if (dr && dr.drifted) {
         // Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it
         // also needs finishing again, after that decision.
@@ -6625,6 +7060,9 @@ function specDoctor(projectDir, name, opts = {}) {
   if (vs.withVerify || Object.keys(vs.evidence).length) {
     add("verification", vs.unverified.length ? "warn" : "pass", vs.unverified.length ? m.unverified(unverifiedLabel(vs, featureLang(projectDir, slug))) : m.verifiedOk);
   }
+  // B5 (warns): red-green — T-IDs made green with no recorded red run of an _Expect: fail_ task; suite-evidence — the project
+  // checks (meta.checks) without a passing run since the last task activity, once every task is done (finish blocks on it).
+  for (const c of b5DoctorChecks(projectDir, slug, dir, tracks, lng)) add(c.id, c.status, c.detail);
   // Duplicated task numbers: complete/brief resolve to the first OPEN one, but humans read them as one task.
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", fm.evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
@@ -7398,11 +7836,6 @@ function taskSize(block) {
 }
 // completeTask, right before it ticks a task: when (state.ticks[n] = ISO), written with the call's own state (its evidence
 // included). A `ticks` that is not an object (a hand edit) is left as it is — never "repaired" — and nothing is recorded.
-function recordTick(dir, state, key) {
-  if (state.ticks !== undefined && !isRecord(state.ticks)) return;
-  state.ticks = { ...(state.ticks || {}), [key]: new Date().toISOString() };
-  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
-}
 // When a DONE task was completed (ms), or null: its tick time, else its own evidence record's first passing run (a
 // re-check later on is not the completion), else the record's time.
 function taskCompletedAt(state, block, dup) {
@@ -10356,7 +10789,7 @@ module.exports = {
   taskBrief: featureLocked(taskBrief, (a) => !!(a[3] && a[3].write)), // write: .execution/ resolved and written under the lock (a move waits)
   taskBlocks,
   globalConstraints,
-  finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && a[2].write)), // write: the drift baseline in .state.json
+  finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && (a[2].write || a[2].evidence != null))), // write: the drift baseline · evidence (B5): finishChecks — both in .state.json
   parseTasks,
   approvePhase: featureLocked(approvePhase),
   readState,
@@ -10487,6 +10920,10 @@ module.exports = {
   // @pkg B4 <<<
 
   // @pkg B5 exports >>>
+  expectsFail, // _Expect: fail_ on a task block (spec_task_brief reports it as `expect: "fail"`, which `done --run` reads)
+  projectChecks, // roadmap.json meta.checks → {checks: [{name, command}], invalid} — `finish --run` runs them
+  parseGitLog, // `git log` text (medium --name-only/--name-status, or --oneline) → commits
+  taskCommits, // `dev-spec log <feature>`: the commits citing each task + the +tdd red-first check, from git log TEXT (never runs git)
   // @pkg B5 <<<
 
   // @pkg C1 exports >>>

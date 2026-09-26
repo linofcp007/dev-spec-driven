@@ -2349,13 +2349,14 @@ function endRun() {
     const rbPtRun = S.completeTask(w5pt, rbPt.slug, 3, { command: "node tests/t01.test.js", exitCode: 1 });
     const plain = S.completeTask(w5, rb.slug, 4, { command: "npm test", exitCode: 1 });
     ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 3 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
-      /move the command to the task that makes it green/.test(rbRun.error) && /dev-spec done red-loop-en 3 --evidence "T-01 fails: <the reason>"/.test(rbRun.error) &&
+      /Mark task 3 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
+      /dev-spec done red-loop-en 3 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
       rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 3 writes a test that must FAIL/.test(rbNote.note) &&
       rbNext.step === "verify" && /Task 3 writes a test that must FAIL/.test(rbNext.recommendation) &&
       rbPtRun.redPhaseVerify === true && /A tarefa 3 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
       plain.ok === false && !plain.redPhaseVerify && !/red phase/.test(plain.error) &&
       /Task 3 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 3 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
-      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (move the command to the fix task, or a note without a _Verify:_) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
+      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (mark it _Expect: fail_, or move the command to the fix task) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
       JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")");
 
     // Quoted evidence in bug.md is content, not a template slot: a Reproduction / Root Cause quoting `[object Object]`, a regex
@@ -7356,6 +7357,335 @@ function endRun() {
   // @pkg B4 <<<
 
   // @pkg B5 tests >>>
+  { // 1.14 B5 — evidence: red → green (_Expect: fail_), project checks (meta.checks) + the finish suite run, git-linked evidence
+    const b5Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
+    const b5Dir = (n) => path.join(tmp, "b5-" + n);
+    const b5State = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const b5Tasks = (f, text) => fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
+    const b5Read = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const b5Tick = () => { const until = Date.now() + 15; while (Date.now() < until) { /* a later millisecond for the next timestamp */ } };
+
+    // --- B5.1 the marker: English-stable, value kept whole; only `fail` sets it; a fenced example never does.
+    const mkB5 = (line, body) => S.taskBlocks("- [ ] 1. " + line + "\n" + (body || "")).find((b) => b.number === 1);
+    ok(S.expectsFail(mkB5("t", "  - _Expect: fail_\n")) && S.expectsFail(mkB5("t _Expect: FAIL_")) && S.expectsFail(mkB5("t", "  - _Expect: `fail`_\n")) &&
+      !S.expectsFail(mkB5("t", "  - _Expect: pass_\n")) && !S.expectsFail(mkB5("t", "  ```md\n  - _Expect: fail_\n  ```\n")) && !S.expectsFail(mkB5("t")),
+      "B5 _Expect: fail_ is read from the task line or a sub-line (any case, backticks dropped); `pass`, a fenced example or no marker leave a must-pass task");
+
+    // --- B5.1 spec_complete_task: a passing run is refused (the test tests nothing), a FAILING run is the proof.
+    const d1 = b5Dir("red");
+    S.initProject(d1, ["tdd"], "en");
+    const f1 = S.createFeature(d1, "Red Green", ["tdd"], "", undefined, "en");
+    b5Tasks(f1, "# Tasks\n\n## Phase 1\n\n" +
+      "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Verify: node tests/t01.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Implement the check\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n");
+    const pass0 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 0, summary: "1 passing" } });
+    const st0 = b5State(f1).evidence["1"];
+    const red1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" } });
+    const st1 = b5State(f1).evidence["1"];
+    ok(pass0.ok === false && pass0.recorded === true && pass0.unexpectedPass === true && pass0.expected === "fail" && /the test doesn't fail yet, so it tests nothing/.test(pass0.error) &&
+      st0.exitCode === 0 && st0.expected === "fail" && red1.ok === true && red1.completed === 1 && red1.verified === true && red1.redRecorded === true && red1.expected === "fail" &&
+      !red1.unverifiedReason && st1.exitCode === 1 && st1.expected === "fail" && st1.history.length === 2 && /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
+      "B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
+      JSON.stringify([pass0.error, red1]).slice(0, 300) + ")");
+    const green2 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 2, evidence: { command: "node tests/t01.test.js", exitCode: 0 } });
+    const again1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 0, summary: "1 passing" } });
+    const st1b = b5State(f1).evidence["1"];
+    const met1 = S.metrics(d1, f1.slug).evidence;
+    ok(green2.ok && green2.verified && !green2.expected && again1.ok === true && again1.alreadyDone && again1.verified === true && again1.expected === "fail" && !again1.redRecorded &&
+      /its test passes now — expected once the fix is in; the red run recorded on \d{4}-\d{2}-\d{2} stays the proof/.test(again1.note) &&
+      st1b.exitCode === 0 && !st1b.expected && st1b.red && st1b.red.exitCode === 1 && st1b.red.command === "node tests/t01.test.js" &&
+      !S.verificationStatus(d1, f1.slug, f1.dir).unverified.length && met1.runs === 4 && met1.passing === 3,
+      "B5 after the fix: a passing re-run of the _Expect: fail_ task keeps the red run as its proof (red) — verified, with a note; metrics count the red run as a pass and the refused pass as a failure (got " +
+      JSON.stringify([again1.note, met1]) + ")");
+
+    // Edges: a command that could not run, a note, a ticked task with no red run, no runnable _Verify:_, a stale red run.
+    const d2 = b5Dir("edges");
+    S.initProject(d2, ["tdd"], "en");
+    const f2 = S.createFeature(d2, "Edge", ["tdd"], "", undefined, "en");
+    b5Tasks(f2, "- [ ] 1. [US1] Write T-01 red\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 2. [US1] Note only\n  - _Verify: node t.js_\n  - _Expect: fail_\n" +
+      "- [x] 3. [US1] Ticked before the marker\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 4. [US1] No verify\n  - _Expect: fail_\n");
+    const cant = S.completeTask(d2, f2.slug, 1, { command: "node t.js", exitCode: 127 });
+    const note2 = S.completeTask(d2, f2.slug, 2, { summary: "it fails" });
+    const tick3 = S.completeTask(d2, f2.slug, 3, { command: "node t.js", exitCode: 0 });
+    const vs2 = S.verificationStatus(d2, f2.slug, f2.dir);
+    const docV2 = S.specDoctor(d2, f2.slug).checks.find((c) => c.id === "verification");
+    const none4 = S.completeTask(d2, f2.slug, 4);
+    ok(cant.ok === false && cant.recorded && !cant.unexpectedPass && /exit 127 means the command itself could not run/.test(cant.error) && /Not marking it done/.test(cant.error) &&
+      note2.ok && note2.verified === false && note2.unverifiedReason === "manual-note-on-runnable-verify" &&
+      tick3.ok === false && tick3.unexpectedPass && /is ticked, but it expects its test to FAIL/.test(tick3.error) &&
+      vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass") && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail) &&
+      none4.ok && none4.verified && none4.nothingToVerify && none4.expected === "fail",
+      "B5 _Expect: fail_ edges: exit 127 is refused (no red test); a note never proves a runnable _Verify:_; a ticked task whose run passes with no red run before it becomes unverified (reason unexpected-pass, labelled in doctor); without a runnable _Verify:_ nothing recorded is nothingToVerify (got " +
+      JSON.stringify([cant.error, docV2.detail]).slice(0, 300) + ")");
+    const st2 = b5State(f2);
+    st2.evidence["1"] = { command: "node t.js", exitCode: 1, at: "2026-01-01T00:00:00.000Z", task: "[US1] Write T-01 red", verify: "node t.js", stale: true };
+    fs.writeFileSync(path.join(f2.dir, ".state.json"), JSON.stringify(st2));
+    const staleRun = S.completeTask(d2, f2.slug, 1, { command: "node t.js", exitCode: 0 });
+    ok(staleRun.ok === false && staleRun.unexpectedPass === true, "B5 a red run marked stale (spec_impact --reopen: the spec changed) proves nothing — a pass after it is refused, a new red run is needed");
+
+    // The red-phase guidance points at _Expect: fail_ (EN/PT/ES); with the marker the red run is the proof (no redPhaseVerify).
+    const d3 = b5Dir("hint");
+    S.initProject(d3, ["tdd"], "en");
+    const mkHint = (lang, name) => {
+      const f = S.createFeature(d3, name, ["tdd"], "", undefined, lang);
+      b5Tasks(f, "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node t.js_\n" +
+        "- [ ] 2. [US1] Write regression test T-02 and watch it fail for the right reason\n  - _Verify: node t.js_\n  - _Expect: fail_\n");
+      return f;
+    };
+    const fh = mkHint("en", "Hint En"), fhp = mkHint("pt", "Dica Pt"), fhe = mkHint("es", "Pista Es");
+    const h1 = S.completeTask(d3, fh.slug, 1, { command: "node t.js", exitCode: 1 });
+    const h2 = S.completeTask(d3, fh.slug, 2, { command: "node t.js", exitCode: 1 });
+    const hp = S.completeTask(d3, fhp.slug, 1, { command: "node t.js", exitCode: 1 });
+    const he = S.completeTask(d3, fhe.slug, 1, { command: "node t.js", exitCode: 1 });
+    const hp2 = S.completeTask(d3, fhp.slug, 2, { command: "node t.js", exitCode: 0 });
+    const he2 = S.completeTask(d3, fhe.slug, 2, { command: "node t.js", exitCode: 0 });
+    const hpNote = S.completeTask(d3, fhp.slug, 2, { command: "node t.js", exitCode: 9009 });
+    ok(h1.ok === false && h1.redPhaseVerify && /Mark task 1 with _Expect: fail_/.test(h1.error) && h2.ok && h2.redRecorded && !h2.redPhaseVerify &&
+      /Marca a tarefa 1 com _Expect: fail_ — uma execução que FALHE passa a ser a prova \(T-01 falha antes da correção\)/.test(hp.error) &&
+      /Marca la tarea 1 con _Expect: fail_ — una ejecución que FALLE es entonces su prueba \(T-01 falla antes del arreglo\)/.test(he.error) &&
+      /A tarefa 2 espera que o seu teste FALHE \(_Expect: fail_\), mas a execução passou \(exit 0\) — o teste ainda não falha, por isso não testa nada/.test(hp2.error) &&
+      /La tarea 2 espera que su prueba FALLE \(_Expect: fail_\), pero la ejecución pasó \(exit 0\) — la prueba aún no falla, así que no prueba nada/.test(he2.error) &&
+      /Tarefa 2: exit 9009 significa que o próprio comando não pôde correr/.test(hpNote.error),
+      "B5 a red-phase task without _Expect: fail_: its refusal points at _Expect: fail_ (EN/PT/ES); with the marker the red run is the proof; the unexpected-pass / could-not-run refusals are localized (PT/ES)");
+
+    // --- B5.1 doctor red-green (+tdd warn): T-IDs made green by done tasks need a recorded red run of an _Expect: fail_ task citing them.
+    const d4 = b5Dir("rg");
+    S.initProject(d4, ["tdd"], "en");
+    const f4 = S.createFeature(d4, "Rg", ["tdd"], "", undefined, "en");
+    b5Tasks(f4, "- [ ] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n- [ ] 2. [US1] Implement\n  - _Makes green: T-01, T-02_\n  - _Verify: node t.js_\n- [ ] 3. [US1] Later\n  - _Makes green: T-03_\n");
+    const rgNone = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green");
+    S.completeTask(d4, f4.slug, 1, { command: "node t.js", exitCode: 0 });
+    S.completeTask(d4, f4.slug, 2, { command: "node t.js", exitCode: 0 });
+    const rgWarn = (await b5Call("spec_doctor", { projectDir: d4, name: "rg" })).checks.find((c) => c.id === "red-green");
+    b5Tasks(f4, b5Read(f4, "tasks.md").replace("- [x] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n", "- [x] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n  - _Expect: fail_\n"));
+    const rgStill = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green"); // its recorded run passed — no red run yet
+    const rgRed = S.completeTask(d4, f4.slug, 1, { command: "node t.js", exitCode: 1 });
+    const rgPass = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green");
+    const fCore = S.createFeature(d4, "Plain", ["core"], "", undefined, "en");
+    b5Tasks(fCore, "- [x] 1. [US1] Implement\n  - _Makes green: T-01_\n");
+    const fPt4 = S.createFeature(d4, "Rg Pt", ["tdd"], "", undefined, "pt");
+    b5Tasks(fPt4, "- [x] 1. [US1] Implementar\n  - _Makes green: T-07_\n");
+    ok(!rgNone && rgWarn && rgWarn.status === "warn" && /T-IDs made green by done tasks without a recorded red run: T-01, T-02 — a test that never failed proves nothing/.test(rgWarn.detail) &&
+      !/T-03/.test(rgWarn.detail) && rgStill.status === "warn" && rgRed.ok && rgRed.redRecorded && rgPass.status === "pass" && /\(2\) has a recorded red run/.test(rgPass.detail) &&
+      !S.specDoctor(d4, fCore.slug).checks.some((c) => c.id === "red-green") &&
+      /T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: T-07/.test(S.specDoctor(d4, fPt4.slug).checks.find((c) => c.id === "red-green").detail),
+      "B5 doctor red-green: warns naming the T-IDs done tasks make green with no recorded red run (never an open task's), passes once an _Expect: fail_ task citing them records a red run; not on core; PT (got " +
+      JSON.stringify([rgWarn && rgWarn.detail, rgPass && rgPass.detail]).slice(0, 300) + ")");
+
+    // --- B5.1 the brief: its Verification section says the run must fail (heading too without a _Verify:_); kept with write:true.
+    const br1 = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 1 });
+    const br2 = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 2 });
+    const brW = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 1, write: true });
+    const br4 = S.taskBrief(d2, f2.slug, 4);
+    const brPt = S.taskBrief(d3, fhp.slug, 2);
+    ok(br1.expect === "fail" && /## Verification \(_Verify:_\)\n- `node tests\/t01\.test\.js`\n\n\*\*Expected result: FAIL\*\* \(_Expect: fail_\) — the run must exit non-zero/.test(br1.brief) &&
+      /\n\d+\. The _Verify:_ run must FAIL \(non-zero exit\) for the right reason/.test(br1.brief) && !br2.expect && !/Expected result: FAIL/.test(br2.brief) &&
+      brW.expect === "fail" && brW.brief === undefined && /## Verification \(_Verify:_\)\n\n\*\*Expected result: FAIL\*\*/.test(br4.brief) &&
+      /\*\*Resultado esperado: FALHA\*\* \(_Expect: fail_\)/.test(brPt.brief) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
+      "B5 brief: an _Expect: fail_ task's Verification section and definition of done say the run must FAIL (expect: 'fail', kept with write:true; the heading appears without a _Verify:_; PT)");
+
+    // --- B5.1 next_action's verify step: an _Expect: fail_ task whose run passed is told its proof is a FAILING run (never "a
+    // passing run"), and no red-phase hint that would tell it to add the marker it has. A written bugfix, gated phase by phase (EN / PT).
+    const redExpect = (d, lang) => {
+      const b = S.createFeature(d, "Red expect " + lang, undefined, "loop", undefined, lang, "bugfix");
+      const tp = path.join(b.dir, "tasks.md");
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace("  - _Makes green: T-01_\n", "  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n  - _Expect: fail_\n"));
+      const bp = path.join(b.dir, "bug.md");
+      fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
+      const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
+      fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
+      fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
+      ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
+      S.completeTask(d, b.slug, 1); S.completeTask(d, b.slug, 2);
+      const pass3 = S.completeTask(d, b.slug, 3, { command: "node tests/t01.test.js", exitCode: 0 });
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/- \[ \] 3\./, "- [x] 3.").replace(/- \[ \] 4\./, "- [x] 4."));
+      return { b, pass3, na: S.nextAction(d, b.slug) };
+    };
+    const d10 = b5Dir("na");
+    S.initProject(d10, ["core"], "en");
+    const reEn = redExpect(d10, "en"), rePt = redExpect(d10, "pt");
+    ok(reEn.pass3.unexpectedPass === true && reEn.na.step === "verify" && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(reEn.na.recommendation) &&
+      /Task 3 is marked _Expect: fail_: its proof is a run that FAILS .*\(dev-spec done red-expect-en 3 --run while the test fails/.test(reEn.na.recommendation) &&
+      !/Mark task 3 with _Expect: fail_/.test(reEn.na.recommendation) && rePt.na.step === "verify" && /A tarefa 3 tem _Expect: fail_: a prova é uma execução que FALHA/.test(rePt.na.recommendation),
+      "B5 next_action verify: an _Expect: fail_ task whose run passed (unexpected-pass) is told its proof is a FAILING run — no 'add the marker' red-phase hint; PT (got " +
+      JSON.stringify([reEn.na.step, reEn.na.recommendation]).slice(0, 400) + ")");
+
+    // --- B5.2 spec_init {checks}: meta.checks merged (add / replace / "" removes), validated before ANY write; the result reports them.
+    const d5 = b5Dir("checks");
+    const rp5 = path.join(d5, ".specs", "roadmap.json");
+    const i1 = await b5Call("spec_init", { projectDir: d5, tracks: ["tdd"], checks: { test: "node -e \"process.exit(0)\"", lint: "npm run lint" } });
+    const i2 = await b5Call("spec_init", { projectDir: d5, checks: { lint: "", typecheck: "npx tsc --noEmit", test: "  node -e \"process.exit(0)\"  " } });
+    const i3 = await b5Call("spec_init", { projectDir: d5 });
+    const before5 = fs.readFileSync(rp5, "utf8");
+    const bad1 = await b5Call("spec_init", { projectDir: d5, lang: "pt", checks: { "bad name": "x" } });
+    const bad2 = await b5Call("spec_init", { projectDir: d5, checks: { test: "a\nb" } });
+    const bad3 = S.initProject(d5, ["core"], undefined, { checks: JSON.parse('{"__proto__": "x"}') });
+    const bad4 = await rpc("tools/call", { name: "spec_init", arguments: { projectDir: d5, checks: ["npm test"] } });
+    const many5 = {};
+    for (let i = 0; i < 20; i++) many5["c" + i] = "x";
+    const bad5 = S.initProject(d5, ["core"], undefined, { checks: many5 });
+    ok(i1.checks.test === "node -e \"process.exit(0)\"" && i1.checks.lint === "npm run lint" && JSON.stringify(i2.checks) === JSON.stringify({ test: "node -e \"process.exit(0)\"", typecheck: "npx tsc --noEmit" }) &&
+      JSON.stringify(JSON.parse(before5).meta.checks) === JSON.stringify(i2.checks) && JSON.stringify(i3.checks) === JSON.stringify(i2.checks) &&
+      bad1.ok === false && /nome de verificação inválido 'bad name'/.test(bad1.error) && bad2.ok === false && /must be one line of text/.test(bad2.error) &&
+      bad3.ok === false && /invalid check name '__proto__'/.test(bad3.error) && bad4.result.isError === true && /checks must be an object/.test(bad4.result.content[0].text) &&
+      bad5.ok === false && /at most 20 project checks/.test(bad5.error) && fs.readFileSync(rp5, "utf8") === before5 && JSON.parse(before5).meta.lang !== "pt",
+      "B5 spec_init {checks}: added / replaced / an empty command removes one, the result always reports them; a bad name (PT message), a multi-line command, '__proto__', a non-object (schema) or > 20 checks are refused before anything — the language included — is written");
+    const d6 = b5Dir("badstored");
+    S.initProject(d6, ["core"], "en");
+    const rp6 = path.join(d6, ".specs", "roadmap.json");
+    const rj6 = JSON.parse(fs.readFileSync(rp6, "utf8"));
+    rj6.meta.checks = { test: 5, lint: "npm run lint" };
+    fs.writeFileSync(rp6, JSON.stringify(rj6));
+    const bs6 = S.initProject(d6, ["core"], undefined, { checks: { e2e: "x" } });
+    const f6 = S.createFeature(d6, "Stored", ["core"], "", undefined, "en");
+    const fin6 = S.finishFeature(d6, f6.slug);
+    ok(bs6.ok === false && /meta\.checks is not an object of name → command strings — fix it by hand/.test(bs6.error) && JSON.parse(fs.readFileSync(rp6, "utf8")).meta.checks.test === 5 &&
+      fin6.warnings.some((w) => /meta\.checks: invalid entries ignored \(test\)/.test(w)) && fin6.suiteChecks.length === 1 && fin6.suiteChecks[0].name === "lint",
+      "B5 a hand-edited meta.checks with a non-string command: spec_init refuses to change it (never repaired); finish ignores the bad entry with a warning and keeps the valid ones");
+
+    // --- B5.2 finish: suite-evidence blocks (doctor warns once every task is done) until every check has a passing run since the last task activity.
+    const d7 = b5Dir("suite");
+    const okCmd = "node -e \"process.exit(0)\"";
+    S.initProject(d7, ["core"], "en", { checks: { test: okCmd, lint: "npm run lint" } });
+    const f7 = S.createFeature(d7, "Suite", ["core"], "", undefined, "en");
+    b5Tasks(f7, "- [ ] 1. [US1] Do it\n");
+    const docOpen7 = S.specDoctor(d7, f7.slug).checks.find((c) => c.id === "suite-evidence");
+    const finOpen7 = S.finishFeature(d7, f7.slug);
+    S.completeTask(d7, f7.slug, 1);
+    const docDone7 = (await b5Call("spec_doctor", { projectDir: d7, name: "suite" })).checks.find((c) => c.id === "suite-evidence");
+    const gate7 = S.approvePhase(d7, f7.slug, "execution", "t");
+    ok(!docOpen7 && finOpen7.suiteChecks.every((c) => c.status === "no-run") && finOpen7.blockers.some((b) => /project checks without a passing run since the last task activity: test \(no run recorded\), lint \(no run recorded\) — run them: dev-spec finish suite --run/.test(b)) &&
+      docDone7 && docDone7.status === "warn" && /every task is done, but project checks have no passing run/.test(docDone7.detail) &&
+      gate7.ok === false && gate7.failing.includes("suite-evidence") && typeof b5State(f7).lastTickAt === "string",
+      "B5 meta.checks set: finish blocks on suite-evidence (every check without a run named), doctor warns once every task is done (not before), the execution sign-off refuses on it; a tick stamps lastTickAt (got " +
+      JSON.stringify([finOpen7.blockers, gate7.failing]).slice(0, 300) + ")");
+    const rec7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [
+      { name: "test", command: okCmd, exitCode: 0, summary: "3 passing" },
+      { name: "lint", command: "npm run lint", exitCode: 1, summary: "2 problems", commit: "ABC1234", dirty: true }] });
+    const fc7 = b5State(f7).finishChecks;
+    ok(rec7.ok && JSON.stringify(rec7.recordedChecks) === JSON.stringify([{ name: "test", exitCode: 0 }, { name: "lint", exitCode: 1 }]) &&
+      rec7.suiteChecks.find((c) => c.name === "test").status === "pass" && rec7.suiteChecks.find((c) => c.name === "lint").status === "failed" &&
+      rec7.blockers.some((b) => /: lint \(latest run failed \(exit 1\)\)/.test(b)) && !rec7.blockers.some((b) => /test \(/.test(b)) &&
+      fc7.test.exitCode === 0 && fc7.test.check === okCmd && typeof fc7.test.at === "string" && fc7.lint.commit === "abc1234" && fc7.lint.dirty === true && fc7.lint.history.length === 1 &&
+      /## Project checks\n- test: `node -e "process\.exit\(0\)"` → exit 0 · 3 passing\n- lint: `npm run lint` → exit 1 · 2 problems · @abc1234-dirty \(latest run failed \(exit 1\)\)/.test(rec7.mergeSummary),
+      "B5 spec_finish {evidence}: records each check's run in finishChecks (stamped with its meta.checks command, commit/dirty kept) BEFORE the readiness — a failed one stays a blocker; the merge summary lists the project checks (got " +
+      JSON.stringify([rec7.blockers, rec7.suiteChecks]).slice(0, 400) + ")");
+    const badEv7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }, { name: "e2e", command: "x", exitCode: 0 }] });
+    const noExit7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "lint", command: "npm run lint" }] });
+    const noCmd7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "lint", exitCode: 0 }] });
+    const notList7 = S.finishFeature(d7, f7.slug, { evidence: { name: "lint" } });
+    const noChecks7 = await b5Call("spec_finish", { projectDir: d1, name: "red-green", evidence: [{ name: "test", command: "x", exitCode: 0 }] });
+    const plain1 = S.finishFeature(d1, f1.slug);
+    ok(badEv7.ok === false && /evidence\[1\]: 'e2e' is not a project check — one of: test, lint/.test(badEv7.error) && b5State(f7).finishChecks.lint.exitCode === 1 &&
+      noExit7.ok === false && /evidence\[0\]: its exit code/.test(noExit7.error) && noCmd7.ok === false && /the command that ran is required/.test(noCmd7.error) &&
+      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && /no project checks configured \(roadmap\.json meta\.checks\)/.test(noChecks7.error) &&
+      !plain1.suiteChecks && !plain1.blockers.some((b) => /project checks/.test(b)),
+      "B5 spec_finish {evidence} is all-or-nothing (an unknown check name, a missing exit code or command: nothing recorded); needs meta.checks; without meta.checks nothing changes");
+    const fix7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0, summary: "clean" }] });
+    const gate7b = S.approvePhase(d7, f7.slug, "execution", "t");
+    const docOk7 = S.specDoctor(d7, f7.slug).checks.find((c) => c.id === "suite-evidence");
+    b5Tick();
+    fs.appendFileSync(path.join(f7.dir, "tasks.md"), "- [ ] 2. [US1] One more\n");
+    S.completeTask(d7, f7.slug, 2);
+    const late7 = S.finishFeature(d7, f7.slug);
+    await b5Call("spec_init", { projectDir: d7, checks: { lint: "npm run lint -- --max-warnings 0" } });
+    const chg7 = S.finishFeature(d7, f7.slug);
+    ok(fix7.ok && fix7.suiteChecks.every((c) => c.status === "pass") && !fix7.blockers.some((b) => /project checks/.test(b)) && !(gate7b.failing || []).includes("suite-evidence") &&
+      docOk7.status === "pass" && late7.suiteChecks.every((c) => c.status === "before-last-tick") && late7.blockers.some((b) => /test \(ran before the last task activity\)/.test(b)) &&
+      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(its command changed since the run\)/.test(b)),
+      "B5 suite-evidence clears once every check passed since the last task activity (doctor pass, the execution gate no longer names it); a later tick makes the runs 'before-last-tick', an edited meta.checks command makes its run 'changed' (got " +
+      JSON.stringify([late7.suiteChecks, chg7.suiteChecks]).slice(0, 300) + ")");
+    const fPt7 = S.createFeature(d7, "Suite Pt", ["core"], "", undefined, "pt");
+    const fEs7 = S.createFeature(d7, "Suite Es", ["core"], "", undefined, "es");
+    const st7x = b5State(f7);
+    st7x.finishChecks = [];
+    fs.writeFileSync(path.join(f7.dir, ".state.json"), JSON.stringify(st7x));
+    const shape7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "test", command: okCmd, exitCode: 0 }] });
+    ok(S.finishFeature(d7, fPt7.slug).blockers.some((b) => /verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: test \(nenhuma execução registada\)/.test(b)) &&
+      S.finishFeature(d7, fEs7.slug).blockers.some((b) => /verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: test \(ninguna ejecución registrada\)/.test(b)) &&
+      shape7.ok === false && /'finishChecks' must be an object/.test(shape7.error),
+      "B5 the suite-evidence blocker is localized (PT/ES); a .state.json whose finishChecks is not an object is refused, never repaired");
+
+    // --- B5.2 the brief's definition of done names the project checks; none configured → no line, no field.
+    const br7 = await b5Call("spec_task_brief", { projectDir: d7, name: "suite", number: 1 });
+    ok(JSON.stringify(br7.projectChecks) === JSON.stringify([{ name: "test", command: okCmd }, { name: "lint", command: "npm run lint -- --max-warnings 0" }]) &&
+      /\n\d+\. Run the project checks and put each command, its exit code and the last lines of its output in the report — nothing that passed before this task may fail after it: `node -e "process\.exit\(0\)"` \(test\) · `npm run lint -- --max-warnings 0` \(lint\)\./.test(br7.brief) &&
+      !br2.projectChecks && !/Run the project checks/.test(br2.brief) && /Corre as verificações do projeto/.test(S.taskBrief(d7, fPt7.slug, 1).brief || ""),
+      "B5 brief: the definition of done lists meta.checks (projectChecks in the result; PT); a project without checks gets neither");
+
+    // --- B5.3 evidence carries the git commit (+ dirty) — `done --run` fills it; a malformed value is dropped, never an error.
+    const d8 = b5Dir("git");
+    S.initProject(d8, ["core"], "en");
+    const f8 = S.createFeature(d8, "Gitev", ["core"], "", undefined, "en");
+    b5Tasks(f8, "- [ ] 1. [US1] A\n  - _Verify: node a.js_\n- [ ] 2. [US1] B\n  - _Verify: node b.js_\n- [ ] 3. [US1] C\n  - _Verify: node c.js_\n");
+    await b5Call("spec_complete_task", { projectDir: d8, name: "gitev", number: 1, evidence: { command: "node a.js", exitCode: 0, commit: "ABCDEF1", dirty: true } });
+    S.completeTask(d8, f8.slug, 2, { command: "node b.js", exitCode: 0, commit: "not-a-sha", dirty: true });
+    S.completeTask(d8, f8.slug, 3, { command: "node c.js", exitCode: 0, dirty: false });
+    const ev8 = b5State(f8).evidence;
+    const sum8 = S.finishFeature(d8, f8.slug).mergeSummary;
+    ok(ev8["1"].commit === "abcdef1" && ev8["1"].dirty === true && ev8["1"].history[0].commit === "abcdef1" && !("commit" in ev8["2"]) && !("dirty" in ev8["2"]) && !("dirty" in ev8["3"]) &&
+      /1\. A — `node a\.js` → exit 0 · @abcdef1-dirty/.test(sum8) && /2\. B — `node b\.js` → exit 0\n/.test(sum8),
+      "B5 evidence keeps a well-formed commit (lowercased) and dirty (only with a commit) in the run and its history; a malformed one is dropped; the merge summary tags the task's run @sha-dirty");
+
+    // --- B5.3 parseGitLog: git's medium format (--name-only, --name-status, decorations) and --oneline.
+    const H = (c) => c.repeat(40);
+    const medium = ["commit " + H("c") + " (HEAD -> main)", "Author: T <t@t>", "Date:   2026-09-03T10:00:00+01:00", "", "    feat(login): implement", "    ", "    Part of .specs/login/ task #2.", "", "src/login.js", "M\tsrc/util.js", "R100\told.js\ttests/new.test.js", "",
+      "commit " + H("b"), "Merge: 1111111 2222222", "Author: T <t@t>", "Date:   2026-09-02T10:00:00+01:00", "", "    merge it", ""].join("\n");
+    const pg = S.parseGitLog(medium);
+    const po = S.parseGitLog("abc1234 feat(login): x — task #2\ndef5678 fix: y\n\n");
+    ok(pg.length === 2 && pg[0].short === "ccccccc" && pg[0].subject === "feat(login): implement" && /Part of \.specs\/login\/ task #2\./.test(pg[0].message) && pg[0].date === "2026-09-03T10:00:00+01:00" &&
+      JSON.stringify(pg[0].files) === JSON.stringify(["src/login.js", "src/util.js", "tests/new.test.js"]) && pg[1].subject === "merge it" && !pg[1].files.length &&
+      po.length === 2 && po[0].short === "abc1234" && po[0].subject === "feat(login): x — task #2" && !po[0].files.length && S.parseGitLog("").length === 0,
+      "B5 parseGitLog reads git log's medium format (message, date, --name-only and --name-status paths, renames, decorations, merges) and --oneline lines");
+
+    // --- B5.3 taskCommits: the conventions (feature name + task #N; T-/AC IDs unless another feature is named) and the +tdd red-first check.
+    const d9 = b5Dir("log");
+    S.initProject(d9, ["tdd"], "en");
+    const f9 = S.createFeature(d9, "Login", ["tdd"], "", undefined, "en");
+    S.createFeature(d9, "Billing", ["core"], "", undefined, "en");
+    b5Tasks(f9, "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Implement the check\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n- [ ] 3. [US1] Clean up\n- [ ] 4. [US1] Later\n  - _Makes green: T-09_\n");
+    fs.mkdirSync(path.join(d9, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(d9, "tests", "login.test.js"), "test(\"T-01 rejects an expired token\", () => {});\n");
+    const commit9 = (h, date, lines, files) => ["commit " + H(h), "Author: T <t@t>", "Date:   " + date, "", ...lines.map((l) => "    " + l), "", ...files, ""];
+    const implFirstLog = [
+      ...commit9("d", "2026-09-04", ["test(login): add T-01 regression"], ["tests/login.test.js"]),
+      ...commit9("c", "2026-09-03", ["feat(login): implement the check", "", "Part of .specs/login/ task #2.", "Makes T-01 green."], ["src/login.js"]),
+      ...commit9("b", "2026-09-02", ["docs(billing): task #2 and T-01 there"], ["docs/billing.md"]),
+      ...commit9("a", "2026-09-01", ["chore: scaffold US-1.AC-1", "fix: task 3 cleanup"], ["README.md"]),
+    ].join("\n");
+    const tc9 = S.taskCommits(d9, "login", implFirstLog);
+    const byTask = (r, n) => r.tasks.find((t) => t.number === n);
+    const rf2 = tc9.redFirst.find((r) => r.task === 2);
+    const rf4 = tc9.redFirst.find((r) => r.task === 4);
+    ok(tc9.ok && tc9.commits === 4 && tc9.citing === 3 && JSON.stringify(byTask(tc9, 1).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:T-01", "aaaaaaa:US-1.AC-1"]) &&
+      JSON.stringify(byTask(tc9, 2).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:#2+T-01", "aaaaaaa:US-1.AC-1"]) &&
+      !byTask(tc9, 3).commits.length && rf2.status === "impl-first" && rf2.taskCommit.short === "ccccccc" && rf2.testCommit.short === "ddddddd" && JSON.stringify(rf2.testFiles) === JSON.stringify(["tests/login.test.js"]) &&
+      rf4.status === "no-test-file" && tc9.warnings.length === 1 && /red-first: task 2 \(makes T-01 green\) was first committed in ccccccc, before any commit touching a test file that names T-01 \(tests\/login\.test\.js — first in ddddddd\)/.test(tc9.warnings[0]) &&
+      tc9.lines.some((l) => /\[ \] #3 Clean up — no commit cites it/.test(l)) && tc9.lines.some((l) => /▲ red-first: task 2/.test(l)),
+      "B5 taskCommits: a commit cites a task by 'task #N' with the feature name, or by the T-/AC IDs it names — never when it names another feature ('billing'), and 'task 3' without the feature name is no citation; red-first warns when the implementation was committed before its test (got " +
+      JSON.stringify([tc9.tasks.map((t) => t.commits.map((c) => c.short + ":" + c.via.join("+"))), tc9.redFirst.map((r) => r.status)]).slice(0, 400) + ")");
+    const testFirstLog = [
+      ...commit9("f", "2026-09-06", ["feat(login): implement — task #2"], ["src/login.js"]),
+      ...commit9("e", "2026-09-05", ["test(login): T-01 fails for the right reason"], ["tests/login.test.js"]),
+    ].join("\n");
+    const noTestLog = commit9("f", "2026-09-06", ["feat(login): implement — task #2"], ["src/login.js"]).join("\n");
+    const tcOk = S.taskCommits(d9, "login", testFirstLog);
+    const tcNever = S.taskCommits(d9, "login", noTestLog);
+    const tcWin = S.taskCommits(d9, "login", noTestLog, { max: 1 });
+    const tcNone = S.taskCommits(d9, "login", commit9("a", "2026-09-01", ["chore: unrelated"], ["x.txt"]).join("\n"));
+    const fPt9 = S.createFeature(d9, "Entrar", ["tdd"], "", undefined, "pt");
+    b5Tasks(fPt9, "- [ ] 1. [US1] Implementar\n  - _Makes green: T-01_\n");
+    const tcPt = S.taskCommits(d9, "entrar", "abc1234 feat(entrar): tarefa 1\n");
+    ok(tcOk.redFirst.find((r) => r.task === 2).status === "ok" && !tcOk.warnings.length && tcOk.lines.some((l) => /red-first: task 2 \(T-01\) — the test was committed first ✓/.test(l)) &&
+      tcNever.redFirst.find((r) => r.task === 2).status === "test-not-committed" && /no commit read touches a test file that names T-01 \(tests\/login\.test\.js\) — commit the test first/.test(tcNever.warnings[0]) &&
+      tcWin.truncated === true && tcWin.redFirst.find((r) => r.task === 2).status === "outside-window" && !tcWin.warnings.length && /the window is full/.test(tcWin.lines[0]) &&
+      tcNone.citing === 0 && tcNone.lines.some((l) => /No commit cites a task of 'login'\. Conventions: .*"Part of \.specs\/login\/ task #N\."/.test(l)) &&
+      tcPt.ok && tcPt.tasks[0].commits.length === 1 && tcPt.tasks[0].commits[0].via[0] === "#1" && /^Commits: entrar — 1 commit\(s\) lido\(s\), 1 citam as suas tarefas/.test(tcPt.lines[0]) &&
+      S.taskCommits(d9, "nope", "").ok === false,
+      "B5 taskCommits red-first: the test committed first is ok; no commit touching it warns; a full log window makes the order unknown (outside-window, no warning); no citing commit prints the conventions; PT lines ('tarefa N'); an unknown feature is an error");
+  }
   // @pkg B5 <<<
 
   // @pkg C1 tests >>>
