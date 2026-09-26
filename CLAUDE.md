@@ -19,7 +19,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
 skills/.../references/          deep library, read on demand
-commands/*.md                  42 slash commands (thin wrappers that invoke the skill/MCP)
+commands/*.md                  43 slash commands (thin wrappers that invoke the skill/MCP)
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
 evals/                         plugin evals for `claude plugin eval` (triggering EN/PT/ES) — maintainer-side, results ignored

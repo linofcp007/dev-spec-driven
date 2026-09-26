@@ -148,6 +148,9 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Guard mode is a Claude Code hook.** `dev-spec init --guard on` sets it, but only Claude Code runs the
   PreToolUse hook that asks before code edits while no feature has approved, unfinished tasks. In other
   tools, follow the same rule yourself: no implementation before the tasks are approved.
+- **Alongside superpowers.** If the superpowers skills are installed in your tool too, this workflow replaces
+  their planning, TDD, debugging, execution, verification, review and branch-finishing skills for feature work.
+  Put the precedence block from `commands/spec-superpowers.md` into your rules / `AGENTS.md` to make it stick.
 
 ## Non-negotiables
 

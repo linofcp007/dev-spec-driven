@@ -212,7 +212,28 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
 /dev-spec-driven:spec  Add per-tenant API keys with rotation and Stripe-metered usage
 ```
 
-### Commands (42)
+### Using it alongside superpowers
+
+Several [superpowers](https://github.com/obra/superpowers) skills overlap this plugin. For feature work,
+dev-spec-driven replaces them — superpowers keeps what it doesn't cover (worktrees, parallel agents, writing skills):
+
+| superpowers | dev-spec-driven |
+|---|---|
+| brainstorming, writing-plans | Phase 0 → requirements → design → tasks (`/spec`, `/clarify`, `/grill`) |
+| executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
+| test-driven-development | the `+tdd` track |
+| systematic-debugging | `/spec-bugfix` |
+| verification-before-completion | the evidence gate (`_Verify:_`, `dev-spec done --run`) |
+| requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
+| finishing-a-development-branch | `/spec-finish` (local merge; no pull requests, no CI) |
+
+Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so **`/spec-superpowers`** writes
+(after you confirm) a marked precedence block into the project's `CLAUDE.md` or, with `--user`, into
+`~/.claude/CLAUDE.md`; `--remove` takes it out. To switch superpowers off instead: for one project,
+`.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
+`/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
+
+### Commands (43)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -220,7 +241,7 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — aliases `/ds` `/dsx` `/dss`.
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`.)
 
 ### The `dev-spec` CLI
@@ -443,7 +464,29 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
 /dev-spec-driven:spec  Adicionar chaves de API por inquilino com rotação e uso medido pelo Stripe
 ```
 
-### Comandos (42)
+### Usar em conjunto com o superpowers
+
+Várias skills do [superpowers](https://github.com/obra/superpowers) sobrepõem-se a este plugin. No trabalho de
+funcionalidades, o dev-spec-driven substitui-as — o superpowers fica com o que ele não cobre (worktrees, agentes em
+paralelo, escrita de skills):
+
+| superpowers | dev-spec-driven |
+|---|---|
+| brainstorming, writing-plans | Fase 0 → requisitos → design → tarefas (`/spec`, `/clarify`, `/grill`) |
+| executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
+| test-driven-development | o track `+tdd` |
+| systematic-debugging | `/spec-bugfix` |
+| verification-before-completion | o gate de evidência (`_Verify:_`, `dev-spec done --run`) |
+| requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
+| finishing-a-development-branch | `/spec-finish` (merge local; sem pull requests, sem CI) |
+
+As próprias instruções do superpowers dizem que o CLAUDE.md tem precedência sobre as skills dele, por isso o
+**`/spec-superpowers`** escreve (depois de confirmares) um bloco de precedência com marcadores no `CLAUDE.md` do
+projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para desligar o superpowers: num projeto,
+`.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
+`/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
+
+### Comandos (43)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -451,7 +494,7 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atalhos `/ds` `/dsx` `/dss`.
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`.)
 
 ### A CLI `dev-spec`
@@ -678,7 +721,29 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
 /dev-spec-driven:spec  Añadir claves de API por inquilino con rotación y uso medido por Stripe
 ```
 
-### Comandos (42)
+### Usarlo junto a superpowers
+
+Varias skills de [superpowers](https://github.com/obra/superpowers) se solapan con este plugin. En el trabajo de
+funciones, dev-spec-driven las sustituye — superpowers se queda con lo que no cubre (worktrees, agentes en paralelo,
+escritura de skills):
+
+| superpowers | dev-spec-driven |
+|---|---|
+| brainstorming, writing-plans | Fase 0 → requisitos → diseño → tareas (`/spec`, `/clarify`, `/grill`) |
+| executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
+| test-driven-development | el track `+tdd` |
+| systematic-debugging | `/spec-bugfix` |
+| verification-before-completion | la puerta de evidencia (`_Verify:_`, `dev-spec done --run`) |
+| requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
+| finishing-a-development-branch | `/spec-finish` (merge local; sin pull requests, sin CI) |
+
+Las propias instrucciones de superpowers dicen que CLAUDE.md tiene prioridad sobre sus skills, así que
+**`/spec-superpowers`** escribe (tras tu confirmación) un bloque de precedencia con marcadores en el `CLAUDE.md` del
+proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para desactivar superpowers: en un
+proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
+todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
+
+### Comandos (43)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -686,7 +751,7 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atajos `/ds` `/dsx` `/dss`.
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`.)
 
 ### La CLI `dev-spec`
@@ -729,7 +794,7 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 42 slash commands (trilingual descriptions)
+├── commands/                         ← 43 slash commands (trilingual descriptions)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)

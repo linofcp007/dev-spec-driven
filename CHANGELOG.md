@@ -7,7 +7,7 @@ this project versions the plugin as a whole.
 
 A full audit of the engine, then gates you can trust and the change-management layer that comes after
 a spec is approved: impact analysis, convergence, a living catalog, drift, metrics, import from other
-spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 commands (was 35).
+spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 43 commands (was 35).
 
 ### Fixed — audit of 1.12 (every fix has a regression test)
 - **Evidence gate.** A task whose `_Verify:_` names a runnable command was "verified" by a text note, and a
@@ -316,6 +316,11 @@ spec tools, an opt-in guard and scoped steering. 29 MCP tools (was 23), 42 comma
   localized message; it now uses the label `dev-spec ears` prints (`[aviso]` / `[erro]` · `[aviso]` / `[error]`).
 
 ### Added
+- **`/spec-superpowers`** and a "Using it alongside superpowers" section (README EN/PT/ES, INTEGRATIONS,
+  AGENTS.md, SKILL.md): superpowers' planning / TDD / debugging / execution / verification / review /
+  branch-finishing skills overlap this plugin, and its own instructions defer to CLAUDE.md — the command writes
+  (after the user confirms) a marked precedence block into the project's or the user's CLAUDE.md, updates it in
+  place or removes it (`--remove`), and never disables superpowers. A prose command: no engine code, no hook.
 - **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
   feature — criteria mapped to `US-N.AC-M` (one EARS criterion per scenario, else the text is kept with
   `[NEEDS CLARIFICATION]`), Kiro `_Requirements:_` rewritten, tasks renumbered keeping checkbox state and

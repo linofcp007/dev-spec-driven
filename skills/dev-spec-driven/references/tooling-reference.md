@@ -151,13 +151,14 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (42 commands)
+## Command reference (43 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
 | `/spec` | entry | Start/resume the whole workflow for a feature — picks mode + tracks, then runs the pipeline (uses `spec_classify`/`spec_next_action`) |
 | `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard` (uses `spec_init`) |
 | `/spec-guard` | setup | Guard mode on/off: code edits ask while no feature has approved tasks (uses `spec_init {guard}`) |
+| `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
 | `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |
 | `/createSpec` | 1 | Requirements in EARS with stable AC IDs (uses `ears_validate`) |
 | `/clarify` | 1 | Surface requirement ambiguities/gaps before design (uses `spec_clarify`) |

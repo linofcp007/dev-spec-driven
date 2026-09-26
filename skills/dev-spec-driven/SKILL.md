@@ -27,6 +27,11 @@ scale design + evals at once. Handle both with one pipeline and composable track
 | **+saas** | 5 mandatory scale sections, multi-tenancy, observability, cost, load tests |
 | **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle |
 
+**With the superpowers plugin installed too:** for feature work this workflow replaces its brainstorming,
+writing-plans, executing-plans, subagent-driven-development, test-driven-development, systematic-debugging,
+verification-before-completion, code-review and finishing-a-development-branch skills — don't run both for the same
+feature. `/spec-superpowers` records that precedence in CLAUDE.md (superpowers itself defers to CLAUDE.md).
+
 ## Language (EN / PT / ES)
 
 This skill is **trilingual**. Detect the language of the user's request and **mirror it** in
@@ -469,6 +474,7 @@ Depth: `references/change-management.md`.
 | `/spec-finish` | Blockers (doctor fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, placeholders, a missing root cause) and warnings, the checks to run fresh, a merge title + summary built from the spec chain, and the drift baseline. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |
 | `/spec-impact` · `/spec-converge` · `/spec-drift` · `/spec-metrics` · `/spec-catalog` | Change requests, the AC-by-AC converge pass, drift since finish, metrics + retro, the living catalog (sections above). | `references/change-management.md` |
 | `/spec-import` | A Kiro / spec-kit / OpenSpec spec → a NEW feature (IDs remapped, `mapping` + `warnings` shown); then Phase 0 track confirmation and the normal gates. | `references/brownfield.md` |
+| `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
 | `/spec-guard` | Opt-in guard mode (`spec_init {guard: true}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks; silent otherwise. | — |
 | `/spec-review-feedback` | Every review comment judged against the spec: fix AC violations, send spec changes back to their phase, push back on out-of-scope asks citing `Out of Scope`, ask about unclear ones. | `references/review-feedback.md` |
 | `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · security. | — |

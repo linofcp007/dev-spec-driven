@@ -53,7 +53,7 @@ prints the config with that path already filled in for your machine.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 42 commands, the 3 agents, the hooks (PostToolUse + SessionStart, plus
+Native — it's a plugin. Skills, the 43 commands, the 3 agents, the hooks (PostToolUse + SessionStart, plus
 the opt-in PreToolUse guard) and the MCP server all load:
 
 ```bash
@@ -62,6 +62,13 @@ claude --plugin-dir "<PLUGIN>"
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
 See [INSTALL.md](./INSTALL.md) for the persistent marketplace install.
+
+**Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
+review / branch-finishing skills overlap this plugin. `/spec-superpowers` writes (after you confirm) a marked
+precedence block into the project's `CLAUDE.md` (or `~/.claude/CLAUDE.md` with `--user`) — superpowers itself defers
+to CLAUDE.md — so feature work runs here and superpowers keeps the rest. To switch it off instead: per project,
+`.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere, `/plugin disable`.
+In Cursor / Codex / Gemini, where superpowers also ships, copy the same block into that tool's rules or `AGENTS.md`.
 
 ## Claude Desktop
 
