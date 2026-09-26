@@ -1685,18 +1685,28 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const askedKind = kind != null ? String(kind).trim().toLowerCase() : null;
   // An unknown kind is an error on every surface (the MCP enum refuses it): the CLI's `--kind bugfx` used to scaffold a
   // plain feature, and a re-run with the right kind then only "kept" the wrong one.
-  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix") {
+  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix" && askedKind !== "spike") {
     const A = i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).args;
-    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix"), JSON.stringify(String(kind)))) };
+    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix, spike"), JSON.stringify(String(kind)))) };
   }
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
+  // 1.14 C2 — a spike (investigate → decide): core-only, spike.md + investigation tasks; question / timebox are its own inputs.
+  const spike = (storedKind || askedKind) === "spike";
+  const spikeIn = spike ? spikeCreateInput(opts || {}, i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)))) : null;
+  if (spikeIn && spikeIn.error) return { ok: false, error: spikeIn.error };
+  // question / timebox on a feature or bugfix are refused — unless the caller asked for a spike and the folder already has
+  // another kind (the kindKept note says so; the spike inputs are simply unused).
+  if (!spike && askedKind !== "spike" && opts && ["question", "timebox"].some((k) => opts[k] != null && String(opts[k]).trim())) {
+    return { ok: false, error: i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike.spikeOnly(opts.question != null && String(opts.question).trim() ? "question" : "timebox") };
+  }
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
   // path as spec_add_track below (a re-run never drops a track and never re-classifies). A bugfix is always
   // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
   // through the add_track path too, so running the same command twice gives the same track set.
   const current = existed ? detectTracks(dir) : null;
-  const t = existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
+  const t = spike ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to)
+    : existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
     : bugfix ? VALID_TRACKS.filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
     : given ? pt.tracks
     : (cls || classify(summary || "", { name, lang })).tracks;
@@ -1720,7 +1730,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
   // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
   const createdAt = new Date().toISOString();
-  writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", tracks: t, approvals: {}, createdAt } : { lang: lng, tracks: t, approvals: {}, createdAt }, null, 2));
+  const kindOut = bugfix ? "bugfix" : spike ? "spike" : null;
+  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, ...(kindOut ? { kind: kindOut } : {}), tracks: t, approvals: {}, createdAt }, null, 2));
 
   const created = [];
   const skip = [];
@@ -1754,6 +1765,19 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     if (notes.length) res.note = notes.join(" ");
     return res;
   };
+
+  if (spike) { // 1.14 C2 — spike.md + the investigation tasks (a project's spike / spike-tasks templates first; {{summary}} = the question)
+    const SP = i18n.msg(lng).spike;
+    const q = spikeIn.question || (summary != null && String(summary).trim() ? safeSpecText(String(summary).trim()) : null);
+    const sv = { name, slug, summary: q || summary, tracks: t };
+    put(SPIKE_FILE, scaffoldText(projectDir, "spike", lng, sv, () => SP.report({ name, question: q, until: spikeIn.until, raw: spikeIn.raw })));
+    put("tasks.md", scaffoldText(projectDir, "spike-tasks", lng, sv, () => SP.tasks(name)));
+    const res = finish({ ok: true, slug, dir, kind: "spike", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
+    const ignored = given ? pt.tracks.filter((x) => x !== "core") : [];
+    if (res.ok !== false && ignored.length) res.note = [res.note, SP.tracksIgnored(ignored.map((x) => "+" + x).join(", "))].filter(Boolean).join(" ");
+    if (res.ok !== false && spikeIn.until && created.includes(SPIKE_FILE)) res.timebox = spikeIn.until;
+    return res;
+  }
 
   if (opts && opts.brownfield) put("integration-plan.md", scaf("integration-plan", () => integrationPlanMd(name, lng))); // create-only, like every artifact
 
@@ -1862,6 +1886,7 @@ const TEMPLATE_ARTIFACTS = Object.freeze({
   "test-plan": "test-plan.md", "eval-plan": "eval-plan.md", "load-test": "load-test.md", quickstart: "quickstart.md",
   checklist: "checklist.md", "integration-plan": "integration-plan.md",
   bug: "bug.md", "bug-requirements": "requirements.md", "bug-test-plan": "test-plan.md", "bug-tasks": "tasks.md",
+  spike: "spike.md", "spike-tasks": "tasks.md", // 1.14 C2 — the spike kind's scaffolds
 });
 // The chain artifacts a gate reads — a template of theirs with no slot at all scaffolds an approvable file (check warns).
 const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks"]);
@@ -2178,6 +2203,8 @@ function builtInTemplate(key, lang, tracks) {
     case "bug-requirements": return i18n.bugRequirements({ name: a.name, summary: a.summary }, lang);
     case "bug-test-plan": return i18n.bugTestPlan(a.name, lang);
     case "bug-tasks": return i18n.bugTasks(a.name, lang);
+    case "spike": return i18n.msg(lang).spike.report({ name: a.name, question: a.summary }); // 1.14 C2: {{summary}} = the spike's question
+    case "spike-tasks": return i18n.msg(lang).spike.tasks(a.name);
     default: return null;
   }
 }
@@ -2488,6 +2515,7 @@ function detectPhase(dir, tracks) {
   const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
   const anyDone = tasks.some((t) => t.done);
   const allDone = tasks.length > 0 && tasks.every((t) => t.done);
+  if (isSpikeDir(dir)) return spikePhase(dir, tasks); // 1.14 C2: question → investigate → decide (no planning chain)
   if (allDone) return "complete";
   if (anyDone) return "executing";
   // Planning: the EARLIEST artifact of the chain that is still a template (artifactState). design.md is judged
@@ -3243,6 +3271,7 @@ function traceCheck(projectDir, name, opts = {}) {
   if (opts.code) result.code = traceTestCode(projectDir, dir, testPlan, requiredAcs, opts.scan);
   result.warnings = traceWarnings(result);
   Object.assign(result, supersedesTrace(projectDir, dir, rawReqs)); // informational: never a gap, never the verdict
+  Object.assign(result, decisionsTrace(dir, stateFromFile(projectDir, statePath(dir)).kind)); // 1.14 C2: phantom _Affects:_ (warnings)
   return result;
 }
 
@@ -4676,6 +4705,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testIds = [...extractTestIds(blockText)];
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
+  const dec = briefDecisions(dir, acIds, testIds, blockText); // 1.14 C2: decisions.md entries citing the task's IDs (bounded)
 
   // Which loop the implementer follows; +ai prompt work stays with the controller (evals cost money,
   // accept/revert is a judgment call).
@@ -4753,6 +4783,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     expectFail,
     projectChecks: checks,
     globalConstraints: globalConstraints(tasksText),
+    decisions: dec.items,
+    decisionsOmitted: dec.omitted,
     reportPath: rel(paths.report),
   }, lng);
 
@@ -4796,6 +4828,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // B5: [{name, command}] the definition of done names
+  if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
+  if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -4804,7 +4838,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // IDs it cites (refs) and the unresolved ones, markers, the bugfix gate — never the spec text the brief quotes (AC
     // texts, test rows, design sections, steering, bug.md). includeBrief:true returns everything, brief included.
     res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug"]) delete res[k];
+    if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // 1.14 C2: the IDs only (their text is in the brief)
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions"]) delete res[k];
   }
   return res;
 }
@@ -4863,6 +4898,7 @@ function finishFeature(projectDir, name, opts = {}) {
   }
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
+  if (kind === "spike") return spikeFinish(projectDir, f, opts, recordedChecks); // 1.14 C2: ready once the decision is written
   // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
   // One walk of the test code (only when an active +tdd plan has T-IDs), shared with doctor's tests-in-code check.
   const scan = tracks.includes("tdd") && extractTestIds(planIdText(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
@@ -4949,8 +4985,10 @@ function finishFeature(projectDir, name, opts = {}) {
   if (suite.items.length) body.push(...suiteSummaryLines(suite.items, lng), ""); // B5: the project checks' recorded runs
   const testIds = [...testIndex(readIfExists(path.join(dir, "test-plan.md")) || "").keys()];
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
+  const decLines = decisionSummaryLines(dir, lng); // 1.14 C2: decisions.md
+  if (decLines.length) body.push(...decLines, "");
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
-  const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md"]
+  const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE]
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";
@@ -5076,6 +5114,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const lng = featureLang(projectDir, f.slug);
+  if (state.kind === "spike" && p !== "execution") return { ok: false, spike: true, error: i18n.msg(lng).spike.noGate(p, f.slug) }; // 1.14 C2
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
   const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
@@ -6685,6 +6724,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   const msg = i18n.msg(lng);
   const pt = parseTracks(track);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
+  if (isSpikeDir(dir)) return { ok: false, spike: true, error: msg.spike.noTracks(slug) }; // 1.14 C2: a spike is core-only
   if (opts.remove) {
     if (!pt.named.length) return { ok: false, error: errs(projectDir, slug).badTrack };
     return removeTracks(projectDir, f, pt.named, lng);
@@ -6966,6 +7006,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  if (isSpikeDir(f.dir)) return spikeNextAction(projectDir, f, opts); // 1.14 C2
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
   const phase = detectPhase(dir, tracks);
@@ -7138,6 +7179,7 @@ function nextAction(projectDir, name, opts = {}) {
 // classification only when classification.md exists (a feature folder made by hand, or by an old engine, has none —
 // it was never a gate there; every other chain artifact that is missing is "fill it").
 function gateWalk(dir, tracks, kind) {
+  if (kind === "spike") return []; // 1.14 C2: a spike has no approval chain (question → investigate → decide)
   return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) &&
     (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
 }
@@ -7151,6 +7193,7 @@ function gateArtifacts(dir, tracks, kind, phase) {
 // or, for `tests` (Phase 4, no artifact), once testsGateDue() says so — not approved yet, in the chain's order. approvePhase
 // refuses a phase while an EARLIER one is still in this list (a phase with nothing to approve never blocks a later one).
 function pendingGateList(dir, tracks, kind, approvals) {
+  if (kind === "spike") return []; // 1.14 C2
   const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
   return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]);
 }
@@ -7633,6 +7676,7 @@ const PHASE_INDEX = { empty: 0, classified: 0, requirements: 1, design: 2, "test
 // The planning chain in phase order (detectPhase's walk). A bugfix's bug.md takes the design slot — its Root Cause
 // replaces the design — and its design.md joins only while it holds active track sections (detectPhase's rule).
 function chainArtifacts(dir, tracks, kind) {
+  if (kind === "spike") return []; // 1.14 C2: spike.md is judged by the spike tools (spikeDoctor / spikeFinish), not the planning chain
   const out = [{ file: "requirements.md", phase: "requirements", idx: 1 }];
   if (kind === "bugfix") {
     out.push({ file: "bug.md", phase: "design", idx: 2 });
@@ -7952,6 +7996,7 @@ const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de 
 function specDoctor(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  if (isSpikeDir(f.dir)) return spikeDoctor(projectDir, f); // 1.14 C2
   const { slug, dir, root } = f;
   const tracks = detectTracks(dir);
   const lng = featureLang(projectDir, name);
@@ -8144,6 +8189,7 @@ function specDoctor(projectDir, name, opts = {}) {
       forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null,
       ...rv.notes]
       .filter(Boolean).join("; ") || m.gatesOk);
+  for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
   const gatesOk = pendingGates.length === 0;
 
   const fails = checks.filter((c) => c.status === "fail");
@@ -8374,7 +8420,7 @@ function roadmap(projectDir) {
     const meta = rm.features[f.name] || {};
     const pct = featurePercent(f.phase, f.tasksDone, f.tasks);
     pctByName[f.name] = pct;
-    return { name: f.name, tracks: f.tracks, phase: f.phase, percent: pct, dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
+    return { name: f.name, kind: f.kind, tracks: f.tracks, phase: f.phase, percent: pct, dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
   });
   // Dependency satisfaction: a dep is met when that feature is 100% (complete).
   for (const f of feats) {
@@ -8526,7 +8572,8 @@ function roadmapData(projectDir, opts = {}) {
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
     const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait };
+    const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
+    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait, spikeTimebox };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -8549,6 +8596,7 @@ function buildAttention(rows, t, lang) {
     // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
     if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}: ${unverifiedLabel({ unverifiedDetail: r.unverifiedDetail || [] }, lang)}` });
     for (const p of r.overlaps || []) a.push({ name: r.f.name, msg: overlapAttention(p, lang) }); // cross-feature file overlap
+    if (r.spikeTimebox) a.push({ name: r.f.name, msg: fm.spike.roadmapTimebox(r.spikeTimebox) }); // 1.14 C2
   });
   return a;
 }
@@ -8577,6 +8625,8 @@ function renderRoadmapMd(projectDir, lang, data) {
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
   const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
+  const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // 1.14 C2: spikes read apart
+  const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : "requirements.md"}`;
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
@@ -8587,14 +8637,14 @@ function renderRoadmapMd(projectDir, lang, data) {
   md += `\n## ▶ ${t.nextup}\n`;
   if (!rmv.features.length) md += `_${t.noFeatures}_\n`;
   else if (!nextUp.length) md += rmv.complete === rmv.total ? `${t.allDone}\n` : `_${t.nothingUnblocked}_\n`;
-  else nextUp.slice(0, 3).forEach((r) => (md += `- **${r.f.name}** (${r.f.tracks}) — ${r.next ? t.next + " " + nextCell(r) : t.ready}\n`));
+  else nextUp.slice(0, 3).forEach((r) => (md += `- **${r.f.name}**${kindTag(r.f)} (${r.f.tracks}) — ${r.next ? t.next + " " + nextCell(r) : t.ready}\n`));
 
   md += `\n## ${t.features}\n\n`;
   if (!rows.length) md += `_${t.none}_\n`;
   else {
     const F = i18n.msg(lang).forecast;
     md += `| | ${t.colFeature} | ${t.colTracks} | ${t.colPhase} | % | ${t.colTasks} | ${t.colDeps} | ${t.colNext} | ${F.colEta} |\n|---|---|---|---|---|---|---|---|---|\n`;
-    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](./${r.f.name}/requirements.md) | ${r.f.tracks} | ${phaseName(r.f.phase)} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} | ${etaText(r.f.forecast, lang) || "—"} |\n`;
+    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](${specLink(r.f)})${kindTag(r.f)} | ${r.f.tracks} | ${phaseName(r.f.phase)} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} | ${etaText(r.f.forecast, lang) || "—"} |\n`;
     if (rows.some((r) => r.f.forecast && r.f.forecast.eta)) md += `\n${F.etaNote(Math.round(FORECAST_SPREAD * 100))}\n`;
   }
 
@@ -8627,7 +8677,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
     .map(
       (r) =>
         `<tr><td><span class="dot" style="background:${dot[r.state]}"></span></td>` +
-        `<td><a href="./${encodeURI(r.f.name)}/requirements.md">${htmlEsc(r.f.name)}</a></td>` +
+        `<td><a href="./${encodeURI(r.f.name)}/${r.f.kind === "spike" ? SPIKE_FILE : "requirements.md"}">${htmlEsc(r.f.name)}</a>${r.f.kind === "spike" ? ` <span class="tracks">🔬 ${htmlEsc(i18n.msg(lang).spike.kind)}</span>` : ""}</td>` +
         `<td><span class="tracks">${htmlEsc(r.f.tracks)}</span></td>` +
         `<td>${htmlEsc(phaseName(r.f.phase))}</td>` +
         `<td class="pct"><span class="bar"><span style="width:${r.f.percent}%"></span></span>${r.f.percent}%</td>` +
@@ -8643,7 +8693,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const depList = rmv.features.filter((f) => f.dependsOn.length).map((f) => `<li><b>${htmlEsc(f.name)}</b> ← ${f.dependsOn.map((d) => `<span class="${f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ")}</li>`).join("\n");
   const attList = attention.map((a) => `<li><b>${htmlEsc(a.name)}</b> — ${htmlEsc(a.msg)}</li>`).join("\n");
   const backList = rmv.backlog.map((b) => `<li><input type="checkbox" disabled> <b>${htmlEsc(b.name)}</b>${b.note ? " — " + htmlEsc(b.note) : ""}</li>`).join("\n");
-  const nextCards = nextUp.slice(0, 3).map((r) => `<div class="card"><b>${htmlEsc(r.f.name)}</b><span class="tracks">${htmlEsc(r.f.tracks)}</span><div>${r.next ? t.next + " " + nextTxt(r) : t.ready}</div></div>`).join("\n");
+  const nextCards = nextUp.slice(0, 3).map((r) => `<div class="card"><b>${htmlEsc(r.f.name)}${r.f.kind === "spike" ? " 🔬" : ""}</b><span class="tracks">${htmlEsc(r.f.tracks)}</span><div>${r.next ? t.next + " " + nextTxt(r) : t.ready}</div></div>`).join("\n");
 
   return `<!doctype html>
 <html lang="${langAttr}">
@@ -9388,9 +9438,12 @@ function catalogData(projectDir) {
         staleFinish(projectDir, s.state, activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", s.tracks))) fin = null;
     }
     const status = s.archived ? "archived" : s.phase === "complete" ? (fin ? "finished" : "complete") : "active";
-    const f = { feature: s.slug, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
+    const kind = s.state.kind === "bugfix" || s.state.kind === "spike" ? s.state.kind : "feature";
+    const f = { feature: s.slug, kind, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
     if (fin) f.finishedAt = fin;
     if (arch && s.archived) f.archivedAt = arch;
+    f.decisions = catalogDecisions(s.dir); // 1.14 C2: decisions.md — { count, items: [{ id, title, kind, supersededBy? }] }
+    if (kind === "spike") { const si = spikeInfo(s.dir); f.spike = { question: si.question, outcome: si.outcome }; } // 1.14 C2
     return f;
   });
   const all = features.flatMap((f) => f.acs);
@@ -9409,10 +9462,18 @@ function renderCatalogMd(data, lang, proj) {
   let md = `# ${C.title(proj)}\n\n<!-- ${C.autogen} -->\n\n> ${C.intro}\n\n${C.totals(t.features, t.acs, t.current, t.superseded)}\n`;
   if (!data.features.length) md += `\n_${C.noFeatures}_\n`;
   for (const f of data.features) {
-    md += `\n## ${icon[f.status]} ${f.feature} — ${C.status[f.status]}${f.status === "active" ? ` (${P[f.phase] || f.phase})` : ""}\n\n`;
+    const SP = i18n.msg(lang).spike; // 1.14 C2: a spike reads apart (its question + decision instead of ACs)
+    md += `\n## ${icon[f.status]} ${f.feature} — ${C.status[f.status]}${f.status === "active" ? ` (${P[f.phase] || f.phase})` : ""}${f.kind === "spike" ? " · 🔬 " + SP.kind : ""}\n\n`;
     const meta = [f.tracks, f.finishedAt ? C.finishedOn(day(f.finishedAt)) : null, f.archivedAt ? C.archivedOn(day(f.archivedAt)) : null].filter(Boolean);
     md += `_${meta.join(" · ")}_\n\n`;
-    if (!f.acs.length) md += `_${C.noAcs}_\n`;
+    const pre = [];
+    if (f.spike) pre.push(`- ${SP.catalogQuestion(f.spike.question || "—")}`, `- ${f.spike.outcome ? SP.catalogOutcome(f.spike.outcome) : SP.catalogPending}`);
+    if (f.decisions && f.decisions.count) {
+      const D = i18n.msg(lang).decisions;
+      pre.push(`- 📝 ${D.catalogLine(f.decisions.count, f.decisions.items.map((d) => (d.supersededBy ? `~~${d.id} ${d.title}~~` : `${d.id} ${d.title}`)).join(" · "))}`);
+    }
+    if (pre.length) md += pre.join("\n") + "\n" + (f.acs.length || !f.spike ? "\n" : "");
+    if (!f.acs.length && !f.spike) md += `_${C.noAcs}_\n`;
     for (const a of f.acs) {
       const body = `**${a.id}** — ${a.text}`;
       let line = a.supersededBy ? `- ~~${body}~~ — ${C.supersededBy(a.supersededBy.map(code).join(", "))}` : `- ${body}`;
@@ -9454,6 +9515,619 @@ function maybeRefreshCatalog(projectDir) {
     return false; // best-effort
   }
 }
+
+// @pkg C2 decisions + spike >>>
+// ---------------------------------------------------------------------------
+// 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
+// ---------------------------------------------------------------------------
+//
+// decisions.md is COMMITTED with the spec (the .execution/ ledger is self-ignored scratch): a localized header, then one
+// entry per decision or discovery —
+//   ## D-<n> — <title>
+//   - _Kind: decision | discovery_
+//   - _Date: <ISO timestamp>_
+//   - _Affects: US-1.AC-2, T-03, <design section>_      (optional)
+//   - _Supersedes: D-1_                                 (optional)
+//   **Context:** …  **Decision:** (**Discovery:**) …  **Consequences:** …   (localized labels, any EN/PT/ES spelling read)
+// The IDs and the four markers are English-stable; the markers are read on the lines between the heading and the first
+// label only. spec_decide appends under the feature lock: numbered after the highest D-n, the existing bytes never
+// rewritten (a BOM and CRLF line ends are kept — the entry follows the file's line ends). _Affects:_ references are
+// validated against the feature when written (an unknown one is an error, nothing written: AC IDs defined in
+// requirements.md, T-IDs planned in test-plan.md, EC/NFR/SC IDs written in requirements.md, anything else a section heading
+// of design.md — bug.md / design.md for a bugfix, spike.md for a spike) and re-checked by trace_check (phantomAffects,
+// warnings) and doctor. A later entry's _Supersedes: D-n_ retires D-n: the brief and doctor's decision-affects-approved skip
+// it, the catalog marks it. Readers: spec_task_brief (entries citing the task's ACs / T-IDs, bounded), spec_finish's merge
+// summary, spec_export, spec_catalog, spec_doctor, trace_check. HTML comments and fenced code never hold an entry.
+const DECISIONS_FILE = "decisions.md";
+const DECISION_TITLE_MAX = 200;
+const DECISION_TEXT_MAX = 20000;
+const RE_DECISION_HEAD = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/;
+const RE_DECISION_MARKER = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):[ \t]*(.*)_\s*$/i;
+const DECISION_LABELS = {
+  context: ["context", "contexto"],
+  decision: ["decision", "decisão", "decisao", "decisión", "discovery", "descoberta", "descubrimiento"],
+  consequences: ["consequences", "consequências", "consequencias", "consecuencias"],
+};
+const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LABELS).flat().join("|") + "):\\*\\*[ \\t]*(.*)$", "iu");
+const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
+const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
+const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
+// HTML comments blanked line for line (line numbers hold).
+const blankHtmlComments = (s) => String(s || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ""));
+const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean);
+const normDecisionId = (s) => { const m = String(s || "").trim().match(/^D-(\d{1,6})$/i); return m ? "D-" + parseInt(m[1], 10) : null; };
+function decisionLabelKey(label) {
+  const l = String(label).toLowerCase();
+  return Object.keys(DECISION_LABELS).find((k) => DECISION_LABELS[k].includes(l)) || "decision";
+}
+
+// decisions.md → [{ id, n, title, line, kind, date (the marker's text), at (ms | null), affects: [ref], supersedes: [D-n],
+// context, decision, consequences }] in file order. An entry runs to the next heading of its level or above.
+function decisionLog(text) {
+  const lines = blankHtmlComments(String(text || "").replace(RE_LEADING_BOM, "")).split(/\r?\n/);
+  const entries = [];
+  const fst = { fence: null };
+  let cur = null;
+  let seg = "body";
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (fenceStep(fst, line)) { if (cur) cur.parts[seg].push(line); continue; }
+    const h = line.match(RE_DECISION_HEAD);
+    if (h) {
+      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: h[3].replace(/[ \t]+#+$/, "").trim(),
+        kind: "decision", date: null, affects: [], supersedes: [], parts: { body: [], context: [], decision: [], consequences: [] } };
+      entries.push(cur);
+      seg = "body";
+      seen.clear();
+      continue;
+    }
+    const hl = line.match(/^(#{1,6})\s/);
+    if (hl) {
+      if (cur && hl[1].length <= cur.level) cur = null;
+      else if (cur) cur.parts[seg].push(line);
+      continue;
+    }
+    if (!cur) continue;
+    const mk = seg === "body" ? line.match(RE_DECISION_MARKER) : null;
+    if (mk) {
+      const key = mk[1].toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        const v = mk[2].trim();
+        if (key === "kind") cur.kind = /^discovery$/i.test(v.replace(/`/g, "").trim()) ? "discovery" : "decision";
+        else if (key === "date") cur.date = v.replace(/`/g, "").trim();
+        else cur[key] = splitRefs(v);
+      }
+      continue;
+    }
+    const lb = line.match(RE_DECISION_LABEL);
+    if (lb) { seg = decisionLabelKey(lb[1]); cur.parts[seg].push(lb[2]); continue; }
+    cur.parts[seg].push(line);
+  }
+  const txt = (arr) => arr.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return entries.map(({ parts, level: _l, ...e }) => ({
+    ...e,
+    at: e.date ? timeOf(e.date) : null,
+    supersedes: e.supersedes.map(normDecisionId).filter(Boolean),
+    context: txt(parts.context),
+    decision: txt(parts.decision) || txt(parts.body),
+    consequences: txt(parts.consequences),
+  }));
+}
+// D-n → the later entry that supersedes it.
+function retiredDecisions(log) {
+  const out = new Map();
+  for (const e of log) for (const s of e.supersedes) if (s !== e.id && !out.has(s)) out.set(s, e.id);
+  return out;
+}
+
+// A heading / an _Affects:_ section reference → its comparison keys: the text folded (case, whitespace, emphasis, a trailing
+// ':' / '.') and the same without a leading [Marker] / numbering (headingMatches' RE_HEADING_LEAD) — "Data Model" names
+// "## 3. Data Model", "[SaaS] Observability" and "Observability" name "### [SaaS] Observability".
+function decisionSectionKeys(text) {
+  const base = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[:.]+$/, "").trim();
+  const keys = new Set(base ? [base] : []);
+  let t = base;
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(RE_HEADING_LEAD, "").trim(); }
+  if (t) keys.add(t);
+  return keys;
+}
+// What an _Affects:_ reference may name in this feature (see the header comment).
+function decisionTargets(dir, kind) {
+  const read = (x) => readIfExists(path.join(dir, x)) || "";
+  const req = read("requirements.md");
+  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : ["design.md"];
+  const sections = new Map(); // key → { title, file }
+  for (const file of files) {
+    const lines = blankHtmlComments(read(file)).split(/\r?\n/);
+    for (const i of headingIndex(lines)) {
+      const m = lines[i].match(/^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/);
+      if (!m || !m[1].trim()) continue;
+      for (const k of decisionSectionKeys(m[1])) if (!sections.has(k)) sections.set(k, { title: m[1].trim(), file });
+    }
+  }
+  return {
+    acs: requirementAcIds(req),
+    secondary: secondaryDefinitions(req).all,
+    tests: new Set([...extractTestIds(planIdText(read("test-plan.md")))].map((id) => tKey(id.slice(2)))),
+    sections,
+  };
+}
+// One reference → { ref (canonical: IDs upper-cased, a section as its heading reads), type: ac | test | secondary | section, ok }.
+function resolveAffect(ref, t) {
+  const r = String(ref || "").trim();
+  let m;
+  if ((m = r.match(/^US-(\d+)\.AC-(\d+)$/i))) { const id = `US-${m[1]}.AC-${m[2]}`; return { ref: id, type: "ac", ok: t.acs.has(id) }; }
+  if ((m = r.match(/^T-(\d+)$/i))) return { ref: "T-" + m[1], type: "test", ok: t.tests.has(tKey(m[1])) };
+  if ((m = r.match(/^(EC|NFR|SC)-(\d+)$/i))) { const p = m[1].toUpperCase(); return { ref: p + "-" + m[2], type: "secondary", ok: t.secondary.has(idKey(p, m[2])) }; }
+  const hit = [...decisionSectionKeys(r)].map((k) => t.sections.get(k)).find(Boolean);
+  return hit ? { ref: hit.title, type: "section", ok: true, file: hit.file } : { ref: r, type: "section", ok: false };
+}
+
+// User text written into a spec file (a decision's paragraphs, a spike's question): a line that would read as a heading, an
+// entry marker or a label is escaped, an HTML comment opener neutralized, an unclosed code fence closed — nothing a caller
+// writes can hide or fake the entries after it.
+function safeSpecText(s) {
+  const st = { fence: null };
+  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map((l) => l.replace(/[ \t]+$/, "")).map((l) => {
+    if (fenceStep(st, l)) return l;
+    if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
+    if (RE_DECISION_MARKER.test(l) || RE_OUTCOME_LINE.test(l)) return l.replace("_", "\\_");
+    if (RE_DECISION_LABEL.test(l)) return l.replace("**", "\\*\\*");
+    return l;
+  });
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return out.join("\n").replace(/^\n+|\n+$/g, "");
+}
+
+// spec_decide input → { title, decision, context, consequences, kind, affects, supersedes } | { error }.
+function decisionInput(input, D) {
+  const o = isObj(input) ? input : {};
+  const str = (k, max, required, errRequired) => {
+    const v = o[k];
+    if (v == null || (typeof v === "string" && !v.trim())) return required ? { error: errRequired } : { value: null };
+    if (typeof v !== "string") return { error: D.badText(k) };
+    if (v.length > max) return { error: D.tooLong(k, max) };
+    return { value: v };
+  };
+  const title = str("title", DECISION_TITLE_MAX * 4, true, D.titleRequired);
+  if (title.error) return title;
+  const t1 = title.value.replace(/\s+/g, " ").trim().replace(/<!--/g, "&lt;!--");
+  if (t1.length > DECISION_TITLE_MAX) return { error: D.tooLong("title", DECISION_TITLE_MAX) };
+  const decision = str("decision", DECISION_TEXT_MAX, true, D.decisionRequired);
+  if (decision.error) return decision;
+  const context = str("context", DECISION_TEXT_MAX, false);
+  if (context.error) return context;
+  const consequences = str("consequences", DECISION_TEXT_MAX, false);
+  if (consequences.error) return consequences;
+  let kind = "decision";
+  if (o.kind != null) {
+    const k = typeof o.kind === "string" ? o.kind.trim().toLowerCase() : null;
+    if (k !== "decision" && k !== "discovery") return { error: D.badKind(JSON.stringify(o.kind)) };
+    kind = k;
+  }
+  const list = (k) => {
+    const v = o[k];
+    if (v == null) return { value: [] };
+    const items = Array.isArray(v) ? v : [v];
+    if (items.some((x) => typeof x !== "string")) return { error: D.badText(k) };
+    return { value: [...new Set(items.flatMap(splitRefs))] };
+  };
+  const affects = list("affects");
+  if (affects.error) return affects;
+  const supersedes = list("supersedes");
+  if (supersedes.error) return supersedes;
+  return { title: t1, decision: decision.value, context: context.value, consequences: consequences.value, kind, affects: affects.value, supersedes: supersedes.value };
+}
+// One entry's lines (no line ends).
+function decisionEntryLines(e, D) {
+  const para = (label, text) => {
+    if (!text) return [];
+    const body = safeSpecText(text);
+    return body ? ["", `**${label}:** ` + body] : [];
+  };
+  return [
+    `## ${e.id} — ${e.title}`,
+    "",
+    `- _Kind: ${e.kind}_`,
+    `- _Date: ${e.at}_`,
+    ...(e.affects.length ? [`- _Affects: ${e.affects.join(", ")}_`] : []),
+    ...(e.supersedes.length ? [`- _Supersedes: ${e.supersedes.join(", ")}_`] : []),
+    ...para(D.labels.context, e.context),
+    ...para(e.kind === "discovery" ? D.labels.discovery : D.labels.decision, e.decision),
+    ...para(D.labels.consequences, e.consequences),
+  ].join("\n").split("\n");
+}
+
+// spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?} / `dev-spec decide`: append one
+// entry to decisions.md (created with its localized header when absent). Under the feature lock (featureLocked).
+function decide(projectDir, name, input) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const D = i18n.msg(lng).decisions;
+  const st = readState(projectDir, slug);
+  if (st.invalid) return { ok: false, error: st.invalid };
+  const kind = st.kind || "feature";
+  const inp = decisionInput(input, D);
+  if (inp.error) return { ok: false, error: inp.error };
+  const file = path.join(dir, DECISIONS_FILE);
+  const raw = readIfExists(file);
+  const log = decisionLog(raw || "");
+  const known = new Set(log.map((e) => e.id));
+  const sup = inp.supersedes.map((s) => ({ s, id: normDecisionId(s) }));
+  const badSup = sup.filter((x) => !x.id || !known.has(x.id)).map((x) => x.s);
+  if (badSup.length) return { ok: false, unknownSupersedes: badSup, error: D.badSupersedes(badSup.join(", ")) };
+  const targets = decisionTargets(dir, kind);
+  const resolved = inp.affects.map((r) => resolveAffect(r, targets));
+  const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
+  if (unknown.length) return { ok: false, unknownAffects: unknown, error: D.badAffects(unknown.join(", ")) };
+  const n = Math.max(0, ...log.map((e) => e.n)) + 1;
+  const entry = { id: "D-" + n, title: inp.title, kind: inp.kind, at: new Date().toISOString(), affects: [...new Set(resolved.map((r) => r.ref))],
+    supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences };
+  const lines = decisionEntryLines(entry, D);
+  let out;
+  if (raw == null) {
+    const title = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
+    out = D.header(title) + "\n" + lines.join("\n") + "\n";
+  } else {
+    // Append only: the file's bytes stay as they are (BOM, line ends, a missing final newline) — the entry follows its line ends.
+    const eol = /\r\n/.test(raw) ? "\r\n" : "\n";
+    const sep = /(?:^|\n)[ \t]*\r?\n$/.test(raw) ? "" : /\n$/.test(raw) ? eol : eol + eol;
+    out = raw + sep + lines.join(eol) + eol;
+  }
+  writeFileAtomic(file, out);
+  maybeRefreshRoadmap(projectDir); // + SPECS.md once it exists (the catalog lists the decisions)
+  const rel = ".specs/" + slug + "/" + DECISIONS_FILE;
+  return { ok: true, feature: slug, id: entry.id, n, kind: entry.kind, title: entry.title, affects: entry.affects, supersedes: entry.supersedes, at: entry.at,
+    file: rel, created: raw == null, message: D.recorded(entry.id, D.kinds[entry.kind] || entry.kind, rel) };
+}
+
+// trace_check's part: every _Affects:_ reference that names nothing in the feature now — warnings, never a gap.
+function decisionsTrace(dir, kind) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return { phantomAffects: [] };
+  const t = decisionTargets(dir, kind);
+  const out = [];
+  for (const e of decisionLog(raw)) for (const r of e.affects) if (!resolveAffect(r, t).ok) out.push({ decision: e.id, ref: r, line: e.line });
+  return { phantomAffects: out };
+}
+TRACE_INFO_FIELDS.add("phantomAffects"); // informational, so traceGaps never lists them as gaps
+// Localized "⚠" lines for a trace_check result's phantom _Affects:_ references (CLI).
+function affectsWarnings(tr, lang) {
+  const D = i18n.msg(lang).decisions;
+  return (tr && Array.isArray(tr.phantomAffects) ? tr.phantomAffects : []).map((p) => D.phantom(p.decision, p.ref));
+}
+
+// Doctor (warns): `decision-affects` — phantom _Affects:_ references; `decision-affects-approved` — a current decision recorded
+// AFTER the approval of requirements.md (it names its AC / EC / NFR / SC IDs) or of the design (its sections; a bugfix's
+// design approval signs off bug.md) — the approved spec may no longer say what was decided: re-review (spec_impact), re-approve.
+function decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return [];
+  const D = i18n.msg(lng).decisions;
+  const out = [];
+  const phantom = tr && Array.isArray(tr.phantomAffects) ? tr.phantomAffects : decisionsTrace(dir, kind).phantomAffects;
+  if (phantom.length) out.push({ id: "decision-affects", status: "warn", detail: D.phantomDoctor(phantom.map((p) => p.decision + " → " + p.ref).join(", ")) });
+  if (kind === "spike") return out;
+  const log = decisionLog(raw);
+  const retired = retiredDecisions(log);
+  const t = decisionTargets(dir, kind);
+  const approvals = isObj(state && state.approvals) ? state.approvals : {};
+  const approvedAt = (ph) => (isRecord(approvals[ph]) ? timeOf(approvals[ph].at) : null);
+  const rq = approvedAt("requirements");
+  const ds = approvedAt("design");
+  const hits = [];
+  const phases = [];
+  for (const e of log) {
+    if (retired.has(e.id) || e.at == null) continue;
+    const res = e.affects.map((r) => resolveAffect(r, t)).filter((r) => r.ok);
+    const reqRefs = res.filter((r) => r.type === "ac" || r.type === "secondary").map((r) => r.ref);
+    const desRefs = res.filter((r) => r.type === "section").map((r) => r.ref);
+    if (reqRefs.length && rq != null && e.at > rq) {
+      hits.push(D.affectsApprovedEntry(e.id, reqRefs.join(", "), "requirements.md", day(new Date(rq).toISOString())));
+      if (!phases.includes("requirements")) phases.push("requirements");
+    }
+    if (desRefs.length && ds != null && e.at > ds) {
+      hits.push(D.affectsApprovedEntry(e.id, desRefs.join(", "), phaseFile("design", kind), day(new Date(ds).toISOString())));
+      if (!phases.includes("design")) phases.push("design");
+    }
+  }
+  if (hits.length) out.push({ id: "decision-affects-approved", status: "warn", detail: D.affectsApproved(hits.join("; "), slug, phases.join(" | ")) });
+  return out;
+}
+
+// spec_task_brief: the current entries citing the task's AC IDs, T-IDs (T-3 = T-03) or EC / NFR / SC IDs — at most
+// BRIEF_DECISIONS_MAX, within BRIEF_DECISIONS_CHARS (the most recent kept first), shown in log order; the rest named.
+function briefDecisions(dir, acIds, testIds, blockText) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return { items: [], omitted: [] };
+  const log = decisionLog(raw);
+  const retired = retiredDecisions(log);
+  const acs = new Set(acIds);
+  const tests = new Set(testIds.map((id) => tKey(id.slice(2))));
+  const sec = secondaryIds(blockText);
+  const cites = (r) => {
+    if (acs.has(r)) return true;
+    let m;
+    if ((m = r.match(/^T-(\d+)$/i))) return tests.has(tKey(m[1]));
+    if ((m = r.match(/^(EC|NFR|SC)-(\d+)$/i))) return sec.has(idKey(m[1].toUpperCase(), m[2]));
+    return false;
+  };
+  const hits = log.filter((e) => !retired.has(e.id) && e.affects.some(cites));
+  const kept = [];
+  let budget = BRIEF_DECISIONS_CHARS;
+  for (const e of hits.slice().reverse()) {
+    const text = oneLiner(e.decision, 400) || "";
+    const cost = e.title.length + text.length;
+    if (kept.length >= BRIEF_DECISIONS_MAX || cost > budget) continue;
+    budget -= cost;
+    kept.push({ id: e.id, n: e.n, title: e.title, kind: e.kind, affects: e.affects, supersedes: e.supersedes, text });
+  }
+  kept.sort((a, b) => a.n - b.n);
+  const ids = new Set(kept.map((k) => k.id));
+  return { items: kept.map(({ n: _n, ...k }) => k), omitted: hits.filter((e) => !ids.has(e.id)).map((e) => e.id) };
+}
+
+// spec_finish's merge summary: "## Decisions" + one line per entry (superseded ones struck through), or [] without a log.
+function decisionSummaryLines(dir, lang) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return [];
+  const log = decisionLog(raw);
+  if (!log.length) return [];
+  const D = i18n.msg(lang).decisions;
+  const retired = retiredDecisions(log);
+  return [D.prHeading, ...log.map((e) => {
+    const head = `**${e.id}** — ${e.title}`;
+    const meta = [D.kinds[e.kind] || e.kind, e.affects.join(", "), e.supersedes.length ? D.supersedesNote(e.supersedes.join(", ")) : ""].filter(Boolean).join(" · ");
+    const text = oneLiner(e.decision, 300);
+    return retired.has(e.id) ? `- ~~${head}~~ _(${D.superseded}: ${retired.get(e.id)})_` : `- ${head} _(${meta})_` + (text ? ": " + text : "");
+  })];
+}
+// spec_catalog: { count, items: [{ id, title, kind, superseded? }] }.
+function catalogDecisions(dir) {
+  const log = decisionLog(readIfExists(path.join(dir, DECISIONS_FILE)) || "");
+  const retired = retiredDecisions(log);
+  return { count: log.length, items: log.map((e) => Object.assign({ id: e.id, title: e.title, kind: e.kind }, retired.has(e.id) ? { supersededBy: retired.get(e.id) } : {})) };
+}
+
+// ---------------------------------------------------------------------------
+// The spike kind — spec_create {kind: "spike"} / `dev-spec spike "<name>" [--question …] [--timebox …]`
+// ---------------------------------------------------------------------------
+// An investigation with a question, a timebox and a DECISION — neither an unrecorded vibe session nor a spec with fake ACs.
+// It scaffolds spike.md (Question · Timebox · Options considered · Evidence · Decision + _Outcome: go | no-go | pivot_ ·
+// Follow-up — localized headings, matched by the synonyms below) and a small tasks.md of investigation steps; it is
+// core-only and has no requirements / design / test / tasks gates (gateWalk, pendingGateList and chainArtifacts are empty
+// for it; approve refuses every phase but the execution sign-off; add_track refuses it). Its own doctor (spikeDoctor:
+// question, decision — fail until written —, timebox — warn once its end date passed with no decision), next_action
+// (spikeNextAction: fill the question → investigate → record the decision → go: spec the real feature, seeded from the
+// question + decision, and archive the spike · no-go: archive it with its reason · pivot: a new spike) and finish
+// (spikeFinish: ready once the decision is written and every task ticked — no suite / evidence gates). detectPhase:
+// requirements (question unwritten) → tasks-ready → executing → complete (decision written and every task ticked).
+// Prototype code lives OUTSIDE .specs/. The changelog never lists a spike (it ships nothing).
+const SPIKE_FILE = "spike.md";
+const SPIKE_SYN = {
+  question: ["question", "pergunta", "pregunta"],
+  timebox: ["timebox", "prazo", "plazo"],
+  options: ["options considered", "opções consideradas", "opcoes consideradas", "opciones consideradas", "options", "opções", "opcoes", "opciones"],
+  evidence: ["evidence", "evidência", "evidencia"],
+  decision: ["decision", "decisão", "decisao", "decisión"],
+  followUp: ["follow-up", "follow up", "seguimento", "seguimiento"],
+};
+const RE_OUTCOME_LINE = /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i;
+// _Outcome:_ values (English-stable go | no-go | pivot; the PT / ES words and yes / no read too).
+const OUTCOME_SYN = {
+  go: ["go", "yes", "sim", "sí", "si", "avançar", "avancar", "avanzar", "seguir"],
+  "no-go": ["no-go", "no go", "nogo", "no", "não", "nao", "não avançar", "nao avancar", "no avanzar", "no seguir", "drop", "abandonar"],
+  pivot: ["pivot", "pivotar", "pivotear", "mudar de rumo", "cambiar de rumbo"],
+};
+function normOutcome(v) {
+  const s = String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!]+$/, "");
+  if (!s || s.includes("|")) return null;
+  return Object.keys(OUTCOME_SYN).find((k) => OUTCOME_SYN[k].includes(s)) || null;
+}
+// A spike.md section's own prose: comments out, the TODO sentinel and the _Outcome:_ line set aside.
+function spikeProse(body) {
+  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !RE_OUTCOME_LINE.test(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
+}
+// Written = present, no `> **TODO**` sentinel, and some prose outside [bracketed slots] (the _Outcome:_ line alone is no rationale).
+function spikeFilled(body) {
+  return body != null && !RE_TODO_SENTINEL.test(stripHtmlComments(body)) && hasProseOutsideBrackets(spikeProse(body));
+}
+// The Decision section's outcome: its _Outcome: …_ line, else a first line that opens with go / no-go / pivot.
+function spikeOutcome(body) {
+  if (body == null) return null;
+  const lines = stripHtmlComments(body).split(/\r?\n/);
+  const mk = lines.map((l) => l.match(RE_OUTCOME_LINE)).find(Boolean);
+  const marked = mk ? normOutcome(mk[1]) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
+  if (marked) return marked;
+  const first = spikeProse(body).split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "";
+  const m = first.match(/^(?:[-*+>]\s*)*(?:\*\*|__)?(no-go|no go|nogo|go|pivot|não avançar|nao avancar|no avanzar|avançar|avancar|avanzar|pivotar|pivotear)(?![\p{L}\p{N}-])/iu);
+  return m ? normOutcome(m[1]) : null;
+}
+// The first paragraph of a section's prose, one line (null when it is only [slots]).
+function spikeParagraph(body, max) {
+  const para = [];
+  for (const l of spikeProse(body).split(/\r?\n/).map((x) => x.trim())) {
+    if (!l) { if (para.length) break; continue; }
+    para.push(l);
+  }
+  const t = para.join(" ");
+  return t && hasProseOutsideBrackets(t) ? oneLiner(t, max || 300) : null;
+}
+const validIsoDay = (s) => { const d = new Date(s + "T00:00:00Z"); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; };
+// The Timebox section → { state: missing | unset (TODO / empty) | date | nodate, date? } — the first real YYYY-MM-DD in it.
+function spikeTimebox(body) {
+  if (body == null) return { state: "missing" };
+  const t = stripHtmlComments(body);
+  if (RE_TODO_SENTINEL.test(t) || !t.trim()) return { state: "unset" };
+  for (const m of t.matchAll(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g)) if (validIsoDay(m[0])) return { state: "date", date: m[0] };
+  return { state: "nodate" };
+}
+const todayIso = () => new Date().toISOString().slice(0, 10);
+// Everything the spike tools read from spike.md.
+function spikeInfo(dir) {
+  const text = readIfExists(path.join(dir, SPIKE_FILE));
+  if (text == null) return { text: null, questionFilled: false, decisionFilled: false, outcome: null, question: null, rationale: null, timebox: { state: "missing" } };
+  const q = extractSection(text, SPIKE_SYN.question);
+  const d = extractSection(text, SPIKE_SYN.decision);
+  const tb = spikeTimebox(extractSection(text, SPIKE_SYN.timebox));
+  const decisionFilled = spikeFilled(d);
+  return { text, questionFilled: spikeFilled(q), decisionFilled, outcome: decisionFilled ? spikeOutcome(d) : null, question: spikeFilled(q) ? spikeParagraph(q) : null,
+    rationale: decisionFilled ? spikeParagraph(d) : null, timebox: tb, timeboxPassed: !decisionFilled && tb.state === "date" && tb.date < todayIso() ? tb.date : null };
+}
+const isSpikeDir = (dir) => (readJson(statePath(dir)).data || {}).kind === "spike";
+// detectPhase for a spike (tasks: parseTasks of its tasks.md).
+function spikePhase(dir, tasks) {
+  const s = spikeInfo(dir);
+  const allDone = tasks.length > 0 && tasks.every((t) => t.done);
+  if (s.decisionFilled && (allDone || !tasks.length)) return "complete";
+  if (s.decisionFilled || tasks.some((t) => t.done)) return "executing";
+  return s.questionFilled ? "tasks-ready" : "requirements";
+}
+// spec_create's spike inputs → { question, until, raw } | { error }. timebox: an end date (YYYY-MM-DD) or a duration from
+// today (3d, 2w, 8h — days / weeks / hours; dias / semanas / horas / días read too).
+function spikeCreateInput(opts, M) {
+  const SP = M.spike;
+  const A = M.args;
+  const out = { question: null, until: null, raw: null };
+  const q = opts.question;
+  if (q != null && typeof q !== "string") return { error: A.invalid(A.item("question", A.type.string, JSON.stringify(q))) };
+  if (typeof q === "string" && q.trim()) {
+    if (q.length > DECISION_TEXT_MAX) return { error: M.decisions.tooLong("question", DECISION_TEXT_MAX) };
+    out.question = safeSpecText(q.trim());
+  }
+  const v = opts.timebox;
+  if (v == null || (typeof v === "string" && !v.trim())) return out;
+  if (typeof v !== "string") return { error: SP.badTimebox(JSON.stringify(v)) };
+  const s = v.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return validIsoDay(s) ? { ...out, until: s, raw: s } : { error: SP.badTimebox(JSON.stringify(s)) };
+  const m = s.match(/^(\d{1,3})\s*(h|hours?|horas?|d|days?|dias?|días?|w|weeks?|semanas?)$/i);
+  if (!m) return { error: SP.badTimebox(JSON.stringify(s)) };
+  const u = m[2][0].toLowerCase();
+  const ms = u === "h" ? 3600e3 : u === "w" || u === "s" ? 7 * 864e5 : 864e5;
+  return { ...out, until: new Date(Date.now() + parseInt(m[1], 10) * ms).toISOString().slice(0, 10), raw: s };
+}
+// The go seed: the spike's name without its "spike" words, and a summary from its question + decision.
+function spikeSeed(slug, s) {
+  const name = slug.split("-").filter((w) => !/^(spike|spikes|investigate|investigation|investigacao|investigacion|investigar|poc)$/.test(w)).join("-") || slug;
+  const summary = oneLiner([s.question, s.rationale].filter(Boolean).join(" — "), 240) || slug;
+  return { name, summary, archiveFirst: name === slug };
+}
+
+function spikeDoctor(projectDir, f) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const SP = i18n.msg(lng).spike;
+  const tracks = detectTracks(dir);
+  const st = readState(projectDir, slug);
+  const s = spikeInfo(dir);
+  const checks = [];
+  const add = (id, status, detail) => checks.push({ id, status, detail });
+  if (s.text == null) add("spike", "fail", SP.doctor.missing);
+  else {
+    add("question", s.questionFilled ? "pass" : "fail", s.questionFilled ? SP.doctor.questionOk : SP.doctor.questionMissing);
+    add("decision", !s.decisionFilled ? "fail" : s.outcome ? "pass" : "warn", !s.decisionFilled ? SP.doctor.decisionMissing : s.outcome ? SP.doctor.decisionOk(s.outcome) : SP.doctor.outcomeMissing);
+    const tb = s.timebox;
+    if (s.decisionFilled) add("timebox", "pass", SP.doctor.timeboxDecided);
+    else if (tb.state === "date") add("timebox", s.timeboxPassed ? "warn" : "pass", s.timeboxPassed ? SP.doctor.timeboxPassed(tb.date) : SP.doctor.timeboxOk(tb.date));
+    else add("timebox", "warn", tb.state === "nodate" ? SP.doctor.timeboxNoDate : SP.doctor.timeboxUnset);
+  }
+  const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
+  if (dupTasks.length) add("duplicate-tasks", "warn", i18n.msg(lng).evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
+  const fails = checks.filter((c) => c.status === "fail");
+  const warns = checks.filter((c) => c.status === "warn");
+  return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
+    nextGate: null, gatesOk: true, checks, summary: { pass: checks.length - fails.length - warns.length, warn: warns.length, fail: fails.length },
+    readyToAdvance: fails.length === 0, verdict: fails.length ? "fail" : warns.length ? "warn" : "pass" };
+}
+
+function spikeNextAction(projectDir, f, opts = {}) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const N = i18n.msg(lng).spike.next;
+  const tracks = detectTracks(dir);
+  const doc = opts.doctor && opts.doctor.ok ? opts.doctor : spikeDoctor(projectDir, f);
+  const s = spikeInfo(dir);
+  const next = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks)).find((t) => !t.done);
+  const late = s.timeboxPassed ? " " + N.timeboxPassed(s.timeboxPassed) : "";
+  const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), verdict: doc.verdict, gatesOk: true, pendingGates: [], changedSinceApproval: [] };
+  if (s.text == null) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.missing(slug) });
+  else if (!s.questionFilled) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.fillQuestion(slug) });
+  else if (next) Object.assign(res, { step: "implement", recommendation: N.investigate(next.number, cleanTaskText(next.text), slug) + late });
+  else if (!s.decisionFilled) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.decide(slug) + late });
+  else if (!s.outcome) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.outcome(slug) });
+  else if (s.outcome === "go") {
+    const seed = spikeSeed(slug, s);
+    Object.assign(res, { step: "promote", outcome: "go", seed: { name: seed.name, summary: seed.summary },
+      recommendation: (seed.archiveFirst ? N.goArchiveFirst : N.goCreateFirst)(slug, seed.name, seed.summary) });
+  } else {
+    const why = s.rationale ? s.rationale.replace(/[\s.;:!…]+$/, "") : null; // the message ends the sentence itself
+    if (s.outcome === "no-go") Object.assign(res, { step: "archive", outcome: "no-go", recommendation: N.noGo(slug, why) });
+    else Object.assign(res, { step: "pivot", outcome: "pivot", recommendation: N.pivot(slug, why) });
+  }
+  return res;
+}
+
+// spec_finish on a spike (after spec_finish {evidence} was recorded, if any): ready once the decision is written and every
+// task is ticked — no suite / evidence / approval gates. opts.gateOnly: the execution sign-off's checks.
+function spikeFinish(projectDir, f, opts, recordedChecks) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const M = i18n.msg(lng);
+  const F = M.finish;
+  const SP = M.spike;
+  const tracks = detectTracks(dir);
+  const s = spikeInfo(dir);
+  const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
+  const blocks = taskBlocks(tasksText);
+  const open = blocks.filter((b) => !b.done).map((b) => b.number);
+  const blocked = [];
+  const block = (id, detail) => blocked.push({ id, detail });
+  if (s.text == null) block("spike", SP.finish.missing);
+  else if (!s.decisionFilled) block("decision", SP.finish.decisionBlocker);
+  if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
+  if (opts.gateOnly) return { ok: true, checks: blocked };
+  const blockers = blocked.map((b) => b.detail);
+  const text = s.text || "";
+  const sec = (syn) => { const b = extractSection(text, syn); return b == null ? null : spikeFilled(b) ? spikeProse(b).trim() : null; };
+  const mergeTitle = `docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — ${shortTitle(s.question || slug)}`;
+  const body = [SP.finish.prQuestion, s.question || slug, ""];
+  const decision = sec(SPIKE_SYN.decision);
+  if (decision) body.push(SP.finish.prDecision(s.outcome), decision, "");
+  for (const [syn, h] of [[SPIKE_SYN.options, SP.finish.prOptions], [SPIKE_SYN.evidence, SP.finish.prEvidence], [SPIKE_SYN.followUp, SP.finish.prFollowUp]]) {
+    const t = sec(syn);
+    if (t) body.push(h, t, "");
+  }
+  const dec = decisionSummaryLines(dir, lng);
+  if (dec.length) body.push(...dec, "");
+  if (blocks.length) body.push(F.prTasks, ...blocks.map((b) => `- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}`), "");
+  body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
+  body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
+  const mergeSummary = body.join("\n") + "\n";
+  const exDir = path.join(dir, ".execution");
+  const summaryPath = path.join(exDir, "merge-summary.md");
+  const write = !!opts.write;
+  if (write) {
+    ensureDir(exDir);
+    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
+    forgetCached(summaryPath);
+    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+  }
+  const ready = blockers.length === 0;
+  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)
+  const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), readyToFinish: ready, message: ready ? SP.finish.ready(slug) : SP.finish.notReady(slug),
+    blockers, warnings: [], openTasks: open, unverified: [], pendingGates: [], changedSinceApproval: [], placeholders: [], checks: SP.finish.checks.slice(),
+    outcome: s.outcome, mergeTitle, paths: { summary: summaryPath }, wrote: write };
+  if (baseline) res.baseline = baseline;
+  if (recordedChecks) res.recordedChecks = recordedChecks;
+  if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
+  return res;
+}
+// @pkg C2 <<<
 
 // @pkg B2 engine >>>
 // ---------------------------------------------------------------------------
@@ -9735,7 +10409,8 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const read = (n) => readIfExists(path.join(dir, n));
   const tracks = detectTracks(dir);
   const st = stateFromFile(projectDir, statePath(dir));
-  const kind = st.kind === "bugfix" ? "bugfix" : "feature";
+  const kind = st.kind === "bugfix" || st.kind === "spike" ? st.kind : "feature"; // 1.14 C2: + spike
+  const SP = M.spike;
   const reqRaw = read("requirements.md") || "";
   const reqs = activeDesign(reqRaw, tracks); // a removed track's [SaaS]/[AI]/… criteria are inactive — not part of the spec
   const status = statusFeature(projectDir, slug);
@@ -9744,18 +10419,25 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const phase = status.ok ? status.phase : detectPhase(dir, tracks);
   const catF = cat.features.find((x) => x.feature === slug && !x.archived);
   const marks = new Map((catF ? catF.acs : []).map((a) => [a.id, a]));
-  const meta = [[X.meta.id, "`" + slug + "`"], [X.meta.kind, X.kind[kind]], [X.meta.tracks, trackLabel(tracks)], [X.meta.phase, P[phase] || phase],
+  const meta = [[X.meta.id, "`" + slug + "`"], [X.meta.kind, X.kind[kind] || SP.kind], [X.meta.tracks, trackLabel(tracks)], [X.meta.phase, P[phase] || phase],
     [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length))]];
   if (catF) meta.push([X.meta.status, M.catalog.status[catF.status] + (catF.finishedAt ? " · " + day(catF.finishedAt) : "")]);
   meta.push([X.meta.lang, lang]);
 
   const blocks = [];
   const bugText = kind === "bugfix" ? read("bug.md") : null;
-  const summary = sectionText(reqs, SUMMARY_SYN) || (bugText != null ? sectionText(bugText, SUMMARY_SYN) : null);
+  const spikeText = kind === "spike" ? read(SPIKE_FILE) : null; // 1.14 C2: a spike — its question is the summary, spike.md its body
+  const summary = sectionText(reqs, SUMMARY_SYN) || (bugText != null ? sectionText(bugText, SUMMARY_SYN) : null) || (kind === "spike" ? spikeInfo(dir).question : null);
   blocks.push({ id: "summary", h: X.sections.summary, md: summary || italic(X.noSummary) });
-  const stories = exportStories(reqs, X, marks);
-  blocks.push({ id: "stories", h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories });
+  if (kind !== "spike") {
+    const stories = exportStories(reqs, X, marks);
+    blocks.push({ id: "stories", h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories });
+  }
   requirementSections(reqs).forEach((s, k) => blocks.push({ id: "req-" + (k + 1), h: s.title, md: s.body }));
+  if (spikeText != null) {
+    const secs = designSections(spikeText);
+    blocks.push({ id: "spike", h: SP.exportSection, md: secs.length ? "" : italic(X.none), children: secs.map((s) => ({ h: s.title, md: s.body || italic(X.none) })) });
+  }
   if (bugText != null) { // a bugfix's design: bug.md (reproduction · expected vs actual · root cause · fix · regression test)
     const secs = designSections(bugText).filter((s) => !(summary && SUMMARY_SYN.some((x) => s.title.toLowerCase().startsWith(x))));
     blocks.push({ id: "bug", h: X.sections.bug, md: secs.length ? "" : italic(X.none), children: secs.map((s) => ({ h: s.title, md: s.body || italic(X.none) })) });
@@ -9806,7 +10488,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
     for (const q of clarificationMarkers(file === "design.md" ? activeDesign(t, tracks) : t)) clar.push(`- \`${file}\` — ${q || "[NEEDS CLARIFICATION]"}`);
   }
   blocks.push({ id: "clarifications", h: X.sections.clarifications, md: clar.length ? clar.join("\n") : italic(X.noClarifications) });
-  return { lang, scope: "feature", feature: slug, title: specTitle(reqRaw, slug), kicker: X.kicker[kind], lead: X.generated(day(new Date().toISOString())), autogen: X.autogen, meta, blocks };
+  return { lang, scope: "feature", feature: slug, title: specTitle(reqRaw || spikeText || "", slug), kicker: X.kicker[kind] || SP.kicker, lead: X.generated(day(new Date().toISOString())), autogen: X.autogen, meta, blocks };
 }
 
 function exportProjectDoc(projectDir, lang, cat) {
@@ -9831,17 +10513,18 @@ function exportProjectDoc(projectDir, lang, cat) {
   for (const f of rmv.features) {
     const dir = path.join(root, f.name);
     const tracks = detectTracks(dir);
-    const kind = stateFromFile(projectDir, statePath(dir)).kind === "bugfix" ? "bugfix" : "feature";
+    const kind = f.kind === "bugfix" || f.kind === "spike" ? f.kind : "feature"; // 1.14 C2: + spike (its question is the summary)
     const reqRaw = readIfExists(path.join(dir, "requirements.md")) || "";
     const reqs = activeDesign(reqRaw, tracks);
     const c = counts(f.name);
     const catF = cat.features.find((x) => x.feature === f.name && !x.archived);
-    const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readIfExists(path.join(dir, "bug.md")), SUMMARY_SYN) : null);
-    const line = [X.kind[kind], f.tracks, P[f.phase] || f.phase, X.progress(c.tasksDone, c.tasks, f.percent)].concat(f.blocked ? [X.blocked(f.unmetDeps.join(", "))] : []).join(" · ");
+    const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readIfExists(path.join(dir, "bug.md")), SUMMARY_SYN) : null) ||
+      (kind === "spike" ? spikeInfo(dir).question : null);
+    const line = [X.kind[kind] || M.spike.kind, f.tracks, P[f.phase] || f.phase, X.progress(c.tasksDone, c.tasks, f.percent)].concat(f.blocked ? [X.blocked(f.unmetDeps.join(", "))] : []).join(" · ");
     const stories = exportStories(reqs, X, new Map((catF ? catF.acs : []).map((a) => [a.id, a])));
     const sc = sectionText(reqs, SUCCESS_SYN);
     blocks.push({ id: "f-" + f.name, cls: "feature", h: titledSlug(specTitle(reqRaw, f.name), f.name), md: italic(line) + "\n\n" + (summary || italic(X.noSummary)),
-      children: [{ h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories }].concat(sc ? [{ h: X.sections.successCriteria, md: sc }] : []) });
+      children: (kind === "spike" ? [] : [{ h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories }]).concat(sc ? [{ h: X.sections.successCriteria, md: sc }] : []) });
   }
   // The living catalog, once the project keeps one (.specs/SPECS.md) — rendered fresh, archived features and superseded ACs included.
   if (fs.existsSync(path.join(root, "SPECS.md"))) blocks.push({ id: "catalog", cls: "feature", h: X.sections.catalog, md: artifactBody(cat.markdown) });
@@ -10043,6 +10726,7 @@ function changelogData(projectDir, since) {
   const srcs = featureDirs(projectDir).map((s) => ({ ...s, st: stateFromFile(projectDir, statePath(s.dir)) }));
   for (const s of srcs) {
     const st = s.st;
+    if (st.kind === "spike") continue; // 1.14 C2: a spike ships nothing (its decision is not a release note)
     const fin = isObj(st.finished) ? timeOf(st.finished.at) : null;
     const exe = isRecord(st.approvals) && isRecord(st.approvals.execution) ? timeOf(st.approvals.execution.at) : null;
     const events = [fin, exe].filter(inWin);
@@ -12688,6 +13372,10 @@ module.exports = {
   // @pkg C1 <<<
 
   // @pkg C2 exports >>>
+  decide: featureLocked(decide), // spec_decide / `dev-spec decide` — append a D-n entry to decisions.md (under the feature lock)
+  decisionLog, // decisions.md text → its entries [{ id, n, title, kind, date, at, affects, supersedes, context, decision, consequences, line }]
+  affectsWarnings, // trace_check's phantom _Affects:_ references as localized lines (CLI)
+  spikeInfo, // a spike folder → { questionFilled, decisionFilled, outcome, question, rationale, timebox, timeboxPassed }
   // @pkg C2 <<<
 
   // @pkg C3 exports >>>

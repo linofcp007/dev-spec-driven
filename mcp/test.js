@@ -156,7 +156,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 33, "tools/list returns 33 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 34, "tools/list returns 34 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -5569,7 +5569,7 @@ function endRun() {
     fs.mkdirSync(path.join(n13, "src"), { recursive: true });
     fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
     const sc13 = S.scanCodebase(n13, { cap: -3 });
-    ok(kind13.ok === false && /kind must be one of: feature, bugfix \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
+    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
       bl13.ok === false && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
       sc13.filesScanned === 1 && !sc13.truncated,
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
@@ -6242,7 +6242,7 @@ function endRun() {
     "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
   // 1.14: spec_export / spec_changelog / spec_templates get their README rows from the 1.14 docs package — remove this set then.
-  const docsPending = new Set(["spec_export", "spec_changelog", "spec_templates"]);
+  const docsPending = new Set(["spec_export", "spec_changelog", "spec_templates", "spec_decide"]);
   const docsTools = list.result.tools.map((t) => t.name).filter((t) => !docsPending.has(t));
   const docsReadme = docsRead("README.md");
   const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
@@ -6345,9 +6345,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 48 && ["spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 50 && ["spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "48 commands incl. the 1.14 /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "50 commands incl. the 1.14 /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -6599,7 +6599,7 @@ function endRun() {
     ok(capped.resources.length === 3 && capped.truncated && capped.total === a1Expected.length && /capped at 3 of \d+/.test(capped.note) &&
       PR.listResources(a1p).truncated === false && PR.RESOURCE_CAP === 500,
       "resources/list is capped (RESOURCE_CAP 500) and says so: truncated, total, a note naming the templates (the server passes it in _meta)");
-    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 12 artifacts = 540 resources > the cap
+    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 14 artifacts = 630 resources > the cap
     for (let i = 1; i <= 45; i++) {
       const d = path.join(a1big, ".specs", "f" + String(i).padStart(2, "0"));
       fs.mkdirSync(d, { recursive: true });
@@ -6610,8 +6610,8 @@ function endRun() {
     const big = (await s4.req("resources/list", {})).result;
     const bigLast = await s4.req("resources/read", { uri: "specs://feature/f45/retro.md" });
     await s4.stop();
-    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 540 && big._meta.cap === 500 &&
-      /capped at 500 of 540 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
+    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 630 && big._meta.cap === 500 &&
+      /capped at 500 of 630 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
       "resources/list over the cap: 500 resources plus _meta {truncated, total, cap, note}; a resource past the cap is still readable through its URI");
     const a1r = path.join(tmp, "proj-a1-roadmap");
     S.initProject(a1r, ["core"], "en");
@@ -7304,7 +7304,7 @@ function endRun() {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 25 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 27 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -7316,10 +7316,10 @@ function endRun() {
     const tplDir = path.join(pi, ".specs", "templates");
     ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
       i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 25 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      i3.created.length === 27 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
       fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
       S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 25, --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 27, --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -8543,6 +8543,333 @@ function endRun() {
   // @pkg C1 <<<
 
   // @pkg C2 tests >>>
+  { // 1.14 C2 — the decision log (decisions.md, spec_decide) and the spike kind (investigate → decide)
+    const c2Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
+    const c2Dir = (n) => path.join(tmp, "c2-" + n);
+    const c2Read = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const c2Tick = () => { const until = Date.now() + 15; while (Date.now() < until) { /* a later millisecond for the next timestamp */ } };
+    const c2Chk = (doc, id) => (doc.checks || []).find((c) => c.id === id);
+    const BOM = String.fromCharCode(0xfeff);
+
+    // --- C2.1 spec_decide: numbering, the file, canonical refs, the header / labels, the result.
+    const d1 = c2Dir("log");
+    S.initProject(d1, ["tdd"], "en");
+    const f1 = S.createFeature(d1, "Auth", ["tdd"], "", undefined, "en");
+    const dec1 = await c2Call("spec_decide", { projectDir: d1, name: "auth", title: "JWT sessions", decision: "Use JWT with a 15 min expiry.\nRefresh tokens rotate.",
+      context: "The API is stateless.", consequences: "A refresh endpoint is needed.", affects: ["us-1.ac-2, t-2", "data models"] });
+    const log1 = c2Read(f1, "decisions.md");
+    const dec2 = S.decide(d1, "auth", { title: "  Clock skew\n tolerated ", decision: "Tokens accept 30 s of skew.", kind: "discovery", supersedes: "D-1" });
+    const log2 = c2Read(f1, "decisions.md");
+    const parsed = S.decisionLog(log2);
+    ok(dec1.ok && dec1.id === "D-1" && dec1.n === 1 && dec1.created === true && dec1.file === ".specs/auth/decisions.md" && dec1.kind === "decision" &&
+      JSON.stringify(dec1.affects) === '["US-1.AC-2","T-2","Data Models"]' && /^Recorded D-1 \(decision\) in \.specs\/auth\/decisions\.md\.$/.test(dec1.message) &&
+      /^# Decisions: Auth\n\n<!-- Decision log — append-only/.test(log1) && /\n## D-1 — JWT sessions\n\n- _Kind: decision_\n- _Date: \d{4}-\d\d-\d\dT[\d:.]+Z_\n- _Affects: US-1\.AC-2, T-2, Data Models_\n\n\*\*Context:\*\* The API is stateless\.\n\n\*\*Decision:\*\* Use JWT with a 15 min expiry\.\nRefresh tokens rotate\.\n\n\*\*Consequences:\*\* A refresh endpoint is needed\.\n$/.test(log1) &&
+      dec2.ok && dec2.id === "D-2" && dec2.created === false && dec2.title === "Clock skew tolerated" && JSON.stringify(dec2.supersedes) === '["D-1"]' && log2.startsWith(log1) &&
+      /\n## D-2 — Clock skew tolerated\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* Tokens accept 30 s of skew\.\n$/.test(log2) &&
+      parsed.length === 2 && parsed[0].decision === "Use JWT with a 15 min expiry.\nRefresh tokens rotate." && parsed[0].context === "The API is stateless." &&
+      parsed[1].kind === "discovery" && parsed[1].at > parsed[0].at && JSON.stringify(parsed[1].supersedes) === '["D-1"]',
+      "C2 spec_decide appends D-1, D-2 to decisions.md (localized header on creation; markers _Kind/_Date/_Affects/_Supersedes; Context / Decision (Discovery) / Consequences); refs canonical (US-1.AC-2, T-2, the heading 'Data Models'); the old bytes kept; decisionLog reads it back (got " +
+      JSON.stringify([dec1.affects, dec2.title, log1.slice(0, 80)]) + ")");
+
+    // Append-only: after a hand-written D-7 → D-8; an entry in an HTML comment or a fenced block is none; CRLF + BOM kept.
+    const d2 = c2Dir("crlf");
+    S.initProject(d2, ["core"], "en");
+    const f2 = S.createFeature(d2, "Pay", ["core"], "", undefined, "en");
+    const hand = BOM + "# Decisions: Pay\r\n\r\n<!-- example: ## D-99 — not an entry -->\r\n\r\n## D-7 — Stripe first\r\n\r\n- _Kind: decision_\r\n- _Date: 2026-01-02_\r\n\r\n**Decision:** Stripe.\r\n\r\n```md\r\n## D-50 — inside a fence\r\n```\r\n";
+    fs.writeFileSync(path.join(f2.dir, "decisions.md"), hand);
+    const dec3 = S.decide(d2, "pay", { title: "Webhooks retried", decision: "Retry 5 times." });
+    const log3 = c2Read(f2, "decisions.md");
+    const noEol = "# Decisions: Pay\n\n## D-1 — X\n\n**Decision:** x";
+    const d2b = c2Dir("noeol");
+    S.initProject(d2b, ["core"], "en");
+    const f2b = S.createFeature(d2b, "Pay", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f2b.dir, "decisions.md"), noEol);
+    S.decide(d2b, "pay", { title: "Y", decision: "y" });
+    const log3b = c2Read(f2b, "decisions.md");
+    ok(dec3.ok && dec3.id === "D-8" && log3.startsWith(hand) && log3.slice(hand.length).startsWith("\r\n## D-8 — Webhooks retried\r\n") && !/[^\r]\n/.test(log3) &&
+      S.decisionLog(log3).map((e) => e.id).join() === "D-7,D-8" && S.decisionLog(log3)[0].decision === "Stripe.\n\n```md\n## D-50 — inside a fence\n```" &&
+      log3b.startsWith(noEol + "\n\n## D-2 — Y\n"),
+      "C2 spec_decide is append-only: numbered after the highest D-n (a D-99 in a comment / D-50 in a fence is no entry); a BOM + CRLF file keeps its bytes and gets a CRLF entry; a file without a final newline is only appended to");
+
+    // Validation: unknown _Affects:_ / _Supersedes:_, missing title / decision, bad kind — an error, nothing written.
+    const before1 = c2Read(f1, "decisions.md");
+    const bad1 = S.decide(d1, "auth", { title: "t", decision: "d", affects: ["US-1.AC-2", "US-9.AC-9", "T-99", "SC-042", "Nowhere Section"] });
+    const bad2 = S.decide(d1, "auth", { title: "t", decision: "d", supersedes: ["D-9", "X-1"] });
+    const bad3 = S.decide(d1, "auth", { title: " ", decision: "d" });
+    const bad4 = S.decide(d1, "auth", { title: "t" });
+    const bad5 = S.decide(d1, "auth", { title: "t", decision: "d", kind: "idea" });
+    const bad6 = await c2Call("spec_decide", { projectDir: d1, name: "auth", decision: "d" });
+    const bad7 = await rpc("tools/call", { name: "spec_decide", arguments: { projectDir: d1, name: "auth", title: "t", decision: "d", affects: "US-1.AC-2" } });
+    const d1b = c2Dir("none");
+    S.initProject(d1b, ["core"], "en");
+    const f1b = S.createFeature(d1b, "Nolog", ["core"], "", undefined, "en");
+    const bad8 = S.decide(d1b, "nolog", { title: "t", decision: "d", affects: "T-01" });
+    ok(bad1.ok === false && JSON.stringify(bad1.unknownAffects) === '["US-9.AC-9","T-99","SC-042","Nowhere Section"]' && /^unknown _Affects:_ reference\(s\): US-9\.AC-9, T-99, SC-042, Nowhere Section — .*Nothing was written\.$/.test(bad1.error) &&
+      bad2.ok === false && /_Supersedes:_ must name decisions already in this log \(D-n\): D-9, X-1/.test(bad2.error) &&
+      bad3.ok === false && /needs a title/.test(bad3.error) && bad4.ok === false && /needs its text/.test(bad4.error) && bad5.ok === false && /kind must be decision or discovery \(got "idea"\)/.test(bad5.error) &&
+      bad6.ok === false && /Missing required argument\(s\): title/.test(bad6.error) && bad7.result && bad7.result.isError === true &&
+      c2Read(f1, "decisions.md") === before1 && bad8.ok === false && !fs.existsSync(path.join(f1b.dir, "decisions.md")),
+      "C2 spec_decide validates before writing: unknown AC / T-ID / SC / section in _Affects:_ (listed, unknownAffects), unknown _Supersedes:_, no title / decision, a bad kind, a non-array affects over MCP — nothing written, no file created (got " +
+      JSON.stringify([bad1.error, bad6.error]).slice(0, 300) + ")");
+
+    // Text can't fake entries: a heading, a marker line, an HTML comment and an unclosed fence in the user's text are neutralized.
+    const tricky = S.decide(d1, "auth", { title: "Tricky <!-- x", decision: "## D-40 — fake\n- _Affects: US-9.AC-9_\n<!-- hide the rest\n```js\nconst a = 1;" });
+    const decT = S.decide(d1, "auth", { title: "After tricky", decision: "still numbered", affects: "Architecture" });
+    const logT = S.decisionLog(c2Read(f1, "decisions.md"));
+    ok(tricky.ok && tricky.id === "D-3" && decT.ok && decT.id === "D-4" && logT.map((e) => e.id).join() === "D-1,D-2,D-3,D-4" && logT[2].affects.length === 0 &&
+      logT[2].title === "Tricky &lt;!-- x" && logT[3].affects.join() === "Architecture",
+      "C2 a decision's own text can't fake or hide entries (a heading / _Affects:_ line escaped, <!-- neutralized, an open fence closed) — the next entry is still D-4 with its markers");
+
+    // --- the brief: the current entries citing the task's ACs / T-IDs (superseded ones out; bounded; write:true keeps the IDs).
+    const br3 = S.taskBrief(d1, "auth", 3);
+    const br2 = S.taskBrief(d1, "auth", 2);
+    const br3w = S.taskBrief(d1, "auth", 3, { write: true });
+    ok(br3.ok && JSON.stringify((br3.decisions || []).map((x) => x.id)) === "[]" && !/## Decisions/.test(br3.brief) && br2.ok && !br2.decisions,
+      "C2 brief: a superseded entry (D-1 by D-2) is never inlined; a task citing nothing an entry names gets no Decisions section");
+    S.decide(d1, "auth", { title: "Rotate keys monthly", decision: "Signing keys rotate every 30 days.", affects: "T-03, US-1.AC-3" });
+    const br3b = S.taskBrief(d1, "auth", 3);
+    const br3bw = S.taskBrief(d1, "auth", 3, { write: true });
+    const br4 = S.taskBrief(d1, "auth", 4);
+    ok(br3b.decisions.map((x) => x.id).join() === "D-5" && /## Decisions\nDecisions and discoveries \(decisions\.md\) that cite this task's criteria or tests — respect them:\n- \*\*D-5\*\* — Rotate keys monthly _\(decision · T-03, US-1\.AC-3\)_: Signing keys rotate every 30 days\./.test(br3b.brief) &&
+      br3bw.refs && JSON.stringify(br3bw.refs.decisions) === '["D-5"]' && !br3bw.decisions && !br4.decisions && br3w.refs && !br3w.refs.decisions,
+      "C2 brief inlines the entry citing the task's T-ID / AC (T-03 ↔ _Makes green: T-03_) with its kind and _Affects:_; write:true keeps only refs.decisions; another task's brief has none");
+    for (let i = 0; i < 6; i++) S.decide(d1, "auth", { title: "Rule " + i, decision: "Detail " + i, affects: "US-1.AC-1" });
+    const br2b = S.taskBrief(d1, "auth", 2);
+    ok(br2b.decisions.map((x) => x.id).join() === "D-7,D-8,D-9,D-10,D-11" && JSON.stringify(br2b.decisionsOmitted) === '["D-6"]' && /…and D-6 — see decisions\.md\./.test(br2b.brief),
+      "C2 brief is bounded: at most 5 entries (the most recent), the rest named (got " + JSON.stringify([br2b.decisions.map((x) => x.id), br2b.decisionsOmitted]) + ")");
+
+    // --- merge summary, export, catalog.
+    const fin1 = S.finishFeature(d1, "auth");
+    const exp1 = S.exportSpecs(d1, { name: "auth", format: "md" });
+    const cat1 = S.catalog(d1, { write: true });
+    const catF1 = cat1.features.find((x) => x.feature === "auth");
+    const specsMd = fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8");
+    ok(/\n## Decisions\n- ~~\*\*D-1\*\* — JWT sessions~~ _\(superseded: D-2\)_\n- \*\*D-2\*\* — Clock skew tolerated _\(discovery · supersedes D-1\)_: Tokens accept 30 s of skew\.\n/.test(fin1.mergeSummary) &&
+      /- `\.specs\/auth\/decisions\.md`/.test(fin1.mergeSummary) &&
+      exp1.ok && /\n## Decisions\n[\s\S]*### D-5 — Rotate keys monthly/.test(exp1.content) &&
+      catF1.kind === "feature" && catF1.decisions.count === 11 && catF1.decisions.items[0].supersededBy === "D-2" && catF1.decisions.items[4].title === "Rotate keys monthly" &&
+      /- 📝 Decisions \(11\): ~~D-1 JWT sessions~~ · D-2 Clock skew tolerated · D-3 /.test(specsMd),
+      "C2 the decision log in the merge summary (superseded struck through, the file in Spec), the export's Decisions section, the catalog (count + titles, superseded marked) and SPECS.md");
+    const specsBefore = specsMd;
+    S.decide(d1, "auth", { title: "Refresh on write", decision: "SPECS.md follows." });
+    ok(fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8") !== specsBefore && /D-12 Refresh on write/.test(fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8")),
+      "C2 spec_decide refreshes SPECS.md once it exists (the catalog lists the new entry)");
+
+    // --- doctor: decision-affects-approved after an approval; gone after re-approval; trace_check phantom _Affects:_ (warnings).
+    const d3 = c2Dir("doctor");
+    S.initProject(d3, ["tdd"], "en");
+    const f3 = S.createFeature(d3, "Orders", ["tdd"], "", undefined, "en");
+    S.decide(d3, "orders", { title: "Before approval", decision: "early", affects: "US-1.AC-1" });
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(d3, "orders", ph, "t", { force: true });
+    const doc3a = S.specDoctor(d3, "orders");
+    c2Tick();
+    S.decide(d3, "orders", { title: "Cap order size", decision: "Max 50 items.", affects: "US-1.AC-2, EC-1" });
+    S.decide(d3, "orders", { title: "Async fulfilment", decision: "Queue it.", affects: "Architecture" });
+    const doc3b = S.specDoctor(d3, "orders");
+    const w3 = c2Chk(doc3b, "decision-affects-approved");
+    c2Tick();
+    S.approvePhase(d3, "orders", "requirements", "t", { force: true });
+    const doc3c = S.specDoctor(d3, "orders");
+    ok(!c2Chk(doc3a, "decision-affects-approved") && w3 && w3.status === "warn" && /D-2 \(US-1\.AC-2, EC-1\) after requirements\.md was approved \(\d{4}-\d\d-\d\d\)/.test(w3.detail) &&
+      /D-3 \(Architecture\) after design\.md was approved/.test(w3.detail) && /spec_impact orders --phase requirements \| design/.test(w3.detail) && !/D-1/.test(w3.detail) &&
+      c2Chk(doc3c, "decision-affects-approved") && !/D-2/.test(c2Chk(doc3c, "decision-affects-approved").detail) && /D-3/.test(c2Chk(doc3c, "decision-affects-approved").detail),
+      "C2 doctor warns decision-affects-approved for decisions recorded after the approval of requirements.md (their AC / EC IDs) or design.md (their sections) — not an older one; re-approving requirements clears its part (got " + JSON.stringify(w3) + ")");
+    fs.appendFileSync(path.join(f3.dir, "decisions.md"), "\n## D-4 — Hand-written\n\n- _Kind: decision_\n- _Date: 2026-01-01_\n- _Affects: US-9.AC-9, Ghost Section, T-01_\n\n**Decision:** x\n");
+    const tr3 = await c2Call("trace_check", { projectDir: d3, name: "orders" });
+    const doc3d = S.specDoctor(d3, "orders");
+    ok(tr3.ok && JSON.stringify(tr3.phantomAffects.map((p) => p.decision + ":" + p.ref)) === '["D-4:US-9.AC-9","D-4:Ghost Section"]' && !S.traceGaps(tr3).some((g) => g.kind === "phantomAffects") &&
+      c2Chk(doc3d, "decision-affects").status === "warn" && /D-4 → US-9\.AC-9, D-4 → Ghost Section/.test(c2Chk(doc3d, "decision-affects").detail) &&
+      S.affectsWarnings(tr3, "en")[0] === "D-4 _Affects:_ US-9.AC-9 — names nothing in this feature (a typo, or a criterion / test / section removed since)" &&
+      Array.isArray(S.traceCheck(d1b, "nolog").phantomAffects) && S.traceCheck(d1b, "nolog").phantomAffects.length === 0,
+      "C2 trace_check reports _Affects:_ references that name nothing (phantomAffects — a warning, never a gap); doctor warns decision-affects; a feature without a log has phantomAffects: []");
+
+    // --- PT / ES logs: localized header and labels, read back by the parser (the brief shows the text).
+    const d4 = c2Dir("pt");
+    S.initProject(d4, ["tdd"], "pt");
+    const f4 = S.createFeature(d4, "Faturas", ["tdd"], "", undefined, "pt");
+    const dec4 = S.decide(d4, "faturas", { title: "PDF no servidor", decision: "Gerar o PDF no servidor.", context: "Clientes antigos.", affects: "US-1.AC-2" });
+    const f5 = S.createFeature(d4, "Pagos", ["tdd"], "", undefined, "es");
+    S.decide(d4, "pagos", { title: "Reintentos", decision: "Tres reintentos.", kind: "discovery", affects: "T-03" });
+    const br4pt = S.taskBrief(d4, "faturas", 3);
+    ok(dec4.ok && /^# Decisões: Faturas\n/.test(c2Read(f4, "decisions.md")) && /\*\*Contexto:\*\* Clientes antigos\.\n\n\*\*Decisão:\*\* Gerar o PDF no servidor\./.test(c2Read(f4, "decisions.md")) &&
+      /^D-1 \(decisão\) registada em/.test(dec4.message) && /^# Decisiones: Pagos\n/.test(c2Read(f5, "decisions.md")) && /\*\*Descubrimiento:\*\* Tres reintentos\./.test(c2Read(f5, "decisions.md")) &&
+      /## Decisões\n.*\n- \*\*D-1\*\* — PDF no servidor _\(decisão · US-1\.AC-2\)_: Gerar o PDF no servidor\./.test(br4pt.brief) && S.decisionLog(c2Read(f5, "decisions.md"))[0].decision === "Tres reintentos.",
+      "C2 decision logs in PT / ES: localized header and labels (Contexto / Decisão, Descubrimiento), read back by the parser; the PT brief's Decisions section");
+
+    // --- C2.2 the spike kind: scaffold EN / PT / ES, question + timebox, no planning chain, core-only.
+    const d6 = c2Dir("spike");
+    S.initProject(d6, ["core"], "en");
+    const sp1 = await c2Call("spec_create", { projectDir: d6, name: "Cache spike", kind: "spike", question: "Can Redis hold the sessions under 5 ms p95?", timebox: "3d", tracks: ["saas"] });
+    const spDir = path.join(d6, ".specs", "cache-spike");
+    const spMd = fs.readFileSync(path.join(spDir, "spike.md"), "utf8");
+    const spSt = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
+    const in3 = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+    ok(sp1.ok && sp1.kind === "spike" && sp1.label === "core" && JSON.stringify(sp1.created) === '["spike.md","tasks.md"]' && sp1.timebox === in3 &&
+      /A spike is core-only — tracks ignored \(\+saas\)/.test(sp1.note) && spSt.kind === "spike" && JSON.stringify(spSt.tracks) === '["core"]' &&
+      !fs.existsSync(path.join(spDir, "requirements.md")) && !fs.existsSync(path.join(spDir, "design.md")) &&
+      /^# Spike: Cache spike\n/.test(spMd) && /\n## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Timebox\n\*\*Until:\*\* \d{4}-\d\d-\d\d \(3d\)\n\n## Options considered\n/.test(spMd) &&
+      /\n## Evidence\n/.test(spMd) && /\n## Decision\n> \*\*TODO\*\*/.test(spMd) && /_Outcome: \[go \| no-go \| pivot\]_/.test(spMd) && /\n## Follow-up\n/.test(spMd) &&
+      /## Phase: Investigate\n- \[ \] 1\. \[shared\] Sharpen the question/.test(fs.readFileSync(path.join(spDir, "tasks.md"), "utf8")),
+      "C2 spec_create {kind: 'spike'} scaffolds spike.md (Question · Timebox Until · Options · Evidence · Decision + _Outcome:_ · Follow-up) + investigation tasks — core-only (tracks ignored, noted), no requirements / design (got " +
+      JSON.stringify([sp1.created, sp1.note, sp1.timebox]) + ")");
+    const spPt = S.createFeature(d6, "Pesquisa fila", undefined, "Kafka ou RabbitMQ?", undefined, "pt", "spike");
+    const spEs = S.createFeature(d6, "Investigar colas", undefined, "", undefined, "es", "spike", { timebox: "2026-10-30" });
+    const mdPt = fs.readFileSync(path.join(spPt.dir, "spike.md"), "utf8");
+    const mdEs = fs.readFileSync(path.join(spEs.dir, "spike.md"), "utf8");
+    ok(spPt.ok && /\n## Pergunta\nKafka ou RabbitMQ\?\n\n## Timebox \(prazo\)\n> \*\*TODO\*\*/.test(mdPt) && /\n## Opções consideradas\n/.test(mdPt) && /\n## Decisão\n/.test(mdPt) &&
+      /^# Tasks: Pesquisa fila\n[\s\S]*## Fase: Investigação/.test(fs.readFileSync(path.join(spPt.dir, "tasks.md"), "utf8")) &&
+      spEs.ok && /\n## Pregunta\n> \*\*TODO\*\*/.test(mdEs) && /\n## Timebox \(plazo\)\n\*\*Hasta:\*\* 2026-10-30\n/.test(mdEs) && /\n## Evidencia\n/.test(mdEs) && /\n## Seguimiento\n/.test(mdEs) &&
+      /^# Tareas: Investigar colas/.test(fs.readFileSync(path.join(spEs.dir, "tasks.md"), "utf8")) &&
+      S.spikeInfo(spPt.dir).questionFilled === true && S.spikeInfo(spEs.dir).questionFilled === false && S.spikeInfo(spEs.dir).timebox.date === "2026-10-30",
+      "C2 spike scaffolds in PT / ES (Pergunta / Pregunta, Timebox (prazo / plazo), Decisão, Evidencia, Seguimiento; the summary becomes the question) and spikeInfo reads them");
+    const badTb = S.createFeature(d6, "Bad timebox", undefined, "", undefined, "en", "spike", { timebox: "soon" });
+    const badTb2 = S.createFeature(d6, "Bad date", undefined, "", undefined, "en", "spike", { timebox: "2026-02-30" });
+    const notSpike = S.createFeature(d6, "Plain", ["core"], "", undefined, "en", "feature", { question: "why?" });
+    const badKind = await c2Call("spec_create", { projectDir: d6, name: "x", kind: "spik" });
+    ok(badTb.ok === false && /timebox must be an end date \(YYYY-MM-DD\) or a duration from today \(e\.g\. 3d, 2w, 8h\) — got "soon"/.test(badTb.error) && badTb2.ok === false &&
+      !fs.existsSync(path.join(d6, ".specs", "bad-timebox")) && notSpike.ok === false && /question only applies to a spike/.test(notSpike.error) && !fs.existsSync(path.join(d6, ".specs", "plain")) &&
+      badKind.ok === false && /kind must be one of: feature, bugfix, spike/.test(badKind.error),
+      "C2 spike inputs are validated first: a bad timebox / an impossible date, a question on a non-spike, an unknown kind — refused, nothing created");
+
+    // Gates: none to approve (the execution sign-off apart), no tracks.
+    const apSp = S.approvePhase(d6, "cache-spike", "requirements", "t");
+    const apSpF = S.approvePhase(d6, "cache-spike", "tasks", "t", { force: true });
+    const atSp = S.addTrack(d6, "cache-spike", "tdd");
+    const docSp0 = S.specDoctor(d6, "cache-spike");
+    ok(apSp.ok === false && apSp.spike === true && /'cache-spike' is a spike: it has no requirements gate/.test(apSp.error) && apSpF.ok === false &&
+      atSp.ok === false && /is a spike — it has no tracks/.test(atSp.error) && docSp0.kind === "spike" && docSp0.gatesOk === true && docSp0.pendingGates.length === 0 &&
+      docSp0.checks.map((c) => c.id + ":" + c.status).join() === "question:pass,decision:fail,timebox:pass" && docSp0.verdict === "fail" && docSp0.phase === "tasks-ready",
+      "C2 a spike has no requirements / design / tasks gates (approve refuses, even forced) and no tracks (add_track refuses); its doctor: question pass, decision fail, timebox pass (got " +
+      JSON.stringify(docSp0.checks) + ")");
+
+    // doctor: timebox passed with no decision (warn), no end date, a decision without an outcome (warn), decided.
+    const spFile = path.join(spDir, "spike.md");
+    const setSp = (fn) => fs.writeFileSync(spFile, fn(fs.readFileSync(spFile, "utf8")));
+    setSp((t) => t.replace(/\*\*Until:\*\* \S+/, "**Until:** 2020-01-06"));
+    const docSp1 = S.specDoctor(d6, "cache-spike");
+    const na1 = S.nextAction(d6, "cache-spike");
+    setSp((t) => t.replace("**Until:** 2020-01-06", "two days of effort"));
+    const docSp2 = S.specDoctor(d6, "cache-spike");
+    setSp((t) => t.replace("two days of effort", "**Until:** 2020-01-06"));
+    ok(c2Chk(docSp1, "timebox").status === "warn" && /the timebox ended on 2020-01-06 and no decision is recorded/.test(c2Chk(docSp1, "timebox").detail) &&
+      /The timebox ended on 2020-01-06: decide with the evidence you have\./.test(na1.recommendation) &&
+      c2Chk(docSp2, "timebox").status === "warn" && /no end date/.test(c2Chk(docSp2, "timebox").detail),
+      "C2 spike doctor warns timebox once its end date passed with no decision (next_action says so too), and when the timebox has no end date");
+
+    // next_action: fill the question → investigate (tasks) → record the decision → go / no-go / pivot.
+    const spBare = S.createFeature(d6, "Queue spike", undefined, "", undefined, "en", "spike");
+    const naQ = S.nextAction(d6, "queue-spike");
+    const naT = S.nextAction(d6, "cache-spike");
+    for (const n of [1, 2, 3, 4]) S.completeTask(d6, "cache-spike", n);
+    const naD = S.nextAction(d6, "cache-spike");
+    const phD = S.detectPhase(spDir, ["core"]);
+    setSp((t) => t.replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot, and why: the evidence that decided it\./, "Redis held 2 ms p95 under a 5k rps load run."));
+    const naO = S.nextAction(d6, "cache-spike");
+    const docO = S.specDoctor(d6, "cache-spike");
+    setSp((t) => t.replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+    const naGo = await c2Call("spec_next_action", { projectDir: d6, name: "cache-spike" });
+    const docGo = S.specDoctor(d6, "cache-spike");
+    ok(spBare.ok && naQ.step === "fill" && naQ.file === "spike.md" && /Write the question this spike answers/.test(naQ.recommendation) && S.detectPhase(spBare.dir, ["core"]) === "requirements" &&
+      naT.step === "implement" && /^Investigate — task #1: Sharpen the question/.test(naT.recommendation) &&
+      naD.step === "decide" && naD.phase === "executing" && phD === "executing" && /Record the decision in spike\.md → Decision/.test(naD.recommendation) && /\/spec-decide cache-spike/.test(naD.recommendation) &&
+      naO.step === "decide" && /State the outcome/.test(naO.recommendation) && c2Chk(docO, "decision").status === "warn" &&
+      naGo.step === "promote" && naGo.outcome === "go" && naGo.phase === "complete" && naGo.seed.name === "cache" &&
+      naGo.seed.summary === "Can Redis hold the sessions under 5 ms p95? — Redis held 2 ms p95 under a 5k rps load run." &&
+      /^Decision: go\. Spec the real feature — spec_create \{name: "cache", summary: "Can Redis/.test(naGo.recommendation) && /then archive the spike: \/feature archive cache-spike\.$/.test(naGo.recommendation) &&
+      docGo.verdict === "pass" && c2Chk(docGo, "timebox").status === "pass" && c2Chk(docGo, "decision").detail === "decision recorded (_Outcome: go_)",
+      "C2 spike next_action: fill the question → investigate #1 → (all ticked) record the decision → state the outcome → go: spec the real feature (seed name 'cache', summary = question — decision) and archive the spike; doctor passes once decided (got " +
+      JSON.stringify([naQ.step, naT.step, naD.step, naO.step, naGo.step, naGo.seed]) + ")");
+    // no-go / pivot, and a spike whose name has no "spike" word (archive first — it frees the name).
+    const spNo = S.createFeature(d6, "Redis eval", undefined, "Is Redis worth it?", undefined, "en", "spike");
+    const noFile = path.join(spNo.dir, "spike.md");
+    const decideSp = (file, rationale, outcome) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot[^\n]*/, rationale)
+      .replace(/^_Outcome: [^\n]*_$/m, "_Outcome: " + outcome + "_"));
+    for (const n of [1, 2, 3, 4]) S.completeTask(d6, "redis-eval", n);
+    decideSp(noFile, "Too costly for the gain.", "no-go");
+    const naNo = S.nextAction(d6, "redis-eval");
+    decideSp(noFile, "Too costly for the gain.", "pivot");
+    const naPv = S.nextAction(d6, "redis-eval");
+    decideSp(noFile, "Worth it.", "go");
+    const naGo2 = S.nextAction(d6, "redis-eval");
+    ok(naNo.step === "archive" && naNo.outcome === "no-go" && naNo.recommendation === "Decision: no-go — Too costly for the gain. Archive the spike with its reason (it stays in spike.md → Decision): /feature archive redis-eval." &&
+      naPv.step === "pivot" && /^Decision: pivot — Too costly for the gain\. Start a new spike/.test(naPv.recommendation) &&
+      naGo2.step === "promote" && naGo2.seed.name === "redis-eval" && /^Decision: go\. Archive the spike first — \/feature archive redis-eval \(it frees the name\)/.test(naGo2.recommendation),
+      "C2 spike next_action: no-go → archive with the reason; pivot → a new spike; a go on a spike named without 'spike' archives it first (the seed keeps its name) (got " +
+      JSON.stringify([naNo.recommendation, naGo2.recommendation]).slice(0, 300) + ")");
+
+    // The outcome read from the decision's first line when the _Outcome:_ line is still the template's.
+    const spH = S.createFeature(d6, "Heuristic spike", undefined, "Does the cache pay off?", undefined, "en", "spike");
+    const hFile = path.join(spH.dir, "spike.md");
+    fs.writeFileSync(hFile, fs.readFileSync(hFile, "utf8").replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot[^\n]*/, "**Go** — the numbers hold."));
+    const hInfo = S.spikeInfo(spH.dir);
+    fs.writeFileSync(hFile, fs.readFileSync(hFile, "utf8").replace("**Go** — the numbers hold.", "Going with it would cost too much."));
+    ok(hInfo.decisionFilled === true && hInfo.outcome === "go" && S.spikeInfo(spH.dir).outcome === null,
+      "C2 a spike's outcome is read from the decision's first line (**Go** — …) while the _Outcome:_ line is still the template's — 'Going …' is no outcome");
+
+    // finish: blocked until the decision is written and every task ticked; ready → merge summary + the finish baseline.
+    const finQ = S.finishFeature(d6, "queue-spike");
+    const finGo = await c2Call("spec_finish", { projectDir: d6, name: "cache-spike", write: true, includeBody: true });
+    const stGo = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
+    const apEx = S.approvePhase(d6, "cache-spike", "execution", "t");
+    const apExQ = S.approvePhase(d6, "queue-spike", "execution", "t");
+    ok(finQ.ok && finQ.readyToFinish === false && finQ.kind === "spike" && finQ.blockers.some((b) => /Decision is not written yet/.test(b)) && finQ.blockers.some((b) => /^open tasks: #1, #2, #3, #4$/.test(b)) &&
+      finGo.readyToFinish === true && finGo.outcome === "go" && finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms p95?" &&
+      /^## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Decision — go\nRedis held 2 ms p95 under a 5k rps load run\.\n\n## Tasks\n- \[x\] 1\. /.test(finGo.mergeSummary) &&
+      /## Checks before merge\n- \[ \] The decision is shared with the people it affects\./.test(finGo.mergeSummary) && !/## Acceptance criteria|## Tests/.test(finGo.mergeSummary) &&
+      finGo.suiteChecks === undefined && finGo.baseline && finGo.baseline.recorded === true && stGo.finished && typeof stGo.finished.at === "string" &&
+      fs.existsSync(path.join(spDir, ".execution", "merge-summary.md")) && apEx.ok === true && apExQ.ok === false && apExQ.refused === true,
+      "C2 spike finish: blocked while the decision is unwritten / tasks open; ready once decided — merge summary from spike.md (question, decision, checks), the finish baseline recorded, the execution sign-off follows the same gate (got " +
+      JSON.stringify([finQ.blockers, finGo.mergeTitle]).slice(0, 300) + ")");
+    // spec_decide on a spike: its sections are the affectable ones.
+    const decSp = S.decide(d6, "cache-spike", { title: "Go with Redis", decision: "Redis 7 cluster.", affects: "Evidence, decision" });
+    const decSpBad = S.decide(d6, "cache-spike", { title: "x", decision: "y", affects: "US-1.AC-1" });
+    ok(decSp.ok && decSp.id === "D-1" && decSp.affects.join() === "Evidence,Decision" && /^# Decisions: Cache spike\n/.test(fs.readFileSync(path.join(spDir, "decisions.md"), "utf8")) &&
+      decSpBad.ok === false && JSON.stringify(decSpBad.unknownAffects) === '["US-1.AC-1"]',
+      "C2 spec_decide works on a spike: its spike.md sections are what _Affects:_ may name (an AC ID is unknown there)");
+
+    // Roadmap / catalog / export / changelog show the spike apart.
+    S.roadmapReport(d6, { write: true });
+    const rmMd = fs.readFileSync(path.join(d6, ".specs", "ROADMAP.md"), "utf8");
+    const rmHtml = S.renderRoadmapHtml(d6, "en");
+    const catSp = S.catalog(d6);
+    const cSp = catSp.features.find((x) => x.feature === "cache-spike");
+    const expSp = S.exportSpecs(d6, { name: "cache-spike", format: "md" });
+    const chSp = S.changelog(d6, { since: "all" });
+    const expProj = S.exportSpecs(d6, { format: "md" });
+    ok(/\| \[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike \| core \|/.test(rmMd) && /\[queue-spike\]\(\.\/queue-spike\/spike\.md\) 🔬 spike/.test(rmMd) &&
+      /<a href="\.\/cache-spike\/spike\.md">cache-spike<\/a> <span class="tracks">🔬 spike<\/span>/.test(rmHtml) &&
+      cSp.kind === "spike" && cSp.status === "finished" && cSp.spike.outcome === "go" && cSp.spike.question === "Can Redis hold the sessions under 5 ms p95?" &&
+      /## ✅ cache-spike — finished · 🔬 spike\n\n_core · finished \d{4}-\d\d-\d\d_\n\n- Question: Can Redis hold the sessions under 5 ms p95\?\n- Decision: go\n- 📝 Decisions \(1\): D-1 Go with Redis\n/.test(catSp.markdown) &&
+      !/cache-spike — finished · 🔬 spike[\s\S]{0,300}No acceptance criteria yet/.test(catSp.markdown) &&
+      expSp.ok && /_Spike \(investigation\) · /.test(expSp.content) && /- \*\*Kind:\*\* spike/.test(expSp.content) && /\n## Spike\n\n### Question\n/.test(expSp.content) && !/## User stories/.test(expSp.content) &&
+      chSp.ok && !chSp.added.some((a) => a.feature === "cache-spike") &&
+      expProj.ok && /\n## cache-spike\n\n_spike · core · [^\n]*_\n\nCan Redis hold the sessions under 5 ms p95\?\n\n## /.test(expProj.content),
+      "C2 spikes read apart: ROADMAP.md / .html (🔬 spike, linked to spike.md), the catalog (kind, question + decision, no 'no ACs' line), the export (Spike kicker + spike.md body), never in the release notes");
+    // Roadmap attention: a spike past its timebox with no decision.
+    const spLate = S.createFeature(d6, "Late spike", undefined, "Which ORM?", undefined, "en", "spike", { timebox: "2020-03-01" });
+    const rmLate = S.roadmapReport(d6, { write: true });
+    ok(spLate.ok && /- \*\*late-spike\*\* — spike: the timebox ended on 2020-03-01 with no decision/.test(fs.readFileSync(path.join(d6, ".specs", "ROADMAP.md"), "utf8")) && rmLate.ok !== false,
+      "C2 ROADMAP.md's needs-attention names a spike past its timebox with no decision");
+
+    // Project templates (B1) apply to a new spike: spike / spike-tasks are template keys ({{summary}} = the question).
+    const d7 = c2Dir("tpl");
+    S.initProject(d7, ["core"], "en");
+    fs.mkdirSync(path.join(d7, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(d7, ".specs", "templates", "spike.md"), "# Spike: {{name}}\n\n## Question\n{{summary}}\n\n## Timebox\n> **TODO** — end date\n\n## Decision\n> **TODO** — team rule: go / no-go\n");
+    const spT = S.createFeature(d7, "Tpl spike", undefined, "", undefined, "en", "spike", { question: "Which queue?" });
+    const lsT = S.templates(d7, "list");
+    const inT = S.templates(d7, "init", { artifact: "spike-tasks" });
+    ok(spT.ok && spT.templates && spT.templates["spike.md"] === ".specs/templates/spike.md" && /## Question\nWhich queue\?\n/.test(fs.readFileSync(path.join(spT.dir, "spike.md"), "utf8")) &&
+      S.spikeInfo(spT.dir).questionFilled === true && S.specDoctor(d7, "tpl-spike").checks.find((c) => c.id === "decision").status === "fail" &&
+      lsT.templates.some((e) => e.artifact === "spike" && e.source === "override") && lsT.templates.some((e) => e.artifact === "spike-tasks" && e.file === "tasks.md") &&
+      inT.ok && inT.created.join() === ".specs/templates/spike-tasks.md" && S.templates(d7, "check").problems.length === 0,
+      "C2 project templates apply to a new spike (spike.md from .specs/templates/, {{summary}} = the question); spec_templates lists / inits / checks spike and spike-tasks");
+
+    // i18n: every C2 message block has the same keys in EN / PT / ES.
+    const c2Keys = (o, pre = "") => Object.keys(o).sort().flatMap((k) => (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? c2Keys(o[k], pre + k + ".") : [pre + k]));
+    ok(["decisions", "spike"].every((ns) => ["pt", "es"].every((l) => c2Keys(S.msg(l)[ns]).join() === c2Keys(S.msg("en")[ns]).join())),
+      "C2 the decisions / spike message blocks have the same keys in EN, PT and ES");
+  }
   // @pkg C2 <<<
 
   // @pkg C3 tests >>>
