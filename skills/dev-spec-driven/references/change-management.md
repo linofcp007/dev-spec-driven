@@ -167,7 +167,8 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
    `.state.json`, records pre-history approvals in `approvalHistory` and, for each approval whose fingerprint still
    matches its file, saves that file as its baseline (`.history/<phase>@<n>.md`, so `spec_impact` can diff later
    edits); a changed or date-only approval is listed as skipped — re-approve to start its history. It also completes
-   `.specs/.gitignore`, stamps `meta.specVersion` and writes the checklist `.specs/UPGRADE.md`. It never edits an
+   `.specs/.gitignore`, stamps `meta.specVersion`, writes the checklist `.specs/UPGRADE.md` and refreshes the generated
+   `ROADMAP.md` / `.html` (like every mutator; the progress then follows the current rules). It never edits an
    artifact, approves, ticks or deletes; a second apply changes nothing.
 3. **Review** — the critic / converge passes the audit recommends, their findings turned into a proposed action list
    per feature; every change still goes through the gates (`spec_approve`, `spec_impact`, `spec_append_tasks`).

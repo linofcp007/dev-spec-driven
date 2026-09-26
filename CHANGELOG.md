@@ -332,7 +332,8 @@ spec tools, an opt-in guard, scoped steering and an upgrade path for projects ma
   `.state.json` (when none are), earlier approvals recorded in `approvalHistory`, a `.history/<phase>@<n>.md` baseline for each
   approval whose fingerprint still matches its file (a changed or date-only approval is listed: re-approve to start its
   history), the maintained `.specs/.gitignore`, the stamp (only once every feature migrated — each under its lock) and the
-  checklist `.specs/UPGRADE.md` (AUTO-GENERATED, in the project language; a hand-written one is left alone). A second apply
+  checklist `.specs/UPGRADE.md` (AUTO-GENERATED, in the project language; a hand-written one is left alone), plus the usual
+  refresh of the generated `ROADMAP.md` / `.html` (its progress now follows the 1.13 rules). A second apply
   changes nothing. `/spec-upgrade` shows the audit, asks before applying, then offers the critic / converge reviews and turns
   their findings into a proposed action list that goes through the normal gates. README (EN/PT/ES), INSTALL, INTEGRATIONS and
   AGENTS.md gain an "Updating" step: update the plugin, then upgrade each project.

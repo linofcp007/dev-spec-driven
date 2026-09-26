@@ -142,7 +142,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   status, what the new rules flag, the next step and the review to run (the critic review for specs not implemented
   yet, the converge pass for half-done ones). With the user's OK, `dev-spec upgrade --apply` saves inferred tracks,
   gives pre-1.13 approvals a history baseline when the file still matches, stamps `meta.specVersion` in
-  `.specs/roadmap.json` and writes the checklist `.specs/UPGRADE.md`; it never edits a spec, approves or ticks
+  `.specs/roadmap.json`, writes the checklist `.specs/UPGRADE.md` and refreshes the generated `ROADMAP.md`; it never
+  edits a spec, approves or ticks
   anything. Every fix it leads to still goes through the gates.
 
 ## Steering, import and guard mode

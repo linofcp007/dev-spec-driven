@@ -223,7 +223,8 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
      current rules flag, the next step and the review to run;
    - **apply** (after your OK; `dev-spec upgrade --apply`) — the safe migrations: inferred tracks saved, a history
      baseline for each pre-1.13 approval whose file still matches, `meta.specVersion` stamped, the checklist
-     `.specs/UPGRADE.md` written. It never edits a spec, approves, ticks or deletes anything;
+     `.specs/UPGRADE.md` written, the generated `ROADMAP.md` (and `.html`) refreshed. It never edits a spec, approves,
+     ticks or deletes anything;
    - **review** — the `spec-critic` agent over the specs not implemented yet, the converge pass over half-done ones;
      every fix still goes through the normal gates.
 
@@ -490,7 +491,8 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
      estado, o que as regras atuais assinalam, o próximo passo e a revisão a correr;
    - **apply** (depois do teu OK; `dev-spec upgrade --apply`) — as migrações seguras: tracks inferidos guardados, uma
      baseline no histórico para cada aprovação anterior à 1.13 cujo ficheiro ainda corresponde, `meta.specVersion`
-     carimbado, a checklist `.specs/UPGRADE.md` escrita. Nunca edita uma spec, nem aprova, marca ou apaga nada;
+     carimbado, a checklist `.specs/UPGRADE.md` escrita, o `ROADMAP.md` (e `.html`) gerado atualizado. Nunca edita uma
+     spec, nem aprova, marca ou apaga nada;
    - **revisão** — o agente `spec-critic` sobre as specs ainda por implementar, a passagem de convergência sobre as
      que estão a meio; cada correção passa na mesma pelos gates normais.
 
@@ -762,7 +764,8 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
      lo que señalan las reglas actuales, el siguiente paso y la revisión a ejecutar;
    - **apply** (tras tu OK; `dev-spec upgrade --apply`) — las migraciones seguras: tracks deducidos guardados, una
      línea base en el historial para cada aprobación anterior a la 1.13 cuyo fichero aún coincide, `meta.specVersion`
-     sellado, la lista de comprobación `.specs/UPGRADE.md` escrita. Nunca edita una spec, ni aprueba, marca o borra nada;
+     sellado, la lista de comprobación `.specs/UPGRADE.md` escrita, el `ROADMAP.md` (y `.html`) generado actualizado.
+     Nunca edita una spec, ni aprueba, marca o borra nada;
    - **revisión** — el agente `spec-critic` sobre las specs aún sin implementar, la pasada de convergencia sobre las
      que están a medias; cada corrección sigue pasando por los gates normales.
 

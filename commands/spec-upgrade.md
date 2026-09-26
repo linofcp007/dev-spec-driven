@@ -23,7 +23,8 @@ If the plugin itself isn't updated yet, say how (above) and stop.
    empty). Call `spec_upgrade {apply: true}` (CLI `dev-spec upgrade --apply`). It never edits an artifact, approves,
    ticks or deletes: it saves inferred tracks to `.state.json`, records pre-history approvals and saves a history
    baseline for each approval whose file still matches its fingerprint, completes `.specs/.gitignore`, stamps
-   `roadmap.json → meta.specVersion` and writes `.specs/UPGRADE.md` (a checklist; a hand-written one is left alone).
+   `roadmap.json → meta.specVersion`, writes `.specs/UPGRADE.md` (a checklist; a hand-written one is left alone) and,
+   like every mutator, refreshes the generated `ROADMAP.md` (and `ROADMAP.html` if present).
    Report `migrations`: done, `skipped` (re-approve to start the history) and `errors` (the stamp waits for them).
 3. **Review, feature by feature — offer, don't impose.**
    - `review: "critic"` (no task ticked yet — the specs created but not implemented): offer to dispatch the
