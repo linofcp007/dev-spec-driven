@@ -6678,6 +6678,263 @@ function endRun() {
   // @pkg A1 <<<
 
   // @pkg A2 tests >>>
+  { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
+    const a2Root = path.join(tmp, "a2-tracks");
+    const a2 = (name) => path.join(a2Root, name);
+    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+
+    // --- the track list itself
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy" &&
+      S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
+      "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
+    const typo = S.createFeature(a2("typo"), "Typo", "privcy");
+    const alias = S.createFeature(a2("typo"), "Typo", ["gdpr"]);
+    ok(!typo.ok && /did you mean 'privacy'/.test(typo.error) && !alias.ok && /'gdpr' \(did you mean 'privacy'\?\)/.test(alias.error) && /sec, privacy/.test(alias.error),
+      "A2: an unknown track near sec/privacy gets a did-you-mean ('privcy', 'gdpr' → privacy) and the valid list names them (" + typo.error + ")");
+
+    // --- classify: EN / PT / ES, strong + weak, negation notes, no cross-track noise
+    const cls = (d, lang) => S.classify(d, lang ? { lang } : {});
+    const secEn = cls("Threat model the upload API against the OWASP Top 10 and fix the stored XSS");
+    const secPt = cls("Modelo de ameaças e testes de intrusão à API de carregamento de ficheiros");
+    const secEs = cls("Modelo de amenazas y pruebas de penetración de la API de subida de archivos");
+    ok([secEn, secPt, secEs].every((r) => r.tracks.includes("sec") && r.confidence.sec !== "none") && secPt.lang === "pt" && secEs.lang === "es" &&
+      secEn.signals.sec.includes("owasp") && secPt.signals.sec.includes("testes de intrusão") && secEs.signals.sec.includes("pruebas de penetración"),
+      "A2: classify turns +sec on from strong EN/PT/ES signals (threat model / OWASP / XSS · modelo de ameaças / testes de intrusão · modelo de amenazas / pruebas de penetración)");
+    ok(!secEn.signals.ai.length && !secPt.signals.ai.length && !secEs.signals.ai.length && !(secEn.possible || []).some((p) => p.track === "ai"),
+      "A2: 'model' inside 'threat model' / 'modelo de ameaças' / 'modelo de amenazas' is no +ai hint (a weak signal inside another track's strong phrase is shadowed)");
+    const privEn = cls("Add a GDPR data export and the right to erasure for user accounts");
+    const privPt = cls("Exportação dos dados pessoais e direito ao apagamento (RGPD)");
+    const privEs = cls("Exportación de datos personales y derecho de supresión (RGPD)");
+    ok([privEn, privPt, privEs].every((r) => r.tracks.includes("privacy") && !r.tracks.includes("saas")) &&
+      privPt.signals.privacy.includes("dados pessoais") && privEs.signals.privacy.includes("datos personales"),
+      "A2: classify turns +privacy on from EN/PT/ES signals (GDPR / right to erasure · dados pessoais / RGPD · datos personales) — GDPR no longer switches +saas on");
+    const weakSec = cls("Login with a password, RBAC permissions for admins");
+    const oneWeak = cls("User profile page with an avatar upload");
+    ok(weakSec.tracks.includes("sec") && weakSec.weak.includes("sec") && weakSec.tracks.includes("tdd") &&
+      !oneWeak.tracks.includes("privacy") && oneWeak.possible.some((p) => p.track === "privacy" && p.signal === "user profile"),
+      "A2: two weak +sec signals turn it on (flagged weak-only) beside +tdd; one weak +privacy signal is only 'possible'");
+    const negated = cls("Internal sales dashboard: no personal data, no authentication needed");
+    const negPt = cls("Relatório interno de vendas, sem dados pessoais");
+    const negEs = cls("Informe interno de ventas, sin datos personales ni autenticación");
+    const onAlthough = cls("OWASP review of the export API — no authentication changes");
+    ok(!negated.tracks.includes("privacy") && !negated.tracks.includes("sec") && negated.notes.some((n) => /\+privacy kept off — 'personal data'/.test(n)) &&
+      negated.notes.some((n) => /\+sec kept off — 'authentication'/.test(n)) && !negPt.tracks.includes("privacy") && negPt.notes.some((n) => /\+privacy mantido inativo/.test(n)) &&
+      negEs.lang === "es" && !negEs.tracks.includes("privacy") && negEs.negated.privacy.includes("datos personales") && negEs.notes.some((n) => /\+privacy/.test(n)) &&
+      onAlthough.tracks.includes("sec") && onAlthough.notes.some((n) => /\+sec is ON although 'authentication' appeared negated/.test(n)),
+      "A2: negation never vetoes a track, it annotates it — +privacy / +sec kept off with a note (EN, PT, ES) and '+sec is ON although …' when a strong signal wins");
+    ok(/\+sec: ON/.test(secEn.reasoning) && /\+privacy: off/.test(secEn.reasoning) && /\+privacy: ON \[high confidence\]/.test(privEn.reasoning),
+      "A2: the reasoning has a line per track, sec and privacy included");
+    const nonSec = cls("Dependency injection container for the services layer; store uploads in object storage");
+    const bruteAlgo = cls("Replace the brute-force search with an index");
+    const bruteAttack = cls("Lock accounts after repeated brute-force attacks");
+    ok(nonSec.tracks.join() === "core" && !nonSec.signals.sec.length && !nonSec.signals.privacy.length &&
+      !bruteAlgo.tracks.includes("sec") && bruteAlgo.possible.some((p) => p.track === "sec") && bruteAttack.tracks.includes("sec"),
+      "A2: no phantom +sec from 'dependency injection' or a brute-force SEARCH (weak, possible only) — a brute-force ATTACK is strong; no +privacy from 'storage'");
+    const sweep = [];
+    for (const tr of ["sec", "privacy"]) {
+      const sg = S.trackSignals(tr);
+      for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
+        const r = S.classify("We need " + kw + " here");
+        if (!r.signals[tr].some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes(tr))) sweep.push(tr + ":" + kw);
+      }
+    }
+    ok(sweep.length === 0 && S.trackSignals("sec").strong.length > 40 && S.trackSignals("privacy").strong.length > 40,
+      "A2: self-match sweep — every +sec / +privacy keyword (EN/PT/ES) matches itself as a word, and a strong one alone turns its track on (misses: " + sweep.join(", ") + ")");
+    const mcpCls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Pseudonymize personal data and threat model the export", projectDir: a2("mcp") } }));
+    ok(mcpCls.tracks.includes("sec") && mcpCls.tracks.includes("privacy") && mcpCls.label === "core +sec +privacy",
+      "A2: spec_classify (MCP) reports +sec and +privacy (" + mcpCls.label + ")");
+
+    // --- scaffold per track, per language: fail while TODO, pass once filled; the design approval is refused meanwhile
+    const titles = { en: ["Threat Model", "Personal Data Inventory"], pt: ["Modelo de Ameaças", "Inventário de Dados Pessoais"], es: ["Modelo de Amenazas", "Inventario de Datos Personales"] };
+    for (const lang of ["en", "pt", "es"]) {
+      const p = a2("scaffold-" + lang);
+      for (const tr of ["sec", "privacy"]) {
+        const f = S.createFeature(p, tr + " " + lang, [tr], "", undefined, lang);
+        const id = tr + "-sections";
+        const other = tr === "sec" ? "privacy-sections" : "sec-sections";
+        const design = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+        const reqs = fs.readFileSync(path.join(f.dir, "requirements.md"), "utf8");
+        const tasks = fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+        const marker = tr === "sec" ? "[SEC]" : "[PRIVACY]";
+        const heads = (design.match(new RegExp("^## \\" + marker.slice(0, -1) + "\\] .*$", "gm")) || []);
+        const e = S.earsValidate(reqs, lang);
+        const trackIssues = e.issues.filter((i) => i.code !== "placeholder" && /US-1\.AC-1[0-5]/.test(i.text || ""));
+        const reqPh = S.featurePlaceholders(p, f.slug, "requirements.md").items.map((x) => x.text);
+        const before = S.specDoctor(p, f.slug);
+        S.approvePhase(p, f.slug, "classification", "t", { force: true });
+        S.approvePhase(p, f.slug, "requirements", "t", { force: true });
+        const refused = S.approvePhase(p, f.slug, "design", "t");
+        dropTodo(path.join(f.dir, "design.md"));
+        const after = S.specDoctor(p, f.slug);
+        const retry = S.approvePhase(p, f.slug, "design", "t");
+        const want = tr === "sec" ? 5 : 6;
+        ok(f.ok && f.label === "core +" + tr && heads.length === want && design.includes(titles[lang][tr === "sec" ? 0 : 1]) &&
+          (design.match(/^> \*\*TODO\*\*/gm) || []).length === want && reqs.includes("#### " + marker) && tasks.includes("US-1.AC-1" + (tr === "sec" ? "0" : "3")) &&
+          !trackIssues.length && e.issues.every((i) => i.severity !== "error") && !reqPh.some((x) => /SEC|PRIVACY/.test(x)) &&
+          chk(before, id).status === "fail" && /unfilled|por preencher|sin rellenar|sin completar/.test(chk(before, id).detail) && !chk(before, other).status &&
+          !refused.ok && refused.failing.includes(id) &&
+          chk(after, id).status === "pass" && /5|6/.test(chk(after, id).detail) && !retry.failing.includes(id),
+          `A2: ${lang} +${tr} scaffold — ${want} ${marker} sections with the TODO sentinel, ${marker} EARS criteria (no EARS issue, no placeholder), ${id} fails and the design approval is refused while TODO, passes once filled (${chk(before, id).detail} → ${chk(after, id).detail})`);
+      }
+    }
+
+    // --- a +sec +privacy feature whose templates are filled is ready: doctor passes and every gate approves without force
+    const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|SEC\]|PRIVACY\]|NEEDS)[^\]\n]*\]/g;
+    for (const lang of ["en", "pt", "es"]) {
+      const p = a2("filled-" + lang);
+      S.initProject(p, ["core", "sec", "privacy"], lang);
+      const f = S.createFeature(p, "Filled " + lang, ["sec", "privacy"], "", undefined, lang);
+      for (const file of ["classification.md", "requirements.md", "design.md", "tasks.md"]) {
+        const fp = path.join(f.dir, file);
+        let t = fs.readFileSync(fp, "utf8");
+        for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the account export"); // nested slots ("[e.g., … [N] …]") need a few passes
+        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+      }
+      const doc = S.specDoctor(p, f.slug);
+      const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
+      ok(doc.readyToAdvance && !doc.checks.some((c) => c.status === "fail") && chk(doc, "sec-sections").status === "pass" && chk(doc, "privacy-sections").status === "pass" &&
+        chk(doc, "ears").status === "pass" && chk(doc, "traceability").status === "pass" && gates.every(([ph, r]) => r.ok && r.approved === ph && !r.forced),
+        `A2: ${lang} — a filled +sec +privacy feature is ready (doctor has no fail, EARS + traceability pass) and classification → requirements → design → tasks approve without force (` +
+        gates.filter(([, r]) => !r.ok).map(([ph, r]) => ph + ":" + (r.failing || []).join(",")).join(" ") + ")");
+    }
+
+    // --- steering: security.md / privacy.md in the project language; still templates → doctor's steering warns
+    const stP = a2("steering-pt");
+    const initPt = S.initProject(stP, ["core", "sec", "privacy"], "pt");
+    const secMd = fs.readFileSync(path.join(stP, ".specs", "steering", "security.md"), "utf8");
+    const privMd = fs.readFileSync(path.join(stP, ".specs", "steering", "privacy.md"), "utf8");
+    const stF = S.createFeature(stP, "Contas", ["privacy"]);
+    ok(initPt.created.includes("security.md") && initPt.created.includes("privacy.md") && /^# Padrões de Segurança/.test(secMd) && /CNPD/.test(privMd) &&
+      /security\.md.*privacy\.md|privacy\.md.*security\.md/.test(chk(S.specDoctor(stP, stF.slug), "steering").detail) &&
+      ["en", "pt", "es"].every((l) => ["security.md", "privacy.md"].every((f) => typeof S.msg(l) === "object" && require("./lib/i18n.js").steeringStub(f, l))),
+      "A2: spec_init +sec +privacy writes steering/security.md and privacy.md (PT: Padrões de Segurança, CNPD) — flagged as templates until filled; EN/PT/ES stubs exist");
+
+    // --- add-track / remove-track for both (additive, non-destructive), then re-add
+    const at = a2("add-track");
+    S.initProject(at, ["core"], "en");
+    const plain = S.createFeature(at, "Plain", ["core"], "", undefined, "en");
+    const tasksBefore = S.statusFeature(at, plain.slug).tasks.total;
+    const add = S.addTrack(at, plain.slug, "+sec +privacy");
+    const pDesign = fs.readFileSync(path.join(plain.dir, "design.md"), "utf8");
+    const pTasks = fs.readFileSync(path.join(plain.dir, "tasks.md"), "utf8");
+    const pCls = fs.readFileSync(path.join(plain.dir, "classification.md"), "utf8");
+    const docAdd = S.specDoctor(at, plain.slug);
+    ok(add.ok && add.tracks === "core +sec +privacy" && add.addedTracks.join() === "sec,privacy" && add.added.includes("steering/security.md") && add.added.includes("steering/privacy.md") &&
+      /## \[SEC\] Threat Model/.test(pDesign) && /## \[PRIVACY\] DPIA/.test(pDesign) && /## Story US-1 — Security/.test(pTasks) && /## Story US-1 — Privacy/.test(pTasks) &&
+      /_Requirements: \[the \+sec criterion this task proves\]_/.test(pTasks) && /## Active Tracks\ncore \+sec \+privacy/.test(pCls) &&
+      chk(docAdd, "sec-sections").status === "fail" && chk(docAdd, "privacy-sections").status === "fail" && S.statusFeature(at, plain.slug).tasks.total === tasksBefore + 7,
+      "A2: add_track sec+privacy — sections, steering, template tasks (placeholder ACs: the requirements predate the track), Active Tracks, doctor checks");
+    const again = S.addTrack(at, plain.slug, "sec");
+    const rmSec = S.removeTrack(at, plain.slug, "sec");
+    const docRm = S.specDoctor(at, plain.slug);
+    const stRm = S.statusFeature(at, plain.slug);
+    ok(again.ok && !again.addedTracks.length && rmSec.ok && rmSec.tracks === "core +privacy" && rmSec.inactive.includes("design.md ([SEC] sections)") &&
+      rmSec.inactive.includes("tasks.md (Story US-1 — Security)") && !chk(docRm, "sec-sections").status && chk(docRm, "privacy-sections").status === "fail" &&
+      stRm.secSections === null && Array.isArray(stRm.privacySections) && stRm.tasks.total === tasksBefore + 3 && fs.readFileSync(path.join(plain.dir, "design.md"), "utf8").includes("[SEC] Threat Model"),
+      "A2: add_track --remove sec is non-destructive — [SEC] sections/tasks stay on disk but inactive: no sec-sections check, secSections null, its 4 tasks not counted");
+    const rmPriv = S.removeTrack(at, plain.slug, "privacy");
+    const reAdd = S.addTrack(at, plain.slug, "sec,privacy");
+    const reTasks = fs.readFileSync(path.join(plain.dir, "tasks.md"), "utf8");
+    ok(rmPriv.ok && rmPriv.tracks === "core" && rmPriv.inactive.includes("design.md ([PRIVACY] sections)") && reAdd.ok && reAdd.tracks === "core +sec +privacy" &&
+      (reTasks.match(/## Story US-1 — Security/g) || []).length === 1 && S.statusFeature(at, plain.slug).tasks.total === tasksBefore + 7 &&
+      chk(S.specDoctor(at, plain.slug), "privacy-sections").status === "fail",
+      "A2: remove privacy then re-add both — the kept sections and tasks count again, nothing duplicated");
+
+    // --- core + saas + sec + privacy (no +tdd): the three section checks side by side, the design gate names all three
+    const c3 = a2("combined-3");
+    const three = S.createFeature(c3, "Tenant Accounts", ["saas", "sec", "privacy"], "", undefined, "es");
+    const d3 = S.specDoctor(c3, three.slug);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(c3, three.slug, ph, "t", { force: true }));
+    const g3 = S.approvePhase(c3, three.slug, "design", "t");
+    const t3 = S.traceCheck(c3, three.slug);
+    ok(three.label === "core +saas +sec +privacy" && ["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(d3, id).status === "fail") &&
+      !fs.existsSync(path.join(three.dir, "test-plan.md")) && fs.existsSync(path.join(three.dir, "load-test.md")) && !g3.ok &&
+      ["saas-sections", "sec-sections", "privacy-sections"].every((id) => g3.failing.includes(id)) && !t3.uncoveredByTasks.length && !t3.phantomAcsInTasks.length &&
+      /## Historia US-1 — Seguridad[\s\S]*## Historia US-1 — Privacidad/.test(fs.readFileSync(path.join(three.dir, "tasks.md"), "utf8")),
+      "A2: core+saas+sec+privacy (ES) — saas/sec/privacy section checks all fail while TODO, the design approval names all three, every template AC is tasked");
+
+    // --- the combined feature: core + tdd + saas + sec + privacy
+    const cb = a2("combined");
+    const combo = S.createFeature(cb, "Tenant Export", ["tdd", "saas", "sec", "privacy"], "", undefined, "en");
+    const cDoc = S.specDoctor(cb, combo.slug);
+    const cTr = S.traceCheck(cb, combo.slug);
+    const cPlan = fs.readFileSync(path.join(combo.dir, "test-plan.md"), "utf8");
+    const cReq = fs.readFileSync(path.join(combo.dir, "requirements.md"), "utf8");
+    ok(combo.label === "core +tdd +saas +sec +privacy" && ["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(cDoc, id).status === "fail") && !chk(cDoc, "ai-sections").status &&
+      /\| T-08 \| integration \| example \| abuse case: an unauthenticated request gets 401/.test(cPlan) && /\| T-09 \| integration \| property \|/.test(cPlan) && /US-1\.AC-15/.test(cPlan) &&
+      cReq.indexOf("[SaaS]") < cReq.indexOf("[SEC]") && cReq.indexOf("[SEC]") < cReq.indexOf("[PRIVACY]") &&
+      !cTr.uncoveredByTasks.length && !cTr.uncoveredByTests.length && !cTr.phantomAcsInTasks.length && !cTr.phantomTestsInTasks.length && !(cTr.testsNotMappedToTasks || []).length,
+      "A2: core+tdd+saas+sec+privacy — saas/sec/privacy section checks, abuse-case + privacy test rows (T-08… after the +saas ones), every template AC planned and tasked");
+    dropTodo(path.join(combo.dir, "design.md"));
+    const cDoc2 = S.specDoctor(cb, combo.slug);
+    const cStatus = S.statusFeature(cb, combo.slug);
+    ok(["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(cDoc2, id).status === "pass") && cStatus.scaleSections.every((s) => s.filled) &&
+      cStatus.secSections.length === 5 && cStatus.secSections.every((s) => s.filled) && cStatus.privacySections.length === 6 && cStatus.privacySections.every((s) => s.filled),
+      "A2: once filled, every track section check passes; spec_status reports secSections (5) / privacySections (6) as filled");
+    const fin = S.finishFeature(cb, combo.slug);
+    ok(fin.checks.some((c) => /^\+sec: SAST/.test(c)) && fin.checks.some((c) => /^\+privacy: access\/export and erasure/.test(c)) && fin.checks.some((c) => /^\+saas:/.test(c)),
+      "A2: spec_finish lists the +sec and +privacy checks only a fresh run or a human can confirm");
+    const cTasks = S.parseTasks(fs.readFileSync(path.join(combo.dir, "tasks.md"), "utf8"));
+    const authz = S.taskBrief(cb, combo.slug, cTasks.find((x) => /object-level authorization/.test(x.text)).number);
+    const reten = S.taskBrief(cb, combo.slug, cTasks.find((x) => /^\[US1\] Retention/.test(x.text)).number);
+    ok(authz.ok && authz.designSections.includes("[SEC] Authentication & Authorization") && !authz.designSections.some((s) => /\[PRIVACY\]/.test(s)) &&
+      authz.acceptanceCriteria.some((a) => /401/.test(a.text || a)) && reten.ok && reten.designSections.includes("[PRIVACY] Retention & Deletion") &&
+      !reten.designSections.some((s) => /\[SEC\]/.test(s)),
+      "A2: spec_task_brief — a task proving a +sec / +privacy criterion carries that track's design sections (and only those)");
+    fs.writeFileSync(path.join(combo.dir, "requirements.md"), "# F\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a user asks THE SYSTEM SHALL answer\n");
+    const cq = S.clarify(cb, combo.slug).questions;
+    const M = S.msg("en").secPrivacy.clarify;
+    ok([M.secAccess, M.secSecrets, M.privacyRights, M.privacyRetention].every((q) => cq.includes(q)),
+      "A2: spec_clarify asks for the access-denied criterion, the secrets, the data subject rights and the retention periods when requirements.md is silent");
+
+    // --- legacy detection (no .state.json tracks) and spec_upgrade
+    const stp = path.join(combo.dir, ".state.json");
+    const st = JSON.parse(fs.readFileSync(stp, "utf8"));
+    delete st.tracks;
+    fs.writeFileSync(stp, JSON.stringify(st, null, 2));
+    const up = S.specUpgrade(cb, {});
+    const upF = (up.features || []).find((x) => x.name === combo.slug) || {};
+    ok(S.statusFeature(cb, combo.slug).tracks === "core +tdd +saas +sec +privacy" && upF.tracksSource === "inferred" && upF.tracks === "core +tdd +saas +sec +privacy" && upF.tracksPending === true,
+      "A2: a feature without saved tracks has +sec / +privacy inferred from its [SEC] / [PRIVACY] design headings; spec_upgrade shows them as inferred, pending apply");
+
+    // --- PT: design-save check, roadmap attention and status names are localized; the markers stay English
+    const pt = a2("pt-views");
+    S.initProject(pt, ["core"], "pt");
+    const ptF = S.createFeature(pt, "Exportar dados", ["sec", "privacy"], "", undefined, "pt");
+    const ptSave = S.designSaveCheck(pt, ptF.slug);
+    const ptMap = fs.readFileSync(path.join(pt, ".specs", "ROADMAP.md"), "utf8");
+    ok(ptSave.sections.map((s) => s.track).join() === "sec,privacy" && /secções \[SEC\]: Modelo de Ameaças:por preencher/.test(ptSave.text) && /\[PRIVACY\] AIPD \(por preencher\)/.test(ptMap) &&
+      /Fundamento de Licitude e Finalidade/.test(chk(S.specDoctor(pt, ptF.slug), "privacy-sections").detail),
+      "A2: PT — the design-save check, ROADMAP.md attention and doctor name the [SEC] / [PRIVACY] sections in Portuguese");
+
+    // --- spec_import with --tracks sec,privacy
+    const im = a2("import");
+    fs.mkdirSync(path.join(im, ".kiro", "specs", "accounts"), { recursive: true });
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "accounts", "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to delete my account.\n\n#### Acceptance Criteria\n\n1. WHEN the user confirms THEN the system SHALL delete the account\n");
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "accounts", "design.md"), "# Design\n\n## Overview\nA delete button.\n");
+    const imp = S.importSpec(im, "kiro", ".kiro/specs/accounts", { tracks: "sec,privacy" });
+    const impDesign = imp.ok ? fs.readFileSync(path.join(im, ".specs", "accounts", "design.md"), "utf8") : "";
+    const impTasks = imp.ok ? fs.readFileSync(path.join(im, ".specs", "accounts", "tasks.md"), "utf8") : "";
+    ok(imp.ok && imp.tracks.join() === "core,sec,privacy" && /A delete button/.test(impDesign) && /## \[SEC\] Threat Model/.test(impDesign) && /## \[PRIVACY\] Retention & Deletion/.test(impDesign) &&
+      !/US-1\.AC-1[0-5]/.test(impTasks) && chk(S.specDoctor(im, "accounts"), "privacy-sections").status === "fail",
+      "A2: spec_import --tracks sec,privacy appends the [SEC] / [PRIVACY] sections to the imported design; the kept track tasks cite no template AC the import lacks");
+
+    // --- placeholders, i18n parity, MCP descriptions
+    ok(!S.placeholderReport("## [SEC] Threat Model\n## [PRIVACY] DPIA\nSee [SEC] and [PRIVACY].").length,
+      "A2: [SEC] / [PRIVACY] are English-stable markers, never template placeholders");
+    const spKeys = (l) => JSON.stringify(Object.keys(S.msg(l).secPrivacy).concat(Object.keys(S.msg(l).secPrivacy.clarify), Object.keys(S.msg(l).secPrivacy.finishChecks)));
+    const names = [...S.trackSections("sec"), ...S.trackSections("privacy")].map((s) => s.name);
+    ok(spKeys("pt") === spKeys("en") && spKeys("es") === spKeys("en") && ["pt", "es"].every((l) => names.every((n) => S.msg(l).sectionNames[n] && S.msg(l).secPrivacy.sectionNames[n])) &&
+      S.trackSections("core") === undefined && S.trackSections("sec").length === 5 && S.trackSections("privacy").length === 6,
+      "A2: EN/PT/ES parity — the same secPrivacy messages in every language, PT/ES names for all 11 [SEC] / [PRIVACY] sections");
+    const desc = (n) => (list.result.tools.find((t) => t.name === n) || {}).description || "";
+    const trackItem = (n) => JSON.stringify((list.result.tools.find((t) => t.name === n) || {}).inputSchema || {});
+    ok(/sec-sections \/ privacy-sections/.test(desc("spec_doctor")) && /\+sec/.test(desc("spec_classify")) && /\+privacy/.test(desc("spec_add_track")) &&
+      /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_create")) && /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_init")) &&
+      /tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_add_track")) && !/"enum"[^\]]*"privacy"/.test(trackItem("spec_create")),
+      "A2: the MCP tool descriptions name sec / privacy (tracks keep no schema enum — unknown names get the did-you-mean)");
+  }
   // @pkg A2 <<<
 
   // @pkg A3 tests >>>
