@@ -7,12 +7,12 @@ can follow it. The full reference lives in `skills/dev-spec-driven/SKILL.md` and
 
 > Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules agents` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).
 
-> **Language:** detect the user's language and respond in it (English, Português, Español),
-> including the prose inside generated artifacts. Pass `--lang en|pt|es` to `dev-spec init`
-> (sets the project default) and `dev-spec create` (per feature; inherits the project default) so
+> **Language:** detect the user's language and respond in it (English, Português — European or
+> Brazilian —, Español), including the prose inside generated artifacts. Pass `--lang en|pt|pt-BR|es` to
+> `dev-spec init` (sets the project default) and `dev-spec create` (per feature; inherits the project default) so
 > the scaffolds, steering and tool messages come out already localized — you only fill the
 > placeholders. Keep structural tokens stable (AC IDs like `US-1.AC-1`, task markers
-> `_Requirements:_`, track names `core/+tdd/+saas/+ai`). EARS keywords work in all three:
+> `_Requirements:_`, track names `core/+tdd/+saas/+ai/+sec/+privacy`). EARS keywords work in every one of them:
 > `SHALL`/`DEVE`/`DEBE`, `WHEN`/`QUANDO`/`CUANDO`, etc.
 
 ## What this is
@@ -26,6 +26,8 @@ Spec-driven development that scales rigor to the feature. You classify each feat
 | **+tdd** | test plan + failing-tests-first + red→green→refactor | correctness matters / hard to undo |
 | **+saas** | performance/scale/multi-tenancy/observability/cost + load test | multi-tenant, hot path, prod scale |
 | **+ai** | eval-driven dev, prompts-as-code, token economics, safety | quality depends on LLM/agent output |
+| **+sec** | threat model, security requirements, authn/authz, secrets & keys, security testing | auth, secrets, untrusted input, an attack surface |
+| **+privacy** | personal data inventory, lawful basis, retention & deletion, data subject rights, processors & transfers, DPIA | personal data (GDPR / RGPD / HIPAA) |
 
 Tracks combine (e.g. a billing webhook in a multi-tenant SaaS that calls an LLM = `core +tdd +saas +ai`).
 The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); change them with
@@ -36,17 +38,23 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 30 tools.
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 34 tools, plus one
+  prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
+  `specs://` resources.
 
 Key operations (CLI form):
 
 ```
 dev-spec classify "<feature description>" [--name "<feature>"]   # recommend tracks (multilingual, weighted)
-dev-spec init [tracks...] [--lang en|pt|es] [--guard on|off]   # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
+dev-spec init [tracks...] [--lang en|pt|pt-BR|es] [--guard on|off|scope]   # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
+dev-spec init --check test="npm test" [--check lint="npm run lint"]   # the project's check commands: finish needs a passing run of each
+dev-spec init --roles requirements=product,design=tech+security   # approvals by role (--roles none clears); --stop-check on|off
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …) or a custom scoped one (api-rules.md)
-dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield]  # scaffold the feature (no tracks → auto-classify; --brownfield → integration-plan.md)
+dev-spec templates [list|init|check] [artifact] [--lang]   # the team's own scaffolds in .specs/templates/ (replace the built-in ones)
+dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield] [--flow design-first]  # scaffold the feature (no tracks → auto-classify; --brownfield → integration-plan.md)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
-dev-spec import <kiro|spec-kit|openspec> <path> [--name "<feature>"] [--tracks …]   # another tool's spec → a NEW feature (IDs remapped)
+dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
+dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan or BMAD docs → a NEW feature (IDs remapped)
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -56,23 +64,31 @@ dev-spec next <feature> [--batch]              # next task (--batch: + the [P] t
 dev-spec next-action <feature>                 # "you are here → do this next", phase by phase: re-review → fill → fix → approve (then the next phase) → implement → verify → finish
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open)
-dev-spec approve <feature> <phase> [--force]   # record an approval gate — refused while that phase's checks fail
+dev-spec approve <feature> <phase> [--force] [--role <role>]   # record an approval gate — refused while that phase's checks fail
+dev-spec approve <feature> --through tasks     # fast-forward: every filled phase in order, each through its own gate; stops at the first refusal
 dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
 dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"]   # converge: append a task (Phase: Convergence)
-dev-spec finish <feature> [--write] [--include-body]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs)
-dev-spec metrics [feature] [--write]           # lead times, rework, forced approvals, change requests, evidence pass rate (--write → retro.md)
+dev-spec finish <feature> [--write] [--include-body] [--run]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs); --run runs the project checks
+dev-spec decide <feature> --title "…" --decision "…" [--affects US-1.AC-2,T-03] [--discovery]   # append a D-n entry to decisions.md
+dev-spec stop-check --message "<your closing message>"   # before saying "done" / "verified": exit 1 = unverified ticks, fix them or say so
+dev-spec log <feature> [--max N]               # the commits that cite each task (+ a red-first check on +tdd)
+dev-spec metrics [feature] [--write]           # lead times, rework, forced approvals, change requests, evidence pass rate, velocity (--write → retro.md)
 dev-spec add-track <feature> <track> [--remove]   # add a track (additive, never overwrites); --remove takes one off, files kept
 dev-spec feature <archive|restore|rename|remove> <name> [new-name] [--yes]   # lifecycle; remove is destructive and needs --yes
+dev-spec feature flow <name> <requirements-first|design-first>   # the phase order (design-first: the design before the requirements)
 dev-spec catalog [--write]                     # living catalog of every feature's ACs (_Supersedes:_ marks replaced ones) → .specs/SPECS.md
+dev-spec export [feature] [--md] [--write]     # one offline, printable document (HTML / markdown) for stakeholders → .specs/exports/
+dev-spec changelog [--since <date|last|all>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
-dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles
+dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
 dev-spec backlog [add|rm "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
 dev-spec scan [path]  /  dev-spec coverage     # brownfield: routes, tests, entrypoints, env var names, migrations + % of code named in _Implements:_
 dev-spec evals <feature> [--dry-run]           # run local eval harness (+ai; your API key)
 dev-spec mcp-config [client]                   # print MCP config for your tool
 dev-spec rules <cursor|windsurf|copilot|gemini|agents>   # print that tool's rule file with this clone's absolute paths
+dev-spec prompts [name] [--args "…"]           # the plugin's commands as MCP prompts: list them, or print one rendered
 ```
 
 ## The pipeline (Spec mode)
@@ -80,13 +96,13 @@ dev-spec rules <cursor|windsurf|copilot|gemini|agents>   # print that tool's rul
 For anything beyond a quick fix (Vibe mode = just do it, no artifacts) or a contained change to an existing
 flow (Bounded mode = a short design in chat and an explicit yes, no artifacts):
 
-0. **Classify** — `dev-spec classify` to seed tracks; confirm against `skills/dev-spec-driven/references/classification-matrix.md`. Get user approval of the mode and track set (a real defect → `dev-spec bugfix` instead; a spec written for Kiro, spec-kit or OpenSpec → `dev-spec import`). After approval: `dev-spec init <tracks> --lang <xx>` if `.specs/steering/` is missing, then `dev-spec create "<name>" <tracks> --lang <xx>` once — it seeds `.specs/<feature>/classification.md`, where you record the decision (add `--brownfield` when the feature lands in existing code).
-1. **Requirements** — fill the scaffolded `requirements.md`: EARS criteria with stable AC IDs; run `dev-spec ears` to lint and `dev-spec clarify` for gaps. Add track-specific ACs (tenant isolation for +saas; quality/safety/cost for +ai). Approve.
-2. **Design** — base sections + the mandatory sections of the active tracks (5 for +saas, 10 for +ai). The scaffold marks each with a `> **TODO**` sentinel; replace it with real content. No blank mandatory sections. Approve.
+0. **Classify** — `dev-spec classify` to seed tracks; confirm against `skills/dev-spec-driven/references/classification-matrix.md`. Get user approval of the mode and track set (a real defect → `dev-spec bugfix` instead; an open question to investigate before committing to requirements → `dev-spec spike`; a spec written for Kiro, spec-kit or OpenSpec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs → `dev-spec import`; work that starts from an architecture → `create --flow design-first`, which puts the design before the requirements). After approval: `dev-spec init <tracks> --lang <xx>` if `.specs/steering/` is missing, then `dev-spec create "<name>" <tracks> --lang <xx>` once — it seeds `.specs/<feature>/classification.md`, where you record the decision (add `--brownfield` when the feature lands in existing code).
+1. **Requirements** — fill the scaffolded `requirements.md`: EARS criteria with stable AC IDs; run `dev-spec ears` to lint and `dev-spec clarify` for gaps. Add track-specific ACs (tenant isolation for +saas; quality/safety/cost for +ai; threats and authorization for +sec; lawful basis, retention and data subject rights for +privacy). Approve.
+2. **Design** — base sections + the mandatory sections of the active tracks (5 for +saas, 10 for +ai, 5 for +sec, 6 for +privacy). The scaffold marks each with a `> **TODO**` sentinel; replace it with real content. No blank mandatory sections. Approve.
 3. **Test/Eval plan** — +tdd: enumerate tests mapped to AC IDs (Kind `example` or `property`). +ai: golden/adversarial/regression sets + thresholds + baseline. Approve.
 4. **Failing tests / eval harness** — +tdd: write tests, all red for the right reason (hard gate); put the T-ID in the test name so `dev-spec trace --code` finds it. +ai: deterministic tests + runnable eval harness + baseline. No implementation before this passes — record the sign-off with `dev-spec approve <feature> tests` (the engine tracks it: `next-action` asks for it and `gatesOk` / `finish` count it; a bugfix has no such gate, its regression test is a task).
-5. **Tasks** — ordered, traceable; markers `_Requirements:_` and `_Verify: <command>_` always (+tdd: the command that runs that task's own tests — the full suite stays red until the last task), `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai). Run `dev-spec trace` — every AC must map to a task.
-6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs, tests and matching steering already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` (MCP: `spec_complete_task`) — the only way to tick a task; evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open and stays recorded; for a task whose `_Verify:_` names a runnable command, a text note alone (`--evidence "…"` without `--cmd "…" --exit 0`) ticks it but leaves it unverified (a task with no runnable `_Verify:_` can be attested by that note). Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `skills/dev-spec-driven/references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
+5. **Tasks** — ordered, traceable; markers `_Requirements:_` and `_Verify: <command>_` always (+tdd: the command that runs that task's own tests — the full suite stays red until the last task), `_Makes green:_` (+tdd), `_Emits metrics:_` (+saas), `_Affects evals:_` (+ai); optionally `_Size: XS|S|M|L|XL_` (roadmap forecasts) and, on a task that writes a test before its fix, `_Expect: fail_` (its run must fail). Run `dev-spec trace` — every AC must map to a task.
+6. **Execute** — per task: implement-and-test (core) / red→green→refactor (+tdd) / prompt-iteration gated on eval delta (+ai). `dev-spec brief <feature>` gives you the task with its ACs, tests and matching steering already resolved — handy to focus, or to hand one task to another agent. Mark done with `dev-spec done <feature> <n> --run` (MCP: `spec_complete_task`) — the only way to tick a task; evidence before claims: the task's `_Verify:_` command runs and its result is recorded; a failure leaves the task open and stays recorded; for a task whose `_Verify:_` names a runnable command, a text note alone (`--evidence "…"` without `--cmd "…" --exit 0`) ticks it but leaves it unverified (a task with no runnable `_Verify:_` can be attested by that note). Before you tell the user a task or feature is done or verified, run `dev-spec stop-check --message "<what you are about to say>"`: exit 1 means ticked tasks still lack passing evidence — record the run or say plainly what is not verified. Close the feature with `dev-spec finish`. (In Claude Code, `/executeTask --subagents` runs an implementer + reviewer subagent per task — see `skills/dev-spec-driven/references/subagent-execution.md`; tools without subagents run inline.) Before "done": load test + observability (+saas), cost + safety validation (+ai).
 
 At each phase boundary, run `dev-spec doctor <feature>`; only advance when it reports
 `readyToAdvance`. Record sign-off with `dev-spec approve <feature> <phase>`. When unsure what comes
@@ -99,6 +115,10 @@ next, `dev-spec next-action <feature>` names the single next step.
   while any fails, listing them. Fix them and approve again. `--force` records it anyway as a *forced*
   approval with the failing checks; `doctor` and the roadmap keep flagging it — use it only when the user
   explicitly accepts the gap.
+- **Roles and fast-forward.** When `dev-spec init --roles …` lists a phase, it is approved only once every role has
+  signed its current content (`approve <f> <phase> --role <role>`); until then it stays pending and `next-action` names
+  the missing role. `approve <f> --through tasks` approves the filled phases in order, each through its own gate, and
+  stops at the first refusal — only when the user asked for it.
 - **A template is not content.** `doctor`'s `placeholders` check fails while the current (or an earlier)
   phase's artifact still holds template placeholders; a fresh feature starts at phase `requirements`.
 - **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with
@@ -110,10 +130,22 @@ next, `dev-spec next-action <feature>` names the single next step.
   `doctor`, `finish` and the `ROADMAP.md` "Needs attention" line list each unverified task with a localized
   reason. A task with no runnable `_Verify:_` and nothing recorded comes back `verified: true` with
   `nothingToVerify: true` — the same verdict doctor gives; a note records how it was checked.
+- **Red → green.** A task marked `_Expect: fail_` is proven by a FAILING run of its `_Verify:_` (the test fails before
+  its fix); a passing run is refused (`unexpected-pass`) until that red run is on record. Exit 126 / 127 / 9009 (the
+  command could not run) is no red test.
+- **Project checks.** With `init --check name="cmd"` set, every brief lists them and `finish` blocks (`suite-evidence`)
+  until each has a passing recorded run since the last task activity — run them and report them (MCP `spec_finish
+  {evidence}`), or `dev-spec finish <f> --run`.
+- **No pipes in `_Verify:_`.** `npm test | tee log` exits with the last command's code, so a failure can read as
+  verified; drop the pipe (or `set -o pipefail;` under bash). doctor warns `verify-pipes`.
+- **Claims at the end of a turn.** Claude Code runs a Stop hook that sends a turn back when its closing message claims
+  "done" / "verified" while recently ticked tasks lack passing evidence. Other tools have no such hook: run
+  `dev-spec stop-check --message "…"` yourself before claiming it.
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders
-  anywhere in the chain, open or unverified tasks and pending approvals. Warnings (uncovered EC/NFR/SC
+  anywhere in the chain, open or unverified tasks, pending approvals (a role still to sign included) and — with project
+  checks set — a check without a passing run since the last task activity. Warnings (uncovered EC/NFR/SC
   IDs, planned tests no test file names) never block.
 
 ## When the spec changes
@@ -126,6 +158,10 @@ next, `dev-spec next-action <feature>` names the single next step.
   it. `--reopen` unticks the affected done tasks and marks their evidence stale — never the tasks of a
   removed criterion: `retire` lists them (and their test rows) to delete or point at the criterion that
   replaces it; then re-review and re-approve.
+- **Record decisions.** A design choice or a discovery made while implementing goes into the feature's decision log:
+  `dev-spec decide <feature> --title "…" --decision "…" --affects US-1.AC-2,T-03` appends `D-n` to `decisions.md`
+  (unknown references are refused). Briefs, the merge summary and the export show the entries; a decision recorded after
+  the approval of the requirements or design it affects makes doctor ask for a re-review.
 - **Converge.** When implementation drifted from the plan or a review found follow-up work, append tasks
   with `dev-spec append-tasks` instead of editing the numbered list by hand: they go under
   `Phase: Convergence`, numbered after the last task; unknown AC IDs are refused, and an approved task
@@ -146,17 +182,27 @@ next, `dev-spec next-action <feature>` names the single next step.
   edits a spec, approves or ticks
   anything. Every fix it leads to still goes through the gates.
 
-## Steering, import and guard mode
+## Steering, templates, import, spikes and guard mode
 
 - **Scoped steering.** A steering file may start with front matter: `inclusion: always`, `fileMatch` (with
   `fileMatchPattern: "src/api/**"`) or `manual`. `dev-spec brief` includes the `fileMatch` files whose
   pattern matches the task's `_Implements:_` paths and lists `manual` ones as available.
-- **Import.** `dev-spec import <kiro|spec-kit|openspec> <path>` turns a spec written for another tool into
-  a new feature: criteria become `US-N.AC-M` (EARS where possible, else `[NEEDS CLARIFICATION]`), tasks are
-  renumbered keeping their checkbox state. The source must be inside the project and is never modified.
+- **Project templates.** `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`) replaces a built-in scaffold for
+  new features (`{{name}}`, `{{summary}}`, `{{tracks}}`… filled in); `dev-spec templates init` copies the built-in ones to
+  edit, `templates check` validates them. An untouched custom scaffold still counts as a template: fill it in.
+- **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
+  — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
+  where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
+  inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — copy it in first).
+- **Spikes.** `dev-spec spike "<name>" --question "…" --timebox 3d` scaffolds `spike.md` + investigation tasks, with no
+  requirements / design gates: investigate, then write the Decision (`_Outcome: go | no-go | pivot_` + the rationale).
+  Go → spec the real feature; no-go → archive the spike. Prototype code stays outside `.specs/`.
+- **For stakeholders.** `dev-spec export [feature]` builds one offline, printable document; `dev-spec changelog` writes
+  release notes from what shipped.
 - **Guard mode is a Claude Code hook.** `dev-spec init --guard on` sets it, but only Claude Code runs the
-  PreToolUse hook that asks before code edits while no feature has approved, unfinished tasks. In other
-  tools, follow the same rule yourself: no implementation before the tasks are approved.
+  PreToolUse hook that asks before code edits while no feature has approved, unfinished tasks (`--guard scope`: also
+  before a code file no open task names in `_Implements:_`). In other tools, follow the same rule yourself: no
+  implementation before the tasks are approved, and no code outside the plan without a converge task.
 - **Alongside superpowers.** If the superpowers skills are installed in your tool too, this workflow replaces
   their planning, TDD, debugging, execution, verification, review and branch-finishing skills for feature work.
   Put the precedence block from `commands/spec-superpowers.md` into your rules / `AGENTS.md` to make it stick.
