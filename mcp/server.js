@@ -8,7 +8,7 @@
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
- * 30 tools, verify with an `initialize` + `tools/list` handshake.
+ * 32 tools, verify with an `initialize` + `tools/list` handshake.
  * Prompts: one per plugin command (commands/*.md) — slash commands in MCP clients without the skill
  * (SPEC_MCP_PROMPTS=off drops them). Resources: the project's spec artifacts, read-only, as specs:// URIs.
  * Both live in lib/prompts-resources.js.
@@ -309,6 +309,33 @@ const TOOLS = [
   // @pkg B1 <<<
 
   // @pkg B2 tools >>>
+  {
+    name: "spec_export",
+    description:
+      "Stakeholder export: ONE self-contained, offline, printable document for people who don't read markdown folders (product, legal, clients). With `name`: that feature, in its language — summary, user stories with their EARS acceptance criteria (stable IDs; a criterion a later feature superseded is struck through, a template one flagged), the other requirements sections (success criteria, edge cases, NFRs, out of scope …), the design sections (a bugfix: bug.md — reproduction, root cause, fix), the test plan, every task with its done / verified status (the verdict doctor gives, with the reason), decisions.md when present, the phase approvals (who / when, forced, changed since, still pending) and the open [NEEDS CLARIFICATION] markers. Without `name`: the whole project, in the project language — the roadmap summary (+ backlog), every active feature's requirements digest (summary, stories + ACs, success criteria — each feature on its own printed page) and the living catalog when .specs/SPECS.md exists. `format`: 'html' (default — the roadmap's brand palette, light/dark following the system with a toggle, print rules: light on paper, no buttons, a page break per feature; every spec text escaped, links kept for http(s)/mailto only, no image, font, script or stylesheet URL — it opens offline) or 'md'. Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature>.<format> (the project: project.<format>; a feature slugged 'project': project.feature.<format>) carrying the AUTO-GENERATED marker, and returns `file` + `bytes` — a same-named file dev-spec did not generate is never overwritten (the result is then an error). Nothing is sent anywhere.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Feature name/slug. Omit for the whole project." },
+        format: { type: "string", enum: ["html", "md"], description: "Document format (default html). CLI: --md." },
+        write: { type: "boolean", description: "Write .specs/exports/<feature|project>.<format> instead of returning the content (never over a hand-written file). CLI: --write." },
+        projectDir: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "spec_changelog",
+    description:
+      "Release notes generated from the spec data (no model, no git log). **Added**: features that shipped since `since` — spec_finish {write} recorded their baseline, or their execution sign-off was approved — each with its summary and every user-story acceptance criterion as one line (template criteria left out). **Changed**: acceptance criteria superseded (_Supersedes:_) by a feature shipped since then, each with the criterion that replaces it; and the change requests (spec_impact reopen — .state.json changes) recorded since then: the IDs / sections added, modified and removed, the tasks reopened and, for a requirements change, the current text of the criteria it added or modified — a feature new in these notes has its change requests folded into its entry. **Fixed**: bugfix features shipped since then, with the root-cause one-liner from bug.md. A feature that already shipped before `since` is never listed as Added again. `since`: an ISO date (YYYY-MM-DD = 00:00 UTC) or timestamp, 'last' (the default — roadmap.json meta.changelogAt, stamped by the last written notes; everything while it is unset) or 'all'. Chrome in the project language; IDs stay English. Returns added / changed {superseded, changeRequests} / fixed, counts, since + sinceSource (last · date · all) and the markdown. `write: true` writes .specs/RELEASE-NOTES.md (AUTO-GENERATED; a hand-written RELEASE-NOTES.md is never overwritten — the result is then an error) and stamps meta.changelogAt, both under the roadmap lock; when there is nothing to report, nothing is written or stamped (`note`).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "ISO date / timestamp, 'last' (default: since the last written release notes) or 'all'. CLI: --since." },
+        write: { type: "boolean", description: "Write .specs/RELEASE-NOTES.md and stamp meta.changelogAt (nothing when there is nothing to report). CLI: --write." },
+        projectDir: { type: "string" },
+      },
+    },
+  },
   // @pkg B2 <<<
 
   // @pkg B3 tools >>>
@@ -432,6 +459,10 @@ function runTool(name, args) {
     // @pkg B1 <<<
 
     // @pkg B2 dispatch >>>
+    case "spec_export": // the same engine call as the CLI's `export [feature] [--md] [--write]`
+      return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });
+    case "spec_changelog": // the same engine call as the CLI's `changelog [--since …] [--write]`
+      return spec.changelog(pdir, { since: args.since, write: args.write === true });
     // @pkg B2 <<<
 
     // @pkg B3 dispatch >>>

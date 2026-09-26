@@ -43,6 +43,8 @@
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
+ *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
+ *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
@@ -126,6 +128,7 @@ function withTracksFlag(list) {
 VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
 
 VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
+VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -845,6 +848,30 @@ function main() {
     // @pkg B1 <<<
 
     // @pkg B2 commands >>>
+    case "export": {
+      // dev-spec export [feature] [--md] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
+      // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
+      if (pos.length > 1 || (on("md") && on("html"))) usage("dev-spec export [feature] [--md] [--write]");
+      const r = spec.exportSpecs(projectDir, { name: pos[0], format: on("md") ? "md" : "html", write: on("write") });
+      if (!r.ok) return fail(r);
+      const X = spec.msg(r.lang).stakeholderExport;
+      return out(r, (r) => (r.wrote ? console.log(X.wrote(r.file)) : process.stdout.write(r.content)));
+    }
+    case "changelog": {
+      // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_changelog): the
+      // markdown on stdout (a note on stderr), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt (exit 1 on a refusal).
+      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--write]");
+      const r = spec.changelog(projectDir, { since: flags.since, write: on("write") });
+      if (!r.ok) return fail(r);
+      const N = spec.msg(r.lang).releaseNotes;
+      return out(r, (r) => {
+        if (r.wrote) console.log(N.wrote(r.file, r.counts.added, r.counts.changed, r.counts.fixed));
+        if (r.markdown != null) {
+          if (r.note) console.error(r.note); // stdout stays the markdown alone (pipe it into a file)
+          process.stdout.write(r.markdown);
+        } else if (r.note) console.log(r.note);
+      });
+    }
     // @pkg B2 <<<
 
     // @pkg B3 commands >>>
@@ -927,6 +954,12 @@ function helpText() {
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
+  export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
+                                  tasks with their verification, approvals, open clarifications) or, without one, the whole project;
+                                  offline HTML (light/dark, print-ready) or --md; --write → .specs/exports/<feature|project>.html|.md
+  changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
+                                  change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
+                                  last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
@@ -951,7 +984,7 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
-         --apply (upgrade)  --args "…" (prompts)
+         --apply (upgrade)  --args "…" (prompts)  --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
