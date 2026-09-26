@@ -6205,7 +6205,8 @@ function endRun() {
   const docsSkill = docsRead("skills", "dev-spec-driven", "SKILL.md");
   const docsDesc = ((docsSkill.match(/^description: >\r?\n([\s\S]*?)\r?\n---/m) || [])[1] || "").split(/\r?\n/).map((l) => l.trim()).join(" ").trim();
   ok(docsDesc.length > 200 && docsDesc.length < 1024 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /antes de começar a programar/.test(docsDesc) &&
-    /antes de empezar a programar/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
+    /antes de empezar a programar/.test(docsDesc) && /update the specs/.test(docsDesc) && /atualizar as specs/.test(docsDesc) && /actualizar las specs/.test(docsDesc) &&
+    /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
     `SKILL.md description is trilingual, scoped ("Not for …") and < 1024 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
   ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),

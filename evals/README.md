@@ -11,6 +11,7 @@ call). These are not the `+ai` feature evals of a user's project (those live in
 |---|---|
 | `trigger-spec-en` / `-pt` / `-es` | a `dev-spec-driven:*` skill or command fires on "spec this before coding" |
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
+| `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
 | `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call — trivial edits the description excludes |
 
