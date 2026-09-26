@@ -82,7 +82,9 @@ Bad:
 
 Put the test plan's T-ID at the start of each test's name. `trace_check {code: true}` (CLI:
 `dev-spec trace <feature> --code`) then links every planned test to the files that implement it, and
-`spec_doctor` warns (`tests-in-code`) when a done task's `_Makes green:_` test exists in no test file.
+`spec_doctor` warns (`tests-in-code`) when a done task's `_Makes green:_` test exists in no test file. The same
+T-IDs tie the evidence together: the task that writes a test cites it with its red run (`_Expect: fail_`, below), the
+task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits that say "Makes T-01 green".
 
 | Language / framework | Convention |
 |---|---|
@@ -325,6 +327,35 @@ FAIL tests/integration/register.test.ts
 ```
 
 The first is a specification. The second is broken infrastructure.
+
+### Recording the red run — `_Expect: fail_`
+
+A test that never failed proves nothing, so the engine lets a task record its red run as evidence. Mark the task
+that writes a test before its code — a bugfix's regression test, a red phase — with `_Expect: fail_` next to the
+`_Verify:_` command that runs that test, and name the T-IDs it writes in the task (its text or `_Makes green:_`):
+
+```markdown
+- [ ] 3. [US1] Write T-04 and T-05 (expired and revoked keys) and watch them fail for the right reason
+  - _Requirements: US-1.AC-3, US-1.AC-4_
+  - _Verify: npm test -- tests/unit/verify.test.ts_
+  - _Expect: fail_
+- [ ] 4. [US1] Reject expired and revoked keys in verify()
+  - _Requirements: US-1.AC-3, US-1.AC-4_
+  - _Makes green: T-04, T-05_
+  - _Verify: npm test -- tests/unit/verify.test.ts_
+```
+
+- `dev-spec done <feature> 3 --run` while the tests fail records the **red run** as task 3's proof (exit ≠ 0,
+  `expected: "fail"`); a passing run is refused (`unexpected-pass` — the test doesn't fail yet). Exit 126 / 127 / 9009
+  (the command could not run) is no red run.
+- Task 4 then turns them green with a normal must-pass `_Verify:_`.
+- `spec_doctor` warns **`red-green`** (+tdd) for every T-ID a done task makes green with no recorded red run of an
+  `_Expect: fail_` task citing it. When Phase 4 wrote all the failing tests up front, one Setup task "confirm the
+  failing tests T-01…T-07 are red" marked `_Expect: fail_`, ticked before any implementation task, records that red
+  run for all of them. A guard test that passes before the
+  change by design (a bugfix's T-02) is named there too — note it rather than making it fail artificially.
+
+Details: `verification.md` (Red → green).
 
 ---
 

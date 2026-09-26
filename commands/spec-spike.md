@@ -21,8 +21,10 @@ question, the timebox, the options, the evidence and the decision.
    `_Outcome: pivot_`. `spec_doctor` fails the `decision` check until it is written and warns `timebox` once the end
    date passed without one — then decide with the evidence you have. Log it with `/spec-decide` (`D-1`).
 5. Follow `spec_next_action`:
-   - **go** — spec the real feature with `spec_create` (the result's `seed` gives a name and a summary from the
-     question + decision), then archive the spike (`/feature archive <spike>`);
+   - **go** (`step: "promote"`) — spec the real feature with `spec_create` (the result's `seed` gives a name and a
+     summary from the question + decision) and archive the spike (`/feature archive <spike>`), in the order the
+     recommendation gives — archive first when the real feature takes the spike's name (it frees it). An architecture
+     the spike settled fits a design-first feature (`flow: "design-first"`, `references/design-first.md`);
    - **no-go** — archive the spike; the reason stays in its Decision;
    - **pivot** — a new spike for the new direction, then archive this one.
 6. `/spec-finish` is ready once the decision is written and every task ticked (no suite or evidence gates); its

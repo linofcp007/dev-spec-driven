@@ -1,6 +1,6 @@
 ---
 description: Record human approval of a phase gate for a feature (auditable, resumable). PT - aprova um gate de fase. ES - aprueba un gate de fase.
-argument-hint: "[feature name] [phase] [--force]"
+argument-hint: "[feature name] [phase] [--role name] [--force]"
 ---
 
 Use the **dev-spec-driven** skill approval gate.
@@ -14,18 +14,22 @@ test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <
 **The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
-`saas-sections` / `ai-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
+`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
 `bug.md`); test-plan: `placeholders`, `traceability` (every AC has a test row, and no row cites an AC
 requirements.md doesn't define); eval-plan: `placeholders`; tasks: `placeholders` (no placeholder tasks),
 `traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks); tests (the Phase 4 sign-off —
 failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
 +ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
 core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
-`root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `approval-gates`.
+`root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
+(project checks without a passing run since the last tick), `approval-gates`.
 `tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
 `gatesOk` stays false and `spec_next_action` asks for it until it is approved. **Phase by phase:** a phase is
 refused while an EARLIER active phase that has an artifact is still unapproved — check `phase-order`, naming the
-phase(s) to approve first (a bugfix's tasks can't be approved before its design / `bug.md`). On a refusal, show the failing checks and fix them (or ask the user to) — don't retry blindly.
+phase(s) to approve first (a bugfix's tasks can't be approved before its design / `bug.md`; on a design-first feature
+the design comes before the requirements). On a refusal, show the failing checks and fix them (or ask the user to) —
+don't retry blindly. "Fix it" or "go ahead" said about the outcome is not an approval of an artifact the user hasn't
+seen: present it first (in a bugfix, the reproduction and the root cause in `bug.md`).
 
 `force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only
 when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —

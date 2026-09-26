@@ -51,6 +51,20 @@ MCP tool a grader names exists — fix a fixture there, not after a paid run.
 
 ## Run (local only — no CI, by design)
 
+**Tags** select cases (several tags OR together):
+
+| Tag | Cases |
+|---|---|
+| `triggering` | the five cases that must fire the workflow |
+| `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the three keyword near-misses) |
+| `behavior` | the seven behavioural cases (need `--scaffold` and the real MCP server — below) |
+| `evidence` · `bugfix` · `gates` · `finish` · `upgrade` | one workflow rule: `evidence` = the two evidence cases, `bugfix` = the bugfix trigger + behaviour cases, `upgrade` = the upgrade trigger + behaviour cases |
+| `en` · `pt` · `es` | every case in that language (triggering and behavioural mixed) |
+
+A tag shared by triggering and behavioural cases (`bugfix`, `upgrade`, a language) selects both kinds, so run it with
+the behavioural flags. To check one rule after editing the skill, run its tag alone — e.g. `--tag evidence` after a
+change to Principle 6 / `references/verification.md`, `--tag bugfix` after a change to the bugfix flow.
+
 ```bash
 # Triggering suite (cheap: 4 turns, only the Skill tool)
 claude plugin eval . --ablation none --tag triggering negative --trust-plugin --no-publish --max-cost-usd 5
@@ -60,6 +74,10 @@ claude plugin eval . --ablation none --tag near-miss --trust-plugin --no-publish
 # Behavioural suite — needs the fixtures, the real MCP server and write tools
 claude plugin eval . --ablation none --tag behavior --scaffold --allow-real-servers --trust-plugin --no-publish \
   --allow-tools Write Edit "mcp__plugin_dev-spec-driven_spec-driven__*" --max-cost-usd 8 -j 3
+
+# One rule only (here: the evidence rule) — same flags, one tag
+claude plugin eval . --ablation none --tag evidence --scaffold --allow-real-servers --trust-plugin --no-publish \
+  --allow-tools Write Edit "mcp__plugin_dev-spec-driven_spec-driven__*" --max-cost-usd 3
 ```
 
 - `--scaffold` runs each case's `fixture.sh` (bash — Git Bash on Windows) in the run's empty workspace, as you.
@@ -95,9 +113,9 @@ Reference runs (default model, `-j 3`):
 | Case | Score | Notes |
 |---|---|---|
 | `behavior-plan-first-en` | 1.00 (2/2) | starts at Phase 0 (`spec_classify`) and asks for approval; nothing written outside `.specs/` (smoke run: it did not even scaffold before the Phase 0 OK) |
-| `behavior-bugfix-root-cause-pt` | 1.00 (2/2) | stopped at the bug.md gate. In the smoke run the agent wrote bug.md, the regression test and **the fix** in one go (no approval, red never seen) — `stops-at-gate` was added for that; it would have scored 0.83 |
+| `behavior-bugfix-root-cause-pt` | 1.00 (2/2) | stopped at the bug.md gate. In the smoke run the agent wrote bug.md, the regression test and **the fix** in one go (no approval, red never seen) — `stops-at-gate` was added for that; it would have scored 0.83. **Addressed in the skill (1.14):** SKILL.md (Bugfix mode, `/spec-bugfix` row), `references/bugfix.md` and `/spec-bugfix` now say to STOP for the `bug.md` approval after the root cause ("fix it" is no approval of it), to see the regression test fail (`_Expect: fail_`) before the fix, and to ask the user to run it when there is no shell |
 | `behavior-evidence-recorded-es` | 1.00 (2/2) | recorded `{command, exitCode: 0, summary}` from the user's report |
-| `behavior-evidence-no-bare-tick-en` | 0.75 (0/2) | **real gap**, kept failing on purpose: it never invents an exit code, but 4 of 5 runs ticked with a summary-only note ("not run — no shell"), which the engine accepts as *unverified*, instead of asking for the run first (the smoke run asked first and passed). The skill says what a note does, not that a missing shell is a reason to stop — proposed rule: without a way to run a task's runnable `_Verify:_`, don't tick; ask for the output (or `dev-spec done <f> <n> --run`) and tick unverified only when the user asks for exactly that. (Re-run after splitting its grader into "no tick" + "no invented exit code": $0.30) |
+| `behavior-evidence-no-bare-tick-en` | 0.75 (0/2) | **real gap** at the time of this run: it never invents an exit code, but 4 of 5 runs ticked with a summary-only note ("not run — no shell"), which the engine accepts as *unverified*, instead of asking for the run first (the smoke run asked first and passed). The skill said what a note does, not that a missing shell is a reason to stop. (Re-run after splitting its grader into "no tick" + "no invented exit code": $0.30.) **Addressed in the skill (1.14):** the rule is now SKILL.md Principle 6 and Phase 6, `references/verification.md` ("When you can't run the command yourself"), `/executeTask`, `/next-action` and the implementer agent — without a way to run a task's runnable `_Verify:_`, don't tick; ask for the output (or `dev-spec done <f> <n> --run`) and tick unverified only when the user asks for exactly that. The score above predates it: re-run `--tag evidence` to confirm |
 | `behavior-finish-local-merge-en` | 1.00 (2/2) | `spec_finish`, then "1. merge into main locally · 2. keep the branch" after asking for a fresh suite run. The first `stays-local` rubric made the haiku judge fail a correct answer 3/3; it now lists the FAIL conditions and passes |
 | `behavior-gate-refused-es` | 1.00 (2/2) | no `force`, no self-approved design; the refusal explained in ES (smoke run: read `spec_doctor`, named placeholders, Constitution Check and the five [SaaS] sections, offered to draft the design for review) |
 | `behavior-upgrade-audit-pt` | 1.00 (2/2) | `spec_upgrade {}` audit per feature and the apply plan, then asks before applying; no spec edited |

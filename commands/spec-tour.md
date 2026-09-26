@@ -36,8 +36,9 @@ they choose to keep the feature, archive it or remove it.
    an edit after it shows as "changed since approval".*
 8. **Execute one task** — implement task 1, run its `_Verify:_` command yourself and record the run:
    `spec_complete_task {name, number: 1, evidence: {command, exitCode, summary}}` (CLI
-   `dev-spec done <feature> 1 --run`). *Gate: a runnable `_Verify:_` counts only with the command and exit code
-   0; a failing run refuses the tick.*
+   `dev-spec done <feature> 1 --run`). No shell in this session? Ask the user to run the command and paste the
+   output, and record that — never a run nobody made. *Gate: a runnable `_Verify:_` counts only with the command and
+   exit code 0; a failing run refuses the tick.*
 9. **Where am I?** — `spec_next_action`: it names the next step (task 2). *Gate: one next step, phase by phase —
    the way back into any feature.*
 10. **Finish** — `spec_finish {name}`: with task 2 open it answers not ready and lists that blocker. *Gate: finish

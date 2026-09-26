@@ -7,5 +7,5 @@ Use the **dev-spec-driven** skill status workflow. Short alias for `/spec-status
 
 Target: $ARGUMENTS
 
-Run `spec_status` for a named feature (tracks, phase, tasks, scale/eval completeness) or
+Run `spec_status` for a named feature (tracks, phase, tasks, each active track's section completeness, eval state) or
 `spec_list` for all features. Keep it concise. Respond in the user's language (EN/PT/ES).

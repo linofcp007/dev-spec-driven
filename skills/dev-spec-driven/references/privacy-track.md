@@ -15,11 +15,13 @@ flow is often `core +tdd +sec +privacy`, a recommendation engine `core +ai +priv
 
 | Signal strength | Examples |
 |---|---|
-| **Strong** (one is enough) | GDPR, RGPD, LGPD, CCPA, HIPAA, personal data, PII, DPIA, data subject, right to erasure, data portability, consent, data retention, anonymization / pseudonymization · *dados pessoais, titular dos dados, direito ao apagamento, consentimento, AIPD, CNPD* · *datos personales, derecho de supresión, consentimiento, EIPD, AEPD* |
-| **Weak** (needs a second one) | user data, user profile, email address, phone number, date of birth, cookies, geolocation, health data, opt-in / opt-out, unsubscribe, privacy · *dados do utilizador, privacidade* · *datos de usuario, privacidad* |
+| **Strong** (one is enough) | GDPR, RGPD, LGPD, CCPA, HIPAA, personal data, PII, DPIA, data subject, right to erasure, data portability, data retention, anonymization / pseudonymization · *dados pessoais, titular dos dados, direito ao apagamento, AIPD, CNPD* · *datos personales, derecho de supresión, EIPD, AEPD* |
+| **Weak** (needs a second one) | user data, user profile, email address, phone number, date of birth, cookies, geolocation, health data, opt-in / opt-out, unsubscribe, privacy, **consent**, retention period / policy · *dados do utilizador, privacidade, consentimento* · *datos de usuario, privacidad, consentimiento* |
 
-Since 1.14, GDPR / RGPD / HIPAA are `+privacy` signals (they used to switch `+saas` on). A negated
-signal ("no personal data", "sem dados pessoais") keeps the track off and says so.
+Since 1.14, GDPR / RGPD / HIPAA are `+privacy` signals (they used to switch `+saas` on). Consent and retention
+words are weak on purpose: an OAuth consent screen or a trash folder's retention period is no personal-data
+processing until another privacy signal says so. A negated signal ("no personal data", "sem dados pessoais") keeps the
+track off and says so. Rules for every track: `classification-matrix.md`.
 
 Turn it on later with `spec_add_track {name, track: "privacy"}` (`dev-spec add-track <feature> privacy`);
 `remove: true` turns it off without deleting anything.

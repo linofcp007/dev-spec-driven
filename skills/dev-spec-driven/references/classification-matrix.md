@@ -9,7 +9,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 
 ---
 
-## The four tracks
+## The six tracks
 
 | Track | Adds | Activated when… |
 |---|---|---|
@@ -17,8 +17,30 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+tdd** | Test Plan + failing-tests-first + red-green-refactor execution | correctness matters / it's hard to undo |
 | **+saas** | 5 mandatory scale design sections, multi-tenancy, observability, cost, load test | production system with real users at scale |
 | **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle, eval-gated execution | feature quality depends on LLM/agent/embedding output |
+| **+sec** | 5 mandatory `[SEC]` sections (STRIDE threat model, ASVS level, authn/authz, secrets, security testing), 3 criteria, abuse-case tests, `security.md` | a mistake here is a breach, not just a bug |
+| **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
 
-`core` is always on. The other three are added independently based on the signals below.
+`core` is always on. The other five are added independently based on the signals below.
+
+### How `spec_classify` weighs a signal
+
+The classifier is a local keyword heuristic (EN/PT/ES, whole words — never substrings — negation-aware). Its output
+is a draft for the human, who confirms Phase 0.
+
+- **Strong** signals turn a track on alone; **weak** ones need a second signal: score = 2 × strong + weak, a track
+  turns ON at 2 (one strong, or two weak — then a note says "on from weak signals only — double-check"), and a lone
+  weak signal is reported as **possible** (a note), not enabled.
+- **Corroborating-only** signals (`permission` / `permissão` / `permiso` for +sec) count as weak evidence only beside
+  another signal of the same track ("RBAC permissions"); alone they are no hint at all (file permission bits, a leave of
+  absence).
+- A weak word inside a longer strong phrase of another track is part of that phrase: `model` in "threat model" is no
+  +ai hint, `security` in "row-level security" no +sec one.
+- Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
+  password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
+- Upper-case acronyms are matched case-sensitively where the lower-case word means something else: `STRIDE` (weak +sec)
+  — a lower-case "stride" is an array stride.
+- **Negation never vetoes a track**, it annotates it: "no personal data" keeps +privacy off and says so; a negated
+  keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
 
 ---
 
@@ -34,7 +56,8 @@ set determines which artifacts, design sections, and execution loop the feature 
      fix; always `+tdd`). See `bugfix.md`.
    - Everything else → **Spec**. When torn between two modes, take the heavier one.
 2. **In Spec mode, evaluate each track's signals** (tables below). Any matching signal turns the
-   track on.
+   track on. (A spike — a question to answer, not a feature — is `/spec-spike`, core-only; an architecture that is
+   the input rather than the output takes the design-first order — see `design-first.md`.)
 3. **Present for approval** the mode, the active track set, the signals that triggered each, and the
    blast radius. If the user disagrees, adjust the track set before requirements.
 4. **After approval**, `spec_init {tracks, lang}` if steering is missing, then
@@ -110,6 +133,57 @@ See `classification-examples-ai.md` for worked AI examples across chatbots, RAG,
 
 ---
 
+## +sec signals (turn on the security track)
+
+Turn on `+sec` if **any** are true:
+
+| Signal | Example |
+|---|---|
+| Credentials and sessions | Login, password reset, API keys, tokens, MFA — beyond the happy path |
+| Trust boundary | A public endpoint, a webhook receiver, a file upload, a third-party callback |
+| Who may do what | Roles, permissions, object-level authorization, admin functions |
+| Secrets or keys | The feature stores, rotates or uses secrets, encryption keys, signing keys |
+| Security explicitly in scope | A threat model, a pentest finding, an OWASP / ASVS requirement, a CVE to fix |
+
+Classifier signals — **strong:** threat model, OWASP, XSS, CSRF, SQL / command injection, pentest, vulnerability, CVE,
+ASVS, secrets management, encryption at rest / in transit, security audit / review / test, SAST / DAST, attack surface,
+privilege escalation, SSRF, credential stuffing, zero trust, mTLS, content security policy (and their PT/ES forms:
+*modelo de ameaças, teste de intrusão, gestão de segredos · modelo de amenazas, prueba de penetración*). **Weak:**
+authentication, authorization, RBAC, access control, access / refresh token, API key, credential, encryption, TLS,
+CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, brute force, `STRIDE`.
+**Corroborating only:** permission. Never a bare "injection" (dependency injection) or "https".
+
+Skip `+sec` when the feature crosses no trust boundary and handles nothing sensitive (a static page, an internal
+report over public data). Details: `security-track.md`.
+
+---
+
+## +privacy signals (turn on the privacy track)
+
+Turn on `+privacy` if **any** are true:
+
+| Signal | Example |
+|---|---|
+| Personal data collected or stored | Sign-up, profiles, contact forms, support tickets, IP / device IDs, location |
+| Personal data shared or processed elsewhere | An analytics or email provider, an LLM provider, an export to a partner |
+| Profiling or special categories | Recommendations about a person, health, biometric or financial data |
+| Data subject rights | Account deletion, data export, consent management, retention jobs |
+| Regulation named | GDPR / RGPD, LGPD, CCPA, HIPAA, a DPIA |
+
+Classifier signals — **strong:** GDPR, RGPD, LGPD, CCPA / CPRA, HIPAA, personal data, PII, DPIA, data protection, data
+subject, right to erasure / to be forgotten, data portability, data retention, anonymization / pseudonymization, data
+minimisation, data processing agreement, privacy by design / policy / notice, special category data, data controller /
+processor, international transfer, standard contractual clauses (*dados pessoais, titular dos dados, AIPD, CNPD ·
+datos personales, derecho de supresión, EIPD, AEPD*). **Weak:** user / customer data, user profile, email address,
+phone number, date of birth, cookie, user tracking, geolocation, biometric, health data, opt-in / opt-out, unsubscribe,
+privacy, account deletion, data export, DPA, **consent**, retention period / policy — generic alone (an OAuth consent
+screen, a trash folder's retention) until a second privacy signal corroborates them.
+
+Since 1.14, GDPR / RGPD / HIPAA turn `+privacy` on, not `+saas`. Skip `+privacy` when no information about an
+identifiable person is involved. Details (not legal advice): `privacy-track.md`.
+
+---
+
 ## How tracks combine — what each artifact set looks like
 
 | Track set | Artifacts in `.specs/<feature>/` |
@@ -122,16 +196,21 @@ See `classification-examples-ai.md` for worked AI examples across chatbots, RAG,
 | `core +ai +saas` | AI sections + scale sections + eval gate + cost/observability validation |
 | `core +tdd +ai` | deterministic TDD for plumbing **and** eval gate for generation |
 | `core +tdd +saas +ai` | the full pipeline — every gate applies |
+| `core +sec` | design gains 5 `[SEC]` sections; `[SEC]` criteria US-1.AC-10..12; security tasks; `steering/security.md` |
+| `core +privacy` | design gains 6 `[PRIVACY]` sections; `[PRIVACY]` criteria US-1.AC-13..15; privacy tasks; `steering/privacy.md` |
+| `core +tdd +sec +privacy` | a typical sign-up / account feature: abuse-case and data-rights tests in the test plan |
 
-**Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` adds its 10, on
-top of the base design. A blank mandatory section is never acceptable — an honest "not needed
-because X" is.
+**Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5 and `+privacy`
+its 6, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
 - Generation/prompt task on `+ai` → prompt-iteration loop gated on eval delta → `spec_complete_task {evidence}`.
 - Plain task on `core` only → implement → run existing tests + its `_Verify:_` → `spec_complete_task {evidence}`.
 - `+saas` hot path → load-test task at the end must pass before "done".
+- `+sec` → the security-testing task's `_Verify:_` runs the scans and the abuse-case tests; `+privacy` → data subject
+  rights verified end to end before "done".
 
 ---
 
@@ -144,12 +223,14 @@ because X" is.
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
 - **+saas:** [signal] — [why]
 - **+ai:** [signal] — [why]
+- **+sec:** [signal] — [why]
+- **+privacy:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

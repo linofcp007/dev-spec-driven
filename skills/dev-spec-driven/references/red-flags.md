@@ -48,12 +48,19 @@ and rewritten from the test — not "kept as reference", not "adapted".
 | "While I'm here I'll also refactor X" | Out of the task = out of scope. File it. |
 | "The subagent said DONE" | Review the diff and the evidence. A report is a claim. |
 | "The command is slow, a note will do" | A runnable `_Verify:_` counts only with its command and exit 0. Run it. |
+| "I have no shell here, so I'll tick it with a note" | No run, no tick. Name the `_Verify:_` command and ask the user for its output (or `dev-spec done <f> <n> --run`); tick unverified only if they ask for exactly that. |
+| "It surely exits 0 — I'll record `exitCode: 0`" | An exit code nobody saw is a fabricated run, the worst claim of all. |
+| "`npm test \| tee log` is fine" | A pipeline reports its LAST command's exit code — a failing suite reads as passing. Drop the pipe or `set -o pipefail`. |
+| "The Stop hook sent me back — I'll rephrase the summary" | It sent you back because a claim has no evidence. Run the check, or say plainly what is not verified. |
+| "The test passed on the first run, good" | On an `_Expect: fail_` task that is `unexpected-pass`: the test doesn't reproduce anything yet. |
 
 ## Gates & changes after approval
 
 | Thought | Reality |
 |---|---|
 | "The approval was refused — I'll just `--force` it" | Force is the human's call, over named failures, and it stays flagged. Fix the checks or ask. |
+| "Everything is filled, I'll `/spec-ff` it myself" | A fast-forward is still the human's approval of every phase it records. Ask first. |
+| "We decided that in chat, no need to write it down" | Decisions in chat are lost at the next compaction. `/spec-decide` — `decisions.md` travels with the spec. |
 | "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `/spec-impact`, then re-approve. |
 | "I'll add the missing tasks myself" | Follow-up work goes through `/spec-converge`: the human approves the list first. |
 | "The finished feature's spec is stale, I'll rewrite it" | Write the new behaviour in a new feature with `_Supersedes:_`; keep history. |
@@ -71,6 +78,16 @@ and rewritten from the test — not "kept as reference", not "adapted".
 | Thought | Reality |
 |---|---|
 | "Quick fix now, investigate later" | No fix before the root cause (`bug.md → Root Cause`). |
+| "They said 'fix it' — that approves my root cause" | "Fix it" asks for the outcome. Present the reproduction and root cause; wait for the `bug.md` approval. |
+| "I can't run the regression test here — I'll just apply the fix" | The red run is the fix's proof. Ask the user to run the test first. |
 | "One more attempt" (after the third failed fix) | Stop; question the design with the human. |
 
-See also: `verification.md`, `bugfix.md`, `review-feedback.md`.
+## Security & privacy (+sec, +privacy)
+
+| Thought | Reality |
+|---|---|
+| "It's only a login, no need for a threat model" | Credentials and trust boundaries are exactly where breaches start. Let `spec_classify` and the matrix decide; when unsure, turn `+sec` on. |
+| "We only store an email address, GDPR doesn't apply" | An email address is personal data. `+privacy`: inventory, lawful basis, retention, rights. |
+| "Legal will sort out the DPIA later" | The spec records the DPO's decision now; "later" is after the data is collected. |
+
+See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`.

@@ -16,7 +16,9 @@ tests for limits). Assign stable test IDs (T-01 …), map each to AC IDs, and pi
 "always / never / for every" criteria, WHILE criteria, tenant isolation, round-trips, totals that must balance.
 Name a concrete test path in the **File** column when you know it — `trace_check {code: true}` then looks for the
 T-ID in that file. On +saas add tenant-isolation, rate-limit, idempotency, authorization-matrix, and audit-log
-tests. Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
+tests; on +sec one abuse-case test per material threat (401 / 403 + audit event, no secret in responses or logs —
+the "never" rules are `property` rows; `references/security-track.md`); on +privacy export, erasure-in-every-store
+and retention-expiry tests (`references/privacy-track.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
 row covers. The Coverage Check must show every AC appears in ≥1 test. Write `test-plan.md` (no template
 placeholders left — the test-plan gate refuses them) and present for approval — no test code yet. See
 `references/test-patterns.md` (Property-Based Tests; Test IDs in test names).

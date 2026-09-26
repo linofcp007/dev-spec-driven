@@ -20,16 +20,29 @@ code and output summary — evidence before claims (`references/verification.md`
 - evidence marked **stale** by `/spec-impact --reopen` (or recorded for an earlier `_Verify:_` command) no longer
   counts: run the check again;
 - duplicate task numbers resolve to the first open one — renumber them (doctor warns `duplicate-tasks`);
-- a bugfix refuses tasks after the root-cause task until `bug.md → Root Cause` is filled.
-CLI: `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` and records the result.
+- a bugfix refuses tasks after the root-cause task until `bug.md → Root Cause` is filled;
+- a task marked **`_Expect: fail_`** (it writes a test before its code) is proven by a **failing** run — record the
+  red run; a passing one is refused (`unexpected-pass`: the test doesn't fail yet);
+- a `_Verify:_` that pipes (`npm test | tee log`) reports the last command's exit code — the tick carries
+  `pipeMasked`; drop the pipe or `set -o pipefail`.
+CLI: `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` and records the result (with the git commit).
+
+**Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
+bare, not with a note, never with an exit code nobody saw. Name the command and ask the user to run it and paste the
+output (or to run `dev-spec done <feature> <n> --run`); record exactly what they report
+(`{command, exitCode, summary}`). Tick it unverified only if the user explicitly asks for exactly that, and say it
+stays unverified. In Claude Code the Stop hook sends back a closing "done" / "tests pass" while a ticked task has no
+passing evidence — the fix is the run, or saying plainly what is not verified. With project checks set
+(`meta.checks`), each brief lists them; run them before calling a task done.
 
 **`--subagents` (or the user asks for subagents).** Follow `references/subagent-execution.md`: check the
 preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes,
 baseline green: run the full suite once and ledger the result),
 then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:spec-implementer` agent with the brief and
 report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
-fix loop (max 5 rounds) → `spec_complete_task` only after a clean review. Keep the ledger. Stop at every
-`**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
+fix loop (max 5 rounds) → `spec_complete_task` only after a clean review, with the evidence from the implementer's
+report (the SubagentStop hook sends back a DONE whose report lacks each `_Verify:_` command and its exit code). Keep
+the ledger. Stop at every `**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
 AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt/eval) run inline. If the
 host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate
 worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol).
@@ -37,5 +50,6 @@ worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol).
 When the last task is done, run `/spec-converge` if you doubt every AC is delivered, then close with `/spec-finish`.
 
 Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
-validation (+saas), cost + safety validation (+ai). If blocked, pause and discuss rather than
-improvising outside the design. Respond in the user's language (EN/PT/ES).
+validation (+saas), cost + safety validation (+ai), security scans + threat model re-check (+sec), data subject
+rights + retention verified (+privacy). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
+pause and discuss rather than improvising outside the design. Respond in the user's language (EN/PT/ES).

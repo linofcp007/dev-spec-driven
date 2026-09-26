@@ -40,7 +40,8 @@ the principles the code *already* follows (e.g. "all DB access goes through the 
 For each module you document: `spec_create` a feature, then fill `requirements.md` and `design.md`
 to describe **what the code does today** (note "reverse-engineered" at the top). Keep AC IDs stable.
 Where helpful, classify the module into tracks (a payment module is `+tdd`; a multi-tenant API is
-`+saas`) so the mandatory sections prompt you to capture isolation/observability/cost reality.
+`+saas`; a login or an admin API `+sec`; anything holding personal data `+privacy`) so the mandatory sections
+prompt you to capture isolation/observability/cost, threat-model and data-inventory reality.
 
 **Validate accuracy:** the reverse-engineered spec must match real behavior — endpoints match
 routes, data models match the schema, error handling matches the code. Spot-check against the source.
@@ -74,21 +75,32 @@ test files, and `spec_finish {write: true}` records the implementing files so `s
 
 ## Import from other spec tools
 
-Specs already written for another tool become dev-spec features with `spec_import {tool, path, name?, tracks?,
-lang?}` (CLI `dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--tracks …] [--lang pt]`). The path must
-be inside the project; the source is only read; the result is always a NEW feature (an existing slug is an error).
+Specs and plans already written for another tool become dev-spec features with `spec_import {tool, path, name?,
+tracks?, lang?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks …]
+[--lang pt]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
+NEW feature (an existing slug is an error).
 
 | Tool | Source | Mapping |
 |---|---|---|
 | `kiro` | `.kiro/specs/<name>/` — `requirements.md`, `design.md`, `tasks.md` | `### Requirement N` + numbered WHEN/THEN/SHALL criteria → `US-N.AC-M`; `_Requirements: 1.1, 2.3_` rewritten to the new AC IDs; `design.md` carried over |
 | `spec-kit` | `specs/<nnn-name>/` — `spec.md`, `plan.md`, `tasks.md` | user stories + Given/When/Then acceptance scenarios → `US-N.AC-M` (story numbers kept when unique); `FR-xxx` / `SC-xxx` keep their IDs; `plan.md` → `design.md`; `T001 [P] [US1] …` tasks renumbered 1…K |
 | `openspec` | `openspec/specs/<capability>/spec.md`, or a change folder `openspec/changes/<id>/` | `### Requirement:` + `#### Scenario:` → `US-N.AC-M`; a change folder's `proposal.md` gives the summary and its `specs/` deltas the requirements (REMOVED / RENAMED ones are reported as warnings, not imported) |
+| `plan` | a Markdown plan: Claude Code plan mode, or a Cursor plan `.cursor/plans/*.plan.md` (`name` / `overview` / `todos` front matter) | goals and acceptance-like bullets (Goals, Acceptance / Success Criteria, Verification…) → US-1's criteria; checklists, Cursor `todos` or a Steps / Implementation section's items → tasks keeping their state (a cancelled to-do comes in open, with a warning); the file paths a step names → `_Implements:_`; the rest (context, approach, files, verification commands) → `design.md` |
+| `execplan` | a Codex ExecPlan written per `PLANS.md` | Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps → tasks, with `_Verify:_` when a step names a test / lint / build / curl command; Decision Log → `design.md` "## Decisions" (D-1…); Purpose → the summary; the living sections (Surprises & Discoveries, Outcomes, Context, Plan of Work…) → `design.md` |
+| `bmad` | BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/` (v6: `_bmad-output/planning-artifacts/`), `docs/stories/*.md`, `docs/architecture.md` — or one story file | epic stories + story files (the file wins) → `US-1…US-n` in story order, their ACs → `US-n.AC-m`; `FR1` / `NFR1` → `FR-1` / `NFR-1`; Tasks / Subtasks → tasks tagged `[USn]` with `(AC: 1, 3)` → `_Requirements:_`; architecture + Technical Assumptions + Dev Notes → `design.md`; Status / Change Log named in a warning, not imported |
+
+**Claude Code plans live outside the project.** Plan mode saves them under `plansDirectory` — by default
+`~/.claude/plans` — so the import refuses that path (it must resolve inside the project): copy the plan file into
+the project first, or set `plansDirectory` to a folder inside it. A folder holding several plans is refused — name
+the file. A plan or ExecPlan names its feature from its title, BMAD from the PRD (one story file: the story's title).
+A plan that is mostly architecture fits the design-first order (`spec_feature {action: "flow", name, flow:
+"design-first"}` — `references/design-first.md`).
 
 For every tool: each scenario becomes ONE EARS criterion (`WHEN … THE SYSTEM SHALL …`) where possible, else its
-text is kept with `[NEEDS CLARIFICATION]`; tasks keep their checkbox state and `[P]`/`[USn]` tags; the active
-tracks' mandatory design sections are appended when the imported design lacks them; every generated artifact
-carries an "Imported from <tool> <path> on <date>" note. Tracks come from `tracks`, else are classified from the
-imported requirements. The result returns `mapping` (old ID → new ID) and `warnings` — show both, confirm the
+text is kept with `[NEEDS CLARIFICATION]`; tasks are renumbered 1…K and keep their checkbox state and `[P]`/`[USn]`
+tags; the active tracks' mandatory design sections are appended when the imported design lacks them; every generated
+artifact carries an "Imported from <tool> <path> on <date>" note. Tracks come from `tracks`, else are classified from
+the imported requirements. The result returns `mapping` (old ID → new ID) and `warnings` — show both, confirm the
 tracks with the human (Phase 0), then run the normal gates. Imported checkboxes carry no evidence: re-verify
 ticked tasks before trusting them.
 

@@ -22,7 +22,8 @@ many it doesn't (`.mts`/`.cts`, C++ `.cc`/`.hpp`, Scala, Dart, F#, Elixir, Lua, 
 `.bat`/`.cmd`, PowerShell, SQL, Kotlin script, CUDA, Fortran, HDL, shaders, code-bearing templates such as
 `.erb`/`.razor`, notebooks…). It is
 silent too for spec files, non-code files (docs, config, markup, styles), files outside the project, and
-whenever the guard is off. An approval recorded with `--force` still counts, with a note saying so. A tasks approval whose
+whenever the guard is off. An approval recorded with `--force` still counts, with a note saying so; a tasks phase still
+waiting for a role's sign-off (approvals by role, `/approve`) does not count yet. A tasks approval whose
 tasks.md changed afterwards (tasks appended with `spec_append_tasks` or edited by hand — ticking boxes doesn't
 count) no longer covers code edits: the prompt names the feature until its tasks phase is re-approved. It
 never blocks on its own error, and the human can always confirm the edit.
