@@ -433,6 +433,158 @@ function endRun() {
   const enOverReq = fs.readFileSync(path.join(ptDir, ".specs", "override-en", "requirements.md"), "utf8");
   ok(enOver.lang === "en" && /## User Stories/.test(enOverReq), "per-feature lang overrides the project default (EN feature in a PT project)");
 
+  // --- 1.14 D1: Brazilian Portuguese (pt-BR) — a fourth locale, DERIVED from European pt (i18n.js toPtBr) ---
+  {
+    const I = require("./lib/i18n.js");
+    // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])a correr(?![\p{L}])|por defeito|por omissão/iu;
+    // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
+    ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
+      ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&
+      S.normalizeLang("es-MX") === "es" && S.normalizeLang("fr") === "en" && S.canonicalLang("fr") === null && S.canonicalLang("br") === null &&
+      S.LANGS.join() === "en,pt,es,pt-BR" && I.baseLang("pt-BR") === "pt" && I.baseLang("pt") === "pt",
+      "pD1: pt-BR / pt_BR / pt-br / ptbr → pt-BR; pt and pt-PT stay European; unknown: normalizeLang → en, canonicalLang → null");
+    const langEnums = list.result.tools.filter((t) => t.inputSchema.properties && t.inputSchema.properties.lang).map((t) => (t.inputSchema.properties.lang.enum || []).join());
+    ok(langEnums.length >= 7 && langEnums.every((e) => e === "en,pt,es,pt-BR"), "pD1: every MCP `lang` enum is en, pt, es, pt-BR (" + langEnums.length + " tools)");
+
+    // 2. a pt-BR project end to end over MCP: init → create → Brazilian scaffold → filled → doctor → approve → done → roadmap
+    const brDir = path.join(tmp, "proj-ptbr-d1");
+    const brInit = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["tdd"], lang: "pt_BR", projectDir: brDir } }));
+    const brRm = () => JSON.parse(fs.readFileSync(path.join(brDir, ".specs", "roadmap.json"), "utf8"));
+    const brSteer = fs.readdirSync(path.join(brDir, ".specs", "steering")).map((n) => fs.readFileSync(path.join(brDir, ".specs", "steering", n), "utf8"));
+    ok(brInit.lang === "pt-BR" && brRm().meta.lang === "pt-BR" && /# Constituição/.test(brSteer.join("\n")) && /usuário/.test(brSteer.join("\n")) &&
+      !brSteer.some((t) => EU_ONLY.test(t)),
+      "pD1: spec_init lang 'pt_BR' (an alias the MCP enum folds) stores meta.lang 'pt-BR' and writes Brazilian steering (usuário, no utilizador/ficheiro)");
+    const brFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Cadastro de Usuários", tracks: ["tdd"], summary: "Cadastro com e-mail e senha", projectDir: brDir } }));
+    const bf = path.join(brDir, ".specs", brFeat.slug);
+    const brRead = (n) => fs.readFileSync(path.join(bf, n), "utf8");
+    const brScaffold = fs.readdirSync(bf).filter((n) => n.endsWith(".md"));
+    const brReq = brRead("requirements.md");
+    ok(brFeat.ok && brFeat.lang === "pt-BR" && JSON.parse(brRead(".state.json")).lang === "pt-BR" && brScaffold.length >= 6 &&
+      /## Histórias de Usuário/.test(brReq) && /## Fora do Escopo/.test(brReq) && /usuários completam/.test(brReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — QUANDO \[gatilho\] O SISTEMA DEVE \[comportamento\]/.test(brReq) && /\[NEEDS CLARIFICATION: que provedor\?\]/.test(brReq) &&
+      /\(arquivos diferentes, sem deps\)/.test(brRead("tasks.md")) && /_Requirements: US-1\.AC-1_/.test(brRead("tasks.md")) && /\| T-01 \| unit \| example \|/.test(brRead("test-plan.md")) &&
+      !brScaffold.some((n) => EU_ONLY.test(brRead(n))),
+      "pD1: spec_create inherits pt-BR — Brazilian headings and vocabulary (Histórias de Usuário, Fora do Escopo, arquivos), stable IDs / EARS / markers, no European-only word in any artifact (" +
+      brScaffold.filter((n) => EU_ONLY.test(brRead(n))).join(", ") + ")");
+    const keepTag = (m) => /^\[(?:US\d+|P|shared|x| )\]$/.test(m) || /^\[NEEDS/.test(m);
+    const fillBr = (t) => t.replace(/> \*\*TODO\*\*[^\n]*\n?/g, "").replace(/\[[^\]\n]*\]/g, (m) => (keepTag(m) ? m : "o usuário envia o formulário de cadastro"));
+    for (const n of ["classification.md", "requirements.md", "design.md", "test-plan.md"]) fs.writeFileSync(path.join(bf, n), fillBr(brRead(n)));
+    fs.writeFileSync(path.join(bf, "tasks.md"), ["# Tasks: Cadastro de Usuários", "", "## História US-1 (P1 — MVP)",
+      "- [ ] 1. [US1] Validar o e-mail e a senha no cadastro", "  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_", "  - _Makes green: T-01, T-02, T-03, T-04_",
+      "  - _Implements: src/cadastro.js_", "**Checkpoint:** o cadastro funciona sozinho.", "", "## História US-2 (P2)",
+      "- [ ] 2. [US2] Confirmar o e-mail do usuário", "  - _Requirements: US-2.AC-1_", "  - _Makes green: T-05_", "  - _Implements: src/cadastro.js_", ""].join("\n"));
+    fs.mkdirSync(path.join(brDir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(brDir, "src", "cadastro.js"), "module.exports = {};\n");
+    fs.mkdirSync(path.join(brDir, "tests", "unit"), { recursive: true });
+    fs.writeFileSync(path.join(brDir, "tests", "unit", "cadastro.test.js"), ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} cadastro", () => {});`).join("\n") + "\n");
+    const brDoc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    const brGate = brDoc.checks.find((c) => c.id === "approval-gates");
+    ok(brDoc.verdict !== "fail" && brDoc.readyToAdvance === true && !brDoc.checks.some((c) => c.status === "fail") &&
+      /^aguardando aprovação humana: .* — execute \/approve antes de avançar$/.test(brGate.detail) && !brDoc.checks.some((c) => EU_ONLY.test(String(c.detail))),
+      "pD1: a filled pt-BR spec passes spec_doctor, its details in Brazilian Portuguese (got " + JSON.stringify(brDoc.checks.filter((c) => c.status !== "pass").map((c) => c.id + ": " + c.detail)) + ")");
+    const brCl = payload(await rpc("tools/call", { name: "spec_clarify", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    ok(brCl.verdict === "clear", "pD1: spec_clarify reads the Brazilian headings (Fora do Escopo, Critérios de Sucesso…) — clear (got " + JSON.stringify(brCl.questions) + ")");
+    const brAppr = [];
+    for (const ph of ["classification", "requirements", "design", "test-plan", "tests", "tasks"]) brAppr.push(payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: brFeat.slug, phase: ph, by: "ana", projectDir: brDir } })));
+    const brDone = [];
+    for (const n of [1, 2]) brDone.push(payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: brFeat.slug, number: n, evidence: { summary: "verificado à mão no navegador" }, projectDir: brDir } })));
+    const brNext = payload(await rpc("tools/call", { name: "spec_next_action", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    ok(brAppr.every((a) => a.ok && !a.forced) && brDone.every((d) => d.ok && d.verified) && brNext.step === "finish" &&
+      /^Todas as tarefas feitas — feche a feature com \/spec-finish cadastro-de-usuarios/.test(brNext.recommendation),
+      "pD1: every phase approves clean, both tasks tick, next_action says (in pt-BR) 'feche a feature' (got " + JSON.stringify([brAppr.map((a) => a.error || a.ok), brNext.recommendation]) + ")");
+    const brRoad = payload(await rpc("tools/call", { name: "spec_roadmap", arguments: { write: true, html: true, projectDir: brDir } }));
+    const brMd = fs.readFileSync(path.join(brDir, ".specs", "ROADMAP.md"), "utf8"), brHtml = fs.readFileSync(path.join(brDir, ".specs", "ROADMAP.html"), "utf8");
+    ok(brRoad.ok !== false && /AUTO-GERADO por dev-spec/.test(brMd) && /Legenda: ✅ feito · 🟡 em andamento · ⛔ bloqueada · 📋 planejada · ⬜ não iniciada/.test(brMd) &&
+      /Backlog \(planejadas, ainda sem spec\)/.test(brMd) && /Nada a sinalizar ✓/.test(brMd) && !/em curso|planeada|por começar|assinalar/.test(brMd) && /<html lang="pt-BR">/.test(brHtml),
+      "pD1: ROADMAP.md / .html chrome in Brazilian Portuguese (em andamento, planejada, não iniciada; <html lang=\"pt-BR\">)");
+    // per-feature override inside the pt-BR project: a European feature stays European; the MCP enum folds 'PT-pt' → pt
+    const euFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Faturas", tracks: ["core"], lang: "PT-pt", projectDir: brDir } }));
+    ok(euFeat.ok && euFeat.lang === "pt" && /## Histórias de Utilizador/.test(fs.readFileSync(path.join(brDir, ".specs", euFeat.slug, "requirements.md"), "utf8")),
+      "pD1: a per-feature lang 'PT-pt' in a pt-BR project is European Portuguese (Histórias de Utilizador)");
+    // every fresh pt-BR artifact (all tracks, and a bugfix) reads 'placeholder' — pt-BR's slots are known to the gates
+    const brAll = S.createFeature(brDir, "Tudo Junto", ["tdd", "saas", "ai", "sec", "privacy"]);
+    const brBug = S.createFeature(brDir, "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
+    const brStates = [brAll, brBug].flatMap((x) => fs.readdirSync(x.dir).filter((n) => n.endsWith(".md") && n !== "checklist.md").map((n) => [n, S.artifactState(path.join(x.dir, n))]));
+    ok(brAll.lang === "pt-BR" && brBug.lang === "pt-BR" && brStates.length >= 12 && brStates.every(([, st]) => st === "placeholder") &&
+      /^placeholders do template sem preencher na fase atual/.test(S.specDoctor(brDir, brAll.slug).checks.find((c) => c.id === "placeholders").detail),
+      "pD1: every fresh pt-BR scaffold artifact (all tracks + a bugfix) reads 'placeholder' — the gates know pt-BR's own slots (" + JSON.stringify(brStates.filter(([, st]) => st !== "placeholder")) + ")");
+    const brTpl = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: "init", artifact: "requirements", lang: "pt-br", projectDir: brDir } }));
+    const brTplFile = path.join(brDir, ".specs", "templates", "pt-BR", "requirements.md");
+    ok(brTpl.ok !== false && fs.existsSync(brTplFile) && /## Histórias de Usuário/.test(fs.readFileSync(brTplFile, "utf8")),
+      "pD1: spec_templates init --lang pt-br copies Brazilian templates into .specs/templates/pt-BR/");
+
+    // 3. every pt-BR string (messages, brief, steering, evals README, all artifact builders — each function called with
+    // probe arguments): no European-only word, English-stable tokens identical to pt's, idempotent, same key tree as pt
+    const probes = [["ARGA", "ARGB", "ARGC", "ARGD"], [2, 3, 4, 5], [["ARGA", "ARGB"], ["ARGC"], ["ARGD"], ["ARGE"]], [true, "ARGB", "ARGC", "ARGD"], [false, false, false, false]];
+    const brPairs = [];
+    const walk = (a, b, where, depth) => {
+      if (depth > 8) return;
+      if (typeof a === "string") return void brPairs.push([where, a, b]);
+      if (Array.isArray(a)) return void a.forEach((x, k) => walk(x, Array.isArray(b) ? b[k] : undefined, where + "[" + k + "]", depth + 1));
+      if (typeof a === "function") {
+        return void probes.forEach((p, k) => { let ra; try { ra = a(...p); } catch { return; } let rb; try { rb = b(...p); } catch (e) { rb = "THROW " + e.message; } walk(ra, rb, where + "()" + k, depth + 1); });
+      }
+      if (a && typeof a === "object" && !(a instanceof RegExp)) for (const k of Object.keys(a)) walk(a[k], b ? b[k] : undefined, where + "." + k, depth + 1);
+    };
+    walk(I.msg("pt"), I.msg("pt-BR"), "MSG", 0);
+    walk(I.brief("pt"), I.brief("pt-BR"), "BRIEF", 0);
+    for (const n of I.steeringKnownFiles()) brPairs.push(["STEERING." + n, I.steeringStub(n, "pt"), I.steeringStub(n, "pt-BR")]);
+    brPairs.push(["EVALS_README", I.evalsReadme("pt"), I.evalsReadme("pt-BR")]);
+    const allTr = ["tdd", "saas", "ai", "sec", "privacy"];
+    for (const t of [[], ...allTr.map((x) => [x]), allTr]) {
+      const a = { name: "ARGN", tracks: ["core", ...t], label: ["core", ...t].join(" +"), slug: "argn", summary: "", signals: { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] } };
+      for (const b of ["classification", "requirements", "design", "tasks", "checklist"]) brPairs.push(["BUILD." + b + "/" + t.join("+"), I[b](a, "pt"), I[b](a, "pt-BR")]);
+      brPairs.push(["BUILD.testPlan/" + t.join("+"), I.testPlan("ARGN", "pt", a.tracks), I.testPlan("ARGN", "pt-BR", a.tracks)]);
+    }
+    for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) brPairs.push(["BUILD." + b, I[b]("ARGN", "pt"), I[b]("ARGN", "pt-BR")]);
+    brPairs.push(["BUILD.bugReport", I.bugReport({ name: "ARGN" }, "pt"), I.bugReport({ name: "ARGN" }, "pt-BR")], ["BUILD.bugRequirements", I.bugRequirements({ name: "ARGN" }, "pt"), I.bugRequirements({ name: "ARGN" }, "pt-BR")]);
+    const euLeft = brPairs.filter(([, , b]) => typeof b !== "string" || EU_ONLY.test(b)).map(([w, , b]) => w + ": " + (typeof b === "string" ? (b.match(EU_ONLY) || [])[0] : typeof b));
+    ok(brPairs.length > 1500 && euLeft.length === 0,
+      "pD1: lint — no pt-BR string holds a European-only word (utilizador, ficheiro, ecrã, equipa, registo, palavra-passe, telemóvel, 'a correr', tens, podes…): " + brPairs.length + " strings (" + euLeft.slice(0, 6).join(" · ") + ")");
+    const STABLE = /US-\d+\.AC-\d+|SC-\d{3}|T-\d+|EC-\d+|NFR-\d+|\[(?:SaaS|AI|SEC|PRIVACY|US\d+|P|shared)\]|\[NEEDS CLARIFICATION|> \*\*TODO\*\*|\*\*Checkpoint:\*\*|_(?:Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Supersedes|Expect|Size):|```(?:mermaid|typescript)|## System|## User Template|`[^`\n]+`|\/spec-[a-z-]+|\b(?:QUANDO|ENQUANTO|ENTÃO|O SISTEMA(?: NÃO)? DEVE)\b/g;
+    const stableLost = brPairs.filter(([, a, b]) => typeof b === "string" && (a.match(STABLE) || []).join("\n") !== (b.match(STABLE) || []).join("\n")).map(([w]) => w);
+    ok(stableLost.length === 0, "pD1: English-stable tokens survive unchanged in every pt-BR string — IDs, [SaaS]/[AI] tags, [NEEDS CLARIFICATION], > **TODO**, **Checkpoint:**, _Marker:_ tags, code spans, /spec-* commands, EARS keywords (" + stableLost.slice(0, 5).join(", ") + ")");
+    const notIdem = brPairs.filter(([, , b]) => typeof b === "string" && I.toPtBr(b) !== b).map(([w]) => w);
+    ok(notIdem.length === 0, "pD1: the pt-BR transform is idempotent — a Brazilian string passes through unchanged (" + notIdem.slice(0, 5).join(", ") + ")");
+    // (an array compares by its first element's kind: pt-BR's stop-gate pattern lists are pt's plus the Brazilian gerunds)
+    const shape = (v, d = 0) => (d > 6 ? "…" : typeof v === "function" ? "fn" : Array.isArray(v) ? "[" + (v.length ? shape(v[0], d + 1) : "") + "]" : v && typeof v === "object" && !(v instanceof RegExp) ? "{" + Object.keys(v).map((k) => k + ":" + shape(v[k], d + 1)).join(",") + "}" : typeof v);
+    ok(shape(I.msg("pt")) === shape(I.msg("pt-BR")) && shape(I.brief("pt")) === shape(I.brief("pt-BR")) &&
+      I.steeringKnownFiles().every((n) => typeof I.steeringStub(n, "pt-BR") === "string") && I.msg("pt") !== I.msg("pt-BR"),
+      "pD1: key parity — pt-BR's message and brief tables have exactly pt's key tree (same keys, same value kinds)");
+    // pt (European) is untouched: the derivation never writes back into the source tables
+    ok(/## Histórias de Utilizador/.test(I.requirements({ name: "x", tracks: ["core"], label: "core" }, "pt")) && /Fora de Âmbito/.test(I.requirements({ name: "x", tracks: ["core"], label: "core" }, "pt")) &&
+      I.msg("pt").addTrackNote("saas", "f") === "+saas adicionado. Preenche as novas secções de design e volta a correr /spec-doctor f." &&
+      I.msg("pt-BR").addTrackNote("saas", "f") === "+saas adicionado. Preencha as novas seções de design e volte a executar /spec-doctor f." &&
+      I.msg("pt").stopGate.claims.length === I.msg("pt-BR").stopGate.claims.length - 3,
+      "pD1: pt stays European Portuguese (Histórias de Utilizador, 'Preenche … volta a correr'), pt-BR is its Brazilian twin ('Preencha … volte a executar')");
+    // the caller's own strings (feature names, paths) are never transformed; a track name never masks part of a word
+    ok(I.msg("pt-BR").addTrackNote("sec", "registo-de-utilizadores") === "+sec adicionado. Preencha as novas seções de design e volte a executar /spec-doctor registo-de-utilizadores." &&
+      I.msg("pt-BR").addTrackNote("ai", "tu").endsWith("/spec-doctor tu.") &&
+      I.msg("pt-BR").spike.doctor.timeboxPassed("2026-09-01").startsWith("o timebox terminou em 2026-09-01 e não há decisão registrada — decida com a evidência que você tem") &&
+      I.toPtBr("O utilizador guarda o ficheiro `src/ficheiro.js` em .specs/utilizador/ — corre `npm test` e regista o resultado.") ===
+      "O usuário guarda o arquivo `src/ficheiro.js` em .specs/utilizador/ — execute `npm test` e registre o resultado.",
+      "pD1: arguments, code spans and paths are kept verbatim; mid-sentence 3rd person vs clause-start imperative (corre → execute, regista → registre)");
+
+    // 4. the classifier: Brazilian words still read as Portuguese ('no' = em+o, never a negator); an explicit pt-BR answers in pt-BR
+    // (only Brazilian markers here — cadastro, usuário, senha, arquivo, tela: before D1 this read as English and "no LLM" negated +ai)
+    const brGuess = S.classify("Cadastro do usuário: senha, arquivo e tela, com resumo no LLM");
+    const brExplicit = S.classify("Cadastro de usuários com senha, sem LLM", { lang: "pt-BR" });
+    ok(brGuess.lang === "pt" && brGuess.tracks.includes("tdd") && brGuess.tracks.includes("ai") && brExplicit.lang === "pt-BR" && brExplicit.tracks.includes("tdd") && !brExplicit.tracks.includes("ai") &&
+      brExplicit.notes.every((n) => !EU_ONLY.test(n)) &&
+      S.classify("Isolamento multilocatário com LGPD e relatório para a ANPD").tracks.join() === "core,saas,privacy",
+      "pD1: classify — Brazilian text guesses 'pt' (senha → +tdd), explicit lang pt-BR is kept, 'sem LLM' negated; multilocatário → +saas, LGPD / ANPD → +privacy (got " +
+      JSON.stringify([brGuess.lang, brGuess.tracks, brExplicit.lang, brExplicit.tracks]) + ")");
+    const brEars = S.earsValidate("1. **US-1.AC-1** — QUANDO o usuário envia o cadastro, O SISTEMA DEVE responder de forma confiável e performática.", "pt-BR");
+    ok(brEars.verdict === "pass" && brEars.issues.map((i) => i.code).join() === "vague,vague" &&
+      brEars.issues.every((i) => /^Termo vago '(?:confiável|performática)' — substitua-o por um valor concreto e testável\.$/.test(i.msg)),
+      "pD1: ears_validate in pt-BR — the same EARS keywords pass; Brazilian vague words (confiável, performática) are flagged in a Brazilian message");
+    // 5. the stop gate reads Brazilian claims and admissions (pt-BR adds its gerund forms to pt's patterns)
+    const sgClaim = S.stopClaims("Pronto: os testes estão passando e tudo funcionando.");
+    const sgAdmit = S.stopClaims("Implementei a tarefa 2, mas 3 testes falhando ainda.");
+    ok(sgClaim.claim === true && sgAdmit.admitted === true, "pD1: stop gate — 'os testes estão passando' is a claim, '3 testes falhando' an admission (got " + JSON.stringify([sgClaim, sgAdmit]) + ")");
+  }
+
   // --- v1.8: projectDir traversal is rejected at the MCP boundary ---
   const trav = payload(await rpc("tools/call", { name: "spec_list", arguments: { projectDir: "../../etc" } }));
   ok(trav.ok === false && /\.\./.test(trav.error), "MCP rejects projectDir with '..' segments");
