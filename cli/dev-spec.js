@@ -14,7 +14,8 @@
  * Commands:
  *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
- *                                      --guard on|off → guard mode: code edits ask while no approved tasks)
+ *                                      --guard on|off → guard mode: code edits ask while no approved tasks;
+ *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
@@ -28,7 +29,8 @@
  *   clarify <feature>                  Surface ambiguities/gaps in requirements
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
- *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd)
+ *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
+ *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
  *                                      (--by = who approved; --force records it anyway, flagged as forced)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
@@ -37,13 +39,16 @@
  *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
- *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
+ *   finish <feature> [--write] [--include-body] [--run]  Readiness report + merge summary (no PRs);
+ *                                      --run [--shell bash|<path>] runs the project checks (meta.checks) and records them
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
+ *   log <feature> [--max N] [-]        Commits citing each task ("task #N" + the feature name, T-/AC IDs) + the +tdd red-first
+ *                                      check, from git log (read-only, local; default 1000 commits); - reads a log from stdin
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
@@ -62,6 +67,7 @@
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
  *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
+ *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · log: --max N (default 1000)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
@@ -126,6 +132,7 @@ function withTracksFlag(list) {
 VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
 
 VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
+VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -267,11 +274,13 @@ function main() {
         else if (["off", "false", "no", "0"].includes(g)) guard = false;
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
       }
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard });
+      const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
         if (r.guardNote) console.log("  " + r.guardNote);
+        if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
       });
     }
 
@@ -374,12 +383,21 @@ function main() {
 
     case "finish": {
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
-      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body]");
-      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: on("include-body") ? true : undefined }); // = spec_finish {includeBody}
+      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|<path>]]");
+      // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
+      // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
+      let evidence;
+      if (on("run")) {
+        const rc = b5RunChecks(pos[0]);
+        if (!rc.ok) return fail(rc, rc.hint);
+        evidence = rc.evidence;
+      }
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: on("include-body") ? true : undefined, evidence }); // = spec_finish {includeBody, evidence}
       if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
       return out(r, (r) => {
+        if (r.recordedChecks) console.log(spec.msg(spec.featureLang(projectDir, r.feature)).projectChecks.recorded(r.recordedChecks.length));
         console.log(r.message);
         r.blockers.forEach((b) => console.log("  ✗ " + b));
         (r.warnings || []).forEach((w) => console.log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
@@ -450,6 +468,7 @@ function main() {
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         const VP = spec.msg(spec.featureLang(projectDir, pos[0])).verifyPipe;
         cmds.filter(spec.verifyPipeMasked).forEach((c) => say(VP.runHint(c)));
+        const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
         for (const cmd of cmds) {
           say("$ " + cmd);
           // Runs the user's OWN _Verify:_ command from their tasks.md, only on an explicit --run (the same
@@ -461,13 +480,18 @@ function main() {
           if (summary) say(summary.replace(/^/gm, "  "));
           const code = run.status == null ? 1 : run.status;
           if (code !== 0) {
-            evidence = { command: cmd, exitCode: code, summary };
+            // B5: an _Expect: fail_ task needs a run that FAILS — but cmd.exe failing to run the line at all (a path it can't
+            // find, its syntax error; exit 1) is no red test: refused, nothing recorded. (9009 goes to the engine: a failed run.)
+            if (b.expect === "fail" && code !== 9009 && process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) {
+              return fail({ ok: false, expected: "fail", error: spec.msg(spec.featureLang(projectDir, pos[0])).redGreen.shellNotRed(cmd) }, D.shellHint);
+            }
+            evidence = { command: cmd, exitCode: code, summary, ...git };
             // The cmd.exe / --shell bash hint only when cmd.exe itself failed (unknown command, its syntax error) — a check
             // that ran and failed (node tests/x.js → exit 1) needs a code fix, not another shell.
             if (process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) hint = D.shellHint;
             break;
           }
-          evidence = { command: cmds.join(" && "), exitCode: 0, summary };
+          evidence = { command: cmds.join(" && "), exitCode: 0, summary, ...git };
         }
       } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
@@ -477,6 +501,7 @@ function main() {
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
         console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
+        if (r.redRecorded) console.log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // B5: _Expect: fail_
         if (r.note) console.log("  ⚠ " + r.note);
       });
     }
@@ -854,6 +879,94 @@ function main() {
     // @pkg B4 <<<
 
     // @pkg B5 commands >>>
+    case "log": {
+      // dev-spec log <feature> [--max N] [-] — per task, the commits whose message cites it (+ the +tdd red-first check), from
+      // `git log` (read-only, local, bounded by --max, default 1000); "-" reads a log from stdin instead (e.g. an agent's
+      // `git log --name-only --relative`). The engine only parses the text (taskCommits) — it never runs git.
+      if (!pos[0]) usage("dev-spec log <feature> [--max N] [-]");
+      const fx = spec.existingFeature(projectDir, pos[0]);
+      if (!fx.ok) return fail(fx);
+      const max = intFlag("max") || 1000;
+      const report = (text, opts) => {
+        const r = spec.taskCommits(projectDir, pos[0], text, opts);
+        if (!r.ok) return fail(r);
+        return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+      };
+      if (pos[1] === "-") return readStdin((text) => report(text, {}));
+      const text = b5Git(["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
+        "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max]);
+      if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
+      return report(text, { max });
+    }
+    // Helpers of done --run / finish --run / init --check / log (function declarations: hoisted across this switch block).
+    // `git` is only ever read here: rev-parse, status, log — local, no network, no lock (GIT_OPTIONAL_LOCKS=0).
+    function b5Git(args) {
+      let r;
+      try {
+        r = spawnSync("git", args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, maxBuffer: 64 * 1024 * 1024,
+          env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } });
+      } catch { return null; }
+      return !r || r.error || r.status !== 0 ? null : String(r.stdout || "");
+    }
+    // {commit, dirty} for evidence — {} without git / a repository / a commit (silently: git is optional).
+    function b5GitState() {
+      const commit = String(b5Git(["rev-parse", "--short", "HEAD"]) || "").trim();
+      if (!/^[0-9a-f]{4,40}$/i.test(commit)) return {};
+      const st = b5Git(["status", "--porcelain", "--", ".", ":(exclude).specs"]); // .specs/ (ticks, state) is not the code under test
+      return st == null ? { commit } : { commit, dirty: st.trim() !== "" };
+    }
+    // Every --check occurrence (the shared parser keeps only the last value) → {name: command} (null-prototype: "__proto__" stays
+    // a plain key the engine refuses), or undefined when none was given.
+    function b5ChecksFlag() {
+      const vals = [];
+      for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a.startsWith("--") && a.includes("=")) { if (a.slice(2, a.indexOf("=")) === "check") vals.push(a.slice(a.indexOf("=") + 1)); }
+        else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) { const v = argv[++i]; if (a.slice(2) === "check") vals.push(v); }
+      }
+      if (!vals.length) return undefined;
+      const checks = Object.create(null);
+      for (const v of vals) {
+        const eq = typeof v === "string" ? v.indexOf("=") : -1;
+        if (eq <= 0) die(spec.msg(flags.lang || spec.projectLang(projectDir)).projectChecks.badArg(String(v)));
+        checks[v.slice(0, eq).trim()] = v.slice(eq + 1);
+      }
+      return checks;
+    }
+    // finish --run: every project check (meta.checks), in order, from the project root — the same shell rules as done --run
+    // (--shell / DEV_SPEC_SHELL, POSIX syntax refused under cmd.exe, the pipe hint). Every run is recorded, a failure too.
+    function b5RunChecks(feature) {
+      const fx = spec.existingFeature(projectDir, feature);
+      if (!fx.ok) return fx;
+      const M = spec.msg(spec.featureLang(projectDir, fx.slug));
+      const { checks } = spec.projectChecks(projectDir);
+      if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
+      const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
+      if (process.platform === "win32" && shell === true) {
+        const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
+        if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
+      }
+      const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
+      checks.map((c) => c.command).filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
+      const git = b5GitState();
+      const evidence = [];
+      let cmdFailed = false;
+      for (const c of checks) {
+        say("$ " + c.command + "   (" + c.name + ")");
+        // Runs the project's OWN meta.checks commands (set by its user with init --check / spec_init), only on an explicit
+        // --run — the same trust as an npm script; a shell is the point: each check is a shell command line.
+        // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+        const run = spawnSync(c.command, { shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+        const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
+        const summary = spec.summarizeRunOutput(output);
+        if (summary) say(summary.replace(/^/gm, "  "));
+        const code = run.status == null ? 1 : run.status;
+        if (code !== 0 && process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) cmdFailed = true;
+        evidence.push({ name: c.name, command: c.command, exitCode: code, summary, ...git });
+      }
+      if (cmdFailed) console.error(M.taskDone.shellHint);
+      return { ok: true, evidence };
+    }
     // @pkg B5 <<<
 
     // @pkg C1 commands >>>
@@ -891,6 +1004,8 @@ function helpText() {
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy), multilingual
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
                                   --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
+                                  --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
+                                  meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
@@ -910,8 +1025,12 @@ function helpText() {
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
   done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records the evidence
                                   (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
-  finish <feature> [--write] [--include-body]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
-                                  --write → .execution/merge-summary.md, --include-body also prints/returns the summary
+                                  A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
+                                  records the git commit (and whether the tree was dirty) when git is available
+  finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
+                                  --write → .execution/merge-summary.md, --include-body also prints/returns the summary;
+                                  --run [--shell bash|<path>] runs the project checks (meta.checks) and records them — with meta.checks
+                                  set, finish needs a passing run of each since the last task activity
   append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
@@ -928,6 +1047,10 @@ function helpText() {
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
+  log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
+                                  writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
+                                  red-first check (implementation committed before its test?); reads git log (read-only, local, --max
+                                  commits, default 1000); - reads a log from stdin (git log --name-only --relative)
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
@@ -951,7 +1074,7 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
-         --apply (upgrade)  --args "…" (prompts)
+         --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.

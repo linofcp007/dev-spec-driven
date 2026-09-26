@@ -2357,14 +2357,15 @@ const MSG = {
       manualOnRunnable: (n, slug) => `Task ${n}: a note was recorded, but its _Verify:_ command was not run — it stays unverified until a passing run is recorded: dev-spec done ${slug} ${n} --run`,
       // A red-phase task (it writes a test that must FAIL) carrying a must-pass _Verify:_ can never be verified.
       redPhaseTestWord: "the test",
-      redPhaseVerify: (n, slug, test) => `Task ${n} writes a test that must FAIL (the red phase), so a _Verify:_ that must pass can never pass on it. Either move the command to the task that makes it green (the fix — its _Verify:_ then proves the fix), or remove the _Verify:_ from task ${n} and record the red run as a note: dev-spec done ${slug} ${n} --evidence "${test} fails: <the reason>".`,
+      redPhaseVerify: (n, slug, test) => `Task ${n} writes a test that must FAIL (the red phase), so a _Verify:_ that must pass can never pass on it. Mark task ${n} with _Expect: fail_ — a run that FAILS is then its proof (${test} fails before the fix) and a passing run is refused: dev-spec done ${slug} ${n} --run. Or move the command to the task that makes it green (the fix — its _Verify:_ then proves the fix).`,
       failedRun: (n, code, slug, runnable) => `Task ${n}: its latest recorded run failed (exit ${code}) — a note doesn't change that; it stays unverified until a passing run ` +
         (runnable ? `of its _Verify:_ command is recorded: dev-spec done ${slug} ${n} --run` : "(a command with exit code 0) is recorded."),
       duplicateNumber: (n) => `Task ${n}: another task also uses number ${n} and the recorded evidence is that task's — this one stays unverified; renumber the tasks, then record its own evidence.`,
       staleEvidence: (n, slug, runnable) => `Task ${n}: the recorded evidence is for another task or an earlier _Verify:_ command — it stays unverified until its own ` +
         (runnable ? `run is recorded: dev-spec done ${slug} ${n} --run` : "evidence is recorded."),
       reason: { "no-evidence": "no evidence", "failed-run": "latest run failed", "manual-note-on-runnable-verify": "note only, _Verify:_ command not run", "duplicate-number": "number shared with another task",
-        "stale-evidence": "evidence is for another task or _Verify:_ command" },
+        "stale-evidence": "evidence is for another task or _Verify:_ command",
+        "unexpected-pass": "run passed, but _Expect: fail_ needs a red run" },
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
     },
     // CLI `done` human output.
@@ -2424,6 +2425,7 @@ const MSG = {
       tracks: "'tracks' must be an array",
       approvalHistory: "'approvalHistory' must be an array",
       changes: "'changes' must be an array",
+      finishChecks: "'finishChecks' must be an object",
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
@@ -3104,6 +3106,60 @@ const MSG = {
     // @pkg B4 <<<
 
     // @pkg B5 msg-en >>>
+    // 1.14 B5 — red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
+    redGreen: {
+      passRefused: (n) => `Task ${n} expects its test to FAIL (_Expect: fail_), but the run passed (exit 0) — the test doesn't fail yet, so it tests nothing. Make it fail for the right reason (an assertion, "not implemented" — not a typo or a missing import), then record that run. Not marking it done.`,
+      passTicked: (n) => `Task ${n} is ticked, but it expects its test to FAIL (_Expect: fail_) and this run passed (exit 0) with no red run recorded before it — the test tests nothing: recorded; the task now counts as unverified until a failing (red) run is recorded.`,
+      cantRun: (n, code, ticked) => `Task ${n}: exit ${code} means the command itself could not run (not found / not executable) — that is no red test (_Expect: fail_). Fix the _Verify:_ command, then record the failing run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
+      passAfterRed: (n, day) => `Task ${n}: its test passes now — expected once the fix is in; the red run recorded on ${day} stays the proof (_Expect: fail_).`,
+      unexpectedPassNote: (n, slug) => `Task ${n} expects its test to FAIL (_Expect: fail_), but its latest run passed with no red run before it — it stays unverified until a failing run is recorded: dev-spec done ${slug} ${n} --run`,
+      redRecorded: (n, code) => `  ✓ red run recorded for task ${n} (exit ${code}) — the test fails before its fix, as _Expect: fail_ expects.`,
+      shellNotRed: (cmd) => `the default Windows shell (cmd.exe) could not run \`${cmd}\` as written — that is no red test (_Expect: fail_). Nothing was recorded; the task stays open.`,
+      doctorMissing: (list) => `T-IDs made green by done tasks without a recorded red run: ${list} — a test that never failed proves nothing. Mark the task that writes it with _Expect: fail_ and record its failing run before the fix (dev-spec done <feature> <n> --run).`,
+      doctorOk: (n) => `every T-ID made green by a done task (${n}) has a recorded red run`,
+      briefExpect: "**Expected result: FAIL** (_Expect: fail_) — the run must exit non-zero: the test fails for the right reason before the fix (an assertion / not implemented — not a typo, a missing import or a command that doesn't run). A passing run is refused: it would mean the test tests nothing.",
+      dodExpect: "The _Verify:_ run must FAIL (non-zero exit) for the right reason — put the command, its exit code and the failure in the report; it is recorded as the task's red run.",
+      naVerify: (n, slug) => `Task ${n} is marked _Expect: fail_: its proof is a run that FAILS (its test red before the fix) — a passing run doesn't count. Record the red run (dev-spec done ${slug} ${n} --run while the test fails — before the fix, or with the fix stashed), or drop _Expect: fail_ if the task is no red test.`,
+    },
+    projectChecks: {
+      badInput: 'checks must be an object of name → command (e.g. {"test": "npm test"}); an empty command removes that check.',
+      badName: (k) => `invalid check name '${k}' — letters, digits and . _ : - (up to 40 characters, starting with a letter or a digit).`,
+      badCommand: (k) => `the command of check '${k}' must be one line of text (up to 500 characters) — or empty to remove the check.`,
+      tooMany: (max) => `at most ${max} project checks.`,
+      badStored: (rel) => `${rel} → meta.checks is not an object of name → command strings — fix it by hand; refusing to change it.`,
+      initLine: (list) => `Project checks (meta.checks): ${list}`,
+      evidenceNotList: "evidence must be a list of check runs: [{name, command, exitCode, summary}].",
+      noChecks: 'no project checks configured (roadmap.json meta.checks) — nothing to record. Set them first: spec_init {checks: {"test": "npm test"}} (CLI: dev-spec init --check test="npm test").',
+      evidenceItem: (i, why) => `evidence[${i}]: ${why}`,
+      itemNotObject: "each run must be an object {name, command, exitCode, summary}",
+      unknownCheck: (name, list) => `'${name}' is not a project check — one of: ${list}`,
+      needsCommand: "the command that ran is required",
+      needsExit: "its exit code (an integer) is required",
+      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "its command changed since the run", "before-last-tick": "ran before the last task activity" })[i.status] || i.status,
+      blocker: (list, slug) => `project checks without a passing run since the last task activity: ${list} — run them: dev-spec finish ${slug} --run (or record the runs with spec_finish {evidence})`,
+      doctorWarn: (list, slug) => `every task is done, but project checks have no passing run since the last task activity: ${list} — spec_finish refuses until they pass: dev-spec finish ${slug} --run`,
+      doctorOk: (n) => `every project check (${n}) has a passing run since the last task activity`,
+      invalidStored: (list) => `roadmap.json meta.checks: invalid entries ignored (${list}) — each must be "name": "one-line command"`,
+      prChecks: "## Project checks",
+      prNoRun: "no run recorded",
+      briefDod: (list) => `Run the project checks and put each command, its exit code and the last lines of its output in the report — nothing that passed before this task may fail after it: ${list}.`,
+      recorded: (n) => `Recorded ${n} project check run(s) in .state.json → finishChecks.`,
+      noneToRun: 'no project checks to run (roadmap.json meta.checks) — set them: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
+      badArg: (v) => `--check expects name=command (got '${v}') — an empty command (name=) removes that check`,
+      posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
+    },
+    gitLog: {
+      head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) read${truncated ? " (the window is full: older commits were not read — --max N)" : ""}, ${citing} cite its tasks`,
+      taskLine: (n, text, done, list) => `  ${done ? "[x]" : "[ ]"} #${n} ${text} — ${list}`,
+      commitRef: (short, subject, via) => `${short} ${subject} (${via})`,
+      more: (n) => `+${n} more`,
+      noCommit: "no commit cites it",
+      implFirst: (n, tests, taskC, testC, files) => `red-first: task ${n} (makes ${tests} green) was first committed in ${taskC}, before any commit touching a test file that names ${tests} (${files} — first in ${testC}): the implementation came before its test.`,
+      testNotCommitted: (n, tests, taskC, files) => `red-first: task ${n} (makes ${tests} green) is committed (${taskC}), but no commit read touches a test file that names ${tests} (${files}) — commit the test first.`,
+      redFirstStatus: (n, tests, status) => `red-first: task ${n} (${tests}) — ` + ({ ok: "the test was committed first ✓", "no-test-file": "no test file names it yet (nothing to compare)", "no-task-commit": "no commit cites the task yet", "outside-window": "can't tell: the log window is full (--max N)" })[status],
+      conventions: (slug) => `No commit cites a task of '${slug}'. Conventions: name the feature and the task — "Part of .specs/${slug}/ task #N." (what /spec-commit writes) — or the IDs it covers: "Makes T-01 green", US-1.AC-2.`,
+      noGit: "git is not available here, or this is not a git repository with commits — dev-spec log reads `git log`. Or pipe a log in: git log --name-only --relative | dev-spec log <feature> -",
+    },
     // @pkg B5 <<<
 
     // @pkg C1 msg-en >>>
@@ -3314,14 +3370,15 @@ const MSG = {
       noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
       manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
       redPhaseTestWord: "o teste",
-      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção), ou tira o _Verify:_ da tarefa ${n} e regista a execução vermelha como nota: dev-spec done ${slug} ${n} --evidence "${test} falha: <o motivo>".`,
+      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Marca a tarefa ${n} com _Expect: fail_ — uma execução que FALHE passa a ser a prova (${test} falha antes da correção) e uma que passe é recusada: dev-spec done ${slug} ${n} --run. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção).`,
       failedRun: (n, code, slug, runnable) => `Tarefa ${n}: a última execução registada falhou (exit ${code}) — uma nota não muda isso; continua não verificada até se registar uma execução com sucesso ` +
         (runnable ? `do comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(um comando com exit code 0)."),
       duplicateNumber: (n) => `Tarefa ${n}: outra tarefa também usa o número ${n} e a evidência registada é dessa — esta continua não verificada; renumera as tarefas e depois regista a evidência desta.`,
       staleEvidence: (n, slug, runnable) => `Tarefa ${n}: a evidência registada é de outra tarefa ou de um comando _Verify:_ anterior — continua não verificada até se registar ` +
         (runnable ? `uma execução desta: dev-spec done ${slug} ${n} --run` : "a evidência desta."),
       reason: { "no-evidence": "sem evidência", "failed-run": "a última execução falhou", "manual-note-on-runnable-verify": "só uma nota, comando _Verify:_ por correr", "duplicate-number": "número partilhado com outra tarefa",
-        "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_" },
+        "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_",
+        "unexpected-pass": "a execução passou, mas o _Expect: fail_ precisa de uma execução vermelha" },
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
     taskDone: {
@@ -3377,6 +3434,7 @@ const MSG = {
       tracks: "'tracks' tem de ser um array",
       approvalHistory: "'approvalHistory' tem de ser um array",
       changes: "'changes' tem de ser um array",
+      finishChecks: "'finishChecks' tem de ser um objeto",
     },
     depend: {
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
@@ -4008,6 +4066,60 @@ const MSG = {
     // @pkg B4 <<<
 
     // @pkg B5 msg-pt >>>
+    // 1.14 B5 — vermelho → verde (_Expect: fail_), verificações do projeto (roadmap.json meta.checks) + a suite no fim, `dev-spec log`.
+    redGreen: {
+      passRefused: (n) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a execução passou (exit 0) — o teste ainda não falha, por isso não testa nada. Põe-no a falhar pela razão certa (uma asserção, "não implementado" — não um erro de escrita nem um import em falta) e regista essa execução. Não a marco como feita.`,
+      passTicked: (n) => `A tarefa ${n} está marcada, mas espera que o seu teste FALHE (_Expect: fail_) e esta execução passou (exit 0) sem nenhuma execução vermelha registada antes — o teste não testa nada: registado; a tarefa passa a contar como não verificada até ser registada uma execução a falhar (vermelha).`,
+      cantRun: (n, code, ticked) => `Tarefa ${n}: exit ${code} significa que o próprio comando não pôde correr (não encontrado / não executável) — isso não é um teste vermelho (_Expect: fail_). Corrige o comando _Verify:_ e regista depois a execução a falhar. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
+      passAfterRed: (n, day) => `Tarefa ${n}: o teste passa agora — é o esperado depois da correção; a execução vermelha registada em ${day} continua a ser a prova (_Expect: fail_).`,
+      unexpectedPassNote: (n, slug) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a última execução passou sem nenhuma execução vermelha antes — continua não verificada até ser registada uma execução a falhar: dev-spec done ${slug} ${n} --run`,
+      redRecorded: (n, code) => `  ✓ execução vermelha registada para a tarefa ${n} (exit ${code}) — o teste falha antes da correção, como o _Expect: fail_ espera.`,
+      shellNotRed: (cmd) => `a shell por omissão do Windows (cmd.exe) não conseguiu correr \`${cmd}\` tal como está escrito — isso não é um teste vermelho (_Expect: fail_). Nada foi registado; a tarefa continua aberta.`,
+      doctorMissing: (list) => `T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: ${list} — um teste que nunca falhou não prova nada. Marca a tarefa que o escreve com _Expect: fail_ e regista a execução a falhar antes da correção (dev-spec done <feature> <n> --run).`,
+      doctorOk: (n) => `todos os T-IDs postos a verde por tarefas feitas (${n}) têm uma execução vermelha registada`,
+      briefExpect: "**Resultado esperado: FALHA** (_Expect: fail_) — a execução tem de terminar com um exit diferente de zero: o teste falha pela razão certa antes da correção (uma asserção / não implementado — não um erro de escrita, um import em falta ou um comando que não corre). Uma execução que passe é recusada: significaria que o teste não testa nada.",
+      dodExpect: "A execução do _Verify:_ tem de FALHAR (exit diferente de zero) pela razão certa — põe no relatório o comando, o exit code e a falha; fica registada como a execução vermelha da tarefa.",
+      naVerify: (n, slug) => `A tarefa ${n} tem _Expect: fail_: a prova é uma execução que FALHA (o teste vermelho antes da correção) — uma execução que passa não conta. Regista a execução vermelha (dev-spec done ${slug} ${n} --run enquanto o teste falha — antes da correção, ou com a correção guardada num stash), ou tira o _Expect: fail_ se a tarefa não for um teste vermelho.`,
+    },
+    projectChecks: {
+      badInput: 'checks tem de ser um objeto nome → comando (ex.: {"test": "npm test"}); um comando vazio remove essa verificação.',
+      badName: (k) => `nome de verificação inválido '${k}' — letras, dígitos e . _ : - (até 40 caracteres, a começar por uma letra ou um dígito).`,
+      badCommand: (k) => `o comando da verificação '${k}' tem de ser uma linha de texto (até 500 caracteres) — ou vazio para remover a verificação.`,
+      tooMany: (max) => `no máximo ${max} verificações do projeto.`,
+      badStored: (rel) => `${rel} → meta.checks não é um objeto de nome → comando (texto) — corrige-o à mão; não o vou alterar.`,
+      initLine: (list) => `Verificações do projeto (meta.checks): ${list}`,
+      evidenceNotList: "evidence tem de ser uma lista de execuções de verificações: [{name, command, exitCode, summary}].",
+      noChecks: 'não há verificações do projeto configuradas (roadmap.json meta.checks) — nada para registar. Define-as primeiro: spec_init {checks: {"test": "npm test"}} (CLI: dev-spec init --check test="npm test").',
+      evidenceItem: (i, why) => `evidence[${i}]: ${why}`,
+      itemNotObject: "cada execução tem de ser um objeto {name, command, exitCode, summary}",
+      unknownCheck: (name, list) => `'${name}' não é uma verificação do projeto — uma de: ${list}`,
+      needsCommand: "falta o comando que correu",
+      needsExit: "falta o exit code (um inteiro)",
+      status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "o comando mudou desde a execução", "before-last-tick": "correu antes da última atividade nas tarefas" })[i.status] || i.status,
+      blocker: (list, slug) => `verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — corre-as: dev-spec finish ${slug} --run (ou regista as execuções com spec_finish {evidence})`,
+      doctorWarn: (list, slug) => `todas as tarefas estão feitas, mas há verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o spec_finish recusa até passarem: dev-spec finish ${slug} --run`,
+      doctorOk: (n) => `todas as verificações do projeto (${n}) têm uma execução bem-sucedida desde a última atividade nas tarefas`,
+      invalidStored: (list) => `roadmap.json meta.checks: entradas inválidas ignoradas (${list}) — cada uma tem de ser "nome": "comando numa linha"`,
+      prChecks: "## Verificações do projeto",
+      prNoRun: "nenhuma execução registada",
+      briefDod: (list) => `Corre as verificações do projeto e põe no relatório cada comando, o exit code e as últimas linhas do output — nada do que passava antes desta tarefa pode falhar depois dela: ${list}.`,
+      recorded: (n) => `Registada(s) ${n} execução(ões) de verificações do projeto em .state.json → finishChecks.`,
+      noneToRun: 'não há verificações do projeto para correr (roadmap.json meta.checks) — define-as: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
+      badArg: (v) => `--check espera nome=comando (recebido '${v}') — um comando vazio (nome=) remove essa verificação`,
+      posixOnWindows: (name, cmd, kinds) => `a verificação do projeto '${name}' (\`${cmd}\`) usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar. Nada foi executado. Volta a correr com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para a correr no cmd.exe mesmo assim.`,
+    },
+    gitLog: {
+      head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) lido(s)${truncated ? " (a janela está cheia: os commits mais antigos não foram lidos — --max N)" : ""}, ${citing} citam as suas tarefas`,
+      taskLine: (n, text, done, list) => `  ${done ? "[x]" : "[ ]"} #${n} ${text} — ${list}`,
+      commitRef: (short, subject, via) => `${short} ${subject} (${via})`,
+      more: (n) => `+${n} mais`,
+      noCommit: "nenhum commit a cita",
+      implFirst: (n, tests, taskC, testC, files) => `red-first: a tarefa ${n} (põe ${tests} a verde) teve o primeiro commit em ${taskC}, antes de qualquer commit que toque num ficheiro de teste que nomeie ${tests} (${files} — primeiro em ${testC}): a implementação veio antes do teste.`,
+      testNotCommitted: (n, tests, taskC, files) => `red-first: a tarefa ${n} (põe ${tests} a verde) tem commit (${taskC}), mas nenhum commit lido toca num ficheiro de teste que nomeie ${tests} (${files}) — faz primeiro o commit do teste.`,
+      redFirstStatus: (n, tests, status) => `red-first: tarefa ${n} (${tests}) — ` + ({ ok: "o teste teve commit primeiro ✓", "no-test-file": "ainda nenhum ficheiro de teste o nomeia (nada para comparar)", "no-task-commit": "ainda nenhum commit cita a tarefa", "outside-window": "impossível saber: a janela do log está cheia (--max N)" })[status],
+      conventions: (slug) => `Nenhum commit cita uma tarefa de '${slug}'. Convenções: nomeia a feature e a tarefa — "Part of .specs/${slug}/ task #N." (o que o /spec-commit escreve) — ou os IDs que cobre: "Makes T-01 green", US-1.AC-2.`,
+      noGit: "o git não está disponível aqui, ou isto não é um repositório git com commits — o dev-spec log lê o `git log`. Ou passa um log pelo stdin: git log --name-only --relative | dev-spec log <feature> -",
+    },
     // @pkg B5 <<<
 
     // @pkg C1 msg-pt >>>
@@ -4218,14 +4330,15 @@ const MSG = {
       noContent: "La evidencia necesita un comando (con su exit code) o un resumen — un exit code solo no prueba nada.",
       manualOnRunnable: (n, slug) => `Tarea ${n}: se registró una nota, pero su comando _Verify:_ no se ejecutó — sigue sin verificar hasta que se registre una ejecución correcta: dev-spec done ${slug} ${n} --run`,
       redPhaseTestWord: "la prueba",
-      redPhaseVerify: (n, slug, test) => `La tarea ${n} escribe una prueba que debe FALLAR (la fase roja), así que un _Verify:_ que debe pasar nunca pasará en ella. O mueve el comando a la tarea que la pone en verde (el arreglo — su _Verify:_ prueba entonces el arreglo), o quita el _Verify:_ de la tarea ${n} y registra la ejecución en rojo como nota: dev-spec done ${slug} ${n} --evidence "${test} falla: <el motivo>".`,
+      redPhaseVerify: (n, slug, test) => `La tarea ${n} escribe una prueba que debe FALLAR (la fase roja), así que un _Verify:_ que debe pasar nunca pasará en ella. Marca la tarea ${n} con _Expect: fail_ — una ejecución que FALLE es entonces su prueba (${test} falla antes del arreglo) y una que pase se rechaza: dev-spec done ${slug} ${n} --run. O mueve el comando a la tarea que la pone en verde (el arreglo — su _Verify:_ prueba entonces el arreglo).`,
       failedRun: (n, code, slug, runnable) => `Tarea ${n}: su última ejecución registrada falló (exit ${code}) — una nota no cambia eso; sigue sin verificar hasta que se registre una ejecución correcta ` +
         (runnable ? `de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(un comando con exit code 0)."),
       duplicateNumber: (n) => `Tarea ${n}: otra tarea también usa el número ${n} y la evidencia registrada es de esa — esta sigue sin verificar; renumera las tareas y luego registra la evidencia de esta.`,
       staleEvidence: (n, slug, runnable) => `Tarea ${n}: la evidencia registrada es de otra tarea o de un comando _Verify:_ anterior — sigue sin verificar hasta que se registre ` +
         (runnable ? `una ejecución de esta: dev-spec done ${slug} ${n} --run` : "la evidencia de esta."),
       reason: { "no-evidence": "sin evidencia", "failed-run": "la última ejecución falló", "manual-note-on-runnable-verify": "solo una nota, comando _Verify:_ sin ejecutar", "duplicate-number": "número compartido con otra tarea",
-        "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_" },
+        "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_",
+        "unexpected-pass": "la ejecución pasó, pero _Expect: fail_ necesita una ejecución en rojo" },
       duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
     },
     taskDone: {
@@ -4281,6 +4394,7 @@ const MSG = {
       tracks: "'tracks' debe ser un array",
       approvalHistory: "'approvalHistory' debe ser un array",
       changes: "'changes' debe ser un array",
+      finishChecks: "'finishChecks' debe ser un objeto",
     },
     depend: {
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
@@ -4912,6 +5026,60 @@ const MSG = {
     // @pkg B4 <<<
 
     // @pkg B5 msg-es >>>
+    // 1.14 B5 — rojo → verde (_Expect: fail_), verificaciones del proyecto (roadmap.json meta.checks) + la suite al final, `dev-spec log`.
+    redGreen: {
+      passRefused: (n) => `La tarea ${n} espera que su prueba FALLE (_Expect: fail_), pero la ejecución pasó (exit 0) — la prueba aún no falla, así que no prueba nada. Hazla fallar por la razón correcta (una aserción, "no implementado" — no una errata ni un import que falta) y registra esa ejecución. No la marco como hecha.`,
+      passTicked: (n) => `La tarea ${n} está marcada, pero espera que su prueba FALLE (_Expect: fail_) y esta ejecución pasó (exit 0) sin ninguna ejecución en rojo registrada antes — la prueba no prueba nada: registrado; la tarea cuenta como no verificada hasta que se registre una ejecución que falle (en rojo).`,
+      cantRun: (n, code, ticked) => `Tarea ${n}: exit ${code} significa que el propio comando no pudo ejecutarse (no encontrado / no ejecutable) — eso no es una prueba en rojo (_Expect: fail_). Corrige el comando _Verify:_ y registra después la ejecución que falla. ` + (ticked ? "Registrado; la tarea cuenta ahora como no verificada." : "No la marco como hecha."),
+      passAfterRed: (n, day) => `Tarea ${n}: su prueba pasa ahora — es lo esperado tras el arreglo; la ejecución en rojo registrada el ${day} sigue siendo la prueba (_Expect: fail_).`,
+      unexpectedPassNote: (n, slug) => `La tarea ${n} espera que su prueba FALLE (_Expect: fail_), pero su última ejecución pasó sin ninguna ejecución en rojo antes — sigue sin verificar hasta que se registre una ejecución que falle: dev-spec done ${slug} ${n} --run`,
+      redRecorded: (n, code) => `  ✓ ejecución en rojo registrada para la tarea ${n} (exit ${code}) — la prueba falla antes de su arreglo, como espera _Expect: fail_.`,
+      shellNotRed: (cmd) => `la shell predeterminada de Windows (cmd.exe) no pudo ejecutar \`${cmd}\` tal como está escrito — eso no es una prueba en rojo (_Expect: fail_). No se registró nada; la tarea sigue abierta.`,
+      doctorMissing: (list) => `T-IDs puestos en verde por tareas hechas sin una ejecución en rojo registrada: ${list} — una prueba que nunca falló no prueba nada. Marca la tarea que la escribe con _Expect: fail_ y registra su ejecución que falla antes del arreglo (dev-spec done <función> <n> --run).`,
+      doctorOk: (n) => `todos los T-IDs puestos en verde por tareas hechas (${n}) tienen una ejecución en rojo registrada`,
+      briefExpect: "**Resultado esperado: FALLO** (_Expect: fail_) — la ejecución debe terminar con un exit distinto de cero: la prueba falla por la razón correcta antes del arreglo (una aserción / no implementado — no una errata, un import que falta o un comando que no se ejecuta). Una ejecución que pase se rechaza: significaría que la prueba no prueba nada.",
+      dodExpect: "La ejecución del _Verify:_ debe FALLAR (exit distinto de cero) por la razón correcta — pon en el informe el comando, su exit code y el fallo; queda registrada como la ejecución en rojo de la tarea.",
+      naVerify: (n, slug) => `La tarea ${n} tiene _Expect: fail_: su prueba es una ejecución que FALLA (la prueba en rojo antes del arreglo) — una ejecución que pasa no cuenta. Registra la ejecución en rojo (dev-spec done ${slug} ${n} --run mientras la prueba falla — antes del arreglo, o con el arreglo guardado en un stash), o quita _Expect: fail_ si la tarea no es una prueba en rojo.`,
+    },
+    projectChecks: {
+      badInput: 'checks debe ser un objeto nombre → comando (p. ej. {"test": "npm test"}); un comando vacío elimina esa verificación.',
+      badName: (k) => `nombre de verificación no válido '${k}' — letras, dígitos y . _ : - (hasta 40 caracteres, empezando por una letra o un dígito).`,
+      badCommand: (k) => `el comando de la verificación '${k}' debe ser una línea de texto (hasta 500 caracteres) — o vacío para eliminar la verificación.`,
+      tooMany: (max) => `como máximo ${max} verificaciones del proyecto.`,
+      badStored: (rel) => `${rel} → meta.checks no es un objeto de nombre → comando (texto) — corrígelo a mano; no se modificará.`,
+      initLine: (list) => `Verificaciones del proyecto (meta.checks): ${list}`,
+      evidenceNotList: "evidence debe ser una lista de ejecuciones de verificaciones: [{name, command, exitCode, summary}].",
+      noChecks: 'no hay verificaciones del proyecto configuradas (roadmap.json meta.checks) — nada que registrar. Defínelas primero: spec_init {checks: {"test": "npm test"}} (CLI: dev-spec init --check test="npm test").',
+      evidenceItem: (i, why) => `evidence[${i}]: ${why}`,
+      itemNotObject: "cada ejecución debe ser un objeto {name, command, exitCode, summary}",
+      unknownCheck: (name, list) => `'${name}' no es una verificación del proyecto — una de: ${list}`,
+      needsCommand: "falta el comando que se ejecutó",
+      needsExit: "falta su exit code (un entero)",
+      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "su comando cambió desde la ejecución", "before-last-tick": "se ejecutó antes de la última actividad en las tareas" })[i.status] || i.status,
+      blocker: (list, slug) => `verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — ejecútalas: dev-spec finish ${slug} --run (o registra las ejecuciones con spec_finish {evidence})`,
+      doctorWarn: (list, slug) => `todas las tareas están hechas, pero hay verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — spec_finish rechaza hasta que pasen: dev-spec finish ${slug} --run`,
+      doctorOk: (n) => `todas las verificaciones del proyecto (${n}) tienen una ejecución correcta desde la última actividad en las tareas`,
+      invalidStored: (list) => `roadmap.json meta.checks: entradas no válidas ignoradas (${list}) — cada una debe ser "nombre": "comando en una línea"`,
+      prChecks: "## Verificaciones del proyecto",
+      prNoRun: "ninguna ejecución registrada",
+      briefDod: (list) => `Ejecuta las verificaciones del proyecto y pon en el informe cada comando, su exit code y las últimas líneas de la salida — nada de lo que pasaba antes de esta tarea puede fallar después: ${list}.`,
+      recorded: (n) => `Registrada(s) ${n} ejecución(es) de verificaciones del proyecto en .state.json → finishChecks.`,
+      noneToRun: 'no hay verificaciones del proyecto que ejecutar (roadmap.json meta.checks) — defínelas: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
+      badArg: (v) => `--check espera nombre=comando (recibido '${v}') — un comando vacío (nombre=) elimina esa verificación`,
+      posixOnWindows: (name, cmd, kinds) => `la verificación del proyecto '${name}' (\`${cmd}\`) usa sintaxis de shell POSIX (${kinds.map((k) => ({ "single-quotes": "comillas simples '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) que cmd.exe — la shell predeterminada de --run en Windows — interpreta de otra forma, a menudo sin fallar. No se ejecutó nada. Vuelve a ejecutar con --shell bash (Git Bash; o define DEV_SPEC_SHELL=bash) — o --shell cmd para ejecutarla en cmd.exe de todos modos.`,
+    },
+    gitLog: {
+      head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) leído(s)${truncated ? " (la ventana está llena: los commits más antiguos no se leyeron — --max N)" : ""}, ${citing} citan sus tareas`,
+      taskLine: (n, text, done, list) => `  ${done ? "[x]" : "[ ]"} #${n} ${text} — ${list}`,
+      commitRef: (short, subject, via) => `${short} ${subject} (${via})`,
+      more: (n) => `+${n} más`,
+      noCommit: "ningún commit la cita",
+      implFirst: (n, tests, taskC, testC, files) => `red-first: el primer commit de la tarea ${n} (pone ${tests} en verde) es ${taskC}, anterior a cualquier commit que toque un fichero de prueba que nombre ${tests} (${files} — el primero en ${testC}): la implementación llegó antes que su prueba.`,
+      testNotCommitted: (n, tests, taskC, files) => `red-first: la tarea ${n} (pone ${tests} en verde) tiene commit (${taskC}), pero ningún commit leído toca un fichero de prueba que nombre ${tests} (${files}) — haz primero el commit de la prueba.`,
+      redFirstStatus: (n, tests, status) => `red-first: tarea ${n} (${tests}) — ` + ({ ok: "la prueba tuvo commit primero ✓", "no-test-file": "ningún fichero de prueba la nombra aún (nada que comparar)", "no-task-commit": "ningún commit cita aún la tarea", "outside-window": "no se puede saber: la ventana del log está llena (--max N)" })[status],
+      conventions: (slug) => `Ningún commit cita una tarea de '${slug}'. Convenciones: nombra la función y la tarea — "Part of .specs/${slug}/ task #N." (lo que escribe /spec-commit) — o los IDs que cubre: "Makes T-01 green", US-1.AC-2.`,
+      noGit: "git no está disponible aquí, o esto no es un repositorio git con commits — dev-spec log lee `git log`. O pasa un log por la entrada estándar: git log --name-only --relative | dev-spec log <función> -",
+    },
     // @pkg B5 <<<
 
     // @pkg C1 msg-es >>>
@@ -5151,6 +5319,8 @@ function renderBrief(d, lang) {
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
   if ((d.verifyPipes || []).length) push("", MSG[normalizeLang(lang)].verifyPipe.brief(d.verifyPipes));
+  // B5: _Expect: fail_ — the Verification section says the run must fail (the heading too when the task has no _Verify:_)
+  if (d.expectFail) push(...(verify.length ? [] : ["", t.verification]), "", MSG[normalizeLang(lang)].redGreen.briefExpect);
 
   if (d.design.toc.length) {
     push("", t.design, t.designToc(d.design.path) + " " + d.design.toc.join(" · "));
@@ -5182,6 +5352,9 @@ function renderBrief(d, lang) {
   if (d.metrics.length) push(`${++extra}. ${t.metricsRule}`);
   if (d.evals.length && d.loop !== "ai-prompt") push(`${++extra}. ${t.evalsRule}`);
   if (verify.length) push(`${++extra}. ${t.verifyRule}`);
+  const B5 = MSG[normalizeLang(lang)]; // B5: the red run, then the project checks (roadmap.json meta.checks)
+  if (d.expectFail) push(`${++extra}. ${B5.redGreen.dodExpect}`);
+  if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks.briefDod(d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
 
   push("", t.report, t.reportTo(d.reportPath), "");
