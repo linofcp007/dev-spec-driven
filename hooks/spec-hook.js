@@ -141,6 +141,11 @@ function handle(raw) {
     if (fwd.includes("/.execution/")) process.exit(0);
     // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
     if (fwd.includes("/.specs/.removing-")) process.exit(0);
+    // Project templates (.specs/templates/[<lang>/]requirements.md …) are no feature's spec: never linted as one (a
+    // .specs/templates/pt/design.md is not feature 'pt''s design) and no roadmap churn — `dev-spec templates check` checks them.
+    // (A FEATURE named templates created before 1.14 — its folder holds a .state.json — is still a feature.)
+    const tplAt = fwd.match(/^(.*\/\.specs)\/templates\//i);
+    if (tplAt && !fs.existsSync(path.join(tplAt[1], "templates", ".state.json"))) process.exit(0);
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
     if (!isDevSpecProject(pdir)) process.exit(0);

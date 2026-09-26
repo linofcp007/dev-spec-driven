@@ -51,6 +51,9 @@ let scratch = null;
 
 for (const f of files) {
   if (!f.startsWith(".specs/") && !f.includes("/.specs/")) continue;
+  // Project templates are no feature's spec (dev-spec templates check) — unless .specs/templates/ is a pre-1.14 feature (.state.json).
+  const tplAt = f.match(/^(.*?)\.specs\/templates\//);
+  if (tplAt && !fs.existsSync(path.join(root, tplAt[1], ".specs", "templates", ".state.json"))) continue;
   const base = path.basename(f).toLowerCase();
   const featureRel = path.posix.dirname(f); // <prefix>.specs/<feature>
   const feature = path.posix.basename(featureRel);

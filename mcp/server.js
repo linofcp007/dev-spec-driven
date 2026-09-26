@@ -308,6 +308,20 @@ const TOOLS = [
   // @pkg A4 <<<
 
   // @pkg B1 tools >>>
+  {
+    name: "spec_templates",
+    description:
+      "Project templates: a team's own scaffolds in .specs/templates/. `<artifact>.md` replaces the built-in template of classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan, bug (bug.md) or the bugfix variants bug-requirements / bug-test-plan / bug-tasks; `<lang>/<artifact>.md` (en | pt | es) replaces it for features in that language and wins over the shared one; `steering/<file>.md` (also under <lang>/) replaces a steering stub. spec_create, spec_add_track, spec_init, steering_scaffold and spec_import (through spec_create) use an override when present — create-only, never over an existing file — with {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} substituted (an unknown {{x}} is left as is; no summary → a generic [TBD] slot). Track blocks: an overridden design.md still gets each active track's sections (+tdd Testability Notes, [SaaS] / [AI] / [SEC] / [PRIVACY]), requirements.md each marker track's criteria (renumbered after the template's own US-1 ACs when they would collide), tasks.md its task block and test-plan.md its test rows, appended at the end as spec_add_track does — unless the template already has that track's heading (for the test plan: already cites its criteria). The [bracketed] slots, code-span slots and task lines of the project's templates count as template placeholders, so an untouched custom scaffold still reads 'placeholder' for spec_doctor, spec_approve and spec_next_action. `action`: 'list' (default) — built-in vs project template per artifact for `lang` (default: the project language), plus files that are not a template name (ignored); 'init' — copy the built-in template(s) (`artifact`, or all of them) into .specs/templates/ for editing, variables in place — with `lang` into .specs/templates/<lang>/, else the shared folder in the project language; never overwrites; 'check' — validate the project's templates against the current rules: a design template with some of a track's marker headings but not all its mandatory sections (error), a track section without its > **TODO** line, EARS / AC-ID problems (a criterion with no modal verb or duplicate AC IDs are errors), AC IDs a tasks / test-plan template cites that the requirements template doesn't define and _Makes green:_ T-IDs the test plan doesn't plan (built-in ones included when only one side is the team's), bug.md without a Root Cause section or with one that already reads as written (errors), unknown {{variables}}, chain templates with no placeholder at all, empty files, names that are not templates — each problem with {file, line?, code, severity, message} and a verdict pass | warn | fail (`lang` limits it to the templates that apply to that language). Every path is built from the allowlisted names; nothing outside .specs/templates/ is read or written (a linked folder, or a file whose real path is outside the project, is ignored); a .specs/templates/ that is a feature created before 1.14 (it holds a .state.json) stays that feature — every action refuses with legacyFeature: true. Returns localized `lines`.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "init", "check"], description: "list (default) | init | check." },
+        artifact: { type: "string", description: "One template: classification | requirements | design | tasks | test-plan | eval-plan | load-test | quickstart | checklist | integration-plan | bug | bug-requirements | bug-test-plan | bug-tasks | steering/<file>.md ('.md' optional). Omit for all." },
+        lang: { type: "string", enum: ["en", "pt", "es"], description: "list: the feature language to resolve for (default: the project language). init: copy the templates in this language into .specs/templates/<lang>/. check: only the templates that apply to it. Messages follow it." },
+        projectDir: { type: "string" },
+      },
+    },
+  },
   // @pkg B1 <<<
 
   // @pkg B2 tools >>>
@@ -458,6 +472,8 @@ function runTool(name, args) {
     // @pkg A4 <<<
 
     // @pkg B1 dispatch >>>
+    case "spec_templates": // the same engine call as the CLI's `templates [list|init|check] [artifact] [--lang]`
+      return spec.templates(pdir, args.action, { artifact: args.artifact, lang: args.lang });
     // @pkg B1 <<<
 
     // @pkg B2 dispatch >>>

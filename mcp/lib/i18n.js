@@ -3095,6 +3095,47 @@ const MSG = {
     // @pkg A4 <<<
 
     // @pkg B1 msg-en >>>
+    // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
+    templates: {
+      noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
+      badAction: (a) => `Unknown templates action '${a}' — one of: list, init, check.`,
+      unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
+      writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
+      writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
+      legacyFeature: ".specs/templates/ is the folder of a feature created before project templates existed (it holds a .state.json) — it stays that feature and is never read as templates. Rename it (dev-spec feature rename templates <new-name>, or spec_feature rename) to use project templates.",
+      builtIn: "built-in",
+      override: "project",
+      listHead: (lang, n) => `Templates for '${lang}' features — ${n} project override(s) in .specs/templates/ (a <lang>/ file wins over a shared one):`,
+      ignored: (list) => `Ignored — not a template dev-spec knows: ${list}`,
+      initDone: (n) => `${n} built-in template(s) copied into .specs/templates/ — edit them; new scaffolds use them from now on:`,
+      initKept: (list) => `Kept (already there — never overwritten): ${list}`,
+      initNothing: "Nothing copied — every template asked for is already in .specs/templates/.",
+      checkNone: "No project template to check — .specs/templates/ holds no override (`dev-spec templates init` copies the built-in ones).",
+      checkHead: (n, errors, warnings) => `${n} template file(s) checked — ${errors} error(s), ${warnings} warning(s).`,
+      appends: (file, list) => `${file}: the engine appends the ${list} section(s) itself (the template has no heading of theirs).`,
+      problems: {
+        empty: "empty — ignored; the built-in template is used instead.",
+        "unknown-file": "not a template dev-spec knows (see spec_templates list) — ignored.",
+        "unknown-variable": (v) => `{{${v}}} is not a template variable — it is left as is (known: {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}}).`,
+        "no-placeholders": "no [bracketed] slot and no > **TODO** line — an untouched scaffold would read as filled, and its gate could be approved unedited.",
+        "missing-section": (marker, section) => `${marker} ${section} is missing — the template has other ${marker} headings, so the engine appends none of that track's sections and doctor fails on this one.`,
+        "no-sentinel": (marker, section) => `${marker} ${section} has no > **TODO** line — a fresh feature would read the section as filled (the built-in template seeds one).`,
+        "constitution-missing": "no Constitution Check section — doctor warns on every feature scaffolded from it.",
+        "no-criteria": "no acceptance criterion (a US-n.AC-m line with SHALL) — nothing for EARS, trace_check or the test plan to follow.",
+        "ac-duplicate": (ids) => `duplicate AC IDs: ${ids} — doctor fails on every feature scaffolded from it.`,
+        "phantom-ac": (ids, file) => `cites AC IDs ${file} does not define: ${ids} — trace_check reports them as phantoms.`,
+        "builtin-phantom": (file, ids) => `the built-in ${file} (not overridden) cites AC IDs this template does not define: ${ids} — override ${file} too, or keep those IDs.`,
+        "phantom-test": (ids, file) => `makes green T-IDs ${file} does not define: ${ids} — trace_check reports them as unknown tests on every +tdd feature.`,
+        "builtin-phantom-test": (file, ids) => `the built-in ${file} of a +tdd feature (not overridden) makes green T-IDs this template does not define: ${ids} — override ${file} too, or keep those IDs.`,
+        "root-cause-missing": "no Root Cause section — the bugfix gate (doctor's root-cause) would fail on every bugfix until one is added.",
+        "root-cause-filled": "Root Cause already reads as written (prose, no slot, no > **TODO** line) — a fresh bugfix would pass the root-cause gate before the cause is known.",
+        "repro-missing": "no Reproduction section — doctor warns on every bugfix.",
+        "repro-filled": "Reproduction already reads as written — a fresh bugfix would not ask for the steps.",
+        "no-tasks": "no task line (- [ ] 1. …) — a scaffold from it has nothing to execute.",
+        "no-active-tracks": "no 'Active Tracks' heading — spec_add_track can't record a track change in classification.md.",
+        "filematch-no-pattern": "front matter says inclusion: fileMatch but gives no fileMatchPattern — the file is only listed on request.",
+      },
+    },
     // @pkg B1 <<<
 
     // @pkg B2 msg-en >>>
@@ -4171,6 +4212,46 @@ const MSG = {
     // @pkg A4 <<<
 
     // @pkg B1 msg-pt >>>
+    templates: {
+      noSummary: "[a definir]",
+      badAction: (a) => `Ação de templates desconhecida '${a}' — uma de: list, init, check.`,
+      unknownArtifact: (a, list) => `Template desconhecido '${a}' — um de: ${list}, ou steering/<ficheiro>.md.`,
+      writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
+      writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
+      legacyFeature: ".specs/templates/ é a pasta de uma feature criada antes de existirem templates do projeto (tem um .state.json) — continua a ser essa feature e nunca é lida como templates. Muda-lhe o nome (dev-spec feature rename templates <novo-nome>, ou spec_feature rename) para usares templates do projeto.",
+      builtIn: "de base",
+      override: "do projeto",
+      listHead: (lang, n) => `Templates para features em '${lang}' — ${n} template(s) do projeto em .specs/templates/ (um ficheiro em <lang>/ prevalece sobre um partilhado):`,
+      ignored: (list) => `Ignorados — não são templates que o dev-spec conheça: ${list}`,
+      initDone: (n) => `${n} template(s) de base copiado(s) para .specs/templates/ — edita-os; os novos scaffolds passam a usá-los:`,
+      initKept: (list) => `Mantidos (já existiam — nunca são substituídos): ${list}`,
+      initNothing: "Nada copiado — todos os templates pedidos já estão em .specs/templates/.",
+      checkNone: "Nenhum template do projeto para verificar — .specs/templates/ não tem nenhum (`dev-spec templates init` copia os de base).",
+      checkHead: (n, errors, warnings) => `${n} ficheiro(s) de template verificado(s) — ${errors} erro(s), ${warnings} aviso(s).`,
+      appends: (file, list) => `${file}: o motor acrescenta ele próprio as secções ${list} (o template não tem os respetivos títulos).`,
+      problems: {
+        empty: "vazio — ignorado; é usado o template de base.",
+        "unknown-file": "não é um template que o dev-spec conheça (ver spec_templates list) — ignorado.",
+        "unknown-variable": (v) => `{{${v}}} não é uma variável de template — fica tal como está (conhecidas: {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}}).`,
+        "no-placeholders": "nenhum campo [entre parênteses retos] nem linha > **TODO** — um scaffold por editar pareceria preenchido e o seu gate poderia ser aprovado sem alterações.",
+        "missing-section": (marker, section) => `falta ${marker} ${section} — o template tem outros títulos ${marker}, por isso o motor não acrescenta nenhuma secção desse track e o doctor falha nesta.`,
+        "no-sentinel": (marker, section) => `${marker} ${section} não tem linha > **TODO** — numa feature nova a secção pareceria preenchida (o template de base semeia uma).`,
+        "constitution-missing": "sem secção Verificação da Constituição (Constitution Check) — o doctor avisa em todas as features criadas a partir dele.",
+        "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
+        "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
+        "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
+        "builtin-phantom": (file, ids) => `o ${file} de base (não substituído) cita IDs de AC que este template não define: ${ids} — substitui também o ${file}, ou mantém esses IDs.`,
+        "phantom-test": (ids, file) => `põe a verde IDs de teste que ${file} não define: ${ids} — o trace_check reporta-os como testes desconhecidos em todas as features +tdd.`,
+        "builtin-phantom-test": (file, ids) => `o ${file} de base de uma feature +tdd (não substituído) põe a verde IDs de teste que este template não define: ${ids} — substitui também o ${file}, ou mantém esses IDs.`,
+        "root-cause-missing": "sem secção Causa Raiz — o gate do bugfix (root-cause do doctor) falharia em todos os bugfixes até ser acrescentada.",
+        "root-cause-filled": "a Causa Raiz já parece escrita (texto, sem campo, sem linha > **TODO**) — um bugfix novo passaria o gate da causa raiz antes de a causa ser conhecida.",
+        "repro-missing": "sem secção Reprodução — o doctor avisa em todos os bugfixes.",
+        "repro-filled": "a Reprodução já parece escrita — um bugfix novo não pediria os passos.",
+        "no-tasks": "nenhuma linha de tarefa (- [ ] 1. …) — um scaffold a partir dele não tem nada para executar.",
+        "no-active-tracks": "sem título 'Tracks ativos' — o spec_add_track não consegue registar uma mudança de track no classification.md.",
+        "filematch-no-pattern": "o front matter diz inclusion: fileMatch mas não indica nenhum fileMatchPattern — o ficheiro só é listado a pedido.",
+      },
+    },
     // @pkg B1 <<<
 
     // @pkg B2 msg-pt >>>
@@ -5243,6 +5324,46 @@ const MSG = {
     // @pkg A4 <<<
 
     // @pkg B1 msg-es >>>
+    templates: {
+      noSummary: "[por definir]",
+      badAction: (a) => `Acción de plantillas desconocida '${a}' — una de: list, init, check.`,
+      unknownArtifact: (a, list) => `Plantilla desconocida '${a}' — una de: ${list}, o steering/<archivo>.md.`,
+      writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
+      writeOutside: (rel) => `Me niego a escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
+      legacyFeature: ".specs/templates/ es la carpeta de una función creada antes de que existieran las plantillas del proyecto (tiene un .state.json) — sigue siendo esa función y nunca se lee como plantillas. Cámbiale el nombre (dev-spec feature rename templates <nuevo-nombre>, o spec_feature rename) para usar plantillas del proyecto.",
+      builtIn: "de serie",
+      override: "del proyecto",
+      listHead: (lang, n) => `Plantillas para funciones en '${lang}' — ${n} plantilla(s) del proyecto en .specs/templates/ (un archivo en <lang>/ prevalece sobre uno compartido):`,
+      ignored: (list) => `Ignorados — no son plantillas que dev-spec conozca: ${list}`,
+      initDone: (n) => `${n} plantilla(s) de serie copiada(s) en .specs/templates/ — edítalas; los nuevos scaffolds las usan a partir de ahora:`,
+      initKept: (list) => `Conservadas (ya existían — nunca se sobrescriben): ${list}`,
+      initNothing: "Nada copiado — todas las plantillas pedidas ya están en .specs/templates/.",
+      checkNone: "No hay plantillas del proyecto que comprobar — .specs/templates/ no tiene ninguna (`dev-spec templates init` copia las de serie).",
+      checkHead: (n, errors, warnings) => `${n} archivo(s) de plantilla comprobado(s) — ${errors} error(es), ${warnings} aviso(s).`,
+      appends: (file, list) => `${file}: el motor añade por sí mismo las secciones ${list} (la plantilla no tiene sus encabezados).`,
+      problems: {
+        empty: "vacío — ignorado; se usa la plantilla de serie.",
+        "unknown-file": "no es una plantilla que dev-spec conozca (ver spec_templates list) — ignorado.",
+        "unknown-variable": (v) => `{{${v}}} no es una variable de plantilla — se deja tal cual (conocidas: {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}}).`,
+        "no-placeholders": "ningún campo [entre corchetes] ni línea > **TODO** — un scaffold sin editar parecería rellenado y su gate podría aprobarse sin cambios.",
+        "missing-section": (marker, section) => `falta ${marker} ${section} — la plantilla tiene otros encabezados ${marker}, así que el motor no añade ninguna sección de ese track y doctor falla en esta.`,
+        "no-sentinel": (marker, section) => `${marker} ${section} no tiene línea > **TODO** — en una función nueva la sección parecería rellenada (la plantilla de serie siembra una).`,
+        "constitution-missing": "sin sección Verificación de la Constitución (Constitution Check) — doctor avisa en todas las funciones creadas con ella.",
+        "no-criteria": "ningún criterio de aceptación (una línea US-n.AC-m con DEBE) — nada que seguir para EARS, trace_check o el plan de pruebas.",
+        "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — doctor falla en todas las funciones creadas con ella.`,
+        "phantom-ac": (ids, file) => `cita IDs de AC que ${file} no define: ${ids} — trace_check los reporta como fantasmas.`,
+        "builtin-phantom": (file, ids) => `el ${file} de serie (no sustituido) cita IDs de AC que esta plantilla no define: ${ids} — sustituye también ${file}, o conserva esos IDs.`,
+        "phantom-test": (ids, file) => `pone en verde IDs de prueba que ${file} no define: ${ids} — trace_check los reporta como pruebas desconocidas en todas las funciones +tdd.`,
+        "builtin-phantom-test": (file, ids) => `el ${file} de serie de una función +tdd (no sustituido) pone en verde IDs de prueba que esta plantilla no define: ${ids} — sustituye también ${file}, o conserva esos IDs.`,
+        "root-cause-missing": "sin sección Causa Raíz — el gate del bugfix (root-cause de doctor) fallaría en todos los bugfixes hasta añadirla.",
+        "root-cause-filled": "la Causa Raíz ya parece escrita (texto, sin campo, sin línea > **TODO**) — un bugfix nuevo pasaría el gate de la causa raíz antes de conocer la causa.",
+        "repro-missing": "sin sección Reproducción — doctor avisa en todos los bugfixes.",
+        "repro-filled": "la Reproducción ya parece escrita — un bugfix nuevo no pediría los pasos.",
+        "no-tasks": "ninguna línea de tarea (- [ ] 1. …) — un scaffold con ella no tiene nada que ejecutar.",
+        "no-active-tracks": "sin encabezado 'Tracks activos' — spec_add_track no puede registrar un cambio de track en classification.md.",
+        "filematch-no-pattern": "el front matter dice inclusion: fileMatch pero no indica ningún fileMatchPattern — el archivo solo se lista a petición.",
+      },
+    },
     // @pkg B1 <<<
 
     // @pkg B2 msg-es >>>
