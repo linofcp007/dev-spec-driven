@@ -21,7 +21,7 @@
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
- *                                      --brownfield → + integration-plan.md)
+ *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
  *   list                               List features + phase + progress
  *   status [feature]                   Status of one feature (or all)
@@ -49,7 +49,7 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
- *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
+ *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
  *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
@@ -63,7 +63,7 @@
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
- *   import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec as a NEW feature
+ *   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
  *   mcp-config [client]                Print ready MCP config (claude-desktop|claude-code|
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
@@ -142,6 +142,7 @@ VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
+VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -308,7 +309,7 @@ function main() {
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
-        { brownfield: on("brownfield") }); // = spec_create {brownfield}
+        { brownfield: on("brownfield"), flow: flags.flow }); // = spec_create {brownfield, flow}
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -690,10 +691,11 @@ function main() {
     }
 
     case "feature": {
-      // dev-spec feature <remove|archive|rename|restore> <name> [new-name] — remove needs --yes (= spec_feature confirm:true)
-      if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore> <name> [new-name] [--yes]");
+      // dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|flow] — remove needs --yes (= spec_feature confirm:true);
+      // flow <name> <requirements-first|design-first> (or --flow) = spec_feature {action: "flow", flow} (C3)
+      if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|requirements-first|design-first] [--yes]");
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
-      const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes") });
+      const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes"), flow: flags.flow });
       if (!r.ok && r.needsConfirm) {
         // Without --yes: show what would be deleted, delete nothing, exit 1.
         process.exitCode = 1;
@@ -713,6 +715,7 @@ function main() {
           // the dependents whose dependsOn the archive pruned — a warning when the archived work was never finished
           if (r.note) console.log((r.incompleteDependency ? "  ⚠ " : "  ") + r.note);
         }
+        else if (r.action === "flow") console.log(r.note); // C3: the flow, the phase order (and the phases that stay approved)
         else if (r.action === "restore") {
           const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language
           console.log(RT.done(r.feature));
@@ -752,9 +755,9 @@ function main() {
     }
 
     case "import": {
-      // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
+      // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai,sec,privacy]");
+      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai,sec,privacy]");
       const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -1079,7 +1082,8 @@ function helpText() {
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
                                   edit; check validates them (exit 1 on an error)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
-                                  --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase)
+                                  --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
+                                  --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)
@@ -1118,6 +1122,7 @@ function helpText() {
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
+  feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
   export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
                                   tasks with their verification, approvals, open clarifications) or, without one, the whole project;
@@ -1140,8 +1145,10 @@ function helpText() {
   scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
-  import <kiro|spec-kit|openspec> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
+  import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|es · --tracks tdd,saas,ai,sec,privacy
+                                  plan = Claude Code plan mode / Cursor .cursor/plans (copy a ~/.claude/plans file into the project first),
+                                  execplan = a Codex ExecPlan (PLANS.md), bmad = BMAD-METHOD docs (prd.md + docs/stories/)
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
@@ -1153,7 +1160,7 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
-         --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
+         --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.

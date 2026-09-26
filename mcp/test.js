@@ -1712,7 +1712,7 @@ function endRun() {
     ok(rPhase.ok && rPhase.approved === "design" && rLang.ok && rLang.lang === "pt" && rKind.ok && rKind.kind === "bugfix" &&
       rBl.ok && rBl.backlog.some((b) => b.name === "Later thing") && rBlList.ok && rBlList.backlog.length === 1 &&
       body(rFeat).needsConfirm === true && !/one of/.test(errText(rFeat)) && !/one of/.test(errText(rImp)) &&
-      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec \(got "Kiro"\)/.test(errText(rTool)) &&
+      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad
       rBadPh.result.isError && /phase must be one of: .* \(got "Desing"\)/.test(errText(rBadPh)),
       "MCP enums are case-insensitive where the engine folds them (phase ' Design ', lang 'PT', kind 'Bugfix', backlog 'ADD'/'LIST', feature 'Remove', impact 'DESIGN'); spec_import's tool stays exact; a typo is still refused as given");
     const rNested =await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
@@ -8546,6 +8546,305 @@ function endRun() {
   // @pkg C2 <<<
 
   // @pkg C3 tests >>>
+  { // 1.14 C3 — spec_import plan · execplan · bmad, and the design-first flow
+    const c3Call = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
+    const c3Put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const c3Read = (root, ...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+    const c3State = (dir) => JSON.parse(fs.readFileSync(path.join(dir, ".state.json"), "utf8"));
+    const c3Safe = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
+
+    // --- C3.1 plan: a Claude Code plan-mode plan (copied into the project), and a Cursor plan with front matter todos
+    const ip = path.join(tmp, "c3-import-plan");
+    S.initProject(ip, ["core"], "en");
+    const claudePlan = ["# Plan: Add dark mode toggle", "", "## Context", "The app only ships a light theme. Users asked for a dark theme that follows the OS setting.", "",
+      "## Goals", "- When the user clicks the theme toggle, the app switches between light and dark themes", "- The chosen theme persists across reloads",
+      "- The system SHALL respect `prefers-color-scheme` on first visit", "", "## Implementation Steps",
+      "1. Create the theme context in `src/theme/ThemeContext.tsx` with a `useTheme` hook", "   - store the choice in localStorage",
+      "2. Add the toggle button to `src/components/Header.tsx` (see src/components/Header.test.tsx:12)", "3. Update the tokens (see [tokens](src/styles/tokens.css)) — not in https://example.com/a.css nor /etc/x.conf, and/or ../up.js",
+      "", "## Files to modify", "- `src/App.tsx` — wrap the tree in `ThemeProvider`", "", "## Verification", "- Run `npm test`", "- Toggling twice returns to the original theme", ""].join("\n");
+    c3Put(ip, ".claude/plans/dark-mode.md", claudePlan);
+    const pl = await c3Call("spec_import", { tool: "plan", path: ".claude/plans/dark-mode.md", projectDir: ip });
+    const plb = pl.body;
+    const plReq = plb.ok ? c3Read(ip, ".specs", plb.feature, "requirements.md") : "";
+    const plTasks = plb.ok ? c3Read(ip, ".specs", plb.feature, "tasks.md") : "";
+    const plDesign = plb.ok ? c3Read(ip, ".specs", plb.feature, "design.md") : "";
+    ok(!pl.isError && plb.feature === "add-dark-mode-toggle" && plb.source === ".claude/plans/dark-mode.md" && plb.toolName === "plan" &&
+      plb.mapping["Add dark mode toggle"] === "US-1" && plb.mapping["Goals 1"] === "US-1.AC-1" && plb.mapping["Verification 1"] === "US-1.AC-4" && plb.mapping["step 3"] === "task 3" &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN the user clicks the theme toggle, THE SYSTEM SHALL ensure that the app switches between light and dark themes/.test(plReq) &&
+      /3\. \*\*US-1\.AC-3\*\* — The system SHALL respect `prefers-color-scheme` on first visit\n/.test(plReq) &&
+      /2\. \*\*US-1\.AC-2\*\* — The chosen theme persists across reloads \[NEEDS CLARIFICATION/.test(plReq) && plb.warnings.some((w) => /US-1\.AC-2, US-1\.AC-4/.test(w)) &&
+      /^## Summary\nThe app only ships a light theme\./m.test(plReq) && /^> Imported from plan `\.claude\/plans\/dark-mode\.md` on \d{4}-\d{2}-\d{2}\.$/m.test(plTasks),
+      "C3 spec_import plan (Claude Code plan mode): goals + verification bullets → US-1.AC-n (EARS when they read like one — a WHEN clause rewritten, a SHALL kept — else [NEEDS CLARIFICATION] + warning), Context → summary, the note names the plan file (got " + JSON.stringify(plb).slice(0, 300) + ")");
+    ok(/- \[ \] 1\. Create the theme context in `src\/theme\/ThemeContext\.tsx` with a `useTheme` hook\n  - _Implements: src\/theme\/ThemeContext\.tsx_\n  - store the choice in localStorage/.test(plTasks) &&
+      /- \[ \] 2\. Add the toggle button[^\n]*\n  - _Implements: src\/components\/Header\.tsx, src\/components\/Header\.test\.tsx_\n/.test(plTasks) &&
+      /- \[ \] 3\. Update the tokens[^\n]*\n  - _Implements: src\/styles\/tokens\.css_\n/.test(plTasks) && !/_Implements:[^\n]*(?:example\.com|etc\/x|and\/or|up\.js)/.test(plTasks) && !/- \[ \] 4\./.test(plTasks) &&
+      /## Files to modify\n- `src\/App\.tsx` — wrap the tree/.test(plDesign) && /## Verification\n- Run `npm test`/.test(plDesign) && !/Implementation Steps|## Goals/.test(plDesign),
+      "C3 plan: numbered steps → tasks with the file paths they name as _Implements:_ (backticks, bare paths with a folder, link targets; :line dropped; never a URL, an absolute path, and/or or '..'); Files to modify and the command-only Verification bullet stay in design.md, the used sections don't");
+    ok(c3Read(ip, ".claude", "plans", "dark-mode.md") === claudePlan && plb.warnings.some((w) => /no _Requirements:_ references/.test(w)),
+      "C3 plan: the source plan is never modified; tasks without _Requirements:_ are reported");
+    const cursorPlan = ["---", "name: Checkout coupons", "overview: \"Let shoppers apply a coupon code at checkout and see the discounted total.\"", "todos:",
+      "  - id: coupon-model", "    content: Add the Coupon model in `app/models/coupon.rb`", "    status: completed",
+      "  - id: apply-endpoint", "    content: \"Create POST /api/coupons/apply in app/controllers/coupons_controller.rb\"", "    status: in_progress",
+      "  - id: old-idea", "    content: Try a coupon microservice", "    status: cancelled", "---", "", "# Checkout coupons", "", "## Overview", "Coupons reduce the order total before tax.", "",
+      "## Acceptance criteria", "- If the code is expired, the system rejects it with the expiry date", "- A valid code reduces the total", "", "## Architecture", "The discount is computed server-side.", ""].join("\n");
+    c3Put(ip, ".cursor/plans/checkout-coupons_1a2b3c4d.plan.md", cursorPlan);
+    const cp = await c3Call("spec_import", { tool: "plan", path: ".cursor/plans", tracks: ["core"], projectDir: ip });
+    const cpb = cp.body;
+    const cpReq = cpb.ok ? c3Read(ip, ".specs", "checkout-coupons", "requirements.md") : "";
+    const cpTasks = cpb.ok ? c3Read(ip, ".specs", "checkout-coupons", "tasks.md") : "";
+    ok(!cp.isError && cpb.feature === "checkout-coupons" && cpb.source === ".cursor/plans/checkout-coupons_1a2b3c4d.plan.md" && /^## Summary\nLet shoppers apply a coupon code/m.test(cpReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — IF the code is expired, THEN THE SYSTEM SHALL reject it with the expiry date/.test(cpReq) &&
+      /- \[x\] 1\. Add the Coupon model in `app\/models\/coupon\.rb`\n  - _Implements: app\/models\/coupon\.rb_/.test(cpTasks) &&
+      /- \[ \] 2\. Create POST \/api\/coupons\/apply in app\/controllers\/coupons_controller\.rb\n  - _Implements: app\/controllers\/coupons_controller\.rb_\n/.test(cpTasks) &&
+      /- \[ \] 3\. Try a coupon microservice/.test(cpTasks) && cpb.mapping["todo coupon-model"] === "task 1" && cpb.warnings.some((w) => /cancelled to-dos[^\n]*Try a coupon microservice/.test(w)) &&
+      /## Overview\nCoupons reduce[^\n]*\n\n## Architecture/.test(c3Read(ip, ".specs", "checkout-coupons", "design.md")),
+      "C3 plan (Cursor .cursor/plans/*.plan.md): front matter overview → summary, todos → tasks (completed → [x], in_progress open, cancelled open + warned), an IF clause → EARS IF…THEN, the plan's folder resolves to its one plan (got " + JSON.stringify(cpb).slice(0, 300) + ")");
+    // Refusals: ~ (plan mode's default folder), ../, a folder of several plans, an existing feature.
+    c3Put(ip, "plans/a.md", "# A\n- [ ] one\n");
+    c3Put(ip, "plans/b.md", "# B\n- [ ] two\n");
+    const home = await c3Call("spec_import", { tool: "plan", path: "~/.claude/plans/dark-mode.md", projectDir: ip });
+    const up = c3Safe(() => S.importSpec(ip, "plan", "../x.md"));
+    const several = await c3Call("spec_import", { tool: "plan", path: "plans", projectDir: ip });
+    const again = await c3Call("spec_import", { tool: "plan", path: ".claude/plans/dark-mode.md", projectDir: ip });
+    const upKiro = c3Safe(() => S.importSpec(ip, "kiro", "../x"));
+    ok(home.isError && /outside the project[^\n]*plansDirectory \(default ~\/\.claude\/plans — outside the project\): copy the plan into the project first/.test(home.body.error) &&
+      !up.ok && /plansDirectory/.test(up.error) && !upKiro.ok && !/plansDirectory/.test(upKiro.error) && /outside the project/.test(upKiro.error) &&
+      several.isError && /'plans' holds several documents \(a\.md, b\.md\) — pass the one to import/.test(several.body.error) && !fs.existsSync(path.join(ip, ".specs", "a")) &&
+      again.isError && /already exists/.test(again.body.error),
+      "C3 plan refusals: ~/.claude/plans (outside — says to copy the plan in or point plansDirectory inside the project; only for plans), ../, a folder with several plans (named), an existing feature");
+    // Sub-heading steps, criteria checklists, a plan in PT.
+    c3Put(ip, "docs/plans/cache.md", ["# Implementation Plan: Response cache", "", "Cache GET responses for five minutes.", "", "## Acceptance Criteria", "- [ ] Given a cached entry, when it is older than 5 minutes, then it is refetched",
+      "", "## Implementation", "### Step 1: Add the cache store", "Create `src/cache/store.ts`.", "#### Notes", "LRU, 500 entries.", "```ts", "// see src/fake/path.ts", "```",
+      "### Step 2: Wire the middleware", "Edit `src/server.ts`.", ""].join("\n"));
+    const sh = c3Safe(() => S.importSpec(ip, "plan", "docs/plans/cache.md"));
+    const shTasks = sh.ok ? c3Read(ip, ".specs", sh.feature, "tasks.md") : "";
+    const shReq = sh.ok ? c3Read(ip, ".specs", sh.feature, "requirements.md") : "";
+    ok(sh.ok && sh.feature === "response-cache" && /1\. \*\*US-1\.AC-1\*\* — WHILE a cached entry, WHEN it is older than 5 minutes, THE SYSTEM SHALL ensure that it is refetched/.test(shReq) &&
+      /- \[ \] 1\. Add the cache store\n  - _Implements: src\/cache\/store\.ts_\n  Create `src\/cache\/store\.ts`\.\n  \*\*Notes\*\*\n  LRU, 500 entries\.\n  ```ts\n  \/\/ see src\/fake\/path\.ts\n  ```/.test(shTasks) &&
+      /- \[ \] 2\. Wire the middleware\n  - _Implements: src\/server\.ts_/.test(shTasks) && !/- \[ \] \d+\. Given a cached/.test(shTasks),
+      "C3 plan: no checklist outside the criteria → the 'Step N:' sub-headings of the Implementation section are the tasks (their notes kept, a sub-heading as a bold line, a code block's paths never _Implements:_); a criteria checklist is a criterion (Given/When/Then → EARS), not a task (got " + JSON.stringify(sh).slice(0, 200) + ")");
+    const ipPt = path.join(tmp, "c3-import-plan-pt");
+    S.initProject(ipPt, ["core"], "pt");
+    c3Put(ipPt, "plano.md", ["# Plano: Exportar CSV", "", "## Objetivos", "- Quando o utilizador clica em Exportar, o sistema gera um ficheiro CSV", "", "## Passos", "- [ ] Criar `src/export/csv.ts`", "- [x] Adicionar o botão", ""].join("\n"));
+    const pt = c3Safe(() => S.importSpec(ipPt, "plan", "plano.md"));
+    const ptReq = pt.ok ? c3Read(ipPt, ".specs", pt.feature, "requirements.md") : "";
+    ok(pt.ok && pt.lang === "pt" && /^> Importado de plan `plano\.md` em /m.test(ptReq) && /US-1\.AC-1\*\* — QUANDO o utilizador clica em Exportar, O SISTEMA DEVE garantir que o sistema gera um ficheiro CSV/.test(ptReq) &&
+      /- \[ \] 1\. Criar `src\/export\/csv\.ts`\n  - _Implements: src\/export\/csv\.ts_\n- \[x\] 2\. Adicionar o botão/.test(c3Read(ipPt, ".specs", pt.feature, "tasks.md")) &&
+      (S.earsFeature(ipPt, pt.feature).issues || []).every((i) => i.severity !== "error"),
+      "C3 plan in PT: a QUANDO clause becomes a PT EARS criterion that passes ears, a checklist keeps its state, the note is localized (got " + JSON.stringify(pt).slice(0, 200) + ")");
+    ok(JSON.stringify(S.planPaths("`package.json` `Node.js` `src/a.ts:12` [x](docs/a.md) see lib/b.js, `@/alias/x.ts` `src/**/*.ts` `C:/abs.ts` `~/.zshrc` client/server `src/utils/`")) ===
+      JSON.stringify(["package.json", "src/a.ts", "src/utils/", "docs/a.md", "lib/b.js"]),
+      "C3 planPaths: backticked files / folders and paths (a :line dropped), link targets, bare paths with a folder and an extension — never a framework name, an alias, a glob, an absolute or home path, or a/b prose (got " + JSON.stringify(S.planPaths("`package.json` `Node.js` `src/a.ts:12` [x](docs/a.md) see lib/b.js, `@/alias/x.ts` `src/**/*.ts` `C:/abs.ts` `~/.zshrc` client/server `src/utils/`")) + ")");
+
+    // --- C3.1 execplan: a Codex ExecPlan (PLANS.md format)
+    const ie = path.join(tmp, "c3-import-exec");
+    S.initProject(ie, ["core"], "en");
+    const execPlan = ["# Add a /health endpoint to the API", "", "This ExecPlan is a living document.", "", "## Purpose / Big Picture", "",
+      "After this change an operator can call GET /health and learn whether the API and its database are up.", "", "It unblocks the load balancer's health checks.", "",
+      "## Progress", "", "- [x] (2025-10-01 13:00Z) Add the route skeleton in `src/routes/health.ts`.", "- [ ] Wire the database ping (`src/db/ping.ts`) and run `npm test` to confirm.",
+      "- [ ] Install the driver with `npm install pg`.", "", "## Surprises & Discoveries", "", "- Observation: the DB driver has no ping.", "  Evidence: `pg` exposes only query().", "",
+      "## Decision Log", "", "- Decision: Use SELECT 1 as the ping.", "  Rationale: No driver API for ping; SELECT 1 is cheap.", "  Date/Author: 2025-10-01 / codex", "",
+      "## Outcomes & Retrospective", "", "(none yet)", "", "## Context and Orientation", "", "The API is an Express app in `src/app.ts`.", "",
+      "## Concrete Steps", "", "1. Wire the database ping (`src/db/ping.ts`) and run `npm test` to confirm.", "2. Run the integration suite from the repository root:", "",
+      "       npm run test:integration", "", "   Expect 3 passing.", "", "## Validation and Acceptance", "",
+      "- When GET /health is called with the database up, the API returns 200 with body {\"status\":\"ok\"}", "- If the database is down, the endpoint returns 503", "- Run `npm test`", "",
+      "## Idempotence and Recovery", "", "The steps can be repeated safely.", ""].join("\n");
+    c3Put(ie, ".agent/execplans/health.md", execPlan);
+    c3Put(ie, ".agent/execplans/PLANS.md", "# ExecPlans\n\nHow to write one: ## Progress, ## Decision Log …\n");
+    const ex = await c3Call("spec_import", { tool: "execplan", path: ".agent/execplans", projectDir: ie });
+    const exb = ex.body;
+    const exReq = exb.ok ? c3Read(ie, ".specs", exb.feature, "requirements.md") : "";
+    const exTasks = exb.ok ? c3Read(ie, ".specs", exb.feature, "tasks.md") : "";
+    const exDesign = exb.ok ? c3Read(ie, ".specs", exb.feature, "design.md") : "";
+    ok(!ex.isError && exb.feature === "add-a-health-endpoint-to-the-api" && exb.source === ".agent/execplans/health.md" && exb.toolName === "ExecPlan" &&
+      /^## Summary\nAfter this change an operator can call GET \/health/m.test(exReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN GET \/health is called with the database up, THE SYSTEM SHALL ensure that the API returns 200/.test(exReq) &&
+      /2\. \*\*US-1\.AC-2\*\* — IF the database is down, THEN THE SYSTEM SHALL ensure that the endpoint returns 503/.test(exReq) && !/US-1\.AC-3/.test(exReq) &&
+      (S.earsFeature(ie, exb.feature).issues || []).every((i) => i.severity !== "error"),
+      "C3 spec_import execplan: Purpose → summary, Validation and Acceptance → EARS criteria (the command-only bullet is no criterion), PLANS.md in the folder is the guide, not the plan (got " + JSON.stringify(exb).slice(0, 300) + ")");
+    ok(/## Progress\n- \[x\] 1\. \(2025-10-01 13:00Z\) Add the route skeleton in `src\/routes\/health\.ts`\.\n  - _Implements: src\/routes\/health\.ts_\n/.test(exTasks) &&
+      /- \[ \] 2\. Wire the database ping[^\n]*\n  - _Implements: src\/db\/ping\.ts_\n  - _Verify: npm test_\n/.test(exTasks) &&
+      /- \[ \] 3\. Install the driver with `npm install pg`\.\n(?!  - _Verify)/.test(exTasks) &&
+      /## Concrete Steps\n- \[ \] 4\. Run the integration suite from the repository root:\n  - _Verify: npm run test:integration_\n\n      npm run test:integration\n\n  Expect 3 passing\./.test(exTasks) &&
+      !/- \[ \] 5\./.test(exTasks) && exb.mapping["Progress 2"] === "task 2" && exb.mapping["Concrete Steps 1"] === "task 2" && exb.mapping["Concrete Steps 2"] === "task 4",
+      "C3 execplan: Progress → tasks (state + timestamp kept), Concrete Steps → tasks (a step Progress already lists maps to that task, never a duplicate); a check command a step names → _Verify:_ (backticked, or its indented block), `npm install` is no check");
+    ok(/## Decisions\n\n- \*\*D-1\*\* — Use SELECT 1 as the ping\.\n  Rationale: No driver API for ping; SELECT 1 is cheap\.\n  Date\/Author: 2025-10-01 \/ codex/.test(exDesign) && exb.mapping["Decision Log 1"] === "D-1" &&
+      /## Surprises & Discoveries\n\n- Observation: the DB driver has no ping\./.test(exDesign) && /## Purpose \/ Big Picture\n\nIt unblocks the load balancer's health checks\./.test(exDesign) &&
+      /## Validation and Acceptance\n\n- Run `npm test`/.test(exDesign) && /## Idempotence and Recovery/.test(exDesign) && !/## Progress|## Decision Log/.test(exDesign) &&
+      c3Read(ie, ".agent", "execplans", "health.md") === execPlan,
+      "C3 execplan: Decision Log → design.md '## Decisions' (D-1 + its Rationale / Date lines), the living sections kept verbatim in design.md, the source untouched");
+    c3Put(ie, "wrapped.md", "```md\n# Rate limit the login\n\n## Progress\n\n- [ ] Add a limiter to `src/login.ts`\n\n## Validation and Acceptance\n\nWhen six attempts arrive within a minute, the API returns 429.\n```\n");
+    c3Put(ip, "notes/no-title.md", "Some intro.\n\n## Steps\n- [ ] Write `src/a.ts`\n\n# Appendix\nMore.\n");
+    const nt = c3Safe(() => S.importSpec(ip, "plan", "notes/no-title.md"));
+    ok(nt.ok && nt.feature === "no-title" && /- \[ \] 1\. Write `src\/a\.ts`/.test(c3Read(ip, ".specs", "no-title", "tasks.md")) && /\n## Appendix\nMore\./.test(c3Read(ip, ".specs", "no-title", "design.md")),
+      "C3 plan: only a FIRST level-1 heading is the title — a later '# Appendix' is a section (kept in design.md as '## Appendix'), the name falls back to the file name (got " + JSON.stringify(nt).slice(0, 200) + ")");
+    const wr = c3Safe(() => S.importSpec(ie, "execplan", "wrapped.md"));
+    const notExec = c3Safe(() => S.importSpec(ie, "execplan", "plans-not.md"));
+    c3Put(ie, "plain.md", "# Just notes\n\n- [ ] do a thing\n");
+    const plain = c3Safe(() => S.importSpec(ie, "execplan", "plain.md"));
+    ok(wr.ok && wr.feature === "rate-limit-the-login" && /US-1\.AC-1\*\* — WHEN six attempts arrive within a minute, THE SYSTEM SHALL ensure that the API returns 429/.test(c3Read(ie, ".specs", wr.feature, "requirements.md")) &&
+      !notExec.ok && /not found/.test(notExec.error) && plain.ok && plain.warnings.some((w) => /no ExecPlan sections found/.test(w)),
+      "C3 execplan: an ExecPlan wrapped whole in a ```md fence is read inside it (a Validation paragraph → a criterion); a document with no ExecPlan section is imported with a warning");
+
+    // --- C3.1 bmad: v4 docs (PRD with FR/NFR + epic stories, a story file, architecture.md)
+    const ib = path.join(tmp, "c3-import-bmad");
+    S.initProject(ib, ["core"], "en");
+    c3Put(ib, "docs/prd.md", ["# TaskFlow Product Requirements Document (PRD)", "", "## Goals and Background Context", "", "### Goals", "- Ship a usable todo MVP", "", "### Background Context",
+      "TaskFlow helps small teams track work without heavy tooling.", "", "### Change Log", "| Date | Version | Description | Author |", "|---|---|---|---|", "| 2025-01-01 | 1.0 | First | PM |", "",
+      "## Requirements", "", "### Functional", "- FR1: Users can create a todo with a title.", "- FR2: Users can mark a todo done.", "", "### Non Functional", "- NFR1: Pages load in under 2 seconds on 3G.", "",
+      "## Technical Assumptions", "Monorepo, Node + React.", "", "## Epic List", "- Epic 1: Foundation & Todos", "", "## Epic 1 Foundation & Todos", "Stand up the app and the core todo loop.", "",
+      "### Story 1.2 Complete todos", "As a user,", "I want to complete todos,", "so that I see progress.", "", "#### Acceptance Criteria", "1: When the user ticks a todo, it is marked done.", "",
+      "### Story 1.1 Create todos (PRD copy)", "As a user, I want todos.", "", "#### Acceptance Criteria", "1: an outdated criterion", ""].join("\n"));
+    const storyFile = ["# Story 1.1: Create todos", "", "## Status", "", "Approved", "", "## Story", "", "**As a** user,", "**I want** to create todos,", "**so that** I remember work.", "",
+      "## Acceptance Criteria", "", "1. WHEN a user submits a title THEN the system SHALL create a todo.", "2. The todo list shows the new todo at the top.", "",
+      "## Tasks / Subtasks", "", "- [x] Task 1: Todo model (AC: 1)", "  - [x] Subtask 1.1: add `src/models/todo.ts`", "- [ ] Task 2: List ordering (AC: 2, 7)", "  - [ ] Subtask 2.1: sort newest first in `src/list.ts`",
+      "- [ ] Task 3: End-to-end check (ACs: 1-2)", "",
+      "## Dev Notes", "", "Use the repository pattern.", "", "### Testing", "", "Jest, tests next to the source.", "", "## Change Log", "", "| Date | Version | Description | Author |", "|---|---|---|---|", "| 2025-01-02 | 0.1 | Draft | SM |", "",
+      "## Dev Agent Record", "", "### File List", "- src/models/todo.ts", ""].join("\n");
+    c3Put(ib, "docs/stories/1.1.create-todos.md", storyFile);
+    c3Put(ib, "docs/architecture.md", "# TaskFlow Architecture\n\n## Tech Stack\nNode 20, React 18, SQLite.\n");
+    const bm = await c3Call("spec_import", { tool: "bmad", path: "docs", projectDir: ib });
+    const bmb = bm.body;
+    const bmReq = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "requirements.md") : "";
+    const bmTasks = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "tasks.md") : "";
+    const bmDesign = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "design.md") : "";
+    ok(!bm.isError && bmb.feature === "taskflow" && bmb.toolName === "BMAD" && bmb.source === "docs" && bmb.mapping["Story 1.1"] === "US-1" && bmb.mapping["Story 1.2"] === "US-2" &&
+      bmb.mapping["Story 1.1 / AC 2"] === "US-1.AC-2" && bmb.mapping["Story 1.2 / AC 1"] === "US-2.AC-1" && bmb.mapping.FR1 === "FR-1" && bmb.mapping.NFR1 === "NFR-1" &&
+      /### US-1: Create todos\nAs a user,\nI want to create todos,\nso that I remember work\./.test(bmReq) && !/outdated criterion|PRD copy/.test(bmReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN a user submits a title THEN the system SHALL create a todo\./.test(bmReq) &&
+      /1\. \*\*US-2\.AC-1\*\* — WHEN the user ticks a todo, THE SYSTEM SHALL ensure that it is marked done/.test(bmReq) &&
+      /## Functional Requirements\n- \*\*FR-1\*\* — Users can create a todo with a title\.\n- \*\*FR-2\*\* — Users can mark a todo done\./.test(bmReq) &&
+      /## Non-Functional Requirements\n- \*\*NFR-1\*\* — Pages load in under 2 seconds on 3G\./.test(bmReq) && /^## Summary\nTaskFlow helps small teams/m.test(bmReq) && !/### Functional|### Non Functional/.test(bmReq),
+      "C3 spec_import bmad: stories in story order (the story file wins over the PRD's copy) → US-n, their ACs ('1:' and '1.') → US-n.AC-m (EARS when they read like one), FR1/NFR1 → FR-1/NFR-1 lines, Background → summary, the name from the PRD title (got " + JSON.stringify(bmb).slice(0, 300) + ")");
+    ok(/## US-1: Create todos\n- \[x\] 1\. \[US1\] Task 1: Todo model\n  - _Requirements: US-1\.AC-1_\n- \[x\] 2\. \[US1\] Subtask 1\.1: add `src\/models\/todo\.ts`\n  - _Implements: src\/models\/todo\.ts_\n/.test(bmTasks) &&
+      /- \[ \] 3\. \[US1\] Task 2: List ordering \(AC: 2, 7\)\n  - _Requirements: US-1\.AC-2_\n/.test(bmTasks) && /- \[ \] 4\. \[US1\] Subtask 2\.1/.test(bmTasks) &&
+      /- \[ \] 5\. \[US1\] Task 3: End-to-end check\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_/.test(bmTasks) &&
+      bmb.mapping["Story 1.1 / Task 2"] === "task 3" && bmb.warnings.some((w) => /Story 1\.1, 'Task 2: List ordering \(AC: 2, 7\)': AC reference\(s\) 7 match no criterion/.test(w)) &&
+      bmb.warnings.some((w) => /BMAD workflow records not imported \(left in place\): Change Log \(PRD, 1\.1\), Status \(1\.1\)/.test(w)) &&
+      bmb.warnings.some((w) => /carried over verbatim[^\n]*Goals and Background Context[^\n]*Epic List/.test(w)),
+      "C3 bmad: Tasks / Subtasks → tasks tagged [USn] (a subtask is a task of its own), '(AC: 1)' / '(ACs: 1-2)' → _Requirements:_ (an unknown AC number keeps the text + a warning), Status / Change Log named as not imported, the PRD's other sections carried");
+    ok(/## Tech Stack\nNode 20, React 18, SQLite\./.test(bmDesign) && /## Technical Assumptions\nMonorepo, Node \+ React\./.test(bmDesign) &&
+      /## US-1: Create todos\n\n### Dev Notes\nUse the repository pattern\.\n\n#### Testing/.test(bmDesign) && /### Dev Agent Record\n#### File List/.test(bmDesign) && !/Change Log/.test(bmDesign) &&
+      c3Read(ib, "docs", "stories", "1.1.create-todos.md") === storyFile,
+      "C3 bmad: architecture.md + the PRD's Technical Assumptions + each story's Dev Notes / Dev Agent Record → design.md; the story file is never modified");
+    const one = c3Safe(() => S.importSpec(ib, "bmad", "docs/stories/1.1.create-todos.md"));
+    ok(one.ok && one.feature === "create-todos" && one.source === "docs/stories/1.1.create-todos.md" && one.mapping["Story 1.1"] === "US-1" && !/FR-1/.test(c3Read(ib, ".specs", "create-todos", "requirements.md")),
+      "C3 bmad: one story file imports that story alone, named after it (got " + JSON.stringify(one).slice(0, 200) + ")");
+    // v6: _bmad-output/planning-artifacts/{prd.md, epics.md} — '#### FR-1:' headings, BDD acceptance criteria.
+    const ib6 = path.join(tmp, "c3-import-bmad6");
+    S.initProject(ib6, ["core"], "en");
+    c3Put(ib6, "_bmad-output/planning-artifacts/prd.md", ["---", "title: Budget", "---", "", "# PRD: Budget", "", "## 1. Vision", "Track grocery spend against a weekly cap.", "",
+      "## 4. Features", "### 4.1 Receipts", "#### FR-1: Scan a receipt", "", "A shopper can scan a receipt to add its total.", "", "**Consequences (testable):**", "- The total is OCR'd.", ""].join("\n"));
+    c3Put(ib6, "_bmad-output/planning-artifacts/epics.md", ["# Epics", "", "## Epic 1: Receipts", "", "### Story 1.1: Scan a receipt", "", "As a shopper, I want to scan receipts, so that my spend is tracked.", "",
+      "**Acceptance Criteria:**", "", "1. **Valid receipt adds its total**", "   **Given** a weekly cap", "   **When** the shopper scans a receipt", "   **Then** the total is added to this week", ""].join("\n"));
+    const b6 = c3Safe(() => S.importSpec(ib6, "bmad", "."));
+    const b6Req = b6.ok ? c3Read(ib6, ".specs", b6.feature, "requirements.md") : "";
+    ok(b6.ok && b6.feature === "budget" && /- \*\*FR-1\*\* — Scan a receipt — A shopper can scan a receipt to add its total\./.test(b6Req) && b6.mapping["FR-1"] === "FR-1" &&
+      /1\. \*\*US-1\.AC-1\*\* — WHILE a weekly cap, WHEN the shopper scans a receipt, THE SYSTEM SHALL ensure that the total is added to this week/.test(b6Req) && /^## Summary\nTrack grocery spend/m.test(b6Req),
+      "C3 bmad v6 (_bmad-output/planning-artifacts): '#### FR-1: name' + its paragraph → FR-1, epics.md stories with bold Given/When/Then criteria → EARS (got " + JSON.stringify(b6).slice(0, 300) + ")");
+    const noBmad = c3Safe(() => S.importSpec(ie, "bmad", ".agent"));
+    const badTool = await c3Call("spec_import", { tool: "Plan", path: "x.md", projectDir: ib });
+    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Plan"\)/.test(badTool.body.error),
+      "C3 spec_import: a folder with no BMAD docs is refused; the tool enum lists the six formats and stays exact ('Plan' refused)");
+
+    // --- C3.2 design-first flow
+    const df = path.join(tmp, "c3-design-first");
+    S.initProject(df, ["core"], "en");
+    const dfc = await c3Call("spec_create", { name: "Port engine", tracks: ["core"], flow: "design-first", projectDir: df });
+    const dfDir = path.join(df, ".specs", "port-engine");
+    ok(!dfc.isError && dfc.body.flow === "design-first" && /design-first flow — phase order: classification → design → requirements → tasks/.test(dfc.body.note) && c3State(dfDir).flow === "design-first",
+      "C3 spec_create {flow: 'design-first'}: stored in .state.json flow, named in the result (flow + the phase order note)");
+    let dfd = S.specDoctor(df, "port-engine");
+    const dfPh = dfd.checks.find((c) => c.id === "placeholders");
+    const dfRm = S.roadmap(df).features.find((f) => f.name === "port-engine");
+    ok(dfd.phase === "design" && dfd.flow === "design-first" && JSON.stringify(dfd.pendingGates) === JSON.stringify(["classification", "design", "requirements", "tasks"]) &&
+      dfPh.status === "fail" && /design\.md \(\d+\)/.test(dfPh.detail) && !/requirements\.md \(\d+\):/.test(dfPh.detail) &&
+      dfRm.percent === 8 && S.listFeatures(df).features[0].flow === "design-first",
+      "C3 design-first scaffold: phase 'design' (its first artifact), pending gates in the flow's order, the placeholder gate blocks on design.md only (requirements.md is a later phase), roadmap 8% (got " + JSON.stringify([dfd.phase, dfd.pendingGates, dfPh.detail, dfRm.percent]).slice(0, 400) + ")");
+    // A test plan written early (+tdd) while requirements.md is still a later phase's template: the AC checks wait for the requirements.
+    const tpEarly = "# Test Plan\n\n| ID | Covers | Test |\n|---|---|---|\n| T-01 | US-7.AC-1 | exports the data |\n";
+    const dft = S.createFeature(df, "Port tdd", ["tdd"], "", undefined, "en", undefined, { flow: "design-first" });
+    const clt = S.createFeature(df, "Classic tdd", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(dft.dir, "test-plan.md"), tpEarly);
+    fs.writeFileSync(path.join(clt.dir, "test-plan.md"), tpEarly);
+    for (const x of [dft, clt]) fs.appendFileSync(path.join(x.dir, "requirements.md"), "\n- Which OS first? [NEEDS CLARIFICATION: Linux only?]\n");
+    const dftDoc = S.specDoctor(df, dft.slug), cltDoc = S.specDoctor(df, clt.slug);
+    const dftTr = dftDoc.checks.find((c) => c.id === "traceability"), cltTr = cltDoc.checks.find((c) => c.id === "traceability");
+    const dftCl = dftDoc.checks.find((c) => c.id === "clarifications"), cltCl = cltDoc.checks.find((c) => c.id === "clarifications");
+    ok(dftTr.status === "warn" && /not traced yet — still a later phase's template: requirements\.md/.test(dftTr.detail) && cltTr.status === "fail" && /US-7\.AC-1/.test(cltTr.detail) &&
+      dftCl.status === "warn" && /^requirements\.md is a later phase \(design-first\) — 1 unresolved \[NEEDS CLARIFICATION\]/.test(dftCl.detail) && cltCl.status === "fail",
+      "C3 design-first doctor: while requirements.md is a later phase's template (the design is being written) the AC traceability waits and its open questions warn (named) — the same files fail both in the default flow (got " + JSON.stringify([dftTr, dftCl, cltTr.status, cltCl.status]).slice(0, 400) + ")");
+    S.approvePhase(df, "port-engine", "classification", "t", { force: true });
+    let dfna = S.nextAction(df, "port-engine");
+    const reqEarly = S.approvePhase(df, "port-engine", "requirements", "t");
+    ok(dfna.step === "fill" && dfna.file === "design.md" && dfna.flow === "design-first" && /\(design-first flow: classification → design → requirements → tasks\)/.test(dfna.recommendation) &&
+      reqEarly.ok === false && reqEarly.failing.includes("phase-order") && /earlier phases are not approved yet: design/.test(reqEarly.error),
+      "C3 design-first: next_action asks for the design after the classification (naming the flow), approving requirements before the design is refused on phase-order");
+    // A real design (Constitution Check filled) while requirements.md is still a template WITH an open question: the design gate passes.
+    fs.writeFileSync(path.join(dfDir, "design.md"), "# Design: Port engine\n\n## Architecture\nThe engine is ported module by module behind an adapter.\n\n```mermaid\nflowchart LR\n  A[old] --> B[adapter] --> C[new]\n```\n\n## Constitution Check\n- Simplicity: one adapter, no framework.\n");
+    fs.appendFileSync(path.join(dfDir, "requirements.md"), "\n- Which platforms first? [NEEDS CLARIFICATION: Linux only?]\n");
+    const dsgOk = S.approvePhase(df, "port-engine", "design", "t");
+    dfd = S.specDoctor(df, "port-engine");
+    dfna = S.nextAction(df, "port-engine");
+    const dfRm2 = S.roadmap(df).features.find((f) => f.name === "port-engine");
+    ok(dsgOk.ok === true && !dsgOk.forced && dfd.phase === "requirements" && dfna.step === "fill" && dfna.file === "requirements.md" && dfRm2.percent === 16 &&
+      dfd.checks.find((c) => c.id === "placeholders").status === "fail" && /requirements\.md/.test(dfd.checks.find((c) => c.id === "placeholders").detail),
+      "C3 design-first: the design is approved before the requirements exist (their open [NEEDS CLARIFICATION] doesn't block the design gate, no AC is asked for); then the requirements are the current phase (placeholders block there, next_action fills requirements.md, roadmap 16%) (got " + JSON.stringify([dsgOk.error || dsgOk.ok, dfd.phase, dfna.step, dfna.file, dfRm2.percent]) + ")");
+    // The same design gate in the default flow is refused on the requirements' open question.
+    const rf = S.createFeature(df, "Classic", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(rf.dir, "design.md"), fs.readFileSync(path.join(dfDir, "design.md"), "utf8"));
+    fs.appendFileSync(path.join(rf.dir, "requirements.md"), "\n- Which platforms first? [NEEDS CLARIFICATION: Linux only?]\n");
+    S.approvePhase(df, rf.slug, "classification", "t", { force: true });
+    const rfDesign = S.approvePhase(df, rf.slug, "design", "t");
+    S.approvePhase(df, rf.slug, "requirements", "t", { force: true });
+    const rfDesign2 = S.approvePhase(df, rf.slug, "design", "t");
+    const rfState = c3State(rf.dir);
+    ok(rf.flow === undefined && rfState.flow === undefined && !("flow" in S.specDoctor(df, rf.slug)) && !("flow" in S.nextAction(df, rf.slug)) && S.listFeatures(df).features.find((f) => f.name === rf.slug).flow === undefined &&
+      rfDesign.ok === false && rfDesign.failing.includes("phase-order") && /earlier phases are not approved yet: requirements/.test(rfDesign.error) &&
+      rfDesign2.ok === false && rfDesign2.failing.includes("clarifications"),
+      "C3 default flow unchanged: no flow key anywhere, design before requirements refused on phase-order, and its design gate still counts the requirements' open questions");
+    const rfPct = S.featurePercent("design", 0, 0), dfPct = S.featurePercent("design", 0, 0, "design-first");
+    ok(rfPct === 16 && dfPct === 8 && S.featurePercent("requirements", 0, 0, "design-first") === 16 && S.featurePercent("requirements", 0, 0) === 8 && S.featurePercent("tasks-ready", 1, 2, "design-first") === S.featurePercent("tasks-ready", 1, 2),
+      "C3 roadmap percent: design-first walks design 8% → requirements 16% (the default the other way round); the task-driven span is the same");
+    // Fast-forward in the flow's order: --through design approves classification + design, never requirements.
+    const ff = S.createFeature(df, "Fast one", ["core"], "", undefined, "en", undefined, { flow: "design-first" });
+    const ffr = S.approvePhase(df, ff.slug, null, "t", { through: "design", force: true });
+    ok(ffr.ok && JSON.stringify(ffr.approved) === JSON.stringify(["classification", "design"]) && !c3State(ff.dir).approvals.requirements,
+      "C3 design-first fast-forward: approve --through design walks classification → design (requirements come after) (got " + JSON.stringify(ffr.approved) + ")");
+    // spec_feature {action: "flow"}: set / same / back; a bugfix refused; bad or missing flow refused (MCP enum = engine).
+    const setF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "design-first", projectDir: df });
+    const sameF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "design-first", projectDir: df });
+    const bug = S.createFeature(df, "Crash on save", ["core"], "", undefined, "en", "bugfix", { flow: "design-first" });
+    const bugF = await c3Call("spec_feature", { action: "flow", name: bug.slug, flow: "design-first", projectDir: df });
+    const badF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "sideways", projectDir: df });
+    const badEngine = S.manageFeature(df, "flow", rf.slug, "sideways");
+    const noneF = S.manageFeature(df, "flow", rf.slug);
+    const back = S.manageFeature(df, "flow", rf.slug, "requirements-first");
+    ok(!setF.isError && setF.body.changed === true && setF.body.previous === "requirements-first" && setF.body.order === "classification → design → requirements → tasks" &&
+      /Phases already approved stay approved: requirements/.test(setF.body.note) && JSON.stringify(setF.body.pendingGates) === JSON.stringify(["design", "tasks"]) &&
+      !sameF.isError && sameF.body.changed === false && /already follows the design-first flow/.test(sameF.body.note) &&
+      bug.ok && bug.flow === undefined && /flow ignored: a bugfix follows its own fixed phase order/.test(bug.note) && c3State(bug.dir).flow === undefined &&
+      bugF.isError && bugF.body.kindIgnored === true && /is a bugfix: it follows its own fixed phase order/.test(bugF.body.error) &&
+      badF.isError && /flow must be one of: requirements-first, design-first \(got "sideways"\)/.test(badF.body.error) && !badEngine.ok && /flow must be one of: requirements-first, design-first \(got "sideways"\)/.test(badEngine.error) &&
+      !noneF.ok && /flow required — one of: requirements-first, design-first/.test(noneF.error) && back.ok && back.changed && c3State(rf.dir).flow === undefined,
+      "C3 spec_feature {action: 'flow'}: sets the flow (approved phases stay, named; pending gates re-ordered), idempotent, back to the default drops the key; a bugfix is refused (and ignores spec_create's flow, with a note); a bad / missing flow is refused alike on MCP and the engine");
+    const keep = S.createFeature(df, "Port engine", undefined, "", undefined, "en", undefined, { flow: "requirements-first" });
+    const badCreate = await c3Call("spec_create", { name: "Nope", flow: "sideways", projectDir: df });
+    ok(keep.ok && keep.flow === "design-first" && /flow kept: 'port-engine' follows design-first \(asked: requirements-first\)/.test(keep.note) && c3State(dfDir).flow === "design-first" &&
+      badCreate.isError && !fs.existsSync(path.join(df, ".specs", "nope")),
+      "C3 spec_create on an existing feature keeps its flow (a note names spec_feature flow); an unknown flow is refused before anything is created");
+    // PT: the flow's notes in the feature's language; spec_upgrade reads a fresh design-first feature as not started.
+    const dfPt = path.join(tmp, "c3-design-first-pt");
+    S.initProject(dfPt, ["core"], "pt");
+    const ptc = S.createFeature(dfPt, "Motor", ["core"], "", undefined, undefined, undefined, { flow: "design-first" });
+    const ptna = S.nextAction(dfPt, ptc.slug);
+    const up16 = S.specUpgrade(dfPt);
+    S.approvePhase(dfPt, ptc.slug, "classification", "t", { force: true });
+    ok(/fluxo design-first — ordem das fases: classification → design → requirements → tasks/.test(ptc.note) && ptna.flow === "design-first" &&
+      /\(fluxo design-first: /.test(S.nextAction(dfPt, ptc.slug).recommendation) && up16.ok && up16.features.find((x) => x.name === "motor").status === "not-started",
+      "C3 design-first in PT: the notes are localized (fluxo design-first …), next_action names the flow; spec_upgrade reads a fresh design-first feature (phase 'design') as not started (got " +
+      JSON.stringify(up16.ok && up16.features.map((x) => [x.name, x.status])) + ")");
+  }
   // @pkg C3 <<<
 
   // @pkg C4 tests >>>
