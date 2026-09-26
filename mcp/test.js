@@ -6413,6 +6413,249 @@ function endRun() {
   }
 
   // @pkg A1 tests >>>
+  { // 1.14 A1 — MCP prompts (one per commands/*.md) + resources (the project's spec artifacts as specs:// URIs)
+    const PR = require("./lib/prompts-resources.js");
+    const a1Stems = fs.readdirSync(path.join(root, "commands")).filter((f) => /\.md$/.test(f)).map((f) => f.slice(0, -3));
+    const a1Fm = (stem) => PR.parseFrontMatter(fs.readFileSync(path.join(root, "commands", stem + ".md"), "utf8")).data;
+    const posix = (p) => p.split(path.sep).join("/");
+    // A private server per scenario (its own SPEC_PROJECT_DIR and env); every line it writes is kept, so a reply to a
+    // notification would show up. String ids: the server must echo them as given.
+    const a1Server = (projectDir, env) => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_MCP_PROMPTS: "", ...env, SPEC_PROJECT_DIR: projectDir }, stdio: ["pipe", "pipe", "inherit"] });
+      const lines = [];
+      const waiting = new Map();
+      let b = "";
+      let n = 0;
+      kid.stdout.on("data", (d) => {
+        b += d.toString();
+        let nl;
+        while ((nl = b.indexOf("\n")) >= 0) {
+          const line = b.slice(0, nl).trim();
+          b = b.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          lines.push(m);
+          if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "a1-" + ++n;
+        const t = setTimeout(() => abort("A1: no reply to " + method + " (" + id + ") within 15s"), 15000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        kid.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      });
+      const note = (method, params) => kid.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { req, note, lines, stop, sent: () => n };
+    };
+
+    // A project with 2 active features (a +tdd feature and a bugfix), steering (+ a custom file), SPECS.md, an archived
+    // feature, a non-addressable folder, a non-allowlisted file in a feature and a file outside .specs/.
+    const a1p = path.join(tmp, "proj-a1");
+    S.initProject(a1p, ["tdd"], "en");
+    const a1f = S.createFeature(a1p, "Auth Login", ["tdd"], "", undefined, "en");
+    const a1b = S.createFeature(a1p, "Crash on save", ["core"], "", undefined, "en", "bugfix");
+    S.scaffoldSteeringFile(a1p, "api-rules.md", "en");
+    S.createFeature(a1p, "Old Thing", ["core"], "", undefined, "en");
+    S.manageFeature(a1p, "archive", "Old Thing");
+    S.catalog(a1p, { write: true });
+    const a1s = path.join(a1p, ".specs");
+    fs.writeFileSync(path.join(a1f.dir, "notes.md"), "private notes\n");
+    fs.mkdirSync(path.join(a1s, "My Notes"), { recursive: true });
+    fs.writeFileSync(path.join(a1s, "My Notes", "requirements.md"), "not a feature\n");
+    fs.writeFileSync(path.join(a1p, "secret.md"), "TOP SECRET\n");
+    const a1Expected = ["specs://roadmap", "specs://catalog"]
+      .concat(fs.readdirSync(path.join(a1s, "steering")).filter((f) => /\.md$/.test(f)).sort().map((f) => "specs://steering/" + f))
+      .concat([a1f, a1b].sort((x, y) => (x.slug < y.slug ? -1 : 1)).flatMap((f) => PR.RESOURCE_ARTIFACTS.filter((a) => fs.existsSync(path.join(f.dir, a))).map((a) => `specs://feature/${f.slug}/${a}`)));
+
+    const s1 = a1Server(a1p);
+    const i1 = await s1.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const caps = (i1.result && i1.result.capabilities) || {};
+    ok(JSON.stringify(caps.prompts) === '{"listChanged":false}' && JSON.stringify(caps.resources) === '{"listChanged":false,"subscribe":false}' &&
+      JSON.stringify(caps.tools) === '{"listChanged":false}' && /Prompts: one per plugin command/.test(i1.result.instructions) &&
+      /specs:\/\/feature\/\{slug\}\/\{artifact\}/.test(i1.result.instructions) && i1.id === "a1-1",
+      "initialize advertises prompts {listChanged:false} and resources {listChanged:false, subscribe:false} beside tools; the instructions mention both; a string id is echoed");
+    s1.note("notifications/initialized", {});
+
+    // prompts/list — one per commands/*.md, read at runtime; description = front matter; one optional `args` argument.
+    const pl = (await s1.req("prompts/list", {})).result.prompts;
+    const plNames = pl.map((p) => p.name);
+    ok(pl.length === a1Stems.length && a1Stems.length >= 44 && plNames.slice().sort().join() === a1Stems.slice().sort().join() &&
+      plNames.indexOf("spec") < plNames.indexOf("spec-bugfix") && pl.every((p) => p.description && p.description === a1Fm(p.name).description) &&
+      pl.every((p) => Object.keys(p).join() === "name,description,arguments" && p.arguments.length === 1 && p.arguments[0].name === "args" && p.arguments[0].required === false),
+      "prompts/list: one prompt per commands/*.md (" + pl.length + "), sorted by name, each with its front-matter description and one optional `args` argument");
+    const plArg = (n) => (pl.find((p) => p.name === n) || { arguments: [{}] }).arguments[0].description || "";
+    ok(plArg("spec-impact") === "Arguments (optional): " + a1Fm("spec-impact")["argument-hint"] && /^No arguments needed/.test(plArg("coverage")) &&
+      JSON.stringify(pl) === JSON.stringify(PR.listPrompts({ lang: "en" }).map((p) => ({ name: p.name, description: p.description, arguments: p.arguments }))),
+      "prompts/list: the `args` description comes from argument-hint (an empty hint says no arguments are needed); same list as the module the CLI uses");
+
+    // prompts/get — the body with $ARGUMENTS replaced, after one line for agents without the skill.
+    const g1 = (await s1.req("prompts/get", { name: "spec-impact", arguments: { args: "login design $& $1" } })).result;
+    const g1t = g1 && g1.messages[0].content.text;
+    const rootPosix = posix(path.resolve(root));
+    ok(g1 && g1.description === a1Fm("spec-impact").description && g1.messages.length === 1 && g1.messages[0].role === "user" && g1.messages[0].content.type === "text" &&
+      /^Note for the agent: if no dev-spec-driven skill is available/.test(g1t) && g1t.includes(rootPosix + "/AGENTS.md") && g1t.includes(rootPosix + "/skills/dev-spec-driven/references/") &&
+      g1t.includes("Args: login design $& $1\n") && !g1t.includes("$ARGUMENTS") && g1t.split("\n")[1] === "" && /spec_impact/.test(g1t),
+      "prompts/get: {description, messages:[{role:user, content:{type:text}}]} — the preamble (AGENTS.md + references/ paths), then the body with $ARGUMENTS ← args ($& / $1 kept literally)");
+    const g2 = (await s1.req("prompts/get", { name: "spec-impact" })).result;
+    const g3 = (await s1.req("prompts/get", { name: "eval", arguments: {} })).result;
+    const g3t = g3 && g3.messages[0].content.text;
+    ok(g2 && g2.messages[0].content.text.includes("Args: \n") && !g2.messages[0].content.text.includes("$ARGUMENTS") &&
+      g3t && !g3t.includes("${CLAUDE_PLUGIN_ROOT}") && g3t.includes(rootPosix + "/mcp/evals/run-evals.js"),
+      "prompts/get: no arguments → $ARGUMENTS is empty; ${CLAUDE_PLUGIN_ROOT} resolves to this clone (other clients have no such variable)");
+    const gBad = await Promise.all([
+      s1.req("prompts/get", { name: "nope" }), s1.req("prompts/get", { name: "../README" }), s1.req("prompts/get", { name: "spec-impact.md" }),
+      s1.req("prompts/get", {}), s1.req("prompts/get", { name: "spec", arguments: { args: 5 } }), s1.req("prompts/get", { name: "spec", arguments: ["x"] }),
+      s1.req("prompts/get", { name: "spec", arguments: "x" }), s1.req("prompts/get", { name: "constructor" }),
+    ]);
+    ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-impact/.test(gBad[0].error.message) &&
+      /Unknown prompt '\.\.\/README'/.test(gBad[1].error.message) && /needs the prompt `name`/.test(gBad[3].error.message) &&
+      [4, 5, 6].every((i) => /`arguments` must be an object of strings/.test(gBad[i].error.message)),
+      "prompts/get: an unknown prompt (also '../README', 'spec-impact.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
+
+    // resources/list — ROADMAP.md, SPECS.md, steering, each active feature's allowlisted artifacts; nothing else.
+    const rl = (await s1.req("resources/list", {})).result;
+    const rlUris = rl.resources.map((r) => r.uri);
+    ok(JSON.stringify(rlUris) === JSON.stringify(a1Expected) && rlUris.includes("specs://feature/auth-login/test-plan.md") &&
+      rlUris.includes("specs://feature/crash-on-save/bug.md") && rlUris.includes("specs://steering/api-rules.md") && !rl._meta &&
+      rl.resources.every((r) => r.mimeType === "text/markdown" && r.name && r.description && Object.keys(r).join() === "uri,name,description,mimeType"),
+      "resources/list: roadmap, catalog, every steering file, then each active feature's existing artifacts — uri, name, description, text/markdown (" + rlUris.length + ")");
+    ok(!rlUris.some((u) => /old-thing|notes\.md|state\.json|My Notes|my-notes|secret|_archive/.test(u)) &&
+      (rl.resources.find((r) => r.uri === "specs://feature/auth-login/requirements.md") || {}).description === "Requirements (EARS) of feature 'auth-login' (.specs/auth-login/requirements.md).",
+      "resources/list: no archived feature, non-addressable folder, non-allowlisted file or file outside .specs/; descriptions name the artifact and its path");
+    const tl = (await s1.req("resources/templates/list", {})).result;
+    ok(tl && tl.resourceTemplates.map((t) => t.uriTemplate).join() === "specs://feature/{slug}/{artifact},specs://steering/{file}" &&
+      tl.resourceTemplates.every((t) => t.name && t.description && t.mimeType === "text/markdown") && /requirements\.md, design\.md/.test(tl.resourceTemplates[0].description),
+      "resources/templates/list: specs://feature/{slug}/{artifact} (naming the allowed artifacts) and specs://steering/{file}");
+
+    // resources/read — the file's text, for every listed URI.
+    const reads = await Promise.all(a1Expected.map((u) => s1.req("resources/read", { uri: u })));
+    const fileOf = (u) => u === "specs://roadmap" ? path.join(a1s, "ROADMAP.md") : u === "specs://catalog" ? path.join(a1s, "SPECS.md")
+      : u.startsWith("specs://steering/") ? path.join(a1s, "steering", u.slice(17)) : path.join(a1s, ...u.slice(16).split("/"));
+    ok(reads.every((r, i) => r.result && r.result.contents.length === 1 && r.result.contents[0].uri === a1Expected[i] && r.result.contents[0].mimeType === "text/markdown" &&
+      r.result.contents[0].text === fs.readFileSync(fileOf(a1Expected[i]), "utf8")),
+      "resources/read: every listed URI returns {contents:[{uri, mimeType, text}]} with the file's exact text");
+
+    // Traversal / arbitrary files / unknown artifacts → -32602 (Invalid params) with data.uri; well-formed but absent → -32002.
+    const badUris = ["specs://feature/../x", "specs://feature/%2e%2e/auth-login/requirements.md", "specs://feature/auth-login/../../secret.md", "specs:///etc/passwd",
+      "specs://steering/../roadmap.json", "specs://steering/..%2Froadmap.json", "specs://steering/%2E%2E%5Csecret.md", "file:///etc/passwd", "/etc/passwd",
+      path.join(a1s, "auth-login", "requirements.md"), "C:\\Windows\\win.ini", "specs://feature/C:/requirements.md", "specs://feature/auth-login/notes.md",
+      "specs://feature/auth-login/.state.json", "specs://feature/auth-login/REQUIREMENTS.MD", "specs://feature/steering/requirements.md", "specs://feature/nul/requirements.md",
+      "specs://feature/.../requirements.md", "specs://feature/auth-login/requirements.md?x=1", "specs://roadmap/extra", "specs://feature/auth-login", "specs://steering/a.txt",
+      "specs://steering/nul.md", "specs://whatever", "specs://", "specs://feature//requirements.md", "specs://feature/auth-login/%ZZ"];
+    const badR = await Promise.all(badUris.map((u) => s1.req("resources/read", { uri: u })));
+    const wrong = badR.map((r, i) => [badUris[i], r]).filter(([u, r]) => !(r.error && r.error.code === -32602 && r.error.data && r.error.data.uri === u && !r.result));
+    ok(!wrong.length && /^Invalid resource URI 'specs:\/\/feature\/\.\.\/x'/.test(badR[0].error.message) && /^Unknown artifact 'notes\.md' — one of: classification\.md/.test(badR[12].error.message) &&
+      /reserved/i.test(badR[15].error.message) && /^Invalid steering file name 'a\.txt'/.test(badR[21].error.message) && !badR.some((r) => /TOP SECRET|\[extensions\]/.test(JSON.stringify(r))),
+      "resources/read: traversal ('..', %2e%2e, %2F, %5C), absolute paths, other schemes, drive letters, unknown / non-allowlisted artifacts, reserved names → -32602 with data.uri (wrong: " + wrong.map(([u, r]) => u + "→" + JSON.stringify(r.error || r.result).slice(0, 80)).join(" | ") + ")");
+    const missR = await Promise.all(["specs://feature/nope/requirements.md", "specs://feature/auth-login/eval-plan.md", "specs://feature/old-thing/requirements.md",
+      "specs://steering/missing.md", "specs://steering/TECH.md"].map((u) => s1.req("resources/read", { uri: u })));
+    ok(missR.every((r) => r.error && r.error.code === -32002 && /^Resource not found: specs:\/\//.test(r.error.message) && r.error.data && typeof r.error.data.uri === "string") &&
+      /not found/.test(missR[0].error.message) && /archived/.test(missR[2].error.message),
+      "resources/read: a well-formed URI naming nothing (unknown feature, absent artifact, archived feature — says so, missing / case-aliased steering file) → -32002 Resource not found");
+    const noUri = await Promise.all([s1.req("resources/read", {}), s1.req("resources/read", { uri: 42 }), s1.req("resources/read")]);
+    ok(noUri.every((r) => r.error && r.error.code === -32602 && /needs the resource `uri`/.test(r.error.message)), "resources/read without a string uri → -32602");
+
+    // A notification never gets a reply (and never runs anything); the next request is answered normally.
+    const before = s1.lines.length;
+    s1.note("prompts/list", {});
+    s1.note("prompts/get", { name: "nope" });
+    s1.note("resources/read", { uri: "specs://feature/../x" });
+    s1.note("resources/list");
+    const ping = await s1.req("ping", {});
+    ok(ping.result && s1.lines.length === before + 1 && s1.lines.length === s1.sent() && s1.lines.every((m) => typeof m.id === "string"),
+      "prompts/* and resources/* notifications get no reply — only requests are answered (" + s1.lines.length + " lines for " + s1.sent() + " requests)");
+    const unsub = await s1.req("resources/subscribe", { uri: "specs://roadmap" });
+    ok(unsub.error && unsub.error.code === -32601, "resources/subscribe (subscribe: false) → Method not found");
+    await s1.stop();
+
+    // Module-level: the cap (and saying so), the roadmap fallback, a symlink out of .specs/, CRLF/BOM front matter, PT.
+    const capped = PR.listResources(a1p, { cap: 3 });
+    ok(capped.resources.length === 3 && capped.truncated && capped.total === a1Expected.length && /capped at 3 of \d+/.test(capped.note) &&
+      PR.listResources(a1p).truncated === false && PR.RESOURCE_CAP === 500,
+      "resources/list is capped (RESOURCE_CAP 500) and says so: truncated, total, a note naming the templates (the server passes it in _meta)");
+    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 12 artifacts = 540 resources > the cap
+    for (let i = 1; i <= 45; i++) {
+      const d = path.join(a1big, ".specs", "f" + String(i).padStart(2, "0"));
+      fs.mkdirSync(d, { recursive: true });
+      for (const a of PR.RESOURCE_ARTIFACTS) fs.writeFileSync(path.join(d, a), "# " + a + "\n");
+    }
+    const s4 = a1Server(a1big);
+    await s4.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const big = (await s4.req("resources/list", {})).result;
+    const bigLast = await s4.req("resources/read", { uri: "specs://feature/f45/retro.md" });
+    await s4.stop();
+    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 540 && big._meta.cap === 500 &&
+      /capped at 500 of 540 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
+      "resources/list over the cap: 500 resources plus _meta {truncated, total, cap, note}; a resource past the cap is still readable through its URI");
+    const a1r = path.join(tmp, "proj-a1-roadmap");
+    S.initProject(a1r, ["core"], "en");
+    S.createFeature(a1r, "Only One", ["core"], "", undefined, "en");
+    fs.unlinkSync(path.join(a1r, ".specs", "ROADMAP.md"));
+    const fbList = PR.listResources(a1r).resources.find((r) => r.uri === "specs://roadmap") || {};
+    const fbRead = PR.readResource(a1r, "specs://roadmap");
+    ok(/rendered from \.specs\/roadmap\.json/.test(fbList.description || "") && fbRead.ok && /^# Roadmap — /.test(fbRead.contents[0].text) && /only-one/.test(fbRead.contents[0].text) &&
+      !fs.existsSync(path.join(a1r, ".specs", "ROADMAP.md")) && !PR.listResources(a1r).resources.some((r) => r.uri === "specs://catalog"),
+      "specs://roadmap without ROADMAP.md: rendered from roadmap.json in memory (nothing written); no SPECS.md → no catalog resource");
+    const a1e = path.join(tmp, "proj-a1-empty");
+    fs.mkdirSync(a1e, { recursive: true });
+    ok(PR.listResources(a1e).resources.length === 0 && PR.readResource(a1e, "specs://roadmap").reason === "not-found" && PR.readResource(a1e, "specs://feature/x/tasks.md").reason === "not-found",
+      "no .specs/ → an empty resource list; reads are not-found");
+    let linked = false;
+    try { fs.symlinkSync(path.join(a1p, "secret.md"), path.join(a1f.dir, "retro.md"), "file"); linked = true; } catch { /* no symlink privilege here */ }
+    ok(!linked || (!PR.listResources(a1p).resources.some((r) => /retro\.md/.test(r.uri)) && PR.readResource(a1p, "specs://feature/auth-login/retro.md").reason === "not-found"),
+      "a symlinked artifact pointing out of .specs/ is neither listed nor read" + (linked ? "" : " (symlinks not creatable here — checked by construction only)"));
+    const outFeat = path.join(a1p, "outside-feature");
+    fs.mkdirSync(outFeat, { recursive: true });
+    fs.writeFileSync(path.join(outFeat, "requirements.md"), "OUTSIDE\n");
+    let junction = false;
+    try { fs.symlinkSync(outFeat, path.join(a1s, "linked-feat"), "junction"); junction = true; } catch { /* no link support here */ }
+    ok(!junction || (!PR.listResources(a1p).resources.some((r) => /linked-feat/.test(r.uri)) && PR.readResource(a1p, "specs://feature/linked-feat/requirements.md").reason === "not-found"),
+      "a feature folder linked (junction / symlink) to a folder outside .specs/ is neither listed nor read" + (junction ? "" : " (links not creatable here — checked by construction only)"));
+    const fmDir = path.join(tmp, "proj-a1-cmds");
+    fs.mkdirSync(fmDir, { recursive: true });
+    fs.writeFileSync(path.join(fmDir, "crlf-cmd.md"), "\uFEFF---\r\ndescription: 'It''s a CRLF command'\r\nargument-hint: \"[x] [--y]\"\r\n---\r\n\r\nDo it: $ARGUMENTS\r\nThen $ARGUMENTS again.\r\n");
+    fs.writeFileSync(path.join(fmDir, "no-fm.md"), "Just a body $ARGUMENTS\n");
+    fs.writeFileSync(path.join(fmDir, "notes.txt"), "not a command\n");
+    fs.mkdirSync(path.join(fmDir, "dir.md"));
+    const fmList = PR.listPrompts({ commandsDir: fmDir, lang: "en" });
+    const fmGet = PR.getPrompt("crlf-cmd", "a b", { commandsDir: fmDir, lang: "en" });
+    ok(fmList.map((p) => p.name).join() === "crlf-cmd,no-fm" && fmList[0].description === "It's a CRLF command" && fmList[0].argumentHint === "[x] [--y]" &&
+      fmList[1].description === "" && fmGet.ok && /\n\nDo it: a b\nThen a b again\.\n$/.test(fmGet.messages[0].content.text) && !fmGet.messages[0].content.text.includes("\r"),
+      "front matter with a BOM, CRLF and quoted values is parsed; a file without front matter is still a prompt; only *.md files are prompts; the body comes back with LF");
+    const a1pt = path.join(tmp, "proj-a1-pt");
+    S.initProject(a1pt, ["core"], "pt");
+    S.createFeature(a1pt, "Pagamentos", ["core"]);
+    const s2 = a1Server(a1pt);
+    await s2.req("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
+    const ptGet = (await s2.req("prompts/get", { name: "spec" })).result;
+    const ptBad = await s2.req("resources/read", { uri: "specs://feature/../x" });
+    const ptMiss = await s2.req("resources/read", { uri: "specs://feature/pagamentos/eval-plan.md" });
+    const ptList = (await s2.req("resources/list", {})).result.resources;
+    const ptArgs = (await s2.req("prompts/list", {})).result.prompts.find((p) => p.name === "coverage").arguments[0].description;
+    await s2.stop();
+    const deepKeys = (o, pre = "") => Object.keys(o).sort().flatMap((k) => (o[k] && typeof o[k] === "object" ? deepKeys(o[k], pre + k + ".") : [pre + k]));
+    const a1Msg = ["en", "pt", "es"].map((l) => S.msg(l).promptsResources);
+    ok(/^Nota para o agente: se não houver uma skill dev-spec-driven/.test(ptGet.messages[0].content.text) && /^URI de recurso inválido/.test(ptBad.error.message) &&
+      /^Recurso não encontrado/.test(ptMiss.error.message) && ptList.some((r) => r.description === "Requisitos (EARS) da feature 'pagamentos' (.specs/pagamentos/requirements.md).") &&
+      /^Não precisa de argumentos/.test(ptArgs) && deepKeys(a1Msg[1]).join() === deepKeys(a1Msg[0]).join() && deepKeys(a1Msg[2]).join() === deepKeys(a1Msg[0]).join() &&
+      a1Msg.every((m) => Object.keys(m.res.labels).sort().join() === PR.RESOURCE_ARTIFACTS.slice().sort().join()) && /^Nota para el agente/.test(a1Msg[2].preamble("a", "b")),
+      "prompts/resources messages follow the project language (PT preamble, errors, descriptions); EN/PT/ES blocks have the same keys and a label per artifact");
+
+    // SPEC_MCP_PROMPTS=off (the Claude Code plugin's mcp/servers.json): no prompts capability — its own slash commands are these files.
+    const s3 = a1Server(a1p, { SPEC_MCP_PROMPTS: "off" });
+    const i3 = await s3.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const p3 = await s3.req("prompts/list", {});
+    const r3 = await s3.req("resources/list", {});
+    await s3.stop();
+    const servers = JSON.parse(fs.readFileSync(path.join(root, "mcp", "servers.json"), "utf8")).mcpServers["spec-driven"];
+    ok(!("prompts" in i3.result.capabilities) && i3.result.capabilities.resources && !/Prompts:/.test(i3.result.instructions) && p3.error && p3.error.code === -32601 &&
+      r3.result.resources.length === a1Expected.length && servers.env.SPEC_MCP_PROMPTS === "off",
+      "SPEC_MCP_PROMPTS=off drops the prompts capability (prompts/* → -32601), resources stay; mcp/servers.json sets it for the Claude Code plugin (no duplicate slash commands)");
+    const BOM = String.fromCharCode(0xfeff);
+    ok(!fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8").includes(BOM) && !/require\((?!["'](?:fs|path|\.\/spec\.js)["'])/.test(fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8")),
+      "lib/prompts-resources.js: zero dependencies (fs, path, ./spec.js) and no literal U+FEFF");
+  }
   // @pkg A1 <<<
 
   // @pkg A2 tests >>>

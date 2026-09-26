@@ -2748,6 +2748,37 @@ const MSG = {
     },
 
     // @pkg A1 msg-en >>>
+    // MCP prompts (one per commands/*.md) + resources (specs:// URIs) — mcp/lib/prompts-resources.js, `dev-spec prompts`.
+    promptsResources: {
+      preamble: (agentsMd, refsDir) => `Note for the agent: if no dev-spec-driven skill is available in this tool, follow the workflow in the plugin's AGENTS.md (${agentsMd}) and use the spec-driven MCP tools (spec_*, ears_validate, trace_check); the references/… files named below are in ${refsDir}.`,
+      argDesc: (hint) => (hint ? `Arguments (optional): ${hint}` : "No arguments needed (optional free text)."),
+      cliHead: (n) => `${n} prompt(s) — one per plugin command; dev-spec prompts <name> [--args "…"] prints one:`,
+      res: {
+        roadmap: "The project roadmap (.specs/ROADMAP.md): every feature's phase, progress and dependencies.",
+        roadmapFromJson: "The project roadmap, rendered from .specs/roadmap.json (no ROADMAP.md written yet).",
+        catalog: "The living catalog (.specs/SPECS.md): every feature and acceptance criterion, superseded ones marked.",
+        steering: (file) => `Steering file .specs/steering/${file} — project-wide rules every feature follows.`,
+        artifact: (slug, label, file) => `${label} of feature '${slug}' (.specs/${slug}/${file}).`,
+        labels: {
+          "classification.md": "Classification (tracks)", "requirements.md": "Requirements (EARS)", "design.md": "Technical design", "test-plan.md": "Test plan",
+          "eval-plan.md": "Eval plan", "load-test.md": "Load test plan", "tasks.md": "Tasks", "bug.md": "Bug report (reproduction · root cause · fix)",
+          "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Integration plan", "retro.md": "Retrospective",
+        },
+        tplFeature: (list) => `A feature's spec artifact: .specs/{slug}/{artifact} — {artifact} is one of ${list}.`,
+        tplSteering: "A steering file: .specs/steering/{file} (a .md file).",
+        truncated: (cap, total) => `Resource list capped at ${cap} of ${total} — read the others through the templates specs://feature/{slug}/{artifact} and specs://steering/{file}.`,
+      },
+      err: {
+        noPromptName: "prompts/get needs the prompt `name` (a string).",
+        badPromptArgs: 'prompts/get: `arguments` must be an object of strings, e.g. {"args": "login"}.',
+        unknownPrompt: (name, list) => `Unknown prompt '${name}' — one of: ${list}.`,
+        noUri: "resources/read needs the resource `uri` (a string).",
+        badUri: (uri) => `Invalid resource URI '${uri}' — expected specs://roadmap, specs://catalog, specs://steering/<file>.md or specs://feature/<slug>/<artifact> (no '..', no absolute path, no other scheme).`,
+        unknownArtifact: (a, list) => `Unknown artifact '${a}' — one of: ${list}.`,
+        badSteering: (file) => `Invalid steering file name '${file}' — a .md file directly under .specs/steering/.`,
+        notFound: (uri, detail) => `Resource not found: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
     // @pkg A1 <<<
 
     // @pkg A2 msg-en >>>
@@ -3593,6 +3624,36 @@ const MSG = {
     },
 
     // @pkg A1 msg-pt >>>
+    promptsResources: {
+      preamble: (agentsMd, refsDir) => `Nota para o agente: se não houver uma skill dev-spec-driven disponível nesta ferramenta, segue o fluxo do AGENTS.md do plugin (${agentsMd}) e usa as ferramentas MCP spec-driven (spec_*, ears_validate, trace_check); os ficheiros references/… citados abaixo estão em ${refsDir}.`,
+      argDesc: (hint) => (hint ? `Argumentos (opcionais): ${hint}` : "Não precisa de argumentos (texto livre opcional)."),
+      cliHead: (n) => `${n} prompt(s) — um por comando do plugin; dev-spec prompts <nome> [--args "…"] mostra um:`,
+      res: {
+        roadmap: "O roadmap do projeto (.specs/ROADMAP.md): a fase, o progresso e as dependências de cada feature.",
+        roadmapFromJson: "O roadmap do projeto, gerado a partir de .specs/roadmap.json (ainda sem ROADMAP.md escrito).",
+        catalog: "O catálogo vivo (.specs/SPECS.md): todas as features e critérios de aceitação, com os substituídos assinalados.",
+        steering: (file) => `Ficheiro de steering .specs/steering/${file} — regras do projeto que todas as features seguem.`,
+        artifact: (slug, label, file) => `${label} da feature '${slug}' (.specs/${slug}/${file}).`,
+        labels: {
+          "classification.md": "Classificação (tracks)", "requirements.md": "Requisitos (EARS)", "design.md": "Design técnico", "test-plan.md": "Plano de testes",
+          "eval-plan.md": "Plano de evals", "load-test.md": "Plano de testes de carga", "tasks.md": "Tasks", "bug.md": "Relatório do bug (reprodução · causa raiz · correção)",
+          "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Plano de integração", "retro.md": "Retrospetiva",
+        },
+        tplFeature: (list) => `Um artefacto da spec de uma feature: .specs/{slug}/{artifact} — {artifact} é um de ${list}.`,
+        tplSteering: "Um ficheiro de steering: .specs/steering/{file} (um ficheiro .md).",
+        truncated: (cap, total) => `Lista de recursos limitada a ${cap} de ${total} — lê os restantes através dos templates specs://feature/{slug}/{artifact} e specs://steering/{file}.`,
+      },
+      err: {
+        noPromptName: "prompts/get precisa do `name` do prompt (uma string).",
+        badPromptArgs: 'prompts/get: `arguments` tem de ser um objeto de strings, p. ex. {"args": "login"}.',
+        unknownPrompt: (name, list) => `Prompt desconhecido '${name}' — um de: ${list}.`,
+        noUri: "resources/read precisa do `uri` do recurso (uma string).",
+        badUri: (uri) => `URI de recurso inválido '${uri}' — esperado specs://roadmap, specs://catalog, specs://steering/<ficheiro>.md ou specs://feature/<slug>/<artefacto> (sem '..', sem caminho absoluto, sem outro esquema).`,
+        unknownArtifact: (a, list) => `Artefacto desconhecido '${a}' — um de: ${list}.`,
+        badSteering: (file) => `Nome de ficheiro de steering inválido '${file}' — um ficheiro .md diretamente em .specs/steering/.`,
+        notFound: (uri, detail) => `Recurso não encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
     // @pkg A1 <<<
 
     // @pkg A2 msg-pt >>>
@@ -4438,6 +4499,36 @@ const MSG = {
     },
 
     // @pkg A1 msg-es >>>
+    promptsResources: {
+      preamble: (agentsMd, refsDir) => `Nota para el agente: si no hay una skill dev-spec-driven disponible en esta herramienta, sigue el flujo del AGENTS.md del plugin (${agentsMd}) y usa las herramientas MCP spec-driven (spec_*, ears_validate, trace_check); los archivos references/… citados abajo están en ${refsDir}.`,
+      argDesc: (hint) => (hint ? `Argumentos (opcionales): ${hint}` : "No necesita argumentos (texto libre opcional)."),
+      cliHead: (n) => `${n} prompt(s) — uno por comando del plugin; dev-spec prompts <nombre> [--args "…"] muestra uno:`,
+      res: {
+        roadmap: "La hoja de ruta del proyecto (.specs/ROADMAP.md): la fase, el progreso y las dependencias de cada función.",
+        roadmapFromJson: "La hoja de ruta del proyecto, generada a partir de .specs/roadmap.json (aún sin ROADMAP.md escrito).",
+        catalog: "El catálogo vivo (.specs/SPECS.md): todas las funciones y criterios de aceptación, con los sustituidos marcados.",
+        steering: (file) => `Archivo de steering .specs/steering/${file} — reglas del proyecto que siguen todas las funciones.`,
+        artifact: (slug, label, file) => `${label} de la función '${slug}' (.specs/${slug}/${file}).`,
+        labels: {
+          "classification.md": "Clasificación (tracks)", "requirements.md": "Requisitos (EARS)", "design.md": "Diseño técnico", "test-plan.md": "Plan de pruebas",
+          "eval-plan.md": "Plan de evals", "load-test.md": "Plan de pruebas de carga", "tasks.md": "Tareas", "bug.md": "Informe del bug (reproducción · causa raíz · corrección)",
+          "quickstart.md": "Guía rápida", "checklist.md": "Lista de comprobación", "integration-plan.md": "Plan de integración", "retro.md": "Retrospectiva",
+        },
+        tplFeature: (list) => `Un artefacto de la spec de una función: .specs/{slug}/{artifact} — {artifact} es uno de ${list}.`,
+        tplSteering: "Un archivo de steering: .specs/steering/{file} (un archivo .md).",
+        truncated: (cap, total) => `Lista de recursos limitada a ${cap} de ${total} — lee los demás mediante las plantillas specs://feature/{slug}/{artifact} y specs://steering/{file}.`,
+      },
+      err: {
+        noPromptName: "prompts/get necesita el `name` del prompt (una cadena).",
+        badPromptArgs: 'prompts/get: `arguments` debe ser un objeto de cadenas, p. ej. {"args": "login"}.',
+        unknownPrompt: (name, list) => `Prompt desconocido '${name}' — uno de: ${list}.`,
+        noUri: "resources/read necesita el `uri` del recurso (una cadena).",
+        badUri: (uri) => `URI de recurso no válido '${uri}' — se esperaba specs://roadmap, specs://catalog, specs://steering/<archivo>.md o specs://feature/<slug>/<artefacto> (sin '..', sin ruta absoluta, sin otro esquema).`,
+        unknownArtifact: (a, list) => `Artefacto desconocido '${a}' — uno de: ${list}.`,
+        badSteering: (file) => `Nombre de archivo de steering no válido '${file}' — un archivo .md directamente en .specs/steering/.`,
+        notFound: (uri, detail) => `Recurso no encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
     // @pkg A1 <<<
 
     // @pkg A2 msg-es >>>

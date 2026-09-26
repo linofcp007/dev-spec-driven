@@ -57,10 +57,13 @@
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
  *   rules <tool>                       Print a rule file (cursor|windsurf|copilot|gemini|agents)
  *                                      with this clone's absolute paths, to paste into a project
+ *   prompts [name] [--args "…"]        The MCP prompts (one per plugin command): list them, or print one rendered as
+ *                                      prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
  *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
+ *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  */
 
@@ -86,6 +89,7 @@ VALUE_FLAGS.add("rm"); // depend <f> --rm x[,y]
 
 VALUE_FLAGS.add("name"); // classify --name <feature name> (evidence for the classifier, like spec_classify {name})
 VALUE_FLAGS.add("text"); // ears --text "<criteria>" (raw text, like ears_validate {text})
+VALUE_FLAGS.add("args"); // prompts <name> --args "…" (= MCP prompts/get {arguments: {args}})
 
 // Localized human output — the feature's language for feature commands, the project's otherwise.
 // (--json prints the structured result, which is never localized.)
@@ -805,6 +809,23 @@ function main() {
     }
 
     // @pkg A1 commands >>>
+    case "prompts": {
+      // dev-spec prompts [name] [--args "…"] — the MCP prompts (one per commands/*.md): the list (= prompts/list), or one
+      // rendered as prompts/get returns it (the words after the name are the args when --args is absent).
+      const PR = require(path.join(__dirname, "..", "mcp", "lib", "prompts-resources.js"));
+      const lang = spec.projectLang(projectDir);
+      const P = spec.msg(lang).promptsResources;
+      if (!pos[0]) {
+        return out({ ok: true, prompts: PR.listPrompts({ lang }) }, (r) => {
+          console.log(P.cliHead(r.prompts.length));
+          r.prompts.forEach((x) => console.log("  " + x.name + (x.argumentHint ? " " + x.argumentHint : "") + "\n      " + x.description));
+        });
+      }
+      if (typeof flags.args === "string" && pos.length > 1) usage('dev-spec prompts [name] [--args "…"]');
+      const r = PR.getPrompt(pos[0], typeof flags.args === "string" ? flags.args : pos.slice(1).join(" "), { lang });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => process.stdout.write(r.messages[0].content.text));
+    }
     // @pkg A1 <<<
 
     // @pkg A2 commands >>>
@@ -918,13 +939,15 @@ function helpText() {
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
+  prompts [name] [--args "…"]     The MCP prompts (one per plugin command — slash commands in MCP clients): list them, or print
+                                  one rendered as prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
 
   Flags: --json  --project <dir>  --lang en|pt|es (init/create/steering/roadmap/ears)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
-         --apply (upgrade)
+         --apply (upgrade)  --args "…" (prompts)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.

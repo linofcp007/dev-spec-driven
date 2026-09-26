@@ -9887,6 +9887,8 @@ module.exports = {
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
   withFeatureLock, // the cross-process feature lock the mutators hold (tests drive it with a short waitMs)
   // @pkg A1 exports >>>
+  resolveFeature, // MCP resources (mcp/lib/prompts-resources.js): a specs://feature/<slug>/… URI resolves like every name-taking op
+  isFeatureFolder, // … and lists only the folders listFeatures would (no _archive, dot folders, steering/)
   // @pkg A1 <<<
 
   // @pkg A2 exports >>>
