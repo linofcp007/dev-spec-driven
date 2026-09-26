@@ -7158,6 +7158,201 @@ function endRun() {
   // @pkg B3 <<<
 
   // @pkg B4 tests >>>
+  { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
+    const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
+    const setStateB4 = (dir, patch) => {
+      const f = path.join(dir, ".state.json");
+      fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, "utf8")), ...patch }, null, 2));
+    };
+    const sizeBlocks = S.taskBlocks("# Tasks\n\n- [ ] 1. One\n  - _Size: XS_\n- [ ] 2. Two _Size: s_\n- [ ] 3. Three\n  - _Size: `XL`_\n- [ ] 4. Four\n  - _Size: XXL_\n" +
+      "- [ ] 5. Five\n  ```md\n  - _Size: L_\n  ```\n- [ ] 6. Six\n  - _Size: M_\n- [ ] 7. Seven\n  - _Size: L_\n");
+    const sizes = sizeBlocks.map((b) => S.taskSize(b));
+    ok(JSON.stringify(sizes) === JSON.stringify(["XS", "S", "XL", null, null, "M", "L"]) && JSON.stringify(S.SIZE_POINTS) === '{"XS":1,"S":2,"M":3,"L":5,"XL":8}',
+      "taskSize: _Size: XS|S|M|L|XL_ on the task line or a sub-line (any case, backticks) → XS=1 S=2 M=3 L=5 XL=8; XXL and a fenced example are unsized (got " + JSON.stringify(sizes) + ")");
+
+    // Ticks: when each task was ticked (state.ticks[n] = ISO).
+    const tpB4 = path.join(tmp, "proj-b4-ticks");
+    S.initProject(tpB4, ["core"], "en");
+    const tfB4 = S.createFeature(tpB4, "Ticks", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(tfB4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] One\n- [ ] 2. [US1] Two\n  - _Verify: npm test_\n- [ ] 3. [US1] Three\n");
+    const beforeB4 = Date.now();
+    const t1B4 = S.completeTask(tpB4, "ticks", 1);
+    const tick1 = (S.readState(tpB4, "ticks").ticks || {})["1"];
+    const t1againB4 = S.completeTask(tpB4, "ticks", 1);
+    const tick1again = S.readState(tpB4, "ticks").ticks["1"];
+    const failB4 = S.completeTask(tpB4, "ticks", 2, { command: "npm test", exitCode: 1 });
+    const stFailB4 = S.readState(tpB4, "ticks");
+    const passB4 = S.completeTask(tpB4, "ticks", 2, { command: "npm test", exitCode: 0 });
+    const stPassB4 = S.readState(tpB4, "ticks");
+    ok(t1B4.ok && typeof tick1 === "string" && Date.parse(tick1) >= beforeB4 - 1000 && Date.parse(tick1) <= Date.now() + 1000 && t1againB4.ok && t1againB4.alreadyDone && tick1again === tick1 &&
+      failB4.ok === false && stFailB4.ticks["2"] === undefined && stFailB4.evidence["2"].exitCode === 1 &&
+      passB4.ok && typeof stPassB4.ticks["2"] === "string" && stPassB4.evidence["2"].exitCode === 0,
+      "spec_complete_task records when a task is ticked (state.ticks[n] = ISO): a re-complete keeps the first tick, a failed run records no tick (its evidence stays), a passing run records both (got " + JSON.stringify([tick1, stFailB4.ticks, stPassB4.ticks]) + ")");
+    const stFileB4 = path.join(tfB4.dir, ".state.json");
+    setStateB4(tfB4.dir, { ticks: "hand edit" });
+    const t3B4 = S.completeTask(tpB4, "ticks", 3);
+    ok(t3B4.ok && JSON.parse(fs.readFileSync(stFileB4, "utf8")).ticks === "hand edit" && /- \[x\] 3\./.test(fs.readFileSync(path.join(tfB4.dir, "tasks.md"), "utf8")),
+      "a hand-edited `ticks` that is not an object is left as it is (never repaired) — the task still ticks");
+
+    // Velocity / ETA from dated ticks, "today" injected (a Wednesday).
+    const NOW_B4 = "2026-06-10T12:00:00Z";
+    const fpB4 = path.join(tmp, "proj-b4-forecast");
+    S.initProject(fpB4, ["core"], "en");
+    const mkB4 = (proj, name, tasks) => { const f = S.createFeature(proj, name, ["core"], "", undefined, "en"); if (tasks != null) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks); return f; };
+    const coreB4 = mkB4(fpB4, "Core API",
+      "- [x] 1. [US1] Schema\n  - _Size: L_\n- [x] 2. [US1] Endpoints\n  - _Size: L_\n- [x] 3. [US1] Auth\n  - _Size: M_\n  - _Verify: npm test_\n" +
+      "- [x] 4. [US1] Paging\n  - _Size: M_\n- [x] 5. [US1] Old work\n  - _Size: S_\n- [x] 6. [US1] Ticked by hand\n  - _Size: XS_\n" +
+      "- [ ] 7. [US1] Filters\n  - _Size: M_\n- [ ] 8. [US1] Sorting\n- [ ] 9. [US1] Bulk import\n  - _Size: XL_\n");
+    setStateB4(coreB4.dir, { ticks: { 1: "2026-06-01T09:00:00Z", 2: "2026-06-02T15:00:00Z", 4: "2026-06-05T11:00:00Z", 5: "2026-04-01T10:00:00Z" },
+      evidence: { 3: { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z",
+        history: [{ command: "npm test", exitCode: 1, at: "2026-06-03T09:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-04T10:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z" }] } } });
+    mkB4(fpB4, "Reports", "- [ ] 1. [US1] Report view\n  - _Size: M_\n- [ ] 2. [US1] CSV\n  - _Size: M_\n");
+    mkB4(fpB4, "Exports", "- [ ] 1. [US1] Export job\n  - _Size: S_\n");
+    mkB4(fpB4, "Draft", null); // the scaffold's tasks only: not broken into tasks
+    mkB4(fpB4, "Later", "- [ ] 1. [US1] Later thing\n");
+    mkB4(fpB4, "Shipped", "- [x] 1. [US1] Done long ago\n");
+    S.setDependency(fpB4, "exports", ["reports"]);
+    S.setDependency(fpB4, "later", ["draft"]);
+    const fcB4 = S.forecastData(fpB4, S.roadmap(fpB4).features, { now: NOW_B4 });
+    const FB4 = fcB4.byFeature;
+    ok(fcB4.velocity.completed === 4 && fcB4.velocity.points === 16 && fcB4.velocity.since === "2026-06-01" && fcB4.velocity.workingDays === 8 && fcB4.velocity.pointsPerDay === 2 && fcB4.velocity.enough === true,
+      "velocity = points completed per working day over the last 28 days — ticks plus a task's first passing evidence run (a later re-check is not the completion); a tick outside the window and a hand tick don't count (got " + JSON.stringify(fcB4.velocity) + ")");
+    ok(FB4["core-api"].eta === "2026-06-18" && JSON.stringify(FB4["core-api"].range) === '["2026-06-17","2026-06-22"]' && FB4["core-api"].remainingPoints === 14 &&
+      FB4["core-api"].unsizedTasks === 1 && FB4["core-api"].velocity === "feature" && FB4["core-api"].workingDays === 7 && FB4["core-api"].pointsPerDay === 2,
+      "ETA: 14 open points (M + an unsized task = the feature's median 3 + XL) ÷ 2 points/day = 7 working days from Wed 2026-06-10 → 2026-06-18, ±25% → 06-17…06-22 (got " + JSON.stringify(FB4["core-api"]) + ")");
+    ok(FB4.reports.eta === "2026-06-12" && FB4.reports.velocity === "project" && FB4.exports.eta === "2026-06-15" && JSON.stringify(FB4.exports.range) === '["2026-06-15","2026-06-17"]' &&
+      JSON.stringify(FB4.exports.after) === '["reports"]' && FB4.exports.eta > FB4.reports.eta,
+      "a feature blocked by an unfinished dependency forecasts after it (exports starts the working day after reports' ETA, Fri 06-12 → Mon 06-15); without completions of its own a feature uses the project velocity (got " + JSON.stringify([FB4.reports, FB4.exports]) + ")");
+    ok(FB4.draft.eta === null && FB4.draft.reason === "no-tasks" && FB4.later.eta === null && FB4.later.reason === "dependency" && JSON.stringify(FB4.later.after) === '["draft"]' &&
+      FB4.shipped.reason === "done",
+      "no ETA for a feature not broken into tasks (no-tasks), one waiting on a dependency that has none (dependency, after: [draft]) or a done one (got " + JSON.stringify([FB4.draft, FB4.later, FB4.shipped]) + ")");
+
+    const npB4 = path.join(tmp, "proj-b4-nodata");
+    S.initProject(npB4, ["core"], "en");
+    const soloB4 = mkB4(npB4, "Solo", "- [x] 1. [US1] A\n- [x] 2. [US1] B\n- [ ] 3. [US1] C\n");
+    setStateB4(soloB4.dir, { ticks: { 1: "2026-06-08T10:00:00Z", 2: "2026-06-09T10:00:00Z" } });
+    const ndB4 = S.roadmapData(npB4, { now: NOW_B4 });
+    const ndMdB4 = S.renderRoadmapMd(npB4, "en", ndB4);
+    ok(ndB4.rmv.velocity.enough === false && ndB4.rmv.velocity.completed === 2 && ndB4.rmv.features[0].forecast.reason === "not-enough-data" && ndB4.rmv.features[0].forecast.eta === null &&
+      /_Velocity: not enough data yet — 2 of the 3 completed tasks a forecast needs in the last 28 days_/.test(ndMdB4) && /\| #3 C \| — \|$/m.test(ndMdB4) && !/ETA = remaining points/.test(ndMdB4),
+      "fewer than 3 completed tasks in the window: not enough data — no ETA ('—' in the column), the roadmap says so and shows no ETA rule");
+
+    const fdB4 = S.roadmapData(fpB4, { now: NOW_B4 });
+    const mdB4 = S.renderRoadmapMd(fpB4, "en", fdB4);
+    const mdPtB4 = S.renderRoadmapMd(fpB4, "pt", fdB4);
+    const htmlB4 = S.renderRoadmapHtml(fpB4, "es", fdB4);
+    ok(/\| Next \| ETA \|\n\|---\|---\|---\|---\|---\|---\|---\|---\|---\|/.test(mdB4) && /\[core-api\]\(\.\/core-api\/requirements\.md\) .*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdB4) &&
+      /\[exports\].*\| 2026-06-15 \(06-15…06-17\) \|$/m.test(mdB4) && /\[later\].*\| — \|$/m.test(mdB4) && /\[shipped\].*\| — \|$/m.test(mdB4) &&
+      /_Velocity: 2 point\(s\)\/working day — 4 task\(s\), 16 point\(s\) completed since 2026-06-01 \(last 28 days\)_/.test(mdB4) && /ETA = remaining points ÷ velocity, in working days \(±25%\)/.test(mdB4),
+      "ROADMAP.md: an ETA column (the date and its range, '—' without one), the project velocity line and the ETA rule");
+    ok(/\| Próxima \| Previsão \|/.test(mdPtB4) && /\[core-api\].*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdPtB4) && /_Velocidade: 2 ponto\(s\)\/dia útil — 4 tarefa\(s\), 16 ponto\(s\) concluídos desde 2026-06-01/.test(mdPtB4) &&
+      /Previsão = pontos por fazer ÷ velocidade, em dias úteis \(±25%\)/.test(mdPtB4),
+      "ROADMAP.md in Portuguese: the Previsão column, the Velocidade line and the rule in European Portuguese");
+    ok(/<th>Previsión<\/th>/.test(htmlB4) && /<td class="eta">2026-06-18 \(06-17…06-22\)<\/td>/.test(htmlB4) && /Velocidad: 2 punto\(s\)\/día laborable/.test(htmlB4) && !/https?:\/\//.test(htmlB4),
+      "ROADMAP.html (ES): the Previsión column and the velocity line — still offline (no URL)");
+
+    const mB4 = S.metrics(fpB4, "core-api", { now: NOW_B4 });
+    const mpB4 = S.metrics(fpB4, undefined, { now: NOW_B4 });
+    ok(mB4.velocity.pointsPerDay === 2 && mB4.velocity.completed === 4 && S.metricsLines(mB4).includes("  velocity: 2 point(s)/working day (4 task(s), 16 point(s) since 2026-06-01, last 28 days)") &&
+      mpB4.velocity.pointsPerDay === 2 && mpB4.velocity.enough === true && S.metricsLines(mpB4).some((l) => /^ {2}velocity: 2 point\(s\)\/working day/.test(l)) &&
+      /velocity: no completed task in the last 28 days/.test(S.metricsLines(S.metrics(fpB4, "reports", { now: NOW_B4 })).join("\n")),
+      "spec_metrics carries velocity — the feature's own and the project's — and metricsLines prints it");
+
+    // MCP = engine (real "today": ticks recorded now by spec_complete_task over MCP).
+    const lpB4 = path.join(tmp, "proj-b4-live");
+    S.initProject(lpB4, ["core"], "pt");
+    mkB4(lpB4, "Agora", "- [ ] 1. [US1] A\n  - _Size: S_\n- [ ] 2. [US1] B\n  - _Size: S_\n- [ ] 3. [US1] C\n  - _Size: S_\n- [ ] 4. [US1] D\n  - _Size: L_\n");
+    for (const n of [1, 2, 3]) await callB4("spec_complete_task", { name: "agora", number: n, projectDir: lpB4 });
+    const mRmB4 = payload(await callB4("spec_roadmap", { projectDir: lpB4 }));
+    const eRmB4 = S.roadmapReport(lpB4);
+    const mMetB4 = payload(await callB4("spec_metrics", { projectDir: lpB4 }));
+    const pick = (r) => JSON.stringify([r.velocity, r.overlaps, r.features.map((f) => [f.name, f.forecast])]);
+    ok(mRmB4.velocity.enough === true && mRmB4.velocity.completed === 3 && typeof mRmB4.features[0].forecast.eta === "string" && pick(mRmB4) === pick(eRmB4) &&
+      JSON.stringify(mMetB4.velocity) === JSON.stringify(S.metrics(lpB4).velocity) && /Velocidade: /.test(S.renderRoadmapMd(lpB4, "pt")),
+      "MCP spec_roadmap returns the engine's velocity / forecast / overlaps (ticks recorded over MCP); spec_metrics carries the same velocity (got " + pick(mRmB4).slice(0, 300) + ")");
+    const mdStr = (fs.readFileSync(path.join(__dirname, "server.js"), "utf8").match(/name: "spec_roadmap",\s*description: "([^"\\]|\\.)*"/) || [""])[0];
+    ok(/_Size: XS\|S\|M\|L\|XL_/.test(mdStr) && /cross-feature-overlap/.test(mdStr) && /not-enough-data/.test(mdStr), "spec_roadmap's description documents _Size:_, the forecast reasons and the overlaps");
+
+    const keysB4 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" ? keysB4(v, pre + k + ".") : [pre + k])).sort().join();
+    ok(keysB4(S.msg("en").forecast) === keysB4(S.msg("pt").forecast) && keysB4(S.msg("en").forecast) === keysB4(S.msg("es").forecast),
+      "the forecast / overlap messages exist in EN, PT and ES with the same keys");
+  }
+
+  { // 1.14 B4.2 — cross-feature file overlap: roadmapData pairs, ROADMAP attention, doctor warn, SessionStart line
+    const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
+    const opB4 = path.join(tmp, "proj-b4-overlap");
+    S.initProject(opB4, ["core"], "en");
+    const mkO = (name, tasks) => { const f = S.createFeature(opB4, name, ["core"], "", undefined, "en"); fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks); return f; };
+    mkO("Billing", "- [ ] 1. [US1] Invoice model\n  - _Implements: src/billing/invoice.js:10_\n- [ ] 2. [US1] Money util\n  - _Implements: ./src/util/money.js#L5_\n- [x] 3. [US1] Done one\n  - _Implements: src/done.js_\n");
+    mkO("Refunds", "- [ ] 1. [US1] Refund flow\n  - _Implements: `src/util/`_\n- [ ] 2. [US1] Refund model\n  - _Implements: src/refunds/refund.js_\n- [ ] 3. [US1] Touch the done file\n  - _Implements: src/done.js_\n");
+    mkO("Payouts", "- [ ] 1. [US1] Payout invoice\n  - _Implements: src/billing/invoice.js#L20_\n");
+    const searchO = mkO("Search", "- [ ] 1. [US1] Index\n  - _Implements: src/search/index.js, src/search/query.js_\n- [ ] 2. [US1] Docs\n  - _Implements: docs/search/*.md_\n");
+    mkO("Notes", "- [ ] 1. [US1] Notes\n  - _Implements: src/notes/notes.js_\n");
+    const legacyO = mkO("Legacy", "- [x] 1. [US1] Old invoices\n  - _Implements: src/billing/legacy.js_\n");
+    const stL = path.join(legacyO.dir, ".state.json");
+    fs.writeFileSync(stL, JSON.stringify({ ...JSON.parse(fs.readFileSync(stL, "utf8")), finished: { at: "2026-06-01T00:00:00Z", files: { "src/billing/legacy.js": "abc", "docs/search/intro.md": null } } }, null, 2));
+    const ovB4 = S.featureOverlaps(opB4);
+    const pairB4 = (a, b) => ovB4.pairs.find((p) => p.a === a && p.b === b) || {};
+    ok(ovB4.pairs.length === 3 && JSON.stringify(ovB4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/payouts","billing/refunds","search/legacy"]' &&
+      pairB4("billing", "payouts").kind === "active" && JSON.stringify(pairB4("billing", "payouts").files) === '["src/billing/invoice.js"]' &&
+      JSON.stringify(pairB4("billing", "refunds").files) === '["src/util/money.js"]' &&
+      pairB4("search", "legacy").kind === "finished" && JSON.stringify(pairB4("search", "legacy").files) === '["docs/search/intro.md"]' && ovB4.truncated === false,
+      "featureOverlaps: the same file however spelled (:10 / #L20 anchors), a folder covering a file (src/util/ ⊃ src/util/money.js), a glob matching a finished feature's baseline file; a DONE task's file, sibling files and disjoint features never pair (got " + JSON.stringify(ovB4) + ")");
+
+    const chk = (f) => S.specDoctor(opB4, f).checks.find((c) => c.id === "cross-feature-overlap");
+    const dBill = chk("billing"), dRef = chk("refunds"), dSearch = chk("search");
+    ok(dBill && dBill.status === "warn" && /payouts \(src\/billing\/invoice\.js\); refunds \(src\/util\/money\.js\)/.test(dBill.detail) && /spec_depend/.test(dBill.detail) && /_Supersedes:/.test(dBill.detail) &&
+      dRef && dRef.status === "warn" && /billing \(src\/util\/money\.js\)/.test(dRef.detail) &&
+      dSearch && /finished feature recorded in its drift baseline — legacy \(docs\/search\/intro\.md\)/.test(dSearch.detail) && /_Supersedes: <feature>\/US-n\.AC-m_/.test(dSearch.detail) &&
+      !chk("legacy") && !chk("notes"),
+      "spec_doctor: a warn 'cross-feature-overlap' on both features of an active pair and on the active side of a finished pair (suggesting spec_depend / _Supersedes:_); none on the finished feature nor on a disjoint one (got " + JSON.stringify([dBill, dSearch]) + ")");
+
+    const omdB4 = S.renderRoadmapMd(opB4, "en");
+    const attB4 = omdB4.split("## ⚠")[1] || "";
+    ok(/- \*\*billing\*\* — plans the same files as payouts: src\/billing\/invoice\.js — order them \(spec_depend\) or declare _Supersedes:_/.test(attB4) &&
+      /- \*\*billing\*\* — plans the same files as refunds: src\/util\/money\.js/.test(attB4) &&
+      /- \*\*search\*\* — plans files in legacy's finish baseline: docs\/search\/intro\.md — declare _Supersedes: legacy\/US-n\.AC-m_/.test(attB4) &&
+      !/\*\*(refunds|payouts|notes|legacy)\*\* — plans/.test(attB4) && /planeia os mesmos ficheiros que payouts/.test(S.renderRoadmapMd(opB4, "pt")),
+      "ROADMAP.md 'needs attention' names each overlap once, on its active side (PT too)");
+
+    const hkB4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    let ctxB4 = "";
+    try { ctxB4 = JSON.parse(hkB4.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
+    ok(ctxB4.split("\n").filter((l) => /overlap/.test(l)).length === 1 && /⚠ 3 cross-feature file overlap\(s\): billing ↔ payouts, billing ↔ refunds, search → legacy — run \/spec-doctor/.test(ctxB4),
+      "SessionStart prints ONE line naming the overlapping pairs (got " + JSON.stringify(ctxB4.slice(-300)) + ")");
+
+    const mDocB4 = payload(await callB4("spec_doctor", { name: "billing", projectDir: opB4 }));
+    const mRmB4 = payload(await callB4("spec_roadmap", { projectDir: opB4 }));
+    ok(JSON.stringify(mDocB4.checks.find((c) => c.id === "cross-feature-overlap")) === JSON.stringify(dBill) && JSON.stringify(mRmB4.overlaps) === JSON.stringify(ovB4.pairs),
+      "MCP spec_doctor / spec_roadmap carry the same overlap check and pairs as the engine");
+
+    // Ordered by a dependency, or declared with _Supersedes:_ → no longer an overlap.
+    S.setDependency(opB4, "payouts", ["billing"]);
+    fs.appendFileSync(path.join(searchO.dir, "requirements.md"), "\n- **US-9.AC-1** — WHEN a search runs THE SYSTEM SHALL use the new index _Supersedes: legacy/US-1.AC-1_\n");
+    const ov2B4 = S.featureOverlaps(opB4);
+    const hk2B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    ok(JSON.stringify(ov2B4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/refunds"]' && !chk("payouts") && !chk("search") && /⚠ 1 cross-feature file overlap\(s\): billing ↔ refunds —/.test(hk2B4.stdout),
+      "no overlap once the pair is ordered by a dependency (payouts → billing) or the active feature declares _Supersedes:_ of the finished one's criteria (got " + JSON.stringify(ov2B4.pairs) + ")");
+    const globB4 = path.join(tmp, "proj-b4-globs");
+    S.initProject(globB4, ["core"], "en");
+    for (const [name, imp] of [["Api all", "src/api/**"], ["Api v2", "src/api/v2/*.js"], ["Lib css", "lib/**/*.css"], ["Lib js", "lib/a.js"], ["Styles dir", "styles/"], ["Styles glob", "styles/**/*.css"]]) {
+      const f = S.createFeature(globB4, name, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Work\n  - _Implements: " + imp + "_\n");
+    }
+    const ovG = S.featureOverlaps(globB4).pairs;
+    ok(JSON.stringify(ovG.map((p) => [p.a, p.b, p.files])) === '[["api-all","api-v2",["src/api/**"]],["styles-dir","styles-glob",["styles"]]]',
+      "globs: a glob pairs with another glob it matches (src/api/** ⊇ src/api/v2/*.js) and with a folder holding its literal part (styles/ ⊇ styles/**/*.css); lib/**/*.css never pairs with lib/a.js (got " + JSON.stringify(ovG) + ")");
+    const cleanB4 = path.join(tmp, "proj-b4-clean");
+    S.initProject(cleanB4, ["core"], "en");
+    const c1 = S.createFeature(cleanB4, "One", ["core"], "", undefined, "en");
+    const c2 = S.createFeature(cleanB4, "Two", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(c1.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Implements: src/one/a.js, src/shared-one.js_\n- [ ] 2. [US1] Later\n  - _Implements: TBD_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
+    fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] B\n  - _Implements: src/one-two/b.js, src/shared.js_\n- [ ] 2. [US1] Later\n  - _Implements: tbd_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
+    const hk3B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
+    ok(S.featureOverlaps(cleanB4).pairs.length === 0 && !S.specDoctor(cleanB4, "one").checks.some((c) => c.id === "cross-feature-overlap") && !/overlap/.test(hk3B4.stdout) &&
+      !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
+      "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");
+  }
   // @pkg B4 <<<
 
   // @pkg B5 tests >>>

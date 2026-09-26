@@ -32,7 +32,7 @@ table{width:100%;border-collapse:collapse;font-size:.9rem;background:var(--bg2);
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border)} th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
 tr:last-child td{border-bottom:none} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
 .pct{white-space:nowrap} .pct .bar{display:inline-block;width:54px;height:6px;border-radius:999px;background:var(--bg3);vertical-align:middle;margin-right:7px;overflow:hidden}
-.pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)}
+.pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)} .eta{white-space:nowrap}
 .met{color:var(--c-done)} .unmet{color:var(--c-block)}
 ul{list-style:none;padding:0;margin:0} li{padding:5px 0;border-bottom:1px solid var(--border)} li:last-child{border:none}
 footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid var(--border);padding-top:12px}
@@ -48,6 +48,7 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
 <div class="prog">Progress: 19%</div>
 <div class="pbar"><span style="width:19%"></span></div>
 <div class="sub">0/2 features complete · 0/16 tasks done</div>
+<div class="sub">Velocity: not enough data yet — 0 of the 3 completed tasks a forecast needs in the last 28 days</div>
 <div class="legend">
   <span><span class="dot" style="background:var(--c-done)"></span>done</span>
   <span><span class="dot" style="background:var(--c-prog)"></span>in progress</span>
@@ -61,8 +62,8 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
 <div class="cards"><div class="card"><b>api-keys</b><span class="tracks">core +tdd +saas</span><div>next #1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</div></div></div>
 
 <h2>Features</h2>
-<table><thead><tr><th></th><th>Feature</th><th>Tracks</th><th>Phase</th><th>%</th><th>Tasks</th><th>Deps</th><th>Next</th></tr></thead><tbody><tr><td><span class="dot" style="background:var(--accent)"></span></td><td><a href="./api-keys/requirements.md">api-keys</a></td><td><span class="tracks">core +tdd +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:30%"></span></span>30%</td><td>0/8</td><td>—</td><td class="next">#1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</td></tr>
-<tr><td><span class="dot" style="background:var(--c-block)"></span></td><td><a href="./usage-metering/requirements.md">usage-metering</a></td><td><span class="tracks">core +saas</span></td><td>requirements</td><td class="pct"><span class="bar"><span style="width:8%"></span></span>8%</td><td>0/8</td><td><span class="unmet">api-keys</span></td><td class="next">blocked</td></tr></tbody></table>
+<table><thead><tr><th></th><th>Feature</th><th>Tracks</th><th>Phase</th><th>%</th><th>Tasks</th><th>Deps</th><th>Next</th><th>ETA</th></tr></thead><tbody><tr><td><span class="dot" style="background:var(--accent)"></span></td><td><a href="./api-keys/requirements.md">api-keys</a></td><td><span class="tracks">core +tdd +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:30%"></span></span>30%</td><td>0/8</td><td>—</td><td class="next">#1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</td><td class="eta">—</td></tr>
+<tr><td><span class="dot" style="background:var(--c-block)"></span></td><td><a href="./usage-metering/requirements.md">usage-metering</a></td><td><span class="tracks">core +saas</span></td><td>requirements</td><td class="pct"><span class="bar"><span style="width:8%"></span></span>8%</td><td>0/8</td><td><span class="unmet">api-keys</span></td><td class="next">blocked</td><td class="eta">—</td></tr></tbody></table>
 
 <h2>Dependencies</h2>
 <ul><li><b>usage-metering</b> ← <span class="unmet">api-keys</span></li></ul>

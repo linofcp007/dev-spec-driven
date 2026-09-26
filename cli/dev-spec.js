@@ -34,7 +34,7 @@
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
  *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
- *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate (--write → retro.md)
+ *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate, velocity (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
@@ -46,7 +46,7 @@
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
- *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
+ *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap: ETA forecasts, cross-feature overlaps (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
@@ -527,7 +527,12 @@ function main() {
       return out(r, (r) => { // --json stays one valid JSON document (wrote/errors/warnings included)
         if (!r.features.length) return console.log(T.noRoadmapFeatures(r.specsDir));
         console.log(T.roadmapHead(r.overallPercent, r.complete, r.total, r.cycle ? r.cycle.join(" → ") : null));
-        r.features.forEach((f) => console.log("  " + (f.blocked ? "⛔" : "  ") + " " + f.name.padEnd(26) + " " + String(f.percent + "%").padStart(4) + "  [" + f.tracks + "]  " + T.phase(f.phase) + (f.dependsOn.length ? T.deps(f.dependsOn.join(","), f.unmetDeps.join(",")) : "")));
+        // + each feature's ETA when it has one, then the velocity / ETA rule / cross-feature overlaps (spec_roadmap's forecast,
+        // velocity, overlaps) — nothing new for a project with no completed task and no overlap.
+        const lang = flags.lang || spec.projectLang(projectDir);
+        const eta = (f) => { const e = spec.etaText(f.forecast, lang, true); return e ? "  · " + e : ""; };
+        r.features.forEach((f) => console.log("  " + (f.blocked ? "⛔" : "  ") + " " + f.name.padEnd(26) + " " + String(f.percent + "%").padStart(4) + "  [" + f.tracks + "]  " + T.phase(f.phase) + (f.dependsOn.length ? T.deps(f.dependsOn.join(","), f.unmetDeps.join(",")) : "") + eta(f)));
+        spec.roadmapTailLines(r, lang).forEach((l) => console.log(l));
       });
     }
 
@@ -920,7 +925,7 @@ function helpText() {
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
                                   (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
-  metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate (project: + avg/median);
+  metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
@@ -931,7 +936,7 @@ function helpText() {
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
-  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
+  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
   backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
