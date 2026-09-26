@@ -474,14 +474,14 @@ review sections, a tasks template with its Definition of Done, a stricter consti
 | File | Replaces |
 |---|---|
 | `.specs/templates/<artifact>.md` | the built-in template of `classification`, `requirements`, `design`, `tasks`, `test-plan`, `eval-plan`, `load-test`, `quickstart`, `checklist`, `integration-plan`, `bug` (bug.md), the bugfix variants `bug-requirements` / `bug-test-plan` / `bug-tasks`, and the spike ones `spike` (spike.md) / `spike-tasks` |
-| `.specs/templates/<lang>/<artifact>.md` | the same, for features in that language (`en` · `pt` · `es`) — wins over the shared file |
+| `.specs/templates/<lang>/<artifact>.md` | the same, for features in that language (`en` · `pt` · `pt-BR` · `es`) — wins over the shared file |
 | `.specs/templates/steering/<file>.md` (also under `<lang>/`) | a steering stub (`constitution.md`, `security.md`, …) |
 
 `spec_create`, `spec_add_track`, `spec_init`, `steering_scaffold` and `spec_import` (through `spec_create`) use an
 override when present — create-only, never over an existing file.
 
 - **Commands:** `spec_templates {action: "list" | "init" | "check", artifact?, lang?}` (CLI `dev-spec templates
-  [list|init|check] [artifact] [--lang en|pt|es]`; `/spec-templates`). `list` shows built-in vs project per artifact
+  [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`; `/spec-templates`). `list` shows built-in vs project per artifact
   (and files that are not a template name — ignored); `init` copies the built-in template(s) into `.specs/templates/`
   (with `lang`: into `<lang>/`) to edit, never overwriting; `check` validates them against the current rules — each
   problem with `{file, line?, code, severity, message}` and a verdict (the CLI exits 1 on an error).

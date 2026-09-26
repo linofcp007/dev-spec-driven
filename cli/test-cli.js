@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa3", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -1164,12 +1164,13 @@ const fill10 = (rel, pairs) => { const fp = path.join(bf10.dir, rel); let t = fs
 fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
   ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
 fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-fill10("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js_"]]);
+fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js_"]]);
 fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
   ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
   ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
   ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-[1, 2, 3].forEach((n) => S10.completeTask(w10f, "login-loop", n));
+[1, 2].forEach((n) => S10.completeTask(w10f, "login-loop", n));
+S10.completeTask(w10f, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
 S10.completeTask(w10f, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
 ["requirements", "design", "test-plan", "tasks"].forEach((p) => S10.approvePhase(w10f, "login-loop", p));
 const fin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
@@ -1829,9 +1830,6 @@ if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy t
   const usage = run(["add-track", "--project", a2]).out;
   ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy>/.test(usage),
     "help and the add-track usage name the +sec / +privacy tracks");
-}
-
-if (inSection("pa3")) { // 1.14 package A3 (CLI tests)
 }
 
 if (inSection("pa4")) { // 1.14 package A4 (CLI tests)

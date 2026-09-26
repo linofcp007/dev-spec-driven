@@ -572,8 +572,9 @@ ${a.summary || "[one line: the bug being fixed]"}
 
 <!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
      No fix before bug.md → Root Cause is filled with evidence.
-     Task 3 is red by design (its test must FAIL): give it no _Verify:_ — record the failing run as a note
-     (--evidence) — the must-pass command belongs on the fix task (4). -->
+     Task 3 is red by design (its test must FAIL): its _Verify:_ runs T-01 and _Expect: fail_ makes that failing run
+     the proof (a passing run is refused). The must-pass suite belongs on the fix task (4).
+     T-02 guards behavior that already works — green before and after the fix, so it is in no task's _Makes green:_. -->
 
 ## Global Constraints
 - [exact values the fix must respect — versions, limits, formats]
@@ -583,12 +584,13 @@ ${a.summary || "[one line: the bug being fixed]"}
   - _Requirements: US-1.AC-1_
 - [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)
   - _Requirements: US-1.AC-1_
-- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output)
+- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
   - _Requirements: US-1.AC-1_
-  - _Makes green: T-01_
-- [ ] 4. [US1] Fix the root cause — one change, not a bundle
+  - _Verify: [command that runs T-01]_
+  - _Expect: fail_
+- [ ] 4. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
   - _Requirements: US-1.AC-1, US-1.AC-2_
-  - _Makes green: T-01, T-02_
+  - _Makes green: T-01_
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
@@ -1224,8 +1226,10 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 
 <!-- A ordem de um bugfix é fixa: reproduzir → causa raiz → teste de regressão a falhar → corrigir → verificar.
      Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência.
-     A tarefa 3 é vermelha por natureza (o teste tem de FALHAR): não lhe ponhas _Verify:_ — regista a execução
-     a falhar como nota (--evidence) — o comando que tem de passar vai na tarefa da correção (4). -->
+     A tarefa 3 é vermelha por natureza (o teste tem de FALHAR): o _Verify:_ dela executa o T-01 e, com o _Expect: fail_,
+     essa execução a falhar é a prova (uma que passe é recusada). A suite que tem de passar vai na tarefa da correção (4).
+     O T-02 protege comportamento que já funciona — verde antes e depois da correção, por isso não entra no _Makes green:_
+     de nenhuma tarefa. -->
 
 ## Restrições Globais
 - [valores exatos que a correção tem de respeitar — versões, limites, formatos]
@@ -1235,12 +1239,13 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
   - _Requirements: US-1.AC-1_
 - [ ] 2. [shared] Encontrar a causa raiz com evidência; preencher bug.md → Causa Raiz (ainda sem corrigir)
   - _Requirements: US-1.AC-1_
-- [ ] 3. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output)
+- [ ] 3. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output); acrescentar o teste de proteção T-02 (já passa)
   - _Requirements: US-1.AC-1_
-  - _Makes green: T-01_
-- [ ] 4. [US1] Corrigir a causa raiz — uma alteração, não um pacote
+  - _Verify: [comando que executa o T-01]_
+  - _Expect: fail_
+- [ ] 4. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
-  - _Makes green: T-01, T-02_
+  - _Makes green: T-01_
   - _Verify: [comando da suite de testes completa]_
 **Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
 `;
@@ -1876,8 +1881,10 @@ ${a.summary || "[una línea: el bug a corregir]"}
 
 <!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
      Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia.
-     La tarea 3 es roja por diseño (su prueba debe FALLAR): no le pongas _Verify:_ — registra la ejecución que
-     falla como nota (--evidence) — el comando que debe pasar va en la tarea del arreglo (4). -->
+     La tarea 3 es roja por diseño (su prueba debe FALLAR): su _Verify:_ ejecuta T-01 y _Expect: fail_ hace de esa
+     ejecución que falla la prueba (una que pase se rechaza). La suite que debe pasar va en la tarea del arreglo (4).
+     T-02 protege un comportamiento que ya funciona — en verde antes y después del arreglo, así que no entra en el
+     _Makes green:_ de ninguna tarea. -->
 
 ## Restricciones Globales
 - [valores exactos que la corrección debe respetar — versiones, límites, formatos]
@@ -1887,12 +1894,13 @@ ${a.summary || "[una línea: el bug a corregir]"}
   - _Requirements: US-1.AC-1_
 - [ ] 2. [shared] Encontrar la causa raíz con evidencia; rellenar bug.md → Causa Raíz (aún sin corregir)
   - _Requirements: US-1.AC-1_
-- [ ] 3. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida)
+- [ ] 3. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida); añadir la prueba de protección T-02 (ya pasa)
   - _Requirements: US-1.AC-1_
-  - _Makes green: T-01_
-- [ ] 4. [US1] Corregir la causa raíz — un cambio, no un paquete
+  - _Verify: [comando que ejecuta T-01]_
+  - _Expect: fail_
+- [ ] 4. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
-  - _Makes green: T-01, T-02_
+  - _Makes green: T-01_
   - _Verify: [comando de la suite de pruebas completa]_
 **Checkpoint:** el bug deja de reproducirse y la suite completa está en verde.
 `;
@@ -3046,7 +3054,6 @@ const MSG = {
       },
     },
 
-    // @pkg A1 msg-en >>>
     // MCP prompts (one per commands/*.md) + resources (specs:// URIs) — mcp/lib/prompts-resources.js, `dev-spec prompts`.
     promptsResources: {
       preamble: (agentsMd, refsDir) => `Note for the agent: if no dev-spec-driven skill is available in this tool, follow the workflow in the plugin's AGENTS.md (${agentsMd}) and use the spec-driven MCP tools (spec_*, ears_validate, trace_check); the references/… files named below are in ${refsDir}.`,
@@ -3079,9 +3086,7 @@ const MSG = {
         notFound: (uri, detail) => `Resource not found: ${uri}` + (detail ? ` — ${detail}` : ""),
       },
     },
-    // @pkg A1 <<<
 
-    // @pkg A2 msg-en >>>
     // +sec / +privacy (1.14): what their tools report beyond the shared track messages.
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
@@ -3101,12 +3106,7 @@ const MSG = {
         privacyRetention: "Specify how long each category of personal data is kept and what happens when that period ends.",
       },
     },
-    // @pkg A2 <<<
 
-    // @pkg A3 msg-en >>>
-    // @pkg A3 <<<
-
-    // @pkg A4 msg-en >>>
     // A _Verify:_ command that pipes into another one (`npm test | tee log`): a pipeline's exit code is its LAST command's.
     verifyPipe: {
       brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "pipe" : "pipes"} into another command: a pipeline's exit code is its LAST command's, so a failing check can exit 0 and read as verified. Drop the pipe, or run it under bash after \`set -o pipefail\` (cmd.exe has no pipefail) — the exit code you report must be the check's own.`,
@@ -3114,9 +3114,7 @@ const MSG = {
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
     },
-    // @pkg A4 <<<
 
-    // @pkg B1 msg-en >>>
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
     templates: {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
@@ -3158,9 +3156,7 @@ const MSG = {
         "filematch-no-pattern": "front matter says inclusion: fileMatch but gives no fileMatchPattern — the file is only listed on request.",
       },
     },
-    // @pkg B1 <<<
 
-    // @pkg B2 msg-en >>>
     // Stakeholder export (spec_export / `dev-spec export`): the chrome of the generated document — the spec text is the user's.
     stakeholderExport: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export (dev-spec export).",
@@ -3221,9 +3217,7 @@ const MSG = {
       badSince: (v) => `since: '${v}' is not an ISO date (YYYY-MM-DD, or a full ISO timestamp), 'last' or 'all'.`,
       noLast: "No release notes were written yet (roadmap.json meta.changelogAt is unset) — every change is listed.",
     },
-    // @pkg B2 <<<
 
-    // @pkg B3 msg-en >>>
     // Team governance (approvals by role — roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through}).
     governance: {
       rolesShape: "approvalRoles must map phases to role lists, e.g. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none clears them)",
@@ -3257,9 +3251,7 @@ const MSG = {
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
     },
-    // @pkg B3 <<<
 
-    // @pkg B4 msg-en >>>
     // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (spec.js: forecastData, featureOverlaps).
     forecast: {
       colEta: "ETA",
@@ -3282,9 +3274,7 @@ const MSG = {
         more: (n) => `+${n} more`,
       },
     },
-    // @pkg B4 <<<
 
-    // @pkg B5 msg-en >>>
     // 1.14 B5 — red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `Task ${n} expects its test to FAIL (_Expect: fail_), but the run passed (exit 0) — the test doesn't fail yet, so it tests nothing. Make it fail for the right reason (an assertion, "not implemented" — not a typo or a missing import), then record that run. Not marking it done.`,
@@ -3339,9 +3329,7 @@ const MSG = {
       conventions: (slug) => `No commit cites a task of '${slug}'. Conventions: name the feature and the task — "Part of .specs/${slug}/ task #N." (what /spec-commit writes) — or the IDs it covers: "Makes T-01 green", US-1.AC-2.`,
       noGit: "git is not available here, or this is not a git repository with commits — dev-spec log reads `git log`. Or pipe a log in: git log --name-only --relative | dev-spec log <feature> -",
     },
-    // @pkg B5 <<<
 
-    // @pkg C1 msg-en >>>
     // 1.14 C1 — the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
     // scope guard (roadmap.json meta.guard = "scope"). claims / negators / admissions are regex sources the engine applies from
     // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
@@ -3414,9 +3402,7 @@ const MSG = {
         next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
       },
     },
-    // @pkg C1 <<<
 
-    // @pkg C2 msg-en >>>
     // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
     // IDs (D-n), the markers (_Kind:_ _Date:_ _Affects:_ _Supersedes:_ _Outcome:_) and their values stay English.
     decisions: {
@@ -3544,9 +3530,7 @@ _Outcome: [go | no-go | pivot]_
       cliQuestion: (q) => `  question: ${q}`,
       cliUntil: (d) => `  timebox: until ${d}`,
     },
-    // @pkg C2 <<<
 
-    // @pkg C3 msg-en >>>
     // Flows (1.14 C3) — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
     flow: {
       required: (slug, known) => `flow required — one of: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
@@ -3574,10 +3558,6 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': AC reference(s) ${list} match no criterion of that story — kept as written`,
       wWorkflow: (list) => `BMAD workflow records not imported (left in place): ${list}`,
     },
-    // @pkg C3 <<<
-
-    // @pkg C4 msg-en >>>
-    // @pkg C4 <<<
   },
 
   pt: {
@@ -4388,7 +4368,6 @@ _Outcome: [go | no-go | pivot]_
       },
     },
 
-    // @pkg A1 msg-pt >>>
     promptsResources: {
       preamble: (agentsMd, refsDir) => `Nota para o agente: se não houver uma skill dev-spec-driven disponível nesta ferramenta, segue o fluxo do AGENTS.md do plugin (${agentsMd}) e usa as ferramentas MCP spec-driven (spec_*, ears_validate, trace_check); os ficheiros references/… citados abaixo estão em ${refsDir}.`,
       argDesc: (hint) => (hint ? `Argumentos (opcionais): ${hint}` : "Não precisa de argumentos (texto livre opcional)."),
@@ -4420,9 +4399,7 @@ _Outcome: [go | no-go | pivot]_
         notFound: (uri, detail) => `Recurso não encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
       },
     },
-    // @pkg A1 <<<
 
-    // @pkg A2 msg-pt >>>
     secPrivacy: {
       sectionNames: {
         "Threat Model": "Modelo de Ameaças", "Security Requirements": "Requisitos de Segurança", "Authentication & Authorization": "Autenticação e Autorização",
@@ -4446,21 +4423,14 @@ _Outcome: [go | no-go | pivot]_
         privacyRetention: "Especifica durante quanto tempo é conservada cada categoria de dados pessoais e o que acontece quando esse prazo termina.",
       },
     },
-    // @pkg A2 <<<
 
-    // @pkg A3 msg-pt >>>
-    // @pkg A3 <<<
-
-    // @pkg A4 msg-pt >>>
     verifyPipe: {
       brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "encaminham" : "encaminha"} a saída para outro comando (pipe): o exit code de um pipeline é o do ÚLTIMO comando, por isso uma verificação que falha pode sair com 0 e passar por verificada. Tira o pipe, ou corre-o em bash depois de \`set -o pipefail\` (o cmd.exe não tem pipefail) — o exit code que reportas tem de ser o da própria verificação.`,
       runHint: (cmd) => `⚠ \`${cmd}\` encaminha a saída para outro comando (pipe): a shell só reporta o exit code do ÚLTIMO comando, por isso uma verificação que falha pode ficar registada como bem-sucedida — tira o pipe, ou começa-o com \`set -o pipefail;\` em bash (--shell bash); o cmd.exe não tem pipefail.`,
       doctor: (list) => `um comando _Verify:_ encaminha a saída para outro (pipe) — uma verificação que falha pode sair com 0 (um pipeline reporta o código do ÚLTIMO comando): ${list}. Tira o pipe ou usa \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Tarefa ${n}: o comando registado encaminha a saída para outro (\`${cmd}\`) — o seu exit 0 é o do ÚLTIMO comando, por isso esta passagem pode esconder uma verificação que falha. Tira o pipe (ou usa \`set -o pipefail\` em bash) e corre-o de novo.`,
     },
-    // @pkg A4 <<<
 
-    // @pkg B1 msg-pt >>>
     templates: {
       noSummary: "[a definir]",
       badAction: (a) => `Ação de templates desconhecida '${a}' — uma de: list, init, check.`,
@@ -4501,9 +4471,7 @@ _Outcome: [go | no-go | pivot]_
         "filematch-no-pattern": "o front matter diz inclusion: fileMatch mas não indica nenhum fileMatchPattern — o ficheiro só é listado a pedido.",
       },
     },
-    // @pkg B1 <<<
 
-    // @pkg B2 msg-pt >>>
     stakeholderExport: {
       autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_export (dev-spec export).",
       kicker: { feature: "Especificação da feature", bugfix: "Especificação do bugfix", project: "Especificação do projeto" },
@@ -4562,9 +4530,7 @@ _Outcome: [go | no-go | pivot]_
       badSince: (v) => `since: '${v}' não é uma data ISO (AAAA-MM-DD, ou um timestamp ISO completo), 'last' nem 'all'.`,
       noLast: "Ainda não foram escritas notas de versão (roadmap.json meta.changelogAt não está definido) — são listadas todas as alterações.",
     },
-    // @pkg B2 <<<
 
-    // @pkg B3 msg-pt >>>
     governance: {
       rolesShape: "approvalRoles tem de associar fases a listas de papéis, p. ex. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none remove-os)",
       rolesPhase: (phase, known) => `approvalRoles: fase desconhecida '${phase}' (conhecidas: ${known})`,
@@ -4597,9 +4563,7 @@ _Outcome: [go | no-go | pivot]_
       ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
       batch: (n) => `  aprovações em lote (avanço rápido): ${n}`,
     },
-    // @pkg B3 <<<
 
-    // @pkg B4 msg-pt >>>
     forecast: {
       colEta: "Previsão",
       etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
@@ -4621,9 +4585,7 @@ _Outcome: [go | no-go | pivot]_
         more: (n) => `+${n} outro(s)`,
       },
     },
-    // @pkg B4 <<<
 
-    // @pkg B5 msg-pt >>>
     // 1.14 B5 — vermelho → verde (_Expect: fail_), verificações do projeto (roadmap.json meta.checks) + a suite no fim, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a execução passou (exit 0) — o teste ainda não falha, por isso não testa nada. Põe-no a falhar pela razão certa (uma asserção, "não implementado" — não um erro de escrita nem um import em falta) e regista essa execução. Não a marco como feita.`,
@@ -4678,9 +4640,7 @@ _Outcome: [go | no-go | pivot]_
       conventions: (slug) => `Nenhum commit cita uma tarefa de '${slug}'. Convenções: nomeia a feature e a tarefa — "Part of .specs/${slug}/ task #N." (o que o /spec-commit escreve) — ou os IDs que cobre: "Makes T-01 green", US-1.AC-2.`,
       noGit: "o git não está disponível aqui, ou isto não é um repositório git com commits — o dev-spec log lê o `git log`. Ou passa um log pelo stdin: git log --name-only --relative | dev-spec log <feature> -",
     },
-    // @pkg B5 <<<
 
-    // @pkg C1 msg-pt >>>
     stopGate: {
       claims: [
         String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?)`,
@@ -4739,9 +4699,7 @@ _Outcome: [go | no-go | pivot]_
         next: (n, slug) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug}, a próxima tarefa por concluir) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
       },
     },
-    // @pkg C1 <<<
 
-    // @pkg C2 msg-pt >>>
     // 1.14 C2 — registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).
     decisions: {
       header: (name) => `# Decisões: ${name}
@@ -4868,9 +4826,7 @@ _Outcome: [go | no-go | pivot]_
       cliQuestion: (q) => `  pergunta: ${q}`,
       cliUntil: (d) => `  timebox: até ${d}`,
     },
-    // @pkg C2 <<<
 
-    // @pkg C3 msg-pt >>>
     flow: {
       required: (slug, known) => `fluxo em falta — um de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
       kindRefused: (slug, kind) => `'${slug}' é um ${kind}: segue a sua própria ordem de fases fixa — o fluxo só se aplica a features.`,
@@ -4896,10 +4852,6 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': referência(s) de AC ${list} não correspondem a nenhum critério dessa história — mantidas como escritas`,
       wWorkflow: (list) => `registos de workflow do BMAD não importados (ficam no sítio): ${list}`,
     },
-    // @pkg C3 <<<
-
-    // @pkg C4 msg-pt >>>
-    // @pkg C4 <<<
   },
 
   es: {
@@ -5710,7 +5662,6 @@ _Outcome: [go | no-go | pivot]_
       },
     },
 
-    // @pkg A1 msg-es >>>
     promptsResources: {
       preamble: (agentsMd, refsDir) => `Nota para el agente: si no hay una skill dev-spec-driven disponible en esta herramienta, sigue el flujo del AGENTS.md del plugin (${agentsMd}) y usa las herramientas MCP spec-driven (spec_*, ears_validate, trace_check); los archivos references/… citados abajo están en ${refsDir}.`,
       argDesc: (hint) => (hint ? `Argumentos (opcionales): ${hint}` : "No necesita argumentos (texto libre opcional)."),
@@ -5742,9 +5693,7 @@ _Outcome: [go | no-go | pivot]_
         notFound: (uri, detail) => `Recurso no encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
       },
     },
-    // @pkg A1 <<<
 
-    // @pkg A2 msg-es >>>
     secPrivacy: {
       sectionNames: {
         "Threat Model": "Modelo de Amenazas", "Security Requirements": "Requisitos de Seguridad", "Authentication & Authorization": "Autenticación y Autorización",
@@ -5768,21 +5717,14 @@ _Outcome: [go | no-go | pivot]_
         privacyRetention: "Especifica cuánto tiempo se conserva cada categoría de datos personales y qué ocurre cuando vence ese plazo.",
       },
     },
-    // @pkg A2 <<<
 
-    // @pkg A3 msg-es >>>
-    // @pkg A3 <<<
-
-    // @pkg A4 msg-es >>>
     verifyPipe: {
       brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "redirigen" : "redirige"} su salida a otro comando (pipe): el exit code de un pipeline es el de su ÚLTIMO comando, así que una comprobación que falla puede salir con 0 y pasar por verificada. Quita el pipe, o ejecútalo en bash tras \`set -o pipefail\` (cmd.exe no tiene pipefail) — el exit code que informes debe ser el de la propia comprobación.`,
       runHint: (cmd) => `⚠ \`${cmd}\` redirige su salida a otro comando (pipe): la shell solo informa del exit code del ÚLTIMO comando, así que una comprobación que falla puede registrarse como correcta — quita el pipe, o empieza con \`set -o pipefail;\` en bash (--shell bash); cmd.exe no tiene pipefail.`,
       doctor: (list) => `un comando _Verify:_ redirige su salida a otro (pipe) — una comprobación que falla puede salir con 0 (un pipeline informa del código de su ÚLTIMO comando): ${list}. Quita el pipe o usa \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Tarea ${n}: el comando registrado redirige su salida a otro (\`${cmd}\`) — su exit 0 es el del ÚLTIMO comando, así que este resultado puede ocultar una comprobación que falla. Quita el pipe (o usa \`set -o pipefail\` en bash) y vuelve a ejecutarlo.`,
     },
-    // @pkg A4 <<<
 
-    // @pkg B1 msg-es >>>
     templates: {
       noSummary: "[por definir]",
       badAction: (a) => `Acción de plantillas desconocida '${a}' — una de: list, init, check.`,
@@ -5823,9 +5765,7 @@ _Outcome: [go | no-go | pivot]_
         "filematch-no-pattern": "el front matter dice inclusion: fileMatch pero no indica ningún fileMatchPattern — el archivo solo se lista a petición.",
       },
     },
-    // @pkg B1 <<<
 
-    // @pkg B2 msg-es >>>
     stakeholderExport: {
       autogen: "AUTO-GENERADO por dev-spec — no editar a mano. Para regenerar: spec_export (dev-spec export).",
       kicker: { feature: "Especificación de la función", bugfix: "Especificación del bugfix", project: "Especificación del proyecto" },
@@ -5884,9 +5824,7 @@ _Outcome: [go | no-go | pivot]_
       badSince: (v) => `since: '${v}' no es una fecha ISO (AAAA-MM-DD, o una marca de tiempo ISO completa), 'last' ni 'all'.`,
       noLast: "Aún no se han escrito notas de la versión (roadmap.json meta.changelogAt no está definido) — se listan todos los cambios.",
     },
-    // @pkg B2 <<<
 
-    // @pkg B3 msg-es >>>
     governance: {
       rolesShape: "approvalRoles debe asociar fases a listas de roles, p. ej. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none los elimina)",
       rolesPhase: (phase, known) => `approvalRoles: fase desconocida '${phase}' (conocidas: ${known})`,
@@ -5919,9 +5857,7 @@ _Outcome: [go | no-go | pivot]_
       ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
       batch: (n) => `  aprobaciones en lote (avance rápido): ${n}`,
     },
-    // @pkg B3 <<<
 
-    // @pkg B4 msg-es >>>
     forecast: {
       colEta: "Previsión",
       etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
@@ -5943,9 +5879,7 @@ _Outcome: [go | no-go | pivot]_
         more: (n) => `+${n} más`,
       },
     },
-    // @pkg B4 <<<
 
-    // @pkg B5 msg-es >>>
     // 1.14 B5 — rojo → verde (_Expect: fail_), verificaciones del proyecto (roadmap.json meta.checks) + la suite al final, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `La tarea ${n} espera que su prueba FALLE (_Expect: fail_), pero la ejecución pasó (exit 0) — la prueba aún no falla, así que no prueba nada. Hazla fallar por la razón correcta (una aserción, "no implementado" — no una errata ni un import que falta) y registra esa ejecución. No la marco como hecha.`,
@@ -6000,9 +5934,7 @@ _Outcome: [go | no-go | pivot]_
       conventions: (slug) => `Ningún commit cita una tarea de '${slug}'. Convenciones: nombra la función y la tarea — "Part of .specs/${slug}/ task #N." (lo que escribe /spec-commit) — o los IDs que cubre: "Makes T-01 green", US-1.AC-2.`,
       noGit: "git no está disponible aquí, o esto no es un repositorio git con commits — dev-spec log lee `git log`. O pasa un log por la entrada estándar: git log --name-only --relative | dev-spec log <función> -",
     },
-    // @pkg B5 <<<
 
-    // @pkg C1 msg-es >>>
     stopGate: {
       claims: [
         String.raw`(?:está|están|esta|quedó|quedaron|fue|fueron|ya\s+está|ya\s+están)\s+(?:todo\s+)?(?:hech[oa]s?|list[oa]s?|terminad[oa]s?|completad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resuelt[oa]s?)`,
@@ -6061,9 +5993,7 @@ _Outcome: [go | no-go | pivot]_
         next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
       },
     },
-    // @pkg C1 <<<
 
-    // @pkg C2 msg-es >>>
     // 1.14 C2 — registro de decisiones (decisions.md, spec_decide) y el tipo spike (investigar → decidir).
     decisions: {
       header: (name) => `# Decisiones: ${name}
@@ -6190,9 +6120,7 @@ _Outcome: [go | no-go | pivot]_
       cliQuestion: (q) => `  pregunta: ${q}`,
       cliUntil: (d) => `  timebox: hasta ${d}`,
     },
-    // @pkg C2 <<<
 
-    // @pkg C3 msg-es >>>
     flow: {
       required: (slug, known) => `falta el flujo — uno de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
       kindRefused: (slug, kind) => `'${slug}' es un ${kind}: sigue su propio orden de fases fijo — el flujo solo se aplica a funciones.`,
@@ -6218,10 +6146,6 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': la(s) referencia(s) de AC ${list} no corresponden a ningún criterio de esa historia — se mantienen como están`,
       wWorkflow: (list) => `registros de workflow de BMAD no importados (se quedan donde están): ${list}`,
     },
-    // @pkg C3 <<<
-
-    // @pkg C4 msg-es >>>
-    // @pkg C4 <<<
   },
 };
 // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
@@ -6286,7 +6210,7 @@ const BRIEF = {
     evalsRule: "This change touches an AI path: run the eval harness afterwards — golden holds or improves, adversarial holds — and put the scores in the report.",
     checkpoint: "When this story's last task is done, the controller stops for human review at the checkpoint:",
     report: "## Report",
-    reportTo: (p) => `Write your full report to \`${p}\`, then reply with only the status line (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), your commits, a one-line test summary and any concerns.`,
+    reportTo: (p) => `Write your full report to \`${p}\`, then reply with only the status line (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), your commits, a one-line test summary, any concerns and the report path written out in full (\`${p}\`) — the evidence gate and the controller find your report through it.`,
     ledgerHeader: (feature) => `# Execution ledger — feature: ${feature}\n\n<!-- One line per event, appended by the controller (never rewritten):\n     Preflight: … · Ruling: <what> — <why> — <cost if wrong> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
     allDone: "All tasks are done — nothing to brief.",
     alreadyDone: (n) => `Task ${n} is already marked done.`,
@@ -6343,7 +6267,7 @@ const BRIEF = {
     evalsRule: "Esta alteração toca num caminho de IA: corre o harness de evals no fim — o golden mantém-se ou melhora, o adversarial mantém-se — e põe as pontuações no relatório.",
     checkpoint: "Quando a última tarefa desta história estiver feita, o controlador pára para revisão humana no checkpoint:",
     report: "## Relatório",
-    reportTo: (p) => `Escreve o relatório completo em \`${p}\` e responde só com a linha de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), os teus commits, um resumo de uma linha dos testes e eventuais preocupações.`,
+    reportTo: (p) => `Escreve o relatório completo em \`${p}\` e responde só com a linha de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), os teus commits, um resumo de uma linha dos testes, eventuais preocupações e o caminho do relatório escrito por extenso (\`${p}\`) — é por esse caminho que o gate de evidência e o controlador chegam ao relatório.`,
     ledgerHeader: (feature) => `# Ledger de execução — feature: ${feature}\n\n<!-- Uma linha por evento, acrescentada pelo controlador (nunca reescrita):\n     Preflight: … · Ruling: <o quê> — <porquê> — <custo se estiver errado> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
     allDone: "Todas as tarefas estão feitas — não há nada para o brief.",
     alreadyDone: (n) => `A tarefa ${n} já está marcada como feita.`,
@@ -6400,7 +6324,7 @@ const BRIEF = {
     evalsRule: "Este cambio toca una ruta de IA: ejecuta el harness de evals al final — golden se mantiene o mejora, adversarial se mantiene — y pon las puntuaciones en el informe.",
     checkpoint: "Cuando la última tarea de esta historia esté hecha, el controlador se detiene para revisión humana en el checkpoint:",
     report: "## Informe",
-    reportTo: (p) => `Escribe el informe completo en \`${p}\` y responde solo con la línea de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), tus commits, un resumen de una línea de las pruebas y cualquier duda.`,
+    reportTo: (p) => `Escribe el informe completo en \`${p}\` y responde solo con la línea de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), tus commits, un resumen de una línea de las pruebas, cualquier duda y la ruta del informe escrita completa (\`${p}\`) — por ella el gate de evidencia y el controlador encuentran tu informe.`,
     ledgerHeader: (feature) => `# Ledger de ejecución — función: ${feature}\n\n<!-- Una línea por evento, añadida por el controlador (nunca reescrita):\n     Preflight: … · Ruling: <qué> — <por qué> — <coste si es erróneo> · Task N: dispatched (base <sha>, model <m>)\n     Task N: fix round R/5 (…) · Task N: minor (deferred): … · Task N: parked — … · Task N: complete (commits a..b, review clean)\n     Checkpoint USn: presented → approved -->\n`,
     allDone: "Todas las tareas están hechas — no hay nada para el brief.",
     alreadyDone: (n) => `La tarea ${n} ya está marcada como hecha.`,
@@ -6497,7 +6421,6 @@ function renderBrief(d, lang) {
   return out.join("\n");
 }
 
-// @pkg D1 ptbr >>>
 // ===========================================================================
 // pt-BR — Brazilian Portuguese as a DERIVED locale (1.14 D1). `pt` stays European Portuguese (the default for pt /
 // pt-PT); every pt-BR string is toPtBr(the pt string), so a pt template or message edit reaches pt-BR with nothing else
@@ -6993,7 +6916,6 @@ defineDerivedLocale(BRIEF);
 defineDerivedLocale(MSG, { stopGate: { claims: true, negators: true, admissions: true } }, {
   stopGate: (m, pt) => Object.assign(m, { claims: [...pt.claims, ...PTBR_STOP_EXTRA.claims], admissions: [...pt.admissions, ...PTBR_STOP_EXTRA.admissions] }),
 });
-// @pkg D1 <<<
 
 // ===========================================================================
 // Public API — thin dispatchers that resolve the language and delegate.

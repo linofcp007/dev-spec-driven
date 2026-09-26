@@ -1,13 +1,13 @@
 ---
 description: Project templates — list, copy (init) or check the team's own scaffolds in .specs/templates/ that replace the built-in ones. PT - templates do projeto. ES - plantillas del proyecto.
-argument-hint: "[list|init|check] [artifact] [--lang en|pt|es]"
+argument-hint: "[list|init|check] [artifact] [--lang en|pt|pt-BR|es]"
 ---
 
 Use the **dev-spec-driven** skill, project templates.
 
 Args: $ARGUMENTS
 
-Call the `spec_templates` MCP tool (CLI `dev-spec templates [list|init|check] [artifact] [--lang en|pt|es]`) and show
+Call the `spec_templates` MCP tool (CLI `dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`) and show
 its `lines`.
 
 - **`list`** (default) — for each artifact, whether new features get the built-in template or the project's

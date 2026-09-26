@@ -1654,7 +1654,6 @@ function setGuard(projectDir, on) {
   });
 }
 
-// @pkg C1 evidence stop gate + scope guard >>>
 // ---------------------------------------------------------------------------
 // 1.14 C1 — "evidence before claims" at the END OF A TURN (hooks/stop-hook.js on Stop / SubagentStop; `dev-spec stop-check`)
 // and the scope guard (roadmap.json meta.guard = "scope": a code edit no open task plans in _Implements:_ asks).
@@ -1924,7 +1923,6 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
     ...(extra.forced ? { forced: extra.forced } : {}),
     reason: S.ask(rel, list(features), hint).replace(/ {2,}/g, " ") + (extra.note ? " " + extra.note : "") };
 }
-// @pkg C1 <<<
 
 // ---------------------------------------------------------------------------
 // Feature artifact skeletons
@@ -2966,9 +2964,12 @@ function statusFeature(projectDir, name) {
   // +sec / +privacy: the same view as the scale sections (null while the track is off).
   const trackView = (tr) => (tracks.includes(tr) ? sectionView(sectionState(design, TRACK_SECTIONS[tr], TRACK_MARKER[tr])) : null);
 
+  const kind = readState(projectDir, slug).kind || "feature";
   return {
     ok: true,
     feature: slug,
+    kind, // feature | bugfix | spike (1.14 — the same field spec_list rows carry)
+    flow: featureFlow(dir, kind), // requirements-first | design-first (C3; a bugfix / spike is always requirements-first)
     tracks: trackLabel(tracks),
     phase: detectPhase(dir, tracks),
     artifacts,
@@ -4652,7 +4653,6 @@ function verifyPipes(block) {
   return taskMarkers(block).verify.filter(verifyPipeMasked);
 }
 
-// @pkg B5 evidence >>>
 // ---------------------------------------------------------------------------
 // 1.14 B5 — evidence: red → green (_Expect: fail_), the project's check commands (roadmap.json meta.checks) with a recorded
 // full-suite run at finish, and git-linked evidence. The engine never runs a command nor git: `dev-spec done --run` /
@@ -5033,7 +5033,6 @@ function taskCommits(projectDir, name, logText, opts = {}) {
     redFirst, warnings, lines,
   };
 }
-// @pkg B5 <<<
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
@@ -5666,7 +5665,6 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   return res;
 }
 
-// @pkg B3 approval roles + fast-forward >>>
 // ---------------------------------------------------------------------------
 // Team governance (1.14) — approvals by role, and the fast-forward approval.
 // roadmap.json meta.approvalRoles = { <phase>: [<role>, …] } (spec_init {approvalRoles} / `init --roles`). A phase listed
@@ -6025,7 +6023,6 @@ function approveThrough(projectDir, name, phase, by, opts) {
   }
   return { ok: true, ...base, approved, steps, complete: true, approvals, message: E.ffDone(f.slug, approved.join(", "), t) };
 }
-// @pkg B3 <<<
 
 // ---------------------------------------------------------------------------
 // Change requests (1.13) — approval snapshots, spec_impact (what an edit after approval touches) and reopen.
@@ -6570,7 +6567,7 @@ function metrics(projectDir, name, opts = {}) {
     const lng = featureLang(projectDir, f.slug);
     const M = i18n.msg(lng).metrics;
     const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
-    res.velocity = featureVelocity(projectDir, f.slug, opts); // @pkg B4 — points / working day over the forecast window
+    res.velocity = featureVelocity(projectDir, f.slug, opts); // 1.14 B4 — points / working day over the forecast window
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
@@ -6602,7 +6599,7 @@ function metrics(projectDir, name, opts = {}) {
     batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
-  // @pkg B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
+  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions), (opts.now != null && timeOf(opts.now)) || Date.now());
   return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
 }
@@ -6632,7 +6629,7 @@ function metricsLines(r) {
     out.push(M.changes(r.changeRequests, r.reopenedTasks));
     out.push(r.evidence.runs ? M.evidence(r.evidence.passRate, r.evidence.passing, r.evidence.runs) : M.noRuns);
     out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
-    if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // @pkg B4
+    if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
     if (r.warning) out.push("  ⚠ " + r.warning);
     if (r.note) out.push(r.note);
     return out;
@@ -6655,7 +6652,7 @@ function metricsLines(r) {
     out.push(M.medianLeads([["requirements", reqLead], ["design", desLead], ["tasks", taskLead]].filter(([, s]) => s.n).map(([ph, s]) => `${M.phase[ph]} ${fmtHours(s.median)}`).join(" · ")));
   }
   out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
-  if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // @pkg B4
+  if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
   return out;
 }
 
@@ -7687,7 +7684,6 @@ function pendingGateList(dir, tracks, kind, approvals) {
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]); // C3: in the flow's order
 }
 
-// @pkg C3 design-first flow >>>
 // ---------------------------------------------------------------------------
 // Flows (1.14 C3) — Kiro's tech-design-first variant. Some features start from an architecture (a port, platform or performance
 // work): `.state.json → flow: "design-first"` (spec_create {flow} / `create --flow design-first`; changed later with spec_feature
@@ -7784,7 +7780,6 @@ function storeCreateFlow(dir, flow) {
   j.data.flow = flow;
   writeFileAtomic(statePath(dir), JSON.stringify(j.data, null, 2));
 }
-// @pkg C3 <<<
 
 // The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
@@ -8785,7 +8780,7 @@ function specDoctor(projectDir, name, opts = {}) {
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
     .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
   if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
-  // @pkg B4 — cross-feature file overlap (featureOverlaps): this feature's open tasks plan files another active feature's open
+  // 1.14 B4 — cross-feature file overlap (featureOverlaps): this feature's open tasks plan files another active feature's open
   // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
   const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
   if (overlapPairs.length) add("cross-feature-overlap", "warn", overlapDoctorDetail(overlapPairs, slug, lng));
@@ -9542,7 +9537,6 @@ function roadmapReport(projectDir, opts = {}) {
   return rm;
 }
 
-// @pkg B4 forecasts + cross-feature overlap >>>
 // ---------------------------------------------------------------------------
 // Roadmap forecasts (1.14). A task may carry `_Size: XS|S|M|L|XL_` (an English-stable marker, like _Verify:_) worth
 // XS=1 S=2 M=3 L=5 XL=8 points; an unsized task counts as its feature's median sized task (M when none is sized). When a
@@ -9879,7 +9873,6 @@ function overlapDoctorDetail(pairs, slug, lang) {
   const fin = pairs.filter((p) => p.kind === "finished").map((p) => `${p.b} (${overlapFiles(p, lang)})`);
   return [act.length ? O.doctorActive(act.join("; "), slug) : null, fin.length ? O.doctorFinished(fin.join("; "), slug) : null].filter(Boolean).join(" · ");
 }
-// @pkg B4 <<<
 
 // ---------------------------------------------------------------------------
 // Living catalog (.specs/SPECS.md) · _Supersedes:_ · restore · drift since finish
@@ -10166,7 +10159,6 @@ function maybeRefreshCatalog(projectDir) {
   }
 }
 
-// @pkg C2 decisions + spike >>>
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
 // ---------------------------------------------------------------------------
@@ -10777,9 +10769,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
-// @pkg C2 <<<
 
-// @pkg B2 engine >>>
 // ---------------------------------------------------------------------------
 // 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
 // ---------------------------------------------------------------------------
@@ -11501,7 +11491,6 @@ function changelog(projectDir, opts = {}) {
   if (!w.ok) return { ...res, ...w };
   return { ...res, wrote: true, changelogAt: now };
 }
-// @pkg B2 <<<
 
 // --- archive record → restore ---
 
@@ -13618,7 +13607,6 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
   }).join("\n");
 }
 
-// @pkg C3 import: plan · execplan · bmad >>>
 // ---------------------------------------------------------------------------
 // spec_import (1.14 C3) — three more sources, with the same guarantees (a NEW feature, the source only read and inside the project,
 // mapping + warnings, the localized "Imported from" note, tracks auto-classified unless given):
@@ -14342,7 +14330,6 @@ function parseBmad(dir, read0, W, src) {
   return model;
 }
 const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad };
-// @pkg C3 <<<
 
 function importSpec(projectDir, tool, source, opts = {}) {
   const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
@@ -14703,45 +14690,29 @@ module.exports = {
   designSaveCheck, // the PostToolUse design.md save check
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
   withFeatureLock, // the cross-process feature lock the mutators hold (tests drive it with a short waitMs)
-  // @pkg A1 exports >>>
   resolveFeature, // MCP resources (mcp/lib/prompts-resources.js): a specs://feature/<slug>/… URI resolves like every name-taking op
   isFeatureFolder, // … and lists only the folders listFeatures would (no _archive, dot folders, steering/)
-  // @pkg A1 <<<
 
-  // @pkg A2 exports >>>
   OPTIONAL_TRACKS,
   TRACK_MARKER: Object.freeze({ ...TRACK_MARKER }), // the stable [Marker] of each marker track
   // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
   trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
   // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
   trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
-  // @pkg A2 <<<
 
-  // @pkg A3 exports >>>
-  // @pkg A3 <<<
-
-  // @pkg A4 exports >>>
   verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
-  // @pkg A4 <<<
 
-  // @pkg B1 exports >>>
   templates, // spec_templates / `dev-spec templates [list|init|check]` — the project's own scaffolds in .specs/templates/
   templateKey, // "requirements.md" / "steering/tech" → the template key, or null (the allowlist)
   TEMPLATE_ARTIFACTS,
-  // @pkg B1 <<<
 
-  // @pkg B2 exports >>>
   exportSpecs, // spec_export / `dev-spec export` — the stakeholder document (.specs/exports/, offline HTML or markdown)
   changelog, // spec_changelog / `dev-spec changelog` — release notes from the specs (.specs/RELEASE-NOTES.md + meta.changelogAt)
   markdownToHtml, // the export's zero-dep markdown renderer (every text escaped; links http(s)/mailto only; no images)
-  // @pkg B2 <<<
 
-  // @pkg B3 exports >>>
   approvalRolesOf, // roadmap.json meta.approvalRoles, sanitized ({} = single approvals) — team governance (approvals by role)
   parseApprovalRolesText, // `init --roles requirements=product,design=tech+security` → the object spec_init {approvalRoles} takes
-  // @pkg B3 <<<
 
-  // @pkg B4 exports >>>
   roadmapData, // the ROADMAP.* computation (+ opts.now for the forecasts)
   forecastData, // velocity + per-feature ETA (roadmap() features; opts.now fixes "today")
   featureOverlaps, // cross-feature file overlap pairs (roadmap attention, doctor, SessionStart)
@@ -14749,38 +14720,26 @@ module.exports = {
   SIZE_POINTS, // XS=1 S=2 M=3 L=5 XL=8
   etaText, // "2026-10-05 (10-03…10-08)" for a forecast (CLI: cli=true)
   roadmapTailLines, // `dev-spec roadmap`'s velocity / ETA-rule / overlap lines
-  // @pkg B4 <<<
 
-  // @pkg B5 exports >>>
   expectsFail, // _Expect: fail_ on a task block (spec_task_brief reports it as `expect: "fail"`, which `done --run` reads)
   projectChecks, // roadmap.json meta.checks → {checks: [{name, command}], invalid} — `finish --run` runs them
   parseGitLog, // `git log` text (medium --name-only/--name-status, or --oneline) → commits
   taskCommits, // `dev-spec log <feature>`: the commits citing each task + the +tdd red-first check, from git log TEXT (never runs git)
-  // @pkg B5 <<<
 
-  // @pkg C1 exports >>>
   stopCheck, // the end-of-turn evidence gate — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`
   stopClaims, // does a message claim the work is done / verified? (EN / PT / ES, conservative) → { claim, admitted, claims }
   stopCheckEnabled, // roadmap.json meta.stopCheck (on unless false)
   guardLevel, // roadmap.json meta.guard → false | true | "scope"
   STOP_RECENT_HOURS, // the gate's "recently active" window, in hours
-  // @pkg C1 <<<
 
-  // @pkg C2 exports >>>
   decide: featureLocked(decide), // spec_decide / `dev-spec decide` — append a D-n entry to decisions.md (under the feature lock)
   decisionLog, // decisions.md text → its entries [{ id, n, title, kind, date, at, affects, supersedes, context, decision, consequences, line }]
   affectsWarnings, // trace_check's phantom _Affects:_ references as localized lines (CLI)
   spikeInfo, // a spike folder → { questionFilled, decisionFilled, outcome, question, rationale, timebox, timeboxPassed }
-  // @pkg C2 <<<
 
-  // @pkg C3 exports >>>
   FLOWS: Object.freeze(FLOWS.slice()), // the phase orders spec_create {flow} / spec_feature {action: "flow"} take (requirements-first = the default)
   featureFlow: (projectDir, name) => { const f = existingFeature(projectDir, name); return f.ok ? featureFlow(f.dir) : null; }, // a feature's flow (null: no such feature)
   planPaths, // the file paths a plan step names (spec_import plan → _Implements:_)
-  // @pkg C3 <<<
-
-  // @pkg C4 exports >>>
-  // @pkg C4 <<<
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

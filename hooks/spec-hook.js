@@ -117,7 +117,7 @@ function handle(raw) {
         const v = spec.specVersionStatus(pdir);
         if (v && v.behind && m.upgrade) lines.push(m.upgrade.hookLine(v.from));
       } catch { /* best-effort */ }
-      // @pkg B4 — cross-feature file overlap: ONE line when two active features' open tasks plan the same files (or an active
+      // 1.14 B4 — cross-feature file overlap: ONE line when two active features' open tasks plan the same files (or an active
       // feature plans files a finished one recorded in its drift baseline). Text reads only — nothing hashed; never throws.
       try {
         const ov = spec.featureOverlaps(pdir);

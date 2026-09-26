@@ -21,8 +21,8 @@ Bug: $ARGUMENTS
    **not** an approval of your root cause: don't touch the product code in this turn. On the user's yes, `/approve`
    requirements, **design** (a bugfix has no design of its own — its design approval signs off `bug.md`, gated on the
    Root Cause), test-plan and tasks — or all four at once with `/spec-ff` once they said so.
-5. **Failing regression test** (T-01, task 3) — mark task 3 `_Expect: fail_` with the command that runs T-01 as its
-   `_Verify:_`, write the test and see it fail for the right reason: `dev-spec done <feature> 3 --run` (or
+5. **Failing regression test** (T-01, task 3) — the scaffold marks task 3 `_Expect: fail_`; fill its `_Verify:_` with the
+   command that runs T-01, write the test and see it fail for the right reason: `dev-spec done <feature> 3 --run` (or
    `spec_complete_task {…, evidence}` with the failing run) records the red run; a passing run is refused. No shell to
    run it? Ask the user to run the test and paste the output — never apply the fix on a red nobody saw.
 6. **Fix the cause** (one change), run the suite, record the evidence:

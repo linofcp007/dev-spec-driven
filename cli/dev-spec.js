@@ -894,7 +894,6 @@ function main() {
       return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
-    // @pkg A1 commands >>>
     case "prompts": {
       // dev-spec prompts [name] [--args "…"] — the MCP prompts (one per commands/*.md): the list (= prompts/list), or one
       // rendered as prompts/get returns it (the words after the name are the args when --args is absent).
@@ -912,18 +911,7 @@ function main() {
       if (!r.ok) return fail(r);
       return out(r, (r) => process.stdout.write(r.messages[0].content.text));
     }
-    // @pkg A1 <<<
 
-    // @pkg A2 commands >>>
-    // @pkg A2 <<<
-
-    // @pkg A3 commands >>>
-    // @pkg A3 <<<
-
-    // @pkg A4 commands >>>
-    // @pkg A4 <<<
-
-    // @pkg B1 commands >>>
     case "templates": {
       // dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es] — the project's own scaffolds in .specs/templates/
       // (= spec_templates {action, artifact, lang}). check exits 1 when a template has an error (scriptable, like doctor).
@@ -933,9 +921,7 @@ function main() {
       if (r.action === "check" && r.errors) process.exitCode = 1;
       return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
-    // @pkg B1 <<<
 
-    // @pkg B2 commands >>>
     case "export": {
       // dev-spec export [feature] [--md] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
       // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
@@ -960,15 +946,7 @@ function main() {
         } else if (r.note) console.log(r.note);
       });
     }
-    // @pkg B2 <<<
 
-    // @pkg B3 commands >>>
-    // @pkg B3 <<<
-
-    // @pkg B4 commands >>>
-    // @pkg B4 <<<
-
-    // @pkg B5 commands >>>
     case "log": {
       // dev-spec log <feature> [--max N] [-] — per task, the commits whose message cites it (+ the +tdd red-first check), from
       // `git log` (read-only, local, bounded by --max, default 1000); "-" reads a log from stdin instead (e.g. an agent's
@@ -1057,9 +1035,7 @@ function main() {
       if (cmdFailed) console.error(M.taskDone.shellHint);
       return { ok: true, evidence };
     }
-    // @pkg B5 <<<
 
-    // @pkg C1 commands >>>
     case "stop-check": {
       // = the Stop / SubagentStop hook's decision (spec.stopCheck): the closing message from --message "<text>", the words
       // after the command, or stdin (--message - / a lone -); --agent <subagent type> (a spec-implementer is checked on its
@@ -1077,9 +1053,7 @@ function main() {
       if (flags.message === "-" || (flags.message === undefined && pos.length === 1 && pos[0] === "-")) return readStdin(runCheck);
       return runCheck(typeof flags.message === "string" ? flags.message : pos.join(" "));
     }
-    // @pkg C1 <<<
 
-    // @pkg C2 commands >>>
     case "spike": {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
@@ -1110,13 +1084,7 @@ function main() {
         if (r.supersedes.length) console.log("  _Supersedes: " + r.supersedes.join(", ") + "_");
       });
     }
-    // @pkg C2 <<<
 
-    // @pkg C3 commands >>>
-    // @pkg C3 <<<
-
-    // @pkg C4 commands >>>
-    // @pkg C4 <<<
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 

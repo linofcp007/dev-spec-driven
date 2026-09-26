@@ -56,8 +56,8 @@ The engine enforces it at every step, not only in doctor:
    plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor`, and present the reproduction, the root
    cause and its evidence for the approvals (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
 3. **Failing regression test** (task 3). Write `T-01` so it reproduces the bug and watch it fail *for the
-   right reason* (the wrong behaviour, not a typo or a missing import). Give task 3 the command that runs T-01 as
-   its `_Verify:_` and mark it **`_Expect: fail_`** (the scaffold leaves task 3 without a `_Verify:_` — add both):
+   right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 3 **`_Expect: fail_`**
+   with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
    its failing run is then the recorded proof (`dev-spec done <f> 3 --run` while the test fails; a passing run is
    refused — `unexpected-pass`, the test doesn't reproduce the bug yet). Paste the red output in the report. This
    is the proof the fix fixes *this* bug. **No shell to run it?** Ask the user to run the test and paste the output
@@ -69,9 +69,9 @@ The engine enforces it at every step, not only in doctor:
 **Checkpoint:** the reproduction steps no longer reproduce the bug and the full suite is green. Close
 with `/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
 
-`T-02` guards behaviour that already works, so it passes before the fix too: doctor's `red-green` warning naming
-T-02 (no recorded red run) is expected on a bugfix — say so when you present the verdict; never make a guard test
-fail artificially.
+`T-02` guards behaviour that already works, so it passes before the fix too: it sits in no task's `_Makes green:_`
+(only `T-01` does, on task 4), so doctor's `red-green` check asks no red run for it. Never make a guard test fail
+artificially — and never list it under `_Makes green:_`, or `red-green` will (rightly) ask for a red run it can't have.
 
 ## When a fix doesn't work
 

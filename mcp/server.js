@@ -95,7 +95,7 @@ const TOOLS = [
   },
   {
     name: "spec_status",
-    description: "Detailed status for one feature: active tracks, phase, artifacts present, task progress and next task, plus +saas scale-section completeness, +ai eval/prompt state and the +sec / +privacy section completeness (secSections / privacySections).",
+    description: "Detailed status for one feature: its kind (feature / bugfix / spike) and flow (requirements-first / design-first), active tracks, phase, artifacts present, task progress and next task, plus +saas scale-section completeness, +ai eval/prompt state and the +sec / +privacy section completeness (secSections / privacySections).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
@@ -301,19 +301,6 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations, write .specs/UPGRADE.md and refresh the generated ROADMAP.md/.html (default: read-only audit). CLI: dev-spec upgrade --apply." }, projectDir: { type: "string" } } },
   },
 
-  // @pkg A1 tools >>>
-  // @pkg A1 <<<
-
-  // @pkg A2 tools >>>
-  // @pkg A2 <<<
-
-  // @pkg A3 tools >>>
-  // @pkg A3 <<<
-
-  // @pkg A4 tools >>>
-  // @pkg A4 <<<
-
-  // @pkg B1 tools >>>
   {
     name: "spec_templates",
     description:
@@ -328,9 +315,7 @@ const TOOLS = [
       },
     },
   },
-  // @pkg B1 <<<
 
-  // @pkg B2 tools >>>
   {
     name: "spec_export",
     description:
@@ -358,21 +343,7 @@ const TOOLS = [
       },
     },
   },
-  // @pkg B2 <<<
 
-  // @pkg B3 tools >>>
-  // @pkg B3 <<<
-
-  // @pkg B4 tools >>>
-  // @pkg B4 <<<
-
-  // @pkg B5 tools >>>
-  // @pkg B5 <<<
-
-  // @pkg C1 tools >>>
-  // @pkg C1 <<<
-
-  // @pkg C2 tools >>>
   {
     name: "spec_decide",
     description:
@@ -393,13 +364,6 @@ const TOOLS = [
       required: ["name", "title", "decision"],
     },
   },
-  // @pkg C2 <<<
-
-  // @pkg C3 tools >>>
-  // @pkg C3 <<<
-
-  // @pkg C4 tools >>>
-  // @pkg C4 <<<
 ];
 
 // --- Tool dispatch ---------------------------------------------------------
@@ -485,53 +449,18 @@ function runTool(name, args) {
       return spec.drift(pdir, args.name);
     case "spec_upgrade": // the same engine call as the CLI's `upgrade [--apply]` (apply only on an explicit true)
       return spec.specUpgrade(pdir, { apply: args.apply === true });
-    // @pkg A1 dispatch >>>
-    // @pkg A1 <<<
 
-    // @pkg A2 dispatch >>>
-    // @pkg A2 <<<
-
-    // @pkg A3 dispatch >>>
-    // @pkg A3 <<<
-
-    // @pkg A4 dispatch >>>
-    // @pkg A4 <<<
-
-    // @pkg B1 dispatch >>>
     case "spec_templates": // the same engine call as the CLI's `templates [list|init|check] [artifact] [--lang]`
       return spec.templates(pdir, args.action, { artifact: args.artifact, lang: args.lang });
-    // @pkg B1 <<<
 
-    // @pkg B2 dispatch >>>
     case "spec_export": // the same engine call as the CLI's `export [feature] [--md] [--write]`
       return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });
     case "spec_changelog": // the same engine call as the CLI's `changelog [--since …] [--write]`
       return spec.changelog(pdir, { since: args.since, write: args.write === true });
-    // @pkg B2 <<<
 
-    // @pkg B3 dispatch >>>
-    // @pkg B3 <<<
-
-    // @pkg B4 dispatch >>>
-    // @pkg B4 <<<
-
-    // @pkg B5 dispatch >>>
-    // @pkg B5 <<<
-
-    // @pkg C1 dispatch >>>
-    // @pkg C1 <<<
-
-    // @pkg C2 dispatch >>>
     case "spec_decide": // the same engine call as the CLI's `decide <f> --title … --decision … [--affects …] [--supersedes …] [--discovery]`
       return spec.decide(pdir, args.name, { title: args.title, decision: args.decision, context: args.context, consequences: args.consequences,
         affects: args.affects, supersedes: args.supersedes, kind: args.kind });
-    // @pkg C2 <<<
-
-    // @pkg C3 dispatch >>>
-    // @pkg C3 <<<
-
-    // @pkg C4 dispatch >>>
-    // @pkg C4 <<<
     default:
       throw new Error("Unknown tool: " + name);
   }

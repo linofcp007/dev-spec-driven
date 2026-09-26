@@ -122,9 +122,17 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
 messages, CLI and hook output — one set per language). `spec.js` keeps the logic and delegates: each
 template function is a one-line call into `i18n.<builder>(args, lang)`. EN is the canonical reference;
 PT and ES mirror its structure (same sections, IDs, markers and slots). **pt-BR (1.14) is a DERIVED locale**
-(`lang: "pt-BR"`): it starts from the pt-PT (`pt`) texts and overrides only what Brazilian Portuguese says
-differently, so it inherits every key, ID, marker and synonym the PT set has — a new PT string reaches pt-BR by
-default; add a pt-BR override only when the wording differs. Readers that match PT headings/keywords match pt-BR too.
+(`lang: "pt-BR"`; `pt_BR` / `pt-br` / `ptbr` fold to it via `canonicalLang()`, `pt` / `pt-PT` stay European): every
+pt-BR string is `toPtBr(<the pt string>)` — protected tokens (code spans, `_Marker:_`s, paths, the caller's arguments),
+then `PTBR_OVERRIDES`, the progressive (`está a correr` → `está rodando`), `PTBR_PHRASES`, the second person (`tens` →
+`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling) — built lazily per
+table group (`defineDerivedLocale`), so it inherits every key, ID, marker and synonym of the PT set and a PT edit
+reaches pt-BR with nothing else to change. **When you add or edit a PT string, read its twin once**
+(`node -e "console.log(require('./mcp/lib/i18n.js').toPtBr('…'))"`): a clause-start 3rd person read as an order goes
+into `RE_PTBR_NOT_IMPERATIVE`, a missed word into `PTBR_WORDS` / `PTBR_PHRASES`, anything else into `PTBR_OVERRIDES`;
+`mcp/test.js` (pD1) lints every pt-BR string (no European-only vocabulary, English-stable tokens byte-identical,
+idempotent). Readers that match PT headings/keywords match pt-BR too (`baseLang()`); the classifier's language guess
+counts Brazilian markers but still answers `pt`. Project templates for it live in `.specs/templates/pt-BR/`.
 The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
 `[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
 (and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.
@@ -355,8 +363,9 @@ sections.
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
   `evidenceGate.redPhaseVerify` (1.14: mark it `_Expect: fail_`, or move the command to the fix task) to the
   failed-run refusal, the failed-run / note-only / no-evidence note and next_action's `verify` step, with the stable
-  field `redPhaseVerify: true` — never for a task that already carries `_Expect: fail_`. The bugfix template's tasks
-  comment says task 3 carries no `_Verify:_` (EN/PT/ES).
+  field `redPhaseVerify: true` — never for a task that already carries `_Expect: fail_`. The bugfix template scaffolds
+  task 3 with `_Verify: [command that runs T-01]_` + `_Expect: fail_` (its red run is the proof) and keeps guard test T-02
+  out of every `_Makes green:_` (green before and after the fix — doctor's `red-green` asks no red run for it) (EN/PT/ES).
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses

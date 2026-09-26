@@ -1010,9 +1010,10 @@ function endRun() {
   llFill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
     ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
   llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-  llFill("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+  llFill("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
   llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
-  [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
+  [1, 2].forEach((n) => S.completeTask(vDir, "login-loop", n));
+  S.completeTask(vDir, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   const llReq = S.approvePhase(vDir, "login-loop", "requirements");
   // Phase by phase: the test plan and the tasks can't be approved before the design (bug.md) — refused, naming it.
@@ -1032,6 +1033,26 @@ function endRun() {
   const prFile = fs.readFileSync(ready.paths.summary, "utf8");
   ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
     "all tasks done + evidence + approvals → readyToFinish; the merge summary (with evidence) is written to .execution/");
+  // 1.14: the bugfix scaffold's task 3 carries its _Verify:_ + _Expect: fail_ (the red run is the proof) and T-02 — a guard
+  // test, green before and after the fix — is in no task's _Makes green:_, so doctor's red-green passes on a finished bugfix
+  // (it warned "T-02 has no red run" on every one). spec_status carries kind + flow; the brief's reply line names the report.
+  {
+    const llDocDone = S.specDoctor(vDir, "login-loop");
+    const rgLl = llDocDone.checks.find((c) => c.id === "red-green");
+    const scaf = ["en", "pt", "es", "pt-BR"].map((lg) => require("./lib/i18n.js").bugTasks("X", lg));
+    const t3 = (t) => (t.match(/- \[ \] 3\.[\s\S]*?(?=\n- \[ \] 4\.)/) || [""])[0];
+    const t4 = (t) => (t.match(/- \[ \] 4\.[\s\S]*?(?=\n\*\*Checkpoint)/) || [""])[0];
+    const stBug = S.statusFeature(vDir, "login-loop");
+    const dfSt = S.createFeature(vDir, "Arch first", ["core"], "x", undefined, "en", undefined, { flow: "design-first" });
+    const stDf = S.statusFeature(vDir, dfSt.slug);
+    const brLl = S.taskBrief(vDir, "login-loop", 4, {});
+    ok(rgLl && rgLl.status === "pass" && scaf.every((t) => /_Verify: \[[^\]\n]+T-01\]_\n  - _Expect: fail_/.test(t3(t)) && !/_Makes green:/.test(t3(t)) &&
+      /_Makes green: T-01_/.test(t4(t)) && !/_Makes green:[^\n]*T-02/.test(t) && /T-02/.test(t3(t)) && /T-02/.test(t4(t))) &&
+      stBug.kind === "bugfix" && stBug.flow === "requirements-first" && stDf.kind === "feature" && stDf.flow === "design-first" &&
+      /the report path written out in full \(`\.specs\/login-loop\/\.execution\/task-4-report\.md`\)/.test(brLl.brief),
+      "bugfix: task 3 scaffolds with _Verify:_ + _Expect: fail_ and T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
+      JSON.stringify([rgLl && rgLl.status, rgLl && rgLl.detail, stBug.kind, stBug.flow, stDf.flow, (brLl.brief || "").slice(-400)]) + ")");
+  }
   const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
   ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
     "bugfix scaffolds are localized (PT)");
@@ -2480,7 +2501,7 @@ function endRun() {
     const redBug = (d, lang) => {
       const b = S.createFeature(d, "Red loop " + lang, undefined, "loop", undefined, lang, "bugfix");
       const tp = path.join(b.dir, "tasks.md");
-      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace("  - _Makes green: T-01_\n", "  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n"));
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n  - _Expect: fail_\n/, "  - _Verify: node tests/t01.test.js_\n")); // a must-pass _Verify:_ (no _Expect: fail_) on the red task
       // A written bugfix (every template slot filled), its phases approved in order — so next_action reaches `verify`.
       const bp = path.join(b.dir, "bug.md");
       fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
@@ -4591,12 +4612,13 @@ function endRun() {
     fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill10("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/_"]]);
+    fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/_"]]);
     fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2, 3].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    [1, 2].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    S.completeTask(w10d, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
     S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w10d, "login-loop", p));
     S.createFeature(w10d, "Draft", ["core"]);
@@ -5229,12 +5251,13 @@ function endRun() {
     fill12("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill12("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill12("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
+    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
     fill12("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2, 3].forEach((n) => S.completeTask(fz12, "login-loop", n));
+    [1, 2].forEach((n) => S.completeTask(fz12, "login-loop", n));
+    S.completeTask(fz12, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
     S.completeTask(fz12, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
     const fin12 = S.finishFeature(fz12, "login-loop", { write: true });
@@ -6587,7 +6610,6 @@ function endRun() {
       "next_action never recommends re-reviewing tasks.md while the earlier test-plan gate is pending (approve would refuse it on phase-order) — it points at test-plan.md (got " + seen.join(" | ") + ")");
   }
 
-  // @pkg A1 tests >>>
   { // 1.14 A1 — MCP prompts (one per commands/*.md) + resources (the project's spec artifacts as specs:// URIs)
     const PR = require("./lib/prompts-resources.js");
     const a1Stems = fs.readdirSync(path.join(root, "commands")).filter((f) => /\.md$/.test(f)).map((f) => f.slice(0, -3));
@@ -6831,9 +6853,7 @@ function endRun() {
     ok(!fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8").includes(BOM) && !/require\((?!["'](?:fs|path|\.\/spec\.js)["'])/.test(fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8")),
       "lib/prompts-resources.js: zero dependencies (fs, path, ./spec.js) and no literal U+FEFF");
   }
-  // @pkg A1 <<<
 
-  // @pkg A2 tests >>>
   { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
     const a2Root = path.join(tmp, "a2-tracks");
     const a2 = (name) => path.join(a2Root, name);
@@ -7091,9 +7111,7 @@ function endRun() {
       /tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_add_track")) && !/"enum"[^\]]*"privacy"/.test(trackItem("spec_create")),
       "A2: the MCP tool descriptions name sec / privacy (tracks keep no schema enum — unknown names get the did-you-mean)");
   }
-  // @pkg A2 <<<
 
-  // @pkg A3 tests >>>
   { // Behavioural plugin evals (evals/behavior-*, tag `behavior`): well-formed, cheap, naming only REAL MCP tools, and
     // their scaffold fixtures still build against THIS engine — a refused approval in a fixture or a renamed tool would
     // otherwise only show up as a mysterious 0 in a paid `claude plugin eval` run.
@@ -7201,9 +7219,7 @@ function endRun() {
         ` (got discount=${discount}, plain=${plain}, evidence=${evidenceReady}, finish=${finReady}, gate=${gateOk}${gate.failing ? " " + gate.failing.join(",") : ""}, upgrade=${upOk})`);
     }
   }
-  // @pkg A3 <<<
 
-  // @pkg A4 tests >>>
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const vp = S.verifyPipeMasked;
@@ -7299,9 +7315,7 @@ function endRun() {
       "scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
       JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")");
   }
-  // @pkg A4 <<<
 
-  // @pkg B1 tests >>>
   { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
     const b1Root = path.join(tmp, "b1-templates");
     const b1 = (n) => path.join(b1Root, n);
@@ -7566,9 +7580,7 @@ function endRun() {
       input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: tw(pk, "pt/design.md", "# D\n") } }), encoding: "utf8" });
     ok(hkTpl.status === 0 && hkTpl.stdout.trim() === "", "B1: the PostToolUse hook stays silent for .specs/templates/ files (pt/design.md is not feature 'pt''s design)");
   }
-  // @pkg B1 <<<
 
-  // @pkg B2 tests >>>
   { // 1.14 B2.1 — stakeholder export (spec_export): ONE offline, printable document of a feature or of the whole project.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const noDate = (s) => String(s).replace(/\d{4}-\d{2}-\d{2}/g, "D");
@@ -7832,9 +7844,7 @@ function endRun() {
     ok(mc.ok && pick(mc) === pick(S.changelog(cp, { since: "2026-05-01" })) && mcBad.result.isError === true,
       "MCP spec_changelog = the engine call (since as a string only)");
   }
-  // @pkg B2 <<<
 
-  // @pkg B3 tests >>>
   { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
     const b3Root = path.join(tmp, "b3-governance");
     const b3 = (n) => path.join(b3Root, n);
@@ -8157,9 +8167,7 @@ function endRun() {
     const shape3 = S.approvePhase(pN, fS3.slug, "classification", "a", { force: true });
     ok(shape3.ok === false && /'signoffs' must be an object/.test(shape3.error), "B3: a .state.json whose signoffs is not an object is refused (never 'repaired')");
   }
-  // @pkg B3 <<<
 
-  // @pkg B4 tests >>>
   { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
     const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
     const setStateB4 = (dir, patch) => {
@@ -8355,9 +8363,7 @@ function endRun() {
       !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
       "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");
   }
-  // @pkg B4 <<<
 
-  // @pkg B5 tests >>>
   { // 1.14 B5 — evidence: red → green (_Expect: fail_), project checks (meta.checks) + the finish suite run, git-linked evidence
     const b5Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
     const b5Dir = (n) => path.join(tmp, "b5-" + n);
@@ -8490,7 +8496,7 @@ function endRun() {
     const redExpect = (d, lang) => {
       const b = S.createFeature(d, "Red expect " + lang, undefined, "loop", undefined, lang, "bugfix");
       const tp = path.join(b.dir, "tasks.md");
-      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace("  - _Makes green: T-01_\n", "  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n  - _Expect: fail_\n"));
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n")); // the scaffold's task 3 already carries _Expect: fail_
       const bp = path.join(b.dir, "bug.md");
       fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
@@ -8687,9 +8693,7 @@ function endRun() {
       S.taskCommits(d9, "nope", "").ok === false,
       "B5 taskCommits red-first: the test committed first is ok; no commit touching it warns; a full log window makes the order unknown (outside-window, no warning); no citing commit prints the conventions; PT lines ('tarefa N'); an unknown feature is an error");
   }
-  // @pkg B5 <<<
 
-  // @pkg C1 tests >>>
   { // 1.14 C1 — the end-of-turn evidence gate (stopCheck, hooks/stop-hook.js on Stop / SubagentStop) and the scope guard (meta.guard "scope")
     const c1Call = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
     const c1Dir = (n) => path.join(tmp, "c1-" + n);
@@ -8964,9 +8968,7 @@ function endRun() {
       /^dev-spec guard \(scope\): src\/outro\.js não está no plano — nenhuma tarefa por concluir de carrinho o nomeia em _Implements:_\. Acrescenta-o ao _Implements:_ da tarefa 1 \(carrinho — mesma pasta que src\/carrinho\.js\)/.test(S.guardCheck(pScPt, "src/outro.js", pScPt).reason || ""),
       "C1 guard true is unchanged (every code file allowed while tasks are approved); scope: a forced approval's note rides along (allowed or asked), nothing approved asks as before; the reason is in the project language (PT)");
   }
-  // @pkg C1 <<<
 
-  // @pkg C2 tests >>>
   { // 1.14 C2 — the decision log (decisions.md, spec_decide) and the spike kind (investigate → decide)
     const c2Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
     const c2Dir = (n) => path.join(tmp, "c2-" + n);
@@ -9294,9 +9296,7 @@ function endRun() {
     ok(["decisions", "spike"].every((ns) => ["pt", "es"].every((l) => c2Keys(S.msg(l)[ns]).join() === c2Keys(S.msg("en")[ns]).join())),
       "C2 the decisions / spike message blocks have the same keys in EN, PT and ES");
   }
-  // @pkg C2 <<<
 
-  // @pkg C3 tests >>>
   { // 1.14 C3 — spec_import plan · execplan · bmad, and the design-first flow
     const c3Call = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
     const c3Put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -9596,9 +9596,7 @@ function endRun() {
       "C3 design-first in PT: the notes are localized (fluxo design-first …), next_action names the flow; spec_upgrade reads a fresh design-first feature (phase 'design') as not started (got " +
       JSON.stringify(up16.ok && up16.features.map((x) => [x.name, x.status])) + ")");
   }
-  // @pkg C3 <<<
 
-  // @pkg C4 tests >>>
   { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
     const c4Root = path.join(tmp, "proj-c4");
     const c4 = (n) => path.join(c4Root, n);
@@ -9743,7 +9741,6 @@ function endRun() {
       "C4.2.7 mcp/server.js: a client closing its read end first → quiet exit 0 (was an unhandled EPIPE stack trace, exit 1); a non-EPIPE stdout error (read-only fd) → one stderr line and exit 1 (got " +
       JSON.stringify([epipe.code, epipe.err.slice(0, 120), badFd.code, badFd.err.slice(0, 120)]) + ")");
   }
-  // @pkg C4 <<<
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
