@@ -667,7 +667,10 @@ function main() {
       }
     } else handle(msg);
   });
-  rl.on("close", () => process.exit(0));
+  // stdin closed: exit once the replies already written have flushed. On Linux a pipe takes writes asynchronously once
+  // its 64 KB buffer is full, and a bare process.exit() dropped the queued replies — a client that sends its requests and
+  // closes stdin (`printf … | node mcp/server.js | jq`) lost the tail of a large answer.
+  rl.on("close", () => process.stdout.write("", () => process.exit(0)));
 }
 
 main();

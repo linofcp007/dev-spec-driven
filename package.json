@@ -22,6 +22,7 @@
   },
   "scripts": {
     "test": "node mcp/test.js && node cli/test-cli.js",
+    "test:docker": "node scripts/test-docker.js",
     "mcp": "node mcp/server.js",
     "cli": "node cli/dev-spec.js",
     "evals": "node mcp/evals/run-evals.js"

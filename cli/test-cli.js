@@ -30,6 +30,12 @@ function run(args) {
 const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa3", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
+// Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
+// asynchronously once its 64 KB buffer is full, and process.exit() drops whatever is still queued — the tail of the
+// output, FAIL lines and the total line included (Windows makes stdio pipes blocking, so it never showed there).
+function exitFlushed(code) {
+  process.stdout.write("", () => process.exit(code));
+}
 if (!SECTION) {
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} // the children make their own
   const { spawn } = require("child_process");
@@ -55,7 +61,7 @@ if (!SECTION) {
       if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
     }
     console.log(`\n${passed} passed, ${failed} failed`);
-    process.exit(failed ? 1 : 0);
+    exitFlushed(failed ? 1 : 0);
   });
   return; // CommonJS module scope: the parent only dispatches
 }
@@ -1196,7 +1202,9 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
   "next-action on a finished feature: 'drift' with the changed file (--json = spec_next_action); finish --write names the drift it accepts; then 'finished' + the execution sign-off");
 // Work added after the finish (append-tasks with a new _Implements:_ file, tasks re-approved, done --run): next-action says
 // finish it again (never "nothing left to do"), drift exits 1 naming why the baseline is stale — audit.js was never hashed.
-run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", "node -e process.exit(0)", "--project", w10f]);
+// The _Verify:_ is quoted: `done --run` runs it in /bin/sh on Linux, where unquoted `process.exit(0)` is a syntax error
+// ("(" unexpected) — cmd.exe accepted it, so the task stayed open only on Linux and the next four checks failed there.
+run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
 const apT10 = run(["approve", "login-loop", "tasks", "--project", w10f]);
 const done5 = run(["done", "login-loop", "5", "--run", "--project", w10f]);
@@ -1768,4 +1776,4 @@ if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-ze
 
 console.log(`\n${pass} passed, ${fail} failed`);
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-process.exit(fail ? 1 : 0);
+exitFlushed(fail ? 1 : 0);
