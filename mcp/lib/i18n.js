@@ -2746,6 +2746,45 @@ const MSG = {
         footer: "Every change goes through the normal gates: re-approvals with spec_approve (/approve), spec edits after an approval with spec_impact (/spec-impact), follow-up work with spec_append_tasks (/spec-converge). Nothing here is applied automatically.",
       },
     },
+
+    // @pkg A1 msg-en >>>
+    // @pkg A1 <<<
+
+    // @pkg A2 msg-en >>>
+    // @pkg A2 <<<
+
+    // @pkg A3 msg-en >>>
+    // @pkg A3 <<<
+
+    // @pkg A4 msg-en >>>
+    // @pkg A4 <<<
+
+    // @pkg B1 msg-en >>>
+    // @pkg B1 <<<
+
+    // @pkg B2 msg-en >>>
+    // @pkg B2 <<<
+
+    // @pkg B3 msg-en >>>
+    // @pkg B3 <<<
+
+    // @pkg B4 msg-en >>>
+    // @pkg B4 <<<
+
+    // @pkg B5 msg-en >>>
+    // @pkg B5 <<<
+
+    // @pkg C1 msg-en >>>
+    // @pkg C1 <<<
+
+    // @pkg C2 msg-en >>>
+    // @pkg C2 <<<
+
+    // @pkg C3 msg-en >>>
+    // @pkg C3 <<<
+
+    // @pkg C4 msg-en >>>
+    // @pkg C4 <<<
   },
 
   pt: {
@@ -3552,6 +3591,45 @@ const MSG = {
         footer: "Todas as alterações passam pelos gates normais: novas aprovações com spec_approve (/approve), edições da spec depois de uma aprovação com spec_impact (/spec-impact), trabalho de seguimento com spec_append_tasks (/spec-converge). Nada aqui é aplicado automaticamente.",
       },
     },
+
+    // @pkg A1 msg-pt >>>
+    // @pkg A1 <<<
+
+    // @pkg A2 msg-pt >>>
+    // @pkg A2 <<<
+
+    // @pkg A3 msg-pt >>>
+    // @pkg A3 <<<
+
+    // @pkg A4 msg-pt >>>
+    // @pkg A4 <<<
+
+    // @pkg B1 msg-pt >>>
+    // @pkg B1 <<<
+
+    // @pkg B2 msg-pt >>>
+    // @pkg B2 <<<
+
+    // @pkg B3 msg-pt >>>
+    // @pkg B3 <<<
+
+    // @pkg B4 msg-pt >>>
+    // @pkg B4 <<<
+
+    // @pkg B5 msg-pt >>>
+    // @pkg B5 <<<
+
+    // @pkg C1 msg-pt >>>
+    // @pkg C1 <<<
+
+    // @pkg C2 msg-pt >>>
+    // @pkg C2 <<<
+
+    // @pkg C3 msg-pt >>>
+    // @pkg C3 <<<
+
+    // @pkg C4 msg-pt >>>
+    // @pkg C4 <<<
   },
 
   es: {
@@ -4358,6 +4436,45 @@ const MSG = {
         footer: "Todo cambio pasa por los gates normales: nuevas aprobaciones con spec_approve (/approve), ediciones de la spec tras una aprobación con spec_impact (/spec-impact), trabajo de seguimiento con spec_append_tasks (/spec-converge). Nada de esto se aplica automáticamente.",
       },
     },
+
+    // @pkg A1 msg-es >>>
+    // @pkg A1 <<<
+
+    // @pkg A2 msg-es >>>
+    // @pkg A2 <<<
+
+    // @pkg A3 msg-es >>>
+    // @pkg A3 <<<
+
+    // @pkg A4 msg-es >>>
+    // @pkg A4 <<<
+
+    // @pkg B1 msg-es >>>
+    // @pkg B1 <<<
+
+    // @pkg B2 msg-es >>>
+    // @pkg B2 <<<
+
+    // @pkg B3 msg-es >>>
+    // @pkg B3 <<<
+
+    // @pkg B4 msg-es >>>
+    // @pkg B4 <<<
+
+    // @pkg B5 msg-es >>>
+    // @pkg B5 <<<
+
+    // @pkg C1 msg-es >>>
+    // @pkg C1 <<<
+
+    // @pkg C2 msg-es >>>
+    // @pkg C2 <<<
+
+    // @pkg C3 msg-es >>>
+    // @pkg C3 <<<
+
+    // @pkg C4 msg-es >>>
+    // @pkg C4 <<<
   },
 };
 

@@ -27,7 +27,7 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa3", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4"];
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 if (!SECTION) {
@@ -1722,6 +1722,45 @@ if (inSection("wp17")) { // 1.13 batch 8 — `dev-spec upgrade [--apply]` (= spe
   const doc17 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   ok(/upgrade \[--apply\]/.test(help17) && /--apply \(upgrade\)/.test(help17) && /upgrade \[--apply\]/.test(doc17) && /upgrade: --apply/.test(doc17),
     "help and the header docblock list upgrade [--apply]");
+}
+
+if (inSection("pa1")) { // 1.14 package A1 (CLI tests)
+}
+
+if (inSection("pa2")) { // 1.14 package A2 (CLI tests)
+}
+
+if (inSection("pa3")) { // 1.14 package A3 (CLI tests)
+}
+
+if (inSection("pa4")) { // 1.14 package A4 (CLI tests)
+}
+
+if (inSection("pb1")) { // 1.14 package B1 (CLI tests)
+}
+
+if (inSection("pb2")) { // 1.14 package B2 (CLI tests)
+}
+
+if (inSection("pb3")) { // 1.14 package B3 (CLI tests)
+}
+
+if (inSection("pb4")) { // 1.14 package B4 (CLI tests)
+}
+
+if (inSection("pb5")) { // 1.14 package B5 (CLI tests)
+}
+
+if (inSection("pc1")) { // 1.14 package C1 (CLI tests)
+}
+
+if (inSection("pc2")) { // 1.14 package C2 (CLI tests)
+}
+
+if (inSection("pc3")) { // 1.14 package C3 (CLI tests)
+}
+
+if (inSection("pc4")) { // 1.14 package C4 (CLI tests)
 }
 
 // unknown command errors

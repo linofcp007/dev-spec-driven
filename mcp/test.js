@@ -6412,6 +6412,45 @@ function endRun() {
       "next_action never recommends re-reviewing tasks.md while the earlier test-plan gate is pending (approve would refuse it on phase-order) — it points at test-plan.md (got " + seen.join(" | ") + ")");
   }
 
+  // @pkg A1 tests >>>
+  // @pkg A1 <<<
+
+  // @pkg A2 tests >>>
+  // @pkg A2 <<<
+
+  // @pkg A3 tests >>>
+  // @pkg A3 <<<
+
+  // @pkg A4 tests >>>
+  // @pkg A4 <<<
+
+  // @pkg B1 tests >>>
+  // @pkg B1 <<<
+
+  // @pkg B2 tests >>>
+  // @pkg B2 <<<
+
+  // @pkg B3 tests >>>
+  // @pkg B3 <<<
+
+  // @pkg B4 tests >>>
+  // @pkg B4 <<<
+
+  // @pkg B5 tests >>>
+  // @pkg B5 <<<
+
+  // @pkg C1 tests >>>
+  // @pkg C1 <<<
+
+  // @pkg C2 tests >>>
+  // @pkg C2 <<<
+
+  // @pkg C3 tests >>>
+  // @pkg C3 <<<
+
+  // @pkg C4 tests >>>
+  // @pkg C4 <<<
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

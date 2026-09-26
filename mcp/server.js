@@ -288,6 +288,45 @@ const TOOLS = [
       "After updating the plugin: audit the project's .specs/ against this engine's rules and, with `apply: true`, run the safe migrations. roadmap.json meta.specVersion records the dev-spec version that last upgraded or created the project (spec_init / spec_create stamp a brand-new project only; the SessionStart hook prints one line while it is absent or older than the engine). The audit (default, read-only) returns from / to / needsUpgrade and, per ACTIVE feature (archived ones are counted in `archived`): kind, tracks + tracksSource (state | inferred), phase, status (not-started · planning · executing · complete · finished — a finish baseline recorded), the doctor verdict with the failing check ids + short details and the warning ids, pendingGates, changedSinceApproval, legacyApprovals (phases approved without a fingerprint), history {present, seed, skip: [{phase, reason: no-fingerprint | changed | missing | untracked | snapshot-missing}]}, unverified tasks with their reason codes, next {step, recommendation} (spec_next_action's), drift (complete / finished features), a `review` recommendation — critic (no task ticked yet: run the spec-critic agent, read-only, over `reviewArtifacts`, phase by phase), converge (some tasks done, some open: the spec-reviewer converge pass + the critic on the changed / unapproved artifacts), none (complete) — and `group` blocked (doctor fails) · attention (pending gates, changed since approval, approvals to redo for the history, unverified tasks, drift, warnings) · ok; plus `summary` counts, `plan` (what apply would change) and localized `lines`. `apply: true` never edits an artifact, approves, ticks or deletes anything: it saves the inferred tracks to .state.json (only when none are saved), records the approvals made before the change history in approvalHistory and, for each approval without a snapshot whose recorded fingerprint still matches its artifact, saves that artifact as its history baseline (.specs/<feature>/.history/<phase>@<n>.md — spec_impact can then diff later edits; approvals changed since, or without a fingerprint, are listed as skipped: re-approve to start the history), completes the maintained .specs/.gitignore, stamps meta.specVersion (only once every feature migrated) and writes the checklist .specs/UPGRADE.md (AUTO-GENERATED, in the project language; a hand-written UPGRADE.md is never overwritten) — `migrations` says what it did. Each feature migrates under its lock, the stamp under the roadmap lock; a second apply changes nothing and says so.",
     inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations, write .specs/UPGRADE.md and refresh the generated ROADMAP.md/.html (default: read-only audit). CLI: dev-spec upgrade --apply." }, projectDir: { type: "string" } } },
   },
+
+  // @pkg A1 tools >>>
+  // @pkg A1 <<<
+
+  // @pkg A2 tools >>>
+  // @pkg A2 <<<
+
+  // @pkg A3 tools >>>
+  // @pkg A3 <<<
+
+  // @pkg A4 tools >>>
+  // @pkg A4 <<<
+
+  // @pkg B1 tools >>>
+  // @pkg B1 <<<
+
+  // @pkg B2 tools >>>
+  // @pkg B2 <<<
+
+  // @pkg B3 tools >>>
+  // @pkg B3 <<<
+
+  // @pkg B4 tools >>>
+  // @pkg B4 <<<
+
+  // @pkg B5 tools >>>
+  // @pkg B5 <<<
+
+  // @pkg C1 tools >>>
+  // @pkg C1 <<<
+
+  // @pkg C2 tools >>>
+  // @pkg C2 <<<
+
+  // @pkg C3 tools >>>
+  // @pkg C3 <<<
+
+  // @pkg C4 tools >>>
+  // @pkg C4 <<<
 ];
 
 // --- Tool dispatch ---------------------------------------------------------
@@ -373,6 +412,44 @@ function runTool(name, args) {
       return spec.drift(pdir, args.name);
     case "spec_upgrade": // the same engine call as the CLI's `upgrade [--apply]` (apply only on an explicit true)
       return spec.specUpgrade(pdir, { apply: args.apply === true });
+    // @pkg A1 dispatch >>>
+    // @pkg A1 <<<
+
+    // @pkg A2 dispatch >>>
+    // @pkg A2 <<<
+
+    // @pkg A3 dispatch >>>
+    // @pkg A3 <<<
+
+    // @pkg A4 dispatch >>>
+    // @pkg A4 <<<
+
+    // @pkg B1 dispatch >>>
+    // @pkg B1 <<<
+
+    // @pkg B2 dispatch >>>
+    // @pkg B2 <<<
+
+    // @pkg B3 dispatch >>>
+    // @pkg B3 <<<
+
+    // @pkg B4 dispatch >>>
+    // @pkg B4 <<<
+
+    // @pkg B5 dispatch >>>
+    // @pkg B5 <<<
+
+    // @pkg C1 dispatch >>>
+    // @pkg C1 <<<
+
+    // @pkg C2 dispatch >>>
+    // @pkg C2 <<<
+
+    // @pkg C3 dispatch >>>
+    // @pkg C3 <<<
+
+    // @pkg C4 dispatch >>>
+    // @pkg C4 <<<
     default:
       throw new Error("Unknown tool: " + name);
   }

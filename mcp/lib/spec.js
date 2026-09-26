@@ -9886,6 +9886,44 @@ module.exports = {
   designSaveCheck, // the PostToolUse design.md save check
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
   withFeatureLock, // the cross-process feature lock the mutators hold (tests drive it with a short waitMs)
+  // @pkg A1 exports >>>
+  // @pkg A1 <<<
+
+  // @pkg A2 exports >>>
+  // @pkg A2 <<<
+
+  // @pkg A3 exports >>>
+  // @pkg A3 <<<
+
+  // @pkg A4 exports >>>
+  // @pkg A4 <<<
+
+  // @pkg B1 exports >>>
+  // @pkg B1 <<<
+
+  // @pkg B2 exports >>>
+  // @pkg B2 <<<
+
+  // @pkg B3 exports >>>
+  // @pkg B3 <<<
+
+  // @pkg B4 exports >>>
+  // @pkg B4 <<<
+
+  // @pkg B5 exports >>>
+  // @pkg B5 <<<
+
+  // @pkg C1 exports >>>
+  // @pkg C1 <<<
+
+  // @pkg C2 exports >>>
+  // @pkg C2 <<<
+
+  // @pkg C3 exports >>>
+  // @pkg C3 <<<
+
+  // @pkg C4 exports >>>
+  // @pkg C4 <<<
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

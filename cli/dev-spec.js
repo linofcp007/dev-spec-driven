@@ -804,6 +804,44 @@ function main() {
       return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
+    // @pkg A1 commands >>>
+    // @pkg A1 <<<
+
+    // @pkg A2 commands >>>
+    // @pkg A2 <<<
+
+    // @pkg A3 commands >>>
+    // @pkg A3 <<<
+
+    // @pkg A4 commands >>>
+    // @pkg A4 <<<
+
+    // @pkg B1 commands >>>
+    // @pkg B1 <<<
+
+    // @pkg B2 commands >>>
+    // @pkg B2 <<<
+
+    // @pkg B3 commands >>>
+    // @pkg B3 <<<
+
+    // @pkg B4 commands >>>
+    // @pkg B4 <<<
+
+    // @pkg B5 commands >>>
+    // @pkg B5 <<<
+
+    // @pkg C1 commands >>>
+    // @pkg C1 <<<
+
+    // @pkg C2 commands >>>
+    // @pkg C2 <<<
+
+    // @pkg C3 commands >>>
+    // @pkg C3 <<<
+
+    // @pkg C4 commands >>>
+    // @pkg C4 <<<
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
