@@ -1,6 +1,6 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai] [--lang pt] [--guard on|off]"
+argument-hint: "[tracks, e.g. tdd saas ai] [--lang pt] [--guard on|off] [--roles requirements=product,design=tech+security]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.
@@ -12,8 +12,10 @@ to create `.specs/steering/` and the steering files the given tracks require (co
 always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai). Tracks may be given
 as `tdd saas`, `'tdd,saas'` or `+saas +ai`; an unknown name is an error with a did-you-mean. **Pass `lang`
 matching the user's language** — the stubs come out in it and it becomes the project default every new feature
-inherits. `guard` is the opt-in guard mode (see `/spec-guard`); omit it to leave it unchanged. It never
-overwrites an existing file.
+inherits. `guard` is the opt-in guard mode (see `/spec-guard`); omit it to leave it unchanged. `approvalRoles`
+(CLI `--roles requirements=product,design=tech+security`, `--roles none` clears them) is the opt-in team governance:
+each listed phase is approved only once every role has signed off its current content (see `/approve`); omit it to
+leave it unchanged. It never overwrites an existing file.
 
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —
 a steering file full of placeholders is a liability (`spec_doctor` warns about each one by name). For rules that

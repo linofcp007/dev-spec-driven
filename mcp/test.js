@@ -6343,9 +6343,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 44 && ["spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 45 && ["spec-ff.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "44 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "45 commands incl. the 1.14 /spec-ff, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -7156,6 +7156,328 @@ function endRun() {
   // @pkg B2 <<<
 
   // @pkg B3 tests >>>
+  { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
+    const b3Root = path.join(tmp, "b3-governance");
+    const b3 = (n) => path.join(b3Root, n);
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const read3 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const write3 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+    const state3 = (f) => JSON.parse(read3(f, ".state.json"));
+    const meta3 = (p) => (JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {});
+    // Real content for the core chain (every gate passes; the tasks trace every AC).
+    const REQ3 = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — WHILE an export runs, WHEN the admin clicks again THE SYSTEM SHALL ignore it.\n" +
+      "3. **US-1.AC-3** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n4. **US-1.AC-4** — THE SYSTEM SHALL name files invoices-YYYY-MM.csv.\n\n" +
+      "### US-2 (P2): Schedule\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN a schedule is due THE SYSTEM SHALL email the CSV.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n\n## Edge Cases & Error Handling\n- **EC-1** — WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV.\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 export time < 5 s.\n\n## Out of Scope\n- PDF export.\n";
+    const DESIGN3 = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+    const TASKS3 = "# Tasks\n\n- [ ] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Verify: [manual: open the CSV in a spreadsheet]_\n";
+    const fillAll = (f, skip = []) => {
+      if (!skip.includes("classification")) write3(f, "classification.md", read3(f, "classification.md").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+      if (!skip.includes("requirements")) write3(f, "requirements.md", REQ3);
+      if (!skip.includes("design")) write3(f, "design.md", DESIGN3);
+      if (!skip.includes("tasks")) write3(f, "tasks.md", TASKS3);
+    };
+    const ROLES3 = { requirements: ["product"], design: ["tech", "security"], tasks: ["tech"] };
+
+    // --- spec_init {approvalRoles} (MCP) — validated, stored in roadmap.json meta.approvalRoles, {} clears
+    const pR = b3("roles");
+    const i1 = payload(await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pR, tracks: ["core"], lang: "en", approvalRoles: { requirements: ["Product"], design: "tech+security", tasks: ["tech"] } } }));
+    const iBadPhase = S.initProject(pR, ["core"], undefined, { approvalRoles: { plan: ["tech"] } });
+    const iBadRole = S.initProject(pR, ["core"], undefined, { approvalRoles: { design: ["tech lead!"] } });
+    const iEmpty = S.initProject(pR, ["core"], undefined, { approvalRoles: { design: [] } });
+    const iShape = payload(await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pR, approvalRoles: ["tech"] } }));
+    ok(i1.approvalRoles && JSON.stringify(i1.approvalRoles) === JSON.stringify(ROLES3) && JSON.stringify(meta3(pR).approvalRoles) === JSON.stringify(ROLES3) &&
+      /^Approval roles: requirements=product · design=tech\+security · tasks=tech — /.test(i1.rolesNote) &&
+      iBadPhase.ok === false && /unknown phase 'plan'/.test(iBadPhase.error) && iBadRole.ok === false && /invalid role name 'tech lead!'/.test(iBadRole.error) &&
+      iEmpty.ok === false && /approvalRoles\.design: name at least one role/.test(iEmpty.error) && iShape.ok === false &&
+      JSON.stringify(meta3(pR).approvalRoles) === JSON.stringify(ROLES3) && S.initProject(pR, ["core"]).approvalRoles.design.join() === "tech,security",
+      "B3: spec_init {approvalRoles} stores roadmap.json meta.approvalRoles (roles lower-cased, 'a+b' split, PHASES order) with a rolesNote; an unknown phase / bad role / empty list / non-object is refused and nothing changes; a later init reports the current roles (got " + JSON.stringify([i1.approvalRoles, iShape.error]) + ")");
+    const pC = b3("roles-clear");
+    S.initProject(pC, ["core"], "en", { approvalRoles: { design: ["tech"] } });
+    const iClear = S.initProject(pC, ["core"], undefined, { approvalRoles: {} });
+    ok(iClear.rolesNote === "Approval roles cleared — every phase takes a single approval again." && meta3(pC).approvalRoles === undefined && JSON.stringify(iClear.approvalRoles) === "{}" &&
+      S.parseApprovalRolesText("requirements=product,design=tech+security").design.join() === "tech,security" &&
+      S.parseApprovalRolesText("design=tech,security;tasks=tech").design.join() === "tech,security" && JSON.stringify(S.parseApprovalRolesText("none")) === "{}" &&
+      !!S.parseApprovalRolesText("tech").error && JSON.stringify(S.approvalRolesOf(pC)) === "{}",
+      "B3: approvalRoles {} clears meta.approvalRoles; the CLI's --roles text parses to the same object ('design=tech,security' keeps both roles, 'none' clears, a role before any phase is an error)");
+
+    // --- a role sign-off leaves the phase PENDING until every role signed; the missing role is named everywhere
+    const fR = S.createFeature(pR, "Invoice export", ["core"]);
+    fillAll(fR);
+    S.approvePhase(pR, fR.slug, "classification", "ana"); // no roles for classification: a single approval, as before
+    const noRole = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pR, name: fR.slug, phase: "requirements" } }));
+    const wrongRole = S.approvePhase(pR, fR.slug, "requirements", "ana", { role: "qa" });
+    const prod = S.approvePhase(pR, fR.slug, "requirements", "paula", { role: "Product" });
+    ok(noRole.ok === false && noRole.roleRequired === true && noRole.roles.join() === "product" && /'requirements' is signed off per role \(product\).*--role <role>.*Nothing recorded/.test(noRole.error) &&
+      wrongRole.ok === false && wrongRole.roleNotListed === true && /'qa' is not a role that signs off 'requirements'/.test(wrongRole.error) &&
+      prod.ok && prod.approved === "requirements" && prod.complete === true && prod.role === "product" && state3(fR).approvals.requirements.roles.product.by === "paula" &&
+      state3(fR).approvals.requirements.roles.product.fingerprint === state3(fR).approvals.requirements.fingerprint && !state3(fR).signoffs,
+      "B3: a phase with roles refuses an approval without a role (roleRequired) or with a role it doesn't list (roleNotListed) — nothing recorded; its only role's sign-off approves it (approvals[phase].roles[role] = {by, at, fingerprint})");
+    const tech1 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pR, name: fR.slug, phase: "design", role: "tech", by: "tom" } }));
+    const st1 = state3(fR);
+    const lastRec1 = st1.approvalHistory[st1.approvalHistory.length - 1];
+    const d1 = S.specDoctor(pR, fR.slug);
+    const n1 = S.nextAction(pR, fR.slug);
+    const fin1 = S.finishFeature(pR, fR.slug);
+    const order1 = S.approvePhase(pR, fR.slug, "tasks", "tom", { role: "tech" });
+    ok(tech1.ok && tech1.approved === null && tech1.signedOff === "design" && tech1.pending === true && tech1.complete === false && tech1.missingRoles.join() === "security" &&
+      /'design' stays pending until every role has signed off its current content — missing role: security\./.test(tech1.note) &&
+      !st1.approvals.design && st1.signoffs.design.tech.by === "tom" && lastRec1.phase === "design" && lastRec1.role === "tech" && lastRec1.partial === true && !lastRec1.snapshot &&
+      d1.pendingGates[0] === "design" && d1.pendingRoles.design.missing.join() === "security" && d1.pendingRoles.design.signed.join() === "tech" && d1.nextGate.missingRoles.join() === "security" &&
+      /awaiting human approval: design \(missing role: security\), tasks \(missing role: tech\)/.test(chk(d1, "approval-gates").detail) && d1.gatesOk === false &&
+      n1.step === "approve" && /missing role: security \(signed: tech\): \/approve invoice-export design --role security/.test(n1.recommendation) && n1.missingRoles.join() === "security" &&
+      fin1.blockers.some((b) => b === "phases awaiting approval: design (missing role: security), tasks (missing role: tech)") && fin1.pendingRoles.design.missing.join() === "security" &&
+      order1.ok === false && order1.failing.includes("phase-order"),
+      "B3: one role's sign-off leaves the phase pending (approved: null, signoffs[phase][role], a `partial` history record without snapshot) — doctor's approval-gates, next_action ('missing role: security' + the --role to sign as), finish's blockers name the missing role; a later phase is refused on phase-order (got " +
+      JSON.stringify([tech1.note, chk(d1, "approval-gates").detail, n1.recommendation]) + ")");
+    const rm1 = fs.readFileSync(path.join(pR, ".specs", "ROADMAP.md"), "utf8");
+    ok(/awaiting role sign-off: design \(security\)/.test(rm1), "B3: ROADMAP.md 'Needs attention' lists a sign-off round under way (design waits for security)");
+
+    // content changed after tech signed → tech's sign-off no longer counts (stale), security's does; tech re-signs → approved
+    fs.appendFileSync(path.join(fR.dir, "design.md"), "\n## Data Model\nOne table: exports (id, month, status).\n");
+    const d2 = S.specDoctor(pR, fR.slug);
+    const sec2 = S.approvePhase(pR, fR.slug, "design", "sara", { role: "security" });
+    const st2 = state3(fR);
+    const tech3 = S.approvePhase(pR, fR.slug, "design", "tom", { role: "tech" });
+    const st3 = state3(fR);
+    const lastRec3 = st3.approvalHistory[st3.approvalHistory.length - 1];
+    ok(d2.pendingRoles.design.stale.join() === "tech" && d2.pendingRoles.design.missing.join() === "tech,security" &&
+      /sign-offs made before the artifact changed no longer count \(re-sign the current content\): design \(tech\)/.test(chk(d2, "approval-gates").detail) &&
+      sec2.ok && sec2.pending && sec2.missingRoles.join() === "tech" && Object.keys(st2.signoffs.design).join() === "security" && !st2.approvals.design &&
+      tech3.ok && tech3.approved === "design" && tech3.complete === true && tech3.signedRoles.sort().join() === "security,tech" &&
+      st3.approvals.design.roles.tech.fingerprint === st3.approvals.design.fingerprint && st3.approvals.design.roles.security.fingerprint === st3.approvals.design.fingerprint &&
+      !st3.signoffs && lastRec3.role === "tech" && !lastRec3.partial && lastRec3.roles.join() === "tech,security" && typeof lastRec3.snapshot === "string" &&
+      fs.existsSync(path.join(fR.dir, lastRec3.snapshot)) && !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
+      "B3: an edit after a role signed invalidates that sign-off (doctor: stale, both roles missing); the other role's sign-off of the new content waits; once every role signed the CURRENT content the phase is approved (roles recorded, snapshot, signoffs cleared)");
+    const m3 = S.metrics(pR, fR.slug);
+    ok(m3.approvalsTotal === 3 && m3.rework === 0 && m3.leadTime.design && m3.leadTime.design.at === st3.approvals.design.at && m3.batchApprovals === 0,
+      "B3: metrics count completed approvals only — a partial role sign-off is no approval (approvalsTotal 3, no rework, design's lead time = its completion) (got " + JSON.stringify([m3.approvalsTotal, m3.rework, m3.leadTime.design]) + ")");
+    const imp3 = S.impactReport(pR, fR.slug, { phase: "design" });
+    ok(imp3.ok && imp3.baseline !== "none" && imp3.baseline !== "fingerprint-only", "B3: spec_impact diffs against the completed role approval's snapshot (partial records are skipped) (got " + JSON.stringify(imp3.baseline) + ")");
+    fs.appendFileSync(path.join(fR.dir, "design.md"), "\n## Rollout\nBehind a flag for one week.\n");
+    const n4 = S.nextAction(pR, fR.slug);
+    S.approvePhase(pR, fR.slug, "design", "tom", { role: "tech" });
+    const n5 = S.nextAction(pR, fR.slug);
+    ok(n4.step === "re-review" && /Each role signs the new content again — design \(missing roles: tech, security\): \/approve invoice-export design --role tech\./.test(n4.recommendation) &&
+      n5.step === "re-review" && /design \(missing role: security\): \/approve invoice-export design --role security\./.test(n5.recommendation) &&
+      chk(S.specDoctor(pR, fR.slug), "changed-since-approval").status === "warn" && !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
+      "B3: an approved role phase edited afterwards — next_action's re-review asks every role to sign the new content again (the roles not re-signed yet, the next --role); the phase stays approved as it was meanwhile (got " + n4.recommendation + ")");
+
+    // --- forced sign-offs: the completed approval is forced when a sign-off that counts was forced
+    const pF = b3("forced");
+    S.initProject(pF, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
+    const fF = S.createFeature(pF, "Forced roles", ["core"]);
+    fillAll(fF);
+    write3(fF, "design.md", DESIGN3.replace("- [x] Principle 1 — complies\n", ""));
+    S.approvePhase(pF, fF.slug, "classification", "a"); S.approvePhase(pF, fF.slug, "requirements", "a");
+    const fT = S.approvePhase(pF, fF.slug, "design", "tom", { role: "tech" });
+    const stFT = state3(fF);
+    const fT2 = S.approvePhase(pF, fF.slug, "design", "tom", { role: "tech", force: true });
+    const stFT2 = state3(fF);
+    const fS = S.approvePhase(pF, fF.slug, "design", "sara", { role: "security", force: true });
+    const dF = S.specDoctor(pF, fF.slug);
+    ok(fT.ok === false && fT.refused && fT.failing.join() === "constitution-check" && !stFT.signoffs && !stFT.approvals.design &&
+      fT2.ok && fT2.forced && fT2.pending && /^Signed off with force — the failing checks are recorded with the sign-off: constitution-check\. 'design' stays pending/.test(fT2.note) &&
+      stFT2.signoffs.design.tech.forced === true && stFT2.signoffs.design.tech.failing.join() === "constitution-check" && state3(fF).signoffs === undefined && fS.ok && fS.approved === "design" && state3(fF).approvals.design.forced === true && state3(fF).approvals.design.failing.join() === "constitution-check" &&
+      dF.forcedGates.includes("design") && S.metrics(pF, fF.slug).forcedApprovals === 1,
+      "B3: each role sign-off runs the phase's gate (refused → nothing recorded; force records the sign-off forced); the completed approval is forced, counted once by metrics");
+
+    // --- guard hook: a tasks phase waiting for a role is not approved tasks
+    const pG = b3("guard");
+    S.initProject(pG, ["core"], "en", { guard: true, approvalRoles: { tasks: ["tech", "qa"] } });
+    const fG = S.createFeature(pG, "Guarded", ["core"]);
+    fillAll(fG);
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(pG, fG.slug, ph, "a");
+    S.approvePhase(pG, fG.slug, "tasks", "tom", { role: "tech" });
+    const gAsk = S.guardCheck(pG, "src/app.js");
+    S.approvePhase(pG, fG.slug, "tasks", "quinn", { role: "qa" });
+    const gAllow = S.guardCheck(pG, "src/app.js");
+    ok(gAsk.decision === "ask" && gAsk.pending.includes(fG.slug) && gAllow.decision === "allow" && gAllow.why === "approved" && gAllow.covering.includes(fG.slug),
+      "B3: guard mode — tasks signed by one of two roles don't cover code edits (ask, pending); once qa signed too they do (allow)");
+
+    // --- no roles configured: exactly today's behavior (a role given is only recorded)
+    const pN = b3("no-roles");
+    S.initProject(pN, ["core"], "en");
+    const fN = S.createFeature(pN, "Plain", ["core"]);
+    fillAll(fN);
+    S.approvePhase(pN, fN.slug, "classification", "a");
+    const nR = S.approvePhase(pN, fN.slug, "requirements", "a", { role: "product" });
+    const nPlain = S.approvePhase(pN, fN.slug, "design", "a");
+    const dN = S.specDoctor(pN, fN.slug);
+    ok(nR.ok && nR.approved === "requirements" && nR.complete === undefined && state3(fN).approvals.requirements.role === "product" && !state3(fN).approvals.requirements.roles &&
+      nPlain.ok && nPlain.approved === "design" && nPlain.role === undefined && nPlain.note === undefined && !("pendingRoles" in dN) && !("unsignedRoles" in dN) &&
+      chk(dN, "approval-gates").detail === "awaiting human approval: tasks — run /approve before advancing" && JSON.stringify(S.approvalRolesOf(pN)) === "{}",
+      "B3: without meta.approvalRoles an approval is single, as before — a role given is only recorded (entry.role); doctor has no role fields and the same approval-gates text (got " + chk(dN, "approval-gates").detail + ")");
+
+    // --- legacy approvals (made before the roles were configured) stay approved — by an unknown role; doctor/finish warn
+    const pL = b3("legacy");
+    S.initProject(pL, ["core"], "en");
+    const fL = S.createFeature(pL, "Legacy", ["core"]);
+    fillAll(fL);
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(pL, fL.slug, ph, "a");
+    S.initProject(pL, ["core"], undefined, { approvalRoles: { design: ["tech", "security"] } });
+    const dL = S.specDoctor(pL, fL.slug);
+    const finL = S.finishFeature(pL, fL.slug);
+    const reL = S.approvePhase(pL, fL.slug, "design", "tom", { role: "tech" });
+    const stL = state3(fL);
+    const dL2 = S.specDoctor(pL, fL.slug);
+    const reL2 = S.approvePhase(pL, fL.slug, "design", "sara", { role: "security" });
+    const dL3 = S.specDoctor(pL, fL.slug);
+    ok(!dL.pendingGates.includes("design") && dL.unsignedRoles.design.join() === "tech,security" && chk(dL, "approval-gates").status === "warn" &&
+      /approved without the role sign-offs now required \(approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign\): design \(tech, security\)/.test(chk(dL, "approval-gates").detail) &&
+      finL.warnings.some((w) => /approved without the role sign-offs now required.*design \(tech, security\)/.test(w)) && !finL.blockers.some((b) => /design/.test(b)) &&
+      reL.ok && reL.pending && stL.approvals.design && !stL.approvals.design.roles && stL.signoffs.design.tech && !dL2.pendingGates.includes("design") &&
+      /re-sign in progress \(the phase stays approved as it was until every role has signed the new content\): design \(missing role: security\)/.test(chk(dL2, "approval-gates").detail) &&
+      reL2.ok && reL2.approved === "design" && Object.keys(state3(fL).approvals.design.roles).sort().join() === "security,tech" && !("design" in dL3.unsignedRoles) &&
+      !/approved without the role sign-offs/.test(chk(dL3, "approval-gates").detail),
+      "B3: an approval made before the roles were configured stays approved (unknown role) — doctor's approval-gates warns and names the roles to re-sign, finish lists it as a warning (never a blocker); a re-sign round keeps it approved until every role signed (got " + chk(dL, "approval-gates").detail + ")");
+
+    // a single approval that named a role (no role was required then) counts as THAT role's sign-off once roles are required;
+    // sign-offs left waiting are dropped when the phase no longer needs roles; a "__proto__" phase is a refused key
+    const pL2 = b3("legacy-role");
+    S.initProject(pL2, ["core"], "en");
+    const fL2 = S.createFeature(pL2, "Legacy role", ["core"]);
+    fillAll(fL2);
+    for (const ph of ["classification", "requirements"]) S.approvePhase(pL2, fL2.slug, ph, "a");
+    S.approvePhase(pL2, fL2.slug, "design", "tom", { role: "tech" });
+    S.initProject(pL2, ["core"], undefined, { approvalRoles: { design: ["tech", "security"], tasks: ["tech", "qa"] } });
+    const dL4 = S.specDoctor(pL2, fL2.slug);
+    const reL4 = S.approvePhase(pL2, fL2.slug, "design", "sara", { role: "security" });
+    const taskSign = S.approvePhase(pL2, fL2.slug, "tasks", "tom", { role: "tech" });
+    const stL4 = state3(fL2);
+    S.initProject(pL2, ["core"], undefined, { approvalRoles: { design: ["tech", "security"] } });
+    const taskPlain = S.approvePhase(pL2, fL2.slug, "tasks", "tom");
+    const stL5 = state3(fL2);
+    const protoTxt = S.parseApprovalRolesText("__proto__=tech");
+    const protoInit = S.initProject(pL2, ["core"], undefined, { approvalRoles: protoTxt });
+    ok(dL4.unsignedRoles.design.join() === "security" && reL4.ok && reL4.approved === "design" && reL4.signedRoles.sort().join() === "security,tech" &&
+      taskSign.pending && stL4.signoffs.tasks.tech && taskPlain.ok && taskPlain.approved === "tasks" && !stL5.signoffs && !stL5.approvals.tasks.roles &&
+      Object.keys(protoTxt).join() === "__proto__" && protoInit.ok === false && /unknown phase '__proto__'/.test(protoInit.error) &&
+      JSON.stringify(S.approvalRolesOf(pL2)) === '{"design":["tech","security"]}',
+      "B3: an earlier single approval that named a role counts as that role's sign-off once roles are required (only security left to sign; its sign-off completes it); waiting sign-offs are dropped when the phase no longer needs roles; a '__proto__' phase is refused (got " + JSON.stringify([dL4.unsignedRoles, reL4.signedRoles]) + ")");
+
+    // --- fast-forward: happy path — next_action suggests it, one call approves every phase in order (batch)
+    const pFF = b3("ff");
+    S.initProject(pFF, ["core"], "en");
+    const fA = S.createFeature(pFF, "Quick spec", ["core"]);
+    fillAll(fA);
+    const nA = S.nextAction(pFF, fA.slug);
+    const ffA = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fA.slug, through: "tasks", by: "ana" } }));
+    const stA = state3(fA);
+    const mA = S.metrics(pFF, fA.slug);
+    ok(nA.step === "approve" && nA.fastForward && nA.fastForward.phases.join() === "classification,requirements,design,tasks" && nA.fastForward.through === "tasks" && nA.fastForward.role === null &&
+      /fast-forward: \/spec-ff quick-spec \(CLI: dev-spec approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation) &&
+      ffA.ok && ffA.complete === true && ffA.approved.join() === "classification,requirements,design,tasks" && ffA.batch === true && ffA.steps.every((s) => s.approved) &&
+      ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved." &&
+      ["classification", "requirements", "design", "tasks"].every((ph) => stA.approvals[ph].batch === true && stA.approvals[ph].by === "ana") &&
+      stA.approvalHistory.filter((h) => h.batch === true && typeof h.snapshot === "string").length === 4 &&
+      mA.batchApprovals === 4 && S.metricsLines(mA).includes("  batch approvals (fast-forward): 4") && S.nextAction(pFF, fA.slug).step === "implement",
+      "B3: next_action names the fast-forward (/spec-ff + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")");
+    const ffAgain = S.approvePhase(pFF, fA.slug, undefined, "ana", { through: "tasks" });
+    ok(ffAgain.ok && ffAgain.nothingToDo && ffAgain.approved.length === 0 && /^Nothing to fast-forward: every active phase of 'quick-spec' through 'tasks' is already approved\.$/.test(ffAgain.message),
+      "B3: a second fast-forward has nothing to do and says so");
+
+    // stop at a refused gate (design placeholders): the phases before it stay approved, nothing after it
+    const fB = S.createFeature(pFF, "Refused ff", ["core"]);
+    fillAll(fB, ["design"]);
+    const nB = S.nextAction(pFF, fB.slug);
+    const ffB = S.approvePhase(pFF, fB.slug, undefined, "ana", { through: "tasks" });
+    const stB = state3(fB);
+    ok(!nB.fastForward && ffB.ok === false && ffB.refused && ffB.stoppedAt === "design" && ffB.stopReason === "refused" && ffB.approved.join() === "classification,requirements" &&
+      ffB.failing.includes("placeholders") && ffB.checks.length >= 1 && stB.approvals.requirements.batch === true && !stB.approvals.design && !stB.approvals.tasks &&
+      /^Fast-forward 'refused-ff' stopped at 'design' \(approved before it: classification, requirements\) — its gate refuses it — failing checks: placeholders/.test(ffB.error) &&
+      /✗ placeholders — design\.md/.test(ffB.error) && /it resumes at 'design'/.test(ffB.error),
+      "B3: the fast-forward never skips a gate — it stops at the first refused one (design placeholders), keeps the phases approved before it and names the failing checks; next_action suggests no fast-forward while a gate would refuse");
+    const ffBF = S.approvePhase(pFF, fB.slug, undefined, "ana", { through: "tasks", force: true });
+    ok(ffBF.ok && ffBF.approved.join() === "design,tasks" && state3(fB).approvals.design.forced === true && ffBF.steps[0].forced === true && state3(fB).approvals.design.batch === true,
+      "B3: force (only when the user asked) forces each gate of the fast-forward, recorded as forced like approve --force");
+
+    // argument errors: phase + through, through execution, an inactive phase, neither phase nor through; MCP schema
+    const fE = S.createFeature(pFF, "Errors ff", ["core"]);
+    const eBoth = S.approvePhase(pFF, fE.slug, "design", "a", { through: "tasks" });
+    const eExec = S.approvePhase(pFF, fE.slug, undefined, "a", { through: "execution" });
+    const eInact = S.approvePhase(pFF, fE.slug, undefined, "a", { through: "test-plan" });
+    const eNone = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug } }));
+    const eEnum = await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug, through: "execution" } });
+    const apTool3 = list.result.tools.find((t) => t.name === "spec_approve");
+    ok(eBoth.ok === false && /either a phase or through/.test(eBoth.error) && eExec.ok === false && /covers the planning phases only/.test(eExec.error) &&
+      eInact.ok === false && eInact.notActive && /'test-plan' is not an approvable phase of 'errors-ff'/.test(eInact.error) &&
+      eNone.ok === false && /Name the phase to approve — or through: <phase>/.test(eNone.error) && JSON.stringify(eEnum).includes("execution") && !(payload(eEnum) || {}).approved &&
+      apTool3.inputSchema.required.join() === "name" && apTool3.inputSchema.properties.through.enum.join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks" &&
+      apTool3.inputSchema.properties.role.type === "string" && /APPROVALS BY ROLE/.test(apTool3.description) && /FAST-FORWARD/.test(apTool3.description) &&
+      !Object.keys(state3(fE).approvals).length,
+      "B3: phase and through together, through 'execution', an inactive phase and neither of them are refused (nothing approved); spec_approve advertises role + through (phase optional)");
+
+    // with roles: the given role signs each phase; a phase that needs another role stops it; next_action suggests it with --role
+    const pFR = b3("ff-roles");
+    S.initProject(pFR, ["core"], "en", { approvalRoles: ROLES3 });
+    const fC = S.createFeature(pFR, "Roles ff", ["core"]);
+    fillAll(fC);
+    const nC0 = S.nextAction(pFR, fC.slug);
+    const ffC1 = S.approvePhase(pFR, fC.slug, undefined, "paula", { through: "tasks", role: "product" });
+    S.approvePhase(pFR, fC.slug, "design", "sara", { role: "security" });
+    const nC1 = S.nextAction(pFR, fC.slug);
+    const ffC2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFR, name: fC.slug, through: "tasks", role: "tech", by: "tom" } }));
+    const stC = state3(fC);
+    ok(!nC0.fastForward && ffC1.ok === false && ffC1.stopReason === "role" && ffC1.stoppedAt === "design" && ffC1.approved.join() === "classification,requirements" &&
+      /'product' is not a role that signs off 'design'/.test(ffC1.error) && stC.approvals.requirements.roles.product.by === "paula" &&
+      nC1.fastForward && nC1.fastForward.role === "tech" && nC1.fastForward.phases.join() === "design,tasks" && /\/spec-ff roles-ff --role tech \(CLI: dev-spec approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation) &&
+      ffC2.ok && ffC2.complete && ffC2.approved.join() === "design,tasks" && Object.keys(stC.approvals.design.roles).sort().join() === "security,tech" &&
+      stC.approvals.design.batch === true && stC.approvals.tasks.roles.tech.batch === true,
+      "B3: fast-forward with roles — the given role signs each phase; a phase that role doesn't sign stops it (role, nothing recorded there); next_action suggests it with --role when one role is all each remaining phase waits for (got " + nC1.recommendation + ")");
+    const fD = S.createFeature(pFR, "Roles wait", ["core"]);
+    fillAll(fD);
+    S.approvePhase(pFR, fD.slug, "classification", "a"); S.approvePhase(pFR, fD.slug, "requirements", "p", { role: "product" });
+    const ffD = S.approvePhase(pFR, fD.slug, undefined, "tom", { through: "tasks", role: "tech" });
+    ok(ffD.ok === true && ffD.complete === false && ffD.stopReason === "roles" && ffD.stoppedAt === "design" && ffD.missingRoles.join() === "security" && ffD.approved.length === 0 &&
+      ffD.steps[0].signedOff === true && state3(fD).signoffs.design.tech.batch === true && !state3(fD).approvals.tasks &&
+      /stopped at 'design' \(nothing approved\) — signed off, but it waits for the other roles \(missing role: security\)/.test(ffD.message),
+      "B3: fast-forward with roles stops at a phase that, once signed, still waits for another role (ok, complete: false, missingRoles) — the later phases wait for it");
+
+    // --- PT / ES: the role and fast-forward messages follow the feature's language
+    const pPT = b3("pt");
+    S.initProject(pPT, ["core"], "pt", { approvalRoles: { design: ["tech", "security"] } });
+    const fPT = S.createFeature(pPT, "Exportar faturas", ["core"]);
+    fillAll(fPT);
+    S.approvePhase(pPT, fPT.slug, "classification", "a"); S.approvePhase(pPT, fPT.slug, "requirements", "a");
+    const ptNo = S.approvePhase(pPT, fPT.slug, "design", "a");
+    const ptSign = S.approvePhase(pPT, fPT.slug, "design", "t", { role: "tech" });
+    const ptNa = S.nextAction(pPT, fPT.slug);
+    const ptDoc = S.specDoctor(pPT, fPT.slug);
+    const ptFf = S.approvePhase(pPT, fPT.slug, undefined, "s", { through: "tasks", role: "security" });
+    const pES = b3("es");
+    S.initProject(pES, ["core"], "es");
+    const fES = S.createFeature(pES, "Exportar facturas", ["core"]);
+    fillAll(fES, ["design"]);
+    const esFf = S.approvePhase(pES, fES.slug, undefined, "a", { through: "tasks" });
+    const esInit = S.initProject(pES, ["core"], undefined, { approvalRoles: { tasks: ["qa", "tech"] } });
+    const esNo = S.approvePhase(pES, fES.slug, "design", "a", { force: true });
+    S.approvePhase(pES, fES.slug, "tasks", "q", { role: "qa", force: true });
+    const esNa = S.finishFeature(pES, fES.slug);
+    ok(/^'design' é validada por papel \(tech, security\) — indica o papel com que validas: \/approve exportar-faturas design --role <papel>/.test(ptNo.error) &&
+      /'design' continua pendente até todos os papéis validarem o seu conteúdo atual — falta o papel: security\./.test(ptSign.note) &&
+      /Revê e valida 'design' — falta o papel: security \(já validaram: tech\): \/approve exportar-faturas design --role security\./.test(ptNa.recommendation) &&
+      /a aguardar aprovação humana: design \(falta o papel: security\)/.test(chk(ptDoc, "approval-gates").detail) &&
+      /^Avanço rápido de 'exportar-faturas': design, tasks aprovadas, por ordem/.test(ptFf.message) &&
+      /^El avance rápido de 'exportar-facturas' se detuvo en 'design' \(aprobadas antes: classification, requirements\) — su gate la rechaza/.test(esFf.error) &&
+      /^Roles de aprobación: tasks=qa\+tech/.test(esInit.rolesNote) && esNo.ok &&
+      esNa.blockers.some((b) => /\(falta el rol: tech\)/.test(b)) && /^'x' no es un rol que valide 'tasks'/.test(S.approvePhase(pES, fES.slug, "tasks", "x", { role: "x" }).error),
+      "B3: PT / ES — role errors, the pending note, next_action's sign-off step, doctor's list, the fast-forward summaries and finish's blockers are localized (got " +
+      JSON.stringify([ptNa.recommendation, esNa.blockers.slice(-1)]) + ")");
+
+    const govKeys = (l) => Object.keys(S.msg(l).governance).sort().join();
+    ok(govKeys("en") === govKeys("pt") && govKeys("en") === govKeys("es") && ["en", "pt", "es"].every((l) => typeof S.msg(l).jsonShape.signoffs === "string") &&
+      S.msg("pt").governance.missing(["a", "b"]) === "faltam os papéis: a, b" && S.msg("es").governance.missing(["a"]) === "falta el rol: a",
+      "B3: EN / PT / ES parity — the same governance messages (roles, fast-forward) in every language, singular / plural role wording");
+
+    // --- .state.json signoffs of the wrong shape is refused like approvals of the wrong shape
+    const fS3 = S.createFeature(pN, "Shape", ["core"]);
+    const s3 = state3(fS3); s3.signoffs = ["tech"]; write3(fS3, ".state.json", JSON.stringify(s3));
+    const shape3 = S.approvePhase(pN, fS3.slug, "classification", "a", { force: true });
+    ok(shape3.ok === false && /'signoffs' must be an object/.test(shape3.error), "B3: a .state.json whose signoffs is not an object is refused (never 'repaired')");
+  }
   // @pkg B3 <<<
 
   // @pkg B4 tests >>>

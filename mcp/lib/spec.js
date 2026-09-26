@@ -1165,7 +1165,11 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // B5: meta.checks (named project commands) — {name: command} adds/replaces, "" removes; validated before any write.
   const nc = checksInput(opts.checks, lang || projectLang(projectDir));
   if (nc && nc.error) return { ok: false, error: nc.error };
-  if (lang || setsGuard || nc) {
+  // 1.14 B3 — approvals by role (roadmap.json meta.approvalRoles): validated before anything is written; {} clears them.
+  const setsRoles = opts.approvalRoles !== undefined && opts.approvalRoles !== null;
+  const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
+  if (roles && !roles.ok) return { ok: false, error: roles.error };
+  if (lang || setsGuard || nc || setsRoles) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
@@ -1174,6 +1178,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
       if (setsGuard) setGuard(projectDir, opts.guard);
       if (nc) writeChecks(projectDir, nc);
+      if (setsRoles) setApprovalRoles(projectDir, roles.map);
       return { ok: true };
     });
     if (!meta.ok) return meta;
@@ -1204,6 +1209,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
   };
   if (setsGuard) res.guardNote = i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  // The CURRENT approval roles, when the project has some or this call set them (+ a note when it did).
+  const current = approvalRolesOf(projectDir);
+  if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
+  if (setsRoles) res.rolesNote = Object.keys(current).length ? i18n.msg(lng).governance.rolesSet(rolesSummary(current)) : i18n.msg(lng).governance.rolesCleared;
   return res;
 }
 
@@ -4269,6 +4278,9 @@ function finishFeature(projectDir, name, opts = {}) {
   const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
   if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
   if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
+  // 1.14 B3: phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
+  const unsigned = doc.ok && isObj(doc.unsignedRoles) ? Object.entries(doc.unsignedRoles) : [];
+  if (unsigned.length) warnings.push(i18n.msg(lng).governance.unsigned(unsigned.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
@@ -4286,7 +4298,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const suite = suiteStatus(projectDir, state);
   if (suite.missing.length) block("suite-evidence", i18n.msg(lng).projectChecks.blocker(suiteLabel(suite.missing, lng), slug));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
-  if (pendingGates.length) block("approval-gates", F.gates(pendingGates.join(", ")));
+  if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for (1.14 B3)
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
 
@@ -4370,6 +4382,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (baseline) res.baseline = baseline;
   if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded
+  if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // 1.14 B3: the roles each pending phase waits for
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
@@ -4398,7 +4411,7 @@ function stateFromFile(projectDir, file) {
   const problems = [];
   if (j.exists && !isObj(j.data)) problems.push(["topLevel"]);
   const s = isObj(j.data) ? j.data : {};
-  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray], ["finishChecks", isObj]]) {
+  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray], ["finishChecks", isObj], ["signoffs", isObj]]) { // finishChecks: project check runs; signoffs: role sign-offs
     if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
   }
   // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
@@ -4447,8 +4460,10 @@ const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "b
 // (doctor's approval-gates and the roadmap keep showing it). A phase with no artifact to sign off (eval-plan
 // without +ai, test-plan without +tdd, a missing file) is an error even with force: there is nothing to approve.
 function approvePhase(projectDir, name, phase, by, opts = {}) {
+  if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // 1.14 B3: the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  if (phase == null || String(phase).trim() === "") return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).governance.phaseRequired };
   const p = String(phase || "").toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
   const state = readState(projectDir, f.slug);
@@ -4458,6 +4473,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const tracks = detectTracks(f.dir);
   const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
   if (!gate.artifact) return { ok: false, nothingToApprove: true, error: G.approveNothing(p, f.slug, gate.file) };
+  // 1.14 B3 — approvals by role: the role this sign-off is for (required while roadmap.json meta.approvalRoles lists the phase).
+  const rc = approvalRole(projectDir, f.slug, p, opts.role, lng);
+  if (rc.error) return rc.error;
   // Phase by phase: an EARLIER active phase still waiting for its approval refuses this one (a bugfix's tasks before its
   // design) — force records it anyway, flagged with `phase-order`. The execution sign-off needs no extra check: its gate
   // is spec_finish's blockers, which already name every pending gate.
@@ -4484,31 +4502,402 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
+  if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
+  if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
   // approvalHistory, with a snapshot of what it signed off (.history/<phase>@<n>.md) — the baseline spec_impact diffs.
   // A feature upgraded mid-flight: the approvals made before the history are seeded first as `legacy` records (no
   // snapshot), so metrics keep counting them (forced ones too) after their phase is re-approved and they're replaced.
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
-  const legacy = Object.entries(state.approvals).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isRecord(h) && h.phase === ph))
+  const legacy = Object.entries(state.approvals).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isRecord(h) && h.phase === ph && h.partial !== true))
     .map(([ph, a]) => legacyRecord(ph, a))
     .sort((x, y) => (timeOf(x.at) || 0) - (timeOf(y.at) || 0));
   const record = { phase: p, at: entry.at, by: entry.by };
   if (entry.file) record.file = entry.file;
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   if (entry.forced) { record.forced = true; record.failing = failing; }
+  if (entry.role) record.role = entry.role;
+  if (entry.batch) record.batch = true;
+  // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
+  const so = rc.roles.length ? recordRoleSignOff(state, p, entry, rc.roles, record) : dropRoleSignOffs(state, p);
   // A bugfix's design approval keeps design.md as it was too (<phase>@<n>.design.md): spec_impact diffs both files.
-  if (raw != null) Object.assign(record, writeSnapshot(f.dir, p, raw, hist, design));
+  if (raw != null && (!so || so.complete)) Object.assign(record, writeSnapshot(f.dir, p, raw, hist, design));
   state.approvalHistory = hist.concat(legacy, [record]);
-  state.approvals[p] = entry;
-  state.lastApprovedPhase = p;
+  if (!so || so.complete) {
+    state.approvals[p] = entry;
+    state.lastApprovedPhase = p;
+  }
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
   const res = { ok: true, feature: f.slug, approved: p, approvals: state.approvals };
   if (record.snapshot) res.snapshot = record.snapshot;
   if (record.designSnapshot) res.designSnapshot = record.designSnapshot;
   if (failing.length) Object.assign(res, { forced: true, failing, checks: gate.checks, note: G.approveForced(failing.join(", ")) });
+  if (entry.role) res.role = entry.role;
+  if (so) roleSignOffResult(res, so, p, lng);
   return res;
 }
+
+// @pkg B3 approval roles + fast-forward >>>
+// ---------------------------------------------------------------------------
+// Team governance (1.14) — approvals by role, and the fast-forward approval.
+// roadmap.json meta.approvalRoles = { <phase>: [<role>, …] } (spec_init {approvalRoles} / `init --roles`). A phase listed
+// there is APPROVED only once every role has signed off its CURRENT content (the artifact fingerprint an approval records):
+// each sign-off runs the phase's gate like any approval (force records it forced), is appended to approvalHistory with its
+// `role` and, until the last role signs, waits in .state.json `signoffs[<phase>][<role>]` — its history record flagged
+// `partial: true`, no snapshot. The completing sign-off writes approvals[<phase>] (with `roles` {<role>: {by, at,
+// fingerprint…}}) and the snapshot exactly like a single approval, so every reader of approvals[<phase>] — doctor's
+// approval-gates, next_action, finish, the roadmap, the guard hook, metrics — sees the phase approved only then. A sign-off
+// of older content no longer counts: the artifact changed after it, that role signs again (doctor names it).
+// Without meta.approvalRoles nothing changes. A phase approved WITHOUT the roles now required (approved before the roles
+// were configured, or before a role was added) stays approved — by an unknown role, never retroactively pending — and
+// doctor / finish name the missing sign-offs as a warning: re-signing records them.
+// ---------------------------------------------------------------------------
+const RE_ROLE = /^[\p{L}\p{N}][\p{L}\p{N}_.-]{0,39}$/u;
+const normRole = (r) => String(r == null ? "" : r).trim().toLowerCase();
+// A role list from an array or a "tech+security" / "tech, security" string → { roles } | { bad } (the first invalid name).
+function parseRoleList(v) {
+  const items = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[+,\s]+/) : null;
+  if (!items) return { roles: null };
+  const roles = [];
+  for (const it of items) {
+    if (typeof it !== "string") return { bad: String(it) };
+    const r = normRole(it);
+    if (!r) continue;
+    if (!RE_ROLE.test(r)) return { bad: it };
+    if (!roles.includes(r)) roles.push(r);
+  }
+  return { roles };
+}
+// spec_init {approvalRoles} → { ok, map } (phases in PHASES order, roles lower-cased) | { ok: false, error }. {} clears them.
+function validateApprovalRoles(input, lang) {
+  const E = i18n.msg(lang).governance;
+  if (!isObj(input)) return { ok: false, error: E.rolesShape };
+  const map = {};
+  for (const [k, v] of Object.entries(input)) {
+    const ph = String(k).trim().toLowerCase();
+    if (!PHASES.includes(ph)) return { ok: false, error: E.rolesPhase(k, PHASES.join(", ")) };
+    const r = parseRoleList(v);
+    if (r.bad != null) return { ok: false, error: E.badRole(r.bad) };
+    if (!r.roles) return { ok: false, error: E.rolesShape };
+    if (!r.roles.length) return { ok: false, error: E.rolesEmpty(ph) };
+    map[ph] = [...new Set([...(map[ph] || []), ...r.roles])];
+  }
+  return { ok: true, map: Object.fromEntries(PHASES.filter((p) => map[p]).map((p) => [p, map[p]])) };
+}
+// `dev-spec init --roles requirements=product,design=tech+security` → the object spec_init takes (validated by it). A word
+// with no '=' is one more role of the phase before it ("design=tech,security"); "none" / "off" → {} (clears them).
+// → the object, or { error } (localized) when the text names a role before any phase.
+function parseApprovalRolesText(text, lang) {
+  const s = String(text == null ? "" : text).trim();
+  if (/^(none|off)$/i.test(s)) return {};
+  const map = Object.create(null); // a phase typed as "__proto__" is a plain (refused) key, never the prototype
+  let last = null;
+  for (const part of s.split(/[,;]/)) {
+    const t = part.trim();
+    if (!t) continue;
+    const eq = t.indexOf("=");
+    if (eq >= 0) { last = t.slice(0, eq).trim(); map[last] = (map[last] || []).concat(t.slice(eq + 1).split("+")); }
+    else if (last != null) map[last] = map[last].concat(t.split("+"));
+    else return { error: i18n.msg(normalizeLang(lang)).governance.rolesShape };
+  }
+  return Object.keys(map).length ? Object.fromEntries(Object.entries(map)) : { error: i18n.msg(normalizeLang(lang)).governance.rolesShape };
+}
+// The project's approval roles (roadmap.json meta.approvalRoles), sanitized — a hand-edited entry keeps its valid role names
+// only; an unreadable roadmap.json has none. → { <phase>: [roles] } (empty object = no governance).
+function approvalRolesOf(projectDir) {
+  const l = loadRoadmap(projectDir);
+  const raw = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.approvalRoles : undefined;
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const ph of PHASES) {
+    if (!own(raw, ph)) continue;
+    const items = Array.isArray(raw[ph]) ? raw[ph] : typeof raw[ph] === "string" ? raw[ph].split(/[+,\s]+/) : [];
+    const roles = [...new Set(items.filter((x) => typeof x === "string").map(normRole).filter((r) => RE_ROLE.test(r)))];
+    if (roles.length) out[ph] = roles;
+  }
+  return out;
+}
+const rolesSummary = (map) => Object.entries(map).map(([p, r]) => `${p}=${r.join("+")}`).join(" · ");
+// meta.approvalRoles ← map ({} deletes it). Called under the roadmap lock (initProject); no write when unchanged.
+function setApprovalRoles(projectDir, map) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  const empty = !Object.keys(map).length;
+  if (empty ? rm.meta.approvalRoles === undefined : JSON.stringify(rm.meta.approvalRoles) === JSON.stringify(map)) return;
+  if (empty) delete rm.meta.approvalRoles;
+  else rm.meta.approvalRoles = map;
+  writeRoadmap(projectDir, rm);
+}
+// approvePhase's role check → { roles, role } | { error: <refusal result> }. roles = the phase's required roles ([] = a single
+// approval, as before 1.14 — a role given then is only recorded). With roles: one of them must be named.
+function approvalRole(projectDir, slug, phase, role, lng) {
+  const E = i18n.msg(lng).governance;
+  const roles = approvalRolesOf(projectDir)[phase] || [];
+  const given = role == null || String(role).trim() === "" ? null : normRole(role);
+  if (given != null && !RE_ROLE.test(given)) return { error: { ok: false, badRole: true, error: E.badRole(String(role)) } };
+  if (!roles.length) return { roles, role: given };
+  if (!given) return { error: { ok: false, roleRequired: true, roles, error: E.roleRequired(phase, slug, roles.join(", ")) } };
+  if (!roles.includes(given)) return { error: { ok: false, roleNotListed: true, roles, error: E.roleNotListed(given, phase, roles.join(", ")) } };
+  return { roles, role: given };
+}
+// The content a sign-off is judged against — what approvePhase records on an approval: the phase artifact's fingerprint (and
+// design.md's, for a bugfix's design, which signs off bug.md). A phase with no file (tests, execution) has none: its sign-offs
+// stay valid until the phase is approved.
+function phaseContent(dir, phase, kind) {
+  const file = phaseFile(phase, kind);
+  const raw = file ? readIfExists(path.join(dir, file)) : null;
+  const c = { fingerprint: raw != null ? textFingerprint(raw, phase) : null, designFingerprint: null };
+  if (file && file !== PHASE_FILE[phase]) {
+    const d = readIfExists(path.join(dir, PHASE_FILE[phase]));
+    if (d != null) c.designFingerprint = textFingerprint(d, phase);
+  }
+  return c;
+}
+const sameContent = (rec, c) => isRecord(rec) && (rec.fingerprint || null) === (c.fingerprint || null) && (rec.designFingerprint || null) === (c.designFingerprint || null);
+// The role sign-offs an approval carries: its `roles`, or — a single approval that named a role (made while no role was required
+// for the phase) — that role, signed with the approval's own content. → { role: {by, at, fingerprint?, designFingerprint?, forced?, failing?} }
+function approvalRoleRecords(appr) {
+  if (!isRecord(appr)) return {};
+  if (isObj(appr.roles)) return appr.roles;
+  if (typeof appr.role !== "string" || !appr.role) return {};
+  const rec = { by: appr.by, at: appr.at };
+  for (const k of ["fingerprint", "designFingerprint"]) if (appr[k]) rec[k] = appr[k];
+  if (appr.forced === true) { rec.forced = true; rec.failing = Array.isArray(appr.failing) ? appr.failing : []; }
+  return { [appr.role]: rec };
+}
+// Which required roles have signed off `content` (state.signoffs, and the roles of the phase's current approval) →
+// { valid: {role: record}, signed, missing, stale } — stale: a waiting sign-off of older content (that role signs again).
+function roleSignOffs(state, phase, required, content) {
+  const so = isObj(state.signoffs) && isObj(state.signoffs[phase]) ? state.signoffs[phase] : {};
+  const appr = isObj(state.approvals) && isRecord(state.approvals[phase]) ? state.approvals[phase] : null;
+  const fromAppr = approvalRoleRecords(appr);
+  const valid = {}, stale = [];
+  for (const r of required) {
+    const waiting = own(so, r) && isRecord(so[r]) ? so[r] : null;
+    const approved = own(fromAppr, r) && isRecord(fromAppr[r]) ? fromAppr[r] : null;
+    const hit = [waiting, approved].find((x) => x && sameContent(x, content));
+    if (hit) valid[r] = hit;
+    else if (waiting) stale.push(r);
+  }
+  return { valid, signed: Object.keys(valid), missing: required.filter((r) => !valid[r]), stale };
+}
+// approvePhase with roles: records this role's sign-off of entry's content. Every required role signed it → the phase is
+// approved (entry gets `roles`; forced when a sign-off that counts was forced; signoffs[phase] cleared) — else it waits in
+// state.signoffs[phase] (only the sign-offs that still count are kept) and the history record is `partial`.
+// → { complete, missing, signed }
+function recordRoleSignOff(state, phase, entry, required, record) {
+  const rec = { by: entry.by, at: entry.at };
+  for (const k of ["fingerprint", "designFingerprint"]) if (entry[k]) rec[k] = entry[k];
+  if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
+  if (entry.batch) rec.batch = true;
+  const signoffs = isObj(state.signoffs) ? state.signoffs : {};
+  const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
+  const view = roleSignOffs({ signoffs: { [phase]: { ...cur, [entry.role]: rec } }, approvals: state.approvals }, phase, required, entry);
+  if (view.missing.length) {
+    signoffs[phase] = view.valid;
+    state.signoffs = signoffs;
+    record.partial = true;
+    return { complete: false, missing: view.missing, signed: view.signed };
+  }
+  entry.roles = view.valid;
+  const forced = Object.values(view.valid).filter((x) => x.forced === true);
+  if (forced.length) {
+    const ids = [...new Set(forced.flatMap((x) => (Array.isArray(x.failing) ? x.failing : [])))];
+    entry.forced = true; entry.failing = ids;
+    record.forced = true; record.failing = ids;
+  }
+  record.roles = required.slice();
+  delete signoffs[phase];
+  if (Object.keys(signoffs).length) state.signoffs = signoffs; else delete state.signoffs;
+  return { complete: true, missing: [], signed: view.signed };
+}
+// A single approval (no role required for the phase any more): sign-offs still waiting from when roles were required are moot.
+// → null (approvePhase's "no role sign-off" marker)
+function dropRoleSignOffs(state, phase) {
+  if (isObj(state.signoffs) && own(state.signoffs, phase)) {
+    delete state.signoffs[phase];
+    if (!Object.keys(state.signoffs).length) delete state.signoffs;
+  }
+  return null;
+}
+// The approve result of a role sign-off: complete / missingRoles / signedRoles, and — when the phase still waits — approved:
+// null + signedOff + pending, with a localized note (after a forced approval's note).
+function roleSignOffResult(res, so, phase, lng) {
+  const E = i18n.msg(lng).governance;
+  Object.assign(res, { complete: so.complete, missingRoles: so.missing, signedRoles: so.signed });
+  const note = so.complete ? E.approvedByRoles(phase, so.signed.join(", ")) : E.stillPending(phase, E.missing(so.missing));
+  if (!so.complete) {
+    Object.assign(res, { approved: null, signedOff: phase, pending: true });
+    if (res.forced) res.note = E.signedForced(res.failing.join(", ")); // a sign-off, not an approval (yet)
+  }
+  res.note = res.note ? res.note + " " + note : note;
+}
+// Doctor's view of the role sign-offs (one read of the config): per PENDING phase that needs roles, {required, signed, missing,
+// stale}; the approved phases whose approval lacks a role now required (`unsigned` — approved before the roles, or before one
+// was added); the approved phases with a re-sign round under way; localized notes; and label(phase) → "design (missing role:
+// security)" for the pending lists. No roles configured → any: false, and every label is the bare phase (output unchanged).
+function roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng) {
+  const cfg = approvalRolesOf(projectDir);
+  const pending = {}, unsigned = {};
+  if (!Object.keys(cfg).length) return { any: false, pending, unsigned, notes: [], label: (p) => p };
+  const E = i18n.msg(lng).governance;
+  const stale = [], resign = [];
+  for (const p of pendingGates) {
+    if (!cfg[p]) continue;
+    const v = roleSignOffs(state, p, cfg[p], phaseContent(dir, p, kind));
+    pending[p] = { required: cfg[p].slice(), signed: v.signed, missing: v.missing, stale: v.stale };
+    if (v.stale.length) stale.push(`${p} (${v.stale.join(", ")})`);
+  }
+  const approvals = isObj(state.approvals) ? state.approvals : {};
+  for (const p of PHASES) {
+    const a = approvals[p];
+    if (!cfg[p] || !isRecord(a) || !phaseActive(p, tracks)) continue;
+    const have = Object.keys(approvalRoleRecords(a));
+    const lack = cfg[p].filter((r) => !have.includes(r));
+    if (lack.length) unsigned[p] = lack;
+    if (isObj(state.signoffs) && isObj(state.signoffs[p]) && Object.keys(state.signoffs[p]).length) {
+      const v = roleSignOffs(state, p, cfg[p], phaseContent(dir, p, kind));
+      if (v.missing.length && v.signed.some((r) => own(state.signoffs[p], r))) resign.push(`${p} (${E.missing(v.missing)})`);
+    }
+  }
+  const notes = [];
+  if (stale.length) notes.push(E.staleSignOffs(stale.join(", ")));
+  if (resign.length) notes.push(E.resigning(resign.join(", ")));
+  const un = Object.entries(unsigned);
+  if (un.length) notes.push(E.unsigned(un.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
+  return { any: true, pending, unsigned, notes, label: (p) => roleLabel(pending, p, lng) };
+}
+// "design (missing role: security)" for a pending phase that waits for roles; the bare phase otherwise.
+function roleLabel(pendingRoles, p, lng) {
+  const pr = isObj(pendingRoles) && own(pendingRoles, p) ? pendingRoles[p] : null;
+  return pr && pr.missing.length ? `${p} (${i18n.msg(lng).governance.missing(pr.missing)})` : p;
+}
+// ROADMAP.md "Needs attention": the phases of a feature whose sign-off round is under way (some role signed, some didn't yet).
+// `st` is the raw .state.json data (the roadmap reads it without the resolver). → [{phase, missing}]
+function roleWaitList(projectDir, dir, st, tracks) {
+  if (!isObj(st) || !isObj(st.signoffs)) return [];
+  const cfg = approvalRolesOf(projectDir);
+  const approvals = isObj(st.approvals) ? st.approvals : {};
+  const kind = typeof st.kind === "string" ? st.kind : "feature";
+  const out = [];
+  for (const p of PHASES) {
+    if (!cfg[p] || approvals[p] || !phaseActive(p, tracks) || !isObj(st.signoffs[p]) || !Object.keys(st.signoffs[p]).length) continue;
+    const v = roleSignOffs({ signoffs: st.signoffs, approvals }, p, cfg[p], phaseContent(dir, p, kind));
+    if (v.missing.length) out.push({ phase: p, missing: v.missing });
+  }
+  return out;
+}
+
+// next_action's re-review step: an approved phase with roles whose artifact changed is re-approved by EVERY role again — the
+// roles that haven't signed the new content yet, and the first sign-off to make. → a localized sentence, or null.
+function reReviewRoles(projectDir, dir, st, phases, kind, slug, lng) {
+  const cfg = approvalRolesOf(projectDir);
+  const items = [];
+  for (const p of [...new Set(phases)]) {
+    if (!p || !cfg[p]) continue;
+    const v = roleSignOffs(st, p, cfg[p], phaseContent(dir, p, kind));
+    if (v.missing.length) items.push({ p, missing: v.missing });
+  }
+  if (!items.length) return null;
+  const E = i18n.msg(lng).governance;
+  return E.resignHint(items.map((x) => `${x.p} (${E.missing(x.missing)})`).join(", "), `/approve ${slug} ${items[0].p} --role ${items[0].missing[0]}`);
+}
+
+// next_action's fast-forward: when the first pending phase would be approved now and EVERY unapproved phase after it through
+// `tasks` is filled and passes its own gate, one /spec-ff approves them all in order. With roles, a single role must be the
+// one missing sign-off of each phase that needs roles (the fast-forward signs as that role) — otherwise no suggestion.
+// → { through: "tasks", phases, role } | null (fewer than two phases, or some gate would refuse).
+function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng) {
+  const walk = gateWalk(dir, tracks, kind);
+  const start = walk.indexOf(pending), end = walk.indexOf("tasks");
+  if (start < 0 || end < start) return null;
+  const approvals = isObj(st.approvals) ? st.approvals : {};
+  const chain = walk.slice(start, end + 1).filter((ph) => !approvals[ph]);
+  if (chain.length < 2) return null;
+  const cfg = approvalRolesOf(projectDir);
+  let role = null;
+  for (const ph of chain) {
+    if (gateArtifacts(dir, tracks, kind, ph).some((file) => artifactReport(dir, file, tracks).state !== "filled")) return null;
+    const g = doc.nextGate && doc.nextGate.phase === ph ? { artifact: true, checks: doc.nextGate.failing } : approvalChecks(projectDir, slug, dir, ph, tracks, kind, lng);
+    if (!g.artifact || g.checks.length) return null;
+    if (cfg[ph]) {
+      const v = roleSignOffs(st, ph, cfg[ph], phaseContent(dir, ph, kind));
+      if (v.missing.length !== 1 || (role && role !== v.missing[0])) return null;
+      role = v.missing[0];
+    }
+  }
+  return { through: "tasks", phases: chain, role };
+}
+// next_action's "approve" step, 1.14: the roles still missing for the pending phase (the recommendation names the role to
+// sign as) and the fast-forward, when it applies. → { text, missingRoles?, fastForward? } (text null = keep the default).
+function approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc, lng) {
+  const E = i18n.msg(lng).governance;
+  const out = { text: null };
+  const pr = doc.pendingRoles && own(doc.pendingRoles, pending) ? doc.pendingRoles[pending] : null;
+  if (pr && pr.missing.length) {
+    out.missingRoles = pr.missing;
+    out.text = E.approveRoles(pending, slug, E.missing(pr.missing), pr.signed.join(", "), pr.missing[0]);
+  }
+  const ff = fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
+  if (ff) {
+    out.fastForward = ff;
+    out.hint = E.ffHint(slug, ff.phases.join(", "), ff.role);
+  }
+  return out;
+}
+
+// spec_approve {name, through} / `dev-spec approve <f> --through <phase>` / /spec-ff — the fast-forward ("quick spec"): approve
+// the active phases IN ORDER, from the first unapproved one up to `through`, each through its own gate (approvePhase — the
+// same checks, snapshot and history record, flagged `batch: true`). It stops at the first phase that is not approved: a
+// refused gate (ok: false, refused, failing, checks — the phases before it stay approved), a phase with nothing to approve,
+// a role error, or — with roles — a phase that was signed off but still waits for another role (ok: true, complete: false).
+// `force` still only when the user asked: it forces each gate, like approve --force. Called by approvePhase, under its lock.
+function approveThrough(projectDir, name, phase, by, opts) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const E = i18n.msg(lng).governance;
+  const G = i18n.msg(lng).gates;
+  if (phase != null && String(phase).trim() !== "") return { ok: false, error: E.ffBoth };
+  const t = String(opts.through || "").toLowerCase().trim();
+  if (t === "execution") return { ok: false, error: E.ffExecution };
+  if (!PHASES.includes(t)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(opts.through, PHASES.filter((p) => p !== "execution").join(", ")) };
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const tracks = detectTracks(f.dir);
+  const walk = gateWalk(f.dir, tracks, state.kind || "feature");
+  if (!walk.includes(t)) return { ok: false, notActive: true, error: E.ffNotActive(t, f.slug) };
+  const chain = walk.slice(0, walk.indexOf(t) + 1).filter((ph) => !state.approvals[ph]);
+  const base = { feature: f.slug, through: t, batch: true };
+  if (!chain.length) return { ok: true, ...base, approved: [], steps: [], complete: true, nothingToDo: true, approvals: state.approvals, message: E.ffNothing(f.slug, t) };
+  const approved = [], steps = [];
+  let approvals = state.approvals;
+  for (const ph of chain) {
+    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true });
+    if (r.approvals) approvals = r.approvals;
+    const step = { phase: ph, approved: !!r.ok && r.complete !== false };
+    if (r.role) step.role = r.role;
+    if (r.forced) Object.assign(step, { forced: true, failing: r.failing });
+    if (step.approved) { approved.push(ph); steps.push(step); continue; }
+    const list = approved.join(", ");
+    if (r.ok) { // signed off by role — the phase waits for the other roles, and the later ones can't pass phase-order before it
+      steps.push(Object.assign(step, { signedOff: true, missingRoles: r.missingRoles }));
+      return { ok: true, ...base, approved, steps, complete: false, stoppedAt: ph, stopReason: "roles", missingRoles: r.missingRoles, approvals,
+        message: E.ffStopped(f.slug, ph, list, E.ffWhyRoles(E.missing(r.missingRoles))) };
+    }
+    if (r.failing) step.failing = r.failing;
+    steps.push(step);
+    const why = r.refused ? E.ffWhyRefused(r.failing.join(", "), r.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n"), f.slug, ph) : r.error;
+    const reason = r.refused ? "refused" : r.nothingToApprove ? "nothing-to-approve" : r.roleRequired || r.roleNotListed || r.badRole ? "role" : r.busy ? "busy" : "error";
+    const res = { ok: false, ...base, approved, steps, complete: false, stoppedAt: ph, stopReason: reason, approvals, error: E.ffStopped(f.slug, ph, list, why) };
+    if (r.refused) Object.assign(res, { refused: true, failing: r.failing, checks: r.checks });
+    if (r.roles) res.roles = r.roles;
+    return res;
+  }
+  return { ok: true, ...base, approved, steps, complete: true, approvals, message: E.ffDone(f.slug, approved.join(", "), t) };
+}
+// @pkg B3 <<<
 
 // ---------------------------------------------------------------------------
 // Change requests (1.13) — approval snapshots, spec_impact (what an edit after approval touches) and reopen.
@@ -4557,7 +4946,7 @@ function historyText(dir, rel) {
 // The snapshot of the phase's LATEST approval → { rel, text, at, record } — null when that approval has none (made
 // before 1.13, or by an older engine after a 1.13 one), or the file is gone / points outside the feature's .history.
 function latestSnapshot(dir, state, phase) {
-  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === phase) : [];
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === phase && h.partial !== true) : []; // partial: a role sign-off (1.14)
   const last = hist[hist.length - 1];
   if (!last || typeof last.snapshot !== "string") return null;
   const appr = isRecord(state.approvals) ? state.approvals[phase] : null;
@@ -4935,7 +5324,8 @@ function featureMetrics(projectDir, slug, dir) {
   // A state whose shape was refused (readState drops a non-list approvalHistory) can't say how many approvals were
   // made: approvals/rework unknown (null). A missing history is an empty one (createFeature doesn't seed the key).
   const lost = !!state.invalid && !Array.isArray(state.approvalHistory);
-  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && typeof h.phase === "string");
+  // A role sign-off that didn't complete its phase (`partial`, 1.14 B3) is no approval: not counted, never a lead time.
+  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && typeof h.phase === "string" && h.partial !== true);
   // Approvals made before the change history (a feature upgraded mid-flight): the `legacy` records approvePhase seeds,
   // and approved phases with no history entry at all (not re-approved since). Each is counted once (its latest
   // approval — earlier ones were overwritten), so their rework is unknown: `rework` is then a lower bound.
@@ -5023,6 +5413,7 @@ function featureMetrics(projectDir, slug, dir) {
     leadTime,
     approvalsTotal: history ? history.length + unseeded.length : null,
     rework, reworkByPhase, reworkLowerBound: rework != null && legacyPhases.length > 0, legacyPhases, forcedApprovals,
+    batchApprovals: history ? history.filter((h) => h.batch === true).length : null, // 1.14 B3: approvals made by a fast-forward
     changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
     evidence: { runs, passing, passRate: runs ? round1((passing / runs) * 100) : null },
     tasks: { done, total: active.length },
@@ -5080,6 +5471,7 @@ function metrics(projectDir, name, opts = {}) {
   const sum = (fn) => features.reduce((s, m) => s + (fn(m) || 0), 0);
   const runs = sum((m) => m.evidence.runs), passing = sum((m) => m.evidence.passing);
   const totals = { features: features.length, tasksDone: sum((m) => m.tasks.done), tasksTotal: sum((m) => m.tasks.total), forcedApprovals: sum((m) => m.forcedApprovals),
+    batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
   // @pkg B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
@@ -5108,6 +5500,7 @@ function metricsLines(r) {
     out.push(r.rework == null ? M.reworkUnknown(r.forcedApprovals)
       : r.reworkLowerBound ? M.reworkPartial(r.approvalsTotal, r.rework, byPhase, r.forcedApprovals, r.legacyPhases.map((ph) => M.phase[ph] || ph).join(", "))
         : M.rework(r.approvalsTotal, r.rework, byPhase, r.forcedApprovals));
+    if (r.batchApprovals) out.push(i18n.msg(r.lang).governance.batch(r.batchApprovals)); // 1.14 B3
     out.push(M.changes(r.changeRequests, r.reopenedTasks));
     out.push(r.evidence.runs ? M.evidence(r.evidence.passRate, r.evidence.passing, r.evidence.runs) : M.noRuns);
     out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
@@ -6008,6 +6401,7 @@ function nextAction(projectDir, name, opts = {}) {
   let impactPhases = [];
   let finishedDrift = null;
   let staleBaseline = null;
+  let approveExtras = null; // 1.14 B3: {missingRoles?, fastForward?} of the approve step
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
@@ -6020,6 +6414,8 @@ function nextAction(projectDir, name, opts = {}) {
     // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
     impactPhases = snapshotPhases(dir, st, reReviewNow);
     if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
+    const resign = reReviewRoles(projectDir, dir, st, reReviewNow.map(phaseOfFile), kind, slug, lng); // 1.14 B3: each role signs again
+    if (resign) recommendation += " " + resign;
   } else if (open) {
     step = "fill";
     const first = open.items.length ? open.items[0].text : "";
@@ -6038,6 +6434,11 @@ function nextAction(projectDir, name, opts = {}) {
   } else if (pending && approveMsg[pending]) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
+    // 1.14 B3: the roles still to sign off this phase (the role to sign as), and the fast-forward when every gate through tasks passes.
+    approveExtras = approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
+    // Phase 4's own wording says what the phase asks for (the tests / eval harness) — the role step is added to it there.
+    if (approveExtras.text) recommendation = pending === "tests" ? recommendation + " " + approveExtras.text : approveExtras.text;
+    if (approveExtras.hint) recommendation += " " + approveExtras.hint;
   } else if (fails.length) {
     step = "fix";
     recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
@@ -6109,6 +6510,8 @@ function nextAction(projectDir, name, opts = {}) {
   if (open) res.file = open.file;
   if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
+  if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
+  if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
   return res;
 }
 // The approval chain next_action walks, in order: every active phase (PHASES; `execution` is the sign-off after a
@@ -7097,9 +7500,12 @@ function specDoctor(projectDir, name, opts = {}) {
   // than these checks (success criteria / priorities are warns here, classification.md isn't in the chain). Surfaced
   // so doctor, next_action and approve agree instead of next_action recommending an approval approve refuses.
   let nextGate = null;
+  // 1.14 B3 — approvals by role: the roles each pending phase still waits for (named in the list), stale / missing sign-offs.
+  const rv = roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng);
   if (pendingGates.length) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
     nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+    if (rv.pending[pendingGates[0]]) nextGate.missingRoles = rv.pending[pendingGates[0]].missing;
   }
   // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve —
   // spec_impact lists what the edit touches when the approval has a snapshot.
@@ -7110,17 +7516,18 @@ function specDoctor(projectDir, name, opts = {}) {
     add("changed-since-approval", "warn", impactPhases.length
       ? fm.impact.doctorChanged(changedArts.join(", "), slug, impactPhases) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
-  add("approval-gates", pendingGates.length || forcedGates.length ? "warn" : "pass",
-    [pendingGates.length ? m.gatesPending(pendingGates.join(", ")) : null,
+  add("approval-gates", pendingGates.length || forcedGates.length || rv.notes.length ? "warn" : "pass",
+    [pendingGates.length ? m.gatesPending(pendingGates.map(rv.label).join(", ")) : null,
       nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
-      forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null]
+      forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null,
+      ...rv.notes]
       .filter(Boolean).join("; ") || m.gatesOk);
   const gatesOk = pendingGates.length === 0;
 
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   const verdict = fails.length ? "fail" : warns.length ? "warn" : "pass";
-  return {
+  const res = {
     ok: true,
     feature: slug,
     tracks: trackLabel(tracks),
@@ -7135,6 +7542,10 @@ function specDoctor(projectDir, name, opts = {}) {
     readyToAdvance: fails.length === 0,
     verdict,
   };
+  // 1.14 B3 (only when the project has approval roles): {phase: {required, signed, missing, stale}} per pending phase that
+  // needs roles, and {phase: [roles]} per approved phase lacking a role now required.
+  if (rv.any) Object.assign(res, { pendingRoles: rv.pending, unsignedRoles: rv.unsigned });
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -7492,7 +7903,8 @@ function roadmapData(projectDir, opts = {}) {
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps };
+    const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
+    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -7510,6 +7922,7 @@ function buildAttention(rows, t, lang) {
     if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
     if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
     if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.join(", ")}` });
+    if (r.roleWait && r.roleWait.length) a.push({ name: r.f.name, msg: fm.governance.roadmapAwaiting(r.roleWait.map((w) => `${w.phase} (${w.missing.join(", ")})`).join(", ")) }); // 1.14 B3
     // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
     // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
     if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}: ${unverifiedLabel({ unverifiedDetail: r.unverifiedDetail || [] }, lang)}` });
@@ -8856,7 +9269,7 @@ function missingIgnoreLines(specsDir) {
 // The last approvalHistory record of a phase (null when none).
 function lastRecord(hist, phase) {
   let r = null;
-  for (const h of hist) if (isRecord(h) && h.phase === phase) r = h;
+  for (const h of hist) if (isRecord(h) && h.phase === phase && h.partial !== true) r = h; // a partial role sign-off (1.14) approved nothing
   return r;
 }
 
@@ -10907,6 +11320,8 @@ module.exports = {
   // @pkg B2 <<<
 
   // @pkg B3 exports >>>
+  approvalRolesOf, // roadmap.json meta.approvalRoles, sanitized ({} = single approvals) — team governance (approvals by role)
+  parseApprovalRolesText, // `init --roles requirements=product,design=tech+security` → the object spec_init {approvalRoles} takes
   // @pkg B3 <<<
 
   // @pkg B4 exports >>>

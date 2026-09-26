@@ -2426,6 +2426,7 @@ const MSG = {
       approvalHistory: "'approvalHistory' must be an array",
       changes: "'changes' must be an array",
       finishChecks: "'finishChecks' must be an object",
+      signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
@@ -3100,6 +3101,39 @@ const MSG = {
     // @pkg B2 <<<
 
     // @pkg B3 msg-en >>>
+    // Team governance (approvals by role — roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through}).
+    governance: {
+      rolesShape: "approvalRoles must map phases to role lists, e.g. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none clears them)",
+      rolesPhase: (phase, known) => `approvalRoles: unknown phase '${phase}' (known: ${known})`,
+      rolesEmpty: (phase) => `approvalRoles.${phase}: name at least one role`,
+      badRole: (role) => `invalid role name '${role}' — use letters, digits, '-', '_' or '.' (at most 40 characters)`,
+      rolesSet: (summary) => `Approval roles: ${summary} — each listed phase counts as approved only once every role has signed off its current content (spec_approve {role} / --role).`,
+      rolesCleared: "Approval roles cleared — every phase takes a single approval again.",
+      phaseRequired: "Name the phase to approve — or through: <phase> (CLI: --through <phase>) to fast-forward up to it.",
+      roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — say which role you sign for: /approve ${slug} ${phase} --role <role> (spec_approve {role}). Nothing recorded.`,
+      roleNotListed: (role, phase, roles) => `'${role}' is not a role that signs off '${phase}' (roles: ${roles}) — nothing recorded.`,
+      missing: (list) => `${list.length > 1 ? "missing roles" : "missing role"}: ${list.join(", ")}`,
+      signedOff: (phase, slug, role) => `Signed off '${phase}' for ${slug} as ${role} ✓`,
+      signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
+      stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
+      approvedByRoles: (phase, roles) => `'${phase}' is approved — every role signed off the current content: ${roles}.`,
+      staleSignOffs: (list) => `sign-offs made before the artifact changed no longer count (re-sign the current content): ${list}`,
+      resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
+      unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
+      approveRoles: (phase, slug, missing, signed, first) => `Review & sign off '${phase}' — ${missing}${signed ? ` (signed: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
+      roadmapAwaiting: (list) => `awaiting role sign-off: ${list}`,
+      resignHint: (list, cmd) => `Each role signs the new content again — ${list}: ${cmd}.`,
+      ffBoth: "Pass either a phase or through (the fast-forward), not both.",
+      ffExecution: "The fast-forward covers the planning phases only (through 'tasks' at most) — sign off 'execution' on its own, after /spec-finish.",
+      ffNotActive: (phase, slug) => `'${phase}' is not an approvable phase of '${slug}' right now (its track is off, or the plan it signs off doesn't exist yet) — nothing approved.`,
+      ffNothing: (slug, through) => `Nothing to fast-forward: every active phase of '${slug}' through '${through}' is already approved.`,
+      ffDone: (slug, list, through) => `Fast-forward '${slug}': approved ${list}, in order, each through its own gate — every phase through '${through}' is approved.`,
+      ffStopped: (slug, phase, list, why) => `Fast-forward '${slug}' stopped at '${phase}'${list ? ` (approved before it: ${list})` : " (nothing approved)"} — ${why}`,
+      ffWhyRefused: (ids, lines, slug, phase) => `its gate refuses it — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), then run the fast-forward again (it resumes at '${phase}').`,
+      ffWhyRoles: (missing) => `signed off, but it waits for the other roles (${missing}) — the later phases can't be approved before it.`,
+      ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
+      batch: (n) => `  batch approvals (fast-forward): ${n}`,
+    },
     // @pkg B3 <<<
 
     // @pkg B4 msg-en >>>
@@ -3457,6 +3491,7 @@ const MSG = {
       approvalHistory: "'approvalHistory' tem de ser um array",
       changes: "'changes' tem de ser um array",
       finishChecks: "'finishChecks' tem de ser um objeto",
+      signoffs: "'signoffs' tem de ser um objeto",
     },
     depend: {
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
@@ -4082,6 +4117,38 @@ const MSG = {
     // @pkg B2 <<<
 
     // @pkg B3 msg-pt >>>
+    governance: {
+      rolesShape: "approvalRoles tem de associar fases a listas de papéis, p. ex. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none remove-os)",
+      rolesPhase: (phase, known) => `approvalRoles: fase desconhecida '${phase}' (conhecidas: ${known})`,
+      rolesEmpty: (phase) => `approvalRoles.${phase}: indica pelo menos um papel`,
+      badRole: (role) => `nome de papel inválido '${role}' — usa letras, dígitos, '-', '_' ou '.' (no máximo 40 caracteres)`,
+      rolesSet: (summary) => `Papéis de aprovação: ${summary} — cada fase indicada só conta como aprovada quando todos os papéis tiverem validado o seu conteúdo atual (spec_approve {role} / --role).`,
+      rolesCleared: "Papéis de aprovação removidos — cada fase volta a precisar de uma única aprovação.",
+      phaseRequired: "Indica a fase a aprovar — ou through: <fase> (CLI: --through <fase>) para avançar rapidamente até ela.",
+      roleRequired: (phase, slug, roles) => `'${phase}' é validada por papel (${roles}) — indica o papel com que validas: /approve ${slug} ${phase} --role <papel> (spec_approve {role}). Nada foi registado.`,
+      roleNotListed: (role, phase, roles) => `'${role}' não é um papel que valide '${phase}' (papéis: ${roles}) — nada foi registado.`,
+      missing: (list) => `${list.length > 1 ? "faltam os papéis" : "falta o papel"}: ${list.join(", ")}`,
+      signedOff: (phase, slug, role) => `'${phase}' de ${slug} validada como ${role} ✓`,
+      signedForced: (ids) => `Validado com force — as verificações a falhar ficam registadas com a validação: ${ids}.`,
+      stillPending: (phase, missing) => `'${phase}' continua pendente até todos os papéis validarem o seu conteúdo atual — ${missing}.`,
+      approvedByRoles: (phase, roles) => `'${phase}' está aprovada — todos os papéis validaram o conteúdo atual: ${roles}.`,
+      staleSignOffs: (list) => `as validações feitas antes de o artefacto mudar já não contam (volta a validar o conteúdo atual): ${list}`,
+      resigning: (list) => `nova validação em curso (a fase continua aprovada como estava até todos os papéis validarem o novo conteúdo): ${list}`,
+      unsigned: (list) => `aprovado sem as validações por papel agora exigidas (aprovado antes de os papéis serem configurados ou alterados — conta como aprovado por um papel desconhecido; pede a cada papel que volte a validar): ${list}`,
+      approveRoles: (phase, slug, missing, signed, first) => `Revê e valida '${phase}' — ${missing}${signed ? ` (já validaram: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
+      roadmapAwaiting: (list) => `à espera de validação por papel: ${list}`,
+      resignHint: (list, cmd) => `Cada papel volta a validar o novo conteúdo — ${list}: ${cmd}.`,
+      ffBoth: "Passa uma fase ou through (o avanço rápido), não as duas.",
+      ffExecution: "O avanço rápido cobre só as fases de planeamento (no máximo até 'tasks') — valida 'execution' à parte, depois do /spec-finish.",
+      ffNotActive: (phase, slug) => `'${phase}' não é uma fase aprovável de '${slug}' neste momento (o track está desativado, ou o plano que valida ainda não existe) — nada foi aprovado.`,
+      ffNothing: (slug, through) => `Nada para avançar: todas as fases ativas de '${slug}' até '${through}' já estão aprovadas.`,
+      ffDone: (slug, list, through) => `Avanço rápido de '${slug}': ${list} aprovadas, por ordem, cada uma pelo seu próprio gate — todas as fases até '${through}' estão aprovadas.`,
+      ffStopped: (slug, phase, list, why) => `O avanço rápido de '${slug}' parou em '${phase}'${list ? ` (aprovadas antes: ${list})` : " (nada aprovado)"} — ${why}`,
+      ffWhyRefused: (ids, lines, slug, phase) => `o gate recusa-a — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}) e volta a correr o avanço rápido (retoma em '${phase}').`,
+      ffWhyRoles: (missing) => `validada, mas fica à espera dos outros papéis (${missing}) — as fases seguintes não podem ser aprovadas antes dela.`,
+      ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
+      batch: (n) => `  aprovações em lote (avanço rápido): ${n}`,
+    },
     // @pkg B3 <<<
 
     // @pkg B4 msg-pt >>>
@@ -4438,6 +4505,7 @@ const MSG = {
       approvalHistory: "'approvalHistory' debe ser un array",
       changes: "'changes' debe ser un array",
       finishChecks: "'finishChecks' debe ser un objeto",
+      signoffs: "'signoffs' debe ser un objeto",
     },
     depend: {
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
@@ -5063,6 +5131,38 @@ const MSG = {
     // @pkg B2 <<<
 
     // @pkg B3 msg-es >>>
+    governance: {
+      rolesShape: "approvalRoles debe asociar fases a listas de roles, p. ej. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none los elimina)",
+      rolesPhase: (phase, known) => `approvalRoles: fase desconocida '${phase}' (conocidas: ${known})`,
+      rolesEmpty: (phase) => `approvalRoles.${phase}: indica al menos un rol`,
+      badRole: (role) => `nombre de rol no válido '${role}' — usa letras, dígitos, '-', '_' o '.' (40 caracteres como máximo)`,
+      rolesSet: (summary) => `Roles de aprobación: ${summary} — cada fase indicada solo cuenta como aprobada cuando todos los roles han validado su contenido actual (spec_approve {role} / --role).`,
+      rolesCleared: "Roles de aprobación eliminados — cada fase vuelve a necesitar una sola aprobación.",
+      phaseRequired: "Indica la fase que apruebas — o through: <fase> (CLI: --through <fase>) para avanzar rápido hasta ella.",
+      roleRequired: (phase, slug, roles) => `'${phase}' se valida por rol (${roles}) — indica el rol con el que validas: /approve ${slug} ${phase} --role <rol> (spec_approve {role}). No se ha registrado nada.`,
+      roleNotListed: (role, phase, roles) => `'${role}' no es un rol que valide '${phase}' (roles: ${roles}) — no se ha registrado nada.`,
+      missing: (list) => `${list.length > 1 ? "faltan los roles" : "falta el rol"}: ${list.join(", ")}`,
+      signedOff: (phase, slug, role) => `'${phase}' de ${slug} validada como ${role} ✓`,
+      signedForced: (ids) => `Validado con force — las verificaciones que fallan quedan registradas con la validación: ${ids}.`,
+      stillPending: (phase, missing) => `'${phase}' sigue pendiente hasta que todos los roles validen su contenido actual — ${missing}.`,
+      approvedByRoles: (phase, roles) => `'${phase}' está aprobada — todos los roles validaron el contenido actual: ${roles}.`,
+      staleSignOffs: (list) => `las validaciones hechas antes de que cambiara el artefacto ya no cuentan (vuelve a validar el contenido actual): ${list}`,
+      resigning: (list) => `nueva validación en curso (la fase sigue aprobada como estaba hasta que todos los roles validen el nuevo contenido): ${list}`,
+      unsigned: (list) => `aprobado sin las validaciones por rol que ahora se exigen (aprobado antes de configurar o cambiar los roles — cuenta como aprobado por un rol desconocido; pide a cada rol que vuelva a validar): ${list}`,
+      approveRoles: (phase, slug, missing, signed, first) => `Revisa y valida '${phase}' — ${missing}${signed ? ` (ya validaron: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
+      roadmapAwaiting: (list) => `esperando validación por rol: ${list}`,
+      resignHint: (list, cmd) => `Cada rol vuelve a validar el nuevo contenido — ${list}: ${cmd}.`,
+      ffBoth: "Pasa una fase o through (el avance rápido), no ambas.",
+      ffExecution: "El avance rápido cubre solo las fases de planificación (como mucho hasta 'tasks') — valida 'execution' aparte, después de /spec-finish.",
+      ffNotActive: (phase, slug) => `'${phase}' no es una fase aprobable de '${slug}' ahora mismo (su track está desactivado, o el plan que valida aún no existe) — no se ha aprobado nada.`,
+      ffNothing: (slug, through) => `Nada que avanzar: todas las fases activas de '${slug}' hasta '${through}' ya están aprobadas.`,
+      ffDone: (slug, list, through) => `Avance rápido de '${slug}': aprobadas ${list}, en orden, cada una por su propio gate — todas las fases hasta '${through}' están aprobadas.`,
+      ffStopped: (slug, phase, list, why) => `El avance rápido de '${slug}' se detuvo en '${phase}'${list ? ` (aprobadas antes: ${list})` : " (nada aprobado)"} — ${why}`,
+      ffWhyRefused: (ids, lines, slug, phase) => `su gate la rechaza — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}) y vuelve a ejecutar el avance rápido (se reanuda en '${phase}').`,
+      ffWhyRoles: (missing) => `validada, pero espera a los demás roles (${missing}) — las fases siguientes no pueden aprobarse antes que ella.`,
+      ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
+      batch: (n) => `  aprobaciones en lote (avance rápido): ${n}`,
+    },
     // @pkg B3 <<<
 
     // @pkg B4 msg-es >>>

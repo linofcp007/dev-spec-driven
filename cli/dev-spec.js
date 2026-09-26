@@ -16,6 +16,7 @@
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
  *                                      --guard on|off → guard mode: code edits ask while no approved tasks;
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
+ *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
@@ -32,7 +33,10 @@
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
  *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
- *                                      (--by = who approved; --force records it anyway, flagged as forced)
+ *                                      (--by = who approved; --force records it anyway, flagged as forced;
+ *                                      --role ROLE = the role you sign off for, when init --roles lists the phase)
+ *   approve <feature> --through <phase> Fast-forward: approve every active phase up to <phase>, in order, each through its
+ *                                      own gate — stops at the first refused one (/spec-ff)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
  *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
@@ -133,6 +137,7 @@ VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|ev
 
 VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
+["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -275,12 +280,19 @@ function main() {
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
       }
       const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks });
+      // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
+      let approvalRoles;
+      if (flags.roles !== undefined) {
+        approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
+        if (approvalRoles.error) die(approvalRoles.error);
+      }
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
         if (r.guardNote) console.log("  " + r.guardNote);
         if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
+        if (r.rolesNote) console.log("  " + r.rolesNote);
       });
     }
 
@@ -507,13 +519,24 @@ function main() {
     }
 
     case "approve": {
-      if (!pos[0] || !pos[1]) usage("dev-spec approve <feature> <phase> [--force] [--by NAME]");
+      // --through <phase> = the fast-forward (spec_approve {through}); --role <role> = the sign-off's role (spec_approve {role}).
+      const through = typeof flags.through === "string" ? flags.through : undefined;
+      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force] [--by NAME] [--role ROLE] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined, { force: on("force") });
-      if (!r.ok) return fail(r);
+      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined,
+        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}) });
+      if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
+      const GV = spec.msg(spec.featureLang(projectDir, r.feature)).governance;
       return out(r, (r) => {
-        console.log(featureText(r.feature).approved(r.approved, r.feature));
-        if (r.note) console.log("  ⚠ " + r.note); // a forced approval names the checks that were failing
+        if (r.through) { // the fast-forward: its summary, then one line per phase it reached
+          console.log(r.message);
+          (r.steps || []).forEach((s) => console.log("  " + (s.approved ? "✓" : "◐") + " " + s.phase + (s.role ? " [" + s.role + "]" : "") +
+            (s.missingRoles && s.missingRoles.length ? " — " + GV.missing(s.missingRoles) : "") + (s.forced ? " (forced: " + s.failing.join(", ") + ")" : "")));
+          return;
+        }
+        console.log(r.approved ? featureText(r.feature).approved(r.approved, r.feature) : GV.signedOff(r.signedOff, r.feature, r.role));
+        // a forced approval names the checks that were failing; a role sign-off, the roles still missing (or that all signed)
+        if (r.note) console.log((r.forced || r.pending ? "  ⚠ " : "  ") + r.note);
       });
     }
 
@@ -1011,6 +1034,8 @@ function helpText() {
                                   --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
+                                  --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
+                                  every role signed its current content); --roles none clears them
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
@@ -1039,7 +1064,10 @@ function helpText() {
   append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
-                                  --force records it anyway (flagged as forced, with the failing checks)
+                                  --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
+                                  that role (required for a phase init --roles lists)
+  approve <feature> --through <phase>  Fast-forward (/spec-ff): approve every active phase up to <phase>, in order, each through its
+                                  own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
@@ -1078,6 +1106,7 @@ function helpText() {
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
+         --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
