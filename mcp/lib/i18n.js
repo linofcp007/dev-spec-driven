@@ -2757,6 +2757,13 @@ const MSG = {
     // @pkg A3 <<<
 
     // @pkg A4 msg-en >>>
+    // A _Verify:_ command that pipes into another one (`npm test | tee log`): a pipeline's exit code is its LAST command's.
+    verifyPipe: {
+      brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "pipe" : "pipes"} into another command: a pipeline's exit code is its LAST command's, so a failing check can exit 0 and read as verified. Drop the pipe, or run it under bash after \`set -o pipefail\` (cmd.exe has no pipefail) — the exit code you report must be the check's own.`,
+      runHint: (cmd) => `⚠ \`${cmd}\` pipes into another command: the shell reports only the LAST command's exit code, so a failing check can be recorded as passing — drop the pipe, or start it with \`set -o pipefail;\` under bash (--shell bash); cmd.exe has no pipefail.`,
+      doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
+      completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
+    },
     // @pkg A4 <<<
 
     // @pkg B1 msg-en >>>
@@ -3602,6 +3609,12 @@ const MSG = {
     // @pkg A3 <<<
 
     // @pkg A4 msg-pt >>>
+    verifyPipe: {
+      brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "encaminham" : "encaminha"} a saída para outro comando (pipe): o exit code de um pipeline é o do ÚLTIMO comando, por isso uma verificação que falha pode sair com 0 e passar por verificada. Tira o pipe, ou corre-o em bash depois de \`set -o pipefail\` (o cmd.exe não tem pipefail) — o exit code que reportas tem de ser o da própria verificação.`,
+      runHint: (cmd) => `⚠ \`${cmd}\` encaminha a saída para outro comando (pipe): a shell só reporta o exit code do ÚLTIMO comando, por isso uma verificação que falha pode ficar registada como bem-sucedida — tira o pipe, ou começa-o com \`set -o pipefail;\` em bash (--shell bash); o cmd.exe não tem pipefail.`,
+      doctor: (list) => `um comando _Verify:_ encaminha a saída para outro (pipe) — uma verificação que falha pode sair com 0 (um pipeline reporta o código do ÚLTIMO comando): ${list}. Tira o pipe ou usa \`set -o pipefail\` (bash).`,
+      completeNote: (n, cmd) => `Tarefa ${n}: o comando registado encaminha a saída para outro (\`${cmd}\`) — o seu exit 0 é o do ÚLTIMO comando, por isso esta passagem pode esconder uma verificação que falha. Tira o pipe (ou usa \`set -o pipefail\` em bash) e corre-o de novo.`,
+    },
     // @pkg A4 <<<
 
     // @pkg B1 msg-pt >>>
@@ -4447,6 +4460,12 @@ const MSG = {
     // @pkg A3 <<<
 
     // @pkg A4 msg-es >>>
+    verifyPipe: {
+      brief: (cmds) => `⚠ ${cmds.map((c) => "`" + c + "`").join(", ")} ${cmds.length > 1 ? "redirigen" : "redirige"} su salida a otro comando (pipe): el exit code de un pipeline es el de su ÚLTIMO comando, así que una comprobación que falla puede salir con 0 y pasar por verificada. Quita el pipe, o ejecútalo en bash tras \`set -o pipefail\` (cmd.exe no tiene pipefail) — el exit code que informes debe ser el de la propia comprobación.`,
+      runHint: (cmd) => `⚠ \`${cmd}\` redirige su salida a otro comando (pipe): la shell solo informa del exit code del ÚLTIMO comando, así que una comprobación que falla puede registrarse como correcta — quita el pipe, o empieza con \`set -o pipefail;\` en bash (--shell bash); cmd.exe no tiene pipefail.`,
+      doctor: (list) => `un comando _Verify:_ redirige su salida a otro (pipe) — una comprobación que falla puede salir con 0 (un pipeline informa del código de su ÚLTIMO comando): ${list}. Quita el pipe o usa \`set -o pipefail\` (bash).`,
+      completeNote: (n, cmd) => `Tarea ${n}: el comando registrado redirige su salida a otro (\`${cmd}\`) — su exit 0 es el del ÚLTIMO comando, así que este resultado puede ocultar una comprobación que falla. Quita el pipe (o usa \`set -o pipefail\` en bash) y vuelve a ejecutarlo.`,
+    },
     // @pkg A4 <<<
 
     // @pkg B1 msg-es >>>
@@ -4698,6 +4717,7 @@ function renderBrief(d, lang) {
   if (d.implements.length) push("", t.files, ...d.implements.map((f) => "- `" + f + "`"));
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
+  if ((d.verifyPipes || []).length) push("", MSG[normalizeLang(lang)].verifyPipe.brief(d.verifyPipes));
 
   if (d.design.toc.length) {
     push("", t.design, t.designToc(d.design.path) + " " + d.design.toc.join(" · "));

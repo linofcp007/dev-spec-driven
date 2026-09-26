@@ -6441,6 +6441,67 @@ function endRun() {
   // @pkg A3 <<<
 
   // @pkg A4 tests >>>
+  { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const vp = S.verifyPipeMasked;
+    const pipeYes = ["npm test | tee log", "pytest | grep passed", "npm test 2>&1 | tee out.log", "a |& tee x", "a|b", 'node x.js | tee "log file"', "(npm test | tee log)",
+      "npm test && eslint . | tee lint.log"];
+    const pipeNo = ["npm test || exit 1", "a || b", 'grep "a|b" file', "grep 'a|b' file", "echo $(ls | wc -l)", "echo `ls | wc -l`", "set -o pipefail; npm test | tee log",
+      'bash -o pipefail -c "npm test | tee log"', "a \\| b", "a >| out", "npm test", "echo a^|b", 'node -e "process.exit(0)"', 'test "$(git status | wc -l)" = 0', "", null];
+    const vpWrong = pipeYes.filter((c) => !vp(c)).map((c) => "missed: " + c).concat(pipeNo.filter((c) => vp(c)).map((c) => "flagged: " + c));
+    ok(!vpWrong.length, "verifyPipeMasked: an unquoted single | (also |&, inside a subshell) is flagged; ||, a quoted '|' / \"|\", \\| / ^|, >|, a pipe inside $(…) / `…` and a command setting pipefail are not (" + vpWrong.join(" · ") + ")");
+
+    const pp = path.join(tmp, "proj-a4-pipes");
+    S.initProject(pp, ["core"], "en");
+    const pf = S.createFeature(pp, "Pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped check\n  - _Verify: `npm test | tee test.log`_\n" +
+      "- [ ] 2. [US1] Quoted pipe\n  - _Verify: grep \"a|b\" notes.txt_\n- [ ] 3. [US1] Or-chain\n  - _Verify: npm test || exit 1_\n- [ ] 4. [US1] Plain\n  - _Verify: npm test_\n");
+    const b1 = S.taskBrief(pp, "pipes", 1), b2 = S.taskBrief(pp, "pipes", 2), b3 = S.taskBrief(pp, "pipes", 3);
+    const b1w = S.taskBrief(pp, "pipes", 1, { write: true });
+    const verifySec = (md) => (md.split("## Verification (_Verify:_)")[1] || "").split("\n## ")[0];
+    ok(JSON.stringify(b1.verifyPipes) === '["npm test | tee test.log"]' && /`npm test \| tee test\.log` pipes into another command: a pipeline's exit code is its LAST command's/.test(verifySec(b1.brief)) &&
+      /set -o pipefail/.test(verifySec(b1.brief)) && b2.verifyPipes === undefined && b3.verifyPipes === undefined && !/pipes into another command/.test(b2.brief + b3.brief) &&
+      JSON.stringify(b1w.verifyPipes) === '["npm test | tee test.log"]' && /pipes into another command/.test(fs.readFileSync(b1w.paths.brief, "utf8")),
+      "spec_task_brief: a piped _Verify:_ is noted in the brief's Verification section and listed in verifyPipes (write:true too); a quoted '|' and '||' are not (got " + JSON.stringify([b1.verifyPipes, b2.verifyPipes, b3.verifyPipes]) + ")");
+
+    const d1 = S.specDoctor(pp, "pipes");
+    const dPipe = d1.checks.find((c) => c.id === "verify-pipes");
+    const clean = S.createFeature(pp, "No pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(clean.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Plain\n  - _Verify: npm test_\n- [ ] 2. [US1] Quoted\n  - _Verify: grep 'x|y' f_\n");
+    ok(dPipe && dPipe.status === "warn" && /#1 `npm test \| tee test\.log`/.test(dPipe.detail) && !/#2|#3|#4/.test(dPipe.detail) &&
+      !S.specDoctor(pp, "no-pipes").checks.some((c) => c.id === "verify-pipes"),
+      "spec_doctor: a warn check 'verify-pipes' names the task whose _Verify:_ pipes (only #1); a feature without one has no such check (got " + JSON.stringify(dPipe) + ")");
+
+    const c1 = S.completeTask(pp, "pipes", 1, { command: "npm test | tee test.log", exitCode: 0, summary: "12 passing" });
+    const c2 = S.completeTask(pp, "pipes", 2, { command: 'grep "a|b" notes.txt', exitCode: 0 });
+    const c3 = S.completeTask(pp, "pipes", 3, { command: "set -o pipefail; npm test | tee test.log", exitCode: 0 });
+    const c4 = S.completeTask(pp, "pipes", 4, { command: "npm test | tee test.log", exitCode: 1 });
+    ok(c1.ok && c1.pipeMasked === true && c1.verified === true && /Task 1: the recorded command pipes into another one \(`npm test \| tee test\.log`\)/.test(c1.note) &&
+      c2.ok && c2.pipeMasked === undefined && !c2.note && c3.ok && c3.pipeMasked === undefined && c4.ok === false && c4.recorded && c4.pipeMasked === undefined,
+      "spec_complete_task: a passing run whose command pipes → recorded + ticked with pipeMasked: true and a note; a quoted '|', a pipefail command and a failing run are not flagged (got " +
+      JSON.stringify([c1.pipeMasked, c1.note, c2.pipeMasked, c3.pipeMasked, c4.pipeMasked]) + ")");
+
+    // MCP = engine; PT / ES wording.
+    const mb = payload(await call("spec_task_brief", { name: "pipes", number: 1, projectDir: pp }));
+    const md = payload(await call("spec_doctor", { name: "pipes", projectDir: pp }));
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped again\n  - _Verify: pytest | grep passed_\n");
+    const mc = payload(await call("spec_complete_task", { name: "pipes", number: 1, evidence: { command: "pytest | grep passed", exitCode: 0 }, projectDir: pp }));
+    const ptF = S.createFeature(pp, "Tubos", ["core"], "", undefined, "pt");
+    const esF = S.createFeature(pp, "Tuberias", ["core"], "", undefined, "es");
+    for (const f of [ptF, esF]) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] x\n  - _Verify: npm test | tee log_\n");
+    const ptB = S.taskBrief(pp, "tubos", 1), esB = S.taskBrief(pp, "tuberias", 1);
+    const ptD = S.specDoctor(pp, "tubos").checks.find((c) => c.id === "verify-pipes"), esD = S.specDoctor(pp, "tuberias").checks.find((c) => c.id === "verify-pipes");
+    const ptC = S.completeTask(pp, "tubos", 1, { command: "npm test | tee log", exitCode: 0 }), esC = S.completeTask(pp, "tuberias", 1, { command: "npm test | tee log", exitCode: 0 });
+    const keysOf = (l) => Object.keys(S.msg(l).verifyPipe).sort().join();
+    ok(JSON.stringify(mb.verifyPipes) === '["npm test | tee test.log"]' && md.checks.some((c) => c.id === "verify-pipes" && c.status === "warn") && mc.ok && mc.pipeMasked === true &&
+      /encaminha a saída para outro comando \(pipe\)/.test(ptB.brief) && /redirige su salida a otro comando \(pipe\)/.test(esB.brief) &&
+      /um comando _Verify:_ encaminha a saída/.test(ptD.detail) && /un comando _Verify:_ redirige su salida/.test(esD.detail) &&
+      ptC.pipeMasked && /^Tarefa 1: o comando registado encaminha/.test(ptC.note) && esC.pipeMasked && /^Tarea 1: el comando registrado redirige/.test(esC.note) &&
+      keysOf("en") === "brief,completeNote,doctor,runHint" && keysOf("pt") === keysOf("en") && keysOf("es") === keysOf("en") &&
+      S.msg("pt").verifyPipe.runHint("a | b") !== S.msg("en").verifyPipe.runHint("a | b") && /cmd\.exe/.test(S.msg("es").verifyPipe.runHint("a | b")),
+      "MCP spec_task_brief / spec_doctor / spec_complete_task carry verifyPipes / verify-pipes / pipeMasked like the engine; the brief note, doctor detail and complete note are in PT / ES; the verifyPipe messages have the same keys in EN / PT / ES");
+  }
+
   { // A4.1 — stdin closed: the server flushes the replies it already wrote before exiting. On Linux a pipe takes writes
     // asynchronously once its 64 KB buffer is full, and a bare process.exit() dropped the queued tail (a client that sends
     // its requests and closes stdin got 64 KB of ~390 KB). The reader here waits before reading, so the buffer fills.
