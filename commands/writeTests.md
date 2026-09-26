@@ -16,7 +16,10 @@ N red, 0 green, 0 erroring. Then run `trace_check {name, code: true}` (CLI `dev-
 every planned T-ID should be found in the test code (`plannedNotInCode` empty), and no test should carry a T-ID
 no plan has (`inCodeNotInPlan`). Rows whose File column names only a non-code artifact (`load-test.md`,
 `evals/golden.json`) are checked outside test code (`plannedOutsideCode`) — their task's `_Verify:_` run is the
-evidence. Commit `test(<feature>): scaffold failing tests …`.
+evidence. Commit `test(<feature>): scaffold failing tests …`. To keep the red run as evidence (doctor's `red-green`
+check warns about T-IDs made green with no recorded red run), plan a first task in `tasks.md` that names these T-IDs
+and runs them while still red — `_Expect: fail_` with their command as `_Verify:_` — and record its failing run
+before any implementation task (`dev-spec done <feature> <n> --run`) — `references/test-patterns.md`.
 
 **+ai:** Write the deterministic tests (validation, schema, rate limiting, logging, fallback, cost
 circuit breaker) AND implement the runnable eval harness; establish and record the baseline scores.

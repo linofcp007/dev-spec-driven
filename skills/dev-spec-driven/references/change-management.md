@@ -3,7 +3,8 @@
 Read on demand from `SKILL.md`. Specs change: a stakeholder rethinks a rule, implementation reveals a gap, a
 later feature replaces an earlier behaviour, code drifts after the feature shipped. The engine never forbids a
 change — it makes every change **visible, diffable and re-approved**, so an edited spec is never silently shipped
-as if it were the approved one. Inspired by OpenSpec's deltas and BMAD's correct-course, done locally.
+as if it were the approved one. Inspired by OpenSpec's deltas and BMAD's correct-course, done locally. Sections
+11–13 cover the decision log, approvals by role + fast-forward, and the stakeholder export + release notes.
 
 ## 1. Approval history and snapshots
 
@@ -172,3 +173,99 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
    artifact, approves, ticks or deletes; a second apply changes nothing.
 3. **Review** — the critic / converge passes the audit recommends, their findings turned into a proposed action list
    per feature; every change still goes through the gates (`spec_approve`, `spec_impact`, `spec_append_tasks`).
+
+## 11. The decision log — `decisions.md`
+
+Decisions and discoveries made while planning or implementing get lost in chat and in the self-ignored
+`.execution/ledger.md`. `spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?}`
+(CLI `dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects
+US-1.AC-2,T-03,"Data Model"] [--supersedes D-1] [--discovery]`; `/spec-decide`) appends ONE entry to
+`.specs/<feature>/decisions.md` — committed with the spec, created with a localized header when absent:
+
+```markdown
+## D-2 — Keep the old key valid for 24 hours after rotation
+
+- _Kind: decision_
+- _Date: 2026-09-26T10:12:00.000Z_
+- _Affects: US-1.AC-2, T-03, Data Model_
+- _Supersedes: D-1_
+
+**Context:** clients cache keys for up to a day
+
+**Decision:** the rotated key stays valid for 24 hours
+```
+
+— the localized Context / Decision (Discovery for `kind: "discovery"`) / Consequences paragraphs follow the markers.
+
+- **Append-only**, under the feature lock: an entry is never renumbered or rewritten (the file's bytes, BOM and CRLF
+  line ends are kept). To change a decision, record a new one with `_Supersedes: D-n_`.
+- **`affects` is validated** against the feature: an AC ID must be defined in `requirements.md`, a T-ID planned in
+  `test-plan.md`, an EC / NFR / SC ID written in `requirements.md`, anything else must be a section heading of
+  `design.md` (`bug.md` / `design.md` for a bugfix, `spike.md` for a spike). An unknown reference is refused
+  (`unknownAffects`, nothing written); `supersedes` must name entries already in the log.
+- **Where it shows up:** `spec_task_brief` inlines the current entries citing the task's ACs / T-IDs (bounded);
+  the merge summary (`spec_finish`) and the stakeholder export get a Decisions section; `spec_catalog` lists each
+  feature's decisions (superseded ones marked); `trace_check` reports `_Affects:_` references that name nothing any
+  more (`phantomAffects`, warnings); `spec_doctor` warns `decision-affects` (the same phantoms) and
+  **`decision-affects-approved`** — a current decision recorded AFTER the approval of the requirements or the design it
+  names: re-review with `spec_impact`, update the spec and re-approve.
+- A spike logs its go / no-go / pivot decision here too (usually `D-1`).
+
+## 12. Approvals by role, and fast-forward
+
+**Roles (team governance, opt-in).** `spec_init {approvalRoles: {"requirements": ["product"], "design": ["tech",
+"security"], "tasks": ["tech"]}}` (CLI `dev-spec init --roles requirements=product,design=tech+security`; `--roles none`
+or `{}` clears it) stores `roadmap.json → meta.approvalRoles`. A listed phase needs `spec_approve {…, role}` (CLI
+`--role <role>`, one of that phase's roles):
+
+- each sign-off runs the phase's gate (`force` records it forced) and is appended to `approvalHistory` with its role;
+  until every role has signed it waits in `.state.json → signoffs[<phase>][<role>]` (history record `partial`, no
+  snapshot) and the result is `ok` with `approved: null`, `signedOff`, `pending`, `missingRoles`;
+- the phase stays **pending** until then — `spec_doctor`'s approval-gates (`nextGate.missingRoles`), `spec_next_action`
+  ("missing role: security" and the `--role` to sign as), `spec_finish`'s blockers, `ROADMAP.md` and the guard hook all
+  see it that way;
+- the completing sign-off writes `approvals[<phase>].roles` and the snapshot, like a single approval;
+- a sign-off of content that changed since no longer counts: that role signs the current content again;
+- a phase approved before the roles were configured stays approved (by an unknown role); doctor and finish warn and
+  ask each role to re-sign. Without `meta.approvalRoles`, one approval per phase, as before.
+
+**Fast-forward (`/spec-ff`).** `spec_approve {name, through: "tasks"}` (CLI `dev-spec approve <feature> --through
+tasks`) approves the active phases **in order** from the first unapproved one up to `through` — each through its own
+gate, each snapshotted and recorded like a normal approval, flagged `batch: true` (`spec_metrics` counts batch
+approvals). It stops at the first refused gate (`ok: false`, `refused`, `stoppedAt`, `failing`, `checks` — the phases
+before it stay approved: `approved`), at a phase with nothing to approve, or — with roles — at a phase still waiting
+for another role (`ok: true`, `complete: false`). `role` signs each phase, `force` forces each gate (only when the
+user asked). `execution` is never fast-forwarded — it is signed off on its own after `/spec-finish`. `spec_next_action`
+suggests it when every planning artifact up to `tasks` is filled and passes its gate. Only run it after the user
+agreed to approve those phases: a fast-forward is still the human's approval, recorded once per phase.
+
+## 13. Stakeholder export and release notes
+
+**Export (`/spec-export`).** `spec_export {name?, format?, write?}` (CLI `dev-spec export [feature] [--md] [--write]`)
+builds ONE self-contained, offline, printable document for people who don't read markdown folders:
+
+- **a feature**, in its language — summary, stories with their EARS criteria and stable IDs (a superseded criterion
+  struck through, a template one flagged), the other requirements sections, the design (a bugfix: `bug.md`), the test
+  plan, every task with its done / verified status and reason, `decisions.md`, the approvals (who, when, forced,
+  changed since, pending) and the open `[NEEDS CLARIFICATION]` markers;
+- **the project** (no `name`), in the project language — the roadmap summary and backlog, every active feature's
+  requirements digest (a printed page each) and the living catalog when `SPECS.md` exists.
+
+`format` `html` (default: the roadmap's palette, light/dark with a toggle, print rules; every text escaped, links only
+http(s)/mailto, nothing external loaded) or `md`. `write: true` writes `.specs/exports/<feature>.<format>` (the project:
+`project.<format>`) with the AUTO-GENERATED marker; a same-named hand-written file is never overwritten. It is a
+snapshot — regenerate it after the spec changes, never edit it.
+
+**Release notes (`/spec-changelog`).** `spec_changelog {since?, write?}` (CLI `dev-spec changelog [--since <ISO
+date|last|all>] [--write]`) builds release notes from the spec data alone — no model, no git log:
+
+- **Added** — features shipped since `since` (a finish baseline recorded, or the `execution` sign-off approved), each
+  with its summary and its user-story criteria (template ones left out); a feature shipped before `since` is never
+  Added again;
+- **Changed** — criteria superseded (`_Supersedes:_`) by a feature shipped since then, and the change requests
+  (`spec_impact` reopen) recorded since then, with the current text of the criteria a requirements change touched;
+- **Fixed** — bugfixes shipped since then, with the root-cause one-liner from `bug.md` (spikes are never listed).
+
+`since` defaults to `last` — `roadmap.json → meta.changelogAt`, stamped by the last written notes (everything while it
+is unset). `write: true` writes `.specs/RELEASE-NOTES.md` (AUTO-GENERATED; a hand-written one is never overwritten) and
+stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped.

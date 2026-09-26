@@ -1,6 +1,6 @@
 ---
 description: Close a feature locally — verify it's really done, draft the merge summary from the spec, then merge locally or keep the branch (no PRs, no CI). PT - fecha a feature localmente (verifica, resumo do merge a partir da spec). ES - cierra la función en local (verifica, resumen del merge desde la spec).
-argument-hint: "[feature name]"
+argument-hint: "[feature name] [--run]"
 ---
 
 Use the **dev-spec-driven** skill to finish a feature.
@@ -9,14 +9,19 @@ Feature: $ARGUMENTS
 
 1. Run `spec_finish {name, write: true}` (CLI: `dev-spec finish <feature> --write`). If `readyToFinish` is
    false, show the **blockers** and stop — fix those first: failing doctor checks, open tasks, tasks ticked
-   without a passing run (no evidence, only a note on a runnable `_Verify:_`, a failed or stale run), pending
-   approvals, an artifact **changed since its approval** (`/spec-impact`, then re-approve), template
-   **placeholders** left anywhere in the chain, and — for a bugfix — an unwritten root cause. Show the
-   **warnings** too (edge cases / NFRs / success criteria no task or test covers, planned tests no test file
-   names): they don't block, but each one deserves a decision.
+   without a passing run (no evidence, only a note on a runnable `_Verify:_`, a failed or stale run, an
+   `_Expect: fail_` task with no red run), **project checks** (`roadmap.json → meta.checks`) without a passing run
+   since the last tick (`suite-evidence` — record them as in step 2; the same call recomputes the readiness),
+   pending approvals (a role sign-off too), an artifact **changed since its approval** (`/spec-impact`, then
+   re-approve), template **placeholders** left anywhere in the chain, and — for a bugfix — an unwritten root cause. Show the **warnings** too (edge cases / NFRs / success criteria no task or test
+   covers, planned tests no test file names): they don't block, but each one deserves a decision.
 2. **Verify fresh, now** (`references/verification.md`): run the full test suite and every check the
-   report lists for the active tracks (+saas load test and observability, +ai cost and safety, bugfix: the
-   reproduction no longer reproduces). Show the commands and their output. No evidence, no "done".
+   report lists for the active tracks (+saas load test and observability, +ai cost and safety, +sec security scans
+   and the threat model re-checked, +privacy data subject rights and retention, bugfix: the reproduction no longer
+   reproduces). With project checks set, record them: run each configured command and pass the results as
+   `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `dev-spec finish <feature> --run`,
+   which runs and records them. Show the commands and their output. No evidence, no "done" — and no shell to run
+   them? Ask the user to run them and paste the output; never record a run nobody made.
 3. Show the merge title and summary generated from the spec chain
    (`.specs/<feature>/.execution/merge-summary.md`) and ask the user to approve the `execution` phase
    (`spec_approve`) — its gate is this report's blockers, so it is refused while the feature isn't ready (only an
@@ -30,6 +35,8 @@ Feature: $ARGUMENTS
    base branch is a separate step the user must approve.
 5. Clean up: delete `.specs/<feature>/.execution/` once merged (keep `.history/` — it is the spec's change
    history); the roadmap already shows the feature at 100%. Offer `/spec-metrics <feature> --write` for a
-   pre-filled `retro.md`, and `/spec-catalog --write` to refresh `.specs/SPECS.md`.
+   pre-filled `retro.md`, `/spec-catalog --write` to refresh `.specs/SPECS.md`, and — when cutting a release —
+   `/spec-changelog` for release notes. A spike finishes the same way once its decision is written (no evidence or
+   suite gates); then act on its outcome (`/spec-spike`).
 
 Respond in the user's language (EN/PT/ES).

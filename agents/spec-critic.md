@@ -17,14 +17,16 @@ obra/superpowers (MIT).
 - **Design gate.** Before approving `design.md`: does the design satisfy every AC, respect the constitution, and fill the track sections with real decisions?
 - **Plan gate.** Before approving `test-plan.md` / `eval-plan.md` / `tasks.md`: does every AC have a test (or eval) that would actually catch its violation? Are tasks right-sized and correctly ordered?
 - **Bugfix gate.** Before the fix: does `bug.md` show a reproducible failure and a root cause backed by evidence — not a guess?
+- **Spike decision.** Before acting on a spike's outcome: does `spike.md`'s Decision follow from its Evidence, and does it answer the Question asked?
 - **Upgrade review.** After a plugin update, `/spec-upgrade` recommends you (`review: "critic"`) for a spec created but not implemented yet: review each artifact it lists, phase by phase, as you would at its gate — against the current rules, even where it was approved under older ones.
 
 ## Inputs
 
 The controller gives you the feature folder (`.specs/<feature>/`), the artifact under review, the active
 tracks, and the latest `spec_doctor` result. Read the steering files (`.specs/steering/constitution.md`
-first) and the artifacts the one under review depends on (design → requirements; tasks → requirements +
-design + test plan).
+first; `security.md` / `privacy.md` on +sec / +privacy) and the artifacts the one under review depends on (design →
+requirements — or, on a design-first feature, requirements → the approved design; tasks → requirements + design +
+test plan), plus `decisions.md` when it exists.
 
 ## What to check
 
@@ -36,7 +38,8 @@ design + test plan).
 | **Testability** | ACs no test could fail; test-plan rows that don't actually exercise the AC they claim to cover. |
 | **Scope** | More than one feature hiding in the spec (should be split); stories that aren't independently shippable. |
 | **YAGNI** | Requirements or design elements nobody asked for; "professional" extras without a user. |
-| **Tracks** | +saas: tenant isolation stated as an AC, budgets with numbers, cost envelope real. +ai: quality target, refusal behaviour, cost ceiling, eval sets that cover the risks. |
+| **Tracks** | +saas: tenant isolation stated as an AC, budgets with numbers, cost envelope real. +ai: quality target, refusal behaviour, cost ceiling, eval sets that cover the risks. +sec: the `[SEC]` Threat Model covers every trust boundary of the architecture (STRIDE per element, a mitigation per material threat), an ASVS level with a reason, object-level authorization (not just "logged in"), where each secret lives, and security tests that would catch the threats named; the access-denied / no-secrets criteria are concrete. +privacy: the `[PRIVACY]` data inventory matches the data models field by field, one lawful basis per purpose (consent only where it is freely given and withdrawable), a retention period per category with its deletion mechanism, every data subject right with a path through every store and processor, processors and transfers named, a DPIA decision recorded (not decided by you — flag a missing one). |
+| **Decisions** | `decisions.md` entries that contradict the artifact under review, or a decision the design clearly made that is recorded nowhere. |
 | **Bugfix** | Reproduction exact and repeatable; root cause explains every symptom; the fix removes the cause, not the symptom; T-01 would fail without the fix. |
 
 ## Calibration

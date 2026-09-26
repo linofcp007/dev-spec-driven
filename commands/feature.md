@@ -1,14 +1,15 @@
 ---
-description: Manage a feature's lifecycle - archive, restore, rename, or remove (keeps roadmap deps consistent). PT - gere a feature (arquivar/restaurar/renomear/apagar). ES - gestiona la feature (archivar/restaurar/renombrar/eliminar).
-argument-hint: "[archive|restore|rename|remove] [feature name] [new name]"
+description: Manage a feature's lifecycle - archive, restore, rename, remove, or switch its phase order (design-first); roadmap deps stay consistent. PT - gere a feature (arquivar/restaurar/renomear/apagar/ordem das fases). ES - gestiona la feature (archivar/restaurar/renombrar/eliminar/orden de fases).
+argument-hint: "[archive|restore|rename|remove|flow] [feature name] [new name | design-first|requirements-first]"
 ---
 
 Use the **dev-spec-driven** skill to manage a feature's lifecycle.
 
 Args: $ARGUMENTS
 
-Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
-`dev-spec feature <action> <name> [new-name] [--yes]`) with one of:
+Call the `spec_feature` MCP tool `{action, name, newName?, flow?, confirm?}` (CLI
+`dev-spec feature <action> <name> [new-name] [--yes]`, `dev-spec feature flow <name> <design-first|requirements-first>`)
+with one of:
 
 - **archive** — move `.specs/<slug>/` to `.specs/_archive/<slug>/`, out of the active roadmap. Its roadmap entry
   and the `dependsOn` references it prunes are recorded in its `.state.json` (`archived`). **Prefer this** over remove.
@@ -23,6 +24,10 @@ Call the `spec_feature` MCP tool `{action, name, newName?, confirm?}` (CLI
   in a comment or fenced code; an approved requirements.md then shows as changed-since-approval, re-approve it) and
   archived features' archive records (so restore brings their dependencies back). The result lists them
   (`supersedesUpdated`, `archiveRecordsUpdated`, `note`).
+- **flow** — set the feature's phase order: `design-first` (classification → design → requirements → …, for work
+  whose architecture is the input) or `requirements-first` (the default). Stored in `.state.json → flow`; phases
+  already approved stay approved (the note names them) and the pending gates follow the new order at once. A bugfix
+  or a spike is refused — each keeps its own order. See `references/design-first.md`.
 - **remove** — permanently delete the feature's folder. **Destructive**: without `confirm: true` (CLI `--yes`)
   nothing is deleted and the result lists what would be (`needsConfirm`). Show that list to the user and pass
   `confirm: true` only after they confirm (or were explicit) — suggest archive instead.

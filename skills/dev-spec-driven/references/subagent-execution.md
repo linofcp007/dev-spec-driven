@@ -80,8 +80,10 @@ test is not yours to rule on — see "Where autonomy stops".
 ### 1. Brief
 
 `spec_task_brief {name, number: N, write: true}` → the paths plus the task's identifiers (number and
-text, `loop`, `inlineOnly`, its `_Verify:_` command, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
-bugfix `gated`), never the spec text the brief quotes: the brief never enters your context.
+text, `loop`, `inlineOnly`, its `_Verify:_` command — with `verifyPipes` when one pipes and `expect: "fail"` on an
+`_Expect: fail_` task — the project checks `projectChecks`, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
+bugfix `gated`), never the spec text the brief quotes: the brief never enters your context. The brief itself also
+carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs.
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 
@@ -94,7 +96,7 @@ The dispatch contains only:
 3. interfaces/decisions from earlier tasks the brief cannot know, and pointers to ledger rulings or
    parked findings that touch this task's files;
 4. your resolution of any ambiguity you noticed;
-5. the report path (`paths.report`).
+5. the report path (`paths.report`) — the implementer names it in its reply.
 
 Never paste prior-task history or the whole spec into a dispatch. Never dispatch two implementers on
 the same working tree — they conflict. Concurrency is only for the parallel mode below (one worktree
@@ -102,6 +104,15 @@ each). **Batch** several small same-shape `[P]` tasks (the same one-line change 
 dispatch and review them as one unit. Record the implementer's agent ID (fix rounds 1–3 resume it).
 
 ### 3. Handle the status
+
+**The SubagentStop gate (Claude Code).** When a `spec-implementer` stops claiming DONE (or DONE_WITH_CONCERNS) for a
+task whose `_Verify:_` holds a runnable command, the plugin's SubagentStop hook opens the report named in its reply
+(`.specs/<feature>/.execution/task-N-report.md`) and sends the stop back unless the report carries **each
+`_Verify:_` command, verbatim, and an exit code** ("exit 0", "exit code: 1", "código de saída 0"…). BLOCKED / NEEDS_CONTEXT and tasks
+without a runnable `_Verify:_` pass. So an implementer's DONE reaches you only with its evidence written down — still
+read it: the gate checks that the run is reported, not that it passed (a non-zero exit is the controller's to catch:
+`spec_complete_task` refuses it). `dev-spec stop-check --agent spec-implementer --message "<its reply>"` shows the
+gate's decision; `spec_init {stopCheck: false}` turns the Stop and SubagentStop gates off for the project.
 
 - **DONE** → build the review package, dispatch the reviewer.
 - **DONE_WITH_CONCERNS** → read the concerns; correctness/scope concerns get resolved before review,
@@ -201,7 +212,14 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 
 - **+tdd:** the implementer shows RED-for-the-right-reason output before implementing and GREEN after,
   with the full suite (targets green, prior green still green, later tasks' tests still red). The
-  reviewer checks that evidence and that no planned test's expectation changed.
+  reviewer checks that evidence and that no planned test's expectation changed. An `_Expect: fail_` task (it writes
+  a test before its code) is DONE when its `_Verify:_` run **fails** for the right reason — the implementer reports
+  that failing run (command, non-zero exit, the failure) and you record it as the red run; a passing run is refused
+  (`unexpected-pass`).
+- **Project checks** (`roadmap.json → meta.checks`, listed in every brief as `projectChecks`): the brief's definition
+  of done has the implementer run each one and put its command, exit code and output tail in the report — nothing
+  that passed before the task may fail after it; the reviewer checks it. At the end `/spec-finish` needs a passing
+  run of each since the last tick (`spec_finish {evidence}` or `dev-spec finish <f> --run`).
 - **+saas:** tasks with `_Emits metrics:_` must show the metric emitting in the report. The hot-path
   load test and observability validation stay feature-level "done" checks (run them at the end, as in
   inline Phase 6).
@@ -222,9 +240,10 @@ list, ONE scoped re-review, then adjudicate residuals as in the breaker. No seco
 load-bearing findings go to the human.
 
 Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
-fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, template
-placeholders, a bugfix's missing root cause) and non-blocking warnings, the track-gated checks to run fresh
-(full suite, load test, observability, cost/safety), writes a merge summary built from the spec chain to
+fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick, pending
+approvals, artifacts changed since approval, template placeholders, a bugfix's missing root cause) and non-blocking
+warnings, the track-gated checks to run fresh (full suite, load test, observability, cost/safety, security scans,
+data subject rights), writes a merge summary built from the spec chain (with the decision log) to
 `.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
 (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
@@ -285,3 +304,4 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Without it, controllers re-dispatch finished tasks. |
 | "I'll tick the task now and review later" | `tasks.md` `[x]` means reviewed. The roadmap reads it. |
 | "The implementer said the tests pass" | Tick with the evidence from its report (command, exit code, output) — no evidence, no claim. |
+| "The SubagentStop hook let it through, so it passed" | The gate checks that each `_Verify:_` run is reported with an exit code, not that it was 0. Read it. |

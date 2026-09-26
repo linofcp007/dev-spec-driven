@@ -16,6 +16,10 @@ Review against the full chain, gating checks by the feature's active tracks:
   added; new hot paths hit cache (cost).
 - **+ai** — eval delta present in the merge summary / commit; prompt changes live in versioned files (not inline
   strings); PII-to-model reviewed; cost tracking on new model calls.
+- **+sec** — the threat model's mitigations are in the code; authn + object-level authz on every new endpoint (deny
+  by default); no secret, token or stack trace in responses or logs; the abuse-case tests exist and the scans ran.
+- **+privacy** — only the fields the data inventory lists are collected; retention / deletion implemented; export and
+  erasure reach every store the inventory names; no personal data in logs or sent to an unlisted processor.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.
