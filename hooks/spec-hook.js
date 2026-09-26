@@ -12,7 +12,8 @@
  *     moment, with zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES), and one
- *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade.
+ *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade — and one
+ *     line when features' open tasks plan the same files (cross-feature overlap; text reads only).
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
  * `hookSpecificOutput.additionalContext` so Claude sees it as context, not as a user message.
@@ -115,6 +116,15 @@ function handle(raw) {
       try {
         const v = spec.specVersionStatus(pdir);
         if (v && v.behind && m.upgrade) lines.push(m.upgrade.hookLine(v.from));
+      } catch { /* best-effort */ }
+      // @pkg B4 — cross-feature file overlap: ONE line when two active features' open tasks plan the same files (or an active
+      // feature plans files a finished one recorded in its drift baseline). Text reads only — nothing hashed; never throws.
+      try {
+        const ov = spec.featureOverlaps(pdir);
+        if (ov && ov.pairs.length && m.forecast) {
+          const names = ov.pairs.slice(0, 3).map((p) => p.a + (p.kind === "finished" ? " → " : " ↔ ") + p.b).join(", ") + (ov.pairs.length > 3 ? ", …" : "");
+          lines.push(m.forecast.overlap.hookLine(ov.pairs.length, names));
+        }
       } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {

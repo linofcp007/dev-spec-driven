@@ -2122,6 +2122,7 @@ function completeTask(projectDir, name, number, evidence) {
     state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, new Date().toISOString());
     writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   }
+  if (!alreadyDone && !failed) recordTick(f.dir, state, key); // @pkg B4 — when it was ticked (state.ticks[n]; roadmap forecasts), before the tick
   let updated = text;
   if (!alreadyDone && !failed) {
     // Tick the resolved line at its checkbox column (line endings, CRLF included, are kept).
@@ -4616,6 +4617,7 @@ function metrics(projectDir, name, opts = {}) {
     const lng = featureLang(projectDir, f.slug);
     const M = i18n.msg(lng).metrics;
     const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
+    res.velocity = featureVelocity(projectDir, f.slug, opts); // @pkg B4 — points / working day over the forecast window
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
@@ -4646,7 +4648,9 @@ function metrics(projectDir, name, opts = {}) {
   const totals = { features: features.length, tasksDone: sum((m) => m.tasks.done), tasksTotal: sum((m) => m.tasks.total), forcedApprovals: sum((m) => m.forcedApprovals),
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
-  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals };
+  // @pkg B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
+  const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions), (opts.now != null && timeOf(opts.now)) || Date.now());
+  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
 }
 
 // 0.5 → "30m", 5 → "5h", 60 → "2.5d" (same units in EN/PT/ES); null → "—".
@@ -4673,6 +4677,7 @@ function metricsLines(r) {
     out.push(M.changes(r.changeRequests, r.reopenedTasks));
     out.push(r.evidence.runs ? M.evidence(r.evidence.passRate, r.evidence.passing, r.evidence.runs) : M.noRuns);
     out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
+    if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // @pkg B4
     if (r.warning) out.push("  ⚠ " + r.warning);
     if (r.note) out.push(r.note);
     return out;
@@ -4695,6 +4700,7 @@ function metricsLines(r) {
     out.push(M.medianLeads([["requirements", reqLead], ["design", desLead], ["tasks", taskLead]].filter(([, s]) => s.n).map(([ph, s]) => `${M.phase[ph]} ${fmtHours(s.median)}`).join(" · ")));
   }
   out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
+  if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // @pkg B4
   return out;
 }
 
@@ -6627,6 +6633,10 @@ function specDoctor(projectDir, name, opts = {}) {
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
     .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
   if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
+  // @pkg B4 — cross-feature file overlap (featureOverlaps): this feature's open tasks plan files another active feature's open
+  // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
+  const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
+  if (overlapPairs.length) add("cross-feature-overlap", "warn", overlapDoctorDetail(overlapPairs, slug, lng));
 
   // Brownfield: an integration plan that is still the template (only when the feature has one).
   const planFile = path.join(dir, "integration-plan.md");
@@ -7008,9 +7018,9 @@ function activeDesign(design, tracks) {
   return drop.size ? design.split(/\r?\n/).filter((_, i) => !drop.has(i)).join("\n") : design;
 }
 
-// Shared computation for both renderers.
-function roadmapData(projectDir) {
-  const rmv = roadmap(projectDir);
+// Shared computation for both renderers. opts.now: "today" for the forecasts (tests).
+function roadmapData(projectDir, opts = {}) {
+  const rmv = roadmapExtras(projectDir, roadmap(projectDir), opts); // + velocity, each feature's forecast, overlaps
   const root = specsRoot(projectDir);
   let tasksDone = 0;
   let tasksTotal = 0;
@@ -7043,7 +7053,8 @@ function roadmapData(projectDir) {
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced };
+    const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
+    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -7064,6 +7075,7 @@ function buildAttention(rows, t, lang) {
     // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
     // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
     if (r.unverified) a.push({ name: r.f.name, msg: `${r.unverified} ${t.unverified}: ${unverifiedLabel({ unverifiedDetail: r.unverifiedDetail || [] }, lang)}` });
+    for (const p of r.overlaps || []) a.push({ name: r.f.name, msg: overlapAttention(p, lang) }); // cross-feature file overlap
   });
   return a;
 }
@@ -7095,6 +7107,7 @@ function renderRoadmapMd(projectDir, lang, data) {
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
+  if (rows.length) md += `_${velocityText(rmv.velocity, lang)}_\n\n`; // forecasts: the project velocity (or "not enough data")
   md += `${t.legend}: ✅ ${t.done} · 🟡 ${t.inprogress} · ⛔ ${t.blocked} · 📋 ${t.planned} · ⬜ ${t.notstarted}\n`;
   if (rmv.cycle) md += `\n> ⚠ **${t.cycle}:** ${rmv.cycle.join(" → ")}\n`;
 
@@ -7106,8 +7119,10 @@ function renderRoadmapMd(projectDir, lang, data) {
   md += `\n## ${t.features}\n\n`;
   if (!rows.length) md += `_${t.none}_\n`;
   else {
-    md += `| | ${t.colFeature} | ${t.colTracks} | ${t.colPhase} | % | ${t.colTasks} | ${t.colDeps} | ${t.colNext} |\n|---|---|---|---|---|---|---|---|\n`;
-    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](./${r.f.name}/requirements.md) | ${r.f.tracks} | ${phaseName(r.f.phase)} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} |\n`;
+    const F = i18n.msg(lang).forecast;
+    md += `| | ${t.colFeature} | ${t.colTracks} | ${t.colPhase} | % | ${t.colTasks} | ${t.colDeps} | ${t.colNext} | ${F.colEta} |\n|---|---|---|---|---|---|---|---|---|\n`;
+    for (const r of rows) md += `| ${icon[r.state]} | [${r.f.name}](./${r.f.name}/requirements.md) | ${r.f.tracks} | ${phaseName(r.f.phase)} | ${r.f.percent}% | ${r.done}/${r.total} | ${depsCell(r.f)} | ${nextCell(r)} | ${etaText(r.f.forecast, lang) || "—"} |\n`;
+    if (rows.some((r) => r.f.forecast && r.f.forecast.eta)) md += `\n${F.etaNote(Math.round(FORECAST_SPREAD * 100))}\n`;
   }
 
   md += `\n## ${t.deps}\n\n`;
@@ -7145,9 +7160,12 @@ function renderRoadmapHtml(projectDir, lang, data) {
         `<td class="pct"><span class="bar"><span style="width:${r.f.percent}%"></span></span>${r.f.percent}%</td>` +
         `<td>${r.done}/${r.total}</td>` +
         `<td>${r.f.dependsOn.length ? r.f.dependsOn.map((d) => `<span class="${r.f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ") : "—"}</td>` +
-        `<td class="next">${nextTxt(r)}</td></tr>`
+        `<td class="next">${nextTxt(r)}</td>` +
+        `<td class="eta">${htmlEsc(etaText(r.f.forecast, lang) || "—")}</td></tr>`
     )
     .join("\n");
+  const F = i18n.msg(lang).forecast;
+  const anyEta = rows.some((r) => r.f.forecast && r.f.forecast.eta);
 
   const depList = rmv.features.filter((f) => f.dependsOn.length).map((f) => `<li><b>${htmlEsc(f.name)}</b> ← ${f.dependsOn.map((d) => `<span class="${f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ")}</li>`).join("\n");
   const attList = attention.map((a) => `<li><b>${htmlEsc(a.name)}</b> — ${htmlEsc(a.msg)}</li>`).join("\n");
@@ -7188,7 +7206,7 @@ table{width:100%;border-collapse:collapse;font-size:.9rem;background:var(--bg2);
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border)} th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
 tr:last-child td{border-bottom:none} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
 .pct{white-space:nowrap} .pct .bar{display:inline-block;width:54px;height:6px;border-radius:999px;background:var(--bg3);vertical-align:middle;margin-right:7px;overflow:hidden}
-.pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)}
+.pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)} .eta{white-space:nowrap}
 .met{color:var(--c-done)} .unmet{color:var(--c-block)}
 ul{list-style:none;padding:0;margin:0} li{padding:5px 0;border-bottom:1px solid var(--border)} li:last-child{border:none}
 footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid var(--border);padding-top:12px}
@@ -7204,6 +7222,7 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
 <div class="prog">${t.progress}: ${rmv.overallPercent}%</div>
 <div class="pbar"><span style="width:${rmv.overallPercent}%"></span></div>
 <div class="sub">${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}</div>
+${rows.length ? `<div class="sub">${htmlEsc(velocityText(rmv.velocity, lang))}</div>` : ""}
 <div class="legend">
   <span><span class="dot" style="background:var(--c-done)"></span>${t.done}</span>
   <span><span class="dot" style="background:var(--c-prog)"></span>${t.inprogress}</span>
@@ -7217,7 +7236,7 @@ ${rmv.cycle ? `<p class="unmet">⚠ ${t.cycle}: ${htmlEsc(rmv.cycle.join(" → "
 ${!rmv.features.length ? `<p class="sub">${t.noFeatures}</p>` : !nextUp.length ? `<p class="sub">${rmv.complete === rmv.total ? t.allDone : t.nothingUnblocked}</p>` : `<div class="cards">${nextCards}</div>`}
 
 <h2>${t.features}</h2>
-${rows.length ? `<table><thead><tr><th></th><th>${t.colFeature}</th><th>${t.colTracks}</th><th>${t.colPhase}</th><th>%</th><th>${t.colTasks}</th><th>${t.colDeps}</th><th>${t.colNext}</th></tr></thead><tbody>${featRows}</tbody></table>` : `<p class="sub">${htmlEsc(t.none)}</p>`}
+${rows.length ? `<table><thead><tr><th></th><th>${t.colFeature}</th><th>${t.colTracks}</th><th>${t.colPhase}</th><th>%</th><th>${t.colTasks}</th><th>${t.colDeps}</th><th>${t.colNext}</th><th>${htmlEsc(F.colEta)}</th></tr></thead><tbody>${featRows}</tbody></table>` : `<p class="sub">${htmlEsc(t.none)}</p>`}${anyEta ? `\n<p class="sub">${htmlEsc(F.etaNote(Math.round(FORECAST_SPREAD * 100)))}</p>` : ""}
 
 <h2>${t.deps}</h2>
 ${depList ? `<ul>${depList}</ul>` : `<p class="sub">${t.noDeps}</p>`}
@@ -7331,7 +7350,7 @@ function roadmapReport(projectDir, opts = {}) {
   const warnings = [];
   let data = null; // one roadmap computation for the files and the view (writing ROADMAP.* changes no feature)
   if (write) {
-    data = roadmapData(projectDir);
+    data = roadmapData(projectDir, { now: opts.now });
     const m = writeRoadmapMd(projectDir, opts.lang, data);
     if (m.ok) wrote.push(m.file); else errors.push(m.error);
     if (opts.html) { // independent files: a refused ROADMAP.md is an error, a skipped hand-written ROADMAP.html a warning
@@ -7339,7 +7358,7 @@ function roadmapReport(projectDir, opts = {}) {
       if (h.ok) wrote.push(h.file); else warnings.push(h.error);
     }
   }
-  const rm = data ? data.rmv : roadmap(projectDir);
+  const rm = data ? data.rmv : roadmapExtras(projectDir, roadmap(projectDir), opts); // forecasts + overlaps (roadmapData attaches them too)
   if (write) rm.wrote = wrote;
   if (warnings.length) rm.warnings = warnings;
   if (errors.length) {
@@ -7349,6 +7368,350 @@ function roadmapReport(projectDir, opts = {}) {
   }
   return rm;
 }
+
+// @pkg B4 forecasts + cross-feature overlap >>>
+// ---------------------------------------------------------------------------
+// Roadmap forecasts (1.14). A task may carry `_Size: XS|S|M|L|XL_` (an English-stable marker, like _Verify:_) worth
+// XS=1 S=2 M=3 L=5 XL=8 points; an unsized task counts as its feature's median sized task (M when none is sized). When a
+// task was ticked is recorded by spec_complete_task (state.ticks[n] = ISO — recordTick); a task ticked before 1.14 falls
+// back to its evidence (the first passing run, else the record's time); a tick made by hand has no time and is not counted.
+// Velocity = points completed per WORKING day (Mon–Fri, UTC days) over the last FORECAST_WINDOW_DAYS calendar days,
+// counted from the day of the first completion in that window through today — project-wide, and per feature once the
+// feature has FORECAST_MIN_TASKS completions of its own in the window. A planned feature's ETA = its open points ÷ that
+// velocity, in working days from today — or from the working day after the ETA of each unfinished dependency — with a
+// ±FORECAST_SPREAD range (low/high chain off the dependencies' low/high). Fewer than FORECAST_MIN_TASKS completions in the
+// window: no ETA ("not enough data"). Pure reads of tasks.md + .state.json.
+// ---------------------------------------------------------------------------
+const SIZE_POINTS = Object.freeze({ XS: 1, S: 2, M: 3, L: 5, XL: 8 });
+const RE_SIZE_MARKER = /_Size:\s*`?(XS|S|M|L|XL)`?\s*_(?=\s|$|[.,;:)\]])/i;
+const FORECAST_WINDOW_DAYS = 28;
+const FORECAST_MIN_TASKS = 3;
+const FORECAST_SPREAD = 0.25;
+const FC_DAY_MS = 24 * 60 * 60 * 1000;
+// A task's `_Size:_` (its line or a sub-line, never fenced code) → "XS" | "S" | "M" | "L" | "XL", or null (unsized).
+function taskSize(block) {
+  for (const line of taskProse(block)) {
+    const m = RE_SIZE_MARKER.exec(line);
+    if (m) return m[1].toUpperCase();
+  }
+  return null;
+}
+// completeTask, right before it ticks a task: when (state.ticks[n] = ISO), written with the call's own state (its evidence
+// included). A `ticks` that is not an object (a hand edit) is left as it is — never "repaired" — and nothing is recorded.
+function recordTick(dir, state, key) {
+  if (state.ticks !== undefined && !isRecord(state.ticks)) return;
+  state.ticks = { ...(state.ticks || {}), [key]: new Date().toISOString() };
+  writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
+}
+// When a DONE task was completed (ms), or null: its tick time, else its own evidence record's first passing run (a
+// re-check later on is not the completion), else the record's time.
+function taskCompletedAt(state, block, dup) {
+  const t = isRecord(state.ticks) ? timeOf(state.ticks[String(block.number)]) : null;
+  if (t != null) return t;
+  const rec = ownRecord(isRecord(state.evidence) ? state.evidence[String(block.number)] : undefined, block, dup);
+  if (!isRecord(rec)) return null;
+  const passes = (Array.isArray(rec.history) ? rec.history : []).filter((h) => isRecord(h) && h.command && Number(h.exitCode) === 0)
+    .map((h) => timeOf(h.at)).filter((x) => x != null);
+  if (passes.length) return Math.min(...passes);
+  const at = timeOf(rec.at);
+  return at != null ? at : timeOf(rec.noteAt);
+}
+const fcDay = (t) => Math.floor(t / FC_DAY_MS) * FC_DAY_MS; // the UTC day a time falls on
+const fcWeekend = (d) => { const w = new Date(d).getUTCDay(); return w === 0 || w === 6; };
+const fcIso = (d) => new Date(d).toISOString().slice(0, 10);
+function fcWorkingDays(from, to) { // working days in [from, to], both UTC days
+  let n = 0;
+  for (let d = from; d <= to; d += FC_DAY_MS) if (!fcWeekend(d)) n++;
+  return n;
+}
+function fcAddWorkingDays(start, n) { // the n-th working day, `start` (when it is one) being the first
+  let d = start;
+  while (fcWeekend(d)) d += FC_DAY_MS;
+  for (let k = 1; k < Math.min(n, 20000); k++) {
+    d += FC_DAY_MS;
+    while (fcWeekend(d)) d += FC_DAY_MS;
+  }
+  return d;
+}
+// Completions [{ t, points }] → the velocity over the window ending `now`. pointsPerDay is given from the first completion
+// on; `enough` says whether forecasts may use it (FORECAST_MIN_TASKS completions in the window).
+function velocityOf(completions, now) {
+  const from = now - FORECAST_WINDOW_DAYS * FC_DAY_MS;
+  const win = completions.filter((c) => c.t > from && c.t <= now);
+  const points = round2(win.reduce((s, c) => s + c.points, 0));
+  const v = { windowDays: FORECAST_WINDOW_DAYS, minTasks: FORECAST_MIN_TASKS, completed: win.length, points, since: null, workingDays: null, pointsPerDay: null, enough: win.length >= FORECAST_MIN_TASKS };
+  if (win.length) {
+    const first = fcDay(Math.min(...win.map((c) => c.t)));
+    v.since = fcIso(first);
+    v.workingDays = Math.max(1, fcWorkingDays(first, fcDay(now)));
+    v.pointsPerDay = round2(points / v.workingDays);
+  }
+  return v;
+}
+// One feature's forecast input: its completions, open points, open / unsized task counts (active tasks only).
+function forecastInput(projectDir, name) {
+  const dir = path.join(specsRoot(projectDir), name);
+  const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
+  const st = readJson(statePath(dir)).data;
+  const state = isObj(st) ? st : {};
+  const med = stats(blocks.map(taskSize).filter(Boolean).map((s) => SIZE_POINTS[s])).median;
+  const dflt = med != null ? med : SIZE_POINTS.M;
+  const pts = (b) => { const s = taskSize(b); return s ? SIZE_POINTS[s] : dflt; };
+  const dups = new Set(duplicateTaskNumbers(blocks));
+  const completions = [];
+  for (const b of blocks) {
+    if (!b.done) continue;
+    const t = taskCompletedAt(state, b, dups.has(b.number));
+    if (t != null) completions.push({ t, points: pts(b) });
+  }
+  const open = blocks.filter((b) => !b.done);
+  return { completions, remaining: round2(open.reduce((s, b) => s + pts(b), 0)), open: open.length, unsized: open.filter((b) => !taskSize(b)).length };
+}
+// feats: roadmap() features ({ name, phase, percent, unmetDeps }). opts.now (ms / ISO) fixes "today" (tests); opts.cycle:
+// roadmap()'s cycle (its features get no ETA). → { velocity, byFeature: { name → forecast } } — forecast: { eta, range:
+// [low, high], workingDays, remainingPoints, openTasks, unsizedTasks, pointsPerDay, velocity: "feature" | "project", after? }
+// or { eta: null, reason: "done" | "no-tasks" | "not-enough-data" | "dependency" | "cycle", … }.
+function forecastData(projectDir, feats, opts = {}) {
+  const now = (opts.now != null && timeOf(opts.now)) || Date.now();
+  const today = fcDay(now);
+  const input = Object.create(null);
+  const feat = Object.create(null);
+  for (const f of feats) { feat[f.name] = f; input[f.name] = forecastInput(projectDir, f.name); }
+  const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions), now);
+  const inCycle = new Set(Array.isArray(opts.cycle) ? opts.cycle : []);
+  const out = Object.create(null);
+  const days = new Map(); // name → { eta, low, high } (UTC day ms) for the dependents' start
+  const visiting = new Set();
+  const solve = (name) => {
+    if (out[name]) return out[name];
+    const f = feat[name];
+    if (!f) return null; // a dependency that is no feature (a stale roadmap.json entry): never an ETA
+    if (visiting.has(name) || inCycle.has(name)) return (out[name] = { eta: null, reason: "cycle" });
+    visiting.add(name);
+    const res = forecastOne(f);
+    visiting.delete(name);
+    return (out[name] = res);
+  };
+  const forecastOne = (f) => {
+    if (f.percent === 100) return { eta: null, reason: "done" };
+    const x = input[f.name];
+    if (!(f.phase === "tasks-ready" || f.phase === "executing") || !x.open) return { eta: null, reason: "no-tasks" };
+    const base = { remainingPoints: x.remaining, openTasks: x.open, unsizedTasks: x.unsized };
+    const fv = velocityOf(x.completions, now);
+    const v = fv.enough ? fv : velocity.enough ? velocity : null;
+    if (!v) return { eta: null, reason: "not-enough-data", ...base };
+    const unmet = Array.isArray(f.unmetDeps) ? f.unmetDeps : [];
+    let start = today, lowStart = today, highStart = today;
+    const waiting = [];
+    for (const d of unmet) {
+      const df = solve(d);
+      const dd = df && df.eta ? days.get(d) : null;
+      if (!dd) { waiting.push(d); continue; }
+      start = Math.max(start, dd.eta + FC_DAY_MS);
+      lowStart = Math.max(lowStart, dd.low + FC_DAY_MS);
+      highStart = Math.max(highStart, dd.high + FC_DAY_MS);
+    }
+    if (waiting.length) return { eta: null, reason: "dependency", after: waiting, ...base };
+    const need = x.remaining / v.pointsPerDay;
+    const at = (from, d) => fcAddWorkingDays(from, Math.max(1, Math.ceil(d - 1e-9)));
+    const dd = { eta: at(start, need), low: at(lowStart, need * (1 - FORECAST_SPREAD)), high: at(highStart, need * (1 + FORECAST_SPREAD)) };
+    days.set(f.name, dd);
+    const res = { eta: fcIso(dd.eta), range: [fcIso(dd.low), fcIso(dd.high)], workingDays: round1(need), ...base, pointsPerDay: v.pointsPerDay, velocity: v === fv ? "feature" : "project" };
+    if (unmet.length) res.after = unmet.slice();
+    return res;
+  };
+  for (const f of feats) solve(f.name);
+  return { velocity, byFeature: out };
+}
+// A feature's own velocity (spec_metrics).
+function featureVelocity(projectDir, name, opts = {}) {
+  return velocityOf(forecastInput(projectDir, name).completions, (opts.now != null && timeOf(opts.now)) || Date.now());
+}
+// spec_roadmap / ROADMAP.* extras on a roadmap() result: `velocity` (project), each feature's `forecast`, and `overlaps`.
+function roadmapExtras(projectDir, rmv, opts = {}) {
+  const fc = forecastData(projectDir, rmv.features, { now: opts.now, cycle: rmv.cycle });
+  rmv.velocity = fc.velocity;
+  for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
+  const ov = featureOverlaps(projectDir, rmv.features);
+  rmv.overlaps = ov.pairs;
+  if (ov.truncated) rmv.overlapsTruncated = true;
+  return rmv;
+}
+// "2026-10-05 (10-03…10-08)" — the range's year dropped when it is the ETA's; the ETA alone when the range is that one day.
+// null without an ETA.
+function etaText(fc, lang, cli) {
+  if (!fc || !fc.eta) return null;
+  const F = i18n.msg(lang).forecast;
+  const short = (d) => (d.slice(0, 4) === fc.eta.slice(0, 4) ? d.slice(5) : d);
+  const [low, high] = Array.isArray(fc.range) ? fc.range : [fc.eta, fc.eta];
+  return (cli ? F.cliEta : F.etaCell)(fc.eta, low === high ? null : short(low), low === high ? null : short(high));
+}
+// The velocity line (ROADMAP.*, CLI): the rate, or "not enough data" with the count so far.
+function velocityText(v, lang) {
+  const F = i18n.msg(lang).forecast;
+  return v && v.enough ? F.velocity(v) : F.notEnough(v || velocityOf([], Date.now()));
+}
+// `dev-spec roadmap`'s lines after the features: the velocity once some task was completed in the window (a project that
+// has not started prints nothing new), the ETA rule when an ETA is shown, and the cross-feature overlaps.
+function roadmapTailLines(r, lang) {
+  const F = i18n.msg(lang).forecast;
+  const out = [];
+  if (r.velocity && r.velocity.completed > 0) out.push(velocityText(r.velocity, lang));
+  if ((r.features || []).some((f) => f.forecast && f.forecast.eta)) out.push(F.etaNote(Math.round(FORECAST_SPREAD * 100)));
+  const ov = r.overlaps || [];
+  if (ov.length) {
+    out.push(F.overlap.cliHead(ov.length));
+    for (const p of ov) out.push((p.kind === "finished" ? F.overlap.cliFinished : F.overlap.cliActive)(p.a, p.b, overlapFiles(p, lang)));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-feature file overlap (1.14). Two ACTIVE features whose OPEN tasks plan the same files (_Implements:_, compared as
+// implementsKey — anchors, ./ and case where the file system folds it dropped; a folder covers every file under it, as in
+// next --batch; a glob covers what it matches and its literal folder), or an active feature planning a file a FINISHED
+// feature recorded in its drift baseline (state.finished.files): they land on the same files at merge time and one of
+// them drifts silently. Not an overlap: two active features already ordered by a dependency (either way, transitively),
+// or either one declaring `_Supersedes:_` of the other's criteria (a finished one: the active one declaring it). Bounded:
+// OVERLAP_MAX_KEYS entries per feature, OVERLAP_MAX_GLOB_CHECKS glob comparisons, OVERLAP_MAX_PAIRS pairs listed.
+// Text reads only — nothing is hashed (the SessionStart hook runs it).
+// ---------------------------------------------------------------------------
+const OVERLAP_MAX_KEYS = 500;
+const OVERLAP_MAX_GLOB_CHECKS = 200000;
+const OVERLAP_MAX_PAIRS = 50;
+const OVERLAP_FILES_SHOWN = 5;
+// feats: roadmap() features ({ name, phase, dependsOn }; default: roadmap(projectDir)'s). opts.only: the pairs one feature
+// is part of (an active pair either way; a finished pair on its active side). → { pairs: [{ a, b, kind: "active" |
+// "finished", files: [rel …], count }], truncated } — a: the active feature (roadmap order first); b: the other one.
+function featureOverlaps(projectDir, feats, opts = {}) {
+  if (!Array.isArray(feats)) feats = roadmap(projectDir).features;
+  const root = specsRoot(projectDir);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  // A project path — not a [placeholder], a "TBD" / "n/a" / "none" / "-" stand-in, the project root or a path leaving it.
+  const okKey = (k) => !!k && k !== "." && !/^\[.*\]$/.test(k) && !/^(?:tbd|todo|n\/?a|none|-+|…|\.{3})$/i.test(k) && !k.startsWith("/") && !/^[A-Za-z]:/.test(k) && !k.split("/").includes("..");
+  let truncated = false;
+  const srcs = [];
+  feats.forEach((f, idx) => {
+    const dir = path.join(root, f.name);
+    const s = { idx, name: f.name, kind: f.phase === "complete" ? "finished" : "active", lit: [], globs: [] };
+    const seen = new Set();
+    const push = (rel, glob) => {
+      const key = fold(rel);
+      if (!okKey(key) || seen.has(key)) return;
+      if (seen.size >= OVERLAP_MAX_KEYS) { truncated = true; return; }
+      seen.add(key);
+      (glob ? s.globs : s.lit).push({ key, rel, glob });
+    };
+    if (s.kind === "finished") { // complete: only its drift baseline counts (none recorded → nothing to collide with)
+      const st = readJson(statePath(dir)).data;
+      if (isObj(st) && isObj(st.finished) && isObj(st.finished.files)) for (const rel of Object.keys(st.finished.files)) push(String(rel).replace(/\\/g, "/"), false);
+    } else {
+      for (const b of taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "")) {
+        if (b.done) continue;
+        for (const ref of taskMarkers(b).implements) { const rel = implementsRel(ref); push(rel, isImplementsGlob(rel)); }
+      }
+    }
+    if (s.lit.length || s.globs.length) srcs.push(s);
+  });
+  const pairs = new Map();
+  const hit = (s1, e1, s2, e2) => {
+    if (s1 === s2 || (s1.kind === "finished" && s2.kind === "finished")) return;
+    let [a, ea, b, eb] = [s1, e1, s2, e2];
+    if (a.kind === "finished" || (b.kind === "active" && b.idx < a.idx)) [a, ea, b, eb] = [b, eb, a, ea];
+    const k = a.name + "\u0000" + b.name;
+    if (!pairs.has(k)) pairs.set(k, { a, b, files: new Map() });
+    const shown = eb.glob || (!ea.glob && ea.rel.length >= eb.rel.length) ? ea : eb; // the literal, more specific path
+    pairs.get(k).files.set(shown.key, shown.rel);
+  };
+  // Literal paths: the same key, or one a folder of the other — every key looks itself and its folders up.
+  const index = new Map();
+  for (const s of srcs) for (const e of s.lit) { if (!index.has(e.key)) index.set(e.key, []); index.get(e.key).push({ s, e }); }
+  for (const s of srcs) {
+    for (const e of s.lit) {
+      const parts = e.key.split("/");
+      for (let i = parts.length; i >= 1; i--) for (const o of index.get(parts.slice(0, i).join("/")) || []) hit(s, e, o.s, o.e);
+    }
+  }
+  // Globs (active features only): a literal path it matches or a folder holding its literal part; another glob when either
+  // matches the other's pattern.
+  for (const s of srcs) {
+    for (const g of s.globs) {
+      g.match = globMatcher(g.key);
+      const parts = g.key.split("/");
+      const litParts = [];
+      for (let i = 0; i < parts.length - 1 && !/[*?{]/.test(parts[i]); i++) litParts.push(parts[i]);
+      g.base = litParts.join("/"); // the glob's literal folders ("src/api" of "src/api/**/*.js")
+    }
+  }
+  let checks = 0;
+  outer: for (const s of srcs) {
+    for (const g of s.globs) {
+      for (const o of srcs) {
+        if (o === s) continue;
+        for (const e of o.lit) {
+          if (++checks > OVERLAP_MAX_GLOB_CHECKS) { truncated = true; break outer; }
+          if (g.match(e.key) || (g.base && (g.base === e.key || g.base.startsWith(e.key + "/")))) hit(s, g, o, e);
+        }
+        for (const e of o.globs) {
+          if (++checks > OVERLAP_MAX_GLOB_CHECKS) { truncated = true; break outer; }
+          if (e.key === g.key || g.match(e.key) || e.match(g.key)) hit(s, g, o, e);
+        }
+      }
+    }
+  }
+  const depsOf = Object.create(null);
+  for (const f of feats) depsOf[f.name] = Array.isArray(f.dependsOn) ? f.dependsOn : [];
+  const reaches = (from, to) => {
+    const seen = new Set();
+    const stack = [...(depsOf[from] || [])];
+    while (stack.length) {
+      const n = stack.pop();
+      if (n === to) return true;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      stack.push(...(depsOf[n] || []));
+    }
+    return false;
+  };
+  const supCache = new Map();
+  const supersedes = (s, other) => { // does s declare _Supersedes:_ of one of other's criteria?
+    if (!supCache.has(s.name)) {
+      const dir = path.join(root, s.name);
+      let set = new Set();
+      try { set = new Set(supersedesTrace(projectDir, dir, readIfExists(path.join(dir, "requirements.md")) || "").supersedes.map((v) => v.feature)); } catch { /* unreadable: none */ }
+      supCache.set(s.name, set);
+    }
+    return supCache.get(s.name).has(other.name);
+  };
+  let list = [...pairs.values()]
+    .filter(({ a, b }) => (b.kind === "finished" ? !supersedes(a, b) : !(reaches(a.name, b.name) || reaches(b.name, a.name) || supersedes(a, b) || supersedes(b, a))))
+    .sort((x, y) => x.a.idx - y.a.idx || x.b.idx - y.b.idx)
+    .map(({ a, b, files }) => {
+      const all = [...files.values()].sort();
+      return { a: a.name, b: b.name, kind: b.kind, files: all.slice(0, OVERLAP_FILES_SHOWN), count: all.length };
+    });
+  if (opts.only) list = list.filter((p) => p.a === opts.only || (p.kind === "active" && p.b === opts.only));
+  if (list.length > OVERLAP_MAX_PAIRS) { list = list.slice(0, OVERLAP_MAX_PAIRS); truncated = true; }
+  return { pairs: list, truncated };
+}
+// "src/a.js, src/lib, +3 more" — a pair's files as the messages list them.
+function overlapFiles(p, lang) {
+  const O = i18n.msg(lang).forecast.overlap;
+  return p.files.join(", ") + (p.count > p.files.length ? ", " + O.more(p.count - p.files.length) : "");
+}
+// ROADMAP.* "needs attention": one line per pair, on its active side (a), naming the other feature.
+function overlapAttention(p, lang) {
+  const O = i18n.msg(lang).forecast.overlap;
+  return (p.kind === "finished" ? O.attentionFinished : O.attentionActive)(p.b, overlapFiles(p, lang));
+}
+// spec_doctor's cross-feature-overlap detail for `slug` (featureOverlaps {only: slug}).
+function overlapDoctorDetail(pairs, slug, lang) {
+  const O = i18n.msg(lang).forecast.overlap;
+  const act = pairs.filter((p) => p.kind === "active").map((p) => `${p.a === slug ? p.b : p.a} (${overlapFiles(p, lang)})`);
+  const fin = pairs.filter((p) => p.kind === "finished").map((p) => `${p.b} (${overlapFiles(p, lang)})`);
+  return [act.length ? O.doctorActive(act.join("; "), slug) : null, fin.length ? O.doctorFinished(fin.join("; "), slug) : null].filter(Boolean).join(" · ");
+}
+// @pkg B4 <<<
 
 // ---------------------------------------------------------------------------
 // Living catalog (.specs/SPECS.md) · _Supersedes:_ · restore · drift since finish
@@ -10114,6 +10477,13 @@ module.exports = {
   // @pkg B3 <<<
 
   // @pkg B4 exports >>>
+  roadmapData, // the ROADMAP.* computation (+ opts.now for the forecasts)
+  forecastData, // velocity + per-feature ETA (roadmap() features; opts.now fixes "today")
+  featureOverlaps, // cross-feature file overlap pairs (roadmap attention, doctor, SessionStart)
+  taskSize, // a task block's _Size:_ (XS|S|M|L|XL) or null
+  SIZE_POINTS, // XS=1 S=2 M=3 L=5 XL=8
+  etaText, // "2026-10-05 (10-03…10-08)" for a forecast (CLI: cli=true)
+  roadmapTailLines, // `dev-spec roadmap`'s velocity / ETA-rule / overlap lines
   // @pkg B4 <<<
 
   // @pkg B5 exports >>>

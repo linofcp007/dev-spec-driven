@@ -3101,6 +3101,28 @@ const MSG = {
     // @pkg B3 <<<
 
     // @pkg B4 msg-en >>>
+    // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (spec.js: forecastData, featureOverlaps).
+    forecast: {
+      colEta: "ETA",
+      etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
+      cliEta: (eta, low, high) => `ETA ${eta}${low ? ` (${low}…${high})` : ""}`,
+      velocity: (v) => `Velocity: ${v.pointsPerDay} point(s)/working day — ${v.completed} task(s), ${v.points} point(s) completed since ${v.since} (last ${v.windowDays} days)`,
+      notEnough: (v) => `Velocity: not enough data yet — ${v.completed} of the ${v.minTasks} completed tasks a forecast needs in the last ${v.windowDays} days`,
+      metricsVelocity: (v) => (v.completed ? `  velocity: ${v.pointsPerDay} point(s)/working day (${v.completed} task(s), ${v.points} point(s) since ${v.since}, last ${v.windowDays} days)${v.enough ? "" : ` — not enough data for a forecast yet (${v.minTasks} needed)`}`
+        : `  velocity: no completed task in the last ${v.windowDays} days`),
+      etaNote: (pct) => `ETA = remaining points ÷ velocity, in working days (±${pct}%) · \`_Size: XS|S|M|L|XL_\` on a task = 1/2/3/5/8 points; an unsized task counts as its feature's median (else M) · a feature waiting on a dependency starts after that one's ETA.`,
+      overlap: {
+        attentionActive: (other, files) => `plans the same files as ${other}: ${files} — order them (spec_depend) or declare _Supersedes:_ if one replaces the other's behaviour`,
+        attentionFinished: (other, files) => `plans files in ${other}'s finish baseline: ${files} — declare _Supersedes: ${other}/US-n.AC-m_ where it replaces that behaviour, or spec_drift flags ${other} after the merge`,
+        doctorActive: (list, slug) => `open tasks plan the same files as another active feature — ${list}: both land on them at merge time and one drifts silently. Order the two (spec_depend {name: "${slug}", add: ["<other>"]} · dev-spec depend ${slug} <other>) or, where one replaces the other's behaviour, declare _Supersedes: <other>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `open tasks plan files a finished feature recorded in its drift baseline — ${list}: after the merge spec_drift flags it. Declare _Supersedes: <feature>/US-n.AC-m_ on the criteria of ${slug} that replace its behaviour, or re-finish it after the merge (spec_finish)`,
+        hookLine: (n, list) => `⚠ ${n} cross-feature file overlap(s): ${list} — run /spec-doctor on them (order them with /depend, or declare _Supersedes:_)`,
+        cliHead: (n) => `⚠ ${n} cross-feature file overlap(s):`,
+        cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
+        cliFinished: (a, b, files) => `  ${a} → ${b} (finished): ${files}`,
+        more: (n) => `+${n} more`,
+      },
+    },
     // @pkg B4 <<<
 
     // @pkg B5 msg-en >>>
@@ -4005,6 +4027,27 @@ const MSG = {
     // @pkg B3 <<<
 
     // @pkg B4 msg-pt >>>
+    forecast: {
+      colEta: "Previsão",
+      etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
+      cliEta: (eta, low, high) => `previsão ${eta}${low ? ` (${low}…${high})` : ""}`,
+      velocity: (v) => `Velocidade: ${v.pointsPerDay} ponto(s)/dia útil — ${v.completed} tarefa(s), ${v.points} ponto(s) concluídos desde ${v.since} (últimos ${v.windowDays} dias)`,
+      notEnough: (v) => `Velocidade: ainda sem dados suficientes — ${v.completed} das ${v.minTasks} tarefas concluídas de que uma previsão precisa nos últimos ${v.windowDays} dias`,
+      metricsVelocity: (v) => (v.completed ? `  velocidade: ${v.pointsPerDay} ponto(s)/dia útil (${v.completed} tarefa(s), ${v.points} ponto(s) desde ${v.since}, últimos ${v.windowDays} dias)${v.enough ? "" : ` — ainda sem dados suficientes para uma previsão (são precisas ${v.minTasks})`}`
+        : `  velocidade: nenhuma tarefa concluída nos últimos ${v.windowDays} dias`),
+      etaNote: (pct) => `Previsão = pontos por fazer ÷ velocidade, em dias úteis (±${pct}%) · \`_Size: XS|S|M|L|XL_\` numa tarefa = 1/2/3/5/8 pontos; uma tarefa sem tamanho conta como a mediana da sua feature (senão M) · uma feature à espera de uma dependência começa depois da previsão dessa.`,
+      overlap: {
+        attentionActive: (other, files) => `planeia os mesmos ficheiros que ${other}: ${files} — ordena-as (spec_depend) ou declara _Supersedes:_ se uma substitui o comportamento da outra`,
+        attentionFinished: (other, files) => `planeia ficheiros da baseline de fecho de ${other}: ${files} — declara _Supersedes: ${other}/US-n.AC-m_ onde substitui esse comportamento, ou o spec_drift assinala ${other} depois do merge`,
+        doctorActive: (list, slug) => `há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — ${list}: ambas mexem neles no merge e uma deriva sem aviso. Ordena as duas (spec_depend {name: "${slug}", add: ["<outra>"]} · dev-spec depend ${slug} <outra>) ou, onde uma substitui o comportamento da outra, declara _Supersedes: <outra>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `há tarefas por fazer que planeiam ficheiros que uma feature fechada registou na sua baseline de drift — ${list}: depois do merge, o spec_drift assinala-a. Declara _Supersedes: <feature>/US-n.AC-m_ nos critérios de ${slug} que substituem o comportamento dela, ou volta a fechá-la depois do merge (spec_finish)`,
+        hookLine: (n, list) => `⚠ ${n} sobreposição(ões) de ficheiros entre features: ${list} — corre /spec-doctor nelas (ordena-as com /depend, ou declara _Supersedes:_)`,
+        cliHead: (n) => `⚠ ${n} sobreposição(ões) de ficheiros entre features:`,
+        cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
+        cliFinished: (a, b, files) => `  ${a} → ${b} (fechada): ${files}`,
+        more: (n) => `+${n} outro(s)`,
+      },
+    },
     // @pkg B4 <<<
 
     // @pkg B5 msg-pt >>>
@@ -4909,6 +4952,27 @@ const MSG = {
     // @pkg B3 <<<
 
     // @pkg B4 msg-es >>>
+    forecast: {
+      colEta: "Previsión",
+      etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
+      cliEta: (eta, low, high) => `previsión ${eta}${low ? ` (${low}…${high})` : ""}`,
+      velocity: (v) => `Velocidad: ${v.pointsPerDay} punto(s)/día laborable — ${v.completed} tarea(s), ${v.points} punto(s) completados desde ${v.since} (últimos ${v.windowDays} días)`,
+      notEnough: (v) => `Velocidad: aún no hay datos suficientes — ${v.completed} de las ${v.minTasks} tareas completadas que una previsión necesita en los últimos ${v.windowDays} días`,
+      metricsVelocity: (v) => (v.completed ? `  velocidad: ${v.pointsPerDay} punto(s)/día laborable (${v.completed} tarea(s), ${v.points} punto(s) desde ${v.since}, últimos ${v.windowDays} días)${v.enough ? "" : ` — aún no hay datos suficientes para una previsión (se necesitan ${v.minTasks})`}`
+        : `  velocidad: ninguna tarea completada en los últimos ${v.windowDays} días`),
+      etaNote: (pct) => `Previsión = puntos pendientes ÷ velocidad, en días laborables (±${pct}%) · \`_Size: XS|S|M|L|XL_\` en una tarea = 1/2/3/5/8 puntos; una tarea sin tamaño cuenta como la mediana de su función (si no, M) · una función que espera una dependencia empieza después de la previsión de esa.`,
+      overlap: {
+        attentionActive: (other, files) => `planifica los mismos ficheros que ${other}: ${files} — ordénalas (spec_depend) o declara _Supersedes:_ si una sustituye el comportamiento de la otra`,
+        attentionFinished: (other, files) => `planifica ficheros de la línea base de cierre de ${other}: ${files} — declara _Supersedes: ${other}/US-n.AC-m_ donde sustituye ese comportamiento, o spec_drift señalará ${other} después del merge`,
+        doctorActive: (list, slug) => `hay tareas pendientes que planifican los mismos ficheros que otra función activa — ${list}: ambas los tocan en el merge y una deriva sin aviso. Ordena las dos (spec_depend {name: "${slug}", add: ["<otra>"]} · dev-spec depend ${slug} <otra>) o, donde una sustituye el comportamiento de la otra, declara _Supersedes: <otra>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `hay tareas pendientes que planifican ficheros que una función cerrada registró en su línea base de drift — ${list}: después del merge, spec_drift la señala. Declara _Supersedes: <función>/US-n.AC-m_ en los criterios de ${slug} que sustituyen su comportamiento, o vuelve a cerrarla después del merge (spec_finish)`,
+        hookLine: (n, list) => `⚠ ${n} solapamiento(s) de ficheros entre funciones: ${list} — ejecuta /spec-doctor en ellas (ordénalas con /depend, o declara _Supersedes:_)`,
+        cliHead: (n) => `⚠ ${n} solapamiento(s) de ficheros entre funciones:`,
+        cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
+        cliFinished: (a, b, files) => `  ${a} → ${b} (cerrada): ${files}`,
+        more: (n) => `+${n} más`,
+      },
+    },
     // @pkg B4 <<<
 
     // @pkg B5 msg-es >>>

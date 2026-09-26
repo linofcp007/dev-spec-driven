@@ -4,6 +4,8 @@
 
 **Progress: 19%** ▰▰▱▱▱▱▱▱▱▱ · 0/2 features complete · 0/16 tasks done
 
+_Velocity: not enough data yet — 0 of the 3 completed tasks a forecast needs in the last 28 days_
+
 Legend: ✅ done · 🟡 in progress · ⛔ blocked · 📋 planned · ⬜ not started
 
 ## ▶ Next up
@@ -11,10 +13,10 @@ Legend: ✅ done · 🟡 in progress · ⛔ blocked · 📋 planned · ⬜ not s
 
 ## Features
 
-| | Feature | Tracks | Phase | % | Tasks | Deps | Next |
-|---|---|---|---|---|---|---|---|
-| 📋 | [api-keys](./api-keys/requirements.md) | core +tdd +saas | tasks-ready | 30% | 0/8 | — | #1 Add `api_keys` table migration + indexes ( |
-| ⛔ | [usage-metering](./usage-metering/requirements.md) | core +saas | requirements | 8% | 0/8 | api-keys ✗ | blocked |
+| | Feature | Tracks | Phase | % | Tasks | Deps | Next | ETA |
+|---|---|---|---|---|---|---|---|---|
+| 📋 | [api-keys](./api-keys/requirements.md) | core +tdd +saas | tasks-ready | 30% | 0/8 | — | #1 Add `api_keys` table migration + indexes ( | — |
+| ⛔ | [usage-metering](./usage-metering/requirements.md) | core +saas | requirements | 8% | 0/8 | api-keys ✗ | blocked | — |
 
 ## Dependencies
 
