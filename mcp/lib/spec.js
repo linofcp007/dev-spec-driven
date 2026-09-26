@@ -7890,7 +7890,8 @@ function requirementSections(reqs) {
   return designSections(reqs).filter((s) => {
     const t = s.title.toLowerCase();
     if (SUMMARY_SYN.some((x) => t.startsWith(x))) return false;
-    if (/^#{2,6}\s+US-\d/m.test(s.body) || /^(?:user stor|hist[óo]rias?(?![\p{L}]))/iu.test(t)) return false;
+    // the stories: their wrapper section, or a story written as a `## US-n` section itself
+    if (/^#{2,6}\s+US-\d/m.test(s.body) || /^(?:user stor|hist[óo]rias?(?![\p{L}])|us-\d)/iu.test(t)) return false;
     return !!s.body.trim();
   });
 }
@@ -7950,7 +7951,9 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
 
   // Approvals — who / when per phase, forced ones, those whose artifact changed since, and the phases still awaiting one.
   const approvals = isRecord(st.approvals) ? st.approvals : {};
-  const changed = changedSinceApproval(dir, approvals, tracks, kind);
+  // Changed by CONTENT only, as spec_finish reads it: a pre-1.11 approval judged by file date is no evidence (a clone resets it).
+  const cs = changedSinceApproval(dir, approvals, tracks, kind, { detail: true });
+  const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
   const pending = new Set(pendingGateList(dir, tracks, kind, approvals));
   const aRows = [];
   for (const p of PHASES) {

@@ -7253,6 +7253,24 @@ function endRun() {
     ok(bad.ok === false && /format/.test(bad.error) && /html, md/.test(bad.error) && nf.ok === false && /not found/i.test(nf.error) && noSpecs.ok === false && /No \.specs\//.test(noSpecs.error) &&
       !fs.existsSync(path.join(tmp, "proj-b2-none")),
       "spec_export: an unknown format, an unknown feature and a project without .specs/ are errors (nothing created)");
+    // Approvals: an artifact edited after its approval is flagged (by content); a pre-1.11 approval judged only by file date is not.
+    const chp = path.join(tmp, "proj-b2-changed");
+    S.initProject(chp, ["core"], "en");
+    const chf = S.createFeature(chp, "Changed", ["core"], "", undefined, "en");
+    S.approvePhase(chp, "changed", "classification", "tester", { force: true });
+    fs.appendFileSync(path.join(chf.dir, "classification.md"), "\nEdited after the approval.\n");
+    const chs = path.join(chf.dir, ".state.json");
+    const chState = JSON.parse(fs.readFileSync(chs, "utf8"));
+    chState.approvals.requirements = { at: "2020-01-01T00:00:00.000Z", by: "legacy" };
+    fs.writeFileSync(chs, JSON.stringify(chState, null, 2));
+    const chMd = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n\| Classification \| tester \| \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC \| approved with --force \([^)]*\); changed since this approval — to be re-reviewed \|\n/.test(chMd) &&
+      /\n\| Requirements \| legacy \| 2020-01-01 00:00 UTC \| — \|\n/.test(chMd),
+      "spec_export approvals: an artifact changed since its approval is flagged (content fingerprint); a legacy approval judged only by file date is not");
+    fs.writeFileSync(path.join(chf.dir, "requirements.md"), "# Feature: Changed\n\n## Summary\nFlat.\n\n## US-1 (P1): One\n**As a** user.\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n- z\n");
+    const flat = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n## User stories and acceptance criteria\n\n### US-1 \(P1\): One\n\n\*\*As a\*\* user\.\n\n- \*\*US-1\.AC-1\*\* — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n/.test(flat) && !/\n## US-1/.test(flat),
+      "spec_export: a story written as its own `## US-n` section is shown once, under the stories (never again as a requirements section)");
     const oldEx = path.join(tmp, "proj-b2-old-exports");
     S.initProject(oldEx, ["core"], "en");
     fs.mkdirSync(path.join(oldEx, ".specs", "exports"), { recursive: true });
