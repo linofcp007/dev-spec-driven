@@ -2007,6 +2007,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   }
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
+  const flowInfo = createFlow(projectDir, slug, dir, existed, storedKind || askedKind || "feature", opts && opts.flow, lang); // C3: {error} | {flow, note, store}
+  if (flowInfo.error) return { ok: false, error: flowInfo.error };
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
   // path as spec_add_track below (a re-run never drops a track and never re-classifies). A bugfix is always
   // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
@@ -2037,6 +2039,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
   const createdAt = new Date().toISOString();
   writeIfAbsent(statePath(dir), JSON.stringify(bugfix ? { lang: lng, kind: "bugfix", tracks: t, approvals: {}, createdAt } : { lang: lng, tracks: t, approvals: {}, createdAt }, null, 2));
+  if (flowInfo.store) storeCreateFlow(dir, flowInfo.store); // C3: a NEW plain feature created design-first
 
   const created = [];
   const skip = [];
@@ -2068,6 +2071,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     maybeRefreshRoadmap(projectDir);
     const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
+    // C3: the flow — named when created design-first, ignored (a bugfix …) or kept (an existing feature); `flow` only when design-first.
+    const flowNote = flowInfo.store ? i18n.msg(lng).flow.created(flowOrderText(dir, t, flowInfo.store)) : flowInfo.note;
+    if (flowNote) res.note = res.note ? res.note + " " + flowNote : flowNote;
+    if (flowInfo.flow === "design-first") res.flow = "design-first";
     return res;
   };
 
@@ -2814,7 +2821,9 @@ function detectPhase(dir, tracks) {
   // so once that track is removed and nothing active is left, the file is out of the chain — not a phase forever open.
   const activeDesignText = () => activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks);
   const bugfix = (readJson(statePath(dir)).data || {}).kind === "bugfix";
-  const chain = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]]
+  const planning = [["requirements", "requirements.md"], ["design", "design.md"], ["test-plan", "test-plan.md"], ["eval-plan", "eval-plan.md"]];
+  if (featureFlow(dir) === "design-first") planning.unshift(planning.splice(1, 1)[0]); // C3: design-first — the design is the chain's first artifact
+  const chain = planning
     .filter(([ph, f]) => phaseActive(ph, tracks) && has(f) && !(f === "design.md" && bugfix && headingsOnly(activeDesignText())));
   // requirements.md too: its +saas/+ai template criteria sit under [SaaS]/[AI] headings, inactive once the track is off.
   const stateOf = (f) => artifactState(f === "design.md" ? { text: activeDesignText() }
@@ -2859,7 +2868,7 @@ function listFeatures(projectDir) {
     const tracks = detectTracks(dir);
     const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
     const done = tasks.filter((t) => t.done).length;
-    return {
+    const row = {
       name: d.name,
       kind: readState(projectDir, d.name).kind || "feature",
       tracks: trackLabel(tracks),
@@ -2867,6 +2876,8 @@ function listFeatures(projectDir) {
       tasks: tasks.length,
       tasksDone: done,
     };
+    if (featureFlow(dir) === "design-first") row.flow = "design-first"; // C3 (only then — the default row is unchanged)
+    return row;
   });
   const res = { specsDir: root, exists: true, features };
   if (ignored.length) res.ignored = ignored;
@@ -5539,7 +5550,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // design) — force records it anyway, flagged with `phase-order`. The execution sign-off needs no extra check: its gate
   // is spec_finish's blockers, which already name every pending gate.
   if (p !== "execution") {
-    const earlier = pendingGateList(f.dir, tracks, state.kind || "feature", state.approvals).filter((ph) => PHASES.indexOf(ph) < PHASES.indexOf(p));
+    const order = phaseOrder(featureFlow(f.dir, state.kind || "feature")); // C3: design-first puts design before requirements
+    const earlier = pendingGateList(f.dir, tracks, state.kind || "feature", state.approvals).filter((ph) => order.indexOf(ph) < order.indexOf(p));
     if (earlier.length) gate.checks.unshift({ id: "phase-order", detail: G.phaseOrder(earlier.join(", "), f.slug, earlier[0]) });
   }
   const failing = gate.checks.map((c) => c.id);
@@ -6685,7 +6697,7 @@ function archiveFeatureLocked(projectDir, name, moved) {
   // is met at 100%). Measured before the move, in the feature's own language.
   const tracks = detectTracks(dir);
   const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
-  const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length);
+  const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length, featureFlow(dir)); // C3: + the flow
   const R = i18n.msg(featureLang(projectDir, slug)).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   const inUse = moveDirOrBusy(projectDir, slug, dir, dest);
@@ -6867,6 +6879,8 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       return renameFeature(projectDir, name, arg);
     case "restore":
       return restoreFeature(projectDir, name);
+    case "flow": // C3: opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
+      return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
     default:
       return { ok: false, error: errs(projectDir).badAction };
   }
@@ -7454,8 +7468,9 @@ function nextAction(projectDir, name, opts = {}) {
       if (g.checks.length) refused = g.checks;
     }
   }
-  const cur = PHASE_INDEX[phase] || 0;
-  const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && (CHECK_PHASE[c.id] || 0) <= cur) : [];
+  const flow = featureFlow(dir, kind); // C3: the phase scale of the feature's flow (design-first: design 1, requirements 2)
+  const cur = flowPhaseIndex(phase, flow);
+  const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && checkPhaseIndex(c.id, flow) <= cur) : [];
   // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
   const plans = [tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md")), tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"))];
   const testsWhat = plans[0] && plans[1] ? "both" : plans[1] ? "ai" : "tdd";
@@ -7583,6 +7598,10 @@ function nextAction(projectDir, name, opts = {}) {
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
+  if (flow === "design-first") { // C3: stable `flow`; the order is named while the design / requirements gates are the open ones
+    res.flow = flow;
+    if (["fill", "fix", "approve"].includes(step) && (pending === "design" || pending === "requirements")) res.recommendation += " " + fm.flow.nextNote(flowOrderText(dir, tracks, flow));
+  }
   return res;
 }
 // The approval chain next_action walks, in order: every active phase (PHASES; `execution` is the sign-off after a
@@ -7590,7 +7609,7 @@ function nextAction(projectDir, name, opts = {}) {
 // classification only when classification.md exists (a feature folder made by hand, or by an old engine, has none —
 // it was never a gate there; every other chain artifact that is missing is "fill it").
 function gateWalk(dir, tracks, kind) {
-  return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) &&
+  return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) && // C3: the feature's flow orders the chain
     (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
 }
 // The artifacts a phase's approval signs off, as next_action's "fill" step checks them: classification.md, the chain
@@ -7604,8 +7623,107 @@ function gateArtifacts(dir, tracks, kind, phase) {
 // refuses a phase while an EARLIER one is still in this list (a phase with nothing to approve never blocks a later one).
 function pendingGateList(dir, tracks, kind, approvals) {
   const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
-  return PHASES.filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]);
+  return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]); // C3: in the flow's order
 }
+
+// @pkg C3 design-first flow >>>
+// ---------------------------------------------------------------------------
+// Flows (1.14 C3) — Kiro's tech-design-first variant. Some features start from an architecture (a port, platform or performance
+// work): `.state.json → flow: "design-first"` (spec_create {flow} / `create --flow design-first`; changed later with spec_feature
+// {action: "flow"} / `feature flow <name> <flow>`) orders the chain classification → design → requirements → (test-plan / eval-plan)
+// → tests → tasks, for every reader of the order: gateWalk / pendingGateList (next_action, doctor, approve's phase-order check,
+// the fast-forward), detectPhase and chainArtifacts (the placeholder gate's phase scoping), next_action's failing-check filter and
+// the roadmap percent. The design gate of a design-first feature never looks at the requirements (they come after it): its
+// clarifications are the design's own, and doctor defers the AC traceability while requirements.md is still a later phase's
+// template. No flow (or "requirements-first") = the default order, unchanged. A bugfix, a spike — any kind but a plain feature —
+// keeps its own fixed order: the flow is ignored there (spec_create says so; spec_feature {action: "flow"} refuses it).
+// ---------------------------------------------------------------------------
+const FLOWS = ["requirements-first", "design-first"];
+const DESIGN_FIRST_PHASES = ["classification", "design", "requirements", "test-plan", "eval-plan", "tests", "tasks", "execution"];
+// The flow a state (the raw .state.json data) gives. `kind`: the caller's (else the state's) — only a plain feature has one.
+function flowOfState(st, kind) {
+  const k = kind != null ? kind : isObj(st) && typeof st.kind === "string" ? st.kind : "feature";
+  return k === "feature" && isObj(st) && st.flow === "design-first" ? "design-first" : "requirements-first";
+}
+// A feature folder's flow (read-cached like every .state.json read of the same call).
+function featureFlow(dir, kind) {
+  return flowOfState(readJson(statePath(dir)).data, kind);
+}
+const phaseOrder = (flow) => (flow === "design-first" ? DESIGN_FIRST_PHASES : PHASES);
+// PHASE_INDEX / CHECK_PHASE / chainArtifacts' idx on the flow's scale: design-first swaps the requirements (1) and design (2) slots.
+const flowIndex = (i, flow) => (flow === "design-first" && (i === 1 || i === 2) ? 3 - i : i);
+const flowPhaseIndex = (phase, flow) => flowIndex(PHASE_INDEX[phase] || 0, flow);
+const checkPhaseIndex = (id, flow) => flowIndex(CHECK_PHASE[id] || 0, flow);
+// The default flow's phase at the same position of the chain (design-first: design ↔ requirements) — for the tables keyed by
+// position: PHASE_PERCENT (the roadmap percent) and NOT_STARTED_PHASES (spec_upgrade's status).
+const positionPhase = (phase, flow) => (flow === "design-first" && (phase === "design" || phase === "requirements") ? (phase === "design" ? "requirements" : "design") : phase);
+// A flow as given (MCP enum / CLI --flow, folded like the other enums) → { flow } | { flow: null } (not given) | { error }.
+function parseFlow(v, lng) {
+  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return { flow: null };
+  const s = typeof v === "string" ? v.trim().toLowerCase() : null;
+  if (s && FLOWS.includes(s)) return { flow: s };
+  const A = i18n.msg(lng).args;
+  return { error: A.invalid(A.item("flow", A.oneOf(FLOWS.join(", ")), JSON.stringify(typeof v === "string" ? v : String(v)))) };
+}
+// "classification → design → requirements → test-plan → tests → tasks" — the active phases of a feature in its flow's order.
+function flowOrderText(dir, tracks, flow) {
+  return phaseOrder(flow).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md")))).join(" → ");
+}
+// spec_feature {action: "flow", name, flow} / `dev-spec feature flow <name> <flow>` — set (or reset) a feature's flow. Phases
+// already approved stay approved (named); the pending gates follow the new order at once. → { ok, action: "flow", feature, flow,
+// previous, changed, order, pendingGates, note }
+function setFeatureFlow(projectDir, name, flow) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const F = i18n.msg(lng).flow;
+  const pf = parseFlow(flow, lng);
+  if (pf.error) return { ok: false, error: pf.error };
+  if (!pf.flow) return { ok: false, error: F.required(f.slug, FLOWS.join(", ")) };
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const kind = typeof state.kind === "string" ? state.kind : "feature";
+  if (kind !== "feature") return { ok: false, kindIgnored: true, kind, error: F.kindRefused(f.slug, kind) };
+  const tracks = detectTracks(f.dir);
+  const previous = flowOfState(state);
+  const res = { ok: true, action: "flow", feature: f.slug, flow: pf.flow, previous, changed: previous !== pf.flow };
+  if (res.changed) {
+    if (pf.flow === "design-first") state.flow = "design-first";
+    else delete state.flow; // the default order: no key (a pre-1.14 engine reads the feature as it always did)
+    writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+    maybeRefreshRoadmap(projectDir);
+  }
+  res.order = flowOrderText(f.dir, tracks, pf.flow);
+  res.pendingGates = pendingGateList(f.dir, tracks, kind, state.approvals);
+  const approved = ["requirements", "design"].filter((ph) => isRecord(state.approvals[ph]));
+  res.note = [res.changed ? F.set(f.slug, pf.flow, previous, res.order) : F.same(f.slug, pf.flow, res.order),
+    res.changed && approved.length ? F.approvedStay(approved.join(", ")) : null].filter(Boolean).join(" ");
+  return res;
+}
+const setFeatureFlowLocked = featureLocked(setFeatureFlow); // manageFeature's "flow": a .state.json read-modify-write, under the feature lock
+// createFeature's flow (spec_create {flow} / `create --flow`) → { error } | { flow, store?, note? }. A NEW plain feature created
+// design-first stores it (`store`); an existing feature keeps its flow (a note names spec_feature {action: "flow"} when another
+// one is asked); any other kind (bugfix, spike…) ignores it, and a note says so.
+function createFlow(projectDir, slug, dir, existed, kind, asked, lang) {
+  const lng = existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir));
+  const pf = parseFlow(asked, lng);
+  if (pf.error) return { error: pf.error };
+  const F = i18n.msg(lng).flow;
+  if (existed) {
+    const cur = featureFlow(dir);
+    return { flow: cur, note: pf.flow && pf.flow !== cur ? (kind !== "feature" ? F.kindIgnored(kind) : F.kept(slug, cur, pf.flow)) : null };
+  }
+  if (kind !== "feature") return { flow: "requirements-first", note: pf.flow === "design-first" ? F.kindIgnored(kind) : null };
+  return { flow: pf.flow || "requirements-first", store: pf.flow === "design-first" ? "design-first" : null };
+}
+// The new feature's .state.json (just written by createFeature) ← flow.
+function storeCreateFlow(dir, flow) {
+  const j = readJson(statePath(dir));
+  if (!isObj(j.data)) return;
+  j.data.flow = flow;
+  writeFileAtomic(statePath(dir), JSON.stringify(j.data, null, 2));
+}
+// @pkg C3 <<<
 
 // The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
@@ -8114,6 +8232,9 @@ function chainArtifacts(dir, tracks, kind) {
     out.push({ file: "bug.md", phase: "design", idx: 2 });
     const d = readIfExists(path.join(dir, "design.md"));
     if (d != null && !headingsOnly(activeDesign(d, tracks))) out.push({ file: "design.md", phase: "design", idx: 2 });
+  } else if (featureFlow(dir, kind) === "design-first") { // C3: design first — the requirements take the second slot
+    out[0].idx = 2;
+    out.unshift({ file: "design.md", phase: "design", idx: 1 });
   } else out.push({ file: "design.md", phase: "design", idx: 2 });
   if (tracks.includes("tdd")) out.push({ file: "test-plan.md", phase: "test-plan", idx: 3 });
   if (tracks.includes("ai")) out.push({ file: "eval-plan.md", phase: "eval-plan", idx: 4 });
@@ -8167,7 +8288,7 @@ function placeholderSummary(reports, lang) {
 // fail the gates, `later` are informational. blockingOnly skips reading the later ones (the roadmap refresh runs on
 // every mutation, for every feature — file reads are its cost).
 function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
-  const cur = PHASE_INDEX[phase] || 0;
+  const cur = flowPhaseIndex(phase, featureFlow(dir, kind)); // C3: on the flow's scale (chainArtifacts' idx follows it)
   const all = chainArtifacts(dir, tracks, kind).filter((a) => !blockingOnly || a.idx <= cur)
     .map((a) => ({ ...artifactReport(dir, a.file, tracks, texts ? texts[a.file] : undefined), idx: a.idx })).filter((r) => r.state === "placeholder");
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
@@ -8349,7 +8470,9 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
           need(tr + "-sections", !bad.length, bad.map(label).join("; "));
         }
       }
-      const mk = [...clarificationMarkers(read("requirements.md") || ""), ...clarificationMarkers(design || "")];
+      // C3: a design-first design is approved BEFORE the requirements are written — only its own open questions block it.
+      const reqMarkers = featureFlow(dir, kind) === "design-first" ? [] : clarificationMarkers(read("requirements.md") || "");
+      const mk = [...reqMarkers, ...clarificationMarkers(design || "")];
       need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
       break;
     }
@@ -8485,6 +8608,11 @@ function specDoctor(projectDir, name, opts = {}) {
   add("placeholders", ph.blocking.length ? "fail" : ph.later.length ? "warn" : "pass",
     ph.blocking.length ? G.placeholdersFail(placeholderSummary(ph.blocking, lng))
       : ph.later.length ? G.placeholdersLater(ph.later.map((r) => `${r.file} (${r.items.length || G.empty})`).join(", ")) : G.placeholdersNone);
+  // C3: design-first — while requirements.md is still a LATER phase's template (the design is being written), its own checks
+  // (EARS, open questions, duplicate IDs) inform instead of failing the design; they gate the requirements approval as ever.
+  if (ph.later.some((r) => r.file === "requirements.md")) {
+    for (const c of checks) if (c.status === "fail" && ["ears", "clarifications", "ac-uniqueness"].includes(c.id)) Object.assign(c, { status: "warn", detail: fm.flow.laterPhase(c.detail) });
+  }
 
   // Design + Mermaid + Constitution Check
   const design = readIfExists(path.join(dir, "design.md"));
@@ -8522,13 +8650,16 @@ function specDoctor(projectDir, name, opts = {}) {
     const deferKinds = new Set([
       ...(laterFiles.includes("tasks.md") ? TRACE_TASK_KINDS : []),
       ...(laterFiles.includes("test-plan.md") ? TRACE_PLAN_KINDS : []),
+      // C3: design-first — requirements.md is a LATER phase's template at the design gate: its template ACs are no gap yet
+      // (the checks involving the requirements run once they are written).
+      ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS].filter((k) => k !== "missingImplFiles") : []),
     ]);
     const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
     const gapLines = traceGapLines(kept, lng);
     // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
     const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
     const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));
-    const deferredFiles = laterFiles.filter((x) => x === "tasks.md" || x === "test-plan.md").join(", ");
+    const deferredFiles = laterFiles.filter((x) => x === "tasks.md" || x === "test-plan.md" || x === "requirements.md").join(", "); // C3: + requirements.md (design-first)
     if (failing) add("traceability", "fail", gapLines.join("; "));
     else if (deferred) add("traceability", "warn", [G.traceDeferred(deferredFiles), ...gapLines].join("; "));
     else add("traceability", "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
@@ -8643,6 +8774,7 @@ function specDoctor(projectDir, name, opts = {}) {
   // 1.14 B3 (only when the project has approval roles): {phase: {required, signed, missing, stale}} per pending phase that
   // needs roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (rv.any) Object.assign(res, { pendingRoles: rv.pending, unsignedRoles: rv.unsigned });
+  if (featureFlow(dir, kind) === "design-first") res.flow = "design-first"; // C3 (only then: the default flow's result is unchanged)
   return res;
 }
 
@@ -8670,7 +8802,8 @@ const PHASE_PERCENT = {
   complete: 100,
 };
 
-function phasePercent(phase) {
+function phasePercent(phase, flow) {
+  phase = positionPhase(phase, flow); // C3: design-first walks design (8%) before requirements (16%) — the same run-up, in its own order
   return PHASE_PERCENT[phase] != null ? PHASE_PERCENT[phase] : 0;
 }
 
@@ -8678,7 +8811,7 @@ function phasePercent(phase) {
 // PLANNING_CEILING → 100 in proportion to the tasks actually completed.
 // "complete" is the only phase that reaches 100; an in-flight "executing"
 // feature is capped at 99 so it can never masquerade as done.
-function featurePercent(phase, tasksDone, tasksTotal) {
+function featurePercent(phase, tasksDone, tasksTotal, flow) { // flow (C3): the feature's — design-first swaps the design / requirements steps
   if (phase === "complete") return 100;
   if (phase === "tasks-ready" || phase === "executing") {
     const total = Number(tasksTotal) || 0;
@@ -8687,7 +8820,7 @@ function featurePercent(phase, tasksDone, tasksTotal) {
     const impl = Math.round((done / total) * (100 - PLANNING_CEILING));
     return Math.min(99, PLANNING_CEILING + impl);
   }
-  return phasePercent(phase);
+  return phasePercent(phase, flow);
 }
 
 function roadmapPath(projectDir) {
@@ -8848,7 +8981,7 @@ function roadmap(projectDir) {
   const pctByName = Object.create(null); // a dep named "constructor" must not read Object.prototype's
   const feats = list.features.map((f) => {
     const meta = rm.features[f.name] || {};
-    const pct = featurePercent(f.phase, f.tasksDone, f.tasks);
+    const pct = featurePercent(f.phase, f.tasksDone, f.tasks, f.flow); // C3: f.flow — a design-first feature's own order
     pctByName[f.name] = pct;
     return { name: f.name, tracks: f.tracks, phase: f.phase, percent: pct, dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
   });
@@ -10221,7 +10354,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const catF = cat.features.find((x) => x.feature === slug && !x.archived);
   const marks = new Map((catF ? catF.acs : []).map((a) => [a.id, a]));
   const meta = [[X.meta.id, "`" + slug + "`"], [X.meta.kind, X.kind[kind]], [X.meta.tracks, trackLabel(tracks)], [X.meta.phase, P[phase] || phase],
-    [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length))]];
+    [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length, flowOfState(st)))]]; // C3: + the flow
   if (catF) meta.push([X.meta.status, M.catalog.status[catF.status] + (catF.finishedAt ? " · " + day(catF.finishedAt) : "")]);
   meta.push([X.meta.lang, lang]);
 
@@ -11174,7 +11307,7 @@ function upgradeFeature(projectDir, s, ctx) {
   const legacyApprovals = Object.keys(PHASE_FILE).filter((ph) => isRecord(approvals[ph]) && !approvals[ph].fingerprint && phaseActive(ph, tracks));
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   const status = phase === "complete" ? (fin ? "finished" : "complete") : phase === "executing" ? "executing"
-    : NOT_STARTED_PHASES.has(phase) && !Object.keys(approvals).length ? "not-started" : "planning";
+    : NOT_STARTED_PHASES.has(positionPhase(phase, flowOfState(st))) && !Object.keys(approvals).length ? "not-started" : "planning"; // C3: a design-first feature starts at its design
   // Complete / finished: nothing to review beyond the drift since the finish (next_action's hash when it computed one).
   let drift = null;
   if (fin && phase === "complete") {
@@ -12157,7 +12290,7 @@ function coverage(projectDir) {
 // imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
-const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec" };
+const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD" }; // C3: + plan · execplan · bmad
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -12760,6 +12893,732 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
   }).join("\n");
 }
 
+// @pkg C3 import: plan · execplan · bmad >>>
+// ---------------------------------------------------------------------------
+// spec_import (1.14 C3) — three more sources, with the same guarantees (a NEW feature, the source only read and inside the project,
+// mapping + warnings, the localized "Imported from" note, tracks auto-classified unless given):
+//   plan      a Markdown plan: Claude Code plan mode (plansDirectory — default ~/.claude/plans, OUTSIDE the project: copy the
+//             plan in, or point plansDirectory inside it) or Cursor (.cursor/plans/*.plan.md — YAML front matter name /
+//             overview / todos [{id, content, status}]). Goals and acceptance-like bullets → US-1's criteria (EARS when the bullet
+//             already reads like one, else kept with [NEEDS CLARIFICATION]); checklists (or Cursor todos, else the items of a
+//             Steps / Implementation section, else its sub-headings) → tasks keeping their state; the file paths a step names →
+//             _Implements:_; everything else (context, approach, files, risks, verification commands) → design.md.
+//   execplan  a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps → tasks,
+//             a step naming a check command (npm test, pytest, curl …) → _Verify:_; Decision Log → design.md "## Decisions"
+//             (D-1 …); Purpose → the summary; the living sections (Surprises & Discoveries, Outcomes, Context, Plan of Work …) →
+//             design.md verbatim.
+//   bmad      BMAD-METHOD docs: the PRD (docs/prd.md, a sharded docs/prd/, v6 _bmad-output/planning-artifacts/) FR / NFR lines →
+//             FR-n / NFR-n (dev-spec's IDs), its epic stories and story files (docs/stories/*.md, v6 implementation-artifacts)
+//             → US-1…US-n in story order (a story file wins over the PRD's copy), their ACs → US-n.AC-m, Tasks / Subtasks →
+//             tasks tagged [USn] (a subtask is a task of its own, as every imported checkbox is), "(AC: 1, 3)" →
+//             _Requirements:_; architecture.md + Technical Assumptions / UI Design Goals + each story's Dev Notes → design.md.
+// A path naming a folder with several plans is refused (name the file). Nothing is dropped silently: what no mapping takes is
+// carried (design.md for a plan / ExecPlan, requirements.md for a PRD) or named in a warning.
+// ---------------------------------------------------------------------------
+const RE_PLAN_CHECKBOX = /^(\s*)[-*+]\s+\[([ xX~\-/])\]\s+(.*)$/;
+const RE_PLAN_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[([ xX~\-/])\]\s+)?(.*)$/;
+// A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
+const PLAN_FILE_EXT = new Set(["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts", "py", "rb", "go", "rs", "java", "kt", "kts", "scala", "cs", "fs", "php",
+  "swift", "m", "mm", "c", "h", "cc", "cpp", "hpp", "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less",
+  "html", "htm", "vue", "svelte", "astro", "sql", "prisma", "graphql", "gql", "proto", "sh", "bash", "zsh", "ps1", "bat", "xml", "gradle", "lock", "txt",
+  "csv", "tf", "hcl", "ex", "exs", "erl", "dart", "lua", "ipynb"]);
+const PLAN_NOT_FILES = new Set(["node.js", "next.js", "vue.js", "react.js", "nuxt.js", "express.js", "three.js", "d3.js", "chart.js", "nest.js", "ember.js", "backbone.js", "alpine.js", "solid.js"]);
+const PLAN_BARE_FILES = /^(?:Dockerfile|Makefile|Procfile|Gemfile|Rakefile|Jenkinsfile|Containerfile|Justfile)$/;
+// The file paths a step names → its _Implements:_ list: backticked paths / file names, markdown link targets and bare tokens
+// with a folder part and an extension. Never a URL, an absolute or home path, '..', an alias (@/…), a glob or a path a
+// marker couldn't read back (spaces, ',' ';'); a trailing :line / #L10 is dropped.
+function planPaths(text) {
+  const out = [];
+  const add = (raw, spanned) => {
+    const p = String(raw).trim().replace(/^\.\//, "").replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "");
+    if (!p || p.length > 200 || /[\s,;<>|"'`*?\\]/.test(p) || /^(?:[a-z][a-z0-9+.-]*:|\/|~|@|\$|%)/i.test(p) || /(?:^|\/)\.\.(?:\/|$)/.test(p)) return;
+    if (PLAN_NOT_FILES.has(p.toLowerCase())) return;
+    const bare = p.replace(/\/+$/, "");
+    const last = bare.split("/").pop();
+    const ext = (last.match(/\.([A-Za-z0-9]{1,10})$/) || [])[1];
+    if (bare.includes("/")) {
+      if (!/^[\w.@+\-/[\]()]+$/.test(p) || (!ext && !spanned)) return;
+    } else if (!spanned || !((ext && PLAN_FILE_EXT.has(ext.toLowerCase()) && /^[\w.\-+]+$/.test(p)) || PLAN_BARE_FILES.test(p))) return;
+    if (!out.includes(p)) out.push(p);
+  };
+  const s = String(text || "");
+  for (const m of s.matchAll(/`([^`\n]+)`/g)) add(m[1], true);
+  const rest = s.replace(/`[^`\n]*`/g, " ").replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, " $1 $2 ");
+  for (const tok of rest.split(/\s+/)) {
+    const t = tok.replace(/^[("'[{<*_]+|[)"'\]}>.,;:!?*_]+$/g, "");
+    if (t.includes("/")) add(t, false);
+  }
+  return out;
+}
+// A shell command a step names (a backticked span, or a line of its code block) — the first that reads as a CHECK (a test, lint,
+// build or curl run) becomes the task's _Verify:_. A `$ ` prompt and a leading `cd <dir> &&` are dropped; one line only.
+const RE_PLAN_RUNNER = /^(?:npm|npx|pnpm|yarn|bun|bunx|node|deno|python3?|py|pytest|uv|poetry|go|cargo|make|mvn|gradle|\.\/gradlew|dotnet|bundle|rake|rspec|rails|php|composer|phpunit|vendor\/bin\/phpunit|swift|xcodebuild|ctest|tox|nox|ruff|mypy|eslint|tsc|jest|vitest|mocha|playwright|cypress|curl|mix|flutter|dart|sbt|zig|just)\b/;
+const RE_PLAN_CHECK = /(?<![\w-])(?:test|tests|spec|check|lint|verify|tsc|typecheck|type-check|build|pytest|jest|vitest|mocha|rspec|phpunit|ctest|clippy|vet|curl|e2e)(?![\w-])/i;
+function planCommand(candidates) {
+  for (const raw of candidates) {
+    const c = String(raw).trim().replace(/^\$\s+/, "").replace(/^cd\s+\S+\s*&&\s*/, "");
+    if (!c || /[\r\n`]/.test(c) || /_\s/.test(c) || c.length > 300) continue;
+    if (RE_PLAN_RUNNER.test(c) && RE_PLAN_CHECK.test(c)) return c;
+  }
+  return null;
+}
+// A command-only bullet ("Run `npm test`", "`npm test` passes") is a check to run, not a criterion.
+function planCommandOnly(text) {
+  const t = String(text).replace(/\*\*|__/g, "").trim();
+  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*:?\s*`([^`]+)`\s*(?:passes|succeeds|is green|should pass|passa|pasa)?\s*[.;]?$/i);
+  return !!(m && RE_PLAN_RUNNER.test(m[1].trim().replace(/^\$\s+/, "")));
+}
+// A criterion as written in a plan → EARS when it already reads like one: a modal requirement (kept), Given/When/Then, or a
+// WHEN / IF / WHILE clause with its response ("When the toggle is clicked, the theme switches" → WHEN …, THE SYSTEM SHALL ensure
+// that …) — EN / PT / ES. Anything else → null (kept with [NEEDS CLARIFICATION]).
+const PLAN_COND = [
+  ["en", /^(when|whenever|if|while)\s+(.+?),\s*(.+)$/i],
+  ["pt", /^(quando|sempre que|se|enquanto)\s+(.+?),\s*(.+)$/i],
+  ["es", /^(cuando|siempre que|si|mientras)\s+(.+?),\s*(.+)$/i],
+];
+function earsFromPlanText(raw) {
+  const t = String(raw).replace(/^\[[ xX~\-/]\]\s+/, "").replace(/\*\*|__/g, "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (RE_MODAL.test(t)) return t;
+  const g = earsFromGwt(t);
+  if (g) return g;
+  for (const [lng, re] of PLAN_COND) {
+    const m = t.match(re);
+    if (!m) continue;
+    const E = i18n.msg(lng).importSpec.ears;
+    const then = earsThen(m[3], lng, E);
+    if (!then) return null;
+    const kw = m[1].toLowerCase();
+    if (kw === "if" || kw === "se" || kw === "si") return `${E.if} ${trimClause(m[2])}, ${E.then} ${then}`;
+    return `${kw === "while" || kw === "enquanto" || kw === "mientras" ? E.while : E.when} ${trimClause(m[2])}, ${then}`;
+  }
+  return null;
+}
+// Top-level list items of [lo, hi) with their whole body (nested items, paragraphs, code blocks — blank lines inside it): up to the
+// next item at (or left of) its indent, a heading, or a line back at its indent after a blank one. code = the body's code lines
+// (fenced, or indented 4 past the item's text).
+function planBlocks(lines, lo, hi) {
+  const items = [];
+  let cur = null, fence = null, prevBlank = true;
+  for (let i = lo; i < hi; i++) {
+    const l = lines[i];
+    if (fence) { if (cur) { cur.body.push(i); cur.code.add(i); } if (closesFence(l, fence)) fence = null; prevBlank = false; continue; }
+    const f = l.match(RE_FENCE);
+    if (f) {
+      if (cur && (indentOf(l) > cur.indent || !prevBlank)) { cur.body.push(i); cur.code.add(i); } else cur = null;
+      fence = f[1];
+      prevBlank = false;
+      continue;
+    }
+    if (/^\s*#{1,6}\s/.test(l)) { cur = null; prevBlank = false; continue; }
+    const blank = !l.trim();
+    const m = l.match(RE_PLAN_ITEM);
+    const ind = indentOf(l);
+    if (m && (!cur || ind <= cur.indent)) {
+      cur = { i, indent: ind, content: l.length - l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").length, box: m[2] != null ? m[2] : null, text: m[3].trim(), body: [], code: new Set() };
+      items.push(cur);
+      prevBlank = false;
+      continue;
+    }
+    if (!cur) { prevBlank = blank; continue; }
+    if (blank) { cur.body.push(i); prevBlank = true; continue; }
+    if (ind > cur.indent || !prevBlank) {
+      cur.body.push(i);
+      if (ind >= cur.content + 4) cur.code.add(i);
+      prevBlank = false;
+      continue;
+    }
+    cur = null;
+    prevBlank = false;
+  }
+  for (const it of items) while (it.body.length && !lines[it.body[it.body.length - 1]].trim()) it.body.pop();
+  return items;
+}
+// Every checkbox of [lo, hi) outside fenced code — importTasks' rule: a nested one is a task of its own — with its own body (the
+// more-indented lines under it, up to the next checkbox, a heading or a line back at its indent). skip(i): lines not to read.
+function checkboxUnits(lines, lo, hi, skip) {
+  const units = [];
+  let cur = null, fence = null;
+  for (let i = lo; i < hi; i++) {
+    const l = lines[i];
+    if (fence) { if (cur) { cur.body.push(i); cur.code.add(i); } if (closesFence(l, fence)) fence = null; continue; }
+    if (skip && skip(i)) { cur = null; continue; }
+    const f = l.match(RE_FENCE);
+    if (f) { fence = f[1]; if (cur && indentOf(l) > cur.indent) { cur.body.push(i); cur.code.add(i); } else cur = null; continue; }
+    const m = l.match(RE_PLAN_CHECKBOX);
+    if (m) {
+      cur = { i, indent: m[1].length, content: l.length - l.replace(/^\s*[-*+]\s+/, "").length, box: m[2], text: m[3].trim(), body: [], code: new Set() };
+      units.push(cur);
+      continue;
+    }
+    if (/^\s*#{1,6}\s/.test(l)) { cur = null; continue; }
+    if (!cur) continue;
+    if (!l.trim()) { cur.body.push(i); continue; }
+    if (indentOf(l) > cur.indent) { cur.body.push(i); if (indentOf(l) >= cur.content + 4) cur.code.add(i); continue; }
+    cur = null;
+  }
+  for (const u of units) while (u.body.length && !lines[u.body[u.body.length - 1]].trim()) u.body.pop();
+  return units;
+}
+const markUnit = (used, u) => { used.add(u.i); u.body.forEach((b) => used.add(b)); };
+// A unit's prose (its text + the body lines that are not code) and its code lines.
+const unitProse = (lines, u) => [u.text, ...u.body.filter((b) => !u.code.has(b)).map((b) => lines[b])].join("\n");
+const unitCode = (lines, u) => u.body.filter((b) => u.code.has(b) && !RE_FENCE.test(lines[b])).map((b) => lines[b].trim());
+// One synthesized task (importTasks renumbers it): `- [x] <tag> text`, its markers, then its own body re-indented under it.
+function planTaskLines(lines, u, o) {
+  const out = [`- [${o.done ? "x" : " "}] ${o.tag ? o.tag + " " : ""}${o.text != null ? o.text : u.text}`];
+  if (o.req && o.req.length) out.push(`  - _Requirements: ${o.req.join(", ")}_`);
+  if (o.paths && o.paths.length) out.push(`  - _Implements: ${o.paths.join(", ")}_`);
+  if (o.verify) out.push(`  - _Verify: ${o.verify}_`);
+  const base = u.content != null ? u.content : u.indent + 2;
+  for (const b of u.body || []) {
+    const l = lines[b].replace(/\s+$/, "");
+    out.push(!l.trim() ? "" : "  " + l.slice(Math.min(indentOf(l), base)));
+  }
+  return out;
+}
+const planDone = (box) => box === "x" || box === "X";
+// The heading text a section is recognised by: numbering, emoji and emphasis dropped ("## 2. ✅ Verification" → "Verification").
+// "### Step 1: Add the store" is a step's own title ("Add the store"), never a Steps section heading of its own.
+const planHeadingText = (t) => String(t).replace(/[*_`]/g, "").replace(/^[^\p{L}\p{N}]+/u, "").replace(/^\d+(?:\.\d+)*[.):]?\s+/, "")
+  .replace(/^(?:step|phase|passo|paso|fase|etapa)\s+\d+(?:\.\d+)*\s*[:.\-–—]\s*/i, "").trim();
+// Each heading's section kind (its own, else its parent's): { kinds: [kind | null per heading], direct(k): [lo, hi) of its own lines }.
+function planSections(lines, hs, classify) {
+  const kinds = [], own = [], parent = [];
+  const stack = [];
+  hs.forEach((h, k) => {
+    while (stack.length && hs[stack[stack.length - 1]].level >= h.level) stack.pop();
+    parent[k] = stack.length ? stack[stack.length - 1] : -1;
+    own[k] = classify(planHeadingText(h.text), h) || null;
+    kinds[k] = own[k] || (parent[k] !== -1 ? kinds[parent[k]] : null);
+    stack.push(k);
+  });
+  return { kinds, own, parent, direct: (k) => [hs[k].i + 1, k + 1 < hs.length ? hs[k + 1].i : lines.length] };
+}
+// A sub-heading step ("### Step 1: Create the context" under "## Implementation") → a unit: the heading (its "Step N:" / "N."
+// dropped) and everything under it; its own sub-headings become bold lines in the task body, code fences stay code.
+function headingUnit(lines, hs, k) {
+  const [lo, hi] = mdRange(lines, hs, k);
+  const body = [], code = new Set();
+  let fence = null;
+  for (let i = lo; i < hi; i++) {
+    const l = lines[i];
+    if (fence) { code.add(i); if (closesFence(l, fence)) fence = null; }
+    else if (RE_FENCE.test(l)) { fence = l.match(RE_FENCE)[1]; code.add(i); }
+    body.push(i);
+  }
+  const text = hs[k].text.replace(/^(?:step|passo|paso)\s+\d+\s*[:.\-–—]\s*/i, "").replace(/^\d+(?:\.\d+)*[.)]?\s+/, "");
+  return { i: hs[k].i, indent: 0, content: 0, text, body, code };
+}
+// The unused lines, with only the headings whose section still holds some unused content (a Steps heading whose every item became
+// a task goes too) — the design body of a plan / ExecPlan. A level-1 section ("# Appendix") becomes "## …": design.md has its own
+// title (and importSpec drops a leading H1 as the source's title).
+function unusedMarkdown(lines, hs, used, from = 0) {
+  const isHead = new Set(hs.map((h) => h.i));
+  const h1s = new Set(hs.filter((h) => h.level === 1).map((h) => h.i));
+  const keep = new Set();
+  hs.forEach((h, k) => {
+    if (used.has(h.i)) return;
+    const [lo, hi] = mdRange(lines, hs, k);
+    for (let i = lo; i < hi; i++) if (!used.has(i) && !isHead.has(i) && lines[i].trim() && !RE_MD_HR.test(lines[i])) { keep.add(h.i); return; }
+  });
+  const out = [];
+  for (let i = from; i < lines.length; i++) if (!used.has(i) && (!isHead.has(i) || keep.has(i))) out.push(h1s.has(i) ? "#" + lines[i] : lines[i]);
+  return tidyLines(out);
+}
+// A tiny YAML subset for Cursor's plan front matter: top-level `key: value` scalars (quoted or plain; `|` / `>` blocks folded) and
+// `todos:` — a list of maps (`- id: …` / `  content: …` / `  status: …`). → { data, end } (end = the line after the closing ---) or null.
+function planFrontMatter(lines) {
+  if (!lines.length || lines[0].trim() !== "---") return null;
+  const end = lines.findIndex((l, i) => i > 0 && /^(?:---|\.\.\.)\s*$/.test(l));
+  if (end === -1) return null;
+  const unq = (v) => {
+    const s = String(v).trim();
+    if (/^"(?:[^"\\]|\\.)*"$/.test(s)) return s.slice(1, -1).replace(/\\(["\\/])/g, "$1").replace(/\\n/g, " ").replace(/\\t/g, " ");
+    if (/^'(?:[^']|'')*'$/.test(s)) return s.slice(1, -1).replace(/''/g, "'");
+    return s.replace(/\s+#.*$/, "");
+  };
+  const data = Object.create(null); // a key named __proto__ is a plain key
+  let list = null, item = null;
+  for (let i = 1; i < end; i++) {
+    const l = lines[i];
+    if (!l.trim() || /^\s*#/.test(l)) continue;
+    const top = l.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (top) {
+      list = item = null;
+      if (/^[|>][-+]?\s*$/.test(top[2])) { // a block scalar: the more-indented lines under it, folded into one line
+        const parts = [];
+        while (i + 1 < end && (!lines[i + 1].trim() || /^\s/.test(lines[i + 1]))) parts.push(lines[++i].trim());
+        data[top[1]] = parts.filter(Boolean).join(" ");
+      } else if (!top[2].trim()) data[top[1]] = list = [];
+      else data[top[1]] = unq(top[2]);
+      continue;
+    }
+    const entry = list && l.match(/^\s*-\s+(.*)$/);
+    if (entry) { // a list entry: a map ("- id: x") or a scalar
+      const kv = entry[1].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+      item = kv ? Object.create(null) : null;
+      if (kv) item[kv[1]] = unq(kv[2]);
+      list.push(item || unq(entry[1]));
+      continue;
+    }
+    const kv = item && l.match(/^\s+([A-Za-z_][\w-]*):\s*(.*)$/);
+    if (kv) item[kv[1]] = unq(kv[2]); // the entry's next key (null-prototype maps: any key is a plain key)
+  }
+  return { data, end: end + 1 };
+}
+// A folder given for a single-document source (a plan, an ExecPlan): its only .md file — several → { several }, none → null.
+function singleDoc(dir, src, exclude) {
+  if (src.file) return { file: src.file };
+  const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n) && !(exclude && exclude.test(n))).sort();
+  const files = names.filter((n) => { try { return fs.lstatSync(path.join(dir, n)).isFile(); } catch { return false; } });
+  if (files.length > 1) return { several: files };
+  return files.length ? { file: path.join(dir, files[0]) } : null;
+}
+// Headings whose whole section is already imported (every line used, blank, or a heading marked so) — marked used too, so
+// leftoverExtras never carries an empty "## Requirements" wrapping the FR / NFR lines it read. Bottom-up: a parent follows its children.
+function markEmptyHeadings(lines, hs, used) {
+  for (let k = hs.length - 1; k >= 0; k--) {
+    if (used.has(hs[k].i)) continue;
+    const [lo, hi] = mdRange(lines, hs, k);
+    let empty = true;
+    for (let i = lo; i < hi && empty; i++) if (!used.has(i) && lines[i].trim() && !RE_MD_HR.test(lines[i])) empty = false;
+    if (empty) used.add(hs[k].i);
+  }
+}
+// A single-document model with one story: title → US-1, the criteria given. → the story object.
+function planStory(model, title, criteria) {
+  const story = { printed: null, key: title, title, priority: null, prose: [], quote: [], after: [], criteria };
+  model.stories.push(story);
+  return story;
+}
+// A plan / ExecPlan wrapped whole in one ```md fence (PLANS.md's own examples are) → its inside.
+function unwrapDocFence(text) {
+  const m = String(text).match(/^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i);
+  return m ? m[2] : text;
+}
+
+const RE_PLAN_CRITERIA = /^(?:goals?|objectives?|acceptance(?:\s+criteria)?|success\s+criteria|requirements|definition\s+of\s+done|done\s+when|expected\s+(?:outcomes?|behaviou?r|results?)|verification|validation|objetivos?|metas?|crit[ée]rios\s+de\s+(?:aceita[çc][ãa]o|sucesso)|requisitos|defini[çc][ãa]o\s+de\s+(?:pronto|conclu[íi]do)|resultados?\s+esperados?|verifica[çc][ãa]o|valida[çc][ãa]o|criterios\s+de\s+(?:aceptaci[óo]n|[ée]xito)|definici[óo]n\s+de\s+(?:hecho|terminado)|verificaci[óo]n|validaci[óo]n)\b/i;
+const RE_PLAN_STEPS = /^(?:(?:implementation\s+)?steps?|implementation(?:\s+(?:plan|details|order|steps))?|(?:work\s+)?plan(?:\s+of\s+work)?|tasks?|to-?dos?|work\s+items?|(?:proposed\s+)?changes|approach|phases?|milestones?|passos|etapas|implementa[çc][ãa]o|plano(?:\s+de\s+implementa[çc][ãa]o)?|tarefas|altera[çc][õo]es|abordagem|fases|pasos|implementaci[óo]n|plan\s+de\s+implementaci[óo]n|tareas|cambios|enfoque)\b/i;
+const RE_PLAN_SUMMARY = /^(?:summary|overview|goal|objective|context|problem(?:\s+statement)?|purpose|background|tl;?dr|resumo|vis[ãa]o\s+geral|objetivo|contexto|problema|prop[óo]sito|resumen|visi[óo]n\s+general)\b/i;
+
+// plan — Claude Code plan mode / Cursor plans (see the block comment above).
+function parsePlan(dir, read, W, src) {
+  const P = i18n.msg(src.lang).importPlans;
+  const doc = singleDoc(dir, src);
+  if (!doc) return null;
+  if (doc.several) return { error: P.several(toPosix(path.relative(src.root, dir)) || ".", doc.several.join(", ")) };
+  const text = read(doc.file);
+  if (text == null) return null;
+  const model = newImportModel();
+  model.sourceFile = doc.file;
+  const lines = stripHtmlComments(text).split(/\r?\n/);
+  const used = new Set();
+  const fm = planFrontMatter(lines);
+  const fmData = fm ? fm.data : {};
+  if (fm) for (let i = 0; i < fm.end; i++) used.add(i);
+  const hs = mdHeadings(lines).filter((h) => !fm || h.i >= fm.end);
+  const h1 = hs[0] && hs[0].level === 1 ? hs[0] : null; // the title: a first heading of level 1 (never a later '# Steps')
+  if (h1) used.add(h1.i);
+  const cleanTitle = (t) => String(t || "").replace(/^(?:(?:implementation|execution)\s+plan|plan|plano(?:\s+de\s+implementa[çc][ãa]o)?|plan\s+de\s+implementaci[óo]n)\s*(?:[:—–-]\s*|$)/i, "").trim();
+  model.title = (typeof fmData.name === "string" && fmData.name.trim()) || cleanTitle(h1 && h1.text) || null;
+  const stem = path.basename(doc.file).replace(/\.md$/i, "").replace(/\.plan$/i, "").replace(/[-_][0-9a-f]{6,}$/i, "");
+  model.nameHint = model.title || stem;
+  // The title is no section ("# Plan: Add dark mode" is not a Plan-of-work heading its sub-sections inherit).
+  const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : RE_PLAN_CRITERIA.test(t) ? "criteria" : RE_PLAN_STEPS.test(t) ? "steps" : RE_PLAN_SUMMARY.test(t) ? "summary" : null));
+  // Summary: Cursor's overview, else the first paragraph of a Summary / Goal / Context section, else the one under the title.
+  if (typeof fmData.overview === "string" && fmData.overview.trim()) model.summary = fmData.overview.trim();
+  else {
+    const k = hs.findIndex((h, j) => sec.kinds[j] === "summary" || (sec.kinds[j] === "criteria" && /^(?:goal|objective|objetivo)\b/i.test(planHeadingText(h.text))));
+    const [lo, hi] = k !== -1 ? sec.direct(k) : [fm ? fm.end : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
+    const at = [];
+    model.summary = firstParagraph(lines.slice(lo, hi), at);
+    at.forEach((r) => used.add(lo + r));
+  }
+  // Criteria: the items of every goals / acceptance / verification section (a command-only item stays in the design).
+  const criteria = [];
+  hs.forEach((h, k) => {
+    if (sec.kinds[k] !== "criteria") return;
+    const [lo, hi] = sec.direct(k);
+    let j = 0;
+    for (const it of planBlocks(lines, lo, hi)) {
+      if (planCommandOnly(it.text) && !it.body.length) continue;
+      const raw = [it.text, ...it.body.filter((b) => !it.code.has(b)).map((b) => lines[b].trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ""))].filter(Boolean).join(" ").replace(/^\[[ xX~\-/]\]\s+/, "");
+      criteria.push({ key: `${planHeadingText(h.text)} ${++j}`, raw, ears: earsFromPlanText(raw) });
+      markUnit(used, it);
+    }
+  });
+  const inCriteria = new Set();
+  hs.forEach((h, k) => { if (sec.kinds[k] === "criteria") { const [lo, hi] = sec.direct(k); for (let i = lo; i < hi; i++) inCriteria.add(i); } });
+  // Tasks: Cursor's todos, else every checklist outside the criteria, else a Steps section's items, else its sub-headings.
+  const out = [];
+  const keys = [];
+  const cancelled = [];
+  const todos = Array.isArray(fmData.todos) ? fmData.todos.filter((x) => isObj(x) && typeof x.content === "string" && x.content.trim()) : [];
+  if (todos.length) {
+    todos.forEach((x, n) => {
+      const status = String(x.status || "").toLowerCase();
+      if (/^cancel/.test(status)) cancelled.push(shortTitle(x.content.trim(), 40));
+      out.push(...planTaskLines(lines, { text: x.content.trim(), body: [], indent: 0 }, { done: /^(?:completed?|done)$/.test(status), paths: planPaths(x.content) }));
+      keys.push(`todo ${typeof x.id === "string" && x.id ? x.id : n + 1}`);
+    });
+  } else {
+    const boxes = checkboxUnits(lines, fm ? fm.end : 0, lines.length, (i) => inCriteria.has(i));
+    if (boxes.length) {
+      let head = null;
+      let k = -1; // the heading the checkbox sits under (one walk: the boxes come in line order)
+      boxes.forEach((u, n) => {
+        while (k + 1 < hs.length && hs[k + 1].i < u.i) k++;
+        if (k >= 0 && hs[k].i !== head && hs[k] !== h1) { head = hs[k].i; out.push("", "## " + planHeadingText(hs[k].text)); }
+        out.push(...planTaskLines(lines, u, { done: planDone(u.box), paths: planPaths(unitProse(lines, u)) }));
+        keys.push(`step ${n + 1}`);
+        markUnit(used, u);
+      });
+    } else {
+      hs.forEach((h, k) => {
+        if (sec.kinds[k] !== "steps") return;
+        const [lo, hi] = sec.direct(k);
+        for (const it of planBlocks(lines, lo, hi)) {
+          out.push(...planTaskLines(lines, it, { done: planDone(it.box), paths: planPaths(unitProse(lines, it)) }));
+          keys.push(`step ${keys.length + 1}`);
+          markUnit(used, it);
+        }
+      });
+      if (!out.length) { // no items: the sub-headings right under a Steps section ("### Step 1: Create the context")
+        hs.forEach((h, k) => {
+          const p = sec.parent[k];
+          if (p === -1 || sec.own[p] !== "steps" || sec.own[k]) return;
+          const u = headingUnit(lines, hs, k);
+          const task = planTaskLines(lines, u, { done: false, paths: planPaths(unitProse(lines, u)) });
+          const off = task.length - u.body.length; // the body lines come last: a sub-heading there becomes a bold line (never one in code)
+          out.push(...task.map((l, r) => (r >= off && !u.code.has(u.body[r - off]) && /^\s*#{1,6}\s/.test(l) ? "  **" + l.replace(/^\s*#+\s*/, "").trim() + "**" : l)));
+          keys.push(`step ${keys.length + 1}`);
+          markUnit(used, u);
+        });
+      }
+    }
+  }
+  planStory(model, model.title || model.nameHint || P.planTitle, criteria);
+  if (out.length) {
+    model.tasks = { text: out.join("\n"), file: path.basename(doc.file) };
+    model.taskKeys = keys;
+  } else model.warnings.push(P.wNoSteps);
+  if (cancelled.length) model.warnings.push(P.wCancelled(cancelled.join(", ")));
+  const design = unusedMarkdown(lines, hs, used, fm ? fm.end : 0);
+  if (design.length) model.design = { text: design.join("\n"), file: path.basename(doc.file) };
+  else model.warnings.push(P.wNoDesignLeft);
+  return model;
+}
+
+// execplan — a Codex ExecPlan (PLANS.md): see the block comment above.
+const RE_EXEC_SECTION = [
+  ["purpose", /^purpose\b|^big picture\b|^prop[óo]sito\b/i],
+  ["progress", /^progress\b|^progresso\b|^progreso\b/i],
+  ["decisions", /^decision log\b|^decisions?\b|^registo de decis|^registro de decis|^decis[õo]es\b|^decisiones\b/i],
+  ["steps", /^concrete steps\b|^passos concretos\b|^pasos concretos\b/i],
+  ["validation", /^validation(?:\s+and\s+|\s*&\s*)acceptance\b|^validation\b|^acceptance\b|^valida[çc][ãa]o(?:\s+e\s+aceita[çc][ãa]o)?\b|^validaci[óo]n(?:\s+y\s+aceptaci[óo]n)?\b/i],
+];
+function parseExecPlan(dir, read, W, src) {
+  const P = i18n.msg(src.lang).importPlans;
+  const doc = singleDoc(dir, src, /^(?:plans|agents|readme)\.md$/i); // PLANS.md itself is the guide, not a plan
+  if (!doc) return null;
+  if (doc.several) return { error: P.several(toPosix(path.relative(src.root, dir)) || ".", doc.several.join(", ")) };
+  const text = read(doc.file);
+  if (text == null) return null;
+  const model = newImportModel();
+  model.sourceFile = doc.file;
+  const lines = stripHtmlComments(unwrapDocFence(text)).split(/\r?\n/);
+  const hs = mdHeadings(lines);
+  const used = new Set();
+  const h1 = hs[0] && hs[0].level === 1 ? hs[0] : null; // the title: a first heading of level 1 (never a later '# Steps')
+  if (h1) { used.add(h1.i); model.title = h1.text.replace(/^exec\s*plan\s*[:—–-]\s*/i, "").trim() || null; }
+  model.nameHint = model.title || path.basename(doc.file).replace(/\.md$/i, "");
+  const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : (RE_EXEC_SECTION.find(([, re]) => re.test(t)) || [null])[0]));
+  const ranges = (kind) => hs.map((h, k) => (sec.kinds[k] === kind ? sec.direct(k) : null)).filter(Boolean);
+  if (!hs.some((h, k) => sec.kinds[k])) model.warnings.push(P.wNotExecPlan);
+  // Summary: Purpose / Big Picture's first paragraph (the rest of it is design context).
+  const pr = ranges("purpose")[0];
+  if (pr) { const at = []; model.summary = firstParagraph(lines.slice(pr[0], pr[1]), at); at.forEach((r) => used.add(pr[0] + r)); }
+  // Criteria: Validation and Acceptance — its items, else its paragraphs (code blocks stay design).
+  const criteria = [];
+  for (const [lo, hi] of ranges("validation")) {
+    const items = planBlocks(lines, lo, hi);
+    if (items.length) {
+      for (const it of items) {
+        if (planCommandOnly(it.text) && !it.body.length) continue;
+        const raw = [it.text, ...it.body.filter((b) => !it.code.has(b)).map((b) => lines[b].trim())].filter(Boolean).join(" ").replace(/^\[[ xX~\-/]\]\s+/, "");
+        criteria.push({ key: `Validation and Acceptance ${criteria.length + 1}`, raw, ears: earsFromPlanText(raw) });
+        markUnit(used, it);
+      }
+    } else {
+      let para = [];
+      let fence = null;
+      const flush = () => { if (para.length) { const raw = para.map((i) => lines[i].trim()).join(" "); if (!planCommandOnly(raw)) { criteria.push({ key: `Validation and Acceptance ${criteria.length + 1}`, raw, ears: earsFromPlanText(raw) }); para.forEach((i) => used.add(i)); } } para = []; };
+      for (let i = lo; i < hi; i++) {
+        const l = lines[i];
+        if (fence) { if (closesFence(l, fence)) fence = null; continue; }
+        const f = l.match(RE_FENCE);
+        if (f) { flush(); fence = f[1]; continue; }
+        if (!l.trim() || /^\s{4,}\S/.test(l) || /^\s*(?:>|\|)/.test(l)) { flush(); continue; }
+        para.push(i);
+      }
+      flush();
+    }
+  }
+  // Tasks: Progress (checkbox state kept) + Concrete Steps (the steps Progress doesn't already list).
+  const out = [];
+  const keys = [];
+  const seen = new Map(); // a Progress item's text → its unit's index (a Concrete Step saying the same maps to that task)
+  model.taskAliases = [];
+  const norm = (s) => String(s).replace(/^\(\s*\d{4}-\d{2}-\d{2}[^)]*\)\s*/, "").replace(/[`*_]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const addUnit = (u, key, head) => {
+    if (head && !out.includes(head)) out.push("", head);
+    const verify = planCommand([...[...unitProse(lines, u).matchAll(/`([^`\n]+)`/g)].map((m) => m[1]), ...unitCode(lines, u)]);
+    out.push(...planTaskLines(lines, u, { done: planDone(u.box), paths: planPaths(unitProse(lines, u)), verify }));
+    keys.push(key);
+    if (!seen.has(norm(u.text))) seen.set(norm(u.text), keys.length - 1);
+    markUnit(used, u);
+  };
+  hs.forEach((h, k) => {
+    if (sec.kinds[k] !== "progress") return;
+    const [lo, hi] = sec.direct(k);
+    checkboxUnits(lines, lo, hi).forEach((u, n) => addUnit(u, `Progress ${n + 1}`, "## " + h.text));
+  });
+  hs.forEach((h, k) => {
+    if (sec.kinds[k] !== "steps") return;
+    const [lo, hi] = sec.direct(k);
+    const hasBoxes = lines.slice(lo, hi).some((l) => RE_PLAN_CHECKBOX.test(l));
+    const units = hasBoxes ? checkboxUnits(lines, lo, hi) : planBlocks(lines, lo, hi);
+    units.forEach((u, n) => {
+      if (!seen.has(norm(u.text))) return addUnit(u, `Concrete Steps ${n + 1}`, "## " + h.text);
+      model.taskAliases.push([`Concrete Steps ${n + 1}`, seen.get(norm(u.text))]); // the same step as a Progress item: one task
+      markUnit(used, u);
+    });
+  });
+  // Decision Log → the design's "## Decisions" (D-1 …), each entry's Rationale / Date lines under it.
+  const decisions = [];
+  for (const [lo, hi] of ranges("decisions")) {
+    for (const it of planBlocks(lines, lo, hi)) {
+      markUnit(used, it);
+      const what = it.text.replace(/^(?:\*\*|__)?(?:decision|decis[ãa]o|decisi[óo]n)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?/i, "").trim();
+      if (!what || /^\(?(?:none|n\/a|tbd|nenhuma|ninguna)(?:\s+yet)?\)?\.?$/i.test(what)) continue;
+      const n = decisions.length + 1;
+      model.mapping[`Decision Log ${n}`] = `D-${n}`;
+      decisions.push(`- **D-${n}** — ${what}`, ...it.body.map((b) => lines[b].replace(/\s+$/, "")).filter((l) => l.trim()).map((l) => "  " + l.trim()));
+    }
+  }
+  planStory(model, model.title || model.nameHint, criteria);
+  if (out.length) {
+    model.tasks = { text: out.join("\n"), file: path.basename(doc.file) };
+    model.taskKeys = keys;
+  } else model.warnings.push(P.wNoSteps);
+  const design = unusedMarkdown(lines, hs, used);
+  if (decisions.length) design.push(...(design.length ? [""] : []), P.decisionsHeading, "", ...decisions);
+  if (design.length) model.design = { text: design.join("\n"), file: path.basename(doc.file) };
+  else model.warnings.push(P.wNoDesignLeft);
+  return model;
+}
+
+// bmad — BMAD-METHOD docs (v4 docs/…, v6 _bmad-output/…): see the block comment above.
+const RE_BMAD_STORY_HEAD = /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i;
+const RE_BMAD_FR = /^\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*(?:\*\*|__)?\s*(.+)$/i;
+const RE_BMAD_WORKFLOW = /^(?:change log|changelog|status)$/i; // BMAD's own workflow records — named in a warning, not imported
+const RE_BMAD_PRD_DESIGN = /^(?:technical assumptions|user interface design goals)\b/i;
+function parseBmad(dir, read0, W, src) {
+  const P = i18n.msg(src.lang).importPlans;
+  const seen = new Map(); // each file read once (a story file is read to recognise it, then to parse it)
+  const read = (f) => { if (!seen.has(f)) seen.set(f, read0(f)); return seen.get(f); };
+  const isDir = (p) => { try { const st = fs.lstatSync(p); return st.isDirectory() && !st.isSymbolicLink(); } catch { return false; } };
+  const isFile = (p) => { try { return fs.lstatSync(p).isFile(); } catch { return false; } };
+  const mdIn = (d) => (isDir(d) ? safeReaddir(d).filter((n) => /\.md$/i.test(n) && isFile(path.join(d, n))).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((n) => path.join(d, n)) : []);
+  const bases = [dir, path.join(dir, "docs"), path.join(dir, "_bmad-output", "planning-artifacts"), path.join(dir, "planning-artifacts")];
+  const first = (names) => { for (const b of bases) for (const n of names) if (isFile(path.join(b, n))) return path.join(b, n); return null; };
+  const isStoryText = (t) => /^#\s+(?:story\s+)?\d+\.\d+\b/im.test(t || "");
+  let prdFiles = [], storyFiles = [], epicsFile = null, archFile = null;
+  const skipped = [];
+  if (src.file) {
+    const t = read(src.file);
+    if (t == null) return null;
+    if (isStoryText(t) && !/^\s*(?:[-*+]\s*)?(?:\*\*)?N?FR-?\d+/im.test(t)) storyFiles = [src.file];
+    else { prdFiles = [src.file]; storyFiles = mdIn(path.join(dir, "stories")).filter((f) => isStoryText(read(f))); }
+  } else {
+    const prd = first(["prd.md", "PRD.md"]);
+    if (prd) prdFiles = [prd];
+    else for (const b of bases) { const sh = mdIn(path.join(b, "prd")); if (sh.length) { prdFiles = sh.sort((a, b2) => (/index\.md$/i.test(a) ? -1 : /index\.md$/i.test(b2) ? 1 : 0)); break; } }
+    epicsFile = first(["epics.md"]);
+    archFile = first(["architecture.md"]);
+    for (const b of bases) if (!archFile && isDir(path.join(b, "architecture")) && mdIn(path.join(b, "architecture")).length) skipped.push(toPosix(path.relative(src.root, path.join(b, "architecture"))) + "/");
+    for (const d of [path.join(dir, "stories"), path.join(dir, "docs", "stories"), path.join(dir, "_bmad-output", "implementation-artifacts"), path.join(dir, "implementation-artifacts"), dir]) {
+      const found = mdIn(d).filter((f) => isStoryText(read(f)));
+      if (found.length) { storyFiles = found; break; }
+    }
+  }
+  if (!prdFiles.length && !storyFiles.length && !epicsFile) return null;
+  const model = newImportModel();
+  model.nameHint = path.basename(dir) === "docs" ? path.basename(path.dirname(dir)) : path.basename(dir);
+  model.skipped = skipped;
+  const stories = new Map(); // "E.S" → { e, s, title, prose, acs: [{n, raw}], tasks: {lines, units} | null, design: [], file }
+  const workflow = new Map(); // BMAD's workflow records (Status, Change Log) → the documents they were found in
+  const addWorkflow = (t, where) => { const k = /^status$/i.test(t) ? "Status" : t; if (!workflow.has(k)) workflow.set(k, []); if (!workflow.get(k).includes(where)) workflow.get(k).push(where); };
+  const designParts = [];
+  // A story's criteria items ("1: text" / "1. text" / "- text"; a BDD block's bold title dropped) → [{ n, raw }].
+  const acItems = (body) => mdListItems(body.map((l) => l.replace(/^(\s*)(\d+)\s*:\s/, "$1$2. ")), false).map((it) => ({
+    n: it.n, raw: it.text.replace(/^(?:\*\*|__)?AC\s*#?\s*(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*/i, "").trim(),
+  }));
+  const acEars = (raw) => {
+    const t = raw.replace(/^(?:\*\*|__)[^*_]+(?:\*\*|__)\s*(?=(?:\*\*|__)?(?:given|when|dad[oa]|quando|cuando)\b)/i, "");
+    return earsFromPlanText(t);
+  };
+  // PRD text(s) → title, summary, FR/NFR, stories (from its epics), carried sections.
+  const prdText = prdFiles.map((f) => read(f)).filter((t) => t != null).join("\n\n");
+  const epicsText = epicsFile ? read(epicsFile) : null;
+  for (const [txt, isPrd] of [[prdText, true], [epicsText, false]]) {
+    if (!txt) continue;
+    const lines = stripHtmlComments(txt).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const used = new Set();
+    if (!isPrd && hs.length && hs[0].level === 1) used.add(hs[0].i); // epics.md's own title
+    if (isPrd) {
+      const h1 = hs.find((h) => h.level === 1);
+      if (h1) { used.add(h1.i); model.title = h1.text.replace(/\s*(?:product requirements document|\(prd\)|prd)\s*/gi, " ").replace(/^\s*[:—–-]\s*|\s*[:—–-]\s*$/g, "").trim() || null; }
+      const sk = hs.findIndex((h) => /^(?:background context|vision|1\.\s*vision)\b/i.test(planHeadingText(h.text)));
+      const [lo, hi] = sk !== -1 ? [hs[sk].i + 1, sk + 1 < hs.length ? hs[sk + 1].i : lines.length] : [h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
+      const at = [];
+      model.summary = firstParagraph(lines.slice(lo, hi), at);
+      at.forEach((r) => used.add(lo + r));
+      // FR / NFR: list lines ("- FR1: …", "**NFR2**: …") and v6 headings ("#### FR-1: name" + its first paragraph).
+      const fr = [], nfr = [];
+      let fence = null;
+      lines.forEach((l, i) => {
+        if (fence) { if (closesFence(l, fence)) fence = null; return; }
+        const f = l.match(RE_FENCE);
+        if (f) { fence = f[1]; return; }
+        const hm = l.match(/^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]\s*(.+)$/i);
+        const m = hm || (!/^\s*#/.test(l) && l.match(RE_BMAD_FR));
+        if (!m) return;
+        const kind = m[1].toUpperCase();
+        let txt2 = m[3].replace(/(?:\*\*|__)\s*$/, "").trim();
+        used.add(i);
+        if (hm) {
+          const k = hs.findIndex((h) => h.i === i);
+          const body = [];
+          for (let j = i + 1; j < (k + 1 < hs.length ? hs[k + 1].i : lines.length); j++) body.push(j);
+          const at2 = [];
+          const para = firstParagraph(body.map((j) => lines[j]), at2);
+          if (para) { txt2 += " — " + para; at2.forEach((r) => used.add(body[r])); }
+        }
+        const id = `${kind}-${+m[2]}`;
+        model.mapping[(l.match(/N?FR[-\s]?\d+/i) || [id])[0].toUpperCase().replace(/\s+/, "")] = id; // "FR1" → "FR-1" (as written → dev-spec's form)
+        (kind === "NFR" ? nfr : fr).push(`- **${id}** — ${txt2}`);
+      });
+      if (fr.length) model.extra.push({ key: "functional", lines: fr });
+      if (nfr.length) model.extra.push({ heading: P.nonFunctional, lines: nfr });
+    }
+    // Stories: "### Story 1.1 Title" (v4 PRD epic sections), "### Story 1.1: Title" (v6 epics.md).
+    hs.forEach((h, k) => {
+      const m = planHeadingText(h.text).match(/^story\s+(\d+)\.(\d+)\s*[:.\-–—]?\s*(.*)$/i);
+      if (!m) return;
+      const [lo, hi] = mdRange(lines, hs, k);
+      markRange(used, h.i, hi);
+      const body = lines.slice(lo, hi);
+      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i.test(l));
+      const prose = tidyLines(body.slice(0, acAt === -1 ? body.length : acAt).filter((l) => !/^\s*#/.test(l)));
+      const acs = acAt === -1 ? [] : acItems(body.slice(acAt + 1));
+      const key = `${+m[1]}.${+m[2]}`;
+      if (!stories.has(key)) stories.set(key, { e: +m[1], s: +m[2], title: m[3].trim() || `Story ${key}`, prose, acs, tasks: null, design: [], from: "prd" });
+    });
+    // PRD sections: design-level ones → design.md; BMAD's change log → a warning; the rest → carried into requirements.md.
+    hs.forEach((h, k) => {
+      if (used.has(h.i)) return;
+      const t = planHeadingText(h.text);
+      const [lo, hi] = mdRange(lines, hs, k);
+      if (isPrd && RE_BMAD_PRD_DESIGN.test(t)) { designParts.push("## " + t, ...unusedLines(lines, used, lo, hi)); markRange(used, h.i, hi); }
+      else if (RE_BMAD_WORKFLOW.test(t)) { addWorkflow(t, isPrd ? "PRD" : "epics.md"); markRange(used, h.i, hi); }
+    });
+    markEmptyHeadings(lines, hs, used); // "## Requirements" whose FR / NFR lines were all read carries nothing
+    model.carried.push(...leftoverExtras(lines, hs, used, isPrd ? "" : "epics: "));
+  }
+  // Story files: # Story 1.1: Title · Status · Story · Acceptance Criteria · Tasks / Subtasks · Dev Notes (+ Testing) · Change Log ·
+  // Dev Agent Record · QA Results — the file wins over the PRD's copy of the same story.
+  for (const file of storyFiles) {
+    const txt = read(file);
+    if (txt == null) continue;
+    const lines = stripHtmlComments(txt).split(/\r?\n/);
+    const hs = mdHeadings(lines);
+    const h1 = hs.find((h) => h.level === 1);
+    const m = h1 && planHeadingText(h1.text).match(RE_BMAD_STORY_HEAD);
+    if (!m) continue;
+    const key = `${+m[1]}.${+m[2]}`;
+    const st = { e: +m[1], s: +m[2], title: m[3].trim() || `Story ${key}`, prose: [], acs: [], tasks: null, design: [], from: toPosix(path.relative(src.root, file)) };
+    const top = hs.filter((h) => h.level === 2);
+    // Before the first section: v6's "Status: ready-for-dev" line (a workflow record); any other text → the story's design notes.
+    const intro = lines.slice(h1.i + 1, top.length ? top[0].i : lines.length);
+    if (intro.some((l) => /^s*statuss*:/i.test(l))) addWorkflow("Status", key);
+    const introRest = tidyLines(intro.filter((l) => !/^s*statuss*:/i.test(l)));
+    if (introRest.length) st.design.push("", ...introRest);
+    for (const h of top) {
+      const k = hs.indexOf(h);
+      const t = planHeadingText(h.text);
+      const [lo, hi] = mdRange(lines, hs, k);
+      const body = lines.slice(lo, hi);
+      if (/^(?:story|user story)$/i.test(t)) st.prose = tidyLines(body.filter((l) => !/^\s*#/.test(l)).map((l) => l.replace(/\*\*(as an?|i want|so that)\*\*/gi, "$1")));
+      else if (/^acceptance criteria$/i.test(t)) st.acs = acItems(body);
+      else if (/^tasks?\s*(?:\/|&|and)?\s*(?:subtasks?)?$/i.test(t)) st.tasks = { lines, lo, hi };
+      else if (RE_BMAD_WORKFLOW.test(t)) addWorkflow(t, key);
+      else if (tidyLines(body).length) st.design.push("", `### ${t}`, ...tidyLines(body.map((l) => l.replace(/^(#{1,4})(\s)/, "#$1$2"))));
+    }
+    stories.set(key, st);
+  }
+  const ordered = [...stories.values()].sort((a, b) => a.e - b.e || a.s - b.s);
+  const out = [];
+  const keys = [];
+  ordered.forEach((st, idx) => {
+    const n = idx + 1;
+    const key = `Story ${st.e}.${st.s}`;
+    const byNumber = new Map(); // the printed AC number a task's (AC: …) cites → the new AC ID
+    const criteria = st.acs.map((a, j) => {
+      const id = `US-${n}.AC-${j + 1}`;
+      if (a.n != null && !byNumber.has(a.n)) byNumber.set(a.n, id);
+      if (!byNumber.has(j + 1) && a.n == null) byNumber.set(j + 1, id);
+      return { key: `${key} / AC ${a.n != null ? a.n : j + 1}`, raw: a.raw, ears: acEars(a.raw) };
+    });
+    model.stories.push({ printed: null, key, title: st.title, priority: null, prose: st.prose, quote: [], after: [], criteria });
+    if (st.design.length) designParts.push("", `## US-${n}: ${st.title}`, ...st.design);
+    if (!st.tasks) return;
+    const units = checkboxUnits(st.tasks.lines, st.tasks.lo, st.tasks.hi);
+    if (!units.length) return;
+    out.push("", `## US-${n}: ${st.title}`);
+    units.forEach((u, j) => {
+      const refM = u.text.match(/\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i);
+      // "(AC: 1, 3)", "(AC #2)", "(ACs: 1-3)" — a range is every number in it (bounded: a typo like 1-9999 is not expanded)
+      const nums = refM ? (refM[1].match(/\d+\s*[-–]\s*\d+|\d+/g) || []).flatMap((x) => {
+        const r = x.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+        return r && +r[2] >= +r[1] && +r[2] - +r[1] < 50 ? Array.from({ length: +r[2] - +r[1] + 1 }, (_, q) => +r[1] + q) : (x.match(/\d+/g) || []).map(Number);
+      }) : [];
+      const req = [], unknown = [];
+      nums.forEach((x) => { if (byNumber.has(x)) { if (!req.includes(byNumber.get(x))) req.push(byNumber.get(x)); } else unknown.push(x); });
+      if (unknown.length) model.warnings.push(P.wUnknownAc(key, shortTitle(u.text, 40), unknown.join(", ")));
+      const text = refM && !unknown.length ? u.text.replace(refM[0], "").replace(/\s{2,}/g, " ").trim() : u.text;
+      const label = (u.text.match(/^(?:sub)?task\s+[\d.]+/i) || [`item ${j + 1}`])[0];
+      out.push(...planTaskLines(st.tasks.lines, u, { done: planDone(u.box), tag: `[US${n}]`, text: text.replace(/^\[US\d+\]\s*/, ""), req, paths: planPaths(unitProse(st.tasks.lines, u)) }));
+      keys.push(`${key} / ${label}`);
+    });
+  });
+  if (!ordered.length) model.warnings.push(W.wNoRequirements(prdFiles.concat(epicsFile ? [epicsFile] : []).map((f) => toPosix(path.relative(src.root, f))).join(", ") || "."));
+  if (out.length) { model.tasks = { text: out.join("\n"), file: "Tasks / Subtasks" }; model.taskKeys = keys; }
+  else model.warnings.push(W.wNoTasks);
+  if (workflow.size) model.warnings.push(P.wWorkflow([...workflow].map(([t, where]) => `${t} (${where.join(", ")})`).join(", ")));
+  const arch = archFile ? read(archFile) : null;
+  const design = [arch != null ? arch.replace(/\s+$/, "") : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
+  if (tidyLines(design).length) model.design = { text: tidyLines(design).join("\n"), file: archFile ? path.basename(archFile) : "Dev Notes" };
+  else model.warnings.push(W.wNoDesign("architecture.md"));
+  if (model.title) model.nameHint = model.title; // the product's name, not "docs"
+  if (storyFiles.length === 1 && !prdFiles.length && ordered.length === 1) { model.sourceFile = storyFiles[0]; model.nameHint = ordered[0].title; }
+  return model;
+}
+const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad };
+// @pkg C3 <<<
+
 function importSpec(projectDir, tool, source, opts = {}) {
   const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
@@ -12771,13 +13630,16 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const root = path.resolve(projectDir);
   const abs = path.resolve(root, String(source).trim());
   const shown = String(source).trim();
-  // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out).
-  if (!isInsideDir(root, abs)) return { ok: false, error: W.outside(shown) };
+  // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
+  // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3).
+  const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir : "") });
+  if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
   if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
   let realRoot, realSrc;
   try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
-  if (!isInsideDir(realRoot, realSrc)) return { ok: false, error: W.outside(shown) };
-  const dir = fs.statSync(realSrc).isDirectory() ? realSrc : path.dirname(realSrc);
+  if (!isInsideDir(realRoot, realSrc)) return outside();
+  const isFileSrc = !fs.statSync(realSrc).isDirectory();
+  const dir = isFileSrc ? path.dirname(realSrc) : realSrc;
   const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const readWarnings = [];
   const read = (file) => {
@@ -12789,8 +13651,12 @@ function importSpec(projectDir, tool, source, opts = {}) {
       return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
     } catch { return null; }
   };
-  const model = (t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec)(dir, read, W);
+  // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
+  const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
+  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot });
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
+  if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
+  const srcRel = model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel; // C3: a single-document source shows its file
 
   const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
   const f = resolveFeature(projectDir, name);
@@ -12807,7 +13673,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
-  const note = L.note(IMPORT_TOOLS[t], rel, new Date().toISOString().slice(0, 10));
+  const note = L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
@@ -12880,6 +13746,11 @@ function importSpec(projectDir, tool, source, opts = {}) {
       return null;
     };
     const tk = importTasks(model.tasks.text, refs, name, lng, W, mapping, warnings);
+    // C3: a synthesized task list (plan / ExecPlan / BMAD) — one task per source item, in order: its item → the new task number.
+    if (Array.isArray(model.taskKeys) && model.taskKeys.length === tk.count) {
+      model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
+      for (const [k, j] of model.taskAliases || []) mapping[k] = "task " + (j + 1); // an ExecPlan step Progress already lists
+    }
     put("tasks.md", tk.text.replace("{{NOTE}}", () => note)); // a function: a '$' in the folder name is not a pattern
     if (!tk.anyRefs && tk.count && acOf.size) warnings.push(W.wNoRefs);
   } else if (cr.created.includes("tasks.md")) {
@@ -12903,7 +13774,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     dir: cr.dir,
     tool: t,
     toolName: IMPORT_TOOLS[t],
-    source: rel,
+    source: srcRel, // C3: the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
     tracks: cr.tracks,
     label: cr.label,
     lang: lng,
@@ -13172,6 +14043,9 @@ module.exports = {
   // @pkg C2 <<<
 
   // @pkg C3 exports >>>
+  FLOWS: Object.freeze(FLOWS.slice()), // the phase orders spec_create {flow} / spec_feature {action: "flow"} take (requirements-first = the default)
+  featureFlow: (projectDir, name) => { const f = existingFeature(projectDir, name); return f.ok ? featureFlow(f.dir) : null; }, // a feature's flow (null: no such feature)
+  planPaths, // the file paths a plan step names (spec_import plan → _Implements:_)
   // @pkg C3 <<<
 
   // @pkg C4 exports >>>

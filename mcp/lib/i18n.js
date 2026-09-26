@@ -2228,7 +2228,7 @@ const MSG = {
       renameNeedsName: "rename needs a new name.",
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
-      badAction: "action must be one of: remove | archive | rename | restore",
+      badAction: "action must be one of: remove | archive | rename | restore | flow",
       badTrack: "track must be one of: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
@@ -3398,6 +3398,33 @@ const MSG = {
     // @pkg C2 <<<
 
     // @pkg C3 msg-en >>>
+    // Flows (1.14 C3) — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
+    flow: {
+      required: (slug, known) => `flow required — one of: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
+      kindRefused: (slug, kind) => `'${slug}' is a ${kind}: it follows its own fixed phase order — the flow applies to features only.`,
+      kindIgnored: (kind) => `flow ignored: a ${kind} follows its own fixed phase order (the flow applies to features only).`,
+      kept: (slug, cur, asked) => `flow kept: '${slug}' follows ${cur} (asked: ${asked}) — change it with spec_feature {action: "flow"} (CLI: dev-spec feature flow ${slug} ${asked}).`,
+      set: (slug, flow, prev, order) => `'${slug}' now follows the ${flow} flow (was ${prev}) — phase order: ${order}.`,
+      same: (slug, flow, order) => `'${slug}' already follows the ${flow} flow — phase order: ${order}.`,
+      approvedStay: (list) => `Phases already approved stay approved: ${list}.`,
+      created: (order) => `design-first flow — phase order: ${order} (the requirements are written after the design is approved).`,
+      nextNote: (order) => `(design-first flow: ${order})`,
+      laterPhase: (detail) => `requirements.md is a later phase (design-first) — ${detail}`,
+    },
+    // spec_import plan · execplan · bmad (1.14 C3). Headings in the feature's language; IDs and markers stay English-stable.
+    importPlans: {
+      plansDir: "Claude Code plan mode keeps plans under plansDirectory (default ~/.claude/plans — outside the project): copy the plan into the project first, or set plansDirectory to a folder inside it.",
+      several: (dir, list) => `'${dir}' holds several documents (${list}) — pass the one to import.`,
+      planTitle: "Plan",
+      wNoSteps: "no checklist, to-do or steps list found — the scaffold's tasks.md was kept (break the work into tasks with /createTask)",
+      wCancelled: (list) => `cancelled to-dos imported as open tasks (drop the ones that no longer apply): ${list}`,
+      wNoDesignLeft: "nothing left for the design beyond the criteria and the steps — the scaffold's design.md was kept",
+      wNotExecPlan: "no ExecPlan sections found (Progress, Decision Log, Concrete Steps, Validation and Acceptance …) — is this an ExecPlan? Try tool 'plan'.",
+      decisionsHeading: "## Decisions",
+      nonFunctional: "## Non-Functional Requirements",
+      wUnknownAc: (story, task, list) => `${story}, '${task}': AC reference(s) ${list} match no criterion of that story — kept as written`,
+      wWorkflow: (list) => `BMAD workflow records not imported (left in place): ${list}`,
+    },
     // @pkg C3 <<<
 
     // @pkg C4 msg-en >>>
@@ -3470,7 +3497,7 @@ const MSG = {
       renameNeedsName: "para renomear é preciso um nome novo.",
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
-      badAction: "a ação tem de ser: remove | archive | rename | restore",
+      badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
@@ -4568,6 +4595,31 @@ const MSG = {
     // @pkg C2 <<<
 
     // @pkg C3 msg-pt >>>
+    flow: {
+      required: (slug, known) => `fluxo em falta — um de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
+      kindRefused: (slug, kind) => `'${slug}' é um ${kind}: segue a sua própria ordem de fases fixa — o fluxo só se aplica a features.`,
+      kindIgnored: (kind) => `fluxo ignorado: um ${kind} segue a sua própria ordem de fases fixa (o fluxo só se aplica a features).`,
+      kept: (slug, cur, asked) => `fluxo mantido: '${slug}' segue ${cur} (pedido: ${asked}) — muda-o com spec_feature {action: "flow"} (CLI: dev-spec feature flow ${slug} ${asked}).`,
+      set: (slug, flow, prev, order) => `'${slug}' segue agora o fluxo ${flow} (antes: ${prev}) — ordem das fases: ${order}.`,
+      same: (slug, flow, order) => `'${slug}' já segue o fluxo ${flow} — ordem das fases: ${order}.`,
+      approvedStay: (list) => `As fases já aprovadas continuam aprovadas: ${list}.`,
+      created: (order) => `fluxo design-first — ordem das fases: ${order} (os requisitos escrevem-se depois de o design ser aprovado).`,
+      nextNote: (order) => `(fluxo design-first: ${order})`,
+      laterPhase: (detail) => `o requirements.md é uma fase posterior (design-first) — ${detail}`,
+    },
+    importPlans: {
+      plansDir: "O plan mode do Claude Code guarda os planos em plansDirectory (por omissão ~/.claude/plans — fora do projeto): copia primeiro o plano para dentro do projeto, ou aponta plansDirectory para uma pasta dentro dele.",
+      several: (dir, list) => `'${dir}' tem vários documentos (${list}) — indica o que queres importar.`,
+      planTitle: "Plano",
+      wNoSteps: "nenhuma checklist, lista de to-dos ou de passos encontrada — o tasks.md do scaffold foi mantido (divide o trabalho em tasks com /createTask)",
+      wCancelled: (list) => `to-dos cancelados importados como tasks em aberto (remove os que já não se aplicam): ${list}`,
+      wNoDesignLeft: "nada ficou para o design além dos critérios e dos passos — o design.md do scaffold foi mantido",
+      wNotExecPlan: "nenhuma secção de ExecPlan encontrada (Progress, Decision Log, Concrete Steps, Validation and Acceptance …) — é mesmo um ExecPlan? Experimenta a ferramenta 'plan'.",
+      decisionsHeading: "## Decisões",
+      nonFunctional: "## Requisitos Não-Funcionais",
+      wUnknownAc: (story, task, list) => `${story}, '${task}': referência(s) de AC ${list} não correspondem a nenhum critério dessa história — mantidas como escritas`,
+      wWorkflow: (list) => `registos de workflow do BMAD não importados (ficam no sítio): ${list}`,
+    },
     // @pkg C3 <<<
 
     // @pkg C4 msg-pt >>>
@@ -4640,7 +4692,7 @@ const MSG = {
       renameNeedsName: "para renombrar hace falta un nombre nuevo.",
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
-      badAction: "la acción debe ser: remove | archive | rename | restore",
+      badAction: "la acción debe ser: remove | archive | rename | restore | flow",
       badTrack: "el track debe ser: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
@@ -5738,6 +5790,31 @@ const MSG = {
     // @pkg C2 <<<
 
     // @pkg C3 msg-es >>>
+    flow: {
+      required: (slug, known) => `falta el flujo — uno de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
+      kindRefused: (slug, kind) => `'${slug}' es un ${kind}: sigue su propio orden de fases fijo — el flujo solo se aplica a funciones.`,
+      kindIgnored: (kind) => `flujo ignorado: un ${kind} sigue su propio orden de fases fijo (el flujo solo se aplica a funciones).`,
+      kept: (slug, cur, asked) => `flujo mantenido: '${slug}' sigue ${cur} (pedido: ${asked}) — cámbialo con spec_feature {action: "flow"} (CLI: dev-spec feature flow ${slug} ${asked}).`,
+      set: (slug, flow, prev, order) => `'${slug}' sigue ahora el flujo ${flow} (antes: ${prev}) — orden de fases: ${order}.`,
+      same: (slug, flow, order) => `'${slug}' ya sigue el flujo ${flow} — orden de fases: ${order}.`,
+      approvedStay: (list) => `Las fases ya aprobadas siguen aprobadas: ${list}.`,
+      created: (order) => `flujo design-first — orden de fases: ${order} (los requisitos se escriben después de aprobar el diseño).`,
+      nextNote: (order) => `(flujo design-first: ${order})`,
+      laterPhase: (detail) => `requirements.md es una fase posterior (design-first) — ${detail}`,
+    },
+    importPlans: {
+      plansDir: "El plan mode de Claude Code guarda los planes en plansDirectory (por defecto ~/.claude/plans — fuera del proyecto): copia primero el plan dentro del proyecto, o apunta plansDirectory a una carpeta dentro de él.",
+      several: (dir, list) => `'${dir}' contiene varios documentos (${list}) — indica el que quieres importar.`,
+      planTitle: "Plan",
+      wNoSteps: "no se encontró ninguna checklist, lista de to-dos ni de pasos — se mantuvo el tasks.md del scaffold (divide el trabajo en tareas con /createTask)",
+      wCancelled: (list) => `to-dos cancelados importados como tareas abiertas (elimina los que ya no apliquen): ${list}`,
+      wNoDesignLeft: "no quedó nada para el diseño aparte de los criterios y los pasos — se mantuvo el design.md del scaffold",
+      wNotExecPlan: "no se encontraron secciones de ExecPlan (Progress, Decision Log, Concrete Steps, Validation and Acceptance …) — ¿es un ExecPlan? Prueba la herramienta 'plan'.",
+      decisionsHeading: "## Decisiones",
+      nonFunctional: "## Requisitos No Funcionales",
+      wUnknownAc: (story, task, list) => `${story}, '${task}': la(s) referencia(s) de AC ${list} no corresponden a ningún criterio de esa historia — se mantienen como están`,
+      wWorkflow: (list) => `registros de workflow de BMAD no importados (se quedan donde están): ${list}`,
+    },
     // @pkg C3 <<<
 
     // @pkg C4 msg-es >>>
