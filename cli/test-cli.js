@@ -1509,7 +1509,10 @@ if (inSection("wp14")) { // 1.13 batch 5 — no stray .tmp files, the cross-proc
     "const [cli, proj, dir] = process.argv.slice(2);",
     "const p = spawn(process.execPath, [cli, 'add-track', 'imp', 'saas', '--project', proj], { env: { ...process.env, DEV_SPEC_LOCK_WAIT_MS: '8000' } });",
     "let out = ''; p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d));",
-    "setTimeout(() => { const t = path.join(path.dirname(dir), '.removing-imp-test'); fs.renameSync(dir, t); fs.rmSync(t, { recursive: true, force: true }); }, 1200);",
+    // Windows refuses a folder rename while the waiter has a file open inside it (its lock attempt): retry, like the engine does.
+    "const moveAway = (left) => { try { const t = path.join(path.dirname(dir), '.removing-imp-test'); fs.renameSync(dir, t); fs.rmSync(t, { recursive: true, force: true }); }" +
+    " catch (e) { if (left > 0 && ['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) setTimeout(() => moveAway(left - 1), 25); else throw e; } };",
+    "setTimeout(() => moveAway(200), 1200);",
     "p.on('close', (code) => console.log(JSON.stringify({ code, out, exists: fs.existsSync(dir) })));",
   ].join("\n"));
   const rr14 = spawnSync(process.execPath, [race14, CLI, lr14, imp14], { encoding: "utf8", timeout: 30000 });
