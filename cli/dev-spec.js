@@ -80,7 +80,7 @@
  *   prompts [name] [--args "…"]        The MCP prompts (one per plugin command): list them, or print one rendered as
  *                                      prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
  *
- * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
+ * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
  *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · log: --max N (default 1000)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
@@ -252,14 +252,14 @@ function mcpConfig(client) {
 }
 
 // ---- dispatch --------------------------------------------------------------
-const CLI_LANGS = ["en", "pt", "es"]; // = the MCP tools' `lang` enum
+const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
 function main() {
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
-    const l = String(flags.lang).trim().toLowerCase();
-    if (!CLI_LANGS.includes(l)) {
+    const l = spec.canonicalLang(String(flags.lang)); // PT → pt · pt-br / pt_BR / ptbr → pt-BR · pt-PT → pt (the MCP enum folds the same)
+    if (!l || !CLI_LANGS.includes(l)) {
       const A = spec.msg(spec.projectLang(projectDir)).args;
       die(A.invalid(A.item("--lang", A.oneOf(CLI_LANGS.join(", ")), JSON.stringify(String(flags.lang)))));
     }
@@ -274,7 +274,7 @@ function main() {
       return console.log(helpText());
 
     case "classify": {
-      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|es]');
+      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es]');
       const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang }); // same args as spec_classify
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
@@ -324,7 +324,7 @@ function main() {
 
     case "bugfix":
     case "create": {
-      if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|es]');
+      if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
       const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
       const tr = withTracksFlag(pos.slice(1));
@@ -455,7 +455,7 @@ function main() {
     case "steering": {
       // dev-spec steering <file> [--lang] — one steering file from its template, or a custom scoped one with front
       // matter (inclusion: always|fileMatch|manual) for any other safe name (same as steering_scaffold)
-      if (!pos[0]) usage("dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|es]");
+      if (!pos[0]) usage("dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|pt-BR|es]");
       const r = spec.scaffoldSteeringFile(projectDir, pos[0], flags.lang);
       if (!r.ok) return fail(r);
       const T = cliText(flags.lang || spec.projectLang(projectDir)); // the language the file was written in
@@ -779,7 +779,7 @@ function main() {
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai,sec,privacy]");
+      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy]");
       const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -925,9 +925,9 @@ function main() {
 
     // @pkg B1 commands >>>
     case "templates": {
-      // dev-spec templates [list|init|check] [artifact] [--lang en|pt|es] — the project's own scaffolds in .specs/templates/
+      // dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es] — the project's own scaffolds in .specs/templates/
       // (= spec_templates {action, artifact, lang}). check exits 1 when a template has an error (scriptable, like doctor).
-      if (pos.length > 2) usage("dev-spec templates [list|init|check] [artifact] [--lang en|pt|es]");
+      if (pos.length > 2) usage("dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es]");
       const r = spec.templates(projectDir, pos[0], { artifact: pos[1], lang: flags.lang });
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) process.exitCode = 1;
@@ -1083,7 +1083,7 @@ function main() {
     case "spike": {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
-      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|es]');
+      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
       const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox });
       if (!r.ok) return fail(r);
@@ -1139,7 +1139,7 @@ function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy), multilingual
-  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
+  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
                                   --guard on|off|scope: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
                                   (scope: once tasks are approved, also a code file no open task names in _Implements:_ — test files excepted)
                                   --stop-check on|off: the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default)
@@ -1152,7 +1152,7 @@ function helpText() {
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
                                   edit; check validates them (exit 1 on an error)
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|es)
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
@@ -1219,7 +1219,7 @@ function helpText() {
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
-  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
+  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|pt-BR|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
   backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
@@ -1227,7 +1227,7 @@ function helpText() {
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
-                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|es · --tracks tdd,saas,ai,sec,privacy
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy
                                   plan = Claude Code plan mode / Cursor .cursor/plans (copy a ~/.claude/plans file into the project first),
                                   execplan = a Codex ExecPlan (PLANS.md), bmad = BMAD-METHOD docs (prd.md + docs/stories/)
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
@@ -1236,7 +1236,7 @@ function helpText() {
   prompts [name] [--args "…"]     The MCP prompts (one per plugin command — slash commands in MCP clients): list them, or print
                                   one rendered as prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
 
-  Flags: --json  --project <dir>  --lang en|pt|es (init/create/steering/roadmap/ears)  --order N (depend)
+  Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/steering/roadmap/ears)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike (create; spike: --question, --timebox)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)

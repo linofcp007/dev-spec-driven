@@ -739,6 +739,8 @@ const SIGNALS = {
       "autorização", "autorizacao", "migração", "migracao", "integridade", "dinheiro",
       "moeda", "mensalidade", "cobrança", "cobranca", "subscrição", "subscricao", "sessão", "sessao",
       "iniciar sessão", "iniciar sessao",
+      // pt-BR (1.14 D1)
+      "senha", "faturamento",
       // ES
       "facturación", "facturacion", "factura", "pago", "contraseña", "autenticación",
       "autorización", "migración", "integridad", "dinero", "suscripción", "suscripcion", "cobro",
@@ -765,6 +767,8 @@ const SIGNALS = {
       "inquilino", "multi-inquilino", "multiinquilino", "limite de taxa", "tempo de atividade",
       "observabilidade", "alta disponibilidade", "pronto para produção", "pronto para producao",
       "teste de carga", "escalabilidade",
+      // pt-BR (1.14 D1): the Brazilian word for tenant
+      "locatário", "multilocatário", "multi-locatário", "multilocatario",
       // ES
       "límite de tasa", "tiempo de actividad", "observabilidad", "alta disponibilidad",
       "listo para producción", "prueba de carga", "escalabilidad",
@@ -790,6 +794,8 @@ const SIGNALS = {
       "alucina", "injeção de prompt", "injecao de prompt", "funcionalidade de ia",
       "produto de ia", "pesquisa semântica", "pesquisa semantica", "incorporação",
       "base de dados vetorial", "modelo de linguagem", "inteligência artificial", "inteligencia artificial",
+      // pt-BR (1.14 D1)
+      "banco de dados vetorial", "busca semântica", "busca semantica", "recurso de ia",
       // ES
       "inyección de prompt", "inyeccion de prompt", "función de ia", "producto de ia",
       "búsqueda semántica", "busqueda semantica", "incrustación", "base de datos vectorial",
@@ -824,6 +830,8 @@ const SIGNALS = {
       // C4 — aligned with the EN strong ones (encryption in transit / at rest, security test): they were weak here
       "cifragem em trânsito", "cifragem em transito", "encriptação em trânsito", "criptografia em trânsito", "criptografia em repouso",
       "teste de segurança",
+      // pt-BR (1.14 D1)
+      "gerenciamento de segredos", "teste de invasão", "testes de invasão",
       // ES
       "modelo de amenazas", "modelado de amenazas", "inyección sql", "inyección de sql", "inyección de código",
       "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
@@ -844,7 +852,7 @@ const SIGNALS = {
       // PT
       "autenticação", "autenticacao", "autorização", "autorizacao", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
-      "registo de auditoria", "trilho de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
+      "registo de auditoria", "trilho de auditoria", "registro de auditoria", "trilha de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
       // ES
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
@@ -868,6 +876,8 @@ const SIGNALS = {
       "anonimiza", "pseudonimiza", "aipd", "cnpd", "categorias especiais de dados", "dados sensíveis", "subcontratante",
       "responsável pelo tratamento", "transferência internacional", "transferências internacionais",
       "política de privacidade", "minimização de dados", "aviso de privacidade",
+      // pt-BR (1.14 D1): LGPD vocabulary
+      "anpd", "ripd", "relatório de impacto à proteção de dados",
       // ES
       "datos personales", "dato personal", "protección de datos", "titular de los datos",
       "derechos arco", "derecho de supresión", "derecho al olvido", "portabilidad de datos", "portabilidad de los datos",
@@ -888,6 +898,9 @@ const SIGNALS = {
       "número de telefone", "número de telemóvel", "data de nascimento", "geolocalização", "dados de saúde",
       "dados biométricos", "privacidade", "apagar conta", "eliminar conta", "exportar dados", "avaliação de impacto",
       "consentimento", "prazo de conservação", "período de retenção", "política de retenção", "política de conservação", // C4 (see EN)
+      // pt-BR (1.14 D1)
+      "dados do usuário", "dados dos usuários", "dados de usuário", "perfil do usuário", "perfil de usuário", "número de celular",
+      "excluir conta", "exclusão de conta",
       // ES
       "datos del usuario", "datos de usuario", "datos de los usuarios", "datos del cliente", "perfil de usuario",
       "perfil del usuario", "perfil del cliente", "dirección de correo", "número de teléfono", "fecha de nacimiento",
@@ -918,9 +931,12 @@ const NEG_AFTER = /^\s*(\w+\s+)?(is |are |isn'?t |aren'?t |won'?t |é |são |sao
 // that English only uses by accident ("de", "por"). Deliberately absent: "no", "o", "a", "as", "do",
 // "usa", "los"… — they appear in ordinary English ("Do the export", "USA offices", "Las Vegas").
 const W = (words) => new RegExp("(?<![\\p{L}.])(" + words + ")(?![\\p{L}])", "giu");
-const PT_STRONG = W("n[ãa]o|uma|umas|pelo|pela|pelos|também|tambem|você|voce|isso|isto|então|entao|ainda|quando|onde|deve|devem|utilizador|utilizadores|sem");
+// Brazilian Portuguese (1.14 D1) counts as Portuguese: você / usuário / arquivo / cadastro / senha are PT-only words
+// ("usuario" without the accent and "archivo" are Spanish); "tela" (screen — ES: fabric) and "equipe" are weak. The guess
+// is still 'pt' — only an explicit lang: "pt-BR" makes the classifier answer in Brazilian Portuguese.
+const PT_STRONG = W("n[ãa]o|uma|umas|pelo|pela|pelos|também|tambem|você|voce|vocês|isso|isto|então|entao|ainda|quando|onde|deve|devem|utilizador|utilizadores|usuário|usuários|arquivo|arquivos|cadastro|cadastrar|senha|senhas|sem");
 const PT_STRONG_CHARS = /ç[ãa]o|ções|[ãõç]/giu;
-const PT_WEAK = W("com|um|por|para|de|da|dos|das|que|na");
+const PT_WEAK = W("com|um|por|para|de|da|dos|das|que|na|tela|telas|equipe");
 const ES_STRONG = W("una|unos|pero|también|tambien|usted|esto|eso|entonces|todavía|cuando|donde|debe|deben|usuario|usuarios|sin|sólo");
 const ES_STRONG_CHARS = /ción|ciones|ñ/giu;
 const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
@@ -939,13 +955,14 @@ function isNegated(text, idx, kwLen, lang, cased) {
   // Negator token in the 1-2 words immediately before the match.
   const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
   const tokens = before.split(/[^a-zà-ú-]+/).filter(Boolean);
-  const negators = lang === "pt" ? NEGATORS.filter((w) => w !== "no") : NEGATORS;
+  const pt = i18n.baseLang(lang) === "pt"; // pt and pt-BR alike: "no" is em+o, never a negator
+  const negators = pt ? NEGATORS.filter((w) => w !== "no") : NEGATORS;
   // "aplicado no checkout" / "guardado na sessão": after a participle, "no"/"na" is PT em+o, even in a
   // phrase too short for guessLang to see Portuguese.
   const prev = tokens[tokens.length - 2] || "";
   const prevCased = ((cased || "").slice(Math.max(0, idx - 20), idx).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
   const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
-    (lang === "pt" || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
+    (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
   if (!contraction && tokens.slice(-2).some((w) => negators.includes(w))) return true;
   // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
   // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
@@ -2537,8 +2554,8 @@ function templates(projectDir, action, opts = {}) {
   const pl = projectLang(projectDir);
   let lang = null;
   if (opts.lang != null && String(opts.lang).trim()) {
-    lang = String(opts.lang).trim().toLowerCase();
-    if (!i18n.LANGS.includes(lang)) {
+    lang = i18n.canonicalLang(String(opts.lang)); // pt-BR / pt_br / PTBR → pt-BR (its folder is .specs/templates/pt-BR/)
+    if (!lang) {
       const A = i18n.msg(pl).args;
       return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) };
     }
@@ -3200,6 +3217,7 @@ const VAGUE_WORDS = [
   "intuitiva", "robusto", "robusta", "simples", "fácil de usar", "eficiente", "escalável", "escalavel",
   "tempo real", "limpo", "limpa", "ótimo", "otimo", "ótima", "conforme necessário",
   "conforme necessario", "flexível", "flexivel", "poderoso", "poderosa", "elegante", "adequadamente",
+  "confiável", "confiavel", "performático", "performática", // pt-BR (1.14 D1): fiável → confiável; the "performant" anglicism
   // ES
   "amigable", "adecuado", "adecuada", "sencillo", "sencilla", "fiable", "optimizado", "optimizada",
   "fácil de usar", "rápida", "intuitiva", "robusta", "moderna", "escalable", "tiempo real", "ligero",
@@ -4206,7 +4224,7 @@ function taskProse(block) {
 const RE_RED_PHASE_TASK = new RegExp([
   "watch (?:it|them) fail", "fail(?:s|ing)? for the right reason", "(?:write|writes|writing) (?:the |a |an |every )?failing (?:regression |unit |integration |e2e )?tests?",
   "red phase", "red before the fix",
-  "v[êe]-l[oa]s? falhar", "ver (?:o teste |os testes )?falhar", "falh(?:ar|e|a|em) pel[ao] (?:raz[ãa]o|motivo) cert[ao]", "teste(?:s)? (?:de regress[ãa]o )?a falhar", "fase vermelha",
+  "v[êe]-l[oa]s? falhar", "ver (?:o teste |os testes )?falhar", "falh(?:ar|e|a|em) pel[ao] (?:raz[ãa]o|motivo) cert[ao]", "teste(?:s)? (?:de regress[ãa]o )?a falhar", "teste(?:s)? (?:de regress[ãa]o )?falhando", "fase vermelha", // pt-BR: falhando
   "verl[ao]s? fallar", "fall(?:ar|e|a|en) por (?:la|el) (?:raz[óo]n|motivo) correct[ao]", "prueba(?:s)? (?:de regresi[óo]n )?que falla", "fase roja",
 ].join("|"), "i");
 function redPhaseTask(block) {
@@ -7935,7 +7953,8 @@ const RE_LIST_CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\](?=\s|$)/;
 // read only]`, `[10 MB, 25 MB for pro]` — read as a slot: the approval was refused and finished, upgraded 1.12 specs
 // were blocked (doctor FAIL, next_action "fill requirements.md" at 5/5 tasks, finish refused). The set
 // (templateSets) holds every bracket text the CURRENT templates render (templateCorpus: every builder, EN/PT/ES,
-// every track combination and kind, the track / import task slots, the steering stubs), every bracket text the 1.12.1
+// every track combination and kind, the track / import task slots, the steering stubs — pt-BR's derived ones in
+// templateSetsBr, built on the first miss), every bracket text the 1.12.1
 // templates rendered (LEGACY_TEMPLATE_PLACEHOLDERS: a spec scaffolded by 1.12 still holds those), and the generic unfilled
 // tokens (isGenericSlot: TODO, TBD, TBC, FIXME, "...", "…"). Anything else in brackets is the user's own content.
 // The key ignores case, spacing and "…" vs "...": `[Story title]` is `[story   title]`.
@@ -8064,7 +8083,7 @@ const LEGACY_TEMPLATE_PLACEHOLDERS = [
   "¿quién usa esto a diario?", "¿qué se rompe si esto está mal? ¿a quién afecta? ¿recuperable? ¿en cuánto tiempo?",
   "árbol de directorios", "árvore de diretórios"
 ];
-function templateCorpus() {
+function templateCorpus(langs) {
   const out = [];
   const add = (fn) => { try { const t = fn(); if (typeof t === "string") out.push(t); } catch { /* a builder's trouble never breaks placeholder detection */ } };
   // Every set of at most TWO optional tracks, plus all of them — the builders compose per track, and the only interplay
@@ -8073,7 +8092,7 @@ function templateCorpus() {
   const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS]
     .map((x) => ["core", ...x]);
   const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] };
-  for (const l of i18n.LANGS) {
+  for (const l of langs || i18n.BASE_LANGS) { // the authored locales; pt-BR's slots come from pt's lines (templateSetsBr)
     const M = i18n.msg(l);
     for (const tracks of combos) {
       const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "" };
@@ -8126,11 +8145,29 @@ function templateSets() {
   }
   return (TEMPLATE_SETS = { brackets, code });
 }
+// pt-BR (1.14 D1) renders every pt template through i18n.toPtBr, whose rules never cross a line: its slots are exactly the
+// pt corpus's visible bracket lines transformed one by one (the corpus is not rendered a fourth time). Built on the first
+// bracket the EN/PT/ES sets don't know — checking a fresh EN/PT/ES scaffold never pays for it; only pt-BR's own keys are kept.
+let TEMPLATE_SETS_BR = null;
+function templateSetsBr() {
+  if (TEMPLATE_SETS_BR) return TEMPLATE_SETS_BR;
+  const base = templateSets(), brackets = new Set(), code = new Set(), seen = new Set(), done = new Set();
+  for (const t of new Set(templateCorpus(["pt"]))) for (const [, line] of visibleLines(t)) {
+    if (!line.includes("[") || done.has(line)) continue;
+    done.add(line);
+    const br = i18n.toPtBr(line);
+    if (br === line) continue;
+    const k = templateBracketKeys(br, seen);
+    k.brackets.forEach((x) => { if (!base.brackets.has(x)) brackets.add(x); });
+    k.code.forEach((x) => { if (!base.code.has(x)) code.add(x); });
+  }
+  return (TEMPLATE_SETS_BR = { brackets, code });
+}
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
-const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || projectTemplateHas("brackets", k); };
+const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k); };
 // A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
 // code-span slot (the bugfix test plan's `[path]` / `[caminho]` / `[ruta]`), which is unwrapped and scanned.
-const isCodeSlot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); if (!b) return false; const k = placeholderKey(b[1]); return templateSets().code.has(k) || projectTemplateHas("code", k); };
+const isCodeSlot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); if (!b) return false; const k = placeholderKey(b[1]); return templateSets().code.has(k) || templateSetsBr().code.has(k) || projectTemplateHas("code", k); };
 
 // [lineNo, content, refs] — the lines a placeholder can sit on: HTML comments, fenced code and reference definitions
 // set aside (refs: the reference labels those define, so a bare `[x]` with a `[x]: url` is a link).
@@ -8585,7 +8622,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
 const RE_CONSTITUTION_CHECK = /constitution check|verifica[çc][ãa]o da constitui[çc][ãa]o|verificaci[óo]n de la constituci[óo]n/i;
 const RE_SUCCESS_CRITERIA = /success criteria|crit[ée]rios de sucesso|criterios de [ée]xito/i;
 const RE_INDEPENDENT_TEST = /independent test|teste independente|prueba independiente/i;
-const RE_OUT_OF_SCOPE = /out of scope|fora de [aâ]mbito|fora do [aâ]mbito|fuera de alcance/i;
+const RE_OUT_OF_SCOPE = /out of scope|fora de [aâ]mbito|fora do [aâ]mbito|fora d[eo] escopo|fuera de alcance/i; // pt-BR: Fora do Escopo
 const RE_NFR = /non-functional|nfr|performance|security|n[ãa]o[- ]funcional|no funcional|desempenho|rendimento|rendimiento|seguran[çc]a|seguridad/i;
 const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|tratamento de erro|manejo de error/i;
 // The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
@@ -9126,9 +9163,13 @@ Object.entries({
   pt: { sections: "secções obrigatórias em falta/por preencher", placeholders: "placeholders do template na fase atual", changedSince: "alterado desde a aprovação — rever de novo", forced: "aprovado com --force (havia verificações a falhar)", placeholderTask: "(por preencher)" },
   es: { sections: "secciones obligatorias que faltan/sin rellenar", placeholders: "placeholders de la plantilla en la fase actual", changedSince: "modificado desde la aprobación — revisar de nuevo", forced: "aprobado con --force (había verificaciones fallando)", placeholderTask: "(sin rellenar)" },
 }).forEach(([l, o]) => Object.assign(ROADMAP_I18N[l], o));
+// pt-BR (1.14 D1) is derived from pt like every i18n table (i18n.derivePtBr), plus the labels a word map can't get right.
+// Derived on first use (a lazy getter, as in i18n.js): loading the engine never pays for a locale it doesn't render.
+let ROADMAP_PT_BR = null;
+Object.defineProperty(ROADMAP_I18N, "pt-BR", { enumerable: true, get: () => ROADMAP_PT_BR ||
+  (ROADMAP_PT_BR = Object.assign(i18n.derivePtBr(ROADMAP_I18N.pt), { notstarted: "não iniciada", nothingFlagged: "Nada a sinalizar ✓" })) });
 function i18nLang(lang) {
-  const l = String(lang || "en").toLowerCase().slice(0, 2);
-  return ROADMAP_I18N[l] || ROADMAP_I18N.en;
+  return ROADMAP_I18N[normalizeLang(lang)] || ROADMAP_I18N.en;
 }
 function htmlEsc(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -9273,7 +9314,7 @@ function renderRoadmapMd(projectDir, lang, data) {
 function renderRoadmapHtml(projectDir, lang, data) {
   const t = i18nLang(lang);
   const phaseName = roadmapPhaseName(lang);
-  const langAttr = ROADMAP_I18N[String(lang || "en").toLowerCase().slice(0, 2)] ? String(lang).toLowerCase().slice(0, 2) : "en";
+  const langAttr = normalizeLang(lang); // en | pt | es | pt-BR — a valid BCP 47 tag
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const attention = buildAttention(rows, t, lang);
@@ -14595,6 +14636,8 @@ module.exports = {
   coverage,
   clarify,
   // language resolution (used by the server, CLI and hooks)
+  LANGS: i18n.LANGS, // en · pt · es · pt-BR — the MCP `lang` enum and the CLI --lang values
+  canonicalLang: i18n.canonicalLang, // strict: a code or alias (pt_BR, pt-pt…) → its canonical code, else null
   normalizeLang,
   projectLang,
   featureLang,
