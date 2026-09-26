@@ -156,7 +156,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 30, "tools/list returns 30 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 32, "tools/list returns 32 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -6241,7 +6241,9 @@ function endRun() {
     (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
-  const docsTools = list.result.tools.map((t) => t.name);
+  // 1.14 B2: spec_export / spec_changelog get their README rows from the 1.14 docs package — remove this set then.
+  const docsPendingReadme = new Set(["spec_export", "spec_changelog"]);
+  const docsTools = list.result.tools.map((t) => t.name).filter((t) => !docsPendingReadme.has(t));
   const docsReadme = docsRead("README.md");
   const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
     .matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));
@@ -6343,9 +6345,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 45 && ["spec-ff.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 47 && ["spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "45 commands incl. the 1.14 /spec-ff, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "47 commands incl. the 1.14 /spec-ff, /spec-export, /spec-changelog, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -7153,6 +7155,269 @@ function endRun() {
   // @pkg B1 <<<
 
   // @pkg B2 tests >>>
+  { // 1.14 B2.1 — stakeholder export (spec_export): ONE offline, printable document of a feature or of the whole project.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const noDate = (s) => String(s).replace(/\d{4}-\d{2}-\d{2}/g, "D");
+    const xp = path.join(tmp, "proj-b2-export");
+    S.initProject(xp, ["tdd"], "en");
+    const xf = S.createFeature(xp, "Checkout", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(xf.dir, "requirements.md"), [
+      "# Feature: Checkout", "", "## Summary", "Customers pay for their cart with a card, in one step.", "",
+      "## User Stories (prioritized — each independently testable)", "", "### US-1 (P1 — MVP): Pay by card",
+      "**As a** shopper, **I want** to pay by card, **so that** I get my order.", "**Why P1:** no sale without it.", "",
+      "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN the shopper submits a valid card THE SYSTEM SHALL charge the total and show the receipt <script>alert(1)</script>",
+      "2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL keep the cart [NEEDS CLARIFICATION: which PSP codes?]",
+      "3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]", "",
+      "### US-2 (P2): Receipt email", "#### Acceptance Criteria (EARS)",
+      "1. **US-2.AC-1** — WHEN a charge succeeds THE SYSTEM SHALL email the receipt. See [docs](javascript:alert(2)) and ![logo](data:image/png;base64,AAAA).", "",
+      "## Success Criteria", "- **SC-001** — 95% of checkouts finish in under 30 seconds.", "", "## Out of Scope", "- Gift cards.", "",
+      "<!-- a template note with [NEEDS CLARIFICATION: not real] -->", ""].join("\n"));
+    fs.writeFileSync(path.join(xf.dir, "design.md"), "# Design: Checkout\n\n## Architecture\nA `CheckoutService` calls the PSP.\n\n```mermaid\ngraph LR\n  A-->B\n```\n\n## Data Model\n| Field | Type |\n|---|---|\n| total_cents | int |\n");
+    fs.writeFileSync(path.join(xf.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n- [ ] 1. [US1] Charge the card\n  - _Requirements: US-1.AC-1_\n  - _Verify: npm test_\n" +
+      "- [ ] 2. [US1] Show the decline\n  - _Requirements: US-1.AC-2_\n  - _Verify: npm run e2e_\n- [ ] 3. [US2] Send receipt | email\n  - _Requirements: US-2.AC-1_\n");
+    fs.writeFileSync(path.join(xf.dir, "decisions.md"), "# Decisions\n\n- **D-1** — Stripe as the PSP (cost, EU coverage).\n");
+    S.completeTask(xp, "checkout", 1, { command: "npm test", exitCode: 0, summary: "3 passing" });
+    S.completeTask(xp, "checkout", 2, { summary: "checked by hand" }); // a note on a runnable _Verify:_ → ticked, unverified
+    S.approvePhase(xp, "checkout", "classification", "alice", { force: true });
+    S.approvePhase(xp, "checkout", "requirements", "alice", { force: true });
+    const xs = S.createFeature(xp, "SSO", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(xs.dir, "requirements.md"), "# Feature: SSO\n\n## Summary\nSign in with the company IdP.\n\n### US-1 (P1): IdP sign-in\n" +
+      "1. **US-1.AC-1** — WHEN the shopper is declined by the IdP THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+
+    const h = S.exportSpecs(xp, { name: "checkout" });
+    const html = h.content || "";
+    ok(h.ok && h.scope === "feature" && h.feature === "checkout" && h.format === "html" && h.wrote === false && h.lang === "en" && h.file === path.join(xp, ".specs", "exports", "checkout.html") &&
+      /^<!doctype html>\n<!-- AUTO-GENERATED by dev-spec/.test(html) && /<html lang="en">/.test(html) && /#11689B/.test(html) && /prefers-color-scheme/.test(html) && /localStorage/.test(html) &&
+      !/https?:\/\//.test(html) && (html.match(/<script/g) || []).length === 1 && html.includes("show the receipt &lt;script&gt;alert(1)&lt;/script&gt;") &&
+      !/<img|javascript:|data:image/.test(html) && /See docs and logo\./.test(html),
+      "spec_export (feature, html): self-contained — marker at the top, brand palette, system light/dark + toggle; offline (no http/https URL); spec text escaped (a <script> in a criterion is text; the page's own theme script is the only one); a javascript: link keeps its text, an image its alt");
+    ok(/@media print\{[\s\S]*\.no-print\{display:none !important\}[\s\S]*section\.feature\{break-before:page;page-break-before:always\}/.test(html) &&
+      /<div class="no-print"><button class="btn" id="tg"[^>]*>◐ Theme<\/button> <button class="btn" id="pr"[^>]*>⎙ Print<\/button><\/div>/.test(html),
+      "spec_export: print rules — light on paper, the theme / print buttons hidden (.no-print), a page break before every feature section");
+    ok(/<h1>Checkout<\/h1>/.test(html) && /<dt>Progress<\/dt><dd>2\/3 tasks done · \d+%<\/dd>/.test(html) &&
+      /<p>Customers pay for their cart with a card, in one step\.<\/p>/.test(html) && /<h3>US-1 \(P1 — MVP\): Pay by card<\/h3>\n<p><strong>As a<\/strong> shopper/.test(html) &&
+      /<li><strong>US-1\.AC-1<\/strong> — WHEN the shopper submits a valid card THE SYSTEM SHALL charge/.test(html) &&
+      /<li><del><strong>US-1\.AC-2<\/strong> — IF the card is declined[^<]*<\/del> — superseded by <code>sso\/US-1\.AC-1<\/code><\/li>/.test(html) &&
+      /US-1\.AC-3<\/strong> — WHEN \[trigger\] THE SYSTEM SHALL \[behavior\] <em>\(template — not written yet\)<\/em>/.test(html) &&
+      /<h2>Success Criteria<\/h2>\n<ul><li><strong>SC-001<\/strong>/.test(html) && /<h2>Out of Scope<\/h2>/.test(html),
+      "spec_export: title, meta (progress), summary, each story with its intro and its EARS criteria by ID — superseded struck through naming the replacement, a template one flagged — then the other requirements sections");
+    ok(/<h3>Architecture<\/h3>\n<p>A <code>CheckoutService<\/code> calls the PSP\.<\/p>\n<pre class="lang-mermaid"><code>graph LR\n  A--&gt;B<\/code><\/pre>/.test(html) &&
+      /<thead><tr><th>Field<\/th><th>Type<\/th><\/tr><\/thead>/.test(html) && /<h2>Test plan<\/h2>[\s\S]*<td>T-01<\/td>/.test(html) &&
+      /<tr><td>1<\/td><td>Charge the card<\/td><td>✅ done<\/td><td>verified<\/td><\/tr>/.test(html) &&
+      /<tr><td>2<\/td><td>Show the decline<\/td><td>✅ done<\/td><td>⚠ not verified \(note only, <em>Verify:<\/em> command not run\)<\/td><\/tr>/.test(html) &&
+      /<tr><td>3<\/td><td>Send receipt \| email<\/td><td>☐ open<\/td><td>—<\/td><\/tr>/.test(html) &&
+      /<h2>Decisions<\/h2>\n<ul><li><strong>D-1<\/strong> — Stripe as the PSP/.test(html) &&
+      /<tr><td>Requirements<\/td><td>alice<\/td><td>\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC<\/td><td>approved with --force \(failing: [^<]*\)<\/td><\/tr>/.test(html) &&
+      /<tr><td>Design<\/td><td>—<\/td><td>—<\/td><td>awaiting approval<\/td><\/tr>/.test(html) &&
+      /<li><code>requirements\.md<\/code> — which PSP codes\?<\/li>/.test(html) && !/not real/.test(html),
+      "spec_export: design sections (code fences stay code), the test plan table, every task with done / verified (the doctor's reason for an unverified one; a '|' in a task stays in its cell), decisions.md, approvals (who / when / forced / still pending) and the open clarifications (never one inside an HTML comment)");
+
+    const m = S.exportSpecs(xp, { name: "checkout", format: "md" });
+    ok(m.ok && m.format === "md" && m.file.endsWith(path.join("exports", "checkout.md")) && /^# Checkout\n\n<!-- AUTO-GENERATED by dev-spec/.test(m.content) &&
+      /\n- \*\*Tracks:\*\* core \+tdd\n/.test(m.content) && /\n## Summary\n\nCustomers pay/.test(m.content) && /\n### US-1 \(P1 — MVP\): Pay by card\n/.test(m.content) &&
+      /\n- \*\*US-1\.AC-1\*\* — WHEN the shopper/.test(m.content) && /\n\| 3 \| Send receipt \\\| email \| ☐ open \| — \|\n/.test(m.content) &&
+      /\n## Design\n\n### Architecture\n/.test(m.content) && !/\n\n\n/.test(m.content.replace(/```[\s\S]*?```/g, "F")),
+      "spec_export {format: 'md'}: the same document as markdown (marker comment, meta list, stories, tasks table with the pipe escaped, design sections one level down, no runs of blank lines)");
+
+    // write: .specs/exports/<slug>.<format>, never over a hand-written file; exports/ is never a feature.
+    const w = S.exportSpecs(xp, { name: "checkout", write: true });
+    const w2 = S.exportSpecs(xp, { name: "checkout", write: true });
+    const mine = path.join(xp, ".specs", "exports", "checkout.md");
+    fs.writeFileSync(mine, "# Our checkout notes\n");
+    const g = S.exportSpecs(xp, { name: "checkout", format: "md", write: true });
+    ok(w.ok && w.wrote === true && w.content === undefined && w.bytes > 2000 && noDate(fs.readFileSync(w.file, "utf8")) === noDate(html) && w2.ok && w2.wrote &&
+      g.ok === false && g.skipped === true && /\.specs\/exports\/checkout\.md exists and was not generated by dev-spec/.test(g.error) && fs.readFileSync(mine, "utf8") === "# Our checkout notes\n" &&
+      !S.listFeatures(xp).features.some((f) => f.name === "exports") && S.createFeature(xp, "Exports", ["core"], "", undefined, "en").ok === false,
+      "spec_export {write}: .specs/exports/checkout.html (content left out of the result, rewritten next time); a hand-written export is never overwritten (error, file unchanged); 'exports' is a reserved name, never listed as a feature");
+
+    // The project document: roadmap + every active feature's digest (page break each) + the catalog once SPECS.md exists.
+    const pj0 = S.exportSpecs(xp, {});
+    S.catalog(xp, { write: true });
+    const pj = S.exportSpecs(xp, {});
+    const ph = pj.content || "";
+    ok(pj0.ok && !/id="s-catalog"/.test(pj0.content) && pj.ok && pj.scope === "project" && JSON.stringify(pj.features) === '["checkout","sso"]' && pj.file === path.join(xp, ".specs", "exports", "project.html") &&
+      /<h1>proj-b2-export — specification overview<\/h1>/.test(ph) && /<th>Feature<\/th><th>Tracks<\/th><th>Phase<\/th><th>Progress<\/th><th>Tasks<\/th><th>Depends on<\/th>/.test(ph) &&
+      /<section class="feature" id="s-f-checkout">\n<h2>Checkout<\/h2>\n<p><em>feature · core \+tdd · [^<]+<\/em><\/p>\n<p>Customers pay/.test(ph) && /<section class="feature" id="s-f-sso">/.test(ph) &&
+      /<h3>Success criteria<\/h3>/.test(ph) && /<section class="feature" id="s-catalog">\n<h2>Living catalog<\/h2>/.test(ph) && /<li><a href="#s-f-sso">SSO<\/a><\/li>/.test(ph) &&
+      !/https?:\/\//.test(ph) && (ph.match(/<script/g) || []).length === 1 && ph.includes("&lt;script&gt;alert(1)"),
+      "spec_export (project): roadmap table, one page-broken section per active feature (summary, stories + ACs, success criteria), the living catalog only once SPECS.md exists; contents list; offline and escaped");
+    const px = S.createFeature(xp, "Project", ["core"], "", undefined, "en");
+    const pfw = S.exportSpecs(xp, { name: "project", write: true });
+    const ppw = S.exportSpecs(xp, { write: true });
+    ok(px.ok && pfw.ok && pfw.file === path.join(xp, ".specs", "exports", "project.feature.html") && ppw.ok && ppw.file === path.join(xp, ".specs", "exports", "project.html") &&
+      /Feature specification/.test(fs.readFileSync(pfw.file, "utf8")) && /Project specification/.test(fs.readFileSync(ppw.file, "utf8")),
+      "spec_export: a feature slugged 'project' writes project.feature.<format> — never the project document's project.<format>");
+    const bad = S.exportSpecs(xp, { name: "checkout", format: "pdf" });
+    const nf = S.exportSpecs(xp, { name: "nope" });
+    const noSpecs = S.exportSpecs(path.join(tmp, "proj-b2-none"), {});
+    ok(bad.ok === false && /format/.test(bad.error) && /html, md/.test(bad.error) && nf.ok === false && /not found/i.test(nf.error) && noSpecs.ok === false && /No \.specs\//.test(noSpecs.error) &&
+      !fs.existsSync(path.join(tmp, "proj-b2-none")),
+      "spec_export: an unknown format, an unknown feature and a project without .specs/ are errors (nothing created)");
+    // Approvals: an artifact edited after its approval is flagged (by content); a pre-1.11 approval judged only by file date is not.
+    const chp = path.join(tmp, "proj-b2-changed");
+    S.initProject(chp, ["core"], "en");
+    const chf = S.createFeature(chp, "Changed", ["core"], "", undefined, "en");
+    S.approvePhase(chp, "changed", "classification", "tester", { force: true });
+    fs.appendFileSync(path.join(chf.dir, "classification.md"), "\nEdited after the approval.\n");
+    const chs = path.join(chf.dir, ".state.json");
+    const chState = JSON.parse(fs.readFileSync(chs, "utf8"));
+    chState.approvals.requirements = { at: "2020-01-01T00:00:00.000Z", by: "legacy" };
+    fs.writeFileSync(chs, JSON.stringify(chState, null, 2));
+    const chMd = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n\| Classification \| tester \| \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC \| approved with --force \([^)]*\); changed since this approval — to be re-reviewed \|\n/.test(chMd) &&
+      /\n\| Requirements \| legacy \| 2020-01-01 00:00 UTC \| — \|\n/.test(chMd),
+      "spec_export approvals: an artifact changed since its approval is flagged (content fingerprint); a legacy approval judged only by file date is not");
+    fs.writeFileSync(path.join(chf.dir, "requirements.md"), "# Feature: Changed\n\n## Summary\nFlat.\n\n## US-1 (P1): One\n**As a** user.\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n- z\n");
+    const flat = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n## User stories and acceptance criteria\n\n### US-1 \(P1\): One\n\n\*\*As a\*\* user\.\n\n- \*\*US-1\.AC-1\*\* — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n/.test(flat) && !/\n## US-1/.test(flat),
+      "spec_export: a story written as its own `## US-n` section is shown once, under the stories (never again as a requirements section)");
+    const oldEx = path.join(tmp, "proj-b2-old-exports");
+    S.initProject(oldEx, ["core"], "en");
+    fs.mkdirSync(path.join(oldEx, ".specs", "exports"), { recursive: true });
+    fs.writeFileSync(path.join(oldEx, ".specs", "exports", "requirements.md"), "# Feature: Exports\n");
+    const oldW = S.exportSpecs(oldEx, { write: true });
+    const keys = (o) => Object.keys(o).sort().map((k) => k + (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? "{" + keys(o[k]) + "}" : Array.isArray(o[k]) ? "[" + o[k].length + "]" : "")).join(",");
+    ok(oldW.ok === false && /is a feature folder from before dev-spec reserved the name 'exports'/.test(oldW.error) && !fs.existsSync(path.join(oldEx, ".specs", "exports", "project.html")) &&
+      ["stakeholderExport", "releaseNotes"].every((g) => keys(S.msg("en")[g]) === keys(S.msg("pt")[g]) && keys(S.msg("pt")[g]) === keys(S.msg("es")[g])),
+      "spec_export {write} never drops a document into a pre-1.14 feature folder named 'exports' (error, nothing written); the export / release-notes messages have the same keys in EN / PT / ES");
+
+    // Localized chrome: a PT project (feature + project documents), an ES project; a per-feature language override.
+    const xpt = path.join(tmp, "proj-b2-export-pt");
+    S.initProject(xpt, ["core"], "pt");
+    S.createFeature(xpt, "Pagamento", ["core"], "Pagar o carrinho.", undefined, "pt");
+    S.createFeature(xpt, "Billing", ["core"], "Invoices.", undefined, "en");
+    const ptF = S.exportSpecs(xpt, { name: "pagamento" }).content || "";
+    const ptP = S.exportSpecs(xpt, {}).content || "";
+    const enF = S.exportSpecs(xpt, { name: "billing", format: "md" }).content || "";
+    const xes = path.join(tmp, "proj-b2-export-es");
+    S.initProject(xes, ["core"], "es");
+    S.createFeature(xes, "Pagos", ["core"], "Pagar el carrito.", undefined, "es");
+    const esP = S.exportSpecs(xes, { format: "md" }).content || "";
+    ok(/<html lang="pt">/.test(ptF) && /Especificação da feature/.test(ptF) && /<h2>Histórias de utilizador e critérios de aceitação<\/h2>/.test(ptF) && /<h2>Resumo<\/h2>\n<p>Pagar o carrinho\.<\/p>/.test(ptF) &&
+      /⎙ Imprimir/.test(ptF) && /AUTO-GERADO por dev-spec/.test(ptF) && /<h2>Aprovações<\/h2>/.test(ptF) && /Especificação do projeto/.test(ptP) && /<th>Depende de<\/th>/.test(ptP) &&
+      /^# Billing\n\n<!-- AUTO-GENERATED by dev-spec/.test(enF) && /\n## User stories and acceptance criteria\n/.test(enF) &&
+      /<!-- AUTO-GENERADO por dev-spec/.test(esP) && /\n## Hoja de ruta\n/.test(esP) && /_Especificación del proyecto · generado el /.test(esP) && /\n#### Historias de usuario y criterios de aceptación\n|\n### Historias de usuario y criterios de aceptación\n/.test(esP),
+      "spec_export: chrome in the feature's language (PT feature, an EN feature in a PT project) and the project's (PT, ES); IDs stay English");
+
+    // The renderer: nesting, checkboxes, quotes, escaped code, tables (a '|' in code is no separator), links http(s)/mailto only.
+    const r1 = S.markdownToHtml("# T\n\n- [x] done\n  - child\n- [ ] todo\n\n3. three\n4. four\n\n> **TODO** — fill\n\n```js\nif (a < b) x();\n```\n\n| a | b |\n|---|---|\n| `x|y` | [l](https://example.org) |\n\n[j](javascript:alert(1)) [m](mailto:a@b.c) ![alt](https://example.org/i.png) <b>raw</b> ~~gone~~ _it_ **b**\n---\n");
+    ok(/^<h1>T<\/h1>/.test(r1) && /<ul><li class="task"><span class="cb">☑<\/span> done<ul><li>child<\/li><\/ul><\/li><li class="task"><span class="cb">☐<\/span> todo<\/li><\/ul>/.test(r1) &&
+      /<ol start="3"><li>three<\/li><li>four<\/li><\/ol>/.test(r1) && /<blockquote><p><strong>TODO<\/strong> — fill<\/p><\/blockquote>/.test(r1) &&
+      /<pre class="lang-js"><code>if \(a &lt; b\) x\(\);<\/code><\/pre>/.test(r1) && /<td><code>x\|y<\/code><\/td><td><a href="https:\/\/example\.org" rel="noopener noreferrer">l<\/a><\/td>/.test(r1) &&
+      /<p>j <a href="mailto:a@b\.c" rel="noopener noreferrer">m<\/a> alt &lt;b&gt;raw&lt;\/b&gt; <del>gone<\/del> <em>it<\/em> <strong>b<\/strong><\/p>\n<hr>/.test(r1) && !/<img|javascript/.test(r1),
+      "markdownToHtml: nested / task / ordered lists, block quotes, escaped fenced code, tables (a '|' inside code stays), emphasis; links keep http(s)/mailto only; images become their alt text; raw HTML is escaped");
+
+    // MCP = engine (the same call as the CLI).
+    const mx = payload(await call("spec_export", { name: "checkout", projectDir: xp }));
+    const mxBad = await call("spec_export", { name: "checkout", format: "pdf", projectDir: xp });
+    const mxw = payload(await call("spec_export", { format: "md", write: true, projectDir: xp }));
+    ok(mx.ok && noDate(mx.content) === noDate(S.exportSpecs(xp, { name: "checkout" }).content) && mxBad.result.isError === true && /format/.test(mxBad.result.content[0].text) &&
+      mxw.ok && mxw.wrote && fs.existsSync(path.join(xp, ".specs", "exports", "project.md")),
+      "MCP spec_export = the engine call (content, the format enum, write)");
+  }
+  { // 1.14 B2.2 — release notes from the specs (spec_changelog): Added / Changed / Fixed since a date or the last notes.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const cp = path.join(tmp, "proj-b2-changelog");
+    S.initProject(cp, ["core"], "en");
+    const mk = (p, name, kind, req, state, files, lang) => {
+      const f = S.createFeature(p, name, ["core"], "", undefined, lang || "en", kind);
+      if (req) fs.writeFileSync(path.join(f.dir, "requirements.md"), req);
+      for (const [n, t] of Object.entries(files || {})) fs.writeFileSync(path.join(f.dir, n), t);
+      const sp = path.join(f.dir, ".state.json");
+      fs.writeFileSync(sp, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(sp, "utf8")), state), null, 2));
+      return f;
+    };
+    mk(cp, "Login", "feature", "# Feature: Login\n\n## Summary\nSign in with email and password.\n\n### US-1 (P1): Sign in\n" +
+      "1. **US-1.AC-1** — WHEN a user submits valid credentials THE SYSTEM SHALL sign them in\n2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL show an error and keep the email\n",
+      { finished: { at: "2026-03-01T10:00:00.000Z", files: {} }, approvals: { execution: { at: "2026-03-01T11:00:00.000Z", by: "bob" } },
+        changes: [{ at: "2026-06-10T09:00:00.000Z", phase: "requirements", snapshot: ".history/requirements@1.md", added: [], modified: ["US-1.AC-2"], removed: ["US-1.AC-3"], reopened: [2], digests: {} }] });
+    mk(cp, "SSO", "feature", "# Feature: SSO\n\n## Summary\nSign in with the company identity provider.\n\n### US-1 (P1): IdP sign-in\n" +
+      "1. **US-1.AC-1** — WHEN a user signs in with the company IdP THE SYSTEM SHALL create the session _Supersedes: login/US-1.AC-1_\n" +
+      "2. **US-1.AC-2** — IF the IdP is down THEN THE SYSTEM SHALL offer the password sign-in\n3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]\n",
+      { finished: { at: "2026-06-15T10:00:00.000Z", files: {} } });
+    mk(cp, "Crash on save", "bugfix", null, { approvals: { execution: { at: "2026-06-20T10:00:00.000Z", by: "carol" } } },
+      { "bug.md": "# Bug: Crash on save\n\n## Summary\nSaving a closed document crashes the editor.\n\n## Root Cause\nThe autosave timer fired after the document closed.\nIt then dereferenced a null buffer.\n\n## Fix\nCancel the timer on close.\n" });
+    mk(cp, "WIP", "feature", null, { changes: [{ at: "2026-06-12T09:00:00.000Z", phase: "design", added: ["Caching"], modified: [], removed: [], reopened: [] }] });
+    mk(cp, "Old fix", "bugfix", null, { finished: { at: "2026-02-01T10:00:00.000Z", files: {} } }, { "bug.md": "# Bug: Old fix\n\n## Root Cause\nOff-by-one in the pager.\n" });
+
+    const c1 = S.changelog(cp, { since: "2026-05-01" });
+    const sso = (c1.added || [])[0] || {};
+    const lg = ((c1.changed || {}).changeRequests || [])[0] || {};
+    ok(c1.ok && c1.sinceSource === "date" && c1.since === "2026-05-01T00:00:00.000Z" && c1.wrote === false && c1.added.map((a) => a.feature).join() === "sso" &&
+      sso.title === "SSO" && sso.event === "finished" && sso.summary === "Sign in with the company identity provider." && sso.acs.map((a) => a.id).join() === "US-1.AC-1,US-1.AC-2" &&
+      !/Supersedes/.test(sso.acs[0].text) && c1.changed.superseded.length === 1 && c1.changed.superseded[0].ac === "login/US-1.AC-1" && c1.changed.superseded[0].by === "sso/US-1.AC-1" &&
+      c1.changed.changeRequests.map((c) => c.feature + "#" + c.n).join() === "login#1,wip#1" && JSON.stringify([lg.modified, lg.removed, lg.reopened]) === '[["US-1.AC-2"],["US-1.AC-3"],[2]]' &&
+      lg.acs.length === 1 && lg.acs[0].id === "US-1.AC-2" && /show an error and keep the email/.test(lg.acs[0].text) &&
+      c1.fixed.map((x) => x.feature).join() === "crash-on-save" && c1.fixed[0].event === "execution-approved" && c1.fixed[0].rootCause === "The autosave timer fired after the document closed. It then dereferenced a null buffer." &&
+      JSON.stringify(c1.counts) === '{"added":1,"changed":3,"fixed":1}',
+      "spec_changelog {since}: Added = the feature finished since then (its user-story ACs, template left out); Changed = the AC it supersedes + the change requests since then (IDs, reopened tasks, current AC text); Fixed = the bugfix shipped (execution approved) with its root cause; an earlier finish (login, old-fix) is not new");
+    ok(/^# Release notes — proj-b2-changelog\n\n<!-- AUTO-GENERATED by dev-spec/.test(c1.markdown) && /_Changes since 2026-05-01 00:00 UTC · generated \d{4}-\d{2}-\d{2}_/.test(c1.markdown) &&
+      /\n## Added\n\n### SSO\n\nSign in with the company identity provider\.\n\n- \*\*US-1\.AC-1\*\* — WHEN a user signs in with the company IdP THE SYSTEM SHALL create the session\n- \*\*US-1\.AC-2\*\* — IF the IdP is down/.test(c1.markdown) &&
+      /\n## Changed\n\n- ~~`login\/US-1\.AC-1`~~ — superseded by `sso\/US-1\.AC-1`: WHEN a user signs in with the company IdP/.test(c1.markdown) &&
+      /\n- \*\*login\*\* — change request #1 \(Requirements, 2026-06-10\): modified: US-1\.AC-2; removed: US-1\.AC-3; tasks reopened: #2\n  - \*\*US-1\.AC-2\*\* — IF the password is wrong/.test(c1.markdown) &&
+      /\n- \*\*wip\*\* — change request #1 \(Design, 2026-06-12\): added: Caching\n/.test(c1.markdown) &&
+      /\n## Fixed\n\n- \*\*Crash on save\*\* — Saving a closed document crashes the editor\. — Root cause: The autosave timer fired/.test(c1.markdown) && !/US-1\.AC-3\*\* — WHEN \[trigger\]/.test(c1.markdown),
+      "spec_changelog: the markdown — marker, scope line, ## Added (title, summary, one line per AC), ## Changed (superseded + change requests with their current text), ## Fixed (root-cause one-liner)");
+    const cAll = S.changelog(cp, { since: "all" });
+    const cDef = S.changelog(cp, {});
+    const cLate = S.changelog(cp, { since: "2026-06-16T00:00:00Z" });
+    const cLast = S.changelog(cp, { since: "last" });
+    ok(cAll.ok && cAll.sinceSource === "all" && cAll.since === null && cAll.added.map((a) => a.feature).join() === "login,sso" && cAll.fixed.map((x) => x.feature).join() === "old-fix,crash-on-save" &&
+      cAll.changed.changeRequests.map((c) => c.feature).join() === "wip" && /_Every change the specs record · /.test(cAll.markdown) &&
+      cDef.ok && cDef.sinceSource === "all" && !cDef.note && cDef.counts.added === 2 && cLast.ok && /No release notes were written yet/.test(cLast.note) &&
+      cLate.ok && cLate.added.length === 0 && cLate.fixed.map((x) => x.feature).join() === "crash-on-save" && cLate.counts.changed === 0 && /\n## Added\n\n_Nothing\._\n/.test(cLate.markdown),
+      "spec_changelog: 'all' (and the default while no notes were written) lists every shipped feature — a feature new in the notes has its change requests folded in; a later since filters; 'last' without a stamp says so");
+    const badSince = ["yesterday", "2026-02-30", "2026-13-01", "2026-06-01T25:00"].map((v) => S.changelog(cp, { since: v }));
+    ok(badSince.every((r) => r.ok === false && /is not an ISO date \(YYYY-MM-DD, or a full ISO timestamp\), 'last' or 'all'/.test(r.error)),
+      "spec_changelog: a since that is not an ISO date / timestamp (or a day that doesn't exist) is an error — never rolled over");
+
+    // write: RELEASE-NOTES.md + meta.changelogAt; the next default run starts there; nothing to report → nothing written.
+    const rn = path.join(cp, ".specs", "RELEASE-NOTES.md");
+    const cw = S.changelog(cp, { since: "2026-05-01", write: true });
+    const stamp = S.readRoadmap(cp).meta.changelogAt;
+    const written = fs.readFileSync(rn, "utf8");
+    const cNext = S.changelog(cp, {});
+    const cNone = S.changelog(cp, { write: true });
+    ok(cw.ok && cw.wrote === true && cw.markdown === undefined && cw.changelogAt === stamp && cw.generatedAt === stamp && /^# Release notes — /.test(written) && /AUTO-GENERATED by dev-spec/.test(written) &&
+      cNext.ok && cNext.sinceSource === "last" && cNext.since === stamp && JSON.stringify(cNext.counts) === '{"added":0,"changed":0,"fixed":0}' && /_Changes since the last release notes \(/.test(cNext.markdown) &&
+      cNone.ok && cNone.wrote === false && /Nothing to report since then — \.specs\/RELEASE-NOTES\.md was not written and meta\.changelogAt is unchanged\./.test(cNone.note) &&
+      fs.readFileSync(rn, "utf8") === written && S.readRoadmap(cp).meta.changelogAt === stamp && S.readRoadmap(cp).meta.lang === "en",
+      "spec_changelog {write}: .specs/RELEASE-NOTES.md (AUTO-GENERATED) + meta.changelogAt (other meta kept); the default since is then the stamp; with nothing new nothing is written or re-stamped");
+    const wipState = path.join(cp, ".specs", "wip", ".state.json");
+    fs.writeFileSync(wipState, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(wipState, "utf8")), { finished: { at: new Date(Date.now() + 60000).toISOString(), files: {} } }), null, 2));
+    const cNew = S.changelog(cp, {});
+    fs.writeFileSync(rn, "# Our release notes\n");
+    const cHand = S.changelog(cp, { write: true });
+    ok(cNew.ok && cNew.added.map((a) => a.feature).join() === "wip" && cHand.ok === false && cHand.skipped === true && /RELEASE-NOTES\.md exists and was not generated by dev-spec/.test(cHand.error) &&
+      fs.readFileSync(rn, "utf8") === "# Our release notes\n" && S.readRoadmap(cp).meta.changelogAt === stamp,
+      "spec_changelog: work shipped after the stamp is the next notes; a hand-written RELEASE-NOTES.md is never overwritten (error) and the stamp stays");
+    const brk = path.join(tmp, "proj-b2-changelog-broken");
+    S.initProject(brk, ["core"], "en");
+    fs.writeFileSync(path.join(brk, ".specs", "roadmap.json"), "{ not json");
+    const bDef = S.changelog(brk, {});
+    const bAll = S.changelog(brk, { since: "all" });
+    const bW = S.changelog(brk, { since: "all", write: true });
+    ok(bDef.ok === false && /roadmap\.json/.test(bDef.error) && bAll.ok && bW.ok && bW.wrote === false && fs.readFileSync(path.join(brk, ".specs", "roadmap.json"), "utf8") === "{ not json",
+      "spec_changelog: an unreadable roadmap.json is an error for the default since (the stamp lives there), never read as 'no notes yet' — and never rewritten");
+
+    // Localized chrome (PT / ES projects); IDs stay English.
+    const lp = (lang, name, req) => { const d = path.join(tmp, "proj-b2-changelog-" + lang); S.initProject(d, ["core"], lang); mk(d, name, "feature", req, { finished: { at: "2026-06-01T00:00:00.000Z", files: {} } }, null, lang);
+      mk(d, "Bug " + lang, "bugfix", null, { finished: { at: "2026-06-02T00:00:00.000Z", files: {} } }, null, lang); return S.changelog(d, { since: "all" }); };
+    const cpt = lp("pt", "Pagamento", "# Feature: Pagamento\n\n## Resumo\nPagar o carrinho.\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE emitir o recibo\n");
+    const ces = lp("es", "Pagos", "# Función: Pagos\n\n## Resumen\nPagar el carrito.\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — CUANDO el cliente paga EL SISTEMA DEBE emitir el recibo\n");
+    ok(cpt.ok && /^# Notas de versão — /.test(cpt.markdown) && /AUTO-GERADO por dev-spec/.test(cpt.markdown) && /\n## Adicionado\n\n### Pagamento\n\nPagar o carrinho\.\n\n- \*\*US-1\.AC-1\*\* — QUANDO o cliente paga/.test(cpt.markdown) &&
+      /\n## Alterado\n\n_Nada\._\n/.test(cpt.markdown) && /\n## Corrigido\n\n- \*\*Bug pt\*\*.* — _causa raiz por escrever no bug\.md_/.test(cpt.markdown) && /_Todas as alterações registadas nas specs · geradas a /.test(cpt.markdown) &&
+      ces.ok && /^# Notas de la versión — /.test(ces.markdown) && /\n## Añadido\n\n### Pagos\n/.test(ces.markdown) && /\n## Cambiado\n/.test(ces.markdown) && /\n## Corregido\n/.test(ces.markdown) && /- \*\*US-1\.AC-1\*\* — CUANDO/.test(ces.markdown),
+      "spec_changelog: PT / ES chrome (Adicionado · Alterado · Corrigido / Añadido · Cambiado · Corregido), an unwritten root cause said so; IDs English-stable");
+
+    // MCP = engine.
+    const mc = payload(await call("spec_changelog", { since: "2026-05-01", projectDir: cp }));
+    const mcBad = await call("spec_changelog", { since: 5, projectDir: cp });
+    const pick = (r) => JSON.stringify([r.since, r.sinceSource, r.added, r.changed, r.fixed, r.counts]);
+    ok(mc.ok && pick(mc) === pick(S.changelog(cp, { since: "2026-05-01" })) && mcBad.result.isError === true,
+      "MCP spec_changelog = the engine call (since as a string only)");
+  }
   // @pkg B2 <<<
 
   // @pkg B3 tests >>>
@@ -7530,11 +7795,11 @@ function endRun() {
       evidence: { 3: { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z",
         history: [{ command: "npm test", exitCode: 1, at: "2026-06-03T09:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-04T10:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z" }] } } });
     mkB4(fpB4, "Reports", "- [ ] 1. [US1] Report view\n  - _Size: M_\n- [ ] 2. [US1] CSV\n  - _Size: M_\n");
-    mkB4(fpB4, "Exports", "- [ ] 1. [US1] Export job\n  - _Size: S_\n");
+    mkB4(fpB4, "Bulk export", "- [ ] 1. [US1] Export job\n  - _Size: S_\n");
     mkB4(fpB4, "Draft", null); // the scaffold's tasks only: not broken into tasks
     mkB4(fpB4, "Later", "- [ ] 1. [US1] Later thing\n");
     mkB4(fpB4, "Shipped", "- [x] 1. [US1] Done long ago\n");
-    S.setDependency(fpB4, "exports", ["reports"]);
+    S.setDependency(fpB4, "bulk-export", ["reports"]);
     S.setDependency(fpB4, "later", ["draft"]);
     const fcB4 = S.forecastData(fpB4, S.roadmap(fpB4).features, { now: NOW_B4 });
     const FB4 = fcB4.byFeature;
@@ -7543,9 +7808,9 @@ function endRun() {
     ok(FB4["core-api"].eta === "2026-06-18" && JSON.stringify(FB4["core-api"].range) === '["2026-06-17","2026-06-22"]' && FB4["core-api"].remainingPoints === 14 &&
       FB4["core-api"].unsizedTasks === 1 && FB4["core-api"].velocity === "feature" && FB4["core-api"].workingDays === 7 && FB4["core-api"].pointsPerDay === 2,
       "ETA: 14 open points (M + an unsized task = the feature's median 3 + XL) ÷ 2 points/day = 7 working days from Wed 2026-06-10 → 2026-06-18, ±25% → 06-17…06-22 (got " + JSON.stringify(FB4["core-api"]) + ")");
-    ok(FB4.reports.eta === "2026-06-12" && FB4.reports.velocity === "project" && FB4.exports.eta === "2026-06-15" && JSON.stringify(FB4.exports.range) === '["2026-06-15","2026-06-17"]' &&
-      JSON.stringify(FB4.exports.after) === '["reports"]' && FB4.exports.eta > FB4.reports.eta,
-      "a feature blocked by an unfinished dependency forecasts after it (exports starts the working day after reports' ETA, Fri 06-12 → Mon 06-15); without completions of its own a feature uses the project velocity (got " + JSON.stringify([FB4.reports, FB4.exports]) + ")");
+    ok(FB4.reports.eta === "2026-06-12" && FB4.reports.velocity === "project" && FB4["bulk-export"].eta === "2026-06-15" && JSON.stringify(FB4["bulk-export"].range) === '["2026-06-15","2026-06-17"]' &&
+      JSON.stringify(FB4["bulk-export"].after) === '["reports"]' && FB4["bulk-export"].eta > FB4.reports.eta,
+      "a feature blocked by an unfinished dependency forecasts after it (bulk-export starts the working day after reports' ETA, Fri 06-12 → Mon 06-15); without completions of its own a feature uses the project velocity (got " + JSON.stringify([FB4.reports, FB4["bulk-export"]]) + ")");
     ok(FB4.draft.eta === null && FB4.draft.reason === "no-tasks" && FB4.later.eta === null && FB4.later.reason === "dependency" && JSON.stringify(FB4.later.after) === '["draft"]' &&
       FB4.shipped.reason === "done",
       "no ETA for a feature not broken into tasks (no-tasks), one waiting on a dependency that has none (dependency, after: [draft]) or a done one (got " + JSON.stringify([FB4.draft, FB4.later, FB4.shipped]) + ")");
@@ -7565,7 +7830,7 @@ function endRun() {
     const mdPtB4 = S.renderRoadmapMd(fpB4, "pt", fdB4);
     const htmlB4 = S.renderRoadmapHtml(fpB4, "es", fdB4);
     ok(/\| Next \| ETA \|\n\|---\|---\|---\|---\|---\|---\|---\|---\|---\|/.test(mdB4) && /\[core-api\]\(\.\/core-api\/requirements\.md\) .*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdB4) &&
-      /\[exports\].*\| 2026-06-15 \(06-15…06-17\) \|$/m.test(mdB4) && /\[later\].*\| — \|$/m.test(mdB4) && /\[shipped\].*\| — \|$/m.test(mdB4) &&
+      /\[bulk-export\].*\| 2026-06-15 \(06-15…06-17\) \|$/m.test(mdB4) && /\[later\].*\| — \|$/m.test(mdB4) && /\[shipped\].*\| — \|$/m.test(mdB4) &&
       /_Velocity: 2 point\(s\)\/working day — 4 task\(s\), 16 point\(s\) completed since 2026-06-01 \(last 28 days\)_/.test(mdB4) && /ETA = remaining points ÷ velocity, in working days \(±25%\)/.test(mdB4),
       "ROADMAP.md: an ETA column (the date and its range, '—' without one), the project velocity line and the ETA rule");
     ok(/\| Próxima \| Previsão \|/.test(mdPtB4) && /\[core-api\].*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdPtB4) && /_Velocidade: 2 ponto\(s\)\/dia útil — 4 tarefa\(s\), 16 ponto\(s\) concluídos desde 2026-06-01/.test(mdPtB4) &&
