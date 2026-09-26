@@ -77,7 +77,7 @@ Turn on `+saas` if **any** are true:
 | Unattended background | Cron jobs, workers, scheduled tasks, webhooks |
 | External contract | Public API, webhook sender, third-party integration |
 | Hard to rollback | Schema changes, irreversible state transitions, email/SMS sends |
-| Compliance-relevant | GDPR, CCPA, PCI, HIPAA, SOC2 audit trail |
+| Compliance-relevant | PCI, SOC2 audit trail (GDPR / RGPD, CCPA, HIPAA — personal data — turn on `+privacy` instead) |
 | Cost-sensitive at scale | Storage/egress/compute that grows per user and can blow a budget |
 
 Skip `+saas` when it's a prototype, internal tool, or low-traffic feature with a contained blast
@@ -164,7 +164,7 @@ core [+tdd] [+saas] [+ai]
 - Launch / 6 months / 2 years: [calls or req per day, ~$ per month]
 
 ## Compliance Tags
-[GDPR | PCI | HIPAA | SOC2 | none] — does user PII reach a third party / model provider?
+[GDPR | PCI | HIPAA | SOC2 | none] — does user PII reach a third party / model provider? (GDPR / HIPAA → `+privacy`)
 ```
 
 The track set chosen here drives every later phase and is stored per feature. Changing it mid-feature
