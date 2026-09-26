@@ -13,7 +13,14 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("./i18n.js");
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy"];
+// The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
+// Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
+// [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
+// (requirements criteria, design block, template tasks, test rows, steering stub).
+const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
+// The steering files a track brings (spec_init / add_track write them, the task brief lists them).
+const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"] };
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -656,7 +663,9 @@ function normalizeTracks(tracks) {
   return parseTracks(tracks).tracks; // lenient: valid tokens only (the boundaries use parseTracks and report unknowns)
 }
 // Words people type for a track — suggestion only, never accepted as input.
-const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas" };
+const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas",
+  security: "sec", secure: "sec", appsec: "sec", owasp: "sec", seguranca: "sec", "segurança": "sec", seguridad: "sec",
+  priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -727,7 +736,7 @@ const SIGNALS = {
   saas: {
     strong: [
       "multi-tenant", "multitenant", "multi tenant", "tenant isolation", "webhook", "cron",
-      "rate limit", "rate-limit", "gdpr", "rgpd", "hipaa", "pci", "soc2", "soc 2", "sla",
+      "rate limit", "rate-limit", "pci", "soc2", "soc 2", "sla", // gdpr / rgpd / hipaa are +privacy signals (1.14)
       "uptime", "observability", "idempoten", "circuit breaker", "sharding",
       "noisy neighbor", "row-level security", "rls", "dead letter", "dlq", "slo",
       "multi-region", "production-ready", "production grade", "production-grade",
@@ -774,6 +783,79 @@ const SIGNALS = {
       // PT/ES
       "agente", "modelo", "geração", "resumo", "resumir", "assistente", "inferência", "custo de tokens",
       "generación", "resumen", "asistente", "coste de tokens", "ia", "generativo", "generativa",
+    ],
+  },
+  // +sec (1.14). Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
+  // +sec until a second signal corroborates it. Never a bare "injection" (dependency injection) or "https" (URLs).
+  sec: {
+    strong: [
+      "threat model", "threat modelling", "owasp", "xss", "cross-site scripting", "csrf", "xsrf", "sql injection",
+      "command injection", "code injection", "pentest", "pen test", "penetration test", "vulnerabili", "cve", "asvs",
+      "secrets management", "secret management", "secrets manager", "encryption at rest", "encryption in transit",
+      "security audit", "security review", "security test", "security hardening", "sast", "dast", "attack surface",
+      "privilege escalation", "ssrf", "remote code execution", "brute force", "brute-force", "credential stuffing",
+      "session hijack", "clickjacking", "zero trust", "zero-trust", "mtls", "content security policy",
+      // PT
+      "modelo de ameaças", "modelação de ameaças", "modelagem de ameaças", "injeção de sql", "injeção sql",
+      // (pluralize() returns early for a phrase ending in -ão / -ção / -ión: its plural first word is listed too)
+      "injeção de código", "injeção de comandos", "teste de intrusão", "testes de intrusão", "teste de penetração",
+      "testes de penetração", "gestão de segredos", "gestão de secrets", "cifragem em repouso", "encriptação em repouso",
+      "auditoria de segurança", "revisão de segurança", "superfície de ataque", "escalada de privilégios",
+      "escalonamento de privilégios", "força bruta", "sequestro de sessão",
+      // ES
+      "modelo de amenazas", "modelado de amenazas", "inyección sql", "inyección de sql", "inyección de código",
+      "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
+      "gestión de secretos", "cifrado en reposo", "auditoría de seguridad", "revisión de seguridad", "superficie de ataque",
+      "escalada de privilegios", "escalamiento de privilegios", "fuerza bruta", "secuestro de sesión",
+    ],
+    weak: [
+      "authentication", "authorization", "rbac", "abac", "access control", "permission", "access token", "refresh token",
+      "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
+      "input validation", "security", "hardening", "least privilege", "stride", "mfa", "2fa", "two-factor", "firewall", "secrets",
+      // PT
+      "autenticação", "autenticacao", "autorização", "autorizacao", "permissão", "controlo de acesso", "controle de acesso",
+      "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
+      "registo de auditoria", "trilho de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada",
+      // ES
+      "autenticación", "autorización", "permiso", "control de acceso", "token de acceso", "clave de api",
+      "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada",
+    ],
+  },
+  // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
+  privacy: {
+    strong: [
+      "gdpr", "rgpd", "lgpd", "ccpa", "cpra", "hipaa", "personal data", "personally identifiable", "pii", "dpia",
+      "data protection", "data subject", "right to erasure", "right to be forgotten", "data portability", "consent",
+      "data retention", "retention period", "retention policy", "retention policies", "anonymiz", "anonymis", "pseudonymiz",
+      "pseudonymis", "data minimi", "data processing agreement", "privacy by design", "privacy policy", "privacy notice",
+      "special category data", "data controller", "data processor", "international transfer", "standard contractual clauses",
+      // PT
+      "dados pessoais", "dado pessoal", "proteção de dados", "protecao de dados", "titular dos dados", "titulares dos dados",
+      "direito ao apagamento", "direito ao esquecimento", "direito de apagamento", "portabilidade dos dados",
+      "portabilidade de dados", "consentimento", "retenção de dados", "prazo de conservação", "conservação de dados",
+      "anonimiza", "pseudonimiza", "aipd", "cnpd", "categorias especiais de dados", "dados sensíveis", "subcontratante",
+      "responsável pelo tratamento", "transferência internacional", "transferências internacionais",
+      "política de privacidade", "minimização de dados",
+      // ES
+      "datos personales", "dato personal", "protección de datos", "titular de los datos",
+      "derechos arco", "derecho de supresión", "derecho al olvido", "portabilidad de datos", "portabilidad de los datos",
+      "retención de datos", "plazo de conservación", "seudonimiza", "eipd", "aepd", "categorías especiales de datos",
+      "datos sensibles", "encargado del tratamiento", "responsable del tratamiento", "transferencia internacional",
+      "transferencias internacionales", "política de privacidad", "minimización de datos",
+    ],
+    weak: [
+      "user data", "customer data", "user profile", "customer profile", "email address", "phone number", "date of birth",
+      "cookie", "user tracking", "geolocation", "location data", "biometric", "health data", "contact details", "opt-out",
+      "opt-in", "unsubscribe", "privacy", "delete account", "account deletion", "data export", "dpa",
+      // PT
+      "dados do utilizador", "dados dos utilizadores", "dados de utilizador", "dados do cliente", "dados dos clientes",
+      "perfil do utilizador", "perfil de utilizador", "perfil do cliente", "endereço de email", "endereço de e-mail",
+      "número de telefone", "número de telemóvel", "data de nascimento", "geolocalização", "dados de saúde",
+      "dados biométricos", "privacidade", "apagar conta", "eliminar conta", "exportar dados", "avaliação de impacto",
+      // ES
+      "datos del usuario", "datos de usuario", "datos de los usuarios", "datos del cliente", "perfil de usuario",
+      "perfil del usuario", "perfil del cliente", "dirección de correo", "número de teléfono", "fecha de nacimiento",
+      "datos de salud", "datos biométricos", "privacidad", "eliminar cuenta", "borrar cuenta", "exportar datos", "evaluación de impacto",
     ],
   },
 };
@@ -848,7 +930,10 @@ function isNegated(text, idx, kwLen, lang, cased) {
 
 // Keywords deliberately written as STEMS: any letters may follow ('idempoten' → idempotent /
 // idempotency / idempotência, 'hallucinat' → hallucinations, 'summariz' → summarization).
-const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina"]);
+const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina",
+  // +sec / +privacy: vulnerability / vulnerabilities / vulnerabilidade(s) / vulnerabilidad(es); sanitize / sanitização;
+  // anonymize / anonymisation / anonimização / anonimización; data minimization / minimisation.
+  "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza"]);
 // Inflections accepted on an exact keyword: payment→payments, cache→cached, rate-limit→rate-limiting.
 const INFLECTION = "(?:e?s|ed|ing|d)?";
 // Short acronyms ('rag', 'sla', 'slo', 'gpt', 'llm', 'ai') pluralize but never conjugate — without
@@ -924,12 +1009,14 @@ function classify(description, opts = {}) {
   const lang = opts.lang ? normalizeLang(opts.lang) : guessLang(text);
   const C = i18n.msg(lang).classify;
   // Accented/unaccented twins ("sessão"/"sessao") match the same word: one span counts once per track.
-  const seenSpan = { tdd: new Set(), saas: new Set(), ai: new Set() };
+  const perTrack = (mk) => Object.fromEntries(OPTIONAL_TRACKS.map((t) => [t, mk()]));
+  const seenSpan = perTrack(() => new Set());
   const active = new Set(["core"]);
-  const matched = { tdd: { strong: [], weak: [] }, saas: { strong: [], weak: [] }, ai: { strong: [], weak: [] } };
-  const negated = { tdd: [], saas: [], ai: [] };
+  const matched = perTrack(() => ({ strong: [], weak: [] }));
+  const negated = perTrack(() => []);
+  const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
 
-  for (const track of ["tdd", "saas", "ai"]) {
+  for (const track of OPTIONAL_TRACKS) {
     for (const tier of ["strong", "weak"]) {
       for (const kw of SIGNALS[track][tier]) {
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
@@ -941,14 +1028,20 @@ function classify(description, opts = {}) {
         while ((m = re.exec(text)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
           seenSpan[track].add(m.index);
-          if (isNegated(text, m.index, m[0].length, lang, cased)) {
-            if (!negated[track].includes(kw)) negated[track].push(kw);
-          } else if (!matched[track][tier].includes(kw)) {
-            matched[track][tier].push(kw);
-          }
+          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: isNegated(text, m.index, m[0].length, lang, cased) });
         }
       }
     }
+  }
+  // A WEAK signal inside a longer STRONG signal of another track is part of that phrase, not evidence of its own:
+  // 'model' in "threat model" / "modelo de ameaças" (+sec) is no +ai hint, 'security' in "row-level security" (+saas)
+  // no +sec one. The same word in two tracks ('authentication': +tdd strong, +sec weak) is not shadowed — equal spans.
+  const shadowed = (h) => h.tier === "weak" && hits.some((s) => s.track !== h.track && s.tier === "strong" &&
+    s.start <= h.start && h.end <= s.end && s.end - s.start > h.end - h.start);
+  for (const h of hits) {
+    if (shadowed(h)) continue;
+    if (h.neg) { if (!negated[h.track].includes(h.kw)) negated[h.track].push(h.kw); }
+    else if (!matched[h.track][h.tier].includes(h.kw)) matched[h.track][h.tier].push(h.kw);
   }
 
   // De-dupe by containment: a keyword that is a substring of another matched keyword in the same
@@ -956,7 +1049,7 @@ function classify(description, opts = {}) {
   // concept, not two signals — otherwise a single PT/ES word would auto-enable a track. The
   // containment must sit at a word edge, or a short keyword vanishes inside an unrelated one
   // ("ai" ⊂ "guardr-ai-l").
-  for (const t of ["tdd", "saas", "ai"]) {
+  for (const t of OPTIONAL_TRACKS) {
     const all = [...matched[t].strong, ...matched[t].weak];
     const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
     matched[t].strong = keep(matched[t].strong);
@@ -969,7 +1062,7 @@ function classify(description, opts = {}) {
   const confidence = {};
   const weak = [];
   const possible = [];
-  for (const t of ["tdd", "saas", "ai"]) {
+  for (const t of OPTIONAL_TRACKS) {
     signals[t] = [...matched[t].strong, ...matched[t].weak];
     const s = matched[t].strong.length;
     const w = matched[t].weak.length;
@@ -1000,7 +1093,7 @@ function classify(description, opts = {}) {
   // A negation is never silently dropped. It cannot *veto* a track — "the system shall not
   // hallucinate" negates 'hallucinat' on a feature that is unmistakably +ai — so when the track is
   // on anyway, surface the contradiction for the human who confirms Phase 0.
-  for (const t of ["tdd", "saas", "ai"]) {
+  for (const t of OPTIONAL_TRACKS) {
     if (!negated[t].length) continue;
     const quoted = negated[t].map((k) => `'${k.trim()}'`).join(", ");
     if (!active.has(t)) {
@@ -1030,7 +1123,7 @@ function classify(description, opts = {}) {
 function buildReasoning(tracks, signals, confidence, negated, C) {
   C = C || i18n.msg("en").classify;
   const lines = [C.core];
-  for (const t of ["tdd", "saas", "ai"]) {
+  for (const t of OPTIONAL_TRACKS) {
     const neg = negated && negated[t] && negated[t].length ? negated[t].map((k) => `'${k.trim()}'`).join(", ") : null;
     if (tracks.includes(t)) {
       const uniq = [...new Set(signals[t])].slice(0, 6);
@@ -1049,9 +1142,7 @@ function buildReasoning(tracks, signals, confidence, negated, C) {
 
 function steeringFilesForTracks(tracks) {
   const files = ["constitution.md", "product.md", "tech.md", "structure.md"];
-  if (tracks.includes("tdd")) files.push("testing-standards.md");
-  if (tracks.includes("saas")) files.push("scale.md", "observability.md", "cost.md");
-  if (tracks.includes("ai")) files.push("ai-strategy.md");
+  for (const t of OPTIONAL_TRACKS) if (tracks.includes(t)) files.push(...TRACK_STEERING[t]);
   return files;
 }
 
@@ -1306,9 +1397,7 @@ const BRIEF_STEERING_BUDGET = 3000; // chars of scoped (fileMatch) steering quot
 function briefSteering(root, tracks, implementsList) {
   const dir = path.join(root, "steering");
   const defaults = ["constitution.md", "tech.md", "structure.md"]
-    .concat(tracks.includes("tdd") ? ["testing-standards.md"] : [])
-    .concat(tracks.includes("saas") ? ["scale.md", "observability.md", "cost.md"] : [])
-    .concat(tracks.includes("ai") ? ["ai-strategy.md"] : []);
+    .concat(...OPTIONAL_TRACKS.filter((t) => tracks.includes(t)).map((t) => TRACK_STEERING[t]));
   const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
   const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
   // _Implements:_ paths as trace_check / coverage read them (backticks and anchors dropped; an absolute path inside
@@ -1426,8 +1515,7 @@ function designSaveCheck(projectDir, name) {
   const kind = readState(projectDir, f.slug).kind || "feature";
   const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   const sections = [];
-  for (const [tr, secs, marker] of [["saas", SAAS_SECTIONS, "[SaaS]"], ["ai", AI_SECTIONS, "[AI]"]]) {
-    if (!tracks.includes(tr)) continue;
+  for (const [tr, secs, marker] of activeSectionTracks(tracks)) {
     const bad = sectionState(design, secs, marker).filter((s) => s.status !== "filled");
     if (bad.length) sections.push({ track: tr, marker, sections: bad });
   }
@@ -1699,6 +1787,8 @@ function detectTracks(dir) {
   const design = readIfExists(path.join(dir, "design.md")) || "";
   if (existsCached(path.join(dir, "load-test.md")) || headingHasMarker(design, "[SaaS]")) t.push("saas");
   if (existsCached(path.join(dir, "eval-plan.md")) || existsCached(path.join(dir, "evals")) || headingHasMarker(design, "[AI]")) t.push("ai");
+  // The marker tracks without an artifact of their own (+sec, +privacy): their design sections are the evidence.
+  for (const x of MARKER_TRACKS) if (!t.includes(x) && headingHasMarker(design, TRACK_MARKER[x])) t.push(x);
   return VALID_TRACKS.filter((x) => t.includes(x));
 }
 // The track list a state object saved (a non-empty list of known track names) → normalized, else null (inferred from the
@@ -1873,6 +1963,8 @@ function statusFeature(projectDir, name) {
     aiSections = { hasEvalPlan: fs.existsSync(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)),
       designHasAiSections: headingHasMarker(design, "[AI]"), sections: sectionView(sectionState(design, AI_SECTIONS, "[AI]")) };
   }
+  // +sec / +privacy: the same view as the scale sections (null while the track is off).
+  const trackView = (tr) => (tracks.includes(tr) ? sectionView(sectionState(design, TRACK_SECTIONS[tr], TRACK_MARKER[tr])) : null);
 
   return {
     ok: true,
@@ -1883,6 +1975,8 @@ function statusFeature(projectDir, name) {
     tasks: { total: tasks.length, done, next: next ? { number: next.number, text: next.text } : null, list },
     scaleSections,
     aiSections,
+    secSections: trackView("sec"),
+    privacySections: trackView("privacy"),
   };
 }
 
@@ -3531,6 +3625,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // way briefSteering reads them) — the raw spelling left the design section out.
   const impFiles = mk.implements.map(implementsRel).filter(Boolean);
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
+  // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
+  const trackMarks = ["sec", "privacy"].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => TRACK_MARKER[tr].toLowerCase());
   const want = (s) => {
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
@@ -3538,6 +3634,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
+    if (trackMarks.some((m) => title.includes(m))) return true;
     return false;
   };
   let budget = BRIEF_DESIGN_BUDGET;
@@ -3722,6 +3819,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
+  for (const tr of ["sec", "privacy"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
@@ -4841,7 +4939,10 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
 // spec_add_track — turn a track on (additive, never overwrites) or off (non-destructive) for a feature
 // ---------------------------------------------------------------------------
 
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]" };
+// The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
+// language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]" };
+const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 
 // The ONE code path that turns tracks ON for an existing feature — spec_add_track, and spec_create re-run on
 // an existing feature with new tracks: missing artifacts, the track's design sections, its steering files, its
@@ -4916,11 +5017,18 @@ function applyTracks(projectDir, f, name, trs, lng) {
 }
 
 // The tracks whose template rows a scaffolded test plan gets: a test is planned only for the track criteria
-// requirements.md actually has (US-1.AC-5 for +saas, US-1.AC-7 for +ai) — a track added after the requirements brings
-// none. spec_add_track and spec_create (new or existing feature) share it, so both give the same plan.
+// requirements.md actually has (US-1.AC-5 for +saas, US-1.AC-7 for +ai, US-1.AC-10 for +sec, US-1.AC-13 for +privacy —
+// the track's first template criterion) — a track added after the requirements brings none. spec_add_track and
+// spec_create (new or existing feature) share it, so both give the same plan.
 function testPlanTracks(dir, tracks, reqIds) {
   const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
-  return tracks.filter((x) => (x !== "saas" || ids.has("US-1.AC-5")) && (x !== "ai" || ids.has("US-1.AC-7")));
+  return tracks.filter((x) => { const first = trackTemplateAcs(x)[0]; return !first || ids.has(first); });
+}
+// A track's own template criteria (the requirements template's IDs for it, in order) — [] for core / tdd.
+function trackTemplateAcs(tr) {
+  if (tr === "core" || tr === "tdd") return [];
+  const core = new Set(i18n.templateAcIds(["core"]));
+  return i18n.templateAcIds(["core", tr]).filter((id) => !core.has(id));
 }
 // The test plan a scaffold writes: the template's rows while requirements.md holds exactly the template's own AC IDs
 // (a fresh feature), else one generic row per REAL AC ID — spec_add_track tdd / spec_create +tdd on a feature whose
@@ -5000,14 +5108,14 @@ function sectionDropLines(lines, owner) {
 }
 // tasks.md (text or lines): the template task blocks of tracks that are off (matched by their heading, in any language).
 function inactiveTaskLines(tasks, tracks) {
-  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => [t, trackTaskHeadings(t)]);
+  const off = MARKER_TRACKS.filter((t) => !tracks.includes(t)).map((t) => [t, trackTaskHeadings(t)]);
   if (!off.length) return new Map();
   const lines = Array.isArray(tasks) ? tasks : String(tasks).split(/\r?\n/);
   return sectionDropLines(lines, (l) => { const hit = off.find(([, wanted]) => wanted.has(normTaskHeading(l))); return hit && hit[0]; });
 }
-// design.md / requirements.md: the [SaaS] / [AI] headed sections of tracks that are off.
+// design.md / requirements.md: the [SaaS] / [AI] / [SEC] / [PRIVACY] headed sections of tracks that are off.
 function inactiveMarkerLines(md, tracks) {
-  const off = ["saas", "ai"].filter((t) => !tracks.includes(t)).map((t) => [t, TRACK_MARKER[t].toLowerCase()]);
+  const off = MARKER_TRACKS.filter((t) => !tracks.includes(t)).map((t) => [t, TRACK_MARKER[t].toLowerCase()]);
   if (!off.length) return new Map();
   return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.toLowerCase().includes(m)); return hit && hit[0]; });
 }
@@ -5016,7 +5124,7 @@ function inactiveMarkerLines(md, tracks) {
 // new label. Only the leading track run is replaced ("core +tdd — confirmed by X" keeps its tail); a missing
 // line is inserted. Returns true when the file changed.
 const RE_ACTIVE_TRACKS = /^#{1,6}\s+(?:active tracks|tracks ativos|tracks activos)\s*$/i;
-const RE_TRACK_RUN = /^\s*core(?:\s+\+(?:tdd|saas|ai))*(?=\s|$)/i;
+const RE_TRACK_RUN = new RegExp("^\\s*core(?:\\s+\\+(?:" + OPTIONAL_TRACKS.join("|") + "))*(?=\\s|$)", "i");
 function updateActiveTracks(file, label) {
   const raw = readIfExists(file);
   if (raw == null) return false;
@@ -5059,7 +5167,7 @@ function removeTracks(projectDir, f, named, lng) {
 }
 
 function inactiveArtifacts(dir, gone, T) {
-  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"] };
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [] };
   const design = readIfExists(path.join(dir, "design.md")) || "";
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];
@@ -5234,7 +5342,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const tracks = detectTracks(dir);
   const norm = normTaskHeading(heading);
   // A turned-off track's task heading is hidden wherever it appears (activeTasks matches it by text).
-  const offTrack = ["saas", "ai"].find((t) => !tracks.includes(t) && trackTaskHeadings(t).has(norm));
+  const offTrack = MARKER_TRACKS.find((t) => !tracks.includes(t) && trackTaskHeadings(t).has(norm));
   if (offTrack) return { ok: false, error: A.inactiveHeading(heading, "+" + offTrack) };
 
   // Line-exact editing: split on "\n" only, so every existing line keeps its own ending (CRLF stays CRLF); new
@@ -5543,7 +5651,7 @@ function pendingGateList(dir, tracks, kind, approvals) {
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "root-cause": 2,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, verification: 6 };
 
 // ---------------------------------------------------------------------------
@@ -5571,6 +5679,36 @@ const AI_SECTIONS = [
   { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"] },
   { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"] },
 ];
+// +sec (1.14) — never a bare "security" synonym: the core design's own "Security Considerations" is not a [SEC] section.
+const SEC_SECTIONS = [
+  { name: "Threat Model", syn: ["threat model", "modelo de ameaças", "modelo de ameacas", "modelação de ameaças", "modelacao de ameacas", "modelo de amenazas", "modelado de amenazas"] },
+  { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"] },
+  { name: "Authentication & Authorization", syn: ["authentication & authorization", "authentication and authorization", "authn & authz", "authn/authz",
+    "autenticação e autorização", "autenticacao e autorizacao", "autenticación y autorización", "autenticacion y autorizacion"] },
+  { name: "Secrets & Key Management", syn: ["secrets & key management", "secrets and key management", "secrets management", "secret management", "key management",
+    "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves"] },
+  { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"] },
+];
+// +privacy (1.14) — GDPR / RGPD.
+const PRIVACY_SECTIONS = [
+  { name: "Personal Data Inventory", syn: ["personal data inventory", "data inventory", "inventário de dados pessoais", "inventario de dados pessoais", "inventário de dados",
+    "inventario de datos personales", "inventario de datos"] },
+  { name: "Lawful Basis & Purpose", syn: ["lawful basis", "legal basis", "fundamento de licitude", "fundamento jurídico", "fundamento juridico", "base de licitude",
+    "base jurídica", "base juridica", "base legal", "base de legitimación", "base de legitimacion"] },
+  { name: "Retention & Deletion", syn: ["retention & deletion", "retention and deletion", "retention", "data retention", "conservação e eliminação", "conservacao e eliminacao",
+    "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion"] },
+  { name: "Data Subject Rights", syn: ["data subject rights", "direitos dos titulares", "direitos do titular", "derechos de los interesados", "derechos del interesado", "derechos arco"] },
+  { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
+    "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales"] },
+  { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto"] },
+];
+// The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
+// check read (a marker track = a TRACK_MARKER entry + its table here).
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS };
+// [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
+function activeSectionTracks(tracks) {
+  return MARKER_TRACKS.filter((t) => tracks.includes(t)).map((t) => [t, TRACK_SECTIONS[t], TRACK_MARKER[t]]);
+}
 
 // Heading lines outside fenced code (a "# comment" inside a bash block is not a heading).
 function headingIndex(lines) {
@@ -5588,7 +5726,7 @@ function headingIndex(lines) {
 // synonym must START the heading text, after an optional [SaaS]/[AI] marker, numbering ("1.", "10)",
 // "Section 1:" — the form references/mandatory-ai-design-sections.md uses) and emphasis, and end at a word
 // boundary ("fix" ≠ "Fixtures").
-const RE_HEADING_LEAD = /^(?:[\s*_—–:-]+|\[(?:saas|ai)\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\s+\d+[.:)]?(?=\s|$)|\d+(?:\.\d+)*[.):]?(?=\s))/;
+const RE_HEADING_LEAD = new RegExp("^(?:[\\s*_—–:-]+|\\[(?:" + MARKER_TRACKS.join("|") + ")\\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\\s+\\d+[.:)]?(?=\\s|$)|\\d+(?:\\.\\d+)*[.):]?(?=\\s))");
 function headingMatches(line, syns) {
   const m = line.match(/^#{2,6}\s+(.*)$/);
   if (!m) return false;
@@ -5605,7 +5743,7 @@ function extractSection(md, synonyms, marker) {
   const lines = (md || "").split(/\r?\n/);
   const heads = headingIndex(lines);
   const matches = (i) => headingMatches(lines[i], syns);
-  const MARKERS = ["[saas]", "[ai]"];
+  const MARKERS = MARKER_TRACKS.map((t) => TRACK_MARKER[t].toLowerCase());
   let start = -1;
   if (marker) start = heads.find((i) => lines[i].toLowerCase().includes(marker.toLowerCase()) && matches(i));
   if (start == null || start === -1) {
@@ -5639,7 +5777,7 @@ function sectionState(design, sections, marker) {
 // The list separator is UNAMBIGUOUS — `\s*(?:[,;/]\s*)?`, never `\s*[,;/]?\s*`: with the separator optional
 // between two `\s*`, every whitespace gap could split two ways and a failing match (`[US-1 US-2 … and more]`)
 // backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
-const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 // The core-only Signals answer scaffolds before 1.13 wrote in brackets (`- [none beyond core]`, PT/ES): the tool's own
 // final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
@@ -5784,8 +5922,9 @@ const LEGACY_TEMPLATE_PLACEHOLDERS = [
 function templateCorpus() {
   const out = [];
   const add = (fn) => { try { const t = fn(); if (typeof t === "string") out.push(t); } catch { /* a builder's trouble never breaks placeholder detection */ } };
-  const combos = [[], ["tdd"], ["saas"], ["ai"], ["tdd", "saas"], ["tdd", "ai"], ["saas", "ai"], ["tdd", "saas", "ai"]].map((x) => ["core", ...x]);
-  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"] };
+  // Every combination of the optional tracks (their blocks are independent — a new track's text joins automatically).
+  const combos = OPTIONAL_TRACKS.reduce((acc, t) => acc.concat(acc.map((c) => [...c, t])), [[]]).map((x) => ["core", ...x]);
+  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] };
   for (const l of i18n.LANGS) {
     const M = i18n.msg(l);
     for (const tracks of combos) {
@@ -6215,10 +6354,9 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         need("constitution-check", sectionFilled(activeDesign(design, tracks), CONSTITUTION_SYN), G.constitutionUnfilled);
       }
       if (design != null) {
-        for (const [tr, id, secs, mark] of [["saas", "saas-sections", SAAS_SECTIONS, "[SaaS]"], ["ai", "ai-sections", AI_SECTIONS, "[AI]"]]) {
-          if (!tracks.includes(tr)) continue;
+        for (const [tr, secs, mark] of activeSectionTracks(tracks)) {
           const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
-          need(id, !bad.length, bad.map(label).join("; "));
+          need(tr + "-sections", !bad.length, bad.map(label).join("; "));
         }
       }
       const mk = [...clarificationMarkers(read("requirements.md") || ""), ...clarificationMarkers(design || "")];
@@ -6366,16 +6504,13 @@ function specDoctor(projectDir, name, opts = {}) {
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
   }
 
-  // Mandatory sections
-  if (tracks.includes("saas") && design != null) {
-    const st = sectionState(design, SAAS_SECTIONS, "[SaaS]");
-    const bad = st.filter((s) => s.status !== "filled");
-    add("saas-sections", bad.length ? "fail" : "pass", bad.length ? bad.map(sectionLabel).join("; ") : m.saasAllFilled);
-  }
-  if (tracks.includes("ai") && design != null) {
-    const st = sectionState(design, AI_SECTIONS, "[AI]");
-    const bad = st.filter((s) => s.status !== "filled");
-    add("ai-sections", bad.length ? "fail" : "pass", bad.length ? bad.map(sectionLabel).join("; ") : m.aiAllFilled);
+  // Mandatory sections — `<track>-sections` per active marker track (saas, ai, sec, privacy).
+  const allFilled = { saas: m.saasAllFilled, ai: m.aiAllFilled, ...fm.secPrivacy.allFilled };
+  if (design != null) {
+    for (const [tr, secs, mark] of activeSectionTracks(tracks)) {
+      const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
+      add(tr + "-sections", bad.length ? "fail" : "pass", bad.length ? bad.map(sectionLabel).join("; ") : allFilled[tr]);
+    }
   }
 
   // tdd: test plan + eval plan presence
@@ -6850,7 +6985,7 @@ function roadmapData(projectDir) {
     // the current phase's template placeholders, approvals recorded with --force.
     const st = readJson(statePath(dir)).data; // read-only here: no resolver pass (it re-reads roadmap.json per call)
     const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
-    const sections = [["saas", SAAS_SECTIONS, "[SaaS]"], ["ai", AI_SECTIONS, "[AI]"]].filter(([tr]) => tracks.includes(tr))
+    const sections = activeSectionTracks(tracks)
       .flatMap(([, secs, mark]) => sectionState(design, secs, mark).filter((s) => s.status !== "filled").map((s) => ({ ...s, mark })));
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
@@ -9520,8 +9655,8 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
   const I = i18n.msg(lng).importSpec;
   const T = i18n.msg(lng).tracks;
   const known = requirementAcIds(reqText || "");
-  const trackKnown = { saas: trackAcIds(reqText || "", "saas"), ai: trackAcIds(reqText || "", "ai") };
-  const trackHeads = ["saas", "ai"].map((tr) => [tr, trackTaskHeadings(tr)]);
+  const trackKnown = Object.fromEntries(MARKER_TRACKS.map((tr) => [tr, trackAcIds(reqText || "", tr)]));
+  const trackHeads = MARKER_TRACKS.map((tr) => [tr, trackTaskHeadings(tr)]);
   const testsFor = new Map(); // AC → the planned T-IDs covering it, in plan order
   for (const [tid, r] of testIndex(planText || "")) {
     for (const ac of extractAcIds(r.row)) {
@@ -9710,6 +9845,10 @@ function importSpec(projectDir, tool, source, opts = {}) {
 
 // Rate limits in natural wording (EN/PT/ES), not just the literal "rate limit".
 const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solicita[çc][õo]es)|limita[çc](?:[ãa]o|[õo]es) de taxa|l[íi]mites? de (?:peticiones|solicitudes|tasa)|limitaci[óo]n(?:es)? de tasa/i;
+// +sec: a criterion for the caller who is NOT allowed (unauthenticated / unauthorized → denied), EN/PT/ES.
+const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
+// +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
+const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -9768,6 +9907,11 @@ function clarify(projectDir, name) {
   if (tracks.includes("saas") && !RE_RATE_LIMIT.test(reqs)) add(q.rateLimit);
   if (tracks.includes("ai") && !/quality|qualidade|calidad|golden|refus/i.test(reqs)) add(q.aiQuality);
   if (tracks.includes("ai") && !/cost|cust[aoe]|custar|coste|token/i.test(reqs)) add(q.aiCost);
+  const QP = fm.secPrivacy.clarify;
+  if (tracks.includes("sec") && !RE_ACCESS_DENIED.test(reqs)) add(QP.secAccess);
+  if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
+  if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
+  if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
 
   return { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
 }
@@ -9890,6 +10034,12 @@ module.exports = {
   // @pkg A1 <<<
 
   // @pkg A2 exports >>>
+  OPTIONAL_TRACKS,
+  TRACK_MARKER: Object.freeze({ ...TRACK_MARKER }), // the stable [Marker] of each marker track
+  // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
+  trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
+  // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
+  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice() } : undefined),
   // @pkg A2 <<<
 
   // @pkg A3 exports >>>

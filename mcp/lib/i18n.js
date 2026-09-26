@@ -12,7 +12,7 @@
  * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
- *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI]),
+ *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY]),
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
@@ -20,7 +20,7 @@
  *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
- * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS) and RE_* matchers in spec.js.
+ * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS) and RE_* matchers in spec.js.
  */
 
 const LANGS = ["en", "pt", "es"];
@@ -33,11 +33,14 @@ function normalizeLang(l) {
 // lists them. The test-plan and tasks builders (every language) share it, so a fresh +tdd scaffold plans a test for
 // every AC and every planned test is made green by a task (it used to start with AC-3/AC-4/US-2.AC-1 uncovered and
 // T-02 unmapped).
-const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"] };
+const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"],
+  sec: ["US-1.AC-10", "US-1.AC-11", "US-1.AC-12"], privacy: ["US-1.AC-13", "US-1.AC-14", "US-1.AC-15"] };
+// The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy"];
 function templateTests(tracks) {
   const ids = {};
   let n = 0;
-  for (const t of ["core", "saas", "ai"]) {
+  for (const t of Object.keys(TEMPLATE_ACS)) {
     if (t !== "core" && !(tracks || []).includes(t)) continue;
     for (const ac of TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
   }
@@ -64,6 +67,11 @@ function templateTestRows(tracks, row, L, acs) {
   if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/...", "property"), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
   if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
     r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
+  // +sec: abuse-case tests; "never" rules (cross-user access, secrets in output) are invariants → property.
+  if (T["US-1.AC-10"]) rows.push(r("US-1.AC-10", L.integration, L.unauthenticated, "tests/integration/..."),
+    r("US-1.AC-11", L.integration, L.forbidden, "tests/integration/...", "property"), r("US-1.AC-12", L.integration, L.noSecrets, "tests/integration/...", "property"));
+  if (T["US-1.AC-13"]) rows.push(r("US-1.AC-13", L.integration, L.exportData, "tests/integration/..."), r("US-1.AC-14", L.integration, L.erasure, "tests/integration/..."),
+    r("US-1.AC-15", "unit", L.retention, "tests/unit/..."));
   return rows.join("\n");
 }
 
@@ -81,7 +89,7 @@ const BUILD = {
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
+      const signalLines = ["tdd", ...MARKER_TRACK_ORDER].map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
       return (
 `# Classification: ${a.name}
 
@@ -112,6 +120,12 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const aiAc = a.tracks.includes("ai")
         ? "\n\n#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size."
         : "";
+      const secAc = a.tracks.includes("sec")
+        ? "\n\n#### [SEC] Acceptance Criteria (EARS)\n10. **US-1.AC-10** — IF an unauthenticated request reaches a protected endpoint, THEN THE SYSTEM SHALL reject it with 401 and return no protected data.\n11. **US-1.AC-11** — IF an authenticated user requests a resource they are not authorized to access, THEN THE SYSTEM SHALL deny it with 403 and record a security audit event.\n12. **US-1.AC-12** — THE SYSTEM SHALL NOT include secrets, credentials, session tokens or stack traces in any response or log entry."
+        : "";
+      const privacyAc = a.tracks.includes("privacy")
+        ? "\n\n#### [PRIVACY] Acceptance Criteria (EARS)\n13. **US-1.AC-13** — WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.\n14. **US-1.AC-14** — WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.\n15. **US-1.AC-15** — WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -132,7 +146,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -241,11 +255,61 @@ Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy.
 Input types · size/count limits · token counting per type · validation pipeline.
 `;
       }
+      if (track === "sec") {
+        return `
+## [SEC] Threat Model
+> **TODO** — replace with real values (remove this line when done).
+- Assets · actors · trust boundaries · entry points · STRIDE per component / boundary (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigation · residual risk.
+
+## [SEC] Security Requirements
+> **TODO** — replace with real values (remove this line when done).
+- Target OWASP ASVS level (L1 / L2 / L3) and why · the ASVS controls and OWASP Top 10 risks in scope → how the design meets each.
+
+## [SEC] Authentication & Authorization
+> **TODO** — replace with real values (remove this line when done).
+- Who may do what (role / permission matrix) · authentication (session, token, MFA) · object-level checks, deny by default · session lifetime and revocation.
+
+## [SEC] Secrets & Key Management
+> **TODO** — replace with real values (remove this line when done).
+- Secrets the feature needs · where they live (a secret store — never code, logs or tickets) · rotation · encryption at rest / in transit and who owns the keys.
+
+## [SEC] Security Testing
+> **TODO** — replace with real values (remove this line when done).
+- SAST · dependency and secret scanning · DAST when exposed · one abuse-case test per material threat — all runnable locally before the merge.
+`;
+      }
+      if (track === "privacy") {
+        return `
+## [PRIVACY] Personal Data Inventory
+> **TODO** — replace with real values (remove this line when done).
+- Each personal data field · category (special categories — Art. 9 — flagged) · source · where it is stored · who can read it.
+
+## [PRIVACY] Lawful Basis & Purpose
+> **TODO** — replace with real values (remove this line when done).
+- Purpose per processing activity · its lawful basis (Art. 6: consent, contract, legal obligation, vital interests, public task, legitimate interests) · how consent is recorded and withdrawn.
+
+## [PRIVACY] Retention & Deletion
+> **TODO** — replace with real values (remove this line when done).
+- Retention period per data category and why · the deletion / anonymization job · backups and logs · legal holds.
+
+## [PRIVACY] Data Subject Rights
+> **TODO** — replace with real values (remove this line when done).
+- Access · rectification · erasure · restriction · portability · objection — how each request is verified, served and answered within one month.
+
+## [PRIVACY] Processors & International Transfers
+> **TODO** — replace with real values (remove this line when done).
+- Processors / sub-processors and their Art. 28 contracts · where the data is stored and processed · transfers outside the EEA and their safeguard (adequacy decision, standard contractual clauses).
+
+## [PRIVACY] DPIA (when required — Art. 35)
+> **TODO** — replace with real values (remove this line when done).
+- Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not.
+`;
+      }
       return "";
     },
 
     design(a) {
-      const extra = ["tdd", "saas", "ai"].filter((t) => a.tracks.includes(t)).map((t) => BUILD.en.trackDesignBlock(t)).join("");
+      const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.en.trackDesignBlock(t)).join("");
       return (
 `# Design: ${a.name}
 
@@ -323,7 +387,7 @@ ${extra}
   - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 is fully functional and independently testable/shippable.
 `;
-      for (const t of ["saas", "ai"]) {
+      for (const t of MARKER_TRACK_ORDER) {
         if (!a.tracks.includes(t)) continue;
         const block = BUILD.en.trackTasks({ track: t, start: n + 1, green });
         phases += block;
@@ -385,6 +449,30 @@ ${phases}`
   - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
   - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      if (a.track === "sec") {
+        return `
+## Story US-1 — Security
+- [ ] ${id()}. [US1] Threat model the feature (STRIDE per trust boundary); record each mitigation in design.md
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+- [ ] ${id()}. [US1] Enforce authentication and object-level authorization on every endpoint (deny by default)
+  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
+- [ ] ${id()}. [US1] Keep secrets out of code, responses and logs — secret store + log redaction
+  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
+- [ ] ${id()}. [US1] Security testing — SAST, dependency audit and the abuse-case tests, runnable locally
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+`;
+      }
+      if (a.track === "privacy") {
+        return `
+## Story US-1 — Privacy
+- [ ] ${id()}. [US1] Personal data inventory + lawful basis per purpose in design.md; update the privacy notice
+  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
+- [ ] ${id()}. [US1] Data subject requests — access/export and erasure end to end, across every store and processor
+  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
+- [ ] ${id()}. [US1] Retention — scheduled deletion/anonymization of records past their retention period
+  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
       return "";
@@ -489,7 +577,10 @@ ${a.summary || "[one line: the bug being fixed]"}
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
           tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
-          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" }, acs);
+          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget",
+          unauthenticated: "abuse case: an unauthenticated request gets 401 and no data", forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
+          noSecrets: "no secret, token or stack trace in any response or log", exportData: "a subject's export holds all of their personal data, machine-readable",
+          erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -610,6 +701,8 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("tdd")) items.push("TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits.");
       if (a.tracks.includes("saas")) items.push("SaaS: 5 mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
       if (a.tracks.includes("ai")) items.push("AI: 10 mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
+      if (a.tracks.includes("sec")) items.push("SEC: 5 mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
+      if (a.tracks.includes("privacy")) items.push("PRIVACY: 6 mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -652,7 +745,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[sinal]"} — [porque se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- nenhum além de core";
+      const signalLines = ["tdd", ...MARKER_TRACK_ORDER].map(sigLine).filter(Boolean).join("\n") || "- nenhum além de core";
       return (
 `# Classificação: ${a.name}
 
@@ -682,6 +775,12 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
       const aiAc = a.tracks.includes("ai")
         ? "\n\n#### [AI] Critérios de Aceitação (EARS)\n7. **US-1.AC-7** — O SISTEMA DEVE produzir saídas classificadas como 'boas ou excelentes' em pelo menos [85]% do conjunto de avaliação golden.\n8. **US-1.AC-8** — SE a entrada contiver uma tentativa de injeção de prompt, ENTÃO O SISTEMA DEVE ignorar a instrução injetada e concluir a tarefa original.\n9. **US-1.AC-9** — O SISTEMA DEVE custar no máximo $[0.03] por pedido de utilizador no tamanho P95."
         : "";
+      const secAc = a.tracks.includes("sec")
+        ? "\n\n#### [SEC] Critérios de Aceitação (EARS)\n10. **US-1.AC-10** — SE um pedido não autenticado chegar a um endpoint protegido, ENTÃO O SISTEMA DEVE rejeitá-lo com 401 e não devolver dados protegidos.\n11. **US-1.AC-11** — SE um utilizador autenticado pedir um recurso a que não tem autorização de acesso, ENTÃO O SISTEMA DEVE negá-lo com 403 e registar um evento de auditoria de segurança.\n12. **US-1.AC-12** — O SISTEMA NÃO DEVE incluir segredos, credenciais, tokens de sessão ou stack traces em nenhuma resposta nem entrada de log."
+        : "";
+      const privacyAc = a.tracks.includes("privacy")
+        ? "\n\n#### [PRIVACY] Critérios de Aceitação (EARS)\n13. **US-1.AC-13** — QUANDO um titular dos dados pede uma cópia dos seus dados pessoais, O SISTEMA DEVE exportá-los num formato estruturado e de leitura automática no prazo de um mês.\n14. **US-1.AC-14** — QUANDO o pedido de apagamento de um titular dos dados é aceite, O SISTEMA DEVE apagar ou anonimizar de forma irreversível os seus dados pessoais em todos os repositórios no prazo de um mês.\n15. **US-1.AC-15** — QUANDO o prazo de conservação de um registo termina, O SISTEMA DEVE apagá-lo ou anonimizá-lo."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -702,7 +801,7 @@ Cada história deve entregar valor autónomo se for lançada sozinha.
 1. **US-1.AC-1** — QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 2. **US-1.AC-2** — ENQUANTO [estado], QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 3. **US-1.AC-3** — SE [condição de erro] ENTÃO O SISTEMA DEVE [recuperação]
-4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}
+4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}${secAc}${privacyAc}
 
 ### US-2 (P2): [Título da História]
 **Como** [papel], **quero** [capacidade], **para que** [benefício].
@@ -811,11 +910,61 @@ IDs fixados · consciência de descontinuação · plano de migração com gate 
 Tipos de entrada · limites de tamanho/quantidade · contagem de tokens por tipo · pipeline de validação.
 `;
       }
+      if (track === "sec") {
+        return `
+## [SEC] Modelo de Ameaças
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Ativos · atores · fronteiras de confiança · pontos de entrada · STRIDE por componente / fronteira (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigação · risco residual.
+
+## [SEC] Requisitos de Segurança
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Nível OWASP ASVS alvo (L1 / L2 / L3) e porquê · os controlos ASVS e os riscos do OWASP Top 10 em âmbito → como o design cumpre cada um.
+
+## [SEC] Autenticação e Autorização
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Quem pode fazer o quê (matriz de papéis / permissões) · autenticação (sessão, token, MFA) · verificação ao nível do objeto, negar por omissão · duração e revogação da sessão.
+
+## [SEC] Gestão de Segredos e Chaves
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Segredos de que a feature precisa · onde ficam (um cofre de segredos — nunca no código, nos logs ou em tickets) · rotação · cifragem em repouso / em trânsito e quem detém as chaves.
+
+## [SEC] Testes de Segurança
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- SAST · análise de dependências e de segredos · DAST quando exposto · um teste de caso de abuso por ameaça relevante — tudo executável localmente antes do merge.
+`;
+      }
+      if (track === "privacy") {
+        return `
+## [PRIVACY] Inventário de Dados Pessoais
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Cada campo de dados pessoais · categoria (categorias especiais — art. 9.º — assinaladas) · origem · onde é guardado · quem lhe pode aceder.
+
+## [PRIVACY] Fundamento de Licitude e Finalidade
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Finalidade por atividade de tratamento · o seu fundamento de licitude (art. 6.º: consentimento, contrato, obrigação jurídica, interesses vitais, interesse público, interesses legítimos) · como o consentimento é registado e retirado.
+
+## [PRIVACY] Conservação e Eliminação
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Prazo de conservação por categoria de dados e porquê · o processo de eliminação / anonimização · cópias de segurança e logs · conservação por obrigação legal.
+
+## [PRIVACY] Direitos dos Titulares dos Dados
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Acesso · retificação · apagamento · limitação · portabilidade · oposição — como cada pedido é verificado, atendido e respondido no prazo de um mês.
+
+## [PRIVACY] Subcontratantes e Transferências Internacionais
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Subcontratantes / subcontratantes ulteriores e os respetivos contratos (art. 28.º) · onde os dados são guardados e tratados · transferências para fora do EEE e a sua garantia (decisão de adequação, cláusulas contratuais-tipo).
+
+## [PRIVACY] AIPD (quando obrigatória — art. 35.º)
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- É obrigatória? (risco elevado: categorias especiais em grande escala, controlo sistemático, definição de perfis com efeitos jurídicos…) · se sim: riscos → medidas → risco residual; se não: porque não.
+`;
+      }
       return "";
     },
 
     design(a) {
-      const extra = ["tdd", "saas", "ai"].filter((t) => a.tracks.includes(t)).map((t) => BUILD.pt.trackDesignBlock(t)).join("");
+      const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.pt.trackDesignBlock(t)).join("");
       return (
 `# Design: ${a.name}
 
@@ -893,7 +1042,7 @@ ${extra}
   - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
 `;
-      for (const t of ["saas", "ai"]) {
+      for (const t of MARKER_TRACK_ORDER) {
         if (!a.tracks.includes(t)) continue;
         const block = BUILD.pt.trackTasks({ track: t, start: n + 1, green });
         phases += block;
@@ -952,6 +1101,30 @@ ${phases}`
   - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
   - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      if (a.track === "sec") {
+        return `
+## História US-1 — Segurança
+- [ ] ${id()}. [US1] Modelar as ameaças da feature (STRIDE por fronteira de confiança); registar cada mitigação no design.md
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+- [ ] ${id()}. [US1] Impor autenticação e autorização ao nível do objeto em todos os endpoints (negar por omissão)
+  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
+- [ ] ${id()}. [US1] Manter os segredos fora do código, das respostas e dos logs — cofre de segredos + ocultação nos logs
+  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
+- [ ] ${id()}. [US1] Testes de segurança — SAST, auditoria de dependências e os testes de casos de abuso, executáveis localmente
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+`;
+      }
+      if (a.track === "privacy") {
+        return `
+## História US-1 — Privacidade
+- [ ] ${id()}. [US1] Inventário de dados pessoais + fundamento de licitude por finalidade no design.md; atualizar a política de privacidade
+  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
+- [ ] ${id()}. [US1] Pedidos dos titulares — acesso/exportação e apagamento de ponta a ponta, em todos os repositórios e subcontratantes
+  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
+- [ ] ${id()}. [US1] Conservação — eliminação/anonimização agendada dos registos com o prazo de conservação expirado
+  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
       return "";
@@ -1056,7 +1229,10 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
           tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
-          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" }, acs);
+          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento",
+          unauthenticated: "caso de abuso: um pedido não autenticado recebe 401 e nenhum dado", forbidden: "caso de abuso: o utilizador B nunca lê o recurso do utilizador A (403 + evento de auditoria)",
+          noSecrets: "nenhum segredo, token ou stack trace em respostas ou logs", exportData: "a exportação de um titular contém todos os seus dados pessoais, em formato de leitura automática",
+          erasure: "após o apagamento nenhum repositório guarda os dados pessoais do titular", retention: "os registos com o prazo de conservação expirado são apagados ou anonimizados" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1177,6 +1353,8 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
       if (a.tracks.includes("tdd")) items.push("TDD: todos os testes planeados escritos e a vermelho pela razão certa antes do código.", "TDD: commits de teste entram antes dos commits de implementação.");
       if (a.tracks.includes("saas")) items.push("SaaS: 5 secções obrigatórias de design preenchidas (sem TODO).", "SaaS: isolamento de inquilino garantido (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; teste de carga cumpre o orçamento (caminho crítico).");
       if (a.tracks.includes("ai")) items.push("IA: 10 secções obrigatórias de design preenchidas (sem TODO).", "IA: golden ≥ limiar, segurança adversarial 100%, regressão mantida.", "IA: prompts versionados em prompts/vN.md; custo dentro do orçamento.");
+      if (a.tracks.includes("sec")) items.push("SEC: 5 secções obrigatórias de design preenchidas (sem TODO) — modelo de ameaças revisto.", "SEC: autenticação + autorização ao nível do objeto impostas, negar por omissão; nenhum segredo no código ou nos logs.", "SEC: SAST, auditoria de dependências e testes de casos de abuso limpos numa execução local.");
+      if (a.tracks.includes("privacy")) items.push("PRIVACIDADE: 6 secções obrigatórias de design preenchidas (sem TODO) — decisão sobre a AIPD registada.", "PRIVACIDADE: acesso/exportação e apagamento funcionam de ponta a ponta, em todos os repositórios e subcontratantes.", "PRIVACIDADE: processo de conservação agendado; política de privacidade e registo das atividades de tratamento atualizados.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar a feature por concluída.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -1219,7 +1397,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[señal]"} — [por qué se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- ninguno además de core";
+      const signalLines = ["tdd", ...MARKER_TRACK_ORDER].map(sigLine).filter(Boolean).join("\n") || "- ninguno además de core";
       return (
 `# Clasificación: ${a.name}
 
@@ -1249,6 +1427,12 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
       const aiAc = a.tracks.includes("ai")
         ? "\n\n#### [AI] Criterios de Aceptación (EARS)\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95."
         : "";
+      const secAc = a.tracks.includes("sec")
+        ? "\n\n#### [SEC] Criterios de Aceptación (EARS)\n10. **US-1.AC-10** — SI una solicitud no autenticada llega a un endpoint protegido, ENTONCES EL SISTEMA DEBE rechazarla con 401 y no devolver datos protegidos.\n11. **US-1.AC-11** — SI un usuario autenticado solicita un recurso al que no tiene autorización de acceso, ENTONCES EL SISTEMA DEBE denegarlo con 403 y registrar un evento de auditoría de seguridad.\n12. **US-1.AC-12** — EL SISTEMA NO DEBE incluir secretos, credenciales, tokens de sesión ni stack traces en ninguna respuesta ni entrada de log."
+        : "";
+      const privacyAc = a.tracks.includes("privacy")
+        ? "\n\n#### [PRIVACY] Criterios de Aceptación (EARS)\n13. **US-1.AC-13** — CUANDO un interesado solicita una copia de sus datos personales, EL SISTEMA DEBE exportarlos en un formato estructurado y de lectura mecánica en el plazo de un mes.\n14. **US-1.AC-14** — CUANDO se acepta la solicitud de supresión de un interesado, EL SISTEMA DEBE eliminar o anonimizar de forma irreversible sus datos personales en todos los almacenes en el plazo de un mes.\n15. **US-1.AC-15** — CUANDO vence el plazo de conservación de un registro, EL SISTEMA DEBE eliminarlo o anonimizarlo."
+        : "";
       return (
 `# Función: ${a.name}
 
@@ -1269,7 +1453,7 @@ Cada historia debe entregar valor autónomo si se lanza sola.
 1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
-4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}
+4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}
 
 ### US-2 (P2): [Título de la Historia]
 **Como** [rol], **quiero** [capacidad], **para que** [beneficio].
@@ -1378,11 +1562,61 @@ IDs fijados · conciencia de descontinuación · plan de migración con gate de 
 Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo · pipeline de validación.
 `;
       }
+      if (track === "sec") {
+        return `
+## [SEC] Modelo de Amenazas
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Activos · actores · fronteras de confianza · puntos de entrada · STRIDE por componente / frontera (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigación · riesgo residual.
+
+## [SEC] Requisitos de Seguridad
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Nivel OWASP ASVS objetivo (L1 / L2 / L3) y por qué · los controles ASVS y los riesgos del OWASP Top 10 en alcance → cómo los cumple el diseño.
+
+## [SEC] Autenticación y Autorización
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Quién puede hacer qué (matriz de roles / permisos) · autenticación (sesión, token, MFA) · comprobación a nivel de objeto, denegar por defecto · duración y revocación de la sesión.
+
+## [SEC] Gestión de Secretos y Claves
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Secretos que necesita la función · dónde viven (un almacén de secretos — nunca en el código, los logs ni los tickets) · rotación · cifrado en reposo / en tránsito y quién custodia las claves.
+
+## [SEC] Pruebas de Seguridad
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- SAST · análisis de dependencias y de secretos · DAST si está expuesto · una prueba de caso de abuso por amenaza relevante — todo ejecutable en local antes del merge.
+`;
+      }
+      if (track === "privacy") {
+        return `
+## [PRIVACY] Inventario de Datos Personales
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Cada campo de datos personales · categoría (categorías especiales — art. 9 — señaladas) · origen · dónde se almacena · quién puede leerlo.
+
+## [PRIVACY] Base Jurídica y Finalidad
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Finalidad por actividad de tratamiento · su base jurídica (art. 6: consentimiento, contrato, obligación legal, intereses vitales, interés público, interés legítimo) · cómo se registra y se retira el consentimiento.
+
+## [PRIVACY] Conservación y Supresión
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Plazo de conservación por categoría de datos y por qué · el proceso de supresión / anonimización · copias de seguridad y logs · bloqueos por obligación legal.
+
+## [PRIVACY] Derechos de los Interesados
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Acceso · rectificación · supresión · limitación · portabilidad · oposición — cómo se verifica, atiende y responde cada solicitud en el plazo de un mes.
+
+## [PRIVACY] Encargados del Tratamiento y Transferencias Internacionales
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Encargados / subencargados y sus contratos (art. 28) · dónde se almacenan y tratan los datos · transferencias fuera del EEE y su garantía (decisión de adecuación, cláusulas contractuales tipo).
+
+## [PRIVACY] EIPD (cuando sea obligatoria — art. 35)
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- ¿Es obligatoria? (alto riesgo: categorías especiales a gran escala, observación sistemática, elaboración de perfiles con efectos jurídicos…) · si lo es: riesgos → medidas → riesgo residual; si no: por qué no.
+`;
+      }
       return "";
     },
 
     design(a) {
-      const extra = ["tdd", "saas", "ai"].filter((t) => a.tracks.includes(t)).map((t) => BUILD.es.trackDesignBlock(t)).join("");
+      const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.es.trackDesignBlock(t)).join("");
       return (
 `# Diseño: ${a.name}
 
@@ -1460,7 +1694,7 @@ ${extra}
   - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional y es testeable/lanzable de forma independiente.
 `;
-      for (const t of ["saas", "ai"]) {
+      for (const t of MARKER_TRACK_ORDER) {
         if (!a.tracks.includes(t)) continue;
         const block = BUILD.es.trackTasks({ track: t, start: n + 1, green });
         phases += block;
@@ -1519,6 +1753,30 @@ ${phases}`
   - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
 - [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
   - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      if (a.track === "sec") {
+        return `
+## Historia US-1 — Seguridad
+- [ ] ${id()}. [US1] Modelar las amenazas de la función (STRIDE por frontera de confianza); registrar cada mitigación en el design.md
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+- [ ] ${id()}. [US1] Imponer autenticación y autorización a nivel de objeto en todos los endpoints (denegar por defecto)
+  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
+- [ ] ${id()}. [US1] Mantener los secretos fuera del código, las respuestas y los logs — almacén de secretos + ocultación en los logs
+  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
+- [ ] ${id()}. [US1] Pruebas de seguridad — SAST, auditoría de dependencias y las pruebas de casos de abuso, ejecutables en local
+  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
+`;
+      }
+      if (a.track === "privacy") {
+        return `
+## Historia US-1 — Privacidad
+- [ ] ${id()}. [US1] Inventario de datos personales + base jurídica por finalidad en el design.md; actualizar la política de privacidad
+  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
+- [ ] ${id()}. [US1] Solicitudes de los interesados — acceso/exportación y supresión de extremo a extremo, en todos los almacenes y encargados
+  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
+- [ ] ${id()}. [US1] Conservación — supresión/anonimización programada de los registros con el plazo de conservación vencido
+  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
       return "";
@@ -1623,7 +1881,10 @@ ${a.summary || "[una línea: el bug a corregir]"}
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
           tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
-          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" }, acs);
+          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto",
+          unauthenticated: "caso de abuso: una solicitud no autenticada recibe 401 y ningún dato", forbidden: "caso de abuso: el usuario B nunca lee el recurso del usuario A (403 + evento de auditoría)",
+          noSecrets: "ningún secreto, token ni stack trace en respuestas o logs", exportData: "la exportación de un interesado contiene todos sus datos personales, en formato de lectura mecánica",
+          erasure: "tras la supresión ningún almacén conserva los datos personales del interesado", retention: "los registros con el plazo de conservación vencido se eliminan o anonimizan" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1744,6 +2005,8 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
       if (a.tracks.includes("tdd")) items.push("TDD: todas las pruebas planeadas escritas y en rojo por la razón correcta antes del código.", "TDD: los commits de prueba entran antes que los de implementación.");
       if (a.tracks.includes("saas")) items.push("SaaS: 5 secciones obligatorias de diseño rellenadas (sin TODO).", "SaaS: aislamiento de inquilino impuesto (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; prueba de carga cumple el presupuesto (ruta crítica).");
       if (a.tracks.includes("ai")) items.push("IA: 10 secciones obligatorias de diseño rellenadas (sin TODO).", "IA: golden ≥ umbral, seguridad adversarial 100%, regresión mantenida.", "IA: prompts versionados en prompts/vN.md; coste dentro del presupuesto.");
+      if (a.tracks.includes("sec")) items.push("SEC: 5 secciones obligatorias de diseño rellenadas (sin TODO) — modelo de amenazas revisado.", "SEC: autenticación + autorización a nivel de objeto impuestas, denegar por defecto; ningún secreto en el código ni en los logs.", "SEC: SAST, auditoría de dependencias y pruebas de casos de abuso limpias en una ejecución local.");
+      if (a.tracks.includes("privacy")) items.push("PRIVACIDAD: 6 secciones obligatorias de diseño rellenadas (sin TODO) — decisión sobre la EIPD registrada.", "PRIVACIDAD: acceso/exportación y supresión funcionan de extremo a extremo, en todos los almacenes y encargados.", "PRIVACIDAD: proceso de conservación programado; política de privacidad y registro de actividades de tratamiento actualizados.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar la función por terminada.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -1803,6 +2066,10 @@ const STEERING = {
       "# Cost Budget\n\n## Infrastructure Budget\nTarget: < $XX/month year 1.\n\n## Cost Per User Target\nTarget: < $0.50 per MAU. If exceeded, stop and optimize.\n\n## Cost Alerts\n- Daily > $100 slack / > $200 page.\n\n## Per-Feature Cost Review\nEach design.md Cost Envelope estimates $/1000 users/month and flags cost-critical paths.\n",
     "ai-strategy.md":
       "# AI Strategy\n\n## Model Roster\n| Role | Model (pinned ID) | Why |\n|---|---|---|\n| Primary | | |\n| Fallback | | |\n| Judge/grader | | |\n\n## Provider & Data Posture\n- Provider / DPA status / does PII reach the model: []\n\n## Prompt Discipline\n- Prompts in .specs/<feature>/prompts/vN.md, versioned. No change ships without eval re-run.\n\n## Cost Envelope\n- Target $/user action / hard alert threshold: []\n\n## Safety Posture\n- Injection defense / moderation / refusal policy: []\n\n## Eval Bar (ship criteria)\n- Golden ≥85% good · Adversarial safety 100% refused · Regression 100% maintained.\n\n## Lifecycle\n- Pin policy / deprecation watch / eval-gated migration.\n",
+    "security.md":
+      "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
+    "privacy.md":
+      "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
   },
   pt: {
     "constitution.md":
@@ -1823,6 +2090,10 @@ const STEERING = {
       "# Orçamento de Custo\n\n## Orçamento de Infraestrutura\nAlvo: < $XX/mês no ano 1.\n\n## Alvo de Custo Por Utilizador\nAlvo: < $0,50 por MAU. Se for excedido, para e otimiza.\n\n## Alertas de Custo\n- Diário > $100 slack / > $200 alerta imediato (page).\n\n## Revisão de Custo Por Feature\nCada Envelope de Custo no design.md estima $/1000 utilizadores/mês e sinaliza caminhos críticos de custo.\n",
     "ai-strategy.md":
       "# Estratégia de IA\n\n## Lista de Modelos\n| Papel | Modelo (ID fixado) | Porquê |\n|---|---|---|\n| Primário | | |\n| Fallback | | |\n| Juiz/classificador | | |\n\n## Postura de Fornecedor e Dados\n- Fornecedor / estado do DPA / a PII chega ao modelo: []\n\n## Disciplina de Prompt\n- Prompts em .specs/<feature>/prompts/vN.md, versionados. Nenhuma mudança é lançada sem voltar a correr os evals.\n\n## Envelope de Custo\n- Alvo $/ação de utilizador / limite de alerta rígido: []\n\n## Postura de Segurança\n- Defesa contra injeção / moderação / política de recusa: []\n\n## Barra de Avaliação (critérios para lançar)\n- Golden ≥85% bom · Segurança adversarial 100% recusado · Regressão 100% mantida.\n\n## Ciclo de Vida\n- Política de fixação / vigilância de descontinuação / migração com gate de avaliação.\n",
+    "security.md":
+      "# Padrões de Segurança\n\n## Nível de Garantia\n- Nível OWASP ASVS alvo: [L1 | L2 | L3] — porquê: []\n\n## Modelação de Ameaças\n- Método: STRIDE por componente e fronteira de confiança, revisto a cada alteração de design.\n- Onde ficam os modelos de ameaças: no design.md de cada feature +sec → Modelo de Ameaças.\n\n## Autenticação e Autorização\n- Fornecedor de identidade / modelo de sessão: []\n- Modelo de autorização (RBAC / ABAC / verificação de titularidade), negar por omissão: []\n\n## Segredos e Criptografia\n- Cofre de segredos: [] — nunca no código, em configuração versionada, em logs ou em tickets.\n- Cifragem em repouso / em trânsito (versão de TLS, rotação de chaves): []\n\n## Regras de Código Seguro\n- Validar a entrada nas fronteiras de confiança; codificar a saída; só queries parametrizadas.\n- Nenhum segredo, token ou stack trace em respostas ou logs.\n\n## Testes de Segurança (locais)\n- SAST: [] · auditoria de dependências: [] · análise de segredos: [] · DAST (serviços expostos): []\n- Cada ameaça relevante tem um teste de caso de abuso.\n\n## Gestão de Vulnerabilidades\n- Prazos de correção por severidade (crítica / alta / média): [] · quem faz a triagem: []\n",
+    "privacy.md":
+      "# Padrões de Privacidade (RGPD)\n\n## Papéis\n- Responsável pelo tratamento: [] · EPD / contacto de privacidade: [] · autoridade de controlo: [ex.: CNPD]\n\n## Princípios (RGPD, art. 5.º)\n- Licitude, lealdade e transparência · limitação das finalidades · minimização dos dados · exatidão · limitação da conservação · integridade e confidencialidade · responsabilidade.\n\n## Registo das Atividades de Tratamento (art. 30.º)\n- Onde está o registo das atividades de tratamento: []\n\n## Fundamentos de Licitude em Uso (art. 6.º)\n- [atividade de tratamento → fundamento de licitude]\n\n## Prazos de Conservação\n| Categoria de dados | Prazo de conservação | Método de eliminação |\n|---|---|---|\n| | | |\n\n## Pedidos dos Titulares\n- Canal · verificação de identidade · prazo de um mês (art. 12.º, n.º 3) · responsável: []\n\n## Subcontratantes e Transferências\n- Subcontratantes aprovados (contratos do art. 28.º): [] · transferências para fora do EEE e a sua garantia: []\n\n## Proteção de Dados desde a Conceção (art. 25.º)\n- Por omissão: recolher o mínimo, pseudonimizar sempre que possível, sem dados pessoais nos logs.\n\n## Resposta a Violações de Dados\n- Notificar a autoridade de controlo no prazo de 72 horas (art. 33.º) · runbook: []\n",
   },
   es: {
     "constitution.md":
@@ -1843,6 +2114,10 @@ const STEERING = {
       "# Presupuesto de Coste\n\n## Presupuesto de Infraestructura\nObjetivo: < $XX/mes en el año 1.\n\n## Objetivo de Coste Por Usuario\nObjetivo: < $0,50 por MAU. Si se excede, para y optimiza.\n\n## Alertas de Coste\n- Diario > $100 slack / > $200 alerta inmediata (page).\n\n## Revisión de Coste Por Función\nCada Presupuesto de Coste en el design.md estima $/1000 usuarios/mes y señala rutas críticas de coste.\n",
     "ai-strategy.md":
       "# Estrategia de IA\n\n## Lista de Modelos\n| Rol | Modelo (ID fijado) | Por qué |\n|---|---|---|\n| Primario | | |\n| Fallback | | |\n| Juez/calificador | | |\n\n## Postura de Proveedor y Datos\n- Proveedor / estado del DPA / la PII llega al modelo: []\n\n## Disciplina de Prompt\n- Prompts en .specs/<feature>/prompts/vN.md, versionados. Ningún cambio se lanza sin volver a ejecutar los evals.\n\n## Presupuesto de Coste\n- Objetivo $/acción de usuario / umbral de alerta rígido: []\n\n## Postura de Seguridad\n- Defensa contra inyección / moderación / política de rechazo: []\n\n## Barra de Evaluación (criterios para lanzar)\n- Golden ≥85% bueno · Seguridad adversarial 100% rechazado · Regresión 100% mantenida.\n\n## Ciclo de Vida\n- Política de fijación / vigilancia de descontinuación / migración con gate de evaluación.\n",
+    "security.md":
+      "# Estándares de Seguridad\n\n## Nivel de Garantía\n- Nivel OWASP ASVS objetivo: [L1 | L2 | L3] — por qué: []\n\n## Modelado de Amenazas\n- Método: STRIDE por componente y frontera de confianza, revisado en cada cambio de diseño.\n- Dónde viven los modelos de amenazas: en el design.md de cada función +sec → Modelo de Amenazas.\n\n## Autenticación y Autorización\n- Proveedor de identidad / modelo de sesión: []\n- Modelo de autorización (RBAC / ABAC / comprobación de propiedad), denegar por defecto: []\n\n## Secretos y Criptografía\n- Almacén de secretos: [] — nunca en el código, en configuración versionada, en logs ni en tickets.\n- Cifrado en reposo / en tránsito (versión de TLS, rotación de claves): []\n\n## Reglas de Código Seguro\n- Validar la entrada en las fronteras de confianza; codificar la salida; solo queries parametrizadas.\n- Ningún secreto, token ni stack trace en respuestas o logs.\n\n## Pruebas de Seguridad (locales)\n- SAST: [] · auditoría de dependencias: [] · análisis de secretos: [] · DAST (servicios expuestos): []\n- Cada amenaza relevante tiene una prueba de caso de abuso.\n\n## Gestión de Vulnerabilidades\n- Plazos de corrección por severidad (crítica / alta / media): [] · quién hace el triaje: []\n",
+    "privacy.md":
+      "# Estándares de Privacidad (RGPD)\n\n## Roles\n- Responsable del tratamiento: [] · DPD / contacto de privacidad: [] · autoridad de control: [p.ej., AEPD]\n\n## Principios (RGPD, art. 5)\n- Licitud, lealtad y transparencia · limitación de la finalidad · minimización de datos · exactitud · limitación del plazo de conservación · integridad y confidencialidad · responsabilidad proactiva.\n\n## Registro de Actividades de Tratamiento (art. 30)\n- Dónde está el registro de actividades de tratamiento: []\n\n## Bases Jurídicas en Uso (art. 6)\n- [actividad de tratamiento → base jurídica]\n\n## Plazos de Conservación\n| Categoría de datos | Plazo de conservación | Método de supresión |\n|---|---|---|\n| | | |\n\n## Solicitudes de los Interesados\n- Canal · verificación de identidad · plazo de un mes (art. 12.3) · responsable: []\n\n## Encargados y Transferencias\n- Encargados aprobados (contratos del art. 28): [] · transferencias fuera del EEE y su garantía: []\n\n## Protección de Datos desde el Diseño (art. 25)\n- Por defecto: recoger lo mínimo, seudonimizar siempre que sea posible, sin datos personales en los logs.\n\n## Respuesta a Brechas de Datos\n- Notificar a la autoridad de control en un plazo de 72 horas (art. 33) · runbook: []\n",
   },
 };
 
@@ -1954,7 +2229,7 @@ const MSG = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore",
-      badTrack: "track must be one of: tdd | saas | ai",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -2751,6 +3026,25 @@ const MSG = {
     // @pkg A1 <<<
 
     // @pkg A2 msg-en >>>
+    // +sec / +privacy (1.14): what their tools report beyond the shared track messages.
+    secPrivacy: {
+      // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
+      sectionNames: {},
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled" }, // doctor's sec-sections / privacy-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}` }, // `dev-spec status`
+      finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
+        sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
+          "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
+        privacy: ["+privacy: access/export and erasure verified end to end on the real stores (processors included).",
+          "+privacy: retention job scheduled; privacy notice and records of processing (Art. 30) updated; DPIA decision on file."],
+      },
+      clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
+        secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
+        secSecrets: "Specify which secrets / credentials the feature handles and that none of them reaches a response or a log (write it as an AC).",
+        privacyRights: "Specify the data subject rights the feature must serve (access, erasure, portability…) as ACs, with the one-month deadline.",
+        privacyRetention: "Specify how long each category of personal data is kept and what happens when that period ends.",
+      },
+    },
     // @pkg A2 <<<
 
     // @pkg A3 msg-en >>>
@@ -2854,7 +3148,7 @@ const MSG = {
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
       badAction: "a ação tem de ser: remove | archive | rename | restore",
-      badTrack: "o track tem de ser: tdd | saas | ai",
+      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
@@ -3596,6 +3890,29 @@ const MSG = {
     // @pkg A1 <<<
 
     // @pkg A2 msg-pt >>>
+    secPrivacy: {
+      sectionNames: {
+        "Threat Model": "Modelo de Ameaças", "Security Requirements": "Requisitos de Segurança", "Authentication & Authorization": "Autenticação e Autorização",
+        "Secrets & Key Management": "Gestão de Segredos e Chaves", "Security Testing": "Testes de Segurança",
+        "Personal Data Inventory": "Inventário de Dados Pessoais", "Lawful Basis & Purpose": "Fundamento de Licitude e Finalidade",
+        "Retention & Deletion": "Conservação e Eliminação", "Data Subject Rights": "Direitos dos Titulares dos Dados",
+        "Processors & International Transfers": "Subcontratantes e Transferências Internacionais", "DPIA": "AIPD",
+      },
+      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas" },
+      statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}` },
+      finishChecks: {
+        sec: ["+sec: SAST, auditoria de dependências e análise de segredos limpos numa execução local nova; todos os testes de casos de abuso a verde.",
+          "+sec: modelo de ameaças revisto contra o código final — nenhum ponto de entrada ou fronteira de confiança novo sem mitigação."],
+        privacy: ["+privacy: acesso/exportação e apagamento verificados de ponta a ponta nos repositórios reais (subcontratantes incluídos).",
+          "+privacy: processo de conservação agendado; política de privacidade e registo das atividades de tratamento (art. 30.º) atualizados; decisão sobre a AIPD registada."],
+      },
+      clarify: {
+        secAccess: "Especifica o que recebe quem chama sem autenticação ou sem autorização (SE … ENTÃO O SISTEMA DEVE negar …) e o nível ASVS que a feature visa.",
+        secSecrets: "Especifica que segredos / credenciais a feature trata e que nenhum chega a uma resposta ou a um log (escreve-o como AC).",
+        privacyRights: "Especifica os direitos dos titulares que a feature tem de satisfazer (acesso, apagamento, portabilidade…) como ACs, com o prazo de um mês.",
+        privacyRetention: "Especifica durante quanto tempo é conservada cada categoria de dados pessoais e o que acontece quando esse prazo termina.",
+      },
+    },
     // @pkg A2 <<<
 
     // @pkg A3 msg-pt >>>
@@ -3699,7 +4016,7 @@ const MSG = {
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       badAction: "la acción debe ser: remove | archive | rename | restore",
-      badTrack: "el track debe ser: tdd | saas | ai",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -4441,6 +4758,29 @@ const MSG = {
     // @pkg A1 <<<
 
     // @pkg A2 msg-es >>>
+    secPrivacy: {
+      sectionNames: {
+        "Threat Model": "Modelo de Amenazas", "Security Requirements": "Requisitos de Seguridad", "Authentication & Authorization": "Autenticación y Autorización",
+        "Secrets & Key Management": "Gestión de Secretos y Claves", "Security Testing": "Pruebas de Seguridad",
+        "Personal Data Inventory": "Inventario de Datos Personales", "Lawful Basis & Purpose": "Base Jurídica y Finalidad",
+        "Retention & Deletion": "Conservación y Supresión", "Data Subject Rights": "Derechos de los Interesados",
+        "Processors & International Transfers": "Encargados del Tratamiento y Transferencias Internacionales", "DPIA": "EIPD",
+      },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas" },
+      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}` },
+      finishChecks: {
+        sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
+          "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
+        privacy: ["+privacy: acceso/exportación y supresión verificados de extremo a extremo en los almacenes reales (encargados incluidos).",
+          "+privacy: proceso de conservación programado; política de privacidad y registro de actividades de tratamiento (art. 30) actualizados; decisión sobre la EIPD registrada."],
+      },
+      clarify: {
+        secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
+        secSecrets: "Especifica qué secretos / credenciales maneja la función y que ninguno llega a una respuesta o a un log (escríbelo como AC).",
+        privacyRights: "Especifica los derechos de los interesados que la función debe atender (acceso, supresión, portabilidad…) como ACs, con el plazo de un mes.",
+        privacyRetention: "Especifica cuánto tiempo se conserva cada categoría de datos personales y qué ocurre cuando vence ese plazo.",
+      },
+    },
     // @pkg A2 <<<
 
     // @pkg A3 msg-es >>>
@@ -4477,6 +4817,8 @@ const MSG = {
     // @pkg C4 <<<
   },
 };
+// The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
+for (const l of LANGS) Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames);
 
 // ===========================================================================
 // Task brief (spec_task_brief) — the self-contained brief a fresh implementer reads first.

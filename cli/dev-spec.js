@@ -40,7 +40,7 @@
  *   finish <feature> [--write] [--include-body]  Readiness report + merge summary (no PRs)
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
- *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai (additive); --remove turns one off
+ *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
@@ -247,7 +247,7 @@ function main() {
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
         const conf = spec.msg(r.lang).classify.conf;
-        console.log(T.tracks(r.label, ["tdd", "saas", "ai"].map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", ")));
+        console.log(T.tracks(r.label, spec.OPTIONAL_TRACKS.map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", ")));
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
       });
@@ -301,6 +301,7 @@ function main() {
           (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
+        for (const tr of ["sec", "privacy"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
       });
     }
 
@@ -612,7 +613,7 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai>... [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>... [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
       if (!r.ok) return fail(r);
@@ -689,7 +690,7 @@ function main() {
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai]");
+      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec> <path> [--name <feature>] [--lang en|pt|es] [--tracks tdd,saas,ai,sec,privacy]");
       const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -863,7 +864,7 @@ function main2list() {
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
-  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai), multilingual
+  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy), multilingual
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
                                   --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
@@ -897,7 +898,7 @@ function helpText() {
                                   (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
-  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai (additive, never overwrites);
+  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive)
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
@@ -914,7 +915,7 @@ function helpText() {
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
-                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|es · --tracks tdd,saas,ai
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|es · --tracks tdd,saas,ai,sec,privacy
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
