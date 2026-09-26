@@ -8,7 +8,7 @@
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
- * 29 tools, verify with an `initialize` + `tools/list` handshake.
+ * 30 tools, verify with an `initialize` + `tools/list` handshake.
  */
 
 const readline = require("readline");
@@ -282,6 +282,12 @@ const TOOLS = [
       "Drift since finish: spec_finish {write: true} on a ready feature records a baseline — a CRLF-normalized sha1 of every file its `_Implements:_` markers name (a folder expands to its files; only files inside the project). spec_drift compares each finished feature's recorded files with the working tree and reports, per feature, the files changed, missing, or now present (missing at finish) since that baseline. `name` checks one feature (active or archived); features without a baseline are listed apart (`unbaselined`), not an error, and so are baselined features whose tasks are open again (`reopened` — checked once they are finished again) and finished features that changed since their finish (`stale` [{feature, finishedAt, since, newFiles, why, drifted}] — a change request or a re-approval after it, or — for an ACTIVE feature — an _Implements:_ file the baseline never recorded: verdict `stale` unless something drifted — finish them again (an archived one can't be finished where it is: its `archived: true` entry means restore, finish, archive again); their recorded files are still hashed, and one that changed ALSO lists the feature in `features` (with `stale: true`) and `drifted`, verdict `drift` — decide on the drift first). An unreadable .state.json is reported in `errors` (verdict `error`), never as clean. Read-only; hashes only the recorded files (never walks the tree).",
     inputSchema: { type: "object", properties: { name: { type: "string", description: "One feature (active or archived). Omit for every feature." }, projectDir: { type: "string" } } },
   },
+  {
+    name: "spec_upgrade",
+    description:
+      "After updating the plugin: audit the project's .specs/ against this engine's rules and, with `apply: true`, run the safe migrations. roadmap.json meta.specVersion records the dev-spec version that last upgraded or created the project (spec_init / spec_create stamp a brand-new project only; the SessionStart hook prints one line while it is absent or older than the engine). The audit (default, read-only) returns from / to / needsUpgrade and, per ACTIVE feature (archived ones are counted in `archived`): kind, tracks + tracksSource (state | inferred), phase, status (not-started · planning · executing · complete · finished — a finish baseline recorded), the doctor verdict with the failing check ids + short details and the warning ids, pendingGates, changedSinceApproval, legacyApprovals (phases approved without a fingerprint), history {present, seed, skip: [{phase, reason: no-fingerprint | changed | missing | untracked | snapshot-missing}]}, unverified tasks with their reason codes, next {step, recommendation} (spec_next_action's), drift (complete / finished features), a `review` recommendation — critic (no task ticked yet: run the spec-critic agent, read-only, over `reviewArtifacts`, phase by phase), converge (some tasks done, some open: the spec-reviewer converge pass + the critic on the changed / unapproved artifacts), none (complete) — and `group` blocked (doctor fails) · attention (pending gates, changed since approval, approvals to redo for the history, unverified tasks, drift, warnings) · ok; plus `summary` counts, `plan` (what apply would change) and localized `lines`. `apply: true` never edits an artifact, approves, ticks or deletes anything: it saves the inferred tracks to .state.json (only when none are saved), records the approvals made before the change history in approvalHistory and, for each approval without a snapshot whose recorded fingerprint still matches its artifact, saves that artifact as its history baseline (.specs/<feature>/.history/<phase>@<n>.md — spec_impact can then diff later edits; approvals changed since, or without a fingerprint, are listed as skipped: re-approve to start the history), completes the maintained .specs/.gitignore, stamps meta.specVersion (only once every feature migrated) and writes the checklist .specs/UPGRADE.md (AUTO-GENERATED, in the project language; a hand-written UPGRADE.md is never overwritten) — `migrations` says what it did. Each feature migrates under its lock, the stamp under the roadmap lock; a second apply changes nothing and says so.",
+    inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations and write .specs/UPGRADE.md (default: read-only audit). CLI: dev-spec upgrade --apply." }, projectDir: { type: "string" } } },
+  },
 ];
 
 // --- Tool dispatch ---------------------------------------------------------
@@ -365,6 +371,8 @@ function runTool(name, args) {
       return spec.catalog(pdir, { write: args.write === true });
     case "spec_drift":
       return spec.drift(pdir, args.name);
+    case "spec_upgrade": // the same engine call as the CLI's `upgrade [--apply]` (apply only on an explicit true)
+      return spec.specUpgrade(pdir, { apply: args.apply === true });
     default:
       throw new Error("Unknown tool: " + name);
   }
@@ -520,7 +528,7 @@ function handle(msg) {
           serverInfo: SERVER_INFO,
           capabilities: { tools: { listChanged: false } },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). ears_validate, trace_check and spec_doctor enforce quality gates. All file ops are local to the project's .specs/ directory.",
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). ears_validate, trace_check and spec_doctor enforce quality gates. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory.",
         });
       }
       case "ping":

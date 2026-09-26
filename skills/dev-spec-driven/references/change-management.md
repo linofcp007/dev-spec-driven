@@ -148,3 +148,26 @@ close a cycle (the rest are listed in `skipped`). Archive is the reversible alte
 approvals, change requests and reopened tasks (`changes`), evidence pass rate (recorded runs), lead times from
 `createdAt`. `write: true` drafts `retro.md` — its steering/constitution amendments are proposals for the human,
 never applied automatically.
+
+## 10. Upgrading after a plugin update
+
+`roadmap.json → meta.specVersion` records the dev-spec version that last upgraded or created the project
+(`spec_init` / `spec_create` stamp a brand-new project only — creating one feature in an older project stamps
+nothing). While it is absent or older than the engine, the SessionStart hook prints one line pointing at
+`/spec-upgrade`. First update the plugin (`/plugin marketplace update`, then restart; a clone: `git pull`), then:
+
+1. **Audit** — `spec_upgrade {}` (CLI `dev-spec upgrade`, read-only): per active feature its status (not started ·
+   planning · executing · complete · finished), what doctor fails / warns on, pending gates, artifacts changed since
+   approval, approvals without a history baseline (`legacyApprovals`, `history.skip`), unverified tasks, drift, the
+   next step and a `review`: `critic` when no task is ticked (run the read-only `spec-critic` agent over the
+   artifacts, phase by phase), `converge` mid-execution (the spec-reviewer converge pass + the critic on changed /
+   unapproved artifacts), `none` once complete. Grouped blocked (doctor fails) · attention · ok; `plan` = what apply
+   changes.
+2. **Apply** (after the human's OK) — `spec_upgrade {apply: true}` (`--apply`): saves inferred tracks to
+   `.state.json`, records pre-history approvals in `approvalHistory` and, for each approval whose fingerprint still
+   matches its file, saves that file as its baseline (`.history/<phase>@<n>.md`, so `spec_impact` can diff later
+   edits); a changed or date-only approval is listed as skipped — re-approve to start its history. It also completes
+   `.specs/.gitignore`, stamps `meta.specVersion` and writes the checklist `.specs/UPGRADE.md`. It never edits an
+   artifact, approves, ticks or deletes; a second apply changes nothing.
+3. **Review** — the critic / converge passes the audit recommends, their findings turned into a proposed action list
+   per feature; every change still goes through the gates (`spec_approve`, `spec_impact`, `spec_append_tasks`).

@@ -11,7 +11,8 @@
  *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
  *     moment, with zero CI and zero cost.
  *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
- *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES).
+ *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES), and one
+ *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade.
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
  * `hookSpecificOutput.additionalContext` so Claude sees it as context, not as a user message.
@@ -108,6 +109,13 @@ function handle(raw) {
         const d = spec.drift(pdir, null, { maxFiles: DRIFT_MAX_FILES, maxBytes: 8 * 1024 * 1024, activeOnly: true });
         if (d && d.ok && !d.skipped) d.features.filter((x) => x.drifted).forEach((x) => lines.push(m.drift.hookLine(x.feature, x.changed.length + x.missing.length + x.nowPresent.length)));
       } catch { /* best-effort */ }
+      // .specs/ from an older dev-spec (roadmap.json meta.specVersion absent or older than this engine — spec_init /
+      // spec_create stamp a brand-new project, spec_upgrade {apply} stamps an upgraded one): ONE line pointing at the
+      // upgrade audit. roadmap.json is already read (the project language); never throws.
+      try {
+        const v = spec.specVersionStatus(pdir);
+        if (v && v.behind && m.upgrade) lines.push(m.upgrade.hookLine(v.from));
+      } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);
@@ -133,7 +141,7 @@ function handle(raw) {
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
     // The generated files at the .specs/ root (ROADMAP.md/.html, SPECS.md) are outputs, never a reason to refresh.
     const atRoot = path.resolve(path.dirname(filePath)).toLowerCase() === path.resolve(pdir, ".specs").toLowerCase();
-    const generated = base === "roadmap.md" || base === "roadmap.html" || (atRoot && base === "specs.md");
+    const generated = base === "roadmap.md" || base === "roadmap.html" || (atRoot && (base === "specs.md" || base === "upgrade.md"));
     let roadmapNote = "";
     if (!generated) {
       try {

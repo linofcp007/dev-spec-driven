@@ -44,6 +44,8 @@
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
+ *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
+ *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
  *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
@@ -58,6 +60,7 @@
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|es
  *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
+ *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  */
 
@@ -140,7 +143,7 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
-const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear"];
+const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply"];
 const on = (k) => flags[k] === true;
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
@@ -791,6 +794,16 @@ function main() {
       });
     }
 
+    case "upgrade": {
+      // dev-spec upgrade [--apply] — after a plugin update (= spec_upgrade {apply}): the audit of every active feature against
+      // the current rules (read-only), or --apply: the safe migrations + .specs/UPGRADE.md. A report exits 0; an error (no
+      // .specs/, a broken roadmap.json, a feature that couldn't be migrated) exits 1.
+      const r = spec.specUpgrade(projectDir, { apply: on("apply") });
+      if (!r.ok) return fail(r);
+      if (r.migrations && r.migrations.errors.length) process.exitCode = 1;
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+    }
+
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
@@ -852,6 +865,9 @@ function helpText() {
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
+  upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
+                                  what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
+                                  approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
@@ -870,6 +886,7 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
+         --apply (upgrade)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.

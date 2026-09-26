@@ -44,7 +44,7 @@ LLM is `core +tdd +saas +ai`. A copy tweak is Vibe mode: no ceremony at all. A *
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
-### The local MCP server (`spec-driven`) — 29 tools
+### The local MCP server (`spec-driven`) — 30 tools
 
 Pure Node core — **no `npm install`, no network, no cost.** Tools:
 
@@ -70,6 +70,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
+| `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, what doctor flags, next step, a critic / converge review); `apply` saves inferred tracks, gives pre-1.13 approvals a history baseline, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec |
 | `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list); `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
 | `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations) + the share of code files named in `_Implements:_` |
@@ -212,6 +213,20 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
 /dev-spec-driven:spec  Add per-tenant API keys with rotation and Stripe-metered usage
 ```
 
+### Updating to a new version
+
+1. **Update the plugin** — from the marketplace: `/plugin marketplace update dev-spec-driven-marketplace`, then restart
+   Claude Code; a clone: `git pull`, then restart the session.
+2. **Run `/spec-upgrade`** in every project that already has a `.specs/` (the session-start hook reminds you while it
+   comes from an older version; other tools: `dev-spec upgrade`):
+   - **audit** (read-only) — every active feature grouped blocked · needs attention · ok, with its status, what the
+     current rules flag, the next step and the review to run;
+   - **apply** (after your OK; `dev-spec upgrade --apply`) — the safe migrations: inferred tracks saved, a history
+     baseline for each pre-1.13 approval whose file still matches, `meta.specVersion` stamped, the checklist
+     `.specs/UPGRADE.md` written. It never edits a spec, approves, ticks or deletes anything;
+   - **review** — the `spec-critic` agent over the specs not implemented yet, the converge pass over half-done ones;
+     every fix still goes through the normal gates.
+
 ### Using it alongside superpowers
 
 Several [superpowers](https://github.com/obra/superpowers) skills overlap this plugin. For feature work,
@@ -233,7 +248,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (43)
+### Commands (44)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -241,7 +256,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — aliases `/ds` `/dsx` `/dss`.
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`.)
 
 ### The `dev-spec` CLI
@@ -253,7 +268,7 @@ prints the raw result, and `help` lists every flag:
 classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
 doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
 append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift
+add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
 roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
 ```
 
@@ -296,7 +311,7 @@ com um LLM é `core +tdd +saas +ai`. Uma alteração de texto é modo Vibe: sem 
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
 
-### O servidor MCP local (`spec-driven`) — 29 ferramentas
+### O servidor MCP local (`spec-driven`) — 30 ferramentas
 
 Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
@@ -322,6 +337,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
+| `spec_upgrade` | Depois de atualizar o plugin: audita cada funcionalidade ativa face às regras atuais (estado, o que o doctor assinala, próximo passo, uma revisão critic / converge); `apply` guarda os tracks inferidos, dá às aprovações anteriores à 1.13 uma baseline no histórico, carimba `meta.specVersion` e escreve `.specs/UPGRADE.md` — nunca edita uma spec |
 | `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista); `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
 | `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações) + a parte dos ficheiros de código indicados em `_Implements:_` |
@@ -464,6 +480,20 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
 /dev-spec-driven:spec  Adicionar chaves de API por inquilino com rotação e uso medido pelo Stripe
 ```
 
+### Atualizar para uma nova versão
+
+1. **Atualiza o plugin** — a partir do marketplace: `/plugin marketplace update dev-spec-driven-marketplace` e depois
+   reinicia o Claude Code; um clone: `git pull` e depois reinicia a sessão.
+2. **Corre `/spec-upgrade`** em cada projeto que já tem um `.specs/` (o hook de início de sessão lembra-te enquanto
+   ele vier de uma versão anterior; noutras ferramentas: `dev-spec upgrade`):
+   - **auditoria** (só leitura) — cada funcionalidade ativa agrupada em bloqueada · a precisar de atenção · ok, com o
+     estado, o que as regras atuais assinalam, o próximo passo e a revisão a correr;
+   - **apply** (depois do teu OK; `dev-spec upgrade --apply`) — as migrações seguras: tracks inferidos guardados, uma
+     baseline no histórico para cada aprovação anterior à 1.13 cujo ficheiro ainda corresponde, `meta.specVersion`
+     carimbado, a checklist `.specs/UPGRADE.md` escrita. Nunca edita uma spec, nem aprova, marca ou apaga nada;
+   - **revisão** — o agente `spec-critic` sobre as specs ainda por implementar, a passagem de convergência sobre as
+     que estão a meio; cada correção passa na mesma pelos gates normais.
+
 ### Usar em conjunto com o superpowers
 
 Várias skills do [superpowers](https://github.com/obra/superpowers) sobrepõem-se a este plugin. No trabalho de
@@ -486,7 +516,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (43)
+### Comandos (44)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -494,7 +524,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atalhos `/ds` `/dsx` `/dss`.
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`.)
 
 ### A CLI `dev-spec`
@@ -506,7 +536,7 @@ mostra o resultado em bruto e `help` lista todas as opções:
 classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
 doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
 append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift
+add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
 roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
 ```
 
@@ -549,7 +579,7 @@ facturas con un LLM es `core +tdd +saas +ai`. Un cambio de texto es modo Vibe: s
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
 
-### El servidor MCP local (`spec-driven`) — 29 herramientas
+### El servidor MCP local (`spec-driven`) — 30 herramientas
 
 Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
@@ -575,6 +605,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
+| `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
 | `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista); `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
 | `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones) + la parte de los archivos de código nombrados en `_Implements:_` |
@@ -721,6 +752,20 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
 /dev-spec-driven:spec  Añadir claves de API por inquilino con rotación y uso medido por Stripe
 ```
 
+### Actualizar a una nueva versión
+
+1. **Actualiza el plugin** — desde el marketplace: `/plugin marketplace update dev-spec-driven-marketplace` y después
+   reinicia Claude Code; un clon: `git pull` y después reinicia la sesión.
+2. **Ejecuta `/spec-upgrade`** en cada proyecto que ya tenga un `.specs/` (el hook de inicio de sesión te lo recuerda
+   mientras venga de una versión anterior; en otras herramientas: `dev-spec upgrade`):
+   - **auditoría** (solo lectura) — cada función activa agrupada en bloqueada · necesita atención · ok, con su estado,
+     lo que señalan las reglas actuales, el siguiente paso y la revisión a ejecutar;
+   - **apply** (tras tu OK; `dev-spec upgrade --apply`) — las migraciones seguras: tracks deducidos guardados, una
+     línea base en el historial para cada aprobación anterior a la 1.13 cuyo fichero aún coincide, `meta.specVersion`
+     sellado, la lista de comprobación `.specs/UPGRADE.md` escrita. Nunca edita una spec, ni aprueba, marca o borra nada;
+   - **revisión** — el agente `spec-critic` sobre las specs aún sin implementar, la pasada de convergencia sobre las
+     que están a medias; cada corrección sigue pasando por los gates normales.
+
 ### Usarlo junto a superpowers
 
 Varias skills de [superpowers](https://github.com/obra/superpowers) se solapan con este plugin. En el trabajo de
@@ -743,7 +788,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (43)
+### Comandos (44)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -751,7 +796,7 @@ todas partes, `/plugin disable` — ambos quitan también las skills de superpow
 `/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
 `/migrateModel` — atajos `/ds` `/dsx` `/dss`.
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers`.
+`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`.)
 
 ### La CLI `dev-spec`
@@ -763,7 +808,7 @@ El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `de
 classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
 doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
 append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift
+add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
 roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
 ```
 
@@ -794,12 +839,12 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 43 slash commands (trilingual descriptions)
+├── commands/                         ← 44 slash commands (trilingual descriptions)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (29 tools, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (30 tools, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
 │   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)

@@ -17,7 +17,7 @@ const path = require("path");
 // own project folders — so the suite runs every section in a child process of this file (MCP_TEST_SECTION=<name>),
 // each with its own server and temp dir, all at once, and prints their output in order with one total. "main" is
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
 if (!SECTION) {
   const runSection = (name) => new Promise((resolve) => {
@@ -150,7 +150,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 29, "tools/list returns 29 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 30, "tools/list returns 30 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -162,7 +162,7 @@ function endRun() {
   if (SECTION !== "main") { // a section child: the handshake above (muted — main counts it), its own section, the end
     muted = false;
     const sections = { wp1: sectionWp1, wp2: sectionWp2, wp3: sectionWp3, wp4: sectionWp4, wp5: sectionWp5, wp6: sectionWp6, wp7: sectionWp7, wp8: sectionWp8,
-      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13, wp14: sectionWp14, wp15: sectionWp15 };
+      wp9: sectionWp9, wp10: sectionWp10, wp11: sectionWp11, wp12: sectionWp12, wp13: sectionWp13, wp14: sectionWp14, wp15: sectionWp15, wp16: sectionWp16 };
     await sections[SECTION]();
     return endRun();
   }
@@ -6007,6 +6007,197 @@ function endRun() {
       stale15.join(", ") + "; CLAUDE.md " + counts15.slice(0, 2).join("/") + " vs CHANGELOG " + counts15.slice(2).join("/") + ")");
   }
 
+  async function sectionWp16() { // --- 1.13 batch 8: spec_upgrade — meta.specVersion, the audit, the safe migrations, UPGRADE.md, the SessionStart notice ---
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const sess = (dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout || "";
+    const sha1 = (t) => require("crypto").createHash("sha1").update(String(t).replace(/\r\n/g, "\n")).digest("hex");
+    const ENGINE = require(path.join(root, "package.json")).version;
+    const readJ = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+    const snapTree = (d) => {
+      const out = {};
+      const walk = (x) => { for (const e of fs.readdirSync(x, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const q = path.join(x, e.name); if (e.isDirectory()) walk(q); else out[path.relative(d, q)] = fs.readFileSync(q, "utf8"); } };
+      walk(d);
+      return JSON.stringify(out);
+    };
+    // A legacy project: scaffolded by this engine, then turned into what 1.12 left behind — no meta.specVersion, no saved
+    // tracks, no approval history: `half` has a requirements approval whose fingerprint still matches, a design approval
+    // whose file changed since and a date-only tasks approval (≤1.10), one task ticked; `done` is complete with a finish
+    // baseline; `bug` has a 1.12 bugfix design approval (no fingerprint, no file); `old` sits in _archive/.
+    const legacy16 = (dir, lang) => {
+      S.initProject(dir, ["core", "tdd"], lang);
+      const L = { draft: S.createFeature(dir, "Draft", ["core"]), half: S.createFeature(dir, "Half", ["tdd"]), done: S.createFeature(dir, "Done", ["core"]),
+        bug: S.createFeature(dir, "Bug", undefined, "the export crashes", undefined, lang, "bugfix") };
+      const old = S.createFeature(dir, "Old", ["core"]);
+      fs.mkdirSync(path.join(dir, ".specs", "_archive"), { recursive: true });
+      fs.renameSync(old.dir, path.join(dir, ".specs", "_archive", "old"));
+      const rmF = path.join(dir, ".specs", "roadmap.json");
+      const rm = readJ(rmF);
+      delete rm.meta.specVersion;
+      fs.writeFileSync(rmF, JSON.stringify(rm, null, 2));
+      const state = (f, extra) => { const p = path.join(f.dir, ".state.json"); const st = readJ(p); delete st.tracks; delete st.createdAt; fs.writeFileSync(p, JSON.stringify(Object.assign(st, extra), null, 2)); };
+      const req = fs.readFileSync(path.join(L.half.dir, "requirements.md"), "utf8");
+      const des = fs.readFileSync(path.join(L.half.dir, "design.md"), "utf8");
+      state(L.draft, {});
+      state(L.half, { approvals: { requirements: { at: "2026-01-01T10:00:00.000Z", by: "old", fingerprint: sha1(req) },
+        design: { at: "2026-01-02T10:00:00.000Z", by: "old", fingerprint: sha1(des) }, tasks: { at: "2026-01-03T10:00:00.000Z", by: "old" } } });
+      fs.appendFileSync(path.join(L.half.dir, "design.md"), "\nA paragraph written after the design approval.\n");
+      const tk = path.join(L.half.dir, "tasks.md");
+      fs.writeFileSync(tk, fs.readFileSync(tk, "utf8").replace("- [ ]", "- [x]"));
+      const dk = path.join(L.done.dir, "tasks.md");
+      fs.writeFileSync(dk, fs.readFileSync(dk, "utf8").replace(/- \[ \]/g, "- [x]"));
+      state(L.done, { finished: { at: "2026-02-01T10:00:00.000Z", files: {} } });
+      state(L.bug, { approvals: { design: { at: "2026-01-05T10:00:00.000Z", by: "old" } } });
+      return L;
+    };
+
+    // 1. The engine knows its version (package.json, read once) and compares versions numerically.
+    ok(S.engineVersion() === ENGINE && S.compareSemver("1.9.0", "1.13.0") === -1 && S.compareSemver("1.13.0", "1.9.0") === 1 && S.compareSemver("v1.13.0", "1.13.0") === 0 &&
+      S.compareSemver("1.13.0-beta.2", "1.13.0") === -1 && S.compareSemver("1.13.0-beta.2", "1.13.0-beta.10") === -1 && S.compareSemver("nope", "0.0.1") === -1,
+      "engine version = package.json (" + S.engineVersion() + "); semver compared numerically (1.9.0 < 1.13.0), a pre-release before its release");
+
+    // 2. The audit (read-only) of a legacy project, over MCP = the engine.
+    const p16 = path.join(tmp, "proj-wp16-legacy");
+    const L16 = legacy16(p16, "en");
+    const before16 = snapTree(path.join(p16, ".specs"));
+    const hookBefore16 = sess(p16);
+    const impBefore16 = S.impactReport(p16, "half", { phase: "requirements" });
+    const au16 = payload(await call("spec_upgrade", { projectDir: p16 }));
+    const f16 = (r, n) => r.features.find((f) => f.name === n) || { history: {}, reviewArtifacts: [], legacyApprovals: [], changedSinceApproval: [] };
+    ok(au16.ok && au16.from === null && au16.to === ENGINE && au16.needsUpgrade === true && au16.archived === 1 && au16.migrations === null &&
+      au16.features.map((f) => f.name).join() === "bug,done,draft,half" && snapTree(path.join(p16, ".specs")) === before16 &&
+      JSON.stringify(au16) === JSON.stringify(S.specUpgrade(p16)) && impBefore16.baseline === "fingerprint-only" &&
+      /⬆ \.specs\/ was created with an older dev-spec \(before 1\.13\) — run \/spec-upgrade \(dev-spec upgrade\) to review what isn't implemented yet/.test(hookBefore16),
+      "spec_upgrade audit of a legacy .specs/ (no meta.specVersion): from null → " + ENGINE + ", needsUpgrade, the archived feature counted apart, nothing written, MCP = engine; SessionStart prints the one-line notice (got " +
+      JSON.stringify([au16.from, au16.to, au16.archived, au16.features.map((f) => f.name)]) + ")");
+    const d16 = f16(au16, "draft"), h16 = f16(au16, "half"), dn16 = f16(au16, "done"), b16 = f16(au16, "bug");
+    ok(d16.status === "not-started" && d16.review === "critic" && d16.group === "blocked" && d16.tracksSource === "inferred" && d16.reviewArtifacts.includes("requirements.md") &&
+      h16.status === "executing" && h16.review === "converge" && h16.tracks === "core +tdd" && (h16.history.seed || []).join() === "requirements" &&
+      JSON.stringify(h16.history.skip) === JSON.stringify([{ phase: "design", reason: "changed" }, { phase: "tasks", reason: "no-fingerprint" }]) &&
+      h16.legacyApprovals.join() === "tasks" && h16.changedSinceApproval.includes("design.md") && h16.attention.includes("re-approve") && h16.next && typeof h16.next.step === "string" &&
+      dn16.status === "finished" && dn16.review === "none" && dn16.drift && dn16.drift.drifted === false &&
+      b16.kind === "bugfix" && (b16.history.skip || []).some((x) => x.phase === "design" && x.reason === "untracked") &&
+      au16.plan.tracks.length === 4 && au16.plan.specVersion.stamp === true && au16.plan.history.records === 4 &&
+      JSON.stringify(au16.plan.history.seed) === JSON.stringify([{ feature: "half", phase: "requirements" }]) &&
+      au16.summary.blocked + au16.summary.attention + au16.summary.ok === 4 && au16.lines.some((l) => /^Apply would change/.test(l)),
+      "audit per feature: a template-only feature → not-started + review critic; a half-executed one → executing + converge, its matching approval seedable, the changed / date-only ones skipped; a finished one → none; a 1.12 bugfix design approval → untracked (got " +
+      JSON.stringify([d16.status, d16.review, h16.status, h16.review, h16.history, dn16.status, dn16.review, b16.history]) + ")");
+
+    // 3. apply: the safe migrations — never an artifact, an approval or a tick — then UPGRADE.md; the notice goes away.
+    const stHalfBefore = readJ(path.join(L16.half.dir, ".state.json"));
+    const tasksHalfBefore = fs.readFileSync(path.join(L16.half.dir, "tasks.md"), "utf8");
+    const reqHalf = fs.readFileSync(path.join(L16.half.dir, "requirements.md"), "utf8");
+    const designHalf = fs.readFileSync(path.join(L16.half.dir, "design.md"), "utf8");
+    const ap16 = payload(await call("spec_upgrade", { apply: true, projectDir: p16 }));
+    const m16 = ap16.migrations || { history: {}, specVersion: {}, tracks: [], report: {} };
+    const stHalf = readJ(path.join(L16.half.dir, ".state.json"));
+    const recs16 = (ph) => (stHalf.approvalHistory || []).filter((h) => h.phase === ph);
+    ok(ap16.ok && m16.changed === true && m16.specVersion.stamped === true && m16.specVersion.from === null && m16.specVersion.to === ENGINE && S.readRoadmap(p16).meta.specVersion === ENGINE &&
+      m16.tracks.length === 4 && ["draft", "half", "done", "bug"].every((n) => Array.isArray(readJ(path.join(p16, ".specs", n, ".state.json")).tracks)) &&
+      JSON.stringify(m16.history.seeded) === JSON.stringify([{ feature: "half", phase: "requirements", snapshot: ".history/requirements@1.md" }]) &&
+      fs.readFileSync(path.join(L16.half.dir, ".history", "requirements@1.md"), "utf8") === reqHalf &&
+      recs16("requirements").length === 1 && recs16("requirements")[0].snapshot === ".history/requirements@1.md" && recs16("requirements")[0].legacy === true && !!recs16("requirements")[0].seededAt &&
+      recs16("design").length === 1 && recs16("design")[0].snapshot === undefined && recs16("tasks").length === 1 && !fs.existsSync(path.join(L16.half.dir, ".history", "design@1.md")) &&
+      JSON.stringify(stHalf.approvals) === JSON.stringify(stHalfBefore.approvals) && fs.readFileSync(path.join(L16.half.dir, "tasks.md"), "utf8") === tasksHalfBefore &&
+      fs.readFileSync(path.join(L16.half.dir, "design.md"), "utf8") === designHalf &&
+      m16.history.skipped.some((x) => x.feature === "half" && x.phase === "design" && x.reason === "changed") && m16.history.records === 4 && m16.report.written === true,
+      "spec_upgrade {apply}: tracks saved, the matching approval gets .history/requirements@1.md (legacy record + seededAt), the changed / date-only ones are recorded without a snapshot, approvals / ticks / artifacts untouched, meta.specVersion stamped (got " +
+      JSON.stringify([m16.changed, m16.specVersion, m16.history.seeded, m16.history.records]) + ")");
+    const imp16 = S.impactReport(p16, "half", { phase: "requirements" });
+    const upMd16 = fs.readFileSync(path.join(p16, ".specs", "UPGRADE.md"), "utf8");
+    const hookAfter16 = sess(p16);
+    ok(imp16.baseline === "snapshot" && imp16.changed === false && /AUTO-GENERATED by dev-spec/.test(upMd16.slice(0, 400)) && /^### draft — not started/m.test(upMd16) &&
+      /^- \[ \] Review it with the spec-critic agent/m.test(upMd16) && /^## ⛔ Blocked — doctor fails$/m.test(upMd16) && /^- meta\.specVersion: none → /m.test(upMd16) &&
+      !/⬆/.test(hookAfter16) && /features in \.specs/.test(hookAfter16) && f16(ap16, "draft").tracksSource === "state" && ap16.lines.some((l) => /^Report: \.specs\/UPGRADE\.md/.test(l)),
+      "after apply: spec_impact diffs the seeded baseline (snapshot, unchanged), UPGRADE.md is a generated checklist, tracks come from the state, the SessionStart notice is gone");
+    const beforeSecond16 = snapTree(path.join(p16, ".specs"));
+    const ap16b = payload(await call("spec_upgrade", { apply: true, projectDir: p16 }));
+    ok(ap16b.migrations.changed === false && ap16b.migrations.report.written === false && ap16b.needsUpgrade === false && ap16b.from === ENGINE &&
+      ap16b.lines.includes("Nothing to migrate — .specs/ is already up to date; nothing was changed.") && snapTree(path.join(p16, ".specs")) === beforeSecond16,
+      "a second apply changes nothing — no state, roadmap, .history or UPGRADE.md write — and says so");
+
+    // 4. A brand-new project is stamped (spec_init, or its first spec_create) and never gets the notice; a legacy project is not
+    // stamped by creating a feature or re-running spec_init.
+    const n16 = path.join(tmp, "proj-wp16-new");
+    S.initProject(n16, ["core"], "en");
+    const stampInit16 = S.readRoadmap(n16).meta.specVersion;
+    S.createFeature(n16, "First", ["core"]);
+    const n16b = path.join(tmp, "proj-wp16-new-create");
+    await call("spec_create", { name: "Solo", tracks: ["core"], projectDir: n16b });
+    const g16 = path.join(tmp, "proj-wp16-legacy-create");
+    legacy16(g16, "en");
+    S.createFeature(g16, "Brand New", ["core"]);
+    S.initProject(g16, ["core", "saas"], "en");
+    await call("spec_create", { name: "Another", tracks: ["core"], projectDir: g16 });
+    ok(stampInit16 === ENGINE && S.readRoadmap(n16b).meta.specVersion === ENGINE && !/⬆/.test(sess(n16)) && !/⬆/.test(sess(n16b)) && /first \[core\]/.test(sess(n16)) &&
+      S.readRoadmap(g16).meta.specVersion === undefined && /⬆/.test(sess(g16)),
+      "a brand-new project is stamped (spec_init / its first spec_create) and never shows the notice; creating features or re-running spec_init in a legacy project stamps nothing");
+
+    // 5. A hand-written .specs/UPGRADE.md is never overwritten — the migrations still run.
+    const w16 = path.join(tmp, "proj-wp16-handwritten");
+    legacy16(w16, "en");
+    const hand16 = "# Our upgrade notes\n\nWritten by hand.\n";
+    fs.writeFileSync(path.join(w16, ".specs", "UPGRADE.md"), hand16);
+    const hw16 = S.specUpgrade(w16, { apply: true });
+    ok(hw16.ok && hw16.migrations.changed && hw16.migrations.report.written === false && /UPGRADE\.md exists and was not generated by dev-spec/.test(hw16.migrations.report.error || "") &&
+      fs.readFileSync(path.join(w16, ".specs", "UPGRADE.md"), "utf8") === hand16 && hw16.lines.some((l) => /left untouched \(no report written\)/.test(l)) && S.readRoadmap(w16).meta.specVersion === ENGINE,
+      "a hand-written .specs/UPGRADE.md is left untouched (the result says so); the migrations and the stamp still happen");
+
+    // 6. A feature another process is updating (its .lock held): not migrated, reported, and meta.specVersion waits for the retry.
+    const k16 = path.join(tmp, "proj-wp16-busy");
+    const K16 = legacy16(k16, "en");
+    const lock16 = path.join(K16.half.dir, ".lock");
+    fs.writeFileSync(lock16, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "held-by-the-test" }));
+    const prevWait16 = process.env.DEV_SPEC_LOCK_WAIT_MS;
+    process.env.DEV_SPEC_LOCK_WAIT_MS = "0";
+    let busy16;
+    try { busy16 = S.specUpgrade(k16, { apply: true }); } finally {
+      if (prevWait16 === undefined) delete process.env.DEV_SPEC_LOCK_WAIT_MS; else process.env.DEV_SPEC_LOCK_WAIT_MS = prevWait16;
+    }
+    const stampBusy16 = S.readRoadmap(k16).meta.specVersion;
+    const tracksBusy16 = readJ(path.join(K16.half.dir, ".state.json")).tracks;
+    fs.rmSync(lock16, { force: true });
+    const retry16 = S.specUpgrade(k16, { apply: true });
+    ok(busy16.ok && busy16.migrations.errors.length === 1 && busy16.migrations.errors[0].feature === "half" && /updating 'half'/.test(busy16.migrations.errors[0].error) &&
+      busy16.migrations.specVersion.stamped === false && stampBusy16 === undefined && tracksBusy16 === undefined && busy16.lines.some((l) => /not migrated: half/.test(l)) &&
+      retry16.migrations.errors.length === 0 && retry16.migrations.specVersion.stamped === true && S.readRoadmap(k16).meta.specVersion === ENGINE,
+      "a feature whose lock another process holds is reported (not migrated) and meta.specVersion stays unstamped until a retry completes");
+
+    // 7. An older stamp gets the notice with its version; a newer one is never lowered and gets none.
+    const o16 = path.join(tmp, "proj-wp16-stamps");
+    S.initProject(o16, ["core"], "en");
+    S.createFeature(o16, "One", ["core"]);
+    const setStamp16 = (v) => { const f = path.join(o16, ".specs", "roadmap.json"); const rm = readJ(f); rm.meta.specVersion = v; fs.writeFileSync(f, JSON.stringify(rm, null, 2)); };
+    setStamp16("1.12.1");
+    const olderHook16 = sess(o16), olderSt16 = S.specVersionStatus(o16);
+    setStamp16("9.0.0");
+    const newer16 = S.specUpgrade(o16, { apply: true });
+    ok(olderSt16.behind && olderSt16.from === "1.12.1" && /older dev-spec \(1\.12\.1\)/.test(olderHook16) && newer16.newer === true && newer16.needsUpgrade === false &&
+      newer16.migrations.changed === false && S.readRoadmap(o16).meta.specVersion === "9.0.0" && !/⬆/.test(sess(o16)) && newer16.lines.some((l) => /newer dev-spec \(9\.0\.0\)/.test(l)),
+      "an older stamp (1.12.1) gets the notice naming it; a newer stamp (9.0.0) is never lowered, needs no upgrade and says the plugin is older");
+
+    // 8. PT: the lines, the notice and UPGRADE.md in the project language.
+    const pt16 = path.join(tmp, "proj-wp16-pt");
+    legacy16(pt16, "pt");
+    const ptAu16 = S.specUpgrade(pt16);
+    const ptHook16 = sess(pt16);
+    const ptAp16 = S.specUpgrade(pt16, { apply: true });
+    const ptMd16 = fs.readFileSync(path.join(pt16, ".specs", "UPGRADE.md"), "utf8");
+    ok(ptAu16.lang === "pt" && ptAu16.lines.some((l) => /feature\(s\) ativa\(s\)/.test(l)) && ptAu16.lines.some((l) => /por começar/.test(l)) && ptAu16.lines.some((l) => /^O apply mudaria/.test(l)) &&
+      /⬆ \.specs\/ foi criado com um dev-spec mais antigo \(anterior à 1\.13\) — corre \/spec-upgrade/.test(ptHook16) &&
+      /AUTO-GERADO por dev-spec/.test(ptMd16) && /^## Migrações$/m.test(ptMd16) && /^- \[ \] Revê-a com o agente spec-critic/m.test(ptMd16) && ptAp16.lines.some((l) => /^Migrações aplicadas/.test(l)),
+      "PT project: the audit lines, the SessionStart notice and UPGRADE.md are in European Portuguese");
+
+    // 9. Every upgrade message exists in EN, PT and ES; the MCP schema refuses a non-boolean apply; no .specs/ is an error.
+    const keys16 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys16(v, pre + k + ".") : [pre + k])).sort();
+    const en16 = JSON.stringify(keys16(S.msg("en").upgrade));
+    const badArg16 = await call("spec_upgrade", { apply: "yes", projectDir: p16 });
+    const noSpecs16 = await call("spec_upgrade", { projectDir: path.join(tmp, "proj-wp16-empty") });
+    ok(["pt", "es"].every((l) => JSON.stringify(keys16(S.msg(l).upgrade)) === en16) && badArg16.result.isError && /apply must be a boolean/.test(badArg16.result.content[0].text) &&
+      noSpecs16.result.isError && /No \.specs\/ at/.test(noSpecs16.result.content[0].text) && !fs.existsSync(path.join(tmp, "proj-wp16-empty")),
+      "upgrade messages exist in EN / PT / ES with the same keys; spec_upgrade {apply: 'yes'} is an argument error; a project without .specs/ is an error (nothing created)");
+  }
+
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples
   // pass its own linter), stay compact, and every user-facing surface must agree with it.
   const docsRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8");
@@ -6131,9 +6322,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 43 && ["spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 44 && ["spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "43 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers");
+    "44 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "results").map((e) => e.name);
   ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) &&
