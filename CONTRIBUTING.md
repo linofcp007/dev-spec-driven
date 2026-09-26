@@ -23,7 +23,7 @@ Full maintainer notes (conventions, gotchas, the track model, multilingual rules
 ```bash
 node mcp/test.js        # MCP server end-to-end (must end `0 failed`)
 node cli/test-cli.js    # universal CLI (must end `0 failed`)
-claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5   # optional: plugin behaviour evals (costs tokens; see evals/README.md)
+claude plugin eval . --ablation none --tag triggering negative --trust-plugin --no-publish --max-cost-usd 5   # optional: plugin triggering evals (costs tokens; the behavioural suite needs more flags — see evals/README.md)
 # or both:
 npm test
 ```
