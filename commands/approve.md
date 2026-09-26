@@ -32,6 +32,14 @@ when the user explicitly chooses to accept the failures, and say so. Forced appr
 `spec_doctor`'s `approval-gates` check warns, the roadmap lists them, and `spec_metrics` counts them. A phase with
 no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even forced.
 
+**Approvals by role** (opt-in: `.specs/roadmap.json → meta.approvalRoles`, set with `spec_init {approvalRoles}` / CLI
+`dev-spec init --roles requirements=product,design=tech+security`): a phase listed there needs `role` (CLI
+`--role <role>`, one of that phase's roles) and counts as approved only once **every** role has signed off its
+**current** content — until then the result says `pending` with the `missingRoles`, and doctor, next_action and finish
+keep naming them (ROADMAP.md too, once one role has signed). An edit after a role signed means that role signs again. A phase approved before the
+roles were configured stays approved (by an unknown role); doctor warns until each role re-signs. To approve several
+filled phases in one go, see `/spec-ff`.
+
 Each approval writes `.specs/<feature>/.state.json` (latest approval + content fingerprint), appends to
 `approvalHistory` and saves a snapshot `.specs/<feature>/.history/<phase>@<n>.md` — the baseline `/spec-impact`
 diffs a later edit against. Confirm what was recorded. Respond in the user's language (EN/PT/ES).
