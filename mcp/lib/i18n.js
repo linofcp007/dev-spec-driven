@@ -3041,6 +3041,7 @@ const MSG = {
           "classification.md": "Classification (tracks)", "requirements.md": "Requirements (EARS)", "design.md": "Technical design", "test-plan.md": "Test plan",
           "eval-plan.md": "Eval plan", "load-test.md": "Load test plan", "tasks.md": "Tasks", "bug.md": "Bug report (reproduction · root cause · fix)",
           "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Integration plan", "retro.md": "Retrospective",
+          "spike.md": "Spike (question · evidence · decision)", "decisions.md": "Decision log", // 1.14 C2
         },
         tplFeature: (list) => `A feature's spec artifact: .specs/{slug}/{artifact} — {artifact} is one of ${list}.`,
         tplSteering: "A steering file: .specs/steering/{file} (a .md file).",
@@ -3395,6 +3396,133 @@ const MSG = {
     // @pkg C1 <<<
 
     // @pkg C2 msg-en >>>
+    // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
+    // IDs (D-n), the markers (_Kind:_ _Date:_ _Affects:_ _Supersedes:_ _Outcome:_) and their values stay English.
+    decisions: {
+      header: (name) => `# Decisions: ${name}
+
+<!-- Decision log — append-only, committed with the spec. spec_decide (dev-spec decide) adds each entry: D-1, D-2…
+     never renumbered, never rewritten. _Affects:_ names the AC IDs, T-IDs and design sections a decision touches;
+     a later decision that replaces one says _Supersedes: D-n_. Discoveries (facts learnt while working) use the
+     same log (_Kind: discovery_). -->
+`,
+      labels: { context: "Context", decision: "Decision", discovery: "Discovery", consequences: "Consequences" },
+      kinds: { decision: "decision", discovery: "discovery" },
+      titleRequired: "a decision needs a title (one line of text).",
+      decisionRequired: "a decision needs its text — decision: what was decided (for a discovery: what was found).",
+      badText: (field) => `${field} must be text.`,
+      tooLong: (field, max) => `${field} is too long (at most ${max} characters).`,
+      badKind: (v) => `kind must be decision or discovery (got ${v}).`,
+      badAffects: (list) => `unknown _Affects:_ reference(s): ${list} — an AC ID must be defined in requirements.md, a T-ID planned in test-plan.md, an EC/NFR/SC ID written in requirements.md; anything else must be a section heading of design.md (bug.md / design.md for a bugfix, spike.md for a spike). Nothing was written.`,
+      badSupersedes: (list) => `_Supersedes:_ must name decisions already in this log (D-n): ${list}. Nothing was written.`,
+      recorded: (id, kind, file) => `Recorded ${id} (${kind}) in ${file}.`,
+      briefHeading: "## Decisions",
+      briefIntro: "Decisions and discoveries (decisions.md) that cite this task's criteria or tests — respect them:",
+      briefOmitted: (list) => `…and ${list} — see decisions.md.`,
+      supersedesNote: (list) => `supersedes ${list}`,
+      prHeading: "## Decisions",
+      catalogLine: (n, list) => `Decisions (${n}): ${list}`,
+      superseded: "superseded",
+      affectsApproved: (list, slug, phases) => `decisions recorded after an approval touch the approved spec: ${list} — re-review what they change (spec_impact ${slug} --phase ${phases}), update the spec, then re-approve.`,
+      affectsApprovedEntry: (id, refs, file, day) => `${id} (${refs}) after ${file} was approved (${day})`,
+      phantomDoctor: (list) => `_Affects:_ references in decisions.md that name nothing in this feature: ${list} — a typo, or a criterion / test / section removed since.`,
+      phantom: (id, ref) => `${id} _Affects:_ ${ref} — names nothing in this feature (a typo, or a criterion / test / section removed since)`,
+      cliRecorded: (id, title, file) => `✎ ${id} — ${title}  (${file})`,
+    },
+    spike: {
+      kind: "spike",
+      kicker: "Spike (investigation)",
+      report: (a) => `# Spike: ${a.name}
+
+<!-- Spike (investigate → decide): a timeboxed investigation that ends in a DECISION, not in production code.
+     Prototype code lives OUTSIDE .specs/ (a scratch folder or a branch) — link it under Evidence.
+     spec_doctor fails until "Decision" is written, and warns once the timebox date passes without one.
+     State the outcome on its own line: _Outcome: go_ · _Outcome: no-go_ · _Outcome: pivot_ -->
+
+## Question
+${a.question || "> **TODO** — the one question this spike answers (what answer would change the plan?)."}
+
+## Timebox
+${a.until ? `**Until:** ${a.until}${a.raw && a.raw !== a.until ? ` (${a.raw})` : ""}` : "> **TODO** — the end date (YYYY-MM-DD) or the effort cap. When it ends, decide with the evidence you have."}
+
+## Options considered
+- [option A — what it is, what it would cost]
+- [option B]
+
+## Evidence
+<!-- Links, measurements, prototypes (the code stays outside the spec — link it here), what was tried and what happened. -->
+- [link / measurement / prototype — and what it showed]
+
+## Decision
+> **TODO** — go / no-go / pivot, and why: the evidence that decided it.
+
+_Outcome: [go | no-go | pivot]_
+
+## Follow-up
+- [go: the feature to spec (spec_create) · no-go: why it was dropped · pivot: the new question]
+`,
+      tasks: (name) => `# Tasks: ${name}
+
+<!-- A spike has no requirements / design gates: question → investigate → decide. Prototype code lives OUTSIDE
+     .specs/ — link it under spike.md → Evidence. When the timebox ends, decide with what you have. -->
+
+## Phase: Investigate
+- [ ] 1. [shared] Sharpen the question and set the timebox in spike.md (what answer would change the plan?)
+- [ ] 2. [shared] List the options considered in spike.md → Options considered
+- [ ] 3. [shared] Gather the evidence — prototypes (outside .specs/), measurements, links — in spike.md → Evidence
+- [ ] 4. [shared] Record the decision (go / no-go / pivot) and its rationale in spike.md → Decision; log it with spec_decide
+**Checkpoint:** the question has an answer backed by evidence.
+`,
+      badTimebox: (v) => `timebox must be an end date (YYYY-MM-DD) or a duration from today (e.g. 3d, 2w, 8h) — got ${v}.`,
+      spikeOnly: (arg) => `${arg} only applies to a spike (kind: "spike").`,
+      tracksIgnored: (list) => `A spike is core-only — tracks ignored (${list}); give them to the feature you spec after a 'go'.`,
+      noTracks: (slug) => `'${slug}' is a spike — it has no tracks. After a 'go', spec the real feature with its tracks (spec_create).`,
+      noGate: (phase, slug) => `'${slug}' is a spike: it has no ${phase} gate — it goes question → investigate → decide. Record the decision in spike.md → Decision (spec_decide logs it); spec_finish closes it.`,
+      doctor: {
+        missing: "spike.md is missing — a spike's question, evidence and decision live there.",
+        questionOk: "the question is written",
+        questionMissing: "spike.md → Question is still the template — write the one question this spike answers.",
+        decisionOk: (o) => `decision recorded (_Outcome: ${o}_)`,
+        decisionMissing: "spike.md → Decision is not written yet (go / no-go / pivot + rationale) — the spike isn't done until it is.",
+        outcomeMissing: "the decision is written but its outcome isn't stated — add a line _Outcome: go_, _Outcome: no-go_ or _Outcome: pivot_.",
+        timeboxOk: (d) => `timebox until ${d}`,
+        timeboxPassed: (d) => `the timebox ended on ${d} and no decision is recorded — decide with the evidence you have (go / no-go / pivot), or extend the timebox on purpose.`,
+        timeboxUnset: "no timebox set — write an end date (YYYY-MM-DD) in spike.md → Timebox.",
+        timeboxNoDate: "the timebox has no end date (YYYY-MM-DD) — when it runs out can't be checked.",
+        timeboxDecided: "decided — the timebox is closed",
+      },
+      next: {
+        missing: (slug) => `spike.md is missing — scaffold it again: dev-spec spike "${slug}" (create-only: what exists is kept).`,
+        fillQuestion: (slug) => `Write the question this spike answers (and its timebox) in spike.md → Question / Timebox — /spec-spike ${slug}.`,
+        investigate: (n, text, slug) => `Investigate — task #${n}: ${text}. Prototype code stays outside .specs/ (link it under spike.md → Evidence); tick it: dev-spec done ${slug} ${n}.`,
+        decide: (slug) => `Record the decision in spike.md → Decision — go / no-go / pivot, the rationale and its _Outcome:_ line — and log it: /spec-decide ${slug} (spec_decide).`,
+        outcome: (slug) => `State the outcome in spike.md → Decision: a line _Outcome: go_, _Outcome: no-go_ or _Outcome: pivot_ (/spec-spike ${slug}).`,
+        timeboxPassed: (d) => `The timebox ended on ${d}: decide with the evidence you have.`,
+        goCreateFirst: (slug, name, summary) => `Decision: go. Spec the real feature — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}) — then archive the spike: /feature archive ${slug}.`,
+        goArchiveFirst: (slug, name, summary) => `Decision: go. Archive the spike first — /feature archive ${slug} (it frees the name) — then spec the real feature: spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}).`,
+        noGo: (slug, reason) => `Decision: no-go${reason ? ` — ${reason}` : ""}. Archive the spike with its reason (it stays in spike.md → Decision): /feature archive ${slug}.`,
+        pivot: (slug, reason) => `Decision: pivot${reason ? ` — ${reason}` : ""}. Start a new spike for the new direction (dev-spec spike "<new question>") — or spec the feature if the answer is already clear — then archive this one: /feature archive ${slug}.`,
+      },
+      finish: {
+        ready: (slug) => `spike '${slug}' is ready to finish — its decision is recorded. Act on it (spec_next_action says how).`,
+        notReady: (slug) => `spike '${slug}' is not ready to finish:`,
+        missing: "spike.md is missing",
+        decisionBlocker: "spike.md → Decision is not written yet (go / no-go / pivot + rationale)",
+        prQuestion: "## Question",
+        prDecision: (o) => `## Decision${o ? ` — ${o}` : ""}`,
+        prEvidence: "## Evidence",
+        prOptions: "## Options considered",
+        prFollowUp: "## Follow-up",
+        checks: ["The decision is shared with the people it affects.", "Prototype code stays out of the main branch — the real feature rewrites what it keeps as its own tasks."],
+      },
+      roadmapTimebox: (d) => `spike: the timebox ended on ${d} with no decision`,
+      catalogQuestion: (q) => `Question: ${q}`,
+      catalogOutcome: (o) => `Decision: ${o}`,
+      catalogPending: "Decision: pending",
+      exportSection: "Spike",
+      cliQuestion: (q) => `  question: ${q}`,
+      cliUntil: (d) => `  timebox: until ${d}`,
+    },
     // @pkg C2 <<<
 
     // @pkg C3 msg-en >>>
@@ -4254,6 +4382,7 @@ const MSG = {
           "classification.md": "Classificação (tracks)", "requirements.md": "Requisitos (EARS)", "design.md": "Design técnico", "test-plan.md": "Plano de testes",
           "eval-plan.md": "Plano de evals", "load-test.md": "Plano de testes de carga", "tasks.md": "Tasks", "bug.md": "Relatório do bug (reprodução · causa raiz · correção)",
           "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Plano de integração", "retro.md": "Retrospetiva",
+          "spike.md": "Spike (pergunta · evidência · decisão)", "decisions.md": "Registo de decisões", // 1.14 C2
         },
         tplFeature: (list) => `Um artefacto da spec de uma feature: .specs/{slug}/{artifact} — {artifact} é um de ${list}.`,
         tplSteering: "Um ficheiro de steering: .specs/steering/{file} (um ficheiro .md).",
@@ -4592,6 +4721,132 @@ const MSG = {
     // @pkg C1 <<<
 
     // @pkg C2 msg-pt >>>
+    // 1.14 C2 — registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).
+    decisions: {
+      header: (name) => `# Decisões: ${name}
+
+<!-- Registo de decisões — só se acrescenta, é versionado com a spec. O spec_decide (dev-spec decide) acrescenta cada
+     entrada: D-1, D-2… nunca renumeradas, nunca reescritas. _Affects:_ indica os AC IDs, T-IDs e secções do design em
+     que a decisão toca; uma decisão posterior que substitua outra diz _Supersedes: D-n_. As descobertas (factos
+     aprendidos durante o trabalho) usam o mesmo registo (_Kind: discovery_). -->
+`,
+      labels: { context: "Contexto", decision: "Decisão", discovery: "Descoberta", consequences: "Consequências" },
+      kinds: { decision: "decisão", discovery: "descoberta" },
+      titleRequired: "uma decisão precisa de um título (uma linha de texto).",
+      decisionRequired: "uma decisão precisa do seu texto — decision: o que foi decidido (numa descoberta: o que se descobriu).",
+      badText: (field) => `${field} tem de ser texto.`,
+      tooLong: (field, max) => `${field} é demasiado longo (no máximo ${max} caracteres).`,
+      badKind: (v) => `kind tem de ser decision ou discovery (recebido: ${v}).`,
+      badAffects: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — um AC ID tem de estar definido em requirements.md, um T-ID planeado em test-plan.md, um ID EC/NFR/SC escrito em requirements.md; qualquer outra tem de ser um título de secção do design.md (bug.md / design.md num bugfix, spike.md num spike). Nada foi escrito.`,
+      badSupersedes: (list) => `_Supersedes:_ tem de indicar decisões que já estão neste registo (D-n): ${list}. Nada foi escrito.`,
+      recorded: (id, kind, file) => `${id} (${kind}) registada em ${file}.`,
+      briefHeading: "## Decisões",
+      briefIntro: "Decisões e descobertas (decisions.md) que citam os critérios ou testes desta tarefa — respeita-as:",
+      briefOmitted: (list) => `…e ${list} — ver decisions.md.`,
+      supersedesNote: (list) => `substitui ${list}`,
+      prHeading: "## Decisões",
+      catalogLine: (n, list) => `Decisões (${n}): ${list}`,
+      superseded: "substituída",
+      affectsApproved: (list, slug, phases) => `decisões registadas depois de uma aprovação tocam na spec aprovada: ${list} — revê o que mudam (spec_impact ${slug} --phase ${phases}), atualiza a spec e volta a aprovar.`,
+      affectsApprovedEntry: (id, refs, file, day) => `${id} (${refs}) depois de ${file} ter sido aprovado (${day})`,
+      phantomDoctor: (list) => `referências _Affects:_ em decisions.md que não correspondem a nada nesta feature: ${list} — um erro de escrita, ou um critério / teste / secção removido entretanto.`,
+      phantom: (id, ref) => `${id} _Affects:_ ${ref} — não corresponde a nada nesta feature (um erro de escrita, ou um critério / teste / secção removido entretanto)`,
+      cliRecorded: (id, title, file) => `✎ ${id} — ${title}  (${file})`,
+    },
+    spike: {
+      kind: "spike",
+      kicker: "Spike (investigação)",
+      report: (a) => `# Spike: ${a.name}
+
+<!-- Spike (investigar → decidir): uma investigação com prazo fixo (timebox) que termina numa DECISÃO, não em código de produção.
+     O código de protótipo vive FORA de .specs/ (uma pasta de rascunho ou um branch) — liga-o em Evidência.
+     O spec_doctor falha enquanto a "Decisão" não estiver escrita e avisa quando a data do timebox passa sem ela.
+     Indica o resultado numa linha própria: _Outcome: go_ · _Outcome: no-go_ · _Outcome: pivot_ -->
+
+## Pergunta
+${a.question || "> **TODO** — a única pergunta a que este spike responde (que resposta mudaria o plano?)."}
+
+## Timebox (prazo)
+${a.until ? `**Até:** ${a.until}${a.raw && a.raw !== a.until ? ` (${a.raw})` : ""}` : "> **TODO** — a data de fim (AAAA-MM-DD) ou o limite de esforço. Quando terminar, decide com a evidência que tiveres."}
+
+## Opções consideradas
+- [opção A — o que é, quanto custaria]
+- [opção B]
+
+## Evidência
+<!-- Links, medições, protótipos (o código fica fora da spec — liga-o aqui), o que se tentou e o que aconteceu. -->
+- [link / medição / protótipo — e o que mostrou]
+
+## Decisão
+> **TODO** — go / no-go / pivot (avançar / não avançar / mudar de rumo) e porquê: a evidência que decidiu.
+
+_Outcome: [go | no-go | pivot]_
+
+## Seguimento
+- [go: a feature a especificar (spec_create) · no-go: porque foi abandonado · pivot: a nova pergunta]
+`,
+      tasks: (name) => `# Tasks: ${name}
+
+<!-- Um spike não tem gates de requisitos / design: pergunta → investigar → decidir. O código de protótipo vive FORA
+     de .specs/ — liga-o em spike.md → Evidência. Quando o timebox terminar, decide com o que tiveres. -->
+
+## Fase: Investigação
+- [ ] 1. [shared] Afinar a pergunta e definir o timebox em spike.md (que resposta mudaria o plano?)
+- [ ] 2. [shared] Listar as opções consideradas em spike.md → Opções consideradas
+- [ ] 3. [shared] Reunir a evidência — protótipos (fora de .specs/), medições, links — em spike.md → Evidência
+- [ ] 4. [shared] Registar a decisão (go / no-go / pivot) e a justificação em spike.md → Decisão; regista-a com o spec_decide
+**Checkpoint:** a pergunta tem uma resposta apoiada em evidência.
+`,
+      badTimebox: (v) => `timebox tem de ser uma data de fim (AAAA-MM-DD) ou uma duração a partir de hoje (p. ex. 3d, 2w, 8h) — recebido: ${v}.`,
+      spikeOnly: (arg) => `${arg} só se aplica a um spike (kind: "spike").`,
+      tracksIgnored: (list) => `Um spike é só core — tracks ignorados (${list}); dá-os à feature que especificares depois de um 'go'.`,
+      noTracks: (slug) => `'${slug}' é um spike — não tem tracks. Depois de um 'go', especifica a feature real com os seus tracks (spec_create).`,
+      noGate: (phase, slug) => `'${slug}' é um spike: não tem gate de ${phase} — segue pergunta → investigar → decidir. Regista a decisão em spike.md → Decisão (o spec_decide regista-a no log); o spec_finish fecha-o.`,
+      doctor: {
+        missing: "falta o spike.md — é lá que vivem a pergunta, a evidência e a decisão de um spike.",
+        questionOk: "a pergunta está escrita",
+        questionMissing: "spike.md → Pergunta ainda é o template — escreve a única pergunta a que este spike responde.",
+        decisionOk: (o) => `decisão registada (_Outcome: ${o}_)`,
+        decisionMissing: "spike.md → Decisão ainda não está escrita (go / no-go / pivot + justificação) — o spike não termina enquanto não estiver.",
+        outcomeMissing: "a decisão está escrita mas o resultado não está indicado — acrescenta uma linha _Outcome: go_, _Outcome: no-go_ ou _Outcome: pivot_.",
+        timeboxOk: (d) => `timebox até ${d}`,
+        timeboxPassed: (d) => `o timebox terminou a ${d} e não há decisão registada — decide com a evidência que tens (go / no-go / pivot), ou prolonga o timebox de propósito.`,
+        timeboxUnset: "sem timebox definido — escreve uma data de fim (AAAA-MM-DD) em spike.md → Timebox.",
+        timeboxNoDate: "o timebox não tem data de fim (AAAA-MM-DD) — não é possível verificar quando acaba.",
+        timeboxDecided: "decidido — o timebox está fechado",
+      },
+      next: {
+        missing: (slug) => `falta o spike.md — volta a criá-lo: dev-spec spike "${slug}" (só cria: o que existe é mantido).`,
+        fillQuestion: (slug) => `Escreve a pergunta a que este spike responde (e o timebox) em spike.md → Pergunta / Timebox — /spec-spike ${slug}.`,
+        investigate: (n, text, slug) => `Investiga — tarefa #${n}: ${text}. O código de protótipo fica fora de .specs/ (liga-o em spike.md → Evidência); marca-a: dev-spec done ${slug} ${n}.`,
+        decide: (slug) => `Regista a decisão em spike.md → Decisão — go / no-go / pivot, a justificação e a linha _Outcome:_ — e regista-a no log: /spec-decide ${slug} (spec_decide).`,
+        outcome: (slug) => `Indica o resultado em spike.md → Decisão: uma linha _Outcome: go_, _Outcome: no-go_ ou _Outcome: pivot_ (/spec-spike ${slug}).`,
+        timeboxPassed: (d) => `O timebox terminou a ${d}: decide com a evidência que tens.`,
+        goCreateFirst: (slug, name, summary) => `Decisão: go. Especifica a feature real — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}) — e depois arquiva o spike: /feature archive ${slug}.`,
+        goArchiveFirst: (slug, name, summary) => `Decisão: go. Arquiva primeiro o spike — /feature archive ${slug} (liberta o nome) — e depois especifica a feature real: spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}).`,
+        noGo: (slug, reason) => `Decisão: no-go${reason ? ` — ${reason}` : ""}. Arquiva o spike com o seu motivo (fica em spike.md → Decisão): /feature archive ${slug}.`,
+        pivot: (slug, reason) => `Decisão: pivot${reason ? ` — ${reason}` : ""}. Começa um novo spike para a nova direção (dev-spec spike "<nova pergunta>") — ou especifica a feature se a resposta já for clara — e depois arquiva este: /feature archive ${slug}.`,
+      },
+      finish: {
+        ready: (slug) => `o spike '${slug}' está pronto para fechar — a decisão está registada. Age sobre ela (o spec_next_action diz como).`,
+        notReady: (slug) => `o spike '${slug}' ainda não está pronto para fechar:`,
+        missing: "falta o spike.md",
+        decisionBlocker: "spike.md → Decisão ainda não está escrita (go / no-go / pivot + justificação)",
+        prQuestion: "## Pergunta",
+        prDecision: (o) => `## Decisão${o ? ` — ${o}` : ""}`,
+        prEvidence: "## Evidência",
+        prOptions: "## Opções consideradas",
+        prFollowUp: "## Seguimento",
+        checks: ["A decisão foi partilhada com as pessoas a quem diz respeito.", "O código de protótipo fica fora do branch principal — a feature real reescreve o que aproveitar nas suas próprias tarefas."],
+      },
+      roadmapTimebox: (d) => `spike: o timebox terminou a ${d} sem decisão`,
+      catalogQuestion: (q) => `Pergunta: ${q}`,
+      catalogOutcome: (o) => `Decisão: ${o}`,
+      catalogPending: "Decisão: pendente",
+      exportSection: "Spike",
+      cliQuestion: (q) => `  pergunta: ${q}`,
+      cliUntil: (d) => `  timebox: até ${d}`,
+    },
     // @pkg C2 <<<
 
     // @pkg C3 msg-pt >>>
@@ -5449,6 +5704,7 @@ const MSG = {
           "classification.md": "Clasificación (tracks)", "requirements.md": "Requisitos (EARS)", "design.md": "Diseño técnico", "test-plan.md": "Plan de pruebas",
           "eval-plan.md": "Plan de evals", "load-test.md": "Plan de pruebas de carga", "tasks.md": "Tareas", "bug.md": "Informe del bug (reproducción · causa raíz · corrección)",
           "quickstart.md": "Guía rápida", "checklist.md": "Lista de comprobación", "integration-plan.md": "Plan de integración", "retro.md": "Retrospectiva",
+          "spike.md": "Spike (pregunta · evidencia · decisión)", "decisions.md": "Registro de decisiones", // 1.14 C2
         },
         tplFeature: (list) => `Un artefacto de la spec de una función: .specs/{slug}/{artifact} — {artifact} es uno de ${list}.`,
         tplSteering: "Un archivo de steering: .specs/steering/{file} (un archivo .md).",
@@ -5787,6 +6043,132 @@ const MSG = {
     // @pkg C1 <<<
 
     // @pkg C2 msg-es >>>
+    // 1.14 C2 — registro de decisiones (decisions.md, spec_decide) y el tipo spike (investigar → decidir).
+    decisions: {
+      header: (name) => `# Decisiones: ${name}
+
+<!-- Registro de decisiones — solo se añade, se versiona con la spec. spec_decide (dev-spec decide) añade cada entrada:
+     D-1, D-2… nunca renumeradas, nunca reescritas. _Affects:_ indica los AC IDs, T-IDs y secciones del diseño que toca
+     la decisión; una decisión posterior que reemplace a otra dice _Supersedes: D-n_. Los descubrimientos (hechos
+     aprendidos durante el trabajo) usan el mismo registro (_Kind: discovery_). -->
+`,
+      labels: { context: "Contexto", decision: "Decisión", discovery: "Descubrimiento", consequences: "Consecuencias" },
+      kinds: { decision: "decisión", discovery: "descubrimiento" },
+      titleRequired: "una decisión necesita un título (una línea de texto).",
+      decisionRequired: "una decisión necesita su texto — decision: qué se decidió (en un descubrimiento: qué se descubrió).",
+      badText: (field) => `${field} debe ser texto.`,
+      tooLong: (field, max) => `${field} es demasiado largo (como máximo ${max} caracteres).`,
+      badKind: (v) => `kind debe ser decision o discovery (recibido: ${v}).`,
+      badAffects: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un AC ID debe estar definido en requirements.md, un T-ID planificado en test-plan.md, un ID EC/NFR/SC escrito en requirements.md; cualquier otra debe ser un título de sección de design.md (bug.md / design.md en un bugfix, spike.md en un spike). No se escribió nada.`,
+      badSupersedes: (list) => `_Supersedes:_ debe indicar decisiones que ya están en este registro (D-n): ${list}. No se escribió nada.`,
+      recorded: (id, kind, file) => `${id} (${kind}) registrada en ${file}.`,
+      briefHeading: "## Decisiones",
+      briefIntro: "Decisiones y descubrimientos (decisions.md) que citan los criterios o pruebas de esta tarea — respétalos:",
+      briefOmitted: (list) => `…y ${list} — ver decisions.md.`,
+      supersedesNote: (list) => `reemplaza ${list}`,
+      prHeading: "## Decisiones",
+      catalogLine: (n, list) => `Decisiones (${n}): ${list}`,
+      superseded: "reemplazada",
+      affectsApproved: (list, slug, phases) => `decisiones registradas después de una aprobación tocan la spec aprobada: ${list} — revisa lo que cambian (spec_impact ${slug} --phase ${phases}), actualiza la spec y vuelve a aprobar.`,
+      affectsApprovedEntry: (id, refs, file, day) => `${id} (${refs}) después de aprobarse ${file} (${day})`,
+      phantomDoctor: (list) => `referencias _Affects:_ en decisions.md que no corresponden a nada en esta función: ${list} — una errata, o un criterio / prueba / sección eliminado desde entonces.`,
+      phantom: (id, ref) => `${id} _Affects:_ ${ref} — no corresponde a nada en esta función (una errata, o un criterio / prueba / sección eliminado desde entonces)`,
+      cliRecorded: (id, title, file) => `✎ ${id} — ${title}  (${file})`,
+    },
+    spike: {
+      kind: "spike",
+      kicker: "Spike (investigación)",
+      report: (a) => `# Spike: ${a.name}
+
+<!-- Spike (investigar → decidir): una investigación con tiempo acotado (timebox) que termina en una DECISIÓN, no en código de producción.
+     El código de prototipo vive FUERA de .specs/ (una carpeta de borrador o una rama) — enlázalo en Evidencia.
+     spec_doctor falla mientras la "Decisión" no esté escrita y avisa cuando pasa la fecha del timebox sin ella.
+     Indica el resultado en su propia línea: _Outcome: go_ · _Outcome: no-go_ · _Outcome: pivot_ -->
+
+## Pregunta
+${a.question || "> **TODO** — la única pregunta que responde este spike (¿qué respuesta cambiaría el plan?)."}
+
+## Timebox (plazo)
+${a.until ? `**Hasta:** ${a.until}${a.raw && a.raw !== a.until ? ` (${a.raw})` : ""}` : "> **TODO** — la fecha de fin (AAAA-MM-DD) o el límite de esfuerzo. Cuando termine, decide con la evidencia que tengas."}
+
+## Opciones consideradas
+- [opción A — qué es, cuánto costaría]
+- [opción B]
+
+## Evidencia
+<!-- Enlaces, mediciones, prototipos (el código queda fuera de la spec — enlázalo aquí), qué se probó y qué pasó. -->
+- [enlace / medición / prototipo — y qué mostró]
+
+## Decisión
+> **TODO** — go / no-go / pivot (seguir / no seguir / cambiar de rumbo) y por qué: la evidencia que lo decidió.
+
+_Outcome: [go | no-go | pivot]_
+
+## Seguimiento
+- [go: la función a especificar (spec_create) · no-go: por qué se descartó · pivot: la nueva pregunta]
+`,
+      tasks: (name) => `# Tareas: ${name}
+
+<!-- Un spike no tiene gates de requisitos / diseño: pregunta → investigar → decidir. El código de prototipo vive FUERA
+     de .specs/ — enlázalo en spike.md → Evidencia. Cuando termine el timebox, decide con lo que tengas. -->
+
+## Fase: Investigación
+- [ ] 1. [shared] Afinar la pregunta y fijar el timebox en spike.md (¿qué respuesta cambiaría el plan?)
+- [ ] 2. [shared] Listar las opciones consideradas en spike.md → Opciones consideradas
+- [ ] 3. [shared] Reunir la evidencia — prototipos (fuera de .specs/), mediciones, enlaces — en spike.md → Evidencia
+- [ ] 4. [shared] Registrar la decisión (go / no-go / pivot) y su justificación en spike.md → Decisión; regístrala con spec_decide
+**Checkpoint:** la pregunta tiene una respuesta respaldada por evidencia.
+`,
+      badTimebox: (v) => `timebox debe ser una fecha de fin (AAAA-MM-DD) o una duración desde hoy (p. ej. 3d, 2w, 8h) — recibido: ${v}.`,
+      spikeOnly: (arg) => `${arg} solo se aplica a un spike (kind: "spike").`,
+      tracksIgnored: (list) => `Un spike es solo core — tracks ignorados (${list}); dáselos a la función que especifiques tras un 'go'.`,
+      noTracks: (slug) => `'${slug}' es un spike — no tiene tracks. Tras un 'go', especifica la función real con sus tracks (spec_create).`,
+      noGate: (phase, slug) => `'${slug}' es un spike: no tiene gate de ${phase} — sigue pregunta → investigar → decidir. Registra la decisión en spike.md → Decisión (spec_decide la registra en el log); spec_finish lo cierra.`,
+      doctor: {
+        missing: "falta spike.md — ahí viven la pregunta, la evidencia y la decisión de un spike.",
+        questionOk: "la pregunta está escrita",
+        questionMissing: "spike.md → Pregunta sigue siendo la plantilla — escribe la única pregunta que responde este spike.",
+        decisionOk: (o) => `decisión registrada (_Outcome: ${o}_)`,
+        decisionMissing: "spike.md → Decisión aún no está escrita (go / no-go / pivot + justificación) — el spike no termina hasta que lo esté.",
+        outcomeMissing: "la decisión está escrita pero su resultado no está indicado — añade una línea _Outcome: go_, _Outcome: no-go_ o _Outcome: pivot_.",
+        timeboxOk: (d) => `timebox hasta ${d}`,
+        timeboxPassed: (d) => `el timebox terminó el ${d} y no hay decisión registrada — decide con la evidencia que tienes (go / no-go / pivot), o amplía el timebox a propósito.`,
+        timeboxUnset: "sin timebox — escribe una fecha de fin (AAAA-MM-DD) en spike.md → Timebox.",
+        timeboxNoDate: "el timebox no tiene fecha de fin (AAAA-MM-DD) — no se puede comprobar cuándo se agota.",
+        timeboxDecided: "decidido — el timebox está cerrado",
+      },
+      next: {
+        missing: (slug) => `falta spike.md — vuelve a crearlo: dev-spec spike "${slug}" (solo crea: lo que existe se mantiene).`,
+        fillQuestion: (slug) => `Escribe la pregunta que responde este spike (y su timebox) en spike.md → Pregunta / Timebox — /spec-spike ${slug}.`,
+        investigate: (n, text, slug) => `Investiga — tarea #${n}: ${text}. El código de prototipo queda fuera de .specs/ (enlázalo en spike.md → Evidencia); márcala: dev-spec done ${slug} ${n}.`,
+        decide: (slug) => `Registra la decisión en spike.md → Decisión — go / no-go / pivot, la justificación y su línea _Outcome:_ — y regístrala en el log: /spec-decide ${slug} (spec_decide).`,
+        outcome: (slug) => `Indica el resultado en spike.md → Decisión: una línea _Outcome: go_, _Outcome: no-go_ o _Outcome: pivot_ (/spec-spike ${slug}).`,
+        timeboxPassed: (d) => `El timebox terminó el ${d}: decide con la evidencia que tienes.`,
+        goCreateFirst: (slug, name, summary) => `Decisión: go. Especifica la función real — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}) — y luego archiva el spike: /feature archive ${slug}.`,
+        goArchiveFirst: (slug, name, summary) => `Decisión: go. Archiva primero el spike — /feature archive ${slug} (libera el nombre) — y luego especifica la función real: spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}).`,
+        noGo: (slug, reason) => `Decisión: no-go${reason ? ` — ${reason}` : ""}. Archiva el spike con su motivo (queda en spike.md → Decisión): /feature archive ${slug}.`,
+        pivot: (slug, reason) => `Decisión: pivot${reason ? ` — ${reason}` : ""}. Empieza un nuevo spike para la nueva dirección (dev-spec spike "<nueva pregunta>") — o especifica la función si la respuesta ya está clara — y luego archiva este: /feature archive ${slug}.`,
+      },
+      finish: {
+        ready: (slug) => `el spike '${slug}' está listo para cerrar — su decisión está registrada. Actúa en consecuencia (spec_next_action dice cómo).`,
+        notReady: (slug) => `el spike '${slug}' aún no está listo para cerrar:`,
+        missing: "falta spike.md",
+        decisionBlocker: "spike.md → Decisión aún no está escrita (go / no-go / pivot + justificación)",
+        prQuestion: "## Pregunta",
+        prDecision: (o) => `## Decisión${o ? ` — ${o}` : ""}`,
+        prEvidence: "## Evidencia",
+        prOptions: "## Opciones consideradas",
+        prFollowUp: "## Seguimiento",
+        checks: ["La decisión se ha compartido con las personas a las que afecta.", "El código de prototipo queda fuera de la rama principal — la función real reescribe lo que aproveche en sus propias tareas."],
+      },
+      roadmapTimebox: (d) => `spike: el timebox terminó el ${d} sin decisión`,
+      catalogQuestion: (q) => `Pregunta: ${q}`,
+      catalogOutcome: (o) => `Decisión: ${o}`,
+      catalogPending: "Decisión: pendiente",
+      exportSection: "Spike",
+      cliQuestion: (q) => `  pregunta: ${q}`,
+      cliUntil: (d) => `  timebox: hasta ${d}`,
+    },
     // @pkg C2 <<<
 
     // @pkg C3 msg-es >>>
@@ -6052,6 +6434,13 @@ function renderBrief(d, lang) {
     push("", t.design, t.designToc(d.design.path) + " " + d.design.toc.join(" · "));
     d.design.included.forEach((s) => push("", "### " + s.title, s.body));
     if (d.design.omitted.length) push("", t.designOmitted + " " + d.design.omitted.join(" · "));
+  }
+  // 1.14 C2: the decisions.md entries that cite this task's ACs / T-IDs (bounded; superseded ones left out)
+  if ((d.decisions || []).length) {
+    const D = MSG[normalizeLang(lang)].decisions;
+    push("", D.briefHeading, D.briefIntro);
+    d.decisions.forEach((x) => push(`- **${x.id}** — ${x.title} _(${[D.kinds[x.kind] || x.kind, x.affects.join(", "), x.supersedes.length ? D.supersedesNote(x.supersedes.join(", ")) : ""].filter(Boolean).join(" · ")})_` + (x.text ? ": " + x.text : "")));
+    if ((d.decisionsOmitted || []).length) push(D.briefOmitted(d.decisionsOmitted.join(", ")));
   }
 
   const constraints = d.globalConstraints || [];

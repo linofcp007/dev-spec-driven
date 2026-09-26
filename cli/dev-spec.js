@@ -25,6 +25,10 @@
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
+ *   spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]  Scaffold a spike: spike.md (question · timebox · options ·
+ *                                      evidence · decision go/no-go/pivot) + investigation tasks (= create --kind spike)
+ *   decide <feature> --title "…" --decision "…"  Append a D-n entry to decisions.md ([--context] [--consequences]
+ *                                      [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery])
  *   list                               List features + phase + progress
  *   status [feature]                   Status of one feature (or all)
  *   doctor <feature>                   Health-check → ready to advance?
@@ -148,6 +152,8 @@ VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes)
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
+// 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
+["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -169,7 +175,7 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
-const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply"];
+const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery"];
 const on = (k) => flags[k] === true;
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
@@ -324,7 +330,7 @@ function main() {
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
-        { brownfield: on("brownfield"), flow: flags.flow }); // = spec_create {brownfield, flow}
+        { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox }); // = spec_create {brownfield, flow, question, timebox}
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -380,6 +386,7 @@ function main() {
           console.log(spec.msg(lang).deepTrace.codeSummary(expected - r.code.plannedNotInCode.length, expected, r.code.scanned, r.code.truncated, outside.join(", ")));
         }
         spec.supersedesWarnings(r, lang).forEach((l) => console.log("  ⚠ " + l)); // warnings, not gaps (exit code unchanged)
+        spec.affectsWarnings(r, lang).forEach((l) => console.log("  ⚠ " + l)); // 1.14 C2: decisions.md _Affects:_ naming nothing — warnings too
       });
     }
 
@@ -1073,6 +1080,36 @@ function main() {
     // @pkg C1 <<<
 
     // @pkg C2 commands >>>
+    case "spike": {
+      // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
+      // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
+      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|es]');
+      const tr = withTracksFlag(pos.slice(1));
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => {
+        const T = cliText(r.lang);
+        const SP = spec.msg(r.lang).spike;
+        console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : ""));
+        const si = spec.spikeInfo(r.dir);
+        if (si.question) console.log(SP.cliQuestion(si.question));
+        if (si.timebox.state === "date") console.log(SP.cliUntil(si.timebox.date));
+      });
+    }
+    case "decide": {
+      // dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03]
+      // [--supersedes D-1] [--discovery] — append one entry to decisions.md (= spec_decide; unknown _Affects:_ → exit 1, nothing written).
+      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery]');
+      const r = spec.decide(projectDir, pos[0], { title: flags.title, decision: flags.decision, context: flags.context, consequences: flags.consequences,
+        affects: flags.affects, supersedes: flags.supersedes, kind: on("discovery") ? "discovery" : undefined });
+      if (!r.ok) return fail(r);
+      const D = spec.msg(spec.featureLang(projectDir, r.feature)).decisions;
+      return out(r, (r) => {
+        console.log(D.cliRecorded(r.id, r.title, r.file));
+        if (r.affects.length) console.log("  _Affects: " + r.affects.join(", ") + "_");
+        if (r.supersedes.length) console.log("  _Supersedes: " + r.supersedes.join(", ") + "_");
+      });
+    }
     // @pkg C2 <<<
 
     // @pkg C3 commands >>>
@@ -1115,10 +1152,16 @@ function helpText() {
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
                                   edit; check validates them (exit 1 on an error)
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix, --lang en|pt|es)
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
+  spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]   Scaffold a spike (investigate → decide): spike.md — question,
+                                  timebox, options, evidence, decision (go / no-go / pivot) — + investigation tasks; no
+                                  requirements/design gates (= create --kind spike; prototype code stays outside .specs/)
+  decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
+                                  [--consequences "…"] [--affects US-1.AC-2,T-03,"Data Model"] [--supersedes D-1] [--discovery]
+                                  — an unknown _Affects:_ reference is refused (exit 1, nothing written)
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)
   doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)
@@ -1194,7 +1237,7 @@ function helpText() {
                                   one rendered as prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
 
   Flags: --json  --project <dir>  --lang en|pt|es (init/create/steering/roadmap/ears)  --order N (depend)
-         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix (create)  --text "…" (ears)
+         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike (create; spike: --question, --timebox)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
