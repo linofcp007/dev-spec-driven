@@ -2,16 +2,16 @@
 name: dev-spec-driven
 description: >
   Spec-driven development with approval gates: EARS requirements, technical design, traceable tasks,
-  then execution (inline or with subagents). This skill should be used when the user wants to plan or
-  scope a non-trivial feature before coding, fix a bug with root cause + regression test, adopt specs
-  in an existing codebase, manage a feature roadmap, or bring existing specs up to date after a
-  dev-spec-driven update. Per-feature tracks: +tdd (tests first), +saas (multi-tenant scale,
-  observability, load tests, cost), +ai (evals, prompt versions, token cost, safety). Triggers: "spec
-  this", "plan this feature", "implementation plan", "break into tasks", "tests first", "update the
-  specs"; PT "especificar", "plano de implementação", "dividir em tarefas", "antes de começar a
-  programar", "atualizar as specs"; ES "especificar", "plan de implementación", "dividir en tareas",
-  "antes de empezar a programar", "actualizar las specs". Not for trivial edits, requirements.txt, or
-  code that merely calls eval() or an LLM.
+  then execution. This skill should be used when the user wants to plan or scope a non-trivial feature
+  before coding, fix a reported bug (root cause and a failing regression test first), adopt specs in an
+  existing codebase, manage a feature roadmap, or update existing specs after a dev-spec-driven update.
+  Tracks: +tdd, +saas (scale, observability, load tests, cost), +ai (evals, prompts, token cost), +sec,
+  +privacy. Triggers: "spec this", "plan this feature", "implementation plan", "break into tasks",
+  "tests first", "fix this bug", "update the specs"; PT "especificar", "plano de implementação",
+  "dividir em tarefas", "antes de começar a programar", "corrige este bug", "atualizar as specs"; ES
+  "especificar", "plan de implementación", "dividir en tareas", "antes de empezar a programar", "arregla
+  este bug", "actualizar las specs". Not for trivial edits, requirements.txt, or code that merely calls
+  eval() or an LLM.
 ---
 
 # Dev Spec-Driven (unified, track-based)
