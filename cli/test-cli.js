@@ -2374,6 +2374,12 @@ if (inSection("pc3")) { // 1.14 package C3 (CLI tests)
 
 if (inSection("pc4")) { // 1.14 package C4 (CLI tests)
   const Sc4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  // C4.1 — /spec-tour is served as a prompt like every command.
+  const tourC4 = run(["prompts", "spec-tour", "--args", "a length check on the signup name"]);
+  ok(tourC4.code === 0 && /as a \*\*guided tour\*\*/.test(tourC4.out) && /Change to take through the tour \(optional\): a length check on the signup name/.test(tourC4.out) &&
+    /^ {2}spec-tour \[a small change you want to make \(optional\)\]$/m.test(run(["prompts"]).out),
+    "prompts spec-tour: the guided tour (args in place), listed with its argument hint");
+
   // C4.2.1–3 — classify on the CLI = the engine.
   const gdC4 = run(["classify", "A GDPR-compliant signup form"]);
   const stC4 = run(["classify", "array stride and file permission bits"]);

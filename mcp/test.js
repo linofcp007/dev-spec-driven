@@ -6345,9 +6345,9 @@ function endRun() {
     ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
     "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 48 && ["spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 49 && ["spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "48 commands incl. the 1.14 /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "49 commands incl. the 1.14 /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -8549,11 +8549,24 @@ function endRun() {
   // @pkg C3 <<<
 
   // @pkg C4 tests >>>
-  { // 1.14 C4 — the fixes from the independent review of the first 1.14 packages.
+  { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
     const c4Root = path.join(tmp, "proj-c4");
     const c4 = (n) => path.join(c4Root, n);
     const cls = (d, lang) => S.classify(d, lang ? { lang } : {});
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+
+    // C4.1 — /spec-tour: a thin command, EN description + PT/ES, every gate named, never auto-approves, keep/archive/remove.
+    const PRc4 = require("./lib/prompts-resources.js");
+    const tourMd = fs.readFileSync(path.join(root, "commands", "spec-tour.md"), "utf8");
+    const tourFm = PRc4.parseFrontMatter(tourMd).data;
+    const tourGet = PRc4.getPrompt("spec-tour", "add a length check to the signup name", { lang: "en" });
+    ok(/10-minute tour/.test(tourFm.description) && / PT - visita guiada/.test(tourFm.description) && / ES - visita guiada/.test(tourFm.description) && tourFm["argument-hint"] &&
+      ["spec_scan", "spec_classify", "spec_init", "spec_create", "ears_validate", "spec_doctor", "spec_approve", "spec_complete_task", "spec_next_action", "spec_finish", "spec_feature"].every((t) => tourMd.includes("`" + t)) &&
+      /1–2 EARS criteria/.test(tourMd) && /exactly \*\*2 tasks\*\*/.test(tourMd) && /real\*\*\s+`_Verify: <command>_`/.test(tourMd) && /each only after the user says yes\*\*; never approve on their behalf/.test(tourMd) &&
+      /evidence: \{command, exitCode, summary\}/.test(tourMd) && /confirm: true` only after the user\s+confirms/.test(tourMd) && /action: "archive"/.test(tourMd) &&
+      /in the user's language/.test(tourMd) && !/\b(?:PRs?|pull requests?|CI)\b/.test(tourMd) &&
+      tourGet.ok && /Change to take through the tour \(optional\): add a length check to the signup name/.test(tourGet.messages[0].content.text),
+      "C4.1 /spec-tour: EN + PT/ES description, scan → classify → 1–2 EARS → design → 2 tasks with real _Verify:_ → approvals only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt");
 
     // C4.2.1 — '-compliant' (and -compliance / -certified / -grade) compounds keep the keyword a signal; '-aware' does not.
     const gdprC = cls("A GDPR-compliant signup form"), hipaaC = cls("HIPAA-compliant storage"), socC = cls("SOC2-certified audit export"), gradeC = cls("enterprise-grade SSO");
