@@ -2,11 +2,13 @@
 
 The methodology travels through **three portable layers**, so it works far beyond Claude Code:
 
-1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 30
+1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 34
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
-   `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` — and `spec_upgrade` (after a plugin update). They are
-   plain local file operations, so they behave the same in every client.
+   `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
+   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide`. They are plain local file operations, so
+   they behave the same in every client. The server also offers **prompts** (one per plugin command) and read-only
+   **resources** (the specs) — see [MCP prompts and resources](#mcp-prompts-and-resources).
 2. **Universal CLI** (`cli/dev-spec.js`) — the same engine from any terminal or tool, even without MCP.
 3. **Instructions files** — `AGENTS.md` (cross-tool) plus per-tool rule files, so the agent follows
    the workflow.
@@ -49,12 +51,31 @@ Replace `<PLUGIN>` throughout this page with the absolute path to your clone of 
 `git clone https://github.com/linofcp007/dev-spec-driven.git`). Tip: `node cli/dev-spec.js mcp-config <client>`
 prints the config with that path already filled in for your machine.
 
+## MCP prompts and resources
+
+Besides its tools, the `spec-driven` server advertises two more MCP capabilities, so clients that support them get
+more than tool calls:
+
+- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-impact`, `spec-ff`, `spec-tour`, … — 51, read from
+  `commands/*.md`), each with one optional `args` argument. A client that surfaces MCP prompts shows them as slash
+  commands or in a prompt picker — VS Code / Copilot Chat, for example, lists them under `/`; whether and how another
+  client shows them depends on the client and its version. Each prompt starts with one line telling an agent without the
+  dev-spec-driven skill to follow `AGENTS.md`.
+- **Resources** (read-only) — `specs://roadmap`, `specs://catalog`, `specs://steering/{file}` and
+  `specs://feature/{slug}/{artifact}` (requirements.md, design.md, tasks.md, decisions.md, spike.md, …) for the project
+  the server runs in. Clients that support resources let you attach them as context.
+
+Clients that support neither simply ignore them — the tools are the same everywhere, and `dev-spec prompts [name]`
+prints any prompt in a terminal. The Claude Code plugin turns the prompts off (`SPEC_MCP_PROMPTS=off` in
+`mcp/servers.json`) because its commands are already slash commands there; set the same variable in another client's
+server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
+
 ---
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 44 commands, the 3 agents, the hooks (PostToolUse + SessionStart, plus
-the opt-in PreToolUse guard) and the MCP server all load:
+Native — it's a plugin. Skills, the 51 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
+SubagentStop evidence gate, plus the opt-in PreToolUse guard) and the MCP server all load:
 
 ```bash
 claude --plugin-dir "<PLUGIN>"
@@ -189,21 +210,25 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 
 | Capability | Claude Code | Other MCP tools | CLI / any tool |
 |---|---|---|---|
-| Engine tools (classify, scaffold, doctor, trace, EARS, approval gates, evidence, impact, converge, import, catalog, drift, metrics, upgrade) | ✅ MCP | ✅ MCP | ✅ CLI |
+| Engine tools (classify, scaffold, doctor, trace, EARS, approval gates and roles, evidence, impact, converge, import, catalog, drift, metrics, upgrade, templates, export, changelog, decisions) | ✅ MCP | ✅ MCP | ✅ CLI |
 | Workflow methodology | ✅ skill | ✅ `AGENTS.md` / rules file | ✅ `AGENTS.md` |
-| Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | — (use the CLI instead) | — (use the CLI) |
-| Hooks on save (EARS / traceability / design checks) + SessionStart status, drift and upgrade lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`) | ✅ git pre-commit |
-| Guard mode (asks before code edits while no feature has approved tasks) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
+| Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
+| Spec resources (`specs://…`) | — (the files are in the project) | ✅ where the client supports resources | — |
+| Hooks on save (EARS / traceability / design checks) + SessionStart status, drift, upgrade and overlap lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`, `dev-spec roadmap`) | ✅ git pre-commit |
+| End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (run `dev-spec stop-check --message "…"` before claiming done) | — (`dev-spec stop-check`) |
+| Guard mode (asks before code edits while no feature has approved tasks; `scope`: outside the plan too) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
 | Subagent execution (`/executeTask --subagents`) | ✅ | — (`dev-spec brief` per task, run inline) | — (`dev-spec brief`) |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
 
 Claude-specific slash commands and hooks don't run inside other IDEs, but **every function they
-trigger is available through `dev-spec` and the MCP tools**, so no capability is lost — only the
-invocation surface differs. The one exception is guard mode: it is a Claude Code **hook** (PreToolUse,
-wired in `hooks/hooks.json`), so other tools can store the setting but only Claude Code asks before a code
-edit — elsewhere, follow the rule in `AGENTS.md` (no implementation before the tasks are approved).
-The PostToolUse and SessionStart hooks are Claude Code only too; everything they report is also
-available on demand through `dev-spec ears` / `trace` / `doctor` / `status` / `drift` / `upgrade`.
+trigger is available through `dev-spec` and the MCP tools** (and the commands themselves as MCP prompts in clients
+that show them), so no capability is lost — only the invocation surface differs. The exceptions are the enforcing
+hooks: guard mode is a Claude Code **hook** (PreToolUse, wired in `hooks/hooks.json`), so other tools can store the
+setting but only Claude Code asks before a code edit — elsewhere, follow the rule in `AGENTS.md` (no implementation
+before the tasks are approved); the end-of-turn evidence gate is a Stop / SubagentStop hook — elsewhere, the agent runs
+`dev-spec stop-check` before claiming a task or feature is done, as `AGENTS.md` says. The PostToolUse and SessionStart
+hooks are Claude Code only too; everything they report is also available on demand through `dev-spec ears` / `trace` /
+`doctor` / `status` / `drift` / `upgrade` / `roadmap`.
 
 Two CLI helpers set up the other tools: `dev-spec mcp-config <client>` prints the MCP config with this
 clone's absolute path, and `dev-spec rules <tool>` prints the workflow rule file for your project (see

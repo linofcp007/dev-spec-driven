@@ -6,21 +6,22 @@
 [![tests: local suites](https://img.shields.io/badge/tests-local%20suites-success.svg)](./CONTRIBUTING.md#developing)
 [![CI: none (local only)](https://img.shields.io/badge/CI-none%20·%20local%20only-informational.svg)](#why-no-github-actions)
 
-**One spec-driven development skill that adapts to the project — trilingual (EN · PT · ES).**
+**One spec-driven development skill that adapts to the project — in four languages (EN · PT-PT · PT-BR · ES).**
 A Claude Code **plugin** that unifies four spec-driven skills into a single track-based workflow,
 bundled with its own **local, zero-dependency MCP server**. No cloud, no GitHub Actions, no
 per-run cost — everything runs on your machine.
 
 > 🌍 **Language / Idioma / Idioma:** the skill detects and mirrors the user's language (English,
-> Português, Español) in the conversation **and** in the generated artifacts. EARS keywords work in
-> all three (`SHALL` / `DEVE` / `DEBE`, `WHEN` / `QUANDO` / `CUANDO`, …).
+> Português europeu, Português do Brasil, Español) in the conversation **and** in the generated artifacts
+> (`lang`: `en` · `pt` · `pt-BR` · `es`). EARS keywords work in every one of them (`SHALL` / `DEVE` / `DEBE`,
+> `WHEN` / `QUANDO` / `CUANDO`, …).
 
 **Jump to / Ir para / Ir a:** [🇬🇧 English](#english) · [🇵🇹 Português](#português) · [🇪🇸 Español](#español)
 
 > 🧩 **Works in / Funciona em / Funciona en:** Claude Code · Claude Desktop · Claude CoWork ·
 > Cursor · Windsurf · GitHub Copilot (VS Code) · Gemini CLI · OpenAI Codex CLI · any MCP client ·
-> plain CLI. Three portable layers carry the workflow everywhere — a standard **MCP server**, a
-> **universal `dev-spec` CLI**, and **`AGENTS.md`** instructions. See **[INTEGRATIONS.md](./INTEGRATIONS.md)**
+> plain CLI. Three portable layers carry the workflow everywhere — a standard **MCP server** (tools,
+> prompts and `specs://` resources), a **universal `dev-spec` CLI**, and **`AGENTS.md`** instructions. See **[INTEGRATIONS.md](./INTEGRATIONS.md)**
 > or run `node cli/dev-spec.js mcp-config all`. No GitHub Actions, no cost.
 
 ---
@@ -38,43 +39,56 @@ feature and composes exactly the rigor it needs:
 | **+tdd** | Test plan + failing-tests-first + red→green→refactor |
 | **+saas** | Performance/scale/multi-tenancy/observability/cost + load testing |
 | **+ai** | Eval-driven dev, prompts-as-code, token economics, safety, model lifecycle |
+| **+sec** | Threat model (STRIDE), security requirements, authentication & authorization, secrets & key management, security testing |
+| **+privacy** | GDPR / RGPD: personal data inventory, lawful basis, retention & deletion, data subject rights, processors & transfers, DPIA |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
-LLM is `core +tdd +saas +ai`. A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
+LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
+point there). A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
-### The local MCP server (`spec-driven`) — 30 tools
+### The local MCP server (`spec-driven`) — 34 tools
 
 Pure Node core — **no `npm install`, no network, no cost.** Tools:
 
 | Tool | Does |
 |---|---|
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
-| `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` turns guard mode on/off |
-| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `brownfield: true` adds `integration-plan.md`) |
-| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
+| `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase |
+| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
+| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
+| `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present |
-| `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded); `batch` for parallel `[P]` tasks |
+| `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run); `batch` for parallel `[P]` tasks |
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
 | `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones |
-| `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `write` also records the drift baseline |
+| `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `evidence` records the project checks' runs; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", phase by phase: re-review → fill → fix → approve (the next phase only after that approval) → implement → verify → finish (then finished / drift) |
-| `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot |
+| `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot; `role` signs off for one role when the phase needs several, `through` fast-forwards every phase up to it, each through its own gate |
 | `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
-| `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`) |
+| `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`), or set its `flow` |
+| `spec_decide` | Append a decision (or a discovery) to the feature's `decisions.md` — `D-n`, with the ACs, tests or design sections it affects (checked) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
 | `spec_clarify` | Surface requirement ambiguities/gaps before design |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders; `write` → `.specs/exports/` |
+| `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, what doctor flags, next step, a critic / converge review); `apply` saves inferred tracks, gives pre-1.13 approvals a history baseline, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec |
-| `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list); `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
+| `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list), an ETA per feature from the velocity of ticked tasks and the files two features' open tasks both plan; `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
 | `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations) + the share of code files named in `_Implements:_` |
 | `steering_scaffold` | Create one steering file from its template (incl. `constitution.md`), or a custom scoped one |
+
+**Prompts and resources.** The server also serves one MCP **prompt** per plugin command — `/spec`, `/spec-status`,
+`/spec-impact`, … become slash commands in MCP clients that surface prompts (VS Code / Copilot Chat, for one) — and the
+project's specs as read-only **resources**: `specs://roadmap`, `specs://catalog`, `specs://steering/{file}`,
+`specs://feature/{slug}/{artifact}`. The Claude Code plugin turns the prompts off (`SPEC_MCP_PROMPTS=off` in
+`mcp/servers.json`), since its commands are already slash commands there.
 
 ### Subagent-driven execution (opt-in)
 
@@ -124,7 +138,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-doctor --deep`** — a `spec-critic` agent reviews the *meaning* of a spec at its gate.
 - **Bounded mode** between Vibe and Spec (short design in chat + an explicit yes), **Global
   Constraints** inlined into every task brief, **parallel `[P]` tasks** in separate worktrees, and
-  **plugin evals** (`evals/`, `claude plugin eval`) that check the skill triggers in EN/PT/ES.
+  **plugin evals** (`evals/`, `claude plugin eval`) that check the skill triggers in EN/PT/ES — and, in the
+  behavioural suite, that the agent then respects the workflow (plans first, records evidence, never forces a gate).
   These ideas are adapted from [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ### Change management
@@ -156,10 +171,12 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 ### Guard mode and scoped steering
 
-- **`/spec-guard`** — opt-in guard mode (`spec_init {guard: true}` / `dev-spec init --guard on|off`).
+- **`/spec-guard`** — opt-in guard mode (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   While it is on, a Claude Code PreToolUse hook **asks before** a Write/Edit on a code file outside
-  `.specs/` when no feature has approved, unfinished tasks. It is silent when off and never blocks on its
-  own errors. Other tools don't run Claude Code hooks, so there the guard does nothing.
+  `.specs/` when no feature has approved, unfinished tasks; `scope` also asks, once tasks are approved, for a
+  code file no open task names in `_Implements:_` (test files excepted), naming the likely task. It is silent
+  when off and never blocks on its own errors. Other tools don't run Claude Code hooks, so there the guard does
+  nothing.
 - **Scoped steering** — steering files take Kiro-compatible front matter: `inclusion: always`,
   `fileMatch` (with `fileMatchPattern: "src/api/**"`) or `manual`. `steering_scaffold` creates custom
   files such as `api-conventions.md`, and each task brief includes the files whose pattern matches the
@@ -175,18 +192,53 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-import`** (`spec_import`) — bring a Kiro (`.kiro/specs/<name>/`), spec-kit
   (`specs/<nnn-name>/`) or OpenSpec (`openspec/specs/<capability>/` or a change folder) spec in as a new
   feature: criteria become `US-N.AC-M` EARS lines (or keep their text with `[NEEDS CLARIFICATION]`),
-  tasks are renumbered with their checkbox state. The source must be inside the project and is only read.
+  tasks are renumbered with their checkbox state. Plans too: `plan` (a Claude Code plan-mode file copied into
+  the project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD
+  and stories). The source must be inside the project and is only read.
 - **Deeper traceability** — `trace_check` warns about edge cases (EC-n), NFRs and success criteria
   (SC-nnn) nothing covers; `--code` looks for T-IDs in test names (`test("T-01 …")`, `def test_T01_…`).
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.14
+
+- **Six tracks** — `+sec` and `+privacy` compose with the others: their `[SEC]` / `[PRIVACY]` criteria, mandatory
+  design sections, tasks, test rows and steering (`security.md`, `privacy.md`). Track markers are case-sensitive.
+- **Project templates** (`/spec-templates`) — `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`) replaces a
+  built-in scaffold, with `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` filled in; the active
+  tracks still get their sections, and an untouched custom scaffold still reads as a template to the gates. `check`
+  validates them.
+- **For stakeholders** — `/spec-export` writes one offline, printable HTML (or markdown) document of a feature or of the
+  project; `/spec-changelog` builds release notes (Added / Changed / Fixed) from what shipped.
+- **Team governance** — `init --roles requirements=product,design=tech+security`: a listed phase is approved once every
+  role has signed its current content (`approve --role`). `/spec-ff` (`approve --through tasks`) fast-forwards the
+  filled phases in order, each through its own gate, and stops at the first refusal.
+- **Forecasts** — tasks may carry `_Size: XS|S|M|L|XL_`; the roadmap shows an ETA per feature from the velocity of
+  ticked tasks (last 28 days, working days, ±25%) and flags features whose open tasks plan the same files.
+- **Stronger evidence** — `_Expect: fail_` marks a test-first task whose run must fail (red → green);
+  `init --check test="npm test"` names the project's checks, and `finish` then needs a passing run of each
+  (`finish --run`); `done --run` records the git commit; `dev-spec log` lists the commits that cite each task; a
+  `_Verify:_` that pipes (`npm test | tee log`) is flagged — the pipeline's exit code is its last command's.
+- **Evidence at the end of a turn** — in Claude Code a Stop hook sends the turn back when the closing message claims
+  "done" or "verified" while a feature active in the last hours has ticked tasks without passing evidence
+  (`init --stop-check off` turns it off; other tools: `dev-spec stop-check`).
+- **Decisions and spikes** — `/spec-decide` appends `D-n` entries to `decisions.md` (what they affect is checked;
+  briefs, the merge summary and the export show them). `/spec-spike` runs a timeboxed investigation that ends in a
+  decision — go / no-go / pivot — instead of made-up requirements.
+- **Design-first flow** — `create --flow design-first` (or `feature flow`) walks classification → design →
+  requirements → … for work that starts from an architecture.
+- **`/spec-tour`** — a guided 10-minute tour on your own repo: one tiny real change through every gate.
+- **Brazilian Portuguese** — `lang: "pt-BR"` (`--lang pt-BR`) generates the artifacts and messages in PT-BR, a locale
+  derived from the European Portuguese one; also new: MCP prompts and `specs://` resources (above), plans / ExecPlans /
+  BMAD import, and a Linux test runner for maintainers.
+
 ### Local automation, not CI
 
 - **Hooks** (`hooks/hooks.json`): on saving `requirements.md` → EARS lint + placeholders; on saving
   `tasks.md` → traceability check; on saving `design.md` → the active tracks' mandatory sections; at
-  session start → feature status + drift. The opt-in guard runs before code edits. Plus an optional git
+  session start → feature status + drift + overlapping features; at the end of a turn (and of a
+  `spec-implementer` subagent) → the evidence gate. The opt-in guard runs before code edits. Plus an optional git
   `pre-commit` validator.
 - **Eval harness** (`mcp/evals/run-evals.js`): runs golden/adversarial/regression sets with **your
   own `ANTHROPIC_API_KEY`**; `--dry-run` validates offline, `--set-baseline` records a baseline.
@@ -249,7 +301,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (44)
+### Commands (51)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -258,7 +310,9 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `/migrateModel` — aliases `/ds` `/dsx` `/dss`.
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-(As a plugin they are namespaced, e.g. `/dev-spec-driven:design`.)
+New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
+`/spec-tour`.
+(As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
 
@@ -266,11 +320,13 @@ The same engine from any terminal (`node cli/dev-spec.js <command>`, or `dev-spe
 prints the raw result, and `help` lists every flag:
 
 ```text
-classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
-doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
-append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
-roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
+approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
+add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+mcp-config <client> · rules <tool> · prompts
 ```
 
 ### Why no GitHub Actions
@@ -284,7 +340,12 @@ run in your own environment when you choose, not on a paid CI runner.
 ```bash
 node mcp/test.js          # smoke-test the MCP server end-to-end (must end `0 failed`)
 node cli/test-cli.js      # smoke-test the universal CLI (must end `0 failed`)
+npm run test:docker       # both suites in Linux containers (Node 18 / 22 / 24) on your own Docker
 ```
+
+The Docker runner mounts the plugin read-only and runs without network (only the first run pulls the images); it
+exits 0 when every suite passed, 1 on a failure and 2 when Docker isn't available. Plugin evals (`claude plugin eval`,
+triggering and behavioural suites) are described in [evals/README.md](./evals/README.md).
 
 > Replaces four predecessor skills; their content lives here as composable tracks (the originals
 > remain in git history and the v1.8.0 release if you ever need them).
@@ -305,44 +366,57 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+tdd** | Plano de testes + testes-a-falhar-primeiro + red→green→refactor |
 | **+saas** | Desempenho/escala/multi-inquilino/observabilidade/custo + testes de carga |
 | **+ai** | Desenvolvimento guiado por evals, prompts como código, economia de tokens, segurança, ciclo de vida do modelo |
+| **+sec** | Modelo de ameaças (STRIDE), requisitos de segurança, autenticação e autorização, gestão de segredos e chaves, testes de segurança |
+| **+privacy** | RGPD / GDPR: inventário de dados pessoais, fundamento de licitude, conservação e eliminação, direitos dos titulares, subcontratantes e transferências, AIPD |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
-com um LLM é `core +tdd +saas +ai`. Uma alteração de texto é modo Vibe: sem cerimónia. Um
+com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
+a HIPAA apontam para aí). Uma alteração de texto é modo Vibe: sem cerimónia. Um
 **classificador de Fase 0** (a ferramenta local `spec_classify`, multilíngue) escolhe os tracks; tu
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
 
-### O servidor MCP local (`spec-driven`) — 30 ferramentas
+### O servidor MCP local (`spec-driven`) — 34 ferramentas
 
 Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
 | Ferramenta | O que faz |
 |---|---|
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
-| `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` liga/desliga o modo guarda |
-| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `brownfield: true` acrescenta `integration-plan.md`) |
-| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
+| `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase |
+| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
+| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
+| `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes |
-| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada); `batch` para tarefas paralelas `[P]` |
+| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha); `batch` para tarefas paralelas `[P]` |
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
 | `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes |
-| `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `write` regista também a baseline de drift |
+| `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `evidence` regista as execuções das verificações do projeto; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", fase a fase: rever → preencher → corrigir → aprovar (a fase seguinte só depois dessa aprovação) → implementar → verificar → fechar (depois fechada / deriva) |
-| `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot |
+| `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot; `role` aprova por um papel quando a fase precisa de vários, `through` avança todas as fases até essa, cada uma pelo seu gate |
 | `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
-| `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`) |
+| `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`), ou define o seu `flow` |
+| `spec_decide` | Acrescenta uma decisão (ou uma descoberta) ao `decisions.md` da funcionalidade — `D-n`, com os ACs, testes ou secções do design que afeta (verificados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
 | `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste |
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS, placeholders, trace, secções, evidência, gates, steering) |
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders; `write` → `.specs/exports/` |
+| `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_upgrade` | Depois de atualizar o plugin: audita cada funcionalidade ativa face às regras atuais (estado, o que o doctor assinala, próximo passo, uma revisão critic / converge); `apply` guarda os tracks inferidos, dá às aprovações anteriores à 1.13 uma baseline no histórico, carimba `meta.specVersion` e escreve `.specs/UPGRADE.md` — nunca edita uma spec |
-| `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista); `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
+| `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista), uma ETA por funcionalidade a partir da velocidade das tarefas marcadas e os ficheiros que as tarefas abertas de duas funcionalidades planeiam em comum; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
 | `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações) + a parte dos ficheiros de código indicados em `_Implements:_` |
 | `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`), ou um ficheiro personalizado com âmbito |
+
+**Prompts e recursos.** O servidor serve também um **prompt** MCP por cada comando do plugin — `/spec`, `/spec-status`,
+`/spec-impact`, … passam a comandos de barra nos clientes MCP que mostram prompts (o VS Code / Copilot Chat, por
+exemplo) — e as specs do projeto como **recursos** só de leitura: `specs://roadmap`, `specs://catalog`, `specs://steering/{file}`,
+`specs://feature/{slug}/{artifact}`. O plugin do Claude Code desliga os prompts (`SPEC_MCP_PROMPTS=off` em
+`mcp/servers.json`), porque aí os comandos já são comandos de barra.
 
 ### Execução com subagentes (opcional)
 
@@ -419,9 +493,11 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
 
 ### Modo guarda e steering com âmbito
 
-- **`/spec-guard`** — modo guarda opcional (`spec_init {guard: true}` / `dev-spec init --guard on|off`).
+- **`/spec-guard`** — modo guarda opcional (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   Enquanto está ligado, um hook PreToolUse do Claude Code **pergunta antes** de um Write/Edit num ficheiro de
-  código fora de `.specs/` quando nenhuma funcionalidade tem tarefas aprovadas por terminar. Fica em silêncio
+  código fora de `.specs/` quando nenhuma funcionalidade tem tarefas aprovadas por terminar; `scope` pergunta
+  também, depois de as tarefas estarem aprovadas, por um ficheiro de código que nenhuma tarefa aberta indica em
+  `_Implements:_` (os ficheiros de teste ficam de fora) e diz qual a tarefa provável. Fica em silêncio
   quando desligado e nunca bloqueia por erros próprios. As outras ferramentas não correm hooks do Claude
   Code, por isso aí o modo guarda não faz nada.
 - **Steering com âmbito** — os ficheiros de steering aceitam front matter compatível com o Kiro:
@@ -439,8 +515,9 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
 - **`/spec-import`** (`spec_import`) — traz uma spec do Kiro (`.kiro/specs/<name>/`), do spec-kit
   (`specs/<nnn-name>/`) ou do OpenSpec (`openspec/specs/<capability>/` ou uma pasta de change) como nova
   funcionalidade: os critérios passam a linhas EARS `US-N.AC-M` (ou mantêm o texto com
-  `[NEEDS CLARIFICATION]`) e as tarefas são renumeradas com o estado das checkboxes. A origem tem de estar
-  dentro do projeto e só é lida.
+  `[NEEDS CLARIFICATION]`) e as tarefas são renumeradas com o estado das checkboxes. Também planos: `plan` (um
+  ficheiro do plan mode do Claude Code copiado para o projeto, ou um `.cursor/plans/*.plan.md` do Cursor), `execplan`
+  (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD). A origem tem de estar dentro do projeto e só é lida.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
   `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
@@ -449,11 +526,49 @@ com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/sub
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
 
+### Novidades da 1.14
+
+- **Seis tracks** — `+sec` e `+privacy` combinam-se com os outros: critérios `[SEC]` / `[PRIVACY]`, secções obrigatórias
+  do design, tarefas, linhas de teste e steering (`security.md`, `privacy.md`). Os marcadores dos tracks distinguem
+  maiúsculas de minúsculas.
+- **Templates do projeto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (ou `<lang>/<artefacto>.md`)
+  substitui um scaffold de origem, com `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}`
+  preenchidos; os tracks ativos continuam a receber as suas secções, e um scaffold personalizado por tocar continua a
+  ler-se como template nos gates. O `check` valida-os.
+- **Para stakeholders** — o `/spec-export` escreve um documento HTML (ou markdown) offline e imprimível de uma
+  funcionalidade ou do projeto; o `/spec-changelog` constrói notas de versão (Added / Changed / Fixed) a partir do que
+  foi entregue.
+- **Governação da equipa** — `init --roles requirements=product,design=tech+security`: uma fase da lista fica aprovada
+  quando todos os papéis aprovaram o conteúdo atual (`approve --role`). O `/spec-ff` (`approve --through tasks`) avança
+  as fases preenchidas por ordem, cada uma pelo seu gate, e para na primeira recusa.
+- **Previsões** — as tarefas podem ter `_Size: XS|S|M|L|XL_`; o roadmap mostra uma ETA por funcionalidade a partir da
+  velocidade das tarefas marcadas (últimos 28 dias, dias úteis, ±25%) e assinala funcionalidades cujas tarefas abertas
+  planeiam os mesmos ficheiros.
+- **Evidência mais forte** — `_Expect: fail_` marca uma tarefa de teste primeiro cuja execução tem de falhar (red →
+  green); `init --check test="npm test"` dá nome às verificações do projeto, e o `finish` passa a exigir uma execução
+  bem-sucedida de cada uma (`finish --run`); o `done --run` regista o commit do git; o `dev-spec log` lista os commits
+  que citam cada tarefa; um `_Verify:_` com pipe (`npm test | tee log`) é assinalado — o código de saída de um pipeline
+  é o do último comando.
+- **Evidência no fim do turno** — no Claude Code, um hook Stop devolve o turno quando a mensagem final afirma "feito" ou
+  "verificado" enquanto uma funcionalidade ativa nas últimas horas tem tarefas marcadas sem a evidência de uma execução
+  bem-sucedida (`init --stop-check off` desliga-o; noutras ferramentas: `dev-spec stop-check`).
+- **Decisões e spikes** — o `/spec-decide` acrescenta entradas `D-n` ao `decisions.md` (o que afetam é verificado; os
+  briefs, o resumo de merge e a exportação mostram-nas). O `/spec-spike` faz uma investigação com prazo que acaba numa
+  decisão — go / no-go / pivot — em vez de requisitos inventados.
+- **Fluxo design-first** — `create --flow design-first` (ou `feature flow`) percorre classificação → design →
+  requisitos → … para trabalho que parte de uma arquitetura.
+- **`/spec-tour`** — uma visita guiada de 10 minutos no teu próprio repositório: uma alteração real e pequena por todos
+  os gates.
+- **Português do Brasil** — `lang: "pt-BR"` (`--lang pt-BR`) gera os artefactos e as mensagens em PT-BR, um locale
+  derivado do português europeu; também novos: prompts MCP e recursos `specs://` (acima), importação de planos /
+  ExecPlans / BMAD e um runner de testes em Linux para quem mantém o plugin.
+
 ### Automação local, sem CI
 
 - **Hooks** (`hooks/hooks.json`): ao gravar `requirements.md` → valida EARS + placeholders; ao gravar
   `tasks.md` → verifica a rastreabilidade; ao gravar `design.md` → as secções obrigatórias dos tracks ativos;
-  no arranque da sessão → estado das funcionalidades + drift. O modo guarda opcional corre antes das edições
+  no arranque da sessão → estado das funcionalidades + drift + funcionalidades que se sobrepõem; no fim de um turno
+  (e de um subagente `spec-implementer`) → o gate de evidência. O modo guarda opcional corre antes das edições
   de código. Mais um validador `pre-commit` opcional do git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): corre os conjuntos golden/adversarial/regression
   com a **tua própria `ANTHROPIC_API_KEY`**; `--dry-run` valida offline, `--set-baseline` grava uma
@@ -518,7 +633,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (44)
+### Comandos (51)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -527,7 +642,9 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `/migrateModel` — atalhos `/ds` `/dsx` `/dss`.
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-(Como plugin, têm namespace, ex.: `/dev-spec-driven:design`.)
+Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
+`/spec-tour`.
+(Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
 
@@ -535,11 +652,13 @@ O mesmo motor em qualquer terminal (`node cli/dev-spec.js <comando>`, ou `dev-sp
 mostra o resultado em bruto e `help` lista todas as opções:
 
 ```text
-classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
-doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
-append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
-roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
+approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
+add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+mcp-config <client> · rules <tool> · prompts
 ```
 
 ### Porque não há GitHub Actions
@@ -553,7 +672,12 @@ no teu ambiente quando quiseres, não num runner de CI pago.
 ```bash
 node mcp/test.js          # testa o servidor MCP de ponta a ponta (tem de terminar em `0 failed`)
 node cli/test-cli.js      # testa a CLI universal (tem de terminar em `0 failed`)
+npm run test:docker       # as duas suites em contentores Linux (Node 18 / 22 / 24) no teu próprio Docker
 ```
+
+O runner Docker monta o plugin só de leitura e corre sem rede (só a primeira execução descarrega as imagens); termina
+com 0 quando todas as suites passam, 1 numa falha e 2 quando o Docker não está disponível. Os evals do plugin
+(`claude plugin eval`, suites de ativação e de comportamento) estão descritos em [evals/README.md](./evals/README.md).
 
 > Substitui quatro skills antecessoras; o conteúdo vive aqui como tracks componíveis (os originais
 > ficam no histórico git e na release v1.8.0, se algum dia precisares).
@@ -574,44 +698,57 @@ compone exactamente el rigor necesario:
 | **+tdd** | Plan de pruebas + pruebas-en-rojo-primero + red→green→refactor |
 | **+saas** | Rendimiento/escala/multiinquilino/observabilidad/coste + pruebas de carga |
 | **+ai** | Desarrollo guiado por evals, prompts como código, economía de tokens, seguridad, ciclo de vida del modelo |
+| **+sec** | Modelo de amenazas (STRIDE), requisitos de seguridad, autenticación y autorización, gestión de secretos y claves, pruebas de seguridad |
+| **+privacy** | RGPD / GDPR: inventario de datos personales, base de legitimación, conservación y supresión, derechos de los interesados, encargados y transferencias, EIPD |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
-facturas con un LLM es `core +tdd +saas +ai`. Un cambio de texto es modo Vibe: sin ceremonia. Un
+facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el
+RGPD, el GDPR y la HIPAA apuntan ahí). Un cambio de texto es modo Vibe: sin ceremonia. Un
 **clasificador de Fase 0** (la herramienta local `spec_classify`, multilingüe) elige los tracks; tú
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
 
-### El servidor MCP local (`spec-driven`) — 30 herramientas
+### El servidor MCP local (`spec-driven`) — 34 herramientas
 
 Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
 | Herramienta | Qué hace |
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
-| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` activa/desactiva el modo guardia |
-| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `brownfield: true` añade `integration-plan.md`) |
-| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
+| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase |
+| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
+| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
+| `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes |
-| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada); `batch` para tareas paralelas `[P]` |
+| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla); `batch` para tareas paralelas `[P]` |
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
 | `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes |
-| `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `write` registra también la línea base de drift |
+| `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `evidence` registra las ejecuciones de las comprobaciones del proyecto; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", fase a fase: revisar → completar → corregir → aprobar (la fase siguiente solo tras esa aprobación) → implementar → verificar → cerrar (después cerrada / deriva) |
-| `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot |
+| `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot; `role` aprueba por un rol cuando la fase necesita varios, `through` avanza todas las fases hasta esa, cada una por su gate |
 | `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `--phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
-| `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`) |
+| `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`), o fija su `flow` |
+| `spec_decide` | Añade una decisión (o un descubrimiento) al `decisions.md` de la función — `D-n`, con los ACs, pruebas o secciones del diseño que afecta (comprobados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba |
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS, placeholders, trace, secciones, evidencia, gates, steering) |
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders; `write` → `.specs/exports/` |
+| `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
-| `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista); `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
+| `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
 | `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones) + la parte de los archivos de código nombrados en `_Implements:_` |
 | `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`), o uno personalizado con ámbito |
+
+**Prompts y recursos.** El servidor sirve también un **prompt** MCP por cada comando del plugin — `/spec`,
+`/spec-status`, `/spec-impact`, … pasan a ser comandos de barra en los clientes MCP que muestran prompts (VS Code /
+Copilot Chat, por ejemplo) — y las specs del proyecto como **recursos** de solo lectura: `specs://roadmap`, `specs://catalog`,
+`specs://steering/{file}`, `specs://feature/{slug}/{artifact}`. El plugin de Claude Code desactiva los prompts
+(`SPEC_MCP_PROMPTS=off` en `mcp/servers.json`), porque allí los comandos ya son comandos de barra.
 
 ### Ejecución con subagentes (opcional)
 
@@ -692,9 +829,11 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 ### Modo guardia y steering con ámbito
 
-- **`/spec-guard`** — modo guardia opcional (`spec_init {guard: true}` / `dev-spec init --guard on|off`).
+- **`/spec-guard`** — modo guardia opcional (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   Mientras está activo, un hook PreToolUse de Claude Code **pregunta antes** de un Write/Edit en un archivo de
-  código fuera de `.specs/` cuando ninguna función tiene tareas aprobadas sin terminar. No dice nada cuando
+  código fuera de `.specs/` cuando ninguna función tiene tareas aprobadas sin terminar; `scope` pregunta también, una
+  vez aprobadas las tareas, por un archivo de código que ninguna tarea abierta nombra en `_Implements:_` (los archivos
+  de prueba quedan fuera) y dice cuál es la tarea probable. No dice nada cuando
   está desactivado y nunca bloquea por sus propios errores. Las demás herramientas no ejecutan hooks de
   Claude Code, así que allí el modo guardia no hace nada.
 - **Steering con ámbito** — los archivos de steering aceptan front matter compatible con Kiro:
@@ -712,8 +851,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-import`** (`spec_import`) — trae una spec de Kiro (`.kiro/specs/<name>/`), spec-kit
   (`specs/<nnn-name>/`) u OpenSpec (`openspec/specs/<capability>/` o una carpeta de change) como función
   nueva: los criterios pasan a líneas EARS `US-N.AC-M` (o conservan su texto con `[NEEDS CLARIFICATION]`) y
-  las tareas se renumeran con el estado de sus casillas. El origen debe estar dentro del proyecto y solo se
-  lee.
+  las tareas se renumeran con el estado de sus casillas. También planes: `plan` (un archivo del plan mode de Claude
+  Code copiado al proyecto, o un `.cursor/plans/*.plan.md` de Cursor), `execplan` (un ExecPlan de Codex) y `bmad` (PRD
+  e historias de BMAD-METHOD). El origen debe estar dentro del proyecto y solo se lee.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
   `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con
@@ -722,11 +862,49 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
+### Novedades de la 1.14
+
+- **Seis tracks** — `+sec` y `+privacy` se combinan con los demás: criterios `[SEC]` / `[PRIVACY]`, secciones
+  obligatorias del diseño, tareas, filas de prueba y steering (`security.md`, `privacy.md`). Los marcadores de los
+  tracks distinguen mayúsculas de minúsculas.
+- **Plantillas del proyecto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (o `<lang>/<artefacto>.md`)
+  sustituye un scaffold de origen, con `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}`
+  rellenados; los tracks activos siguen recibiendo sus secciones, y un scaffold personalizado sin tocar sigue
+  leyéndose como plantilla en los gates. `check` las valida.
+- **Para stakeholders** — `/spec-export` escribe un documento HTML (o markdown) offline e imprimible de una función o
+  del proyecto; `/spec-changelog` construye notas de la versión (Added / Changed / Fixed) a partir de lo entregado.
+- **Gobernanza del equipo** — `init --roles requirements=product,design=tech+security`: una fase de la lista queda
+  aprobada cuando todos los roles han aprobado su contenido actual (`approve --role`). `/spec-ff`
+  (`approve --through tasks`) avanza las fases completadas en orden, cada una por su gate, y se detiene en el primer
+  rechazo.
+- **Previsiones** — las tareas pueden llevar `_Size: XS|S|M|L|XL_`; la hoja de ruta muestra una ETA por función a
+  partir de la velocidad de las tareas marcadas (últimos 28 días, días laborables, ±25%) y señala funciones cuyas
+  tareas abiertas planifican los mismos archivos.
+- **Evidencia más fuerte** — `_Expect: fail_` marca una tarea de prueba primero cuya ejecución debe fallar (red →
+  green); `init --check test="npm test"` da nombre a las comprobaciones del proyecto, y `finish` exige entonces una
+  ejecución correcta de cada una (`finish --run`); `done --run` registra el commit de git; `dev-spec log` lista los
+  commits que citan cada tarea; un `_Verify:_` con pipe (`npm test | tee log`) se señala — el código de salida de un
+  pipeline es el de su último comando.
+- **Evidencia al final del turno** — en Claude Code, un hook Stop devuelve el turno cuando el mensaje final afirma
+  "hecho" o "verificado" mientras una función activa en las últimas horas tiene tareas marcadas sin la evidencia de
+  una ejecución correcta (`init --stop-check off` lo desactiva; en otras herramientas: `dev-spec stop-check`).
+- **Decisiones y spikes** — `/spec-decide` añade entradas `D-n` a `decisions.md` (lo que afectan se comprueba; los
+  briefs, el resumen de merge y la exportación las muestran). `/spec-spike` hace una investigación con plazo que
+  termina en una decisión — go / no-go / pivot — en lugar de requisitos inventados.
+- **Flujo design-first** — `create --flow design-first` (o `feature flow`) recorre clasificación → diseño →
+  requisitos → … para trabajo que parte de una arquitectura.
+- **`/spec-tour`** — una visita guiada de 10 minutos en tu propio repositorio: un cambio real y pequeño por todos
+  los gates.
+- **Portugués de Brasil** — `lang: "pt-BR"` (`--lang pt-BR`) genera los artefactos y los mensajes en PT-BR, un locale
+  derivado del portugués europeo; también nuevo: prompts MCP y recursos `specs://` (arriba), importación de planes /
+  ExecPlans / BMAD y un runner de pruebas en Linux para quien mantiene el plugin.
+
 ### Automatización local, no CI
 
 - **Hooks** (`hooks/hooks.json`): al guardar `requirements.md` → valida EARS + placeholders; al guardar
   `tasks.md` → comprueba la trazabilidad; al guardar `design.md` → las secciones obligatorias de los tracks
-  activos; al iniciar la sesión → estado de las funciones + drift. El modo guardia opcional se ejecuta antes
+  activos; al iniciar la sesión → estado de las funciones + drift + funciones que se solapan; al final de un turno
+  (y de un subagente `spec-implementer`) → la puerta de evidencia. El modo guardia opcional se ejecuta antes
   de las ediciones de código. Más un validador `pre-commit` opcional de git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): ejecuta los conjuntos
   golden/adversarial/regression con **tu propia `ANTHROPIC_API_KEY`**; `--dry-run` valida sin
@@ -791,7 +969,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (44)
+### Comandos (51)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -800,7 +978,9 @@ todas partes, `/plugin disable` — ambos quitan también las skills de superpow
 `/migrateModel` — atajos `/ds` `/dsx` `/dss`.
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-(Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`.)
+Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
+`/spec-tour`.
+(Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
 
@@ -808,11 +988,13 @@ El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `de
 `--json` muestra el resultado en bruto y `help` lista todas las opciones:
 
 ```text
-classify · init [--guard on|off] · steering · create [--brownfield] · bugfix · import · list · status
-doctor · trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run]
-append-tasks · approve [--force] · impact [--reopen] · metrics [--write] · finish [--write]
-add-track [--remove] · feature <remove|archive|rename|restore> · catalog [--write] · drift · upgrade [--apply]
-roadmap · depend · backlog · scan · coverage · evals · mcp-config <client> · rules <tool>
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
+approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
+add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+mcp-config <client> · rules <tool> · prompts
 ```
 
 ### Por qué no hay GitHub Actions
@@ -826,7 +1008,13 @@ evals se ejecutan en tu entorno cuando quieras, no en un runner de CI de pago.
 ```bash
 node mcp/test.js          # prueba el servidor MCP de extremo a extremo (debe terminar en `0 failed`)
 node cli/test-cli.js      # prueba la CLI universal (debe terminar en `0 failed`)
+npm run test:docker       # las dos suites en contenedores Linux (Node 18 / 22 / 24) en tu propio Docker
 ```
+
+El runner de Docker monta el plugin en solo lectura y se ejecuta sin red (solo la primera ejecución descarga las
+imágenes); termina con 0 cuando todas las suites pasan, 1 ante un fallo y 2 cuando Docker no está disponible. Los evals
+del plugin (`claude plugin eval`, suites de activación y de comportamiento) se describen en
+[evals/README.md](./evals/README.md).
 
 > Sustituye cuatro skills predecesoras; el contenido vive aquí como tracks componibles (los
 > originales quedan en el historial git y en la release v1.8.0, por si alguna vez los necesitas).
@@ -842,18 +1030,20 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 44 slash commands (trilingual descriptions)
+├── commands/                         ← 51 slash commands (trilingual descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
-├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES)
+├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (30 tools, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (34 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
-│   ├── lib/i18n.js                   ← localized content EN/PT/ES (artifact + steering builders, messages)
+│   ├── lib/i18n.js                   ← localized content (artifact + steering builders, messages)
+│   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
 │   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
-├── hooks/                            ← local automation (PostToolUse, SessionStart, opt-in PreToolUse guard, pre-commit)
+├── scripts/test-docker.js            ← both suites in Linux containers (npm run test:docker)
+├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, opt-in PreToolUse guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)

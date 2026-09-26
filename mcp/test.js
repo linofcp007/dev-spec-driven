@@ -6241,9 +6241,7 @@ function endRun() {
     (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
-  // 1.14: spec_export / spec_changelog / spec_templates get their README rows from the 1.14 docs package — remove this set then.
-  const docsPending = new Set(["spec_export", "spec_changelog", "spec_templates", "spec_decide"]);
-  const docsTools = list.result.tools.map((t) => t.name).filter((t) => !docsPending.has(t));
+  const docsTools = list.result.tools.map((t) => t.name);
   const docsReadme = docsRead("README.md");
   const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
     .matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));

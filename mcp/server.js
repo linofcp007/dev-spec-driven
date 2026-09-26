@@ -8,7 +8,7 @@
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
- * 32 tools, verify with an `initialize` + `tools/list` handshake.
+ * 34 tools, verify with an `initialize` + `tools/list` handshake.
  * Prompts: one per plugin command (commands/*.md) — slash commands in MCP clients without the skill
  * (SPEC_MCP_PROMPTS=off drops them). Resources: the project's spec artifacts, read-only, as specs:// URIs.
  * Both live in lib/prompts-resources.js.
