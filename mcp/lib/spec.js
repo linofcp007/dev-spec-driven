@@ -2082,6 +2082,12 @@ function completeTask(projectDir, name, number, evidence) {
     res.rootCausePending = true;
     res.note = [i18n.msg(lng).gates.rootCauseTaskEmpty(n), res.note].filter(Boolean).join(" ");
   }
+  // A passing run whose recorded command pipes into another one (`npm test | tee log`): its exit 0 is the pipeline's LAST
+  // command's, so it may hide a failing check. Recorded and ticked as given — flagged (pipeMasked: stable) with a note.
+  if (ev && ev.exitCode === 0 && ev.command && verifyPipeMasked(ev.command)) {
+    res.pipeMasked = true;
+    res.note = [res.note, i18n.msg(lng).verifyPipe.completeNote(n, ev.command)].filter(Boolean).join(" ");
+  }
   return res;
 }
 
@@ -3360,6 +3366,37 @@ function posixShellSyntax(cmd) {
   }
   return ["single-quotes", "variable"].filter((k) => found.has(k));
 }
+// A _Verify:_ command that PIPES into another one (`npm test | tee log`, `pytest | grep passed`): a pipeline's exit code is
+// its LAST command's, so a failing check exits 0 and would be recorded as a passing run. → true for an unquoted single `|`
+// (`|&` too); never `||` (or), a `|` inside '…' / "…", an escaped one (`\|`, cmd.exe's `^|`), the `>|` redirection, or one
+// inside $(…) / `…` (a substitution's status is not the command's). A command that sets pipefail is not flagged.
+function verifyPipeMasked(cmd) {
+  const s = String(cmd == null ? "" : cmd);
+  if (/(?<![\p{L}\p{N}_])pipefail(?![\p{L}\p{N}_])/u.test(s)) return false;
+  let sq = false, dq = false, bq = false, sub = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (sq) { if (c === "'") sq = false; continue; }
+    if (c === "\\") { i++; continue; }
+    if (dq) { if (c === '"') dq = false; continue; }
+    if (c === "^") { i++; continue; }
+    if (c === "'") sq = true;
+    else if (c === '"') dq = true;
+    else if (c === "`") bq = !bq;
+    else if (c === "$" && s[i + 1] === "(") { sub++; i++; }
+    else if (c === ")" && sub) sub--;
+    else if (c === "|") {
+      if (s[i + 1] === "|") { i++; continue; } // `||`
+      if (s[i - 1] === ">" || bq || sub) continue; // `>|` redirection · inside a command substitution
+      return true;
+    }
+  }
+  return false;
+}
+// The runnable _Verify:_ commands of a block that pipe (verifyPipeMasked) — brief, doctor and `done --run` name them.
+function verifyPipes(block) {
+  return taskMarkers(block).verify.filter(verifyPipeMasked);
+}
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
@@ -3558,6 +3595,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     report: path.join(exDir, `task-${block.number}-report.md`),
     ledger: path.join(exDir, "ledger.md"),
   };
+  // The runnable _Verify:_ commands that pipe into another one: their exit code is the pipeline's LAST command's.
+  const pipes = verifyPipes(block);
 
   const md = i18n.renderBrief({
     feature: slug,
@@ -3578,6 +3617,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     steeringScoped: steer.included.filter((s) => s.body).map((s) => ({ path: rel(path.join(steer.dir, s.name)), patterns: s.patterns, body: s.body })),
     steeringManual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     verify: mk.verify,
+    verifyPipes: pipes, // a pipe masks the check's exit code — the brief says so
     globalConstraints: globalConstraints(tasksText),
     reportPath: rel(paths.report),
   }, lng);
@@ -3619,6 +3659,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
+  if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -5544,7 +5585,7 @@ function pendingGateList(dir, tracks, kind, approvals) {
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "root-cause": 2,
-  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, verification: 6 };
+  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, verification: 6 };
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -6439,6 +6480,11 @@ function specDoctor(projectDir, name, opts = {}) {
   // Duplicated task numbers: complete/brief resolve to the first OPEN one, but humans read them as one task.
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", fm.evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  // A _Verify:_ that pipes into another command (`npm test | tee log`) reports the pipeline's LAST exit code: a failing
+  // check exits 0 and its run reads as verified. Active tasks only (a removed track's tasks are inactive).
+  const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
+    .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
+  if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
 
   // Brownfield: an integration plan that is still the template (only when the feature has one).
   const planFile = path.join(dir, "integration-plan.md");
@@ -9896,6 +9942,7 @@ module.exports = {
   // @pkg A3 <<<
 
   // @pkg A4 exports >>>
+  verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
   // @pkg A4 <<<
 
   // @pkg B1 exports >>>

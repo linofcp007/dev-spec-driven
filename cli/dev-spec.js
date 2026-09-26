@@ -442,6 +442,9 @@ function main() {
           const posix = cmds.map((c) => [c, spec.posixShellSyntax(c)]).find(([, k]) => k.length);
           if (posix) return fail({ ok: false, error: D.posixOnWindows(posix[0], posix[1]) });
         }
+        // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
+        const VP = spec.msg(spec.featureLang(projectDir, pos[0])).verifyPipe;
+        cmds.filter(spec.verifyPipeMasked).forEach((c) => say(VP.runHint(c)));
         for (const cmd of cmds) {
           say("$ " + cmd);
           // Runs the user's OWN _Verify:_ command from their tasks.md, only on an explicit --run (the same

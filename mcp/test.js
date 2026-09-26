@@ -19,6 +19,12 @@ const path = require("path");
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
 const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
+// Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
+// asynchronously once its 64 KB buffer is full, and process.exit() drops whatever is still queued — the tail of the
+// output, FAIL lines and the total line included (Windows makes stdio pipes blocking, so it never showed there).
+function exitFlushed(code) {
+  process.stdout.write("", () => process.exit(code));
+}
 if (!SECTION) {
   const runSection = (name) => new Promise((resolve) => {
     let out = "";
@@ -42,7 +48,7 @@ if (!SECTION) {
       if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
     }
     console.log(`\n${passed} passed, ${failed} failed`);
-    process.exit(failed ? 1 : 0);
+    exitFlushed(failed ? 1 : 0);
   });
   return; // CommonJS module scope: the parent only dispatches
 }
@@ -106,7 +112,7 @@ function abort(reason) {
   console.log("  FAIL - " + reason);
   console.log(`\n${pass} passed, ${fail + 1} failed`);
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(1);
+  exitFlushed(1);
 }
 let finished = false;
 child.on("exit", (code) => { if (!finished) abort("MCP server exited early (code " + code + ") with " + pending.size + " request(s) pending"); });
@@ -141,7 +147,7 @@ function endRun() {
   child.stdin.end();
   console.log(`\n${pass} passed, ${fail} failed`);
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(fail ? 1 : 0);
+  exitFlushed(fail ? 1 : 0);
 }
 
 (async () => {
@@ -1890,7 +1896,9 @@ function endRun() {
     const evBadDry = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
     const evBadLive = spawnSync(process.execPath, ["-r", stubEv, EVALS, "Análise Avançada", "--project", evp],
       { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", FETCH_MARK: markEv, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
-    const itemLines = (out) => (out.match(/regression\.json — item [^\n]*/g) || []).join("\n");
+    // V8 before Node 20 leaves the flags out of a RegExp SyntaxError ("/(pago/: Unterminated group"; Node 20+: "/(pago/i:")
+    // — the engines floor is Node 18, so the expected line accepts both (the rest of the line stays exact).
+    const itemLines = (out) => (out.match(/regression\.json — item [^\n]*/g) || []).join("\n").replace("Invalid regular expression: /(pago/: ", "Invalid regular expression: /(pago/i: ");
     ok(evBadDry.status === 1 && itemLines(evBadDry.stdout) === ["regression.json — item r1: tipo de avaliador desconhecido 'contain' (usa contains | equals | regex | refuse | judge)",
       "regression.json — item r2: a regex não compila: Invalid regular expression: /(pago/i: Unterminated group", "regression.json — item #3: sem 'id' (texto não vazio); sem objeto 'expect'",
       "regression.json — item r4: sem 'input' (texto não vazio)", "regression.json — item #5: não é um objeto", "regression.json — item r6: 'judge' precisa de uma 'rubric'",
@@ -4405,6 +4413,17 @@ function endRun() {
       const bXc = catXc.features.find((f) => f.feature === "Billing");
       ok(bXc && bXc.acs.map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2,US-1.AC-5:" &&
         catXc.totals.superseded === 3, "catalog on a case-insensitive file system: a case-different feature folder still gets its superseded ACs; a self-reference is not one");
+    } else {
+      // A case-sensitive file system (Linux): the slug 'billing' can't reach a 'Billing/' folder — listFeatures reports it as
+      // ignored (the listFeatures case-only check) — so the catalog doesn't list it and trace_check reads the references to
+      // billing/… as unknown-feature warnings: never silently resolved, never a half-listed feature.
+      fs.renameSync(path.join(w10x, ".specs", "billing"), path.join(w10x, ".specs", "Billing"));
+      const catXs = S.catalog(w10x);
+      const trXs = S.traceCheck(w10x, "paren");
+      ok(!catXs.features.some((f) => f.feature.toLowerCase() === "billing") && catXs.totals.superseded === 0 && (S.listFeatures(w10x).ignored || []).includes("Billing") &&
+        trXs.phantomSupersedes.map((p) => p.reason + ":" + p.ref).join() === "unknown-feature:billing/US-1.AC-2,unknown-feature:billing/US-1.AC-4",
+        "catalog on a case-sensitive file system: a case-different feature folder is not reached by its slug (listFeatures ignores it) — not listed, and the _Supersedes:_ references to it are unknown-feature warnings (got " +
+        JSON.stringify([catXs.features.map((f) => f.feature), catXs.totals.superseded, trXs.phantomSupersedes.map((p) => p.reason + ":" + p.ref)]) + ")");
     }
 
     // Drift: finish {write} on a READY feature records the baseline; drift reports changed / missing / now present.
@@ -6422,6 +6441,101 @@ function endRun() {
   // @pkg A3 <<<
 
   // @pkg A4 tests >>>
+  { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const vp = S.verifyPipeMasked;
+    const pipeYes = ["npm test | tee log", "pytest | grep passed", "npm test 2>&1 | tee out.log", "a |& tee x", "a|b", 'node x.js | tee "log file"', "(npm test | tee log)",
+      "npm test && eslint . | tee lint.log"];
+    const pipeNo = ["npm test || exit 1", "a || b", 'grep "a|b" file', "grep 'a|b' file", "echo $(ls | wc -l)", "echo `ls | wc -l`", "set -o pipefail; npm test | tee log",
+      'bash -o pipefail -c "npm test | tee log"', "a \\| b", "a >| out", "npm test", "echo a^|b", 'node -e "process.exit(0)"', 'test "$(git status | wc -l)" = 0', "", null];
+    const vpWrong = pipeYes.filter((c) => !vp(c)).map((c) => "missed: " + c).concat(pipeNo.filter((c) => vp(c)).map((c) => "flagged: " + c));
+    ok(!vpWrong.length, "verifyPipeMasked: an unquoted single | (also |&, inside a subshell) is flagged; ||, a quoted '|' / \"|\", \\| / ^|, >|, a pipe inside $(…) / `…` and a command setting pipefail are not (" + vpWrong.join(" · ") + ")");
+
+    const pp = path.join(tmp, "proj-a4-pipes");
+    S.initProject(pp, ["core"], "en");
+    const pf = S.createFeature(pp, "Pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped check\n  - _Verify: `npm test | tee test.log`_\n" +
+      "- [ ] 2. [US1] Quoted pipe\n  - _Verify: grep \"a|b\" notes.txt_\n- [ ] 3. [US1] Or-chain\n  - _Verify: npm test || exit 1_\n- [ ] 4. [US1] Plain\n  - _Verify: npm test_\n");
+    const b1 = S.taskBrief(pp, "pipes", 1), b2 = S.taskBrief(pp, "pipes", 2), b3 = S.taskBrief(pp, "pipes", 3);
+    const b1w = S.taskBrief(pp, "pipes", 1, { write: true });
+    const verifySec = (md) => (md.split("## Verification (_Verify:_)")[1] || "").split("\n## ")[0];
+    ok(JSON.stringify(b1.verifyPipes) === '["npm test | tee test.log"]' && /`npm test \| tee test\.log` pipes into another command: a pipeline's exit code is its LAST command's/.test(verifySec(b1.brief)) &&
+      /set -o pipefail/.test(verifySec(b1.brief)) && b2.verifyPipes === undefined && b3.verifyPipes === undefined && !/pipes into another command/.test(b2.brief + b3.brief) &&
+      JSON.stringify(b1w.verifyPipes) === '["npm test | tee test.log"]' && /pipes into another command/.test(fs.readFileSync(b1w.paths.brief, "utf8")),
+      "spec_task_brief: a piped _Verify:_ is noted in the brief's Verification section and listed in verifyPipes (write:true too); a quoted '|' and '||' are not (got " + JSON.stringify([b1.verifyPipes, b2.verifyPipes, b3.verifyPipes]) + ")");
+
+    const d1 = S.specDoctor(pp, "pipes");
+    const dPipe = d1.checks.find((c) => c.id === "verify-pipes");
+    const clean = S.createFeature(pp, "No pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(clean.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Plain\n  - _Verify: npm test_\n- [ ] 2. [US1] Quoted\n  - _Verify: grep 'x|y' f_\n");
+    ok(dPipe && dPipe.status === "warn" && /#1 `npm test \| tee test\.log`/.test(dPipe.detail) && !/#2|#3|#4/.test(dPipe.detail) &&
+      !S.specDoctor(pp, "no-pipes").checks.some((c) => c.id === "verify-pipes"),
+      "spec_doctor: a warn check 'verify-pipes' names the task whose _Verify:_ pipes (only #1); a feature without one has no such check (got " + JSON.stringify(dPipe) + ")");
+
+    const c1 = S.completeTask(pp, "pipes", 1, { command: "npm test | tee test.log", exitCode: 0, summary: "12 passing" });
+    const c2 = S.completeTask(pp, "pipes", 2, { command: 'grep "a|b" notes.txt', exitCode: 0 });
+    const c3 = S.completeTask(pp, "pipes", 3, { command: "set -o pipefail; npm test | tee test.log", exitCode: 0 });
+    const c4 = S.completeTask(pp, "pipes", 4, { command: "npm test | tee test.log", exitCode: 1 });
+    ok(c1.ok && c1.pipeMasked === true && c1.verified === true && /Task 1: the recorded command pipes into another one \(`npm test \| tee test\.log`\)/.test(c1.note) &&
+      c2.ok && c2.pipeMasked === undefined && !c2.note && c3.ok && c3.pipeMasked === undefined && c4.ok === false && c4.recorded && c4.pipeMasked === undefined,
+      "spec_complete_task: a passing run whose command pipes → recorded + ticked with pipeMasked: true and a note; a quoted '|', a pipefail command and a failing run are not flagged (got " +
+      JSON.stringify([c1.pipeMasked, c1.note, c2.pipeMasked, c3.pipeMasked, c4.pipeMasked]) + ")");
+
+    // MCP = engine; PT / ES wording.
+    const mb = payload(await call("spec_task_brief", { name: "pipes", number: 1, projectDir: pp }));
+    const md = payload(await call("spec_doctor", { name: "pipes", projectDir: pp }));
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped again\n  - _Verify: pytest | grep passed_\n");
+    const mc = payload(await call("spec_complete_task", { name: "pipes", number: 1, evidence: { command: "pytest | grep passed", exitCode: 0 }, projectDir: pp }));
+    const ptF = S.createFeature(pp, "Tubos", ["core"], "", undefined, "pt");
+    const esF = S.createFeature(pp, "Tuberias", ["core"], "", undefined, "es");
+    for (const f of [ptF, esF]) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] x\n  - _Verify: npm test | tee log_\n");
+    const ptB = S.taskBrief(pp, "tubos", 1), esB = S.taskBrief(pp, "tuberias", 1);
+    const ptD = S.specDoctor(pp, "tubos").checks.find((c) => c.id === "verify-pipes"), esD = S.specDoctor(pp, "tuberias").checks.find((c) => c.id === "verify-pipes");
+    const ptC = S.completeTask(pp, "tubos", 1, { command: "npm test | tee log", exitCode: 0 }), esC = S.completeTask(pp, "tuberias", 1, { command: "npm test | tee log", exitCode: 0 });
+    const keysOf = (l) => Object.keys(S.msg(l).verifyPipe).sort().join();
+    ok(JSON.stringify(mb.verifyPipes) === '["npm test | tee test.log"]' && md.checks.some((c) => c.id === "verify-pipes" && c.status === "warn") && mc.ok && mc.pipeMasked === true &&
+      /encaminha a saída para outro comando \(pipe\)/.test(ptB.brief) && /redirige su salida a otro comando \(pipe\)/.test(esB.brief) &&
+      /um comando _Verify:_ encaminha a saída/.test(ptD.detail) && /un comando _Verify:_ redirige su salida/.test(esD.detail) &&
+      ptC.pipeMasked && /^Tarefa 1: o comando registado encaminha/.test(ptC.note) && esC.pipeMasked && /^Tarea 1: el comando registrado redirige/.test(esC.note) &&
+      keysOf("en") === "brief,completeNote,doctor,runHint" && keysOf("pt") === keysOf("en") && keysOf("es") === keysOf("en") &&
+      S.msg("pt").verifyPipe.runHint("a | b") !== S.msg("en").verifyPipe.runHint("a | b") && /cmd\.exe/.test(S.msg("es").verifyPipe.runHint("a | b")),
+      "MCP spec_task_brief / spec_doctor / spec_complete_task carry verifyPipes / verify-pipes / pipeMasked like the engine; the brief note, doctor detail and complete note are in PT / ES; the verifyPipe messages have the same keys in EN / PT / ES");
+  }
+
+  { // A4.1 — stdin closed: the server flushes the replies it already wrote before exiting. On Linux a pipe takes writes
+    // asynchronously once its 64 KB buffer is full, and a bare process.exit() dropped the queued tail (a client that sends
+    // its requests and closes stdin got 64 KB of ~390 KB). The reader here waits before reading, so the buffer fills.
+    const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: tmp }, stdio: ["pipe", "pipe", "ignore"] });
+    const closed = new Promise((resolve) => kid.on("close", (code) => resolve(code)));
+    kid.stdout.pause();
+    kid.stdin.end([1, 2, 3, 4, 5, 6, 7, 8].map((id) => JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list", params: {} })).join("\n") + "\n");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    let raw = "";
+    kid.stdout.setEncoding("utf8");
+    kid.stdout.on("data", (d) => (raw += d));
+    kid.stdout.resume();
+    const code = await Promise.race([closed, new Promise((resolve) => setTimeout(() => { kid.kill(); resolve("timeout"); }, 15000))]);
+    let ids = [];
+    try { ids = raw.split("\n").filter(Boolean).map((l) => JSON.parse(l).id); } catch { /* a cut reply is not JSON */ }
+    ok(code === 0 && ids.join() === "1,2,3,4,5,6,7,8",
+      "the server answers every request sent before stdin closes, even to a reader that is slower than it (replies flushed before exit; got " + ids.length + " of 8 replies, " + raw.length + " chars, exit " + code + ")");
+  }
+  { // A4.1 — scripts/test-docker.js (`npm run test:docker`): zero-dependency, offline-checkable parts — no Docker needed here.
+    const dockerJs = path.join(root, "scripts", "test-docker.js");
+    const src = fs.readFileSync(dockerJs, "utf8");
+    const mods = [...src.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
+    const help = spawnSync(process.execPath, [dockerJs, "--help"], { encoding: "utf8" });
+    const badArg = spawnSync(process.execPath, [dockerJs, "--suite", "nope"], { encoding: "utf8" });
+    const noPathEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^path$/i.test(k)));
+    const noDocker = spawnSync(process.execPath, [dockerJs], { encoding: "utf8", env: { ...noPathEnv, PATH: path.join(tmp, "no-such-bin-dir") } });
+    ok(mods.length && mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)) && require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js" &&
+      help.status === 0 && /--network none/.test(help.stdout) && /read-only/.test(help.stdout) && /node:18-alpine/.test(help.stdout) &&
+      badArg.status === 2 && /unknown suite 'nope'/.test(badArg.stderr) &&
+      noDocker.status === 2 && /Docker is not available: the docker command was not found/.test(noDocker.stderr) && /npm test/.test(noDocker.stderr) &&
+      /"--network", "none"/.test(src) && /:\/repo:ro/.test(src) && !/\.github|workflow/i.test(src),
+      "scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
+      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")");
+  }
   // @pkg A4 <<<
 
   // @pkg B1 tests >>>
@@ -6462,5 +6576,5 @@ function endRun() {
   child.stdin.end();
   console.log(`\n${pass} passed, ${fail} failed`);
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(fail ? 1 : 0);
+  exitFlushed(fail ? 1 : 0);
 })();
