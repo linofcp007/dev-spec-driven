@@ -14,7 +14,9 @@
  * Commands:
  *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
- *                                      --guard on|off → guard mode: code edits ask while no approved tasks;
+ *                                      --guard on|off|scope → guard mode: code edits ask while no approved tasks
+ *                                      (scope: also a code file no open task names in _Implements:_);
+ *                                      --stop-check on|off → the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default);
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
@@ -54,6 +56,8 @@
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
  *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
+ *   stop-check [--message "<text>"|-] [--agent <type>]  The Stop hook's evidence gate for a closing message: does it claim
+ *                                      done / verified while a recently active feature has ticked tasks without evidence? (exit 1 = sent back)
  *   log <feature> [--max N] [-]        Commits citing each task ("task #N" + the feature name, T-/AC IDs) + the +tdd red-first
  *                                      check, from git log (read-only, local; default 1000 commits); - reads a log from stdin
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
@@ -138,7 +142,8 @@ function withTracksFlag(list) {
 
 VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
 
-VALUE_FLAGS.add("guard"); // init --guard on|off (= spec_init {guard: true|false})
+VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
+["stop-check", "message", "agent"].forEach((k) => VALUE_FLAGS.add(k)); // 1.14 C1: init --stop-check on|off (= spec_init {stopCheck}); stop-check --message "…" --agent <type>
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
@@ -275,13 +280,22 @@ function main() {
 
     case "init": {
       const tr = withTracksFlag(pos);
-      // --guard on|off = spec_init {guard: true|false}; absent leaves the guard as it is.
+      // --guard on|off|scope = spec_init {guard: true|false|"scope"}; absent leaves the guard as it is.
       let guard;
       if (flags.guard !== undefined) {
         const g = String(flags.guard).trim().toLowerCase();
         if (["on", "true", "yes", "1"].includes(g)) guard = true;
         else if (["off", "false", "no", "0"].includes(g)) guard = false;
+        else if (g === "scope") guard = "scope"; // 1.14 C1 — the scope guard
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
+      }
+      // 1.14 C1: --stop-check on|off = spec_init {stopCheck: true|false}; absent leaves the evidence gate as it is.
+      let stopCheck;
+      if (flags["stop-check"] !== undefined) {
+        const v = String(flags["stop-check"]).trim().toLowerCase();
+        if (["on", "true", "yes", "1"].includes(v)) stopCheck = true;
+        else if (["off", "false", "no", "0"].includes(v)) stopCheck = false;
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]));
       }
       const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
       // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
@@ -290,11 +304,12 @@ function main() {
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
         if (approvalRoles.error) die(approvalRoles.error);
       }
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles });
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
         if (r.guardNote) console.log("  " + r.guardNote);
+        if (r.stopCheckNote) console.log("  " + r.stopCheckNote);
         if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
         if (r.rolesNote) console.log("  " + r.rolesNote);
       });
@@ -1035,6 +1050,23 @@ function main() {
     // @pkg B5 <<<
 
     // @pkg C1 commands >>>
+    case "stop-check": {
+      // = the Stop / SubagentStop hook's decision (spec.stopCheck): the closing message from --message "<text>", the words
+      // after the command, or stdin (--message - / a lone -); --agent <subagent type> (a spec-implementer is checked on its
+      // report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
+      const runCheck = (message) => {
+        const r = spec.stopCheck(projectDir, { message, agent: typeof flags.agent === "string" ? flags.agent : "" });
+        if (flags.json) console.log(JSON.stringify(r, null, 2));
+        else if (r.block) console.log(r.reason);
+        else {
+          const A = spec.msg(r.lang).stopGate.allow;
+          console.log(Object.prototype.hasOwnProperty.call(A, r.why) ? A[r.why]({ hours: spec.STOP_RECENT_HOURS, list: (r.verifiedFeatures || []).join(", "), n: r.task, slug: r.feature }) : r.why);
+        }
+        process.exitCode = r.block ? 1 : 0;
+      };
+      if (flags.message === "-" || (flags.message === undefined && pos.length === 1 && pos[0] === "-")) return readStdin(runCheck);
+      return runCheck(typeof flags.message === "string" ? flags.message : pos.join(" "));
+    }
     // @pkg C1 <<<
 
     // @pkg C2 commands >>>
@@ -1068,7 +1100,9 @@ function helpText() {
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy), multilingual
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|es → project default)
-                                  --guard on|off: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
+                                  --guard on|off|scope: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
+                                  (scope: once tasks are approved, also a code file no open task names in _Implements:_ — test files excepted)
+                                  --stop-check on|off: the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default)
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
@@ -1126,6 +1160,10 @@ function helpText() {
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
+  stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
+                                  verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
+                                  evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
+                                  --agent spec-implementer checks the task report named in the message instead
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
@@ -1156,6 +1194,7 @@ function helpText() {
          --brownfield (create)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
+         --guard on|off|scope / --stop-check on|off (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.

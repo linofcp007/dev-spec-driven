@@ -37,13 +37,14 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for +privacy). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). `guard` turns the opt-in guard mode on/off (roadmap.json meta.guard; with or without tracks): while on, the plugin's PreToolUse hook ASKS before Write/Edit on a code file outside .specs/ unless some feature has approved, unfinished tasks. The result always reports the current `guard` state. `checks` = the project's named check commands (roadmap.json meta.checks, e.g. {\"test\": \"npm test\", \"lint\": \"npm run lint\", \"typecheck\": \"npx tsc --noEmit\"}): the given names are added or replaced, an empty command removes one, the others are kept; every task brief lists them in its definition of done, and once set spec_finish needs a passing recorded run of each since the feature's last task activity (blocker suite-evidence). The result always reports the current `checks`. `approvalRoles` (team governance, opt-in) maps phases to the roles that must sign them off — e.g. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"], \"tasks\": [\"tech\"]} — stored in roadmap.json meta.approvalRoles ({} clears it; the result then reports the current `approvalRoles` + a `rolesNote`): a listed phase counts as approved only once every role has signed off its current content (spec_approve {role}). Idempotent — never overwrites existing files.",
+      "Initialize spec-driven structure in the project: create `.specs/steering/` and the steering files required by the given tracks (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for +privacy). Steering content is generated in `lang` (en/pt/es), which also becomes the project's default language (persisted in .specs/roadmap.json meta.lang and inherited by every new feature). `guard` turns the opt-in guard mode on/off (roadmap.json meta.guard; with or without tracks): while on, the plugin's PreToolUse hook ASKS before Write/Edit on a code file outside .specs/ unless some feature has approved, unfinished tasks; `guard: \"scope\"` also asks, once tasks are approved, for a code file no open task names in _Implements:_. The result always reports the current `guard` state (true | false | \"scope\"). `stopCheck` turns the end-of-turn evidence gate on/off (roadmap.json meta.stopCheck, on by default — the plugin's Stop hook); the result always reports the current `stopCheck`. `checks` = the project's named check commands (roadmap.json meta.checks, e.g. {\"test\": \"npm test\", \"lint\": \"npm run lint\", \"typecheck\": \"npx tsc --noEmit\"}): the given names are added or replaced, an empty command removes one, the others are kept; every task brief lists them in its definition of done, and once set spec_finish needs a passing recorded run of each since the feature's last task activity (blocker suite-evidence). The result always reports the current `checks`. `approvalRoles` (team governance, opt-in) maps phases to the roles that must sign them off — e.g. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"], \"tasks\": [\"tech\"]} — stored in roadmap.json meta.approvalRoles ({} clears it; the result then reports the current `approvalRoles` + a `rolesNote`): a listed phase counts as approved only once every role has signed off its current content (spec_approve {role}). Idempotent — never overwrites existing files.",
     inputSchema: {
       type: "object",
       properties: {
         tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Tracks in use across the project. 'core' is always included." },
         lang: { type: "string", enum: ["en", "pt", "es"], description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
-        guard: { type: "boolean", description: "Guard mode (opt-in): true = code edits ask for confirmation while no feature has approved, unfinished tasks; false = off. Omit to leave it unchanged (CLI: --guard on|off)." },
+        guard: { type: "string", enum: ["on", "off", "scope"], description: "Guard mode (opt-in): \"on\" = code edits ask for confirmation while no feature has approved, unfinished tasks; \"scope\" = that, and once tasks are approved a code file no open task names in _Implements:_ (the file, a folder above it or a glob; test files excepted) asks too, naming the task to add it to; \"off\" = off. The booleans true / false are accepted as on / off. Omit to leave it unchanged (CLI: --guard on|off|scope)." },
+        stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (roadmap.json meta.stopCheck; on by default): the plugin's Stop hook sends a turn back when the agent's closing message claims the work is done or verified while a recently active feature has ticked tasks without verification evidence. false = off, true = on again. Omit to leave it unchanged (CLI: --stop-check on|off)." },
         checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command} → roadmap.json meta.checks. Names: letters, digits, . _ : - (≤ 40); commands: one line (≤ 500 chars); an empty command removes that check; at most 20. Omit to leave them unchanged (CLI: --check name=\"cmd\", repeatable)." },
         approvalRoles: { type: "object", description: "Approvals by role (opt-in): {<phase>: [<role>, …]} — phases classification … execution, roles lower-cased (letters, digits, - _ .; a \"tech+security\" string is split). {} clears them; omit to leave them unchanged (CLI: --roles requirements=product,design=tech+security | none)." },
         projectDir: { type: "string", description: "Project root. Defaults to SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd." },
@@ -392,8 +393,8 @@ function runTool(name, args) {
   }
   const pdir = spec.resolveProjectDir(args.projectDir);
   switch (name) {
-    case "spec_init": // guard → meta.guard; checks → meta.checks; approvalRoles → meta.approvalRoles (undefined leaves each unchanged; = `init --guard / --check / --roles`)
-      return spec.initProject(pdir, args.tracks, args.lang, { guard: args.guard, checks: args.checks, approvalRoles: args.approvalRoles });
+    case "spec_init": // guard → meta.guard; checks → meta.checks; approvalRoles → meta.approvalRoles; stopCheck → meta.stopCheck (undefined leaves each unchanged; = `init --guard / --check / --roles / --stop-check`)
+      return spec.initProject(pdir, args.tracks, args.lang, { guard: args.guard, checks: args.checks, approvalRoles: args.approvalRoles, stopCheck: args.stopCheck });
     case "spec_classify":
       return spec.classify(args.description, { name: args.name, lang: args.lang });
     case "spec_create": {
@@ -628,6 +629,13 @@ function foldEnumArgs(toolName, args) {
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
   let out = args;
   for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
+    // A boolean for an on/off string enum → "on" / "off" (spec_init {guard: true} — a boolean until 1.14 added "scope"; one plain
+    // string enum stays portable: some MCP clients reject a schema whose `type` is a list).
+    if (Array.isArray(s.enum) && s.enum.includes("on") && s.enum.includes("off") && hasOwn(args, k) && typeof args[k] === "boolean") {
+      if (out === args) out = { ...args };
+      out[k] = args[k] ? "on" : "off";
+      continue;
+    }
     if (!Array.isArray(s.enum) || !hasOwn(args, k) || typeof args[k] !== "string" || (EXACT_ENUMS[toolName] && EXACT_ENUMS[toolName].has(k))) continue;
     const v = args[k].trim().toLowerCase();
     if (v !== args[k] && s.enum.includes(v)) {

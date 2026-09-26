@@ -4717,8 +4717,8 @@ function endRun() {
       "spec_init {guard: true} sets roadmap.json meta.guard (no tracks needed); again with tracks → unchanged file; without guard → reports the current state, no note");
     const gBad = await call11("spec_init", { guard: "yes", projectDir: g });
     const gOff = await call11("spec_init", { guard: false, projectDir: g });
-    ok(gBad.isError && /guard must be a boolean/.test(gBad.p.error) && gOff.p.guard === false && /Guard mode OFF/.test(gOff.p.guardNote) && S.readRoadmap(g).meta.guard === false,
-      "spec_init {guard: 'yes'} is an argument error (boolean); {guard: false} turns it off");
+    ok(gBad.isError && /guard must be one of: on, off, scope/.test(gBad.p.error) && gOff.p.guard === false && /Guard mode OFF/.test(gOff.p.guardNote) && S.readRoadmap(g).meta.guard === false,
+      "spec_init {guard: 'yes'} is an argument error (on | off | scope; the booleans read as on / off); {guard: false} turns it off");
     const gBroken = path.join(tmp, "proj-wp11-broken");
     fs.mkdirSync(path.join(gBroken, ".specs"), { recursive: true });
     fs.writeFileSync(path.join(gBroken, ".specs", "roadmap.json"), "{ nope");
@@ -8540,6 +8540,280 @@ function endRun() {
   // @pkg B5 <<<
 
   // @pkg C1 tests >>>
+  { // 1.14 C1 — the end-of-turn evidence gate (stopCheck, hooks/stop-hook.js on Stop / SubagentStop) and the scope guard (meta.guard "scope")
+    const c1Call = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const c1Dir = (n) => path.join(tmp, "c1-" + n);
+    const c1State = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const c1SetState = (f, patch) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify({ ...c1State(f), ...patch }, null, 2));
+    const c1Tasks = (f, text) => fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
+    const hoursAgo = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+    const ageTasks = (f, h) => { const t = (Date.now() - h * 3600 * 1000) / 1000; fs.utimesSync(path.join(f.dir, "tasks.md"), t, t); };
+    const stopJs = path.join(__dirname, "..", "hooks", "stop-hook.js");
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR must never leak into the hooks.
+    const runHook = (js, input) => spawnSync(process.execPath, [js], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    const stopPayload = (cwd, message, extra) => ({ session_id: "s1", prompt_id: "550e8400-e29b-41d4-a716-446655440000", transcript_path: path.join(cwd, "no-transcript.jsonl"),
+      cwd, permission_mode: "default", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: message, effort: { level: "medium" }, ...(extra || {}) });
+    const blocked = (r) => { try { const j = JSON.parse(r.stdout); return r.status === 0 && j.decision === "block" && typeof j.reason === "string" && Object.keys(j).length === 2 ? j.reason : null; } catch { return null; } };
+    const silent = (r) => r.status === 0 && r.stdout === "";
+
+    // --- C1.1 claims: EN / PT / ES, conservative (negations, conditions, questions, code and quotes claim nothing; an admission is honest).
+    const claimYes = ["Done — all tests pass.", "Task 3 is done.", "I've implemented the parser; 14/14 passing.", "**Status:** DONE\nCommits: abc1234 feat", "Everything works now.",
+      "It's complete.", "Feito. Todos os testes passam.", "A tarefa 2 está concluída.", "Terminei a tarefa 2.", "Listo, todas las pruebas pasan.", "La tarea 2 está terminada.", "Hecho.", "Todo listo."];
+    const claimNo = ["I renamed the variable.", "The tests are not passing yet.", "Should I mark task 3 done?", "Once the tests pass, I'll mark it complete.", "Nothing is done yet.",
+      "I'll verify it next.", "```\nall tests pass\n```\nI ran it.", "> Done — all tests pass (the user's words)", "Let me know when you're done.", "Não está feito ainda.",
+      "Os testes ainda não passam.", "El hecho de que falle es raro.", "Todavía no está terminado.", "The unfinished work is in src/x.js."];
+    const cYes = claimYes.filter((m) => !(S.stopClaims(m).claim && !S.stopClaims(m).admitted));
+    const cNo = claimNo.filter((m) => S.stopClaims(m).claim);
+    const adm = ["Tests pass locally; task 3 is not verified.", "Done. 12 passing, 2 failing.", "Feito, mas a tarefa 2 está por verificar.", "Listo, pero la tarea 2 sigue sin verificar."].filter((m) => !S.stopClaims(m).admitted);
+    ok(!cYes.length && !cNo.length && !adm.length,
+      "C1 stopClaims: EN/PT/ES completion and verification claims are found; negated / conditional / question / fenced / quoted ones are not; 'not verified' / 'N failing' / 'por verificar' / 'sin verificar' are admissions (missed: " +
+      JSON.stringify(cYes) + ", false: " + JSON.stringify(cNo) + ", not admitted: " + JSON.stringify(adm) + ")");
+
+    // --- C1.1 stopCheck matrix.
+    const pEn = c1Dir("en");
+    S.initProject(pEn, ["core"], "en");
+    const fEn = S.createFeature(pEn, "Billing", ["core"], "", undefined, "en");
+    c1Tasks(fEn, "- [ ] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. [US1] Receipt\n");
+    S.completeTask(pEn, "billing", 1); // ticked with no evidence — its _Verify:_ holds a runnable command
+    S.completeTask(pEn, "billing", 3, { summary: "checked the PDF by hand" });
+    const claimMsg = "Done — all tests pass and everything is verified.";
+    const sBlock = S.stopCheck(pEn, { message: claimMsg });
+    const sNoClaim = S.stopCheck(pEn, { message: "I renamed the variable in src/billing.js." });
+    const sActive = S.stopCheck(pEn, { message: claimMsg, stopHookActive: true });
+    const sAdmit = S.stopCheck(pEn, { message: "Done, but task 1 is not verified yet." });
+    ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
+      JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
+      /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
+      /`dev-spec done billing 1 --run`/.test(sBlock.reason) && /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
+      sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
+      "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (done --run / spec_complete_task evidence / say it plainly); no claim, stop_hook_active or an honest admission → allowed (got " +
+      JSON.stringify([sBlock.why, sBlock.features, sNoClaim.why, sActive.why, sAdmit.why]) + ")");
+    // Every reason verificationStatus reports: a failed run, a note on a runnable _Verify:_, an unexpected pass (_Expect: fail_), stale evidence.
+    c1Tasks(fEn, "- [x] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [x] 3. [US1] Receipt\n" +
+      "- [ ] 4. [US1] Write T-01 red\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Export\n  - _Verify: node e.js_\n");
+    S.completeTask(pEn, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 1, summary: "1 failing" }); // a failed re-check of a ticked task
+    S.completeTask(pEn, "billing", 2, { summary: "looked fine" }); // a note on a runnable _Verify:_
+    S.completeTask(pEn, "billing", 4, { command: "node t.js", exitCode: 0 }); // refused (unexpected pass), recorded
+    c1Tasks(fEn, fs.readFileSync(path.join(fEn.dir, "tasks.md"), "utf8").replace("- [ ] 4.", "- [x] 4.")); // …then ticked by hand
+    S.completeTask(pEn, "billing", 5, { command: "node e.js", exitCode: 0 });
+    c1SetState(fEn, { evidence: { ...c1State(fEn).evidence, 5: { ...c1State(fEn).evidence["5"], stale: true } } }); // spec_impact --reopen marked it
+    const sMany = S.stopCheck(pEn, { message: "All done!" });
+    const byN = (n) => (sMany.features[0].unverified.find((d) => d.number === n) || {}).reason;
+    ok(sMany.block && byN(1) === "failed-run" && byN(2) === "manual-note-on-runnable-verify" && byN(4) === "unexpected-pass" && byN(5) === "stale-evidence" && !byN(3) &&
+      /#1 \(latest run failed\), #2 \(note only, _Verify:_ command not run\), #4 \(run passed, but _Expect: fail_ needs a red run\), #5 \(the spec changed since this evidence; spec_impact reopened the task\)/.test(sMany.reason),
+      "C1 stopCheck lists every unverified reason: failed run, note on a runnable _Verify:_, unexpected pass, stale evidence (a noted task without _Verify:_ is verified) (got " + JSON.stringify(sMany.features) + ")");
+    // Verified → allowed; old activity (state stamps AND tasks.md older than the window) → allowed; a hand-tick is recent activity.
+    const pOk = c1Dir("ok");
+    S.initProject(pOk, ["core"], "en");
+    const fOk = S.createFeature(pOk, "Search", ["core"], "", undefined, "en");
+    c1Tasks(fOk, "- [ ] 1. [US1] Index\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Query\n");
+    S.completeTask(pOk, "search", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "3 passing" });
+    const sVer = S.stopCheck(pOk, { message: claimMsg });
+    const pOld = c1Dir("old");
+    S.initProject(pOld, ["core"], "en");
+    const fOld = S.createFeature(pOld, "Legacy", ["core"], "", undefined, "en");
+    c1Tasks(fOld, "- [x] 1. [US1] Old work\n  - _Verify: npm test_\n- [ ] 2. [US1] Next\n");
+    c1SetState(fOld, { lastTickAt: hoursAgo(10), ticks: { 1: hoursAgo(10) } });
+    ageTasks(fOld, 10);
+    const sOld = S.stopCheck(pOld, { message: claimMsg });
+    ageTasks(fOld, 0.1); // tasks.md edited a few minutes ago (a box ticked by hand leaves no other stamp)
+    const sHand = S.stopCheck(pOld, { message: claimMsg });
+    ok(sVer.block === false && sVer.why === "verified" && JSON.stringify(sVer.verifiedFeatures) === JSON.stringify(["search"]) &&
+      sOld.block === false && sOld.why === "no-recent" && sHand.block === true && sHand.features[0].feature === "legacy" && sHand.features[0].unverified[0].reason === "no-evidence",
+      "C1 stopCheck: every ticked task verified → allowed ('verified'); activity older than the window → allowed ('no-recent'); a tasks.md edited just now (hand-ticked box) is recent activity → block (got " +
+      JSON.stringify([sVer.why, sOld.why, sHand.why]) + ")");
+    // Suite evidence: every task done, meta.checks without a passing run since the last task activity → block with the finish --run hint.
+    const pSu = c1Dir("suite");
+    S.initProject(pSu, ["core"], "en", { checks: { test: "npm test" } });
+    const fSu = S.createFeature(pSu, "Export", ["core"], "", undefined, "en");
+    c1Tasks(fSu, "- [ ] 1. [US1] Export CSV\n");
+    S.completeTask(pSu, "export", 1, { summary: "downloaded a CSV" });
+    const sSuite = S.stopCheck(pSu, { message: "Finished — the feature is complete." });
+    ok(sSuite.block && JSON.stringify(sSuite.features[0].suite) === JSON.stringify([{ name: "test", status: "no-run" }]) && !sSuite.features[0].unverified.length &&
+      /- export: project checks without a passing run since the last task activity: test \(no run recorded\)/.test(sSuite.reason) && /`dev-spec finish export --run`/.test(sSuite.reason) && !/dev-spec done/.test(sSuite.reason),
+      "C1 stopCheck: a complete feature whose project checks (meta.checks) have no passing run since the last task activity → block with `dev-spec finish <f> --run` (got " + JSON.stringify(sSuite.features) + ")");
+    // meta.stopCheck: spec_init {stopCheck} over MCP (the result always reports it; a note when set); off → allowed; no .specs/; a broken .state.json is skipped.
+    const i1 = await c1Call("spec_init", { projectDir: pEn });
+    const i2 = await c1Call("spec_init", { projectDir: pEn, stopCheck: false });
+    const sOff = S.stopCheck(pEn, { message: claimMsg });
+    const iBad = await c1Call("spec_init", { projectDir: pEn, stopCheck: "no" });
+    const i3 = await c1Call("spec_init", { projectDir: pEn, stopCheck: true });
+    const rmMeta = JSON.parse(fs.readFileSync(path.join(pEn, ".specs", "roadmap.json"), "utf8")).meta;
+    const pNo = c1Dir("none");
+    fs.mkdirSync(pNo, { recursive: true });
+    const pBr = c1Dir("broken");
+    S.initProject(pBr, ["core"], "en");
+    const fBr = S.createFeature(pBr, "Broken", ["core"], "", undefined, "en");
+    c1Tasks(fBr, "- [x] 1. [US1] A\n  - _Verify: npm test_\n");
+    fs.writeFileSync(path.join(fBr.dir, ".state.json"), "{ not json");
+    ok(i1.p.stopCheck === true && i1.p.stopCheckNote === undefined && i2.p.stopCheck === false && /Evidence gate OFF/.test(i2.p.stopCheckNote) && sOff.block === false && sOff.why === "off" &&
+      iBad.isError && /stopCheck must be a boolean/.test(iBad.p.error) && i3.p.stopCheck === true && /Evidence gate ON/.test(i3.p.stopCheckNote) && rmMeta.stopCheck === true &&
+      S.stopCheck(pEn, { message: claimMsg }).block === true && S.stopCheck(pNo, { message: claimMsg }).why === "no-specs" && S.stopCheck(pBr, { message: claimMsg }).block === false,
+      "C1 spec_init {stopCheck}: on by default (reported, no note), false turns the gate off (roadmap.json meta.stopCheck, allowed 'off'), a non-boolean is refused, true turns it back on; no .specs/ → 'no-specs'; an unreadable .state.json is skipped, never a block");
+    // PT / ES: the claim in the project language, the reason in the project language.
+    const pPt = c1Dir("pt");
+    S.initProject(pPt, ["core"], "pt");
+    const fPt = S.createFeature(pPt, "Pagamentos", ["core"], "", undefined, "pt");
+    c1Tasks(fPt, "- [ ] 1. [US1] Cobrar\n  - _Verify: npm test_\n");
+    S.completeTask(pPt, "pagamentos", 1);
+    const sPt = S.stopCheck(pPt, { message: "Feito. Todos os testes passam." });
+    const pEs = c1Dir("es");
+    S.initProject(pEs, ["core"], "es");
+    const fEs = S.createFeature(pEs, "Pagos", ["core"], "", undefined, "es");
+    c1Tasks(fEs, "- [ ] 1. [US1] Cobrar\n  - _Verify: npm test_\n");
+    S.completeTask(pEs, "pagos", 1, { command: "npm test", exitCode: 2, summary: "2 failing" });
+    c1Tasks(fEs, "- [x] 1. [US1] Cobrar\n  - _Verify: npm test_\n"); // ticked by hand after the failed run
+    const sEs = S.stopCheck(pEs, { message: "Listo: todas las pruebas pasan." });
+    ok(sPt.block && sPt.lang === "pt" && /^dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:\n {2}- pagamentos: #1 \(sem evidência\)/.test(sPt.reason) &&
+      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /`dev-spec done pagamentos 1 --run`/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
+      sEs.block && /^dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:\n {2}- pagos: #1 \(la última ejecución falló\)/.test(sEs.reason) &&
+      /O di claramente/.test(sEs.reason) && S.stopCheck(pPt, { message: "Os testes ainda não passam; a tarefa 1 não está verificada." }).block === false,
+      "C1 stopCheck PT / ES: the claim is read in either language and the reason is in the project language (PT: no evidence; ES: failed run); an honest PT answer is allowed (got " +
+      JSON.stringify([sPt.reason, sEs.reason]).slice(0, 400) + ")");
+
+    // --- C1.1 hooks/stop-hook.js with realistic payloads.
+    const hEn = runHook(stopJs, stopPayload(pEn, claimMsg));
+    const hEnReason = blocked(hEn);
+    let hOneJson = false;
+    try { hOneJson = typeof JSON.parse(hEn.stdout) === "object" && !hEn.stdout.includes("\n"); } catch { /* not one JSON object */ }
+    const hPt = blocked(runHook(stopJs, stopPayload(pPt, "Feito — todos os testes passam.")));
+    ok(!!hEnReason && hOneJson && hEnReason === S.stopCheck(pEn, { message: claimMsg }).reason && /billing: #1 \(latest run failed\)/.test(hEnReason) &&
+      !!hPt && /gate de evidência/.test(hPt) && /pagamentos: #1 \(sem evidência\)/.test(hPt),
+      "C1 Stop hook: a claim + unverified ticked tasks → exactly one JSON object {decision: 'block', reason} — the engine's reason, localized (EN, PT)");
+    ok(silent(runHook(stopJs, stopPayload(pEn, claimMsg, { stop_hook_active: true }))) && silent(runHook(stopJs, stopPayload(pEn, "I renamed the variable."))) &&
+      silent(runHook(stopJs, stopPayload(pOk, claimMsg))) && silent(runHook(stopJs, stopPayload(pNo, claimMsg))) && silent(runHook(stopJs, "not json")) &&
+      silent(runHook(stopJs, "null")) && silent(runHook(stopJs, { ...stopPayload(pEn, claimMsg), hook_event_name: "PostToolUse" })) &&
+      silent(runHook(stopJs, stopPayload(pEn, claimMsg, { last_assistant_message: 42 }))),
+      "C1 Stop hook: stop_hook_active (never twice in a row), no claim, everything verified, no .specs/, a malformed payload, another event or no message → silent exit 0");
+    await c1Call("spec_init", { projectDir: pEn, stopCheck: false });
+    const hOff = runHook(stopJs, stopPayload(pEn, claimMsg));
+    await c1Call("spec_init", { projectDir: pEn, stopCheck: true });
+    // Older Claude Code: no last_assistant_message — the last assistant text of the transcript (JSONL tail).
+    const tr = path.join(pEn, "transcript.jsonl");
+    fs.writeFileSync(tr, [JSON.stringify({ type: "user", message: { role: "user", content: "finish billing" } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Done — all tests pass." }] } })].join("\n") + "\n");
+    const hTr = blocked(runHook(stopJs, { hook_event_name: "Stop", cwd: pEn, stop_hook_active: false, transcript_path: tr }));
+    ok(silent(hOff) && !!hTr && /billing: #1/.test(hTr) && !fs.readFileSync(stopJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "C1 Stop hook: meta.stopCheck false → silent; without last_assistant_message it reads the transcript's last assistant text; no literal BOM in stop-hook.js");
+
+    // --- C1.1 SubagentStop: the spec-implementer is checked on its REPORT (it never ticks tasks).
+    const pIm = c1Dir("impl");
+    S.initProject(pIm, ["core"], "en");
+    const fIm = S.createFeature(pIm, "Auth", ["core"], "", undefined, "en");
+    c1Tasks(fIm, "- [ ] 1. [US1] Login\n  - _Verify: node --test tests/login.test.js_\n- [ ] 2. [US1] Docs\n");
+    const exDir = path.join(fIm.dir, ".execution");
+    fs.mkdirSync(exDir, { recursive: true });
+    const rep = path.join(exDir, "task-1-report.md");
+    const subPayload = (message, agent) => ({ session_id: "s1", transcript_path: path.join(pIm, "t.jsonl"), cwd: pIm, permission_mode: "default", hook_event_name: "SubagentStop",
+      agent_id: "subagent_xyz", agent_type: agent || "dev-spec-driven:spec-implementer", stop_hook_active: false, last_assistant_message: message, agent_transcript_path: path.join(pIm, "sub.jsonl") });
+    const doneReply = "**Status:** DONE\nCommits: abc1234 feat(auth): login\n14/14 passing\nReport: .specs/auth/.execution/task-1-report.md";
+    const hNoRep = blocked(runHook(stopJs, subPayload(doneReply)));
+    fs.writeFileSync(rep, "# Task 1\nImplemented US-1.AC-1.\nTests: all green.\n");
+    const hNoRun = blocked(runHook(stopJs, subPayload(doneReply)));
+    const hNoType = blocked(runHook(stopJs, { ...subPayload(doneReply), agent_type: undefined })); // older payloads: the registered agent
+    const sNoRun = S.stopCheck(pIm, { message: doneReply, agent: "dev-spec-driven:spec-implementer" });
+    fs.writeFileSync(rep, "# Task 1\n## Verification evidence\n- `node --test tests/login.test.js` → exit code 0\n  ℹ pass 14\n  ℹ fail 0\n");
+    const hOk = runHook(stopJs, subPayload(doneReply));
+    const sOk = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer" });
+    fs.writeFileSync(rep, "# Task 1\nRan node --test tests/login.test.js on the final code: it exited with code 0 (14 passing).\n");
+    const sExited = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer" });
+    ok(!!hNoRep && /^dev-spec evidence gate: you report task 1 of 'auth' as DONE, but its report \(\.specs\/auth\/\.execution\/task-1-report\.md\) does not exist\./.test(hNoRep) &&
+      !!hNoRun && /doesn't show the _Verify:_ run — the exact command and its exit code: `node --test tests\/login\.test\.js`/.test(hNoRun) && /report BLOCKED \/ NEEDS_CONTEXT/.test(hNoRun) && hNoType === hNoRun &&
+      sNoRun.block && sNoRun.why === "implementer-evidence" && sNoRun.task === 1 && sNoRun.feature === "auth" && silent(hOk) && sOk.block === false && sOk.why === "report-ok" &&
+      sExited.why === "report-ok",
+      "C1 SubagentStop (spec-implementer): DONE with no report, or a report without the _Verify:_ command + exit code → block naming the task and the report; a report with both ('exit code 0', 'exited with code 0') → silent (got " +
+      JSON.stringify([sNoRun.why, sOk.why, sExited.why]) + ")");
+    const sBlockedIm = S.stopCheck(pIm, { message: "**Status:** BLOCKED\nThe login API is missing.", agent: "spec-implementer" });
+    const sNoPath = S.stopCheck(pIm, { message: "**Status:** DONE\n14/14 passing", agent: "spec-implementer" });
+    const sNoVerify = S.stopCheck(pIm, { message: "**Status:** DONE\nReport: .specs/auth/.execution/task-2-report.md", agent: "spec-implementer" });
+    const sActiveIm = runHook(stopJs, { ...subPayload(doneReply), stop_hook_active: true });
+    fs.rmSync(rep);
+    const sActiveIm2 = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer", stopHookActive: true });
+    ok(sBlockedIm.why === "not-done" && sNoPath.why === "no-task" && sNoVerify.why === "nothing-to-verify" && silent(sActiveIm) && sActiveIm2.block === false &&
+      [sBlockedIm, sNoPath, sNoVerify].every((r) => r.block === false),
+      "C1 SubagentStop (spec-implementer): BLOCKED / NEEDS_CONTEXT, a reply naming no task report, a task with no runnable _Verify:_ and stop_hook_active are never sent back");
+    const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const stopCfg = ((hooksCfg.Stop || [])[0] || {});
+    const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
+    const cmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"';
+    const re = new RegExp(subCfg.matcher || "^$");
+    ok(stopCfg.matcher === undefined && stopCfg.hooks[0].command === cmd && stopCfg.hooks[0].timeout === 10 && subCfg.hooks[0].command === cmd && subCfg.hooks[0].timeout === 10 &&
+      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && !re.test("dev-spec-driven:spec-reviewer") && !re.test("Explore") && !re.test("general-purpose") &&
+      hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
+      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
+
+    // --- C1.2 the scope guard (meta.guard = "scope").
+    const pSc = c1Dir("scope");
+    const gi = await c1Call("spec_init", { projectDir: pSc, guard: "Scope" });
+    const fSc = S.createFeature(pSc, "Checkout", ["core"], "", undefined, "en");
+    c1Tasks(fSc, "- [x] 1. [US1] Cart\n  - _Implements: src/cart/cart.js_\n- [ ] 2. [US1] Pay\n  - _Implements: `src/pay/pay.js:12`, src/pay/providers/_\n" +
+      "- [ ] 3. [US1] API\n  - _Implements: src/api/**/*.ts, [path/to/file]_\n");
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    const pre = (file) => ({ session_id: "s1", hook_event_name: "PreToolUse", cwd: pSc, tool_name: "Edit", tool_input: { file_path: file, old_string: "a", new_string: "b" } });
+    const asked = (r) => { try { const j = JSON.parse(r.stdout); return j.hookSpecificOutput && j.hookSpecificOutput.permissionDecision === "ask" ? j.hookSpecificOutput.permissionDecisionReason : null; } catch { return null; } };
+    const gIn = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const gFolder = S.guardCheck(pSc, path.join(pSc, "src", "pay", "providers", "stripe.js"));
+    const gGlob = S.guardCheck(pSc, "src/api/v1/users.ts", pSc);
+    const gTest = S.guardCheck(pSc, "tests/pay.test.js", pSc);
+    ok(gi.p.guard === "scope" && /Guard mode SCOPE/.test(gi.p.guardNote) && S.readRoadmap(pSc).meta.guard === "scope" && S.guardEnabled(pSc) === true &&
+      gIn.decision === "allow" && gIn.why === "in-scope" && gIn.task.number === 2 && gFolder.why === "in-scope" && gFolder.task.number === 2 && gGlob.why === "in-scope" && gGlob.task.number === 3 &&
+      gTest.decision === "allow" && gTest.why === "test-file" && silent(runHook(guardJs, pre(path.join(pSc, "src", "pay", "pay.js")))) && silent(runHook(guardJs, pre(path.join(pSc, "src", "api", "x.ts")))),
+      "C1 scope guard: spec_init {guard: 'Scope'} stores meta.guard 'scope'; a file an open task names (anchored path, a folder above it, a glob) or a test file → allowed, the hook silent (got " +
+      JSON.stringify([gi.p.guard, gIn.why, gFolder.why, gGlob.why, gTest.why]) + ")");
+    const gSame = S.guardCheck(pSc, "src/pay/refund.js", pSc);
+    const hSame = asked(runHook(guardJs, pre(path.join(pSc, "src", "pay", "refund.js"))));
+    const gDone = S.guardCheck(pSc, "src/cart/cart.js", pSc); // planned by a DONE task only
+    const gFar = S.guardCheck(pSc, "lib/util.py", pSc);
+    const gApiJs = S.guardCheck(pSc, "src/api/legacy.js", pSc);
+    ok(gSame.decision === "ask" && gSame.why === "out-of-scope" && JSON.stringify(gSame.likely) === JSON.stringify({ feature: "checkout", number: 2, via: "same-folder" }) &&
+      hSame === gSame.reason && /^dev-spec guard \(scope\): src\/pay\/refund\.js is not in the plan — no open task of checkout names it in _Implements:_\. Add it to task 2's _Implements:_ \(checkout — same folder as src\/pay\/pay\.js\) and re-approve the tasks phase, or plan the change with \/spec-converge \(spec_append_tasks\)\./.test(hSame || "") &&
+      gDone.decision === "ask" && gFar.decision === "ask" && gFar.likely.via === "next" && gFar.likely.number === 2 && /task 2 \(checkout, the next open task\)/.test(gFar.reason) &&
+      gApiJs.decision === "ask" && gApiJs.likely.number === 3 && gApiJs.likely.via === "same-folder",
+      "C1 scope guard: a code file no open task names → ask naming the likely task (same folder — a glob's literal folder too — else the next open task); a file only a done task planned asks too (got " +
+      JSON.stringify([gSame.likely, gFar.likely, gApiJs.likely]) + ")");
+    // The advertised schema is one plain string enum (portable: some MCP clients reject a list-valued `type`); true / false still work.
+    const initTool = list.result.tools.find((t) => t.name === "spec_init");
+    const gOnStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "ON" });
+    const gOffStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "off" });
+    const gBool = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: true });
+    ok(initTool.inputSchema.properties.guard.type === "string" && initTool.inputSchema.properties.guard.enum.join() === "on,off,scope" && initTool.inputSchema.properties.stopCheck.type === "boolean" &&
+      gOnStr.p.guard === true && /Guard mode ON/.test(gOnStr.p.guardNote) && gOffStr.p.guard === false && gBool.p.guard === true &&
+      list.result.tools.every((t) => Object.values(t.inputSchema.properties || {}).every((s) => !Array.isArray(s.type))),
+      "C1 spec_init advertises guard as a string enum on | off | scope (any case; the booleans true / false read as on / off) and stopCheck as a boolean; no tool property has a list-valued type");
+    // guard true keeps today's behavior; scope with nothing approved asks like true; a forced approval's note rides along; PT; the CLI's value.
+    await c1Call("spec_init", { projectDir: pSc, guard: true });
+    const gTrue = S.guardCheck(pSc, "lib/util.py", pSc);
+    const hTrue = runHook(guardJs, pre(path.join(pSc, "lib", "util.py")));
+    await c1Call("spec_init", { projectDir: pSc, guard: "scope" });
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true, failing: ["placeholders"] } } });
+    const gForcedIn = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const gForcedOut = S.guardCheck(pSc, "lib/util.py", pSc);
+    // Several approved features: the plan is all their open tasks — a forced one's included (no note while a regular approval covers).
+    const fSc2 = S.createFeature(pSc, "Invoices", ["core"], "", undefined, "en");
+    c1Tasks(fSc2, "- [ ] 1. [US1] PDF\n  - _Implements: src/invoices/pdf.js_\n");
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    c1SetState(fSc2, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true } } });
+    const gMixed = S.guardCheck(pSc, "src/invoices/pdf.js", pSc);
+    const gMixedOut = S.guardCheck(pSc, "src/other.js", pSc);
+    S.manageFeature(pSc, "archive", "invoices");
+    ok(gMixed.decision === "allow" && gMixed.why === "in-scope" && gMixed.task.feature === "invoices" && !gMixed.note &&
+      gMixedOut.decision === "ask" && /no open task of checkout, invoices names it/.test(gMixedOut.reason),
+      "C1 scope guard with several approved features: any of their open tasks puts a file in the plan (a forced approval's too); the ask names them all");
+    c1SetState(fSc, { approvals: {} });
+    const gNone = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const pScPt = c1Dir("scope-pt");
+    S.initProject(pScPt, ["core"], "pt", { guard: "scope" });
+    const fScPt = S.createFeature(pScPt, "Carrinho", ["core"], "", undefined, "pt");
+    c1Tasks(fScPt, "- [ ] 1. [US1] Carrinho\n  - _Implements: src/carrinho.js_\n");
+    c1SetState(fScPt, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    ok(gTrue.decision === "allow" && gTrue.why === "approved" && silent(hTrue) && gForcedIn.decision === "allow" && /FORCED tasks approval/.test(gForcedIn.note) &&
+      gForcedOut.decision === "ask" && /FORCED tasks approval/.test(gForcedOut.reason) && gNone.decision === "ask" && gNone.why === "no-approved-tasks" &&
+      /^dev-spec guard \(scope\): src\/outro\.js não está no plano — nenhuma tarefa por concluir de carrinho o nomeia em _Implements:_\. Acrescenta-o ao _Implements:_ da tarefa 1 \(carrinho — mesma pasta que src\/carrinho\.js\)/.test(S.guardCheck(pScPt, "src/outro.js", pScPt).reason || ""),
+      "C1 guard true is unchanged (every code file allowed while tasks are approved); scope: a forced approval's note rides along (allowed or asked), nothing approved asks as before; the reason is in the project language (PT)");
+  }
   // @pkg C1 <<<
 
   // @pkg C2 tests >>>
