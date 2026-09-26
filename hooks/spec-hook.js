@@ -6,9 +6,13 @@
  *
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
- *     when a `.specs/.../tasks.md` is saved, run a traceability check. Surfaces gaps in
- *     the moment, with zero CI and zero cost.
- *   - SessionStart: print a one-line status of all features in the project.
+ *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
+ *     is saved, run its mandatory checks for the active tracks. Any spec edit also refreshes ROADMAP.md
+ *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
+ *     moment, with zero CI and zero cost.
+ *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
+ *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES), and one
+ *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade.
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
  * `hookSpecificOutput.additionalContext` so Claude sees it as context, not as a user message.
@@ -26,6 +30,7 @@ try {
 
 let emitted = false;
 let ran = false;
+const DRIFT_MAX_FILES = 200; // SessionStart hashes at most this many recorded _Implements:_ files, else skips the drift check
 // Emits exactly one JSON object and exits only after the write is flushed (Windows pipes truncate
 // otherwise). Callers `return emit(...)` — nothing may call process.exit() after it.
 function emit(eventName, text) {
@@ -70,6 +75,12 @@ function findProjectDir(filePath) {
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run the hook
   ran = true;
+  // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
+  // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
+  return spec.withReadCache(() => handle(raw));
+}
+
+function handle(raw) {
   let payload = {};
   try {
     payload = JSON.parse(raw || "{}");
@@ -82,10 +93,29 @@ function main(raw) {
   if (event === "SessionStart") {
     try {
       const pdir = process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
+      // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
+      if (!isDevSpecProject(pdir)) process.exit(0);
       const list = spec.listFeatures(pdir);
       if (!list.exists || !list.features.length) process.exit(0);
-      const h = spec.msg(spec.projectLang(pdir)).hook;
-      const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, f.phase, f.tasksDone, f.tasks));
+      const m = spec.msg(spec.projectLang(pdir));
+      const h = m.hook;
+      const phase = (p) => (m.phaseNames && m.phaseNames[p]) || p; // 'executing' → 'em execução' / 'en ejecución'
+      const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, phase(f.phase), f.tasksDone, f.tasks));
+      // Drift since finish (finished features only — a reopened one is not; archived ones are left to `dev-spec drift`,
+      // like the feature lines above, so a set-aside feature can't nag every session). Bounded: over DRIFT_MAX_FILES
+      // recorded files (or ~8 MB of them) nothing is hashed — `dev-spec drift` still checks on demand. Never blocks or
+      // breaks the session line.
+      try {
+        const d = spec.drift(pdir, null, { maxFiles: DRIFT_MAX_FILES, maxBytes: 8 * 1024 * 1024, activeOnly: true });
+        if (d && d.ok && !d.skipped) d.features.filter((x) => x.drifted).forEach((x) => lines.push(m.drift.hookLine(x.feature, x.changed.length + x.missing.length + x.nowPresent.length)));
+      } catch { /* best-effort */ }
+      // .specs/ from an older dev-spec (roadmap.json meta.specVersion absent or older than this engine — spec_init /
+      // spec_create stamp a brand-new project, spec_upgrade {apply} stamps an upgraded one): ONE line pointing at the
+      // upgrade audit. roadmap.json is already read (the project language); never throws.
+      try {
+        const v = spec.specVersionStatus(pdir);
+        if (v && v.behind && m.upgrade) lines.push(m.upgrade.hookLine(v.from));
+      } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);
@@ -99,6 +129,8 @@ function main(raw) {
     if (!filePath || !fwd.includes("/.specs/")) process.exit(0);
     // Subagent-execution scratch (briefs, reports, ledger) is not spec content: no lint, no roadmap churn.
     if (fwd.includes("/.execution/")) process.exit(0);
+    // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
+    if (fwd.includes("/.specs/.removing-")) process.exit(0);
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
     if (!isDevSpecProject(pdir)) process.exit(0);
@@ -107,38 +139,64 @@ function main(raw) {
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
+    // The generated files at the .specs/ root (ROADMAP.md/.html, SPECS.md) are outputs, never a reason to refresh.
+    const atRoot = path.resolve(path.dirname(filePath)).toLowerCase() === path.resolve(pdir, ".specs").toLowerCase();
+    const generated = base === "roadmap.md" || base === "roadmap.html" || (atRoot && (base === "specs.md" || base === "upgrade.md"));
     let roadmapNote = "";
-    if (base !== "roadmap.md" && base !== "roadmap.html") {
+    if (!generated) {
       try {
         const w = spec.writeRoadmapMd(pdir);
         if (w.ok) roadmapNote = h.roadmapUpdated(w.overallPercent, w.complete, w.total);
       } catch {
         /* best-effort */
       }
+      // …and the living catalog (.specs/SPECS.md) after a spec artifact changed — only once it exists and carries the
+      // AUTO-GENERATED marker (maybeRefreshCatalog checks both; unchanged content is not rewritten). Steering is not
+      // catalogued. Best-effort, silent.
+      if (!/\/\.specs\/steering\//i.test(fwd)) {
+        try { spec.maybeRefreshCatalog(pdir); } catch { /* best-effort */ }
+      }
     }
 
     try {
       if (base === "requirements.md") {
         const text = fs.readFileSync(filePath, "utf8");
-        const r = spec.earsValidate(text, spec.featureLang(pdir, feature)); // issue messages in the spec's language
+        const lang = spec.featureLang(pdir, feature);
+        const r = spec.earsValidate(text, lang); // issue messages in the spec's language
         if (!r.ok) process.exit(0);
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");
-        if (!errs.length && !warns.length) return emit("PostToolUse", h.earsClean(r.summary.criteriaDetected));
-        const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${i.severity}] ${i.msg}`);
-        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0));
+        // Template placeholders anywhere in the file (Summary, stories, SC/NFR — not only criteria): never "all clean"
+        // while any remain. The gates' own view: a removed track's [SaaS]/[AI] criteria are inactive.
+        const ph = (spec.featurePlaceholders(pdir, feature, "requirements.md") || { items: [] }).items;
+        const G = spec.msg(lang).gates;
+        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
+        if (!errs.length && !warns.length) return emit("PostToolUse", phLine || h.earsClean(r.summary.criteriaDetected));
+        // The severity label `dev-spec ears` prints (cliOutput.words: aviso / erro · aviso / error); EN keeps warn / error.
+        const words = (spec.msg(lang).cliOutput && spec.msg(lang).cliOutput.words) || {};
+        const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${words[i.severity] || i.severity}] ${i.msg}`);
+        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : ""));
       }
 
       if (base === "tasks.md") {
         const tr = spec.traceCheck(pdir, feature);
         if (!tr.ok) process.exit(0);
-        if (tr.verdict === "pass") return emit("PostToolUse", h.traceOk(tr.totalAcs));
-        const parts = [];
-        if (tr.uncoveredByTasks.length) parts.push(h.traceUncovered(tr.uncoveredByTasks.join(", ")));
-        if (tr.phantomAcsInTasks.length) parts.push(h.tracePhantomAc(tr.phantomAcsInTasks.join(", ")));
-        if (tr.uncoveredByTests && tr.uncoveredByTests.length) parts.push(h.traceUncoveredTests(tr.uncoveredByTests.join(", ")));
-        if (tr.phantomTestsInTasks && tr.phantomTestsInTasks.length) parts.push(h.tracePhantomTests(tr.phantomTestsInTasks.join(", ")));
-        return emit("PostToolUse", h.traceGaps(feature, parts.join("\n  - ")));
+        // Every gap kind the engine reports, with its IDs (a hand-picked subset used to leave an empty "- ").
+        const lang = spec.featureLang(pdir, feature);
+        const parts = spec.traceGapLines(tr, lang);
+        // Then the warnings (uncovered / phantom EC·NFR·SC) — listed, never blocking. No test-code scan here: hooks stay fast.
+        const warns = spec.traceWarningLines(tr, lang);
+        const warnText = warns.length ? "\n" + spec.msg(lang).deepTrace.warningsHead + "\n" + warns.map((w) => "  ▲ " + w).join("\n") : "";
+        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText);
+        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText);
+      }
+
+      if (base === "design.md") {
+        // The design's mandatory checks for the feature's ACTIVE tracks ([SaaS]/[AI] sections, Constitution Check,
+        // placeholders) — one file, string checks only, in the feature's language.
+        // Not an active feature's design (an archived one, steering/design.md): fall through to the roadmap note.
+        const d = spec.designSaveCheck(pdir, feature);
+        if (d.ok) return emit("PostToolUse", d.text);
       }
     } catch {
       process.exit(0);

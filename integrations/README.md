@@ -8,7 +8,7 @@ Two ways to get a working config:
 
 1. **Generate it (recommended)** — prints the config with the correct absolute path for *your* machine:
    ```bash
-   node cli/dev-spec.js mcp-config <client>     # claude-desktop | cursor | windsurf | vscode | gemini | codex | all
+   node cli/dev-spec.js mcp-config <client>     # claude-desktop | claude-code | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 2. **Copy a template and replace the placeholder** with your real path to `mcp/server.js`.
 
@@ -42,4 +42,9 @@ machine when this repo is the open project — no editing needed.
   To pin a project explicitly, add `"env": { "SPEC_PROJECT_DIR": "/path/to/your/project" }` to the
   server entry.
 - After editing a config, restart the tool (or restart the MCP server from its UI). Verify the
-  `spec-driven` tools appear. Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+  `spec-driven` tools appear (30 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+- Every tool works the same in any MCP client. The plugin's hooks — the save checks, the SessionStart
+  status and the opt-in guard mode — are Claude Code only.
+- The workflow rules for your own project are generated the same way:
+  `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints that tool's rule file with
+  this clone's absolute paths (the copies in this repo use clone-relative paths).

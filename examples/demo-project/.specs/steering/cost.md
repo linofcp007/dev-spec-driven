@@ -1,7 +1,7 @@
 # Cost Budget
 
 ## Infrastructure Budget
-Target: < $XX/month year 1.
+Target: < $400/month year 1.
 
 ## Cost Per User Target
 Target: < $0.50 per MAU. If exceeded, stop and optimize.

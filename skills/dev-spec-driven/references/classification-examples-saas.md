@@ -1,5 +1,10 @@
 # Classification Matrix: Worked Examples
 
+> **Vocabulary map.** These examples use the older *Fast Path / Rigor Path* names. Read **Rigor
+> Path** as **Spec mode + the track whose signal fired** (here usually `+saas`, plus `+tdd` when money,
+> auth or data integrity is involved), and **Fast Path** as **Vibe or Bounded mode**, or Spec mode with
+> `core` only. The current decision procedure is in `classification-matrix.md`.
+
 The Fast Path vs Rigor Path decision is the highest-leverage decision in a SaaS feature.
 Over-rigor wastes days writing tests for a settings toggle. Under-rigor ships a billing
 bug that costs you customers at 3AM.

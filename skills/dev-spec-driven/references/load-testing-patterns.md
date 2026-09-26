@@ -367,6 +367,6 @@ spike ends.
 ### Run 2026-05-20 (after cache layer changes)
 - Steady: P95 = 1150ms ⚠️  (regressed 17%)
 - Root cause: new query missing index on (event_id, status)
-- Fix: PR #1234 adds index
+- Fix: commit a1b2c3d adds the index
 - Rerun: P95 = 850ms ✅ Ship.
 ```

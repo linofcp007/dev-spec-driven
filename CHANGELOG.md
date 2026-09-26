@@ -3,6 +3,457 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.13.0] — 2026-09-26
+
+A full audit of the engine, then gates you can trust and the change-management layer that comes after
+a spec is approved: impact analysis, convergence, a living catalog, drift, metrics, import from other
+spec tools, an opt-in guard, scoped steering and an upgrade path for projects made by an older version. 30 MCP tools
+(was 23), 44 commands (was 35).
+
+### Fixed — audit of 1.12 (every fix has a regression test)
+- **Evidence gate.** A task whose `_Verify:_` names a runnable command was "verified" by a text note, and a
+  bare `{exitCode: 0}` verified a task on its own. Now only `{command, exitCode: 0}` verifies it; a note
+  ticks it but leaves it unverified, an exit code only counts next to its command ("exit 0" without one
+  is kept as a note), and `{exitCode}` alone is rejected. A failed run on an OPEN task used to be
+  discarded — every run is now recorded (never ticked) with a short history (last 5), and a later note
+  can't clear it. Evidence records are stamped with their task's text and `_Verify:_` command, so the
+  second of two tasks numbered `3.` never borrows the first one's passing run and an edited command's old
+  run no longer counts. `spec_complete_task` returns a stable reason code (`unverifiedReason`:
+  `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `no-evidence`);
+  doctor, `spec_finish` and the ROADMAP.md / ROADMAP.html "needs attention" line list each unverified task
+  with a localized reason (`#1 (latest run failed), #3` — the roadmap used to show only a count), the roadmap's
+  in its chrome language. A `.state.json` whose evidence/approvals aren't objects is refused
+  before tasks.md is touched. A task with no runnable `_Verify:_` stays outside the run gate: a v1.12 bare
+  `{exitCode: 0}` there still verifies (legacy evidence never leaves a task worse off than none) and a later
+  note becomes its summary. `verified` is one verdict on every surface (`spec_complete_task`, `spec_status`,
+  `spec_impact`, doctor, `spec_finish`, ROADMAP.md): `spec_complete_task` answered `verified: false` with no
+  `unverifiedReason` for a task with no runnable `_Verify:_` and nothing recorded while doctor and finish passed
+  it — it is now verified with `nothingToVerify: true`, `unverifiedReason` is present whenever `verified` is
+  false, `done` prints no "(verified)" for it and `spec_impact` says "nothing to verify" (the `spec_complete_task` tool description no longer says doctor and finish
+  keep listing such a task).
+- **Placeholder and approve gates.** An untouched scaffold passed `doctor` with `readyToAdvance: true`,
+  and `spec_approve` stamped anything. Doctor has a `placeholders` check (fail for the current and earlier
+  phases, warn for later ones), the approval runs that phase's checks and refuses while any fails, and
+  `next_action` no longer loops recommending an approval the gate refuses (it names what it fails on).
+  `next_action` also stopped telling a brand-new feature to fix the checks of phases it hasn't reached.
+  `spec_finish` could be "ready" with an artifact edited after its approval, template placeholders left in
+  the chain, or a bugfix without a root cause; each now blocks. A bugfix's fix task could be ticked before
+  bug.md's Root Cause was written — tasks after the root-cause task are now refused until it is, and the
+  template's own "Fix the root cause" task can't open the gate for itself. The requirements.md hook no
+  longer says "all clean" while placeholders remain. Placeholder detection is a lookup, not a guess from the
+  bracket's shape: a bracket is a template placeholder only when its text (case and spacing ignored) is one a
+  scaffold writes — the current templates (every builder, EN/PT/ES, every track combination and kind), the 1.12.1
+  templates (kept as a static list, so a spec scaffolded by 1.12 is still read correctly) — or a generic
+  TODO / TBD / TBC / FIXME / `…`. Everything else in brackets is your content: real values in a criterion
+  (`[free: 60, pro: 600, enterprise: 6000]`, `[admin, billing-manager, read only]`, `[10 MB, 25 MB for pro]`, `[owner, admin]`)
+  never refuse an approval, and an approved 1.12 spec with bracketed values stays finishable (a shape heuristic
+  flagged those, so upgraded, fully-done features failed doctor, `next_action` said "fill requirements.md" at 5/5
+  tasks and finish was blocked). Code is left alone (`[Authorize]`, `[dependencies]`, `[]`) except the templates' own
+  `` `[path]` ``, a slot left inside a half-edited template sentence is still found, the ID-list check is
+  linear (a long space-separated ID list in one bracket used to freeze the server); and it treats the
+  scaffold's verbatim +saas/+ai tasks as real tasks. A core-only feature's Signals line is written as
+  `- none beyond core` (PT/ES too) — in brackets, the gate refused every core-only classification (created or
+  imported) on the tool's own answer — and a pre-1.13 `[none beyond core]` is not a placeholder either.
+  `tests` and `execution` were stamped unchecked (an untouched scaffold with 0 tasks done was "finished 0m" in
+  `spec_metrics`): approving `tests` now needs every planned T-ID named by a test file (+tdd, `tests-in-code`) and an
+  `evals/golden.json` of the feature's own (+ai, `eval-sets`) — nothing to approve on a core-only feature — and
+  `execution` runs `spec_finish`'s blockers; `spec_metrics` also reads `finished` from the finish `spec_finish {write}`
+  records. A file date alone no longer blocks `spec_finish`: a 1.12 bugfix design approval (no fingerprint) judged
+  bug.md by its mtime, so every clone or copy was "changed since approval" and couldn't finish — bug.md is now
+  reported as untracked (a warning to re-approve), a pre-1.11 approval's date check is a finish warning, and
+  `spec_impact` says `baseline: "none"` (changed unknown) instead of "only its fingerprint was recorded".
+- **Gates next_action follows.** SKILL.md calls Phase 4 (failing tests / eval harness) the hard gate, yet no
+  surface ever asked for it: on a +tdd feature `next_action` went from the tasks approval straight to "Implement
+  task #1" with `gatesOk: true`. Phase `tests` is now pending on a +tdd / +ai feature once its test or eval plan
+  exists — `next_action` asks for it (`/writeTests`, then `/approve <f> tests`) before any task, and `gatesOk` /
+  `spec_finish` count it (never for a bugfix: its failing regression test is a task). A bugfix's design gate
+  (bug.md — Reproduction + Root Cause) was never pending either, because `pendingGates` looked for a design.md:
+  it wasn't asked for, finish didn't need it and a later root-cause edit went unnoticed. It is now due on bug.md,
+  like approve, impact and changed-since-approval already read it.
+- **Phase by phase.** SKILL.md presents each phase for approval before the next one starts, but `next_action` went
+  from "fill requirements.md" straight to "fill design.md" and asked for approvals only once the whole chain was
+  written — and `spec_approve` took a bugfix's tasks before its design. `next_action` now walks the active phases in
+  order (classification, requirements, design, test/eval plan, tests, tasks) and, for the first one not approved yet,
+  says fill it → fix what its gate refuses → approve it; the next phase starts only after that approval (a changed
+  artifact's re-review still comes first — for the artifacts that can be re-approved now: one of a phase after the
+  first pending gate waits for that gate, since approve would refuse it on `phase-order` and next_action looped;
+  implement, verify, drift and finish follow). Approving a phase while an
+  earlier one is still unapproved is refused (check `phase-order`, naming the earlier phase — EN/PT/ES) unless forced.
+  A finished feature whose `execution` approval exists but predates a later approval or change request (an upgraded
+  1.12 feature after its new tests sign-off) was told the final approval was missing; it is now asked to re-confirm
+  it, naming what came after (EN/PT/ES).
+- **Task scanner.** Tasks inside HTML comments or fenced code were counted and ticked, `complete` ticked
+  the first regex match in the file, `01.` wasn't task 1, and a stray unclosed `<!--` or fence hid every
+  task below it (the feature could read as complete). One comment- and fence-aware scanner now serves
+  status, next, complete, brief and finish; task numbers are numeric; a duplicated number resolves to its
+  first OPEN task (doctor warns `duplicate-tasks`), `done --run` runs the `_Verify:_` of the task it
+  ticks, and the tick lands on exactly that line (CRLF kept). Markers in a fenced example under a task
+  (`_Verify:_`, `_Implements:_`, AC/T IDs) are the example's, never the task's: `done --run` doesn't
+  execute them, trace_check doesn't count them as coverage or planned files, and `spec_task_brief` takes no AC / T-ID
+  from them (the example's IDs gave the brief a foreign criterion and test, the tdd loop and an "unresolved" warning).
+- **Tracks.** A Mermaid node `X[AI]` or prose mentioning `[AI]` switched +ai on (doctor then failed ten
+  "missing" AI sections). Tracks are now stored in `.state.json`; older features are detected from real
+  headings only. `'tdd,saas'` / `'+saas +ai'` are split, unknown names get a did-you-mean error, and
+  `spec_create` on an existing feature with new tracks adds them the way `spec_add_track` does. `add_track`
+  now updates the Active Tracks line, the track's steering, its template tasks (once) and the stored set.
+  A fresh scaffold starts at phase `requirements` (it could report a later one), dot-folders and non-slug
+  folders are no longer listed as features, and a tasks-ready feature with nothing done shows 📋 planned.
+- **Sections and the merge title.** `extractSection` matched the H1 title (`# Bug: Fix login crash` was
+  the Fix section, and fed the merge summary) and any heading merely containing a synonym (`Fixtures` as
+  Fix). A synonym must now start an H2+ heading, word-bounded. `spec_status` distinguishes a section that
+  is present from one that is filled.
+- **Traceability, EARS, clarify.** An OPEN task's `_Implements:_` file that isn't written yet was a
+  gap (it is the plan: `plannedImplFiles`); at a drive root (`subst Q:\`) every `_Implements:_` path read as
+  outside the project. `_Implements: src/app.js:12_` / `src/app.js#L12` named the file for coverage and the drift
+  baseline but a missing one for trace_check (doctor and `spec_finish` failed "files that don't exist"); every reader
+  now drops the anchor — `next --batch` too (`src/pay.js:10`, `src/pay.js#L50` and `./src/pay.js` went to three
+  parallel implementers as three files; a folder now also overlaps the files under it) and the brief's design
+  sections (the raw spelling found none). EC-/NFR-/SC- IDs got `no-id` warnings, a deeper sub-list split its criterion, and a
+  template criterion linted clean (new `placeholder` code). A stray unclosed `<!--` above the criteria hid every AC
+  from the EARS linter (0 criteria, verdict pass — so the requirements approval passed a criterion with no modal verb)
+  while trace_check counted them all; a marker that never closes is now plain text there and in placeholder
+  detection, as it already was for tasks. Every fence-aware reader shares one CommonMark closer rule: a closing
+  fence carries no info string and is at least as long as its opener — a `js`-tagged fence line inside an open
+  block used to close it, so the rest of requirements.md read inverted and its ACs vanished from EARS and
+  trace_check. `clarify` finds IF…THEN per criterion, keeps
+  real line numbers after multi-line comments and groups placeholder questions, and never asks a bugfix for
+  non-functional requirements — its EN/PT/ES template has no NFR section by design, so a filled bugfix stayed
+  `needs-clarification` forever at the step next_action points to. The classifier negates
+  across filler words ("sem uso de IA") while PT "no uso do LLM" stays em+o. Every template AC now has a
+  task and a test row, so a fresh scaffold traces clean once filled. `spec_create` on an existing feature adding
+  +tdd with +saas/+ai planned test rows for US-1.AC-5…AC-9 its requirements never had (`spec_add_track` already
+  didn't) — both now share one rule — and `trace_check` reports a test-plan row covering an AC requirements.md
+  doesn't define as a gap (`phantomAcsInTests`; doctor and the test-plan approval see it).
+- **Robustness.** MCP arguments weren't type-checked: `number: 1.9` (or `1e21`) ticked task 1, `name: {a:1}`
+  created `.specs/object-object/`, `cap: "abc"` scanned nothing. Arguments are now validated against each
+  tool's `inputSchema` (safe integers, enums, minimum, array items, nested objects) with localized errors.
+  Valid JSON of the wrong shape in `roadmap.json` / `.state.json` crashed mutators after their destructive
+  step (remove deleted the folder, then threw); it is now refused up front like unparseable JSON.
+  Prototype keys (`constructor`, `__proto__`) as feature, steering or rule names are plain keys. `spec_depend`
+  accepted dependencies on features that don't exist. `spec_roadmap` reported a refused ROADMAP.md write as
+  success. The eval harness now resolves accented and legacy slugs and rejects wrong-shaped sets.
+- **CLI ↔ MCP parity.** `finish --include-body`, `classify --name` and `ears --text "…"` / `ears -` match
+  their MCP arguments; trace, doctor and the hook list every gap kind with its IDs (they could print
+  "gaps-found" with nothing under it); a value flag no longer swallows the next flag; repeated `--add` /
+  `--rm` / `--req` are all kept; `--tracks` is merged with positional tracks everywhere; `backlog rm` of an
+  unknown name is an error; `ears --text "---"` is a value; approvals default to the same approver on both
+  surfaces; `--lang` is checked against `en|pt|es` like the MCP enum (an unknown value such as `fr` became
+  `en` and was saved — `init` rewrote the project language). The new MCP enum validation was case-sensitive while
+  the CLI (and the 1.12 MCP) took `Design` / `PT` / `Bugfix`: enums the engine folds (phase, lang, kind, action) are
+  case-insensitive on both surfaces (`backlog ADD` too); `spec_import`'s tool stays exact.
+- **CLI switches, numbers and refusals.** Boolean switches were read by truthiness, so `--x=false` turned them
+  ON: `done --run=false` ran the `_Verify:_` commands, `add-track --remove=false` removed the track, `--write=false`
+  wrote. `--x=true|false` (1/0, yes/no, on/off) is now honored and any other value is an error. The CLI refuses
+  what MCP refuses: a task number like `1.9` / `2abc` (`brief 1.9` briefed task 1 — the engine now refuses it on
+  both surfaces), `--cap` / `--max` that aren't integers ≥ 1 (`scan --cap -3` scanned nothing; `spec_next_task`
+  `max` gets `minimum: 1` too), an unknown `--kind` (a typo scaffolded a plain feature for good) or backlog action
+  (`backlog delete X` just listed), and the hidden CLI-only aliases are gone: `feature delete X --yes` removed a
+  folder and `backlog remove X` an item that `spec_feature` / `spec_backlog` refused (exit 1 now, like MCP). With
+  `--json`, a refused operation prints the engine result (`{ok: false, error, recorded…}`) on stdout, as MCP
+  returns it, and exits 1 — stdout used to be empty.
+- **Localization.** CLI human output, SessionStart phase names, argument errors and the eval harness speak
+  the feature's (or project's) language — EN/PT/ES; `--json` is unchanged. Leftovers fixed: status section
+  labels, `depend` and `add-track` lines, usage prefixes, `unknown command`, EARS severities, doctor's ears
+  detail, `spec_add_track`'s `added` entries and the ROADMAP.md / ROADMAP.html phase column were English in
+  PT/ES projects (the JSON `phase` stays English-stable).
+- **Pre-commit.** Staged paths with accents (`serviços/.specs/…`) were quoted by git and skipped; names are
+  now read NUL-separated, and the output names the phantom and uncovered IDs. A requirements.md with EARS
+  warnings or template placeholders no longer reads "EARS clean" — a non-blocking ⚠ line names them.
+- **`done --run` on Windows.** cmd.exe (the default shell) has no single quotes, so `_Verify: node -e
+  'process.exit(1)'_` exited 0 and the task was recorded as verified. A `_Verify:_` in POSIX syntax (single quotes,
+  `$VAR`) is now refused before anything runs unless `--shell` picks a shell (`--shell bash`, or `--shell cmd` to
+  run it under cmd.exe anyway). The "retry with `--shell bash`" hint is printed only when cmd.exe itself failed (an
+  unknown command — exit 9009 —, its own syntax error, a path it can't find; EN/PT/ES Windows wording), never after a
+  check that ran and failed (`node tests/x.js` → exit 1), which needs a code fix. A red-phase task (it writes a test
+  that must FAIL) carrying a must-pass `_Verify:_` could never be verified — `--run` refused the red run and a note
+  left it unverified, with no word on why; its refusal, its note and `next_action`'s verify step now say to move the
+  command to the fix task, or drop it and record the red run as a note (`redPhaseVerify: true`, EN/PT/ES), and the
+  bugfix template's tasks comment says its failing-test task carries no `_Verify:_`.
+- **`spec_impact --phase test-plan` / `eval-plan`.** `next_action` listed test-plan.md (and eval-plan.md) among the
+  artifacts changed since their approval but offered only `--phase design`. `spec_impact` (MCP enum and CLI) now takes
+  `test-plan` — the T-ID row diff (added / modified / removed planned tests; re-padding a table column is no change) with
+  the tasks making each changed test green; `--reopen` unticks a modified test's done tasks and lists a removed test's in
+  `retire` (never redone, EN/PT/ES) — and `eval-plan` (a section diff, like design); next_action and doctor name the
+  right phase for each changed file.
+- **Concurrency, Windows files and foreign `.specs/`.** Two processes completing tasks of one feature at the same
+  moment (two editors' MCP servers, or MCP + `dev-spec done`) lost ticks and evidence while both answered ok — the
+  feature mutators (complete, approve, append-tasks, add/remove track, `spec_create` re-run on an existing feature,
+  impact `--reopen`, finish `--write`, brief `--write`, metrics `--write`) now hold a cross-process lock (`.specs/<feature>/.lock`, reclaimed when its
+  process is gone) and a caller that can't get it within `DEV_SPEC_LOCK_WAIT_MS` (default 10 s) gets a localized
+  "busy" error with nothing changed (a caller whose feature folder was removed, renamed or archived while it waited
+  answers not-found on fresh reads — it recreated a zombie folder from its stale pre-lock check); tasks.md ticks and track additions are written atomically (a concurrent reader no
+  longer sees a truncated file). `spec_feature` rename / archive / remove / restore never move or delete a folder
+  another process is writing (they moved it away mid-write: a zombie `.specs/<old>/` came back and a feature's ticks
+  and its spec split between two folders) — they wait on the same lock, which moves with the folder and is released
+  there (left behind, it kept the renamed feature "busy"). `roadmap.json`'s read-modify-writes (depend, backlog, the
+  prunes of create / archive / rename / remove / restore, init `--lang` / `--guard`, roadmap `--lang`) hold
+  `.specs/.roadmap.lock`: two processes adding backlog items at once kept about half of them, and a dependency could
+  vanish (its feature then read as unblocked). The lock itself guarantees one holder at a time: a waiter that found a
+  just-released lock gone read it as stale and deleted the NEXT holder's fresh lock (and a holder's release deleted
+  whatever lock sat at the path), so under contention two processes ran the read-modify-write at once — 80 parallel
+  `dev-spec done` calls all answered ok and kept 49–71 ticks. A lock that can't be stat'ed is never stale, a stale
+  lock is removed only under a `<lock>.reclaim` guard while it is still the lock judged stale, and a holder removes
+  only the lock carrying its own token. A stale lock that can't be removed (held open without delete sharing by a
+  scanner or sync client, a read-only folder, a folder named `.lock`) spun at 100% CPU with no deadline and froze
+  the MCP server; it now waits like a held lock and answers `busy` + `stuck` with a localized "delete it by hand"
+  error. The lock files and their reclaim guards are git-ignored by a `.specs/.gitignore` that init, create and every
+  lock acquisition keep (an existing one only gains the missing lines): a lock left by a killed process showed in
+  `git status`, `git add -A` committed it, and on a clone its fresh checkout time kept the feature "busy" for two
+  minutes before the reclaim deleted a tracked file. `brief --write` (`spec_task_brief {write}`) resolved the feature,
+  and a rename / archive / remove landing before its write recreated a zombie `.specs/<old>/.execution/` that listed
+  as a phantom feature and blocked renaming back — it and `metrics --write` now wait on the lock like every writer.
+  `feature remove` deleted the folder in place, so its `.lock` went early while the folder still existed: a waiter took a
+  fresh lock in the half-deleted folder and wrote into it, and the removed feature came back (`.state.json`,
+  `.history/`) after an ok remove (1 run in 12 under stress). The folder is now renamed to a dot tombstone
+  (`.specs/.removing-<slug>-…`, the lock inside) before it is deleted — waiters find nothing to lock and answer "not
+  found" — and a tombstone a failed delete leaves is swept by the next remove. A process killed between creating a lock
+  and writing its note left an EMPTY lock that blocked the feature for two minutes: the note is now written with the lock
+  (a temp file hard-linked into place; an O_EXCL fallback where links are unsupported) and a noteless lock older than 5 s
+  is stale. Archive / rename / restore / remove answered a raw, untranslated `EPERM` when another program held the folder
+  open for more than 60 ms: the rename is retried for ~1.4 s (the lock is held), then a localized "folder in use, try
+  again" (EN/PT/ES). A lock taken inside another (a folder move's roadmap lock) could wait a second full
+  `DEV_SPEC_LOCK_WAIT_MS`; it now gets what is left of the outer budget. The temp files a killed process leaves
+  (`<file>.<pid>.<ts>.tmp`) and leftover tombstones are git-ignored too.
+  When a generated file couldn't be replaced
+  (read-only or locked on Windows, a folder in its place) every mutator and hook run left a full-size
+  `ROADMAP.md.<pid>.<ts>.tmp` in `.specs/` — the temp file is now always removed (and a brief Windows lock is
+  retried). A BOM-only re-save ("UTF-8 with BOM", Windows PowerShell 5.1) of an approved artifact counted as
+  changed-since-approval and blocked `spec_finish` while `spec_impact` showed nothing changed — a BOM is ignored like
+  CRLF, and approvals recorded over a BOM file still match. SessionStart printed a dev-spec status block for a
+  `.specs/` that belongs to another tool; it now applies the PostToolUse ownership check. The MCP server refuses a
+  network `projectDir` (`\\host\share`, `//host/share`, `\\?\UNC\…`) before touching it — a tool call made the server
+  connect out over SMB to any host it named (and hang on an unreachable one); WSL paths and `\\?\C:\…` stay accepted.
+- **Docs.** SKILL.md claims match the engine (every execution loop ends in `spec_complete_task
+  {evidence}`, the EARS example passes the linter, the constitution check is section presence), the
+  description is trigger-accurate and under 1,024 characters, rule files stay true in the copy
+  `rules <tool>` prints, PowerShell saves rule files as UTF-8, and the prose guard against PR/CI wording
+  covers EN/PT/ES. The worked designs "a complete design.md looks like" (`scale-design-template.md`,
+  `mandatory-ai-design-sections.md`) had no Constitution Check, so the 1.13 design gate refused a copy of
+  them — both now carry a filled Constitution Check and Complexity Tracking. The improvement-spec example
+  used bare `AC-1` headings, which trace to 0 ACs; it uses `US-1.AC-n` criteria. The demo project
+  (`examples/demo-project`) passes doctor with verdict PASS again, from a fresh clone too: its approvals carry
+  fingerprints, its steering and classification are filled, its edge cases are covered and its Phase 4 tests
+  exist; `examples/README.md` shows the real outputs, and `cli/test-cli.js` compares them on every run. README /
+  INSTALL / llms-install / CONTRIBUTING no longer hard-code test counts that go stale with every assertion.
+  README (EN/PT/ES) and AGENTS.md say the ROADMAP.md "needs attention" line names each unverified task with its
+  reason (they still said it showed a count); README, AGENTS.md, tooling-reference and `dev-spec help` say `reopen`
+  never unticks a removed criterion's tasks (`retire` lists them); `/approve` and the `spec_approve` description put a
+  test-plan row citing an undefined AC under the test-plan gate, where it is checked (they listed it under tasks).
+  tooling-reference says `dev-spec drift` also exits 1 on a stale baseline or an unreadable state, as the CLI help,
+  AGENTS.md and `/spec-drift` do (it said only on drift).
+- **Planning gates and test-plan rows.** At the requirements and design gates `spec_doctor` failed `traceability`
+  on the untouched tasks.md / test-plan.md template ("tasks reference unknown ACs (typos?): US-1.AC-3…") for any
+  feature whose ACs aren't the template's — while the same report called that file a later phase's template, "not
+  blocking yet", and the approve gate passed. The gap kinds that read a later phase's still-template artifact are
+  deferred (a warn, "not traced yet"); once it is written they fail as before. `spec_add_track tdd` (and
+  `spec_create` +tdd on an existing feature) planned the template's US-1.AC-1…4 / US-2.AC-1 rows for requirements
+  that were already written (an import) — a test for a criterion the feature lacks, approvable; the rows now come
+  from its own AC IDs (one generic row each). `spec_import` with +tdd still planned the template's rows (it scaffolded
+  before writing the imported requirements): trace said "(typos?)" on a fresh import and doctor failed traceability
+  once real tasks were imported. It now plans the imported ACs too, and the scaffold tasks.md it keeps when the source
+  has none cites only imported ACs and the tests covering them — else a localized placeholder. Its +saas / +ai track
+  tasks (and the ones `spec_add_track` appends) cite a criterion only when requirements.md defines it AS that track's
+  (under a `[SaaS]` / `[AI]` heading or carrying the marker): kept by number, tenant isolation / load test / the
+  prompt task "covered" an import's unrelated US-1.AC-5…8 (a coupon, a checkout) and trace_check passed with those
+  criteria implemented by nothing.
+- **Bugfix root-cause task.** Ticking the root-cause task while bug.md → Root Cause is still empty stays allowed (it
+  is the task that writes it) but returns `rootCausePending: true` with a note, and a later task's refusal no longer
+  says "do task 2 first" for a task already ticked — it says the section is still empty (EN/PT/ES). A Reproduction or
+  Root Cause that quotes bracketed evidence — `[object Object]`, a regex class `[A-Z]`, a log tag `[WARN]`,
+  `[Error: ENOENT …]` — was "not filled" in every language (doctor, the requirements / design approvals, the fix tasks
+  and finish refused a documented bug, naming no bracket); in bug.md only the bug report's own slots, or a section
+  holding nothing but brackets, count as unfilled — the 1.12 behaviour for evidence.
+- **Removed criteria.** `spec_impact --reopen` unticked the tasks of a REMOVED AC with "redo them with fresh
+  evidence" — `next` then pointed at re-building a feature the spec no longer has — and doctor called the leftover
+  reference a typo. A removed criterion's tasks are never unticked (nor by a design section naming only removed
+  criteria): `spec_impact` lists them with their test rows in `retire` `[{id, tasks, tests}]` to delete or repoint,
+  and `trace_check`'s informational `removedAcs` `[{id, changeRequest}]` lets doctor, trace and the approve gate say
+  "ACs a change request removed … (change request #N)" instead of "(typos?)".
+- **Finished features.** After `spec_finish {write}`, `spec_next_action` kept answering "close the feature with
+  /spec-finish" — even after the `execution` approval — and never mentioned drift, so following it re-baselined over
+  drifted files without a word. It now answers `finished` (asking for the `execution` sign-off while it is missing)
+  or `drift` with the changed files and the decision (spec wrong → `spec_impact`, code wrong → fix, harmless →
+  re-finish), plus a structured `drift`; a re-finish over a drifted baseline returns `baseline.replaced` and the CLI
+  prints the files it accepted. A feature that changed after its finish — a change request or a re-approval newer
+  than the baseline (tasks re-approved after `spec_append_tasks`), or an `_Implements:_` file the baseline never
+  recorded — read "finished — nothing left to do" again once its tasks were done, drift called it unchanged (a new
+  implementing file was never hashed), the catalog called it finished and the old execution sign-off still counted.
+  `spec_next_action` now answers `finish` again with `staleBaseline` {finishedAt, since, newFiles}, `spec_drift` lists
+  it as `stale` (verdict `stale`, CLI exit 1), the catalog shows it as complete, and an execution sign-off older than
+  the change is asked for again. A stale baseline still hashes the files it recorded: adding a file under an
+  implemented folder made a changed recorded file vanish from next_action ("finish it again") and `spec_drift`, and
+  the re-finish accepted it — now next_action answers `drift` (the decision, then finish again) with `staleBaseline`
+  and `drift`, and `spec_drift` lists the feature as drifted (`stale: true`, verdict `drift`), like SessionStart.
+  With every task ticked but one unverified (its latest run failed, a note on a runnable `_Verify:_`), next_action
+  said "close the feature with /spec-finish" — or "finished, nothing left to do" — while spec_finish and the
+  execution sign-off refused, and the catalog showed ✅ finished; it now answers `verify`, naming each task with its
+  reason and how to record a passing run (`dev-spec done <f> <n> --run`), and the catalog calls it complete.
+  The catalog's `finished` now means exactly what next_action and finish mean: it also reads `complete` when the only
+  change is an `_Implements:_` file the baseline never recorded (it checked state only and kept ✅ finished while
+  next_action said "finish it again"), and when an approved artifact was edited and not re-approved (it listed the
+  unapproved criterion as current behaviour under ✅ finished while finish refused). An ARCHIVED finished feature is
+  never walked for new files: a file added later under a folder it once implemented kept `dev-spec drift` at exit 1
+  for good with "finish it again (dev-spec finish <f> --write)", a command that answered only "not found"; a stale
+  archived feature's line now says to restore it first, then finish and archive it again (EN/PT/ES), and any
+  operation on an archived feature's name says it is archived and how to restore it.
+- **Eval sets.** The harness's dry run said "sets are valid" for items a live run then paid a model call for and
+  failed: an unknown grader type, a missing `id` / `input` / `expect`, a non-object item, a regex that doesn't
+  compile, `judge` without a rubric, `contains` / `equals` / `regex` without a value. Every item is validated — the
+  dry run exits 1 with one line per bad item, and a live run calls no model while any set is invalid; an
+  unparseable `evals/thresholds.json` (or a set threshold outside [0, 1]) is invalid instead of silently ignored.
+  A bare, non-numeric, zero or negative `--max-items` graded nothing and scored every set 0/0 = 100% (exit 0, and
+  `--set-baseline` wrote a 100% baseline): it must be an integer ≥ 1 (exit 2 otherwise, before any model call), and a
+  set with no items is invalid instead of passing. The harness's switches follow the CLI's rule: `--set-baseline=false`
+  (as `dev-spec evals` forwards it) overwrote `evals/baseline.json` and `--dry-run=false` dry-ran — `--dry-run`,
+  `--set-baseline` and `--require-live` take `=true|false` (1/0, yes/no, on/off), any other value exits 2.
+- **Fenced examples in test-plan.md.** A ```fenced``` example row counted as a real one: it covered its AC (trace_check
+  and the test-plan approval passed for an AC with no real test row) and planned a T-ID the Phase 4 `tests` gate then
+  demanded in the test code. Every reader of test-plan.md's IDs now skips fenced code, like tasks.md and
+  requirements.md — and a fence left unclosed inside a list item ends with that item (CommonMark, and the tasks
+  scanner's rule): it blanked every row below it, so their T-IDs planned nothing, covered nothing and read as phantoms
+  in tasks.md. requirements.md (criteria, EARS), the placeholder check and heading / design-section readers follow the
+  same rule.
+- **The requirements.md hook in PT/ES** printed each EARS issue's severity in English (`[warn]`) inside an otherwise
+  localized message; it now uses the label `dev-spec ears` prints (`[aviso]` / `[erro]` · `[aviso]` / `[error]`).
+
+### Added
+- **Upgrading an existing project: `spec_upgrade`** (`dev-spec upgrade [--apply]`, `/spec-upgrade`). After a plugin update,
+  a project's `.specs/` from an older version kept working, but nothing said so, nothing reviewed the specs created but not
+  implemented yet against the new rules, and approvals made before 1.13 had no history baseline (`spec_impact` answered
+  `fingerprint-only`). `roadmap.json → meta.specVersion` now records the dev-spec version that last upgraded or created the
+  project — `spec_init` / `spec_create` stamp a brand-new project only (creating one feature in an older project stamps
+  nothing); versions are compared numerically. While it is absent or older than the plugin, the SessionStart hook prints one
+  line pointing at `/spec-upgrade` (EN/PT/ES). The audit (read-only) groups every active feature — blocked (doctor fails) ·
+  needs attention · ok — with its status (not started · planning · executing · complete · finished), the failing and
+  warning checks, pending gates, artifacts changed since approval, approvals without a fingerprint or a history baseline,
+  unverified tasks with their reason codes, drift, next_action's step and a review recommendation: the read-only
+  `spec-critic` agent for specs with no task ticked, the spec-reviewer converge pass for half-done ones, none once complete.
+  `apply` runs the safe migrations only — it never edits an artifact, approves, ticks or deletes: inferred tracks saved to
+  `.state.json` (when none are), earlier approvals recorded in `approvalHistory`, a `.history/<phase>@<n>.md` baseline for each
+  approval whose fingerprint still matches its file (a changed or date-only approval is listed: re-approve to start its
+  history), the maintained `.specs/.gitignore`, the stamp (only once every feature migrated — each under its lock) and the
+  checklist `.specs/UPGRADE.md` (AUTO-GENERATED, in the project language; a hand-written one is left alone), plus the usual
+  refresh of the generated `ROADMAP.md` / `.html` (its progress now follows the 1.13 rules). A second apply
+  changes nothing. `/spec-upgrade` shows the audit, asks before applying, then offers the critic / converge reviews and turns
+  their findings into a proposed action list that goes through the normal gates. README (EN/PT/ES), INSTALL, INTEGRATIONS and
+  AGENTS.md gain an "Updating" step: update the plugin, then upgrade each project.
+- **`/spec-superpowers`** and a "Using it alongside superpowers" section (README EN/PT/ES, INTEGRATIONS,
+  AGENTS.md, SKILL.md): superpowers' planning / TDD / debugging / execution / verification / review /
+  branch-finishing skills overlap this plugin, and its own instructions defer to CLAUDE.md — the command writes
+  (after the user confirms) a marked precedence block into the project's or the user's CLAUDE.md, updates it in
+  place or removes it (`--remove`), and never disables superpowers. A prose command: no engine code, no hook.
+- **`spec_import`** (`dev-spec import`, `/spec-import`): a Kiro, spec-kit or OpenSpec spec becomes a new
+  feature — criteria mapped to `US-N.AC-M` (one EARS criterion per scenario, else the text is kept with
+  `[NEEDS CLARIFICATION]`), Kiro `_Requirements:_` rewritten, tasks renumbered keeping checkbox state and
+  `[P]`/`[USn]` tags, unmapped text carried with a warning. The source must be inside the project and is
+  only read; it never imports over an existing feature.
+- **`spec_append_tasks`** (`dev-spec append-tasks`, `/spec-converge`): append follow-up tasks under a
+  localized `Phase: Convergence` heading, numbered after the last, with `_Requirements:_` / `_Implements:_`
+  / `_Verify:_`. All-or-nothing validation (unknown AC IDs refused), existing tasks never change, CRLF/BOM
+  kept; an approved task list reports `needsReapproval`.
+- **Approval history + `spec_impact`** (`dev-spec impact`, `/spec-impact`): every approval is appended to
+  `.state.json → approvalHistory` and snapshots the artifact to `.specs/<f>/.history/<phase>@<n>.md`.
+  `spec_impact` diffs the current requirements (by AC and SC/EC/NFR ID), design (by section) or tasks
+  against that snapshot and lists the tasks, tests and design sections each change touches; `reopen`
+  unticks the affected done tasks, marks their evidence stale and records the change request
+  (`.state.json → changes`).
+- **`spec_metrics`** (`dev-spec metrics`, `/spec-metrics`): lead time per phase, rework, forced approvals,
+  change requests, reopened tasks and evidence pass rate, per feature or for the project (averages and
+  medians); `write` creates a pre-filled `retro.md`. Every gated planning phase is measured, Phase 4 (`tests`)
+  included (lead time, the CLI line, retro.md's "Lead time → tests" row, the project's `leadTimeHours.tests`); a
+  phase never approved is null. `finished` is the earliest of the first execution approval and the finish
+  `spec_finish {write}` recorded on a ready feature (the tool description said "execution approved" only).
+- **`spec_catalog`** (`dev-spec catalog`, `/spec-catalog`): the living catalog `.specs/SPECS.md`
+  (AUTO-GENERATED, never over a hand-written file) — every feature's ACs, with the English-stable marker
+  `_Supersedes: <feature>/US-n.AC-m_` marking criteria a later feature replaced.
+- **`spec_drift`** (`dev-spec drift`, `/spec-drift`): `spec_finish {write}` on a ready feature records a
+  hash of its `_Implements:_` files; drift reports what changed, went missing or appeared since then, and
+  SessionStart adds one line per drifted feature.
+- **`spec_feature restore`** (`dev-spec feature restore`): archive now records the roadmap entry and the
+  dependencies it prunes; restore puts the feature and them back. `rename` now follows every reference to the old
+  slug — archived features' archive records (restore used to drop the edge as "no longer exists") and
+  `_Supersedes:_` markers in other features' requirements.md, active and archived (the auto-refreshed SPECS.md
+  un-struck the replaced ACs); the result lists what it rewrote. Doctor warns (`supersedes`) on a `_Supersedes:_`
+  reference that resolves to nothing. Archive names the features whose dependency it pruned (`dependentsPruned`,
+  printed by the CLI) and warns (`incompleteDependency`) when the archived feature wasn't complete — the roadmap
+  used to turn a blocked feature into a ready one without a word.
+- **Guard mode** (`spec_init {guard}`, `dev-spec init --guard on|off`, `/spec-guard`): an opt-in
+  PreToolUse hook (`hooks/guard-hook.js`) that asks before a Write/Edit on a code file outside `.specs/`
+  while no feature has approved, unfinished tasks — a tasks approval whose tasks.md changed afterwards
+  (appended or edited) covers nothing until re-approved. Silent when off; never blocks on its own errors.
+  "Code" is a source file in a broad list of languages — not only the scanner's list, so `.mts`, `.cc`/`.hpp`,
+  Scala, Dart, Elixir, shell (Windows `.bat`/`.cmd`, `.ksh`, `.fish` too), PowerShell, SQL, Kotlin script,
+  CoffeeScript, CUDA, Fortran, Pascal, assembly, HDL, shaders and code-bearing templates (`.erb`, `.jsp`,
+  `.razor`, `.astro`) ask too; docs, config, data, markup and styles stay silent.
+- **Scoped steering**: Kiro-compatible front matter (`inclusion: always | fileMatch | manual`,
+  `fileMatchPattern`), custom steering files via `steering_scaffold` / `dev-spec steering`, per-task
+  selection in `spec_task_brief` (matching `fileMatch` bodies quoted), and a doctor warning for steering
+  files still holding template placeholders.
+- **Deeper traceability**: `trace_check` warns about edge cases, NFRs and success criteria nothing covers
+  (never the verdict); `trace --code` finds T-IDs in test names (`test("T-01 …")`, `def test_T01_…`,
+  `TestT01…`) and doctor warns when a test made green by a done task isn't in any test file. A plan row whose
+  File column names only a non-code artifact (`load-test.md`, `evals/golden.json`, a `.feature`) is a check run
+  outside test code — listed in `plannedOutsideCode`, never expected in a test file — so the scaffold's own load
+  and eval rows no longer leave a permanent tests-in-code warning (doctor, finish) once their task is done.
+- **Test plans** gain a **Kind** column (`example` | `property`) with property-based testing guidance in
+  `references/test-patterns.md`.
+- **Brownfield depth**: `spec_scan` lists HTTP routes with method, path and `file:line` across the common
+  web frameworks, test frameworks and test-file count, entrypoints, environment variable names (never
+  values, never `.env`) and migration files; `spec_coverage` measures code files named in any
+  `_Implements:_` (active + archived features), per folder; `create --brownfield` scaffolds
+  `integration-plan.md` (doctor warns while it is the template).
+- **`dev-spec rules <cursor|windsurf|copilot|gemini|agents>`** prints a rule file with this clone's absolute
+  paths for your own project.
+- **Seven commands**: `/spec-impact`, `/spec-metrics`, `/spec-converge`, `/spec-import`, `/spec-catalog`,
+  `/spec-drift`, `/spec-guard`.
+- A design.md save check in the PostToolUse hook (the active tracks' mandatory sections, Constitution
+  Check, placeholders), `spec_finish` `warnings`, `spec_doctor` `nextGate` / `forcedGates`, and
+  `spec_next_action` `step` / `refusedGate` / `impact`.
+
+### Changed (heads-up)
+- **`spec_approve` refuses** an artifact that is still a template or fails that phase's checks. Pass
+  `force: true` (CLI `--force`) to record it anyway — it is stored as forced, with the failing checks, and
+  stays flagged.
+- **`spec_feature remove` needs `confirm: true`** (CLI `--yes`); without it nothing is deleted and the
+  result lists what would be. Prefer `archive`, now reversible with `restore`.
+- **`dev-spec depend <feature>` with no dependencies only shows them** — it used to clear the list. Use
+  `--clear` (MCP `dependsOn: []`); `--add` / `--rm` (MCP `add` / `remove`) edit it incrementally.
+- **A fresh feature starts at phase `requirements`** (8%) until its artifacts hold real content.
+- **Two more pending gates.** A +tdd / +ai feature now has a pending `tests` approval (Phase 4) and a bugfix a
+  pending `design` approval (bug.md): in-flight features show them in doctor / next_action and can't finish until
+  `approve <f> tests` / `approve <f> design`. Approving `tests` checks that the planned tests exist in test code
+  (+tdd) and that the eval set is the feature's own (+ai); approving `execution` needs a ready `spec_finish` — or
+  `--force`. On a feature already executing or complete (an upgraded 1.12 feature), `next_action` words Phase 4 as a
+  sign-off for the tests that exist — name each planned T-ID in its test's name (`test("T-01 …")`), or record the eval
+  baseline — never "write failing tests first, no implementation code until then". `approve <f> tests`' own
+  `tests-in-code` refusal uses the same sign-off wording there (EN/PT/ES) — it said "write each failing test" right
+  after next_action's sign-off.
+- **Windows: `done --run` refuses a POSIX-syntax `_Verify:_`** under the default cmd.exe — add `--shell bash` (or
+  `DEV_SPEC_SHELL=bash`), or `--shell cmd` to keep cmd.exe.
+- **MCP: an explicit `projectDir` must be a local folder** — a network path (`\\host\share`, `//host/share`) is
+  refused. A project on a share can still be the server's working directory or `SPEC_PROJECT_DIR`; the CLI is
+  unchanged.
+- **Renaming a feature edits other features' requirements.md** when they `_Supersedes:_` its ACs; an approved one
+  then shows as changed-since-approval (re-review, re-approve).
+- **A note no longer verifies a task with a runnable `_Verify:_`** — record the command and its exit code
+  (`dev-spec done <f> <n> --run`).
+- **`spec_task_brief {write: true}` returns paths and identifiers only** (the controller's call in subagent
+  execution): the task, `loop`, `inlineOnly`, `verify`, markers, `refs` {acs, tests}, `unresolved`, the bugfix gate and
+  `paths` — no longer `acceptanceCriteria` / `tests` / `designSections` / `steering` / `bug`, the spec text the brief
+  quotes. Pass `includeBrief: true` (CLI `--include-brief`) for the full result.
+- **Track input is validated**: an unknown track name is an error with a did-you-mean instead of being
+  ignored.
+- `spec_coverage` now measures code files named in `_Implements:_` (`coveragePercent`, and
+  `documented`/`undocumented` are folders with / without a covered file) instead of the folder-name
+  heuristic; `spec_scan`'s `candidateEndpoints` counts routes.
+- The EN/PT/ES templates changed on purpose: every template AC is planned and tasked, track ACs sit under
+  `[SaaS]` / `[AI]` headings, and the test plan has the Kind column.
+
+### Tests
+- `node mcp/test.js` 766 assertions (was 181), `node cli/test-cli.js` 257 (was 53); the tool count is
+  asserted exactly again (30), and the README tool tables are checked against the live `tools/list` (a hand-kept
+  list of 23 names had gone stale).
+
 ## [1.12.1]
 
 ### Changed

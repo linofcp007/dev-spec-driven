@@ -78,6 +78,50 @@ Bad:
 - `works correctly` (works how? correctly by what standard?)
 - `regression for bug #4123` (future readers don't have the ticket; describe the behaviour)
 
+### Test IDs in test names (traceability into the code)
+
+Put the test plan's T-ID at the start of each test's name. `trace_check {code: true}` (CLI:
+`dev-spec trace <feature> --code`) then links every planned test to the files that implement it, and
+`spec_doctor` warns (`tests-in-code`) when a done task's `_Makes green:_` test exists in no test file.
+
+| Language / framework | Convention |
+|---|---|
+| JS / TS (node:test, Jest, Vitest, Mocha) | `test("T-01 should reject an expired token", …)` · `it("T-01 …")` |
+| Python (pytest, unittest) | `def test_T01_rejects_expired_token():` |
+| Go | `func TestT01RejectsExpiredToken(t *testing.T)` |
+| Java / Kotlin (JUnit 5, jqwik) | `@DisplayName("T-01 rejects an expired token")` · `void testT01RejectsExpiredToken()` |
+| C# (xUnit, NUnit, FsCheck) | `[Fact(DisplayName = "T-01 rejects an expired token")]` · `public void T01_RejectsExpiredToken()` |
+
+- `T-01` with the hyphen is found anywhere in a test file (a title, a display name, a comment). Without
+  the hyphen only the naming forms count, with an **uppercase** `T` and the zero-padded number the
+  templates write (two digits or more): `test_T01…`, `testT01…`, `TestT01…` and a method that starts
+  with `T01_`. A bare `T1` is ignored — it collides with generic type parameters (`Func<T1, T2>`) — and
+  so is `test_t2_is_after_t1` (a pytest name about a time variable, not test T-2).
+- IDs compare by number: `T-1`, `T-01` and `test_T01` name the same planned test.
+- Only test files are read: files in JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#, Ruby,
+  PHP, Swift, C/C++, Vue/Svelte, Elixir or Dart that sit under a `test/`, `tests/`, `__tests__/`,
+  `spec/` or `e2e/` folder or are named like a test (`*.test.ts`, `*.spec.js`, `test_*.py`, `*_test.go`,
+  `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs` …). `node_modules/`, build
+  output and hidden folders are skipped. `.specs/` is skipped
+  too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
+  is bounded (the result says `truncated` when it stopped at its cap).
+- T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
+  names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`), only that file — or a
+  file under that folder — can satisfy the T-ID. Write the path from the project root, from the feature
+  folder, from a monorepo package (`tests/unit/login.test.ts` matches
+  `packages/api/tests/unit/login.test.ts`) or as a bare file name (`login.test.ts`); it matches whole
+  path segments, so `tests/beta.test.js` never matches `tests/alpha.test.js`. While the cell is still a
+  template slot (`[path]`, `tests/unit/...`) or names a code file outside a test folder (`load/invoice.k6.js`),
+  the match is by number across the project, so another feature's `T-01` test would pass this one. A test
+  under **another** feature's `.specs/<feature>/tests/` never counts for this one.
+- A row whose File column names **only non-code artifacts** — `load-test.md`, `evals/golden.json`, a Gherkin
+  `.feature`, a JMeter `.jmx` — is a check run outside test code (a load run, the eval harness, a manual pass):
+  its T-ID is listed in `plannedOutsideCode`, never in `plannedNotInCode`, so neither doctor, `finish` nor the
+  Phase 4 gate expects it in a test file (the scaffold's own load and eval rows are such rows). Its evidence is
+  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead.
+- `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
+  (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
+
 ---
 
 ## Table-Driven Tests
@@ -101,6 +145,83 @@ describe('validatePassword', () => {
 ```
 
 Each row must contribute information — if two rows test the same path, delete one.
+
+---
+
+## Property-Based Tests
+
+An example test checks one chosen input. A property test states an **invariant** and lets a generator
+throw hundreds of inputs at it, shrinking any failure to a minimal counter-example. The test plan's
+**Kind** column records which one each planned test is: `example` or `property` (the values stay in
+English in every language).
+
+| EARS pattern | Usually | Why |
+|---|---|---|
+| Ubiquitous — `THE SYSTEM SHALL …` (always true) | property | It must hold for every input — a generator says so |
+| State-driven — `WHILE <state>, THE SYSTEM SHALL …` | property | An invariant over every input while the state holds |
+| Event-driven — `WHEN <trigger> THE SYSTEM SHALL …` | example | One trigger → one observable response |
+| Unwanted — `IF <error> THEN THE SYSTEM SHALL …` | example (negative) | A specific failure path; add a property when the error class is wide ("any malformed input") |
+
+Other good candidates: round-trips (`decode(encode(x)) == x`), idempotence (`f(f(x)) == f(x)`),
+invariants (totals always balance, tenant A never reads tenant B's rows) and a simple reference
+implementation checked against the fast one.
+
+Libraries: **fast-check** (JS/TS), **Hypothesis** (Python), **jqwik** (Java/Kotlin), **gopter** (Go),
+**FsCheck** (.NET). The same invariant — "T-04: the codec round-trips every string" (a ubiquitous AC) —
+in each family:
+
+```ts
+// fast-check
+import fc from "fast-check";
+test("T-04 decode(encode(s)) returns s for every string", () => {
+  fc.assert(fc.property(fc.string(), (s) => decode(encode(s)) === s));
+});
+```
+
+```python
+# Hypothesis
+from hypothesis import given, strategies as st
+
+@given(st.text())
+def test_T04_round_trip(s):
+    assert decode(encode(s)) == s
+```
+
+```java
+// jqwik
+@Property
+@Label("T-04 decode(encode(s)) returns s")
+void roundTrip(@ForAll String s) {
+    assertEquals(s, decode(encode(s)));
+}
+```
+
+```go
+// gopter
+func TestT04RoundTrip(t *testing.T) {
+	properties := gopter.NewProperties(nil)
+	properties.Property("decode(encode(s)) == s", prop.ForAll(
+		func(s string) bool { return decode(encode(s)) == s },
+		gen.AnyString(),
+	))
+	properties.TestingRun(t)
+}
+```
+
+```csharp
+// FsCheck (xUnit)
+[Property(DisplayName = "T-04 decode(encode(s)) returns s")]
+public bool RoundTrip(NonNull<string> s) => Decode(Encode(s.Get)) == s.Get;
+```
+
+Rules of thumb:
+- Generate only the valid domain the AC talks about (amounts ≥ 0, non-empty names) — a property that
+  filters away most generated inputs tests almost nothing.
+- Keep runs reproducible: the libraries print the seed of a failing run — re-run with it, and record it.
+- Every shrunk counter-example that exposed a real bug becomes a permanent **example** test (a
+  regression) with its own T-ID.
+- A property test is red for the right reason too: it fails on the missing behaviour, not on a broken
+  generator.
 
 ---
 

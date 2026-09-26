@@ -16,7 +16,8 @@
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
- *   ```typescript fences, and the eval-harness headings `## System` / `## User Template`.
+ *   ```typescript fences, the eval-harness headings `## System` / `## User Template`, and the test-plan
+ *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
  * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS) and RE_* matchers in spec.js.
@@ -28,9 +29,47 @@ function normalizeLang(l) {
   return LANGS.includes(s) ? s : "en";
 }
 
+// The template's test IDs: one per template AC of the active tracks, numbered in the order the requirements template
+// lists them. The test-plan and tasks builders (every language) share it, so a fresh +tdd scaffold plans a test for
+// every AC and every planned test is made green by a task (it used to start with AC-3/AC-4/US-2.AC-1 uncovered and
+// T-02 unmapped).
+const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"] };
+function templateTests(tracks) {
+  const ids = {};
+  let n = 0;
+  for (const t of ["core", "saas", "ai"]) {
+    if (t !== "core" && !(tracks || []).includes(t)) continue;
+    for (const ac of TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
+  }
+  return ids;
+}
+// `_Makes green: T-0x, …_` for these template ACs — only on a +tdd scaffold (green = templateTests, else null).
+function greenLine(green, ...acs) {
+  return green ? "\n  - _Makes green: " + acs.map((ac) => green[ac]).join(", ") + "_" : "";
+}
+// The test-plan matrix rows of the template ACs — row(testId, layer, kind, description, acId, file) formats one per
+// language, L holds that language's layer names and descriptions. Kind stays English-stable (example | property): the
+// ubiquitous AC-4 ("always-true property") and tenant isolation ("never") are invariants, the event-driven ones examples.
+// acs: the feature's REAL AC IDs (a test plan scaffolded after requirements.md was written — spec_add_track tdd): one
+// generic row each (T-01…, unit, example, [behavior]) instead of the template's, whose IDs the feature may not define.
+function templateTestRows(tracks, row, L, acs) {
+  if (Array.isArray(acs) && acs.length) {
+    return acs.map((ac, i) => row("T-" + String(i + 1).padStart(2, "0"), "unit", "example", L.behavior, ac, "tests/unit/...")).join("\n");
+  }
+  const T = templateTests(tracks);
+  const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
+  const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
+    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
+    r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
+  if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/...", "property"), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
+  if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
+    r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
+  return rows.join("\n");
+}
+
 // ===========================================================================
-// Artifact builders, one set per language. EN is the canonical reference and
-// is byte-for-byte the original output (the test suite asserts against it).
+// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
+// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
 // ===========================================================================
 
 const BUILD = {
@@ -42,7 +81,7 @@ const BUILD = {
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [none beyond core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
       return (
 `# Classification: ${a.name}
 
@@ -66,11 +105,12 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
     },
 
     requirements(a) {
+      // Track criteria sit under [SaaS]/[AI] headings: inactive (not a gate, not a placeholder) once the track is off.
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95.\n"
+        ? "\n\n#### [SaaS] Acceptance Criteria (EARS)\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size.\n"
+        ? "\n\n#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size."
         : "";
       return (
 `# Feature: ${a.name}
@@ -262,7 +302,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null; // each template test made green by one task
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -273,41 +313,27 @@ ${extra}
 
 ## Phase: Foundational (blocks all stories)
 - [ ] ${id()}. [shared] [Models, schemas, indexes shared across stories]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## Story US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 - [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 is fully functional and independently testable/shippable.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## Story US-1 — Observability & Scale
-- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## Story US-1 — AI
-- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.en.trackTasks({ track: t, start: n + 1, green });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
 ## Story US-2 (P2)
 - [ ] ${id()}. [US2] [Behavior for US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 works without breaking US-1.
 
 ## Phase: Polish (cross-cutting)
@@ -332,6 +358,36 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    // A track's template task block (none for +tdd — it only adds markers). Shared by tasks() and
+    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start, green? } — green
+    // (templateTests) only on a greenfield +tdd scaffold, whose test plan holds those T-IDs.
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## Story US-1 — Observability & Scale
+- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Enforce tenant isolation — every query scoped by tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## Story US-1 — AI
+- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
+- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -391,10 +447,14 @@ ${a.summary || "[one line: the bug being fixed]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
-| T-01 | [unit/integration] | regression — reproduces the bug (red before the fix) | US-1.AC-1 | \`[path]\` |
-| T-02 | [unit/integration] | neighbouring behavior still works | US-1.AC-2 | \`[path]\` |
+<!-- Kind: example (one concrete input → expected output) or property (an invariant over generated inputs — e.g.
+     "every input outside the bug's condition behaves as before" guards US-1.AC-2 well). Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|
+| T-01 | [unit/integration] | example | regression — reproduces the bug (red before the fix) | US-1.AC-1, SC-001 | \`[path]\` |
+| T-02 | [unit/integration] | example | neighbouring behavior still works | US-1.AC-2 | \`[path]\` |
 `;
     },
 
@@ -402,7 +462,9 @@ ${a.summary || "[one line: the bug being fixed]"}
       return `# Tasks: ${name}
 
 <!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
-     No fix before bug.md → Root Cause is filled with evidence. -->
+     No fix before bug.md → Root Cause is filled with evidence.
+     Task 3 is red by design (its test must FAIL): give it no _Verify:_ — record the failing run as a note
+     (--evidence) — the must-pass command belongs on the fix task (4). -->
 
 ## Global Constraints
 - [exact values the fix must respect — versions, limits, formats]
@@ -423,7 +485,11 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks, acs) {
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
+          tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
+          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -435,10 +501,15 @@ ${a.summary || "[one line: the bug being fixed]"}
 
 ## Traceability Matrix
 
-| Test ID | Layer | Description | Covers (AC IDs) | File |
-|---------|-------|-------------|-----------------|------|
-| T-01 | unit | [behavior] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integration | [behavior] | US-1.AC-2 | \`tests/integration/...\` |
+<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
+     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
+     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
+     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|
+${rows}
 
 ## Coverage Check
 Every AC must appear in at least one "Covers" cell. Gaps (with justification):
@@ -581,7 +652,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[sinal]"} — [porque se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [nenhum além de core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- nenhum além de core";
       return (
 `# Classificação: ${a.name}
 
@@ -606,10 +677,10 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
 
     requirements(a) {
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — QUANDO um utilizador do inquilino A pede dados, O SISTEMA NÃO DEVE devolver qualquer registo cujo tenant_id != A.\n6. **US-1.AC-6** — O SISTEMA DEVE responder em [N]ms no P95.\n"
+        ? "\n\n#### [SaaS] Critérios de Aceitação (EARS)\n5. **US-1.AC-5** — QUANDO um utilizador do inquilino A pede dados, O SISTEMA NÃO DEVE devolver qualquer registo cujo tenant_id != A.\n6. **US-1.AC-6** — O SISTEMA DEVE responder em [N]ms no P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — O SISTEMA DEVE produzir saídas classificadas como 'boas ou excelentes' em pelo menos [85]% do conjunto de avaliação golden.\n8. **US-1.AC-8** — SE a entrada contiver uma tentativa de injeção de prompt, ENTÃO O SISTEMA DEVE ignorar a instrução injetada e concluir a tarefa original.\n9. **US-1.AC-9** — O SISTEMA DEVE custar no máximo $[0.03] por pedido de utilizador no tamanho P95.\n"
+        ? "\n\n#### [AI] Critérios de Aceitação (EARS)\n7. **US-1.AC-7** — O SISTEMA DEVE produzir saídas classificadas como 'boas ou excelentes' em pelo menos [85]% do conjunto de avaliação golden.\n8. **US-1.AC-8** — SE a entrada contiver uma tentativa de injeção de prompt, ENTÃO O SISTEMA DEVE ignorar a instrução injetada e concluir a tarefa original.\n9. **US-1.AC-9** — O SISTEMA DEVE custar no máximo $[0.03] por pedido de utilizador no tamanho P95."
         : "";
       return (
 `# Feature: ${a.name}
@@ -801,7 +872,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null;
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -812,41 +883,27 @@ ${extra}
 
 ## Fase: Fundacional (bloqueia todas as histórias)
 - [ ] ${id()}. [shared] [Modelos, schemas, índices partilhados entre histórias]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## História US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamento central para US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 - [ ] ${id()}. [US1][P] [tarefa paralelizável — ficheiro diferente, sem deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## História US-1 — Observabilidade e Escala
-- [ ] ${id()}. [US1] Emitir métricas, adicionar dashboard, configurar alertas
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Teste de carga — verificar o orçamento de desempenho do design.md (só caminho crítico)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## História US-1 — IA
-- [ ] ${id()}. [US1] Prompt v1 + ligação ao harness de avaliação (tarefa separada por mudança de prompt)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.pt.trackTasks({ track: t, start: n + 1, green });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
 ## História US-2 (P2)
 - [ ] ${id()}. [US2] [Comportamento para US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 funciona sem quebrar US-1.
 
 ## Fase: Acabamento (transversal)
@@ -871,6 +928,33 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## História US-1 — Observabilidade e Escala
+- [ ] ${id()}. [US1] Emitir métricas, adicionar dashboard, configurar alertas
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Teste de carga — verificar o orçamento de desempenho do design.md (só caminho crítico)
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Garantir o isolamento de inquilino — todas as queries filtradas por tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## História US-1 — IA
+- [ ] ${id()}. [US1] Prompt v1 + ligação ao harness de avaliação (tarefa separada por mudança de prompt)
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
+- [ ] ${id()}. [US1] Monitorização de custo — emitir métrica de custo + alerta
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -930,10 +1014,14 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
-|---------|--------|-----------|----------------|----------|
-| T-01 | [unit/integração] | regressão — reproduz o bug (vermelho antes da correção) | US-1.AC-1 | \`[caminho]\` |
-| T-02 | [unit/integração] | o comportamento vizinho continua a funcionar | US-1.AC-2 | \`[caminho]\` |
+<!-- Tipo: example (uma entrada concreta → resultado esperado) ou property (uma invariante sobre entradas geradas — p. ex.
+     "toda a entrada fora da condição do bug comporta-se como antes" protege bem o US-1.AC-2). Os valores ficam example / property.
+     Põe o Test ID no nome do teste (test("T-01 …"), def test_T01_…) para o trace_check {code: true} o encontrar. -->
+
+| Test ID | Camada | Tipo | Descrição | Cobre (AC IDs) | Ficheiro |
+|---------|--------|------|-----------|----------------|----------|
+| T-01 | [unit/integração] | example | regressão — reproduz o bug (vermelho antes da correção) | US-1.AC-1, SC-001 | \`[caminho]\` |
+| T-02 | [unit/integração] | example | o comportamento vizinho continua a funcionar | US-1.AC-2 | \`[caminho]\` |
 `;
     },
 
@@ -941,7 +1029,9 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
       return `# Tasks: ${name}
 
 <!-- A ordem de um bugfix é fixa: reproduzir → causa raiz → teste de regressão a falhar → corrigir → verificar.
-     Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência. -->
+     Nenhuma correção antes de bug.md → Causa Raiz estar preenchida com evidência.
+     A tarefa 3 é vermelha por natureza (o teste tem de FALHAR): não lhe ponhas _Verify:_ — regista a execução
+     a falhar como nota (--evidence) — o comando que tem de passar vai na tarefa da correção (4). -->
 
 ## Restrições Globais
 - [valores exatos que a correção tem de respeitar — versões, limites, formatos]
@@ -962,7 +1052,11 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks, acs) {
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
+          tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
+          golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -974,10 +1068,15 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 
 ## Matriz de Rastreabilidade
 
-| Test ID | Camada | Descrição | Cobre (AC IDs) | Ficheiro |
-|---------|--------|-----------|----------------|----------|
-| T-01 | unit | [comportamento] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integração | [comportamento] | US-1.AC-2 | \`tests/integration/...\` |
+<!-- Tipo — example: uma entrada concreta → resultado esperado; o padrão para critérios por evento (QUANDO …, SE … ENTÃO).
+     property: uma invariante verificada sobre muitas entradas geradas (fast-check, Hypothesis, jqwik, gopter, FsCheck); usa-o
+     em critérios ubíquos (O SISTEMA DEVE sempre …), critérios ENQUANTO (por estado) e em qualquer regra "nunca / para todo" —
+     isolamento de inquilinos, um round-trip codificar → descodificar, totais que batem sempre certo. Os valores ficam example / property.
+     Põe o Test ID no nome do teste (test("T-01 …"), def test_T01_…) para o trace_check {code: true} o encontrar. -->
+
+| Test ID | Camada | Tipo | Descrição | Cobre (AC IDs) | Ficheiro |
+|---------|--------|------|-----------|----------------|----------|
+${rows}
 
 ## Verificação de Cobertura
 Cada AC tem de aparecer em pelo menos uma célula "Cobre". Lacunas (com justificação):
@@ -1120,7 +1219,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
         a.tracks.includes(t)
           ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[señal]"} — [por qué se aplica]`
           : null;
-      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- [ninguno además de core]";
+      const signalLines = ["tdd", "saas", "ai"].map(sigLine).filter(Boolean).join("\n") || "- ninguno además de core";
       return (
 `# Clasificación: ${a.name}
 
@@ -1145,10 +1244,10 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
 
     requirements(a) {
       const saasAc = a.tracks.includes("saas")
-        ? "\n5. **US-1.AC-5** — CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.\n6. **US-1.AC-6** — EL SISTEMA DEBE responder en [N]ms en P95.\n"
+        ? "\n\n#### [SaaS] Criterios de Aceptación (EARS)\n5. **US-1.AC-5** — CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.\n6. **US-1.AC-6** — EL SISTEMA DEBE responder en [N]ms en P95."
         : "";
       const aiAc = a.tracks.includes("ai")
-        ? "\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95.\n"
+        ? "\n\n#### [AI] Criterios de Aceptación (EARS)\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95."
         : "";
       return (
 `# Función: ${a.name}
@@ -1340,7 +1439,7 @@ ${extra}
     },
 
     tasks(a) {
-      const greenMarker = a.tracks.includes("tdd") ? "\n  - _Makes green: T-01_" : "";
+      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null;
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
@@ -1351,41 +1450,27 @@ ${extra}
 
 ## Fase: Fundacional (bloquea todas las historias)
 - [ ] ${id()}. [shared] [Modelos, schemas, índices compartidos entre historias]
-  - _Requirements: US-1.AC-1_${greenMarker}${metricMarker}
+  - _Requirements: US-1.AC-1_${metricMarker}
 
 ## Historia US-1 (P1 — MVP)
 - [ ] ${id()}. [US1] [Comportamiento central para US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenMarker}${evalMarker}
+  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
   - _Verify: [comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]_
 - [ ] ${id()}. [US1][P] [tarea paralelizable — archivo distinto, sin deps]
-  - _Requirements: US-1.AC-4_
+  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
 **Checkpoint:** US-1 está totalmente funcional y es testeable/lanzable de forma independiente.
 `;
-      if (a.tracks.includes("saas")) {
-        phases +=
-`
-## Historia US-1 — Observabilidad y Escala
-- [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
-  - _Requirements: US-1.AC-6_
-`;
-      }
-      if (a.tracks.includes("ai")) {
-        phases +=
-`
-## Historia US-1 — IA
-- [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
-  - _Affects evals: golden, adversarial, regression_
-- [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
-  - _Requirements: US-1.AC-9_
-`;
+      for (const t of ["saas", "ai"]) {
+        if (!a.tracks.includes(t)) continue;
+        const block = BUILD.es.trackTasks({ track: t, start: n + 1, green });
+        phases += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
       phases +=
 `
 ## Historia US-2 (P2)
 - [ ] ${id()}. [US2] [Comportamiento para US-2]
-  - _Requirements: US-2.AC-1_${greenMarker}
+  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
 **Checkpoint:** US-2 funciona sin romper US-1.
 
 ## Fase: Pulido (transversal)
@@ -1410,6 +1495,33 @@ ${extra}
 
 ${phases}`
       );
+    },
+
+    trackTasks(a) {
+      let n = a.start - 1;
+      const id = () => ++n;
+      if (a.track === "saas") {
+        return `
+## Historia US-1 — Observabilidad y Escala
+- [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
+  - _Requirements: US-1.AC-6_
+- [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
+  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
+- [ ] ${id()}. [US1] Imponer el aislamiento de inquilino — toda query filtrada por tenant_id
+  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
+`;
+      }
+      if (a.track === "ai") {
+        return `
+## Historia US-1 — IA
+- [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
+  - _Requirements: US-1.AC-7, US-1.AC-8_
+  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
+- [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
+  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
+`;
+      }
+      return "";
     },
 
     bugReport(a) {
@@ -1469,10 +1581,14 @@ ${a.summary || "[una línea: el bug a corregir]"}
     bugTestPlan(name) {
       return `# Test Plan: ${name}
 
-| Test ID | Capa | Descripción | Cubre (AC IDs) | Fichero |
-|---------|------|-------------|----------------|---------|
-| T-01 | [unit/integración] | regresión — reproduce el bug (rojo antes de la corrección) | US-1.AC-1 | \`[ruta]\` |
-| T-02 | [unit/integración] | el comportamiento vecino sigue funcionando | US-1.AC-2 | \`[ruta]\` |
+<!-- Tipo: example (una entrada concreta → resultado esperado) o property (una invariante sobre entradas generadas — p. ej.
+     "toda entrada fuera de la condición del bug se comporta como antes" protege bien US-1.AC-2). Los valores quedan example / property.
+     Pon el Test ID en el nombre de la prueba (test("T-01 …"), def test_T01_…) para que trace_check {code: true} lo encuentre. -->
+
+| Test ID | Capa | Tipo | Descripción | Cubre (AC IDs) | Fichero |
+|---------|------|------|-------------|----------------|---------|
+| T-01 | [unit/integración] | example | regresión — reproduce el bug (rojo antes de la corrección) | US-1.AC-1, SC-001 | \`[ruta]\` |
+| T-02 | [unit/integración] | example | el comportamiento vecino sigue funcionando | US-1.AC-2 | \`[ruta]\` |
 `;
     },
 
@@ -1480,7 +1596,9 @@ ${a.summary || "[una línea: el bug a corregir]"}
       return `# Tareas: ${name}
 
 <!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
-     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia. -->
+     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia.
+     La tarea 3 es roja por diseño (su prueba debe FALLAR): no le pongas _Verify:_ — registra la ejecución que
+     falla como nota (--evidence) — el comando que debe pasar va en la tarea del arreglo (4). -->
 
 ## Restricciones Globales
 - [valores exactos que la corrección debe respetar — versiones, límites, formatos]
@@ -1501,7 +1619,11 @@ ${a.summary || "[una línea: el bug a corregir]"}
 `;
     },
 
-    testPlan(name) {
+    testPlan(name, tracks, acs) {
+      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
+        { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
+          tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
+          golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1513,10 +1635,15 @@ ${a.summary || "[una línea: el bug a corregir]"}
 
 ## Matriz de Trazabilidad
 
-| Test ID | Capa | Descripción | Cubre (AC IDs) | Archivo |
-|---------|------|-------------|----------------|---------|
-| T-01 | unit | [comportamiento] | US-1.AC-1 | \`tests/unit/...\` |
-| T-02 | integración | [comportamiento] | US-1.AC-2 | \`tests/integration/...\` |
+<!-- Tipo — example: una entrada concreta → resultado esperado; lo habitual para criterios por evento (CUANDO …, SI … ENTONCES).
+     property: una invariante comprobada sobre muchas entradas generadas (fast-check, Hypothesis, jqwik, gopter, FsCheck); úsalo
+     en criterios ubicuos (EL SISTEMA DEBE siempre …), criterios MIENTRAS (por estado) y cualquier regla "nunca / para todo" —
+     aislamiento entre inquilinos, un round-trip codificar → decodificar, totales que siempre cuadran. Los valores quedan example / property.
+     Pon el Test ID en el nombre de la prueba (test("T-01 …"), def test_T01_…) para que trace_check {code: true} lo encuentre. -->
+
+| Test ID | Capa | Tipo | Descripción | Cubre (AC IDs) | Archivo |
+|---------|------|------|-------------|----------------|---------|
+${rows}
 
 ## Verificación de Cobertura
 Cada AC debe aparecer en al menos una celda "Cubre". Lagunas (con justificación):
@@ -1767,7 +1894,7 @@ const MSG = {
     addTrackAlready: (tr) => `already on +${tr}`,
     notes: {
       scan: "Heuristic inventory only — the agent interprets this to infer steering/constitution and reverse-engineer specs.",
-      coverage: "Coarse heuristic: maps top-level code dirs to documented features by name. Use as a starting point, not a hard metric.",
+      coverage: "Heuristic, from declared intent: the share of code files (tests apart) named by an _Implements:_ marker of any feature, active or archived. A file counts as covered once a task claims it — keep _Implements:_ current.",
     },
     evidence: {
       failed: (n, code) => `Task ${n}: the verification failed (exit ${code}) — not marking it done.`,
@@ -1800,6 +1927,8 @@ const MSG = {
       prRootCause: "## Root cause",
       prFix: "## Fix",
       noEvidence: "no evidence recorded",
+      changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
+      untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
@@ -1808,10 +1937,15 @@ const MSG = {
       reserved: (slug) => `'${slug}' is a reserved name — pick another feature name.`,
       reservedWin: (slug) => `'${slug}' is a reserved name on Windows — pick another feature name.`,
       notFound: (slug, root) => `Feature '${slug}' not found under ${root}`,
+      archivedHint: (slug) => `— it is archived (.specs/_archive/${slug}): restore it first (dev-spec feature restore ${slug}).`,
       invalidJson: (rel, detail) => `${rel} is not valid JSON (${detail}) — fix it by hand; refusing to overwrite it.`,
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n) => `Task ${n} not found in tasks.md`,
+      featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
+      roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
+      folderInUse: (rel) => `The folder ${rel} is in use by another program (an editor, a file indexer or antivirus, a terminal opened inside it) — nothing was moved or deleted; close it and try again.`,
+      lockStuck: (rel) => `A stale dev-spec lock (${rel}) could not be removed — the file (or a folder of that name) is held open by another program, read-only, or not a file. Nothing was changed. Delete ${rel} by hand (check its permissions), then retry.`,
       numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
@@ -1819,7 +1953,7 @@ const MSG = {
       renameNeedsName: "rename needs a new name.",
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
-      badAction: "action must be one of: remove | archive | rename",
+      badAction: "action must be one of: remove | archive | rename | restore",
       badTrack: "track must be one of: tdd | saas | ai",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
@@ -1851,8 +1985,9 @@ const MSG = {
       header: "dev-spec-driven pre-commit:",
       earsErrors: (f, n) => `✗ ${f}: ${n} EARS error(s)`,
       earsClean: (f, n) => `✓ ${f}: EARS clean (${n} criteria)`,
-      phantom: (f, n) => `✗ ${f}: ${n} phantom AC/test reference(s) — likely typos`,
-      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) not covered by a task (warning)`,
+      earsWarnings: (f, n, w, p) => `⚠ ${f}: no EARS errors (${n} criteria), but ${[w ? `${w} warning(s)` : null, p ? `${p} template placeholder(s) left` : null].filter(Boolean).join(" and ")} — not blocking`,
+      phantom: (f, n, list) => `✗ ${f}: ${n} phantom AC/test reference(s) — likely typos: ${list}`,
+      uncovered: (f, n, list) => `⚠ ${f}: ${n} AC(s) not covered by a task (warning): ${list}`,
       traceClean: (f, n) => `✓ ${f}: traceability clean (${n} ACs)`,
       blocked: (n) => `\nCommit blocked: ${n} blocking issue(s) in staged spec files. Fix or 'git commit --no-verify' to bypass.`,
     },
@@ -1868,6 +2003,7 @@ const MSG = {
       prioritiesMissing: "no P1 (MVP) priority on a user story",
       acDup: (list) => `duplicate AC IDs: ${list}`,
       acUnique: "AC IDs unique",
+      earsDetail: (n, e, w) => `criteria=${n}, errors=${e}, warnings=${w}`,
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
@@ -1892,9 +2028,26 @@ const MSG = {
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Review & approve the test plan — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Review & approve the eval plan — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Review & approve bug.md (Reproduction + Root Cause — a bugfix's design) — /approve ${slug} design.`,
+      // Phase 4 on a feature whose implementation already started (tasks ticked — e.g. a 1.12 feature, which had no tests gate):
+      // writing failing tests first is no longer possible — the gate is a sign-off for the tests that exist.
+      signOffTests: (slug, what) => `Phase 4 sign-off: the implementation has already started, so the tests are no longer written first — ${({ tdd: "check that every planned test exists with its T-ID in the test's name (test(\"T-01 …\")) so tests-in-code finds it", ai: `check that the eval set is the feature's own and record the baseline (/eval ${slug} --set-baseline)`, both: `check that every planned test exists with its T-ID in the test's name (test("T-01 …")) and that the eval set is the feature's own, and record the baseline (/eval ${slug} --set-baseline)` })[what]}. Then approve — /approve ${slug} tests.`,
+      approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /writeTests ${slug}; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "All tasks done — verify, then close the feature.",
+      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (dev-spec drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
+      // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
+      // but predates a later change: re-confirm it — never "sign it off" as if there were none).
+      finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` +
+        (!signOff ? ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`
+          : signOff.why ? ` Its execution sign-off (${signOff.at}) predates ${signOff.why} — re-confirm it: /approve ${slug} execution.` : ` Sign it off: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `the approval of ${list}`, changeRequests: (list) => `change request ${list}`, join: " and " },
+      refinish: (slug, day, why) => `'${slug}' was finished on ${day}, but it changed since (${why}) and all its tasks are done — finish it again: /spec-finish ${slug} (spec_finish {write: true}) refreshes the readiness report, the merge summary and the drift baseline; then sign it off again: /approve ${slug} execution.`,
+      driftedStale: (why) => `It also changed since that finish (${why}): whichever you decide, finish it again afterwards — /spec-finish (spec_finish {write: true}) records the new baseline.`,
+      verify: (slug, list, n, runnable) => `All tasks are ticked, but not all are verified: ${list} — /spec-finish and the execution sign-off refuse until each has a passing run. ` +
+        (runnable ? `Re-run task ${n}'s _Verify:_ command and record the result: dev-spec done ${slug} ${n} --run` : `Record a passing run for task ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<command>" --exit 0)`) +
+        "; a failing run means the code needs fixing first.",
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(unspecified)"),
@@ -1903,7 +2056,6 @@ const MSG = {
       prioritize: "Prioritize the user stories (P1 = the MVP slice that delivers value alone; P2/P3 incremental).",
       independentTest: "State how each user story can be tested independently (so it's shippable on its own).",
       quantifyVague: (line, text) => `Quantify the vague term on line ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resolve placeholder/TBD on line ${line}.`,
       edgeCases: "List the edge cases and error-handling behavior (each as an IF…THEN AC).",
       outOfScope: "State explicitly what is OUT of scope.",
       nfr: "Specify non-functional requirements (performance / security / accessibility) with measurable targets.",
@@ -1919,13 +2071,680 @@ const MSG = {
         `EARS check on requirements.md — ${errs} error(s), ${warns} warning(s):\n${top}` + (hasErr ? "\nFix the errors before advancing to design." : ""),
       traceOk: (n) => `Traceability: all ${n} ACs covered by tasks ✓`,
       traceGaps: (feature, parts) => `Traceability gaps in ${feature}:\n  - ${parts}`,
-      traceUncovered: (list) => `ACs with no task: ${list}`,
-      tracePhantomAc: (list) => `tasks reference unknown ACs (typos?): ${list}`,
-      traceUncoveredTests: (list) => `ACs with no planned test: ${list}`,
-      tracePhantomTests: (list) => `tasks reference unknown tests: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap updated → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features in .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tasks)`,
+    },
+
+    // Evidence gate (spec_complete_task / doctor / spec_finish). Reason codes stay English-stable.
+    evidenceGate: {
+      noContent: "Evidence needs a command (with its exit code) or a summary — an exit code alone proves nothing.",
+      manualOnRunnable: (n, slug) => `Task ${n}: a note was recorded, but its _Verify:_ command was not run — it stays unverified until a passing run is recorded: dev-spec done ${slug} ${n} --run`,
+      // A red-phase task (it writes a test that must FAIL) carrying a must-pass _Verify:_ can never be verified.
+      redPhaseTestWord: "the test",
+      redPhaseVerify: (n, slug, test) => `Task ${n} writes a test that must FAIL (the red phase), so a _Verify:_ that must pass can never pass on it. Either move the command to the task that makes it green (the fix — its _Verify:_ then proves the fix), or remove the _Verify:_ from task ${n} and record the red run as a note: dev-spec done ${slug} ${n} --evidence "${test} fails: <the reason>".`,
+      failedRun: (n, code, slug, runnable) => `Task ${n}: its latest recorded run failed (exit ${code}) — a note doesn't change that; it stays unverified until a passing run ` +
+        (runnable ? `of its _Verify:_ command is recorded: dev-spec done ${slug} ${n} --run` : "(a command with exit code 0) is recorded."),
+      duplicateNumber: (n) => `Task ${n}: another task also uses number ${n} and the recorded evidence is that task's — this one stays unverified; renumber the tasks, then record its own evidence.`,
+      staleEvidence: (n, slug, runnable) => `Task ${n}: the recorded evidence is for another task or an earlier _Verify:_ command — it stays unverified until its own ` +
+        (runnable ? `run is recorded: dev-spec done ${slug} ${n} --run` : "evidence is recorded."),
+      reason: { "no-evidence": "no evidence", "failed-run": "latest run failed", "manual-note-on-runnable-verify": "note only, _Verify:_ command not run", "duplicate-number": "number shared with another task",
+        "stale-evidence": "evidence is for another task or _Verify:_ command" },
+      duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
+    },
+    // CLI `done` human output.
+    taskDone: {
+      done: (n, verified, done, total) => `Task ${n} done${verified ? " (verified)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `Task ${n} was already done${verified ? " (verified)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  next → #${n} ${text}`,
+      allDone: "  — all done ✓",
+      numberInt: "task number must be an integer",
+      noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
+      shellHint: "Hint: the default Windows shell (cmd.exe) could not run this command line as written. If the _Verify:_ command is written for a POSIX shell, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
+      posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
+    },
+
+    tracks: {
+      unknown: (items, valid) => `Unknown track${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (did you mean '${u.suggestion}'?)` : "")).join(", ")}. Valid tracks: ${valid}.`,
+      cannotRemoveCore: "'core' is always on — it can't be removed.",
+      bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
+      notActive: (list) => `Not active: ${list} — nothing to remove.`,
+      removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' already existed: added ${list} (artifacts, design sections, steering, tasks) — nothing was overwritten.`,
+      designTitle: (name) => `# Design: ${name}`,
+      acPlaceholder: (tr) => `[the +${tr} criterion this task proves]`,
+      designSections: (marker) => `design.md (${marker} sections)`,
+      // spec_add_track / spec_create `added` entries for files extended in place (a new file is listed by its path).
+      addedDesign: "design.md (+sections)",
+      addedTasks: "tasks.md (+tasks)",
+      addedActiveTracks: "classification.md (Active Tracks)",
+      taskBlock: (track, start) => BUILD.en.trackTasks({ track, start }),
+    },
+
+    // MCP argument validation (server.js): names the argument and the type its inputSchema expects.
+    args: {
+      missing: (list) => `Missing required argument(s): ${list}`,
+      invalid: (list) => `Invalid argument(s): ${list}`,
+      item: (arg, expected, got) => `${arg} must be ${expected} (got ${got})`,
+      type: { string: "a string", integer: "an integer", number: "a number", boolean: "a boolean (true/false)", array: "an array", object: "an object", null: "null" },
+      arrayOf: (t) => `an array (each item ${t})`,
+      oneOf: (list) => `one of: ${list}`,
+      atLeast: (n) => `≥ ${n}`,
+      notObject: "arguments must be a JSON object.",
+      dotdot: "projectDir must not contain '..' path segments.",
+      network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
+    },
+    // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
+    jsonShape: {
+      invalid: (rel, detail) => `${rel} has an unexpected shape (${detail}) — fix it by hand; refusing to overwrite it.`,
+      topLevel: "the top level must be an object",
+      features: "'features' must be an object",
+      featureEntry: (k) => `features.${k} must be an object`,
+      dependsOn: (k) => `features.${k}.dependsOn must be an array of feature names`,
+      meta: "'meta' must be an object",
+      backlog: "'backlog' must be an array",
+      backlogEntry: "every 'backlog' entry must be an object with a 'name'",
+      approvals: "'approvals' must be an object",
+      evidence: "'evidence' must be an object",
+      tracks: "'tracks' must be an array",
+      approvalHistory: "'approvalHistory' must be an array",
+      changes: "'changes' must be an array",
+    },
+    depend: {
+      unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
+      orderInt: (v) => `order must be an integer (got '${v}').`,
+    },
+    // mcp/evals/run-evals.js human output (in the feature's language).
+    evals: {
+      usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
+      noEvalsDir: (slug, dir) => `No evals/ dir for '${slug}' at ${dir}`,
+      requireLive: "eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.",
+      header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
+      config: (model, prompt, mode) => `  model: ${model}   prompt: ${prompt}   mode: ${mode}`,
+      none: "(none)",
+      modeDry: "DRY-RUN (no model calls)",
+      modeLive: "LIVE",
+      noKey: "  (no ANTHROPIC_API_KEY set — running dry. Set it to do a live run.)",
+      badJson: (set, err) => `  ✗ ${set}.json — invalid JSON: ${err}`,
+      badItems: (set) => `  ✗ ${set}.json — 'items' must be an array`,
+      emptySet: (set) => `  ✗ ${set}.json — no items to grade: a set that grades nothing can't pass — add eval items (evals/README.md) or delete the file`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} more invalid item(s)`,
+      itemWhy: {
+        notObject: "not an object",
+        noId: "no 'id' (a non-empty string)",
+        noInput: "no 'input' (a non-empty string)",
+        noExpect: "no 'expect' object",
+        unknownType: (t, types) => `unknown grader type '${t}' (use ${types})`,
+        noValue: (t) => `'${t}' needs a 'value'`,
+        badRegex: (msg) => `the regex doesn't compile: ${msg}`,
+        noRubric: "'judge' needs a 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "must be an object giving each set (golden / adversarial / regression) a number between 0 and 1",
+      capped: (set, max, total) => `  ⚠ ${set}: capped at ${max}/${total} items (raise with --max-items=N)`,
+      wouldRun: (set, n, kinds) => `  • ${set}: ${n} item(s) — would run ${kinds}`,
+      score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (threshold ${thr}%)`,
+      failure: (id, detail) => `      - ${id}: ${detail}`,
+      error: (msg) => `ERROR ${msg}`,
+      resp: (sample) => ` | resp: ${sample}`,
+      fail: "fail",
+      judge: "judge",
+      judgeSkipped: "judge skipped (heuristic used)",
+      unknownGrader: (t) => `unknown grader '${t}'`,
+      vsBaseline: "\n  vs baseline:",
+      delta: (set, base, cur, sign, pp) => `    ${set}: ${base}% → ${cur}% (${sign}${pp}pp)`,
+      baselineWritten: (rel) => `\n  baseline written → ${rel}`,
+      tokens: (i, o) => `\n  tokens: ${i} in / ${o} out`,
+      dryInvalid: "\nDry run found invalid eval set(s) — fix them before a live run.",
+      liveInvalid: "\nInvalid eval set(s) — fix them first; no model was called.",
+      dryOk: "\nDry run complete — sets are valid. Set ANTHROPIC_API_KEY and re-run for live scores.",
+      verdict: (below) => `\nVerdict: ${below ? "BELOW THRESHOLD ✗" : "all sets pass ✓"}`,
+      crashed: (msg) => `eval harness error: ${msg}`,
+    },
+
+    // Every gap kind trace_check can report (CLI, hook and doctor list them all — none is dropped).
+    traceGapText: {
+      kinds: {
+        uncoveredByTasks: "ACs with no task",
+        phantomAcsInTasks: "tasks reference unknown ACs (typos?)",
+        uncoveredByTests: "ACs with no planned test",
+        phantomAcsInTests: "the test plan covers unknown ACs (typos?)",
+        phantomTestsInTasks: "tasks reference unknown tests (typos?)",
+        testsNotMappedToTasks: "planned tests that no task makes green",
+        missingImplFiles: "_Implements:_ files that don't exist",
+      },
+      gap: (label, list) => `${label}: ${list}`,
+      allCovered: (n) => `all ${n} ACs covered by tasks`,
+      removedKinds: {
+        phantomAcsInTasks: "tasks still cite ACs a change request removed (delete or update those tasks — not a typo)",
+        phantomAcsInTests: "the test plan still covers ACs a change request removed (delete or update those rows — not a typo)",
+      },
+      removedRef: (id, n) => `${id} (change request #${n})`,
+    },
+    // detectPhase() tokens stay English in JSON; these are for human-readable lines only.
+    phaseNames: {
+      complete: "complete", executing: "executing", "tasks-ready": "tasks-ready", "eval-plan": "eval-plan", "test-plan": "test-plan",
+      design: "design", requirements: "requirements", classified: "classified", empty: "empty",
+    },
+    featureOps: {
+      removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
+      backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
+    },
+    // CLI human output (--json output is the structured result, never localized).
+    cliOutput: {
+      words: {}, // verdict tokens shown as-is in English
+      yes: "true", no: "false",
+      tracks: (label, conf) => `Tracks: ${label}   confidence: ${conf}`,
+      note: (n) => `\nNote: ${n}`,
+      created: (dir, lang, files, kept) => `Created in ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (existing, kept: ${kept})` : ""),
+      nothingNew: "(nothing new)",
+      steeringCreated: (f) => `Created ${f}`,
+      steeringExists: (f) => `Exists (left untouched) ${f}`,
+      feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
+      noFeatures: (dir) => `No features under ${dir}`,
+      listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tasks)`,
+      statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  phase=${phase}`,
+      statusTasks: (done, total, next) => `Tasks: ${done}/${total}` + (next ? `  next → ${next}` : ""),
+      doctorHead: (f, tracks, verdict, ready) => `Doctor: ${f}  [${tracks}]  verdict=${verdict}  readyToAdvance=${ready}`,
+      traceHead: (f, verdict, acs, covered) => `Trace: ${f}  verdict=${verdict}  ACs=${acs}  coveredByTasks=${covered}`,
+      earsHead: (n, m, verdict) => `EARS: ${n} criteria, ${m} with modal, verdict=${verdict}`,
+      next: (n, text, left, total) => `Next → #${n} ${text}  (${left}/${total} left)`,
+      allDone: "All tasks done ✓",
+      batch: (list) => `  parallel batch: ${list}`,
+      mergeSummaryAt: (p) => `\nMerge summary → ${p}`,
+      briefAt: (p, inline) => `Brief → ${p}` + (inline ? "  (inline only: +ai prompt task)" : ""),
+      reportAt: (p) => `  report → ${p}`,
+      ledgerAt: (p) => `  ledger → ${p}`,
+      unresolved: (list) => `  ⚠ unresolved: ${list}`,
+      approved: (phase, f) => `Approved '${phase}' for ${f} ✓`,
+      backlogHead: (n) => `Backlog (${n}):`,
+      backlogAdded: (name) => `✓ '${name}' added to the backlog`,
+      backlogRemoved: (name) => `✓ '${name}' removed from the backlog`,
+      wrote: (file, pct, c, t) => `✎ wrote ${file}` + (pct != null ? `  (${pct}%, ${c}/${t})` : ""),
+      noRoadmapFeatures: (dir) => `No features yet under ${dir}`,
+      roadmapHead: (pct, c, t, cycle) => `Roadmap — overall ${pct}%  (${c}/${t} complete)` + (cycle ? `  ⚠ CYCLE: ${cycle}` : ""),
+      deps: (list, unmet) => `  deps: ${list}` + (unmet ? ` (unmet: ${unmet})` : ""),
+      scanHead: (root, truncated) => `Scan of ${root}` + (truncated ? " (truncated at cap)" : ""),
+      scanFiles: (n, stack) => `  files: ${n}  | stack: ${stack || "unknown"}`,
+      scanDirs: (list) => `  top dirs: ${list}`,
+      scanExt: (list) => `  by ext: ${list}`,
+      scanEndpoints: (n, files) => `  endpoints: ${n} route(s) in ${files} file(s)`,
+      coverage: (pct, d, t) => `Spec coverage: ${pct}%  (${d}/${t} code files named in _Implements:_)`,
+      undocumented: (list) => `  uncovered folders: ${list}`,
+      clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
+      naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
+      changed: (list) => `  ⚠ changed since last approval: ${list}`,
+      renamed: (a, b) => `Renamed '${a}' → '${b}' ✓`,
+      archived: (f, dest) => `Archived '${f}' → .specs/${dest} ✓`,
+      removed: (f) => `Removed '${f}' ✓`,
+      wouldRemove: (slug, dir, n, entries) => `Would permanently delete '${slug}': ${dir} (${n} file(s): ${entries})`,
+      confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: dev-spec feature archive ${slug}`,
+      missingValue: (flag) => `missing value for --${flag}`,
+      unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
+      scaleSections: (list) => `Scale sections: ${list}`,
+      aiSections: (list) => `AI sections: ${list}`,
+      dependsOn: (f, deps, order, unknown) => `${f} depends on: ${deps || "(none)"}` + (order != null ? `  order=${order}` : "") + (unknown ? `  ⚠ unknown deps: ${unknown}` : ""),
+      trackNow: (f, tracks) => `'${f}' now [${tracks}]`,
+      usage: (syntax) => `usage: ${syntax}`,
+      unknownCommand: (c) => `unknown command '${c}'. Run \`dev-spec help\`.`,
+      unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
+    },
+
+    // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
+    // next_action's "fill <file>" step, clarify's grouped placeholder question and the requirements hook line.
+    gates: {
+      empty: "no content beyond headings",
+      more: (n) => `+${n} more`,
+      placeholdersNone: "no template placeholders left in the current phase",
+      placeholdersFail: (list) => `template placeholders left in the current phase (or an earlier one): ${list}`,
+      placeholdersLater: (list) => `later phases are still templates (not blocking yet): ${list}`,
+      traceDeferred: (files) => `not traced yet — still a later phase's template: ${files} (its template references are no typos and don't block this phase); traced once written`,
+      earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
+      constitutionUnfilled: "the Constitution Check section is missing or not filled in",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
+      approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
+      approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
+      phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
+      forcedGates: (list) => `approved with force over failing checks: ${list}`,
+      finishRootCause: "bug.md → Root Cause is not filled — no fix before the root cause is known",
+      finishPlaceholders: (list) => `template placeholders left in the spec chain: ${list}`,
+      finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
+      bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
+      bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
+      rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
+      fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
+      fillMissing: "it doesn't exist yet",
+      fillEmpty: "it has no content beyond headings",
+      fillPlaceholders: (n, first) => `${n} template placeholder(s) left (first: ${first})`,
+      fillHint: {
+        "classification.md": (slug) => `confirm the tracks and write the blast radius and compliance tags (/classify ${slug}), then /approve ${slug} classification`,
+        "requirements.md": (slug) => `check it with /clarify ${slug} and ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `write the Reproduction and the Root Cause with evidence (/spec-doctor ${slug})`,
+        "design.md": (slug) => `run /spec-doctor ${slug} (mandatory sections, Constitution Check)`,
+        "test-plan.md": (slug) => `check the AC coverage with trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `break the design into real tasks (/createTask ${slug}), then trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Before approving '${phase}', fix what the approve gate would refuse: ${list} — then /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `approving '${phase}' would be refused (${ids})`,
+      noRealTasks: "only the scaffold's template tasks — break the design into at least one real task of your own",
+      testsNotInCode: (list) => `planned tests no test file names yet: ${list} — write each failing test with its T-ID in the name (trace_check {code: true} finds them)`,
+      // An executing/complete feature (tasks ticked — e.g. a 1.12 one): the code exists, so the tests are not written first
+      // and not failing — the same sign-off wording as next_action's signOffTests.
+      testsNotInCodeSignOff: (list) => `planned tests no test file names yet: ${list} — the implementation has already started: check that each one exists with its T-ID in the test's name (test("T-01 …")) so trace_check {code: true} finds it`,
+      noPlannedTests: "test-plan.md lists no T-ID — plan the tests first",
+      evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
+      evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
+      testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
+      clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Template placeholders: ${n} left in requirements.md (${list}) — replace them before approving the requirements.`,
+    },
+
+    // Brownfield depth: scan / coverage CLI lines and the integration-plan doctor check.
+    brownfield: {
+      frameworks: (list) => `  frameworks: ${list}`,
+      routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
+      moreRoutes: (n) => `    … ${n} more (--json lists them, up to the cap)`,
+      routesTruncated: (shown, total) => `Showing the first ${shown} of ${total} routes — the endpoint count covers all of them.`,
+      readCapped: (n) => `Only the first ${n} code files were read (routes, env names, test hints) — those lists may be incomplete.`,
+      tests: (n, fws) => `  tests: ${n} file(s) · frameworks: ${fws}`,
+      entrypoints: (list) => `  entrypoints: ${list}`,
+      env: (list, more) => `  env vars (names only): ${list}` + (more ? ` … +${more}` : ""),
+      migrations: (n, dirs) => `  migrations/schema: ${n} file(s)` + (dirs ? ` — ${dirs}` : ""),
+      none: "none",
+      coverageTests: (n) => `  test files (reported apart, not counted): ${n}`,
+      coverageFolder: (folder, covered, files, pct) => `  ${folder.padEnd(24)} ${String(covered + "/" + files).padStart(9)}  ${pct}%`,
+      root: "(root)",
+      coverageUnmatched: (list) => `  ⚠ _Implements:_ entries that name nothing on disk: ${list}`,
+      coverageNonCode: (list) => `  · _Implements:_ entries naming tests or non-code files (not counted): ${list}`,
+      integrationPlanPlaceholder: "integration-plan.md is still the template — fill in the integration points, modifications and risks before implementing",
+      integrationPlanOk: "integration plan filled",
+    },
+    // spec_import (Kiro · spec-kit · OpenSpec → a new feature). Artifact text is in the feature's language; the
+    // EARS tokens below are used in the language the imported scenario was written in.
+    importSpec: {
+      note: (tool, rel, date) => `> Imported from ${tool} \`${rel}\` on ${date}.`,
+      unknownTool: (tool, known) => `Unknown spec format '${tool}'. Known: ${known}.`,
+      pathRequired: "path required — the folder (or a file) of the spec to import.",
+      outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
+      notFound: (p) => `'${p}' not found.`,
+      nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
+      exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
+      featureTitle: (name) => `# Feature: ${name}`,
+      tasksTitle: (name) => `# Tasks: ${name}`,
+      summary: "## Summary",
+      summaryPlaceholder: "[1-2 sentences: what this does and why it matters]",
+      stories: "## User Stories",
+      story: (n, pri, title) => `### US-${n}${pri ? ` (${pri})` : ""}: ${title}`,
+      criteria: "#### Acceptance Criteria (EARS)",
+      functional: "## Functional Requirements",
+      entities: "## Key Entities",
+      success: "## Success Criteria",
+      edge: "## Edge Cases & Error Handling",
+      original: (tool, text) => `<!-- ${tool}: ${text} -->`,
+      notEars: "[NEEDS CLARIFICATION: not an EARS statement yet — add its trigger (WHEN/IF) and the system's response]", // no modal verb here: the criterion must still fail EARS
+      noCriteria: "[NEEDS CLARIFICATION: this story has no acceptance criteria]",
+      optional: "(optional)",
+      modified: "(modified)",
+      importedNotes: "## Imported notes", // source text before any heading, carried verbatim
+      otherTasks: "## Other tasks", // closes a parent task's phase heading when a stand-alone task follows it
+      ears: { while: "WHILE", when: "WHEN", if: "IF", where: "WHERE", then: "THEN", shall: "THE SYSTEM SHALL", not: "NOT", ensure: "THE SYSTEM SHALL ensure that" },
+      wNotEars: (ids) => `not converted to EARS (text kept, marked [NEEDS CLARIFICATION]): ${ids}`,
+      wNoCriteria: (ids) => `stories without acceptance criteria: ${ids}`,
+      wUnknownRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
+      wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
+      wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
+      wNoRefs: "the imported tasks carry no _Requirements:_ references — add them so trace_check can map every AC to a task",
+      wNoTasks: "no tasks.md in the source — the scaffold's tasks.md was kept (its template _Requirements:_ / _Makes green:_ narrowed to the imported criteria)",
+      taskAcPlaceholder: "[an imported criterion this task proves]", // a kept template task citing a criterion the import lacks
+      taskTestPlaceholder: "[the planned test this task makes green]",
+      wNoDesign: (file) => `no ${file} in the source — the scaffold's design.md was kept`,
+      wNoRequirements: (file) => `no requirements found in ${file}`,
+      wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
+      wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
+      wSkipped: (files) => `not imported (left in place): ${files}`,
+      wUnreadable: (file) => `${file} points outside the project — skipped`,
+      done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
+      mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
+    },
+
+    // spec_append_tasks / `dev-spec append-tasks` (converge). Markers, IDs and **Checkpoint:** stay English-stable.
+    appendTasks: {
+      heading: "Phase: Convergence",
+      checkpoint: "the convergence tasks are done and verified — the spec and the code agree again.",
+      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Task ${i}: text is required.`,
+      badStory: (i, v) => `Task ${i}: story must be US<n> (e.g. US1) or shared (got '${v}').`,
+      badPath: (i, p) => `Task ${i}: _Implements:_ paths must be relative to the project root, without '..' (got '${p}').`,
+      badVerify: (i) => `Task ${i}: _Verify:_ must be a single-line command.`,
+      placeholderVerify: (i, v) => `Task ${i}: '${v}' reads as a placeholder, not a command (a _Verify:_ in [brackets] is ignored) — give the real command (for a shell test, 'test …' instead of '[ … ]').`,
+      unstorable: (i, marker) => `Task ${i}: its ${marker} would not read back from tasks.md as given — keep markers out of the task text, ',' and ';' out of paths, and '_ ' out of paths and commands.`,
+      phantom: (list) => `Unknown acceptance criteria (not in requirements.md): ${list}. Nothing was written — fix the IDs or add the criteria first.`,
+      badHeading: "heading must be one line of text.",
+      constraintsHeading: (h) => `'${h}' holds the constraints every task respects, not tasks — pick a phase heading. Nothing was written.`,
+      inactiveHeading: (h, track) => `'${h}' is the task section of the inactive ${track} track — re-add the track or pick another heading. Nothing was written.`,
+      unsafe: (n) => `Couldn't append safely: ${n ? `task ${n} would not read back as written` : "existing tasks would change"} (an unclosed comment or code fence near the end of the phase?). Nothing was written.`,
+      reapprove: (slug) => `tasks.md changed after its approval — review the new tasks, then re-approve: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Appended to tasks.md → '${heading}'${created ? " (new phase)" : ""}:`,
+      oneTaskPerCall: "append-tasks takes one --task per call — run it again for the next task (spec_append_tasks takes a list).",
+      oneValue: (flag) => `append-tasks takes --${flag} once per call — ${flag === "verify" ? "join the checks into one command (a && b)" : "give a single value"}. Nothing was written.`,
+    },
+
+    // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
+    // IDs and file names stay English-stable.
+    impact: {
+      badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
+      reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
+      // --phase test-plan: a REMOVED planned test — its tasks still name its T-ID in _Makes green:_.
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Removed tests still made green by tasks — ${list}: don't redo those tasks; drop the T-ID from their _Makes green:_ or point it at the test that replaces it.` +
+          (offer ? ` --reopen records the change request without unticking them (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Removed tests are not redone — still named in _Makes green:_: ${list}: drop the T-ID from those tasks, or point it at the test that replaces it.`,
+        recordedRetire: (n, list, slug, phase) => `Change request #${n} recorded — nothing unticked: a removed test's tasks are not redone. Still named in _Makes green:_: ${list}: drop the T-ID from those tasks, or point it at the test that replaces it; then re-approve: /approve ${slug} ${phase}.`,
+      },
+      missing: (file, slug) => `${file} not found for '${slug}' — nothing to compare.`,
+      neverApproved: (phase, slug) => `'${phase}' was never approved for '${slug}' — there is no approved version to compare with. Approve it first: /approve ${slug} ${phase}.`,
+      fingerprintOnly: (phase, slug) => `This approval predates the change history: only its fingerprint was recorded, so what changed can't be listed. Re-approve to start the history: /approve ${slug} ${phase}.`,
+      noFingerprint: (phase, slug) => `This approval predates content fingerprints: nothing about the approved version was recorded, so neither whether nor what it changed can be told (a file date is no evidence — a clone or copy resets it). Re-approve to start tracking it: /approve ${slug} ${phase}.`,
+      reopenNeedsSnapshot: (phase) => `Nothing was reopened: without a snapshot of the approved '${phase}' the affected tasks can't be determined.`,
+      nothingNew: "Nothing new since the last reopen against this approval — nothing was changed.",
+      nothingToReopen: (changed) => (changed ? "Nothing to reopen: the edit changed no criterion or section (only text outside them) — nothing was changed."
+        : "Nothing changed since the approval — nothing to reopen."),
+      designFingerprintOnly: (slug) => `design.md changed since the approval too, but this approval kept no snapshot of it (only its fingerprint), so what changed there can't be listed. Re-approve to start its history: /approve ${slug} design.`,
+      reopenDesignUnknown: "Nothing was reopened: design.md changed, but without a snapshot of it as approved the affected tasks can't be determined.",
+      reopened: (list, slug, phase) => `Reopened ${list}: unticked, their evidence marked stale — redo them with fresh evidence, then re-approve: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tasks " + tasks.join(", ") : "", tests.length ? "tests " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Removed criteria still cited — ${list}: don't redo those tasks; delete them (and the test rows) or point them at the criterion that replaces it.` +
+        (offer ? ` --reopen records the change request without unticking them (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Removed criteria are not redone — still cited: ${list}: delete those tasks and test rows, or point them at the criterion that replaces it.`,
+      recordedRetire: (n, list, slug, phase) => `Change request #${n} recorded — nothing unticked: a removed criterion's tasks are not redone. Still cited: ${list}: delete those tasks and test rows, or point them at the criterion that replaces it; then re-approve: /approve ${slug} ${phase}.`,
+      recordedOnly: (n, slug, phase) => `Change request #${n} recorded — no done task was affected. Review it, then re-approve: /approve ${slug} ${phase}.`,
+      reopenHint: (slug, phase) => `To untick the affected done tasks and mark their evidence stale: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
+      nextHint: (slug, phases) => `First see what the edit touches with spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
+      doctorChanged: (list, slug, phases) => `changed after their approval: ${list} — see what the edit touches with spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}), then re-approve`,
+      doctorChangedPlain: (list, slug) => `changed after their approval: ${list} — re-review, then re-approve (/approve ${slug} <phase>)`,
+      staleNote: (n, slug, runnable) => `Task ${n}: its evidence predates a spec change (spec_impact reopened it) — it stays unverified until ` +
+        (runnable ? `a new passing run is recorded: dev-spec done ${slug} ${n} --run` : "new evidence is recorded."),
+      head: (slug, phase, date, snap) => `Impact: ${slug} · ${phase} — against the approval of ${date} (${snap})`,
+      headFp: (slug, phase, changed) => `Impact: ${slug} · ${phase} — fingerprint only: ${changed ? "changed since the approval" : "unchanged since the approval"}`,
+      headNone: (slug, phase, changed) => `Impact: ${slug} · ${phase} — no fingerprint recorded: ${changed ? "changed since the approval (a file added after it)" : "whether it changed can't be told"}`,
+      noChanges: "no changes since the approval",
+      noStructural: "edited, but no criterion, section or task changed (only text outside them)",
+      affected: "Affected:",
+      tasksLabel: "tasks",
+      testsLabel: "tests",
+      designLabel: "design",
+      idsLabel: "IDs",
+      none: "none",
+      change: { added: "added", modified: "modified", removed: "removed" },
+      verified: "verified",
+      nothingToVerify: "nothing to verify (no _Verify:_ command, nothing recorded)",
+      staleSpec: "the spec changed since this evidence; spec_impact reopened the task",
+      uncovered: (list) => `new, no task cites them yet: ${list}`,
+      reReview: (slug, phase) => `review the change, then re-approve: /approve ${slug} ${phase}`,
+    },
+    // spec_metrics + the retrospective (retro.md). Durations use the same units everywhere (m/h/d).
+    metrics: {
+      writeNeedsName: "write needs a feature name — the retrospective is per feature (spec_metrics {name, write: true} / dev-spec metrics <feature> --write).",
+      retroWritten: (p) => `Retrospective → ${p} (pre-filled with the metrics — the rest is yours to write).`,
+      retroExists: (p) => `${p} already exists — left untouched (a retrospective is never overwritten).`,
+      unknown: "unknown",
+      source: { approval: "approximate: from the earliest approval", filesystem: "approximate: from the folder's date" },
+      phase: { classification: "classification", requirements: "requirements", design: "design", "test-plan": "test plan", "eval-plan": "eval plan", tests: "tests", tasks: "tasks", execution: "execution", complete: "complete", finished: "finished" },
+      head: (slug, tracks, created, approx) => `Metrics: ${slug} [${tracks}] — created ${created}${approx ? ` (${approx})` : ""}`,
+      leadTimes: (list) => `  lead time from creation: ${list}`,
+      noLeadTimes: "  lead time from creation: nothing approved yet",
+      rework: (total, n, list, forced) => `  approvals: ${total} · rework: ${n}${list ? ` (${list})` : ""} · forced: ${forced}`,
+      reworkUnknown: (forced) => `  rework: unknown (approvals made before the change history) · forced: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  approvals: ${total} · rework: at least ${n}${list ? ` (${list})` : ""} · forced: ${forced} — rework unknown for ${legacy} (approved before the change history)`,
+      changes: (n, reopened) => `  change requests: ${n} · reopened tasks: ${reopened}`,
+      evidence: (rate, pass, runs) => `  evidence: ${rate}% of runs passing (${pass}/${runs})`,
+      noRuns: "  evidence: no recorded runs",
+      tasks: (done, total, clar) => `  tasks: ${done}/${total} · open clarification markers: ${clar}`,
+      noFeatures: (dir) => `No features yet under ${dir}`,
+      projectHead: (n) => `Metrics — ${n} feature(s)`,
+      row: (created, complete, rework, forced, changes, pass, tasks) => [created ? `created ${created}` : null, `complete ${complete}`, `rework ${rework}`,
+        `forced ${forced}`, `changes ${changes}`, `pass ${pass}`, tasks ? `tasks ${tasks}` : null].filter(Boolean).join(" · "),
+      avg: "average",
+      median: "median",
+      medianLeads: (list) => `  median lead time: ${list}`,
+      totals: (done, total, pass, runs, changes, reopened) => `  total: tasks ${done}/${total} · ${runs ? `evidence ${pass} of ${runs} run(s) passing` : "no recorded runs"} · change requests ${changes} · reopened tasks ${reopened}`,
+      retroText: {
+        title: (f) => `# Retrospective: ${f}`,
+        intro: (date) => `> Generated by dev-spec on ${date} from .state.json, .history/ and the artifacts. The numbers are derived locally; the rest is yours to write. Nothing here is applied automatically.`,
+        metrics: "## Metrics",
+        header: "| Metric | Value |",
+        created: "Created",
+        approximate: "approximate",
+        unknown: "unknown",
+        lead: (ph) => `Lead time → ${ph}`,
+        rework: "Rework (re-approvals)",
+        reworkUnknown: "unknown — the approvals predate the change history",
+        reworkPartial: (value, legacy) => `at least ${value} — unknown for ${legacy} (approved before the change history)`,
+        forced: "Forced approvals",
+        changes: "Change requests",
+        reopened: (n) => `${n} task(s) reopened`,
+        passRate: "Evidence pass rate",
+        runs: (rate, pass, runs) => `${rate}% (${pass}/${runs} runs)`,
+        noRuns: "no recorded runs",
+        tasks: "Tasks",
+        tasksValue: (done, total) => `${done}/${total} done`,
+        clar: "Open clarification markers",
+        well: "## What went well",
+        hurt: "## What hurt",
+        signals: (list) => `<!-- Signals from the metrics: ${list}. -->`,
+        sigRework: (ph, n) => `'${ph}' approved ${n} time(s)`,
+        sigForced: (n) => `${n} approval(s) forced over failing checks`,
+        sigReopened: (n) => `${n} task(s) reopened by change requests`,
+        sigPass: (rate) => `only ${rate}% of verification runs passed`,
+        sigClar: (n) => `${n} clarification marker(s) still open`,
+        amend: "## Proposed steering or constitution amendments",
+        amendNote: "<!-- For human approval — never applied automatically. Name the file (.specs/steering/constitution.md, tech.md, …), the exact change and why. -->",
+        followUps: "## Follow-ups",
+        followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_backlog (dev-spec backlog add \"<name>\" \"<note>\"). -->",
+      },
+      // The ONE retro layout; each language passes its own retroText (lazy MSG reference — MSG is complete at call time).
+      buildRetro: (T, P, m, fmt) => {
+        const lt = m.leadTime || {};
+        const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
+        for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
+          if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
+        }
+        const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
+        const reworkValue = m.rework == null ? null : m.rework + (by ? ` (${by})` : "");
+        rows.push([T.rework, reworkValue == null ? T.reworkUnknown
+          : m.reworkLowerBound && Array.isArray(m.legacyPhases) ? T.reworkPartial(reworkValue, m.legacyPhases.map((ph) => P[ph] || ph).join(", ")) : reworkValue]);
+        rows.push([T.forced, String(m.forcedApprovals)]);
+        rows.push([T.changes, `${m.changeRequests} (${T.reopened(m.reopenedTasks)})`]);
+        rows.push([T.passRate, m.evidence && m.evidence.runs ? T.runs(m.evidence.passRate, m.evidence.passing, m.evidence.runs) : T.noRuns]);
+        rows.push([T.tasks, T.tasksValue(m.tasks.done, m.tasks.total)]);
+        rows.push([T.clar, String(m.openClarifications)]);
+        const sig = [];
+        if (m.reworkByPhase) for (const [ph, n] of Object.entries(m.reworkByPhase)) sig.push(T.sigRework(P[ph] || ph, n + 1));
+        if (m.forcedApprovals) sig.push(T.sigForced(m.forcedApprovals));
+        if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
+        if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
+        if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
+        return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
+          T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
+          T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
+      },
+      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
+    },
+
+    // Deep traceability (trace_check warnings, doctor secondary-trace / tests-in-code, finish, hook). Never blocking.
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "edge cases (EC) that no task or test covers",
+        uncoveredNfr: "non-functional requirements (NFR) that no task or test covers",
+        uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
+        phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
+        plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
+        inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
+        unresolvedImplGlobs: "_Implements:_ globs not fully resolved (the file walk stopped at its cap before a match — not counted as missing)",
+      },
+      secondaryOk: (n) => `all ${n} EC/NFR/SC IDs covered`,
+      testsInCodeOk: (n) => `every planned T-ID made green by a done task is named in a test file (${n})`,
+      testsInCodeMissing: (list) => `made green by done tasks, but no test file names them: ${list} — put the T-ID in a test's name (test("T-01 …"), def test_T01_…) in a test file (a tests/ folder, *.test.*, *_test.* …), in the file the plan's File column names when it names one; a check run outside test code (a load script, an eval set) names its non-code artifact in the File column instead (load-test.md, evals/golden.json) and is not expected in a test file`,
+      truncated: "the test-file scan stopped at its cap — some files were not read",
+      codeSummary: (found, planned, scanned, truncated, outside) => `  tests in code: ${found}/${planned} planned T-ID(s) named in ${scanned} test file(s)` + (outside ? ` · checked outside test code (the File column names a non-code artifact): ${outside}` : "") + (truncated ? " (scan truncated at its cap)" : ""),
+      warningsHead: "Warnings (not blocking):",
+    },
+
+    // Living catalog (.specs/SPECS.md) chrome. IDs, `_Supersedes:_` and the AUTO-GENERATED marker stay English-stable.
+    catalog: {
+      title: (proj) => `Spec catalog — ${proj}`,
+      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_catalog {write: true} (dev-spec catalog --write).",
+      intro: "What the system does today: every acceptance criterion, grouped by feature. A criterion replaced by a later feature (_Supersedes:_) is struck through and names the criterion that replaces it.",
+      totals: (f, acs, current, sup) => `**${f} feature(s) · ${acs} acceptance criteria — ${current} current, ${sup} superseded**`,
+      status: { active: "in progress", complete: "complete", finished: "finished", archived: "archived" },
+      finishedOn: (d) => `finished ${d}`,
+      archivedOn: (d) => `archived ${d}`,
+      supersededBy: (list) => `superseded by ${list}`,
+      supersedes: (list) => `supersedes ${list}`,
+      template: "template — not written yet",
+      noAcs: "No acceptance criteria yet.",
+      noFeatures: "No features yet.",
+      cliWrote: (file, f, acs, sup) => `✎ wrote ${file}  (${f} feature(s), ${acs} AC(s), ${sup} superseded)`,
+    },
+    // `_Supersedes:_` references trace_check can't resolve — warnings, never an AC gap (reason codes stay English).
+    supersedes: {
+      phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (on ${by})` : ""} — ${reason}`,
+      renamed: (list) => `_Supersedes:_ references to it now use the new name, in: ${list}`,
+      reason: { "bad-ref": "not <feature>/US-n.AC-m", "unknown-feature": "no such feature (active or archived)", "unknown-ac": "that feature has no such AC", self: "a feature can't supersede its own AC", unterminated: "the marker is never closed — end it with an underscore: _Supersedes: <feature>/US-n.AC-m_" },
+    },
+    restore: {
+      notArchived: (slug) => `Nothing is archived as '${slug}' (.specs/_archive/${slug}/ not found).`,
+      activeExists: (slug) => `'${slug}' is already an active feature — rename or archive it before restoring the archived one.`,
+      done: (slug) => `Restored '${slug}' from .specs/_archive/ ✓`,
+      noRecord: "It was archived before archive recorded its roadmap entry — re-declare its dependencies with spec_depend if it had any.",
+      skipDependsOn: (d, reason) => `its dependency '${d}' (${reason})`,
+      skipDependent: (k, reason) => `'${k}', which depended on it (${reason})`,
+      skipRecord: (field, reason) => `the archive record's ${field} (${reason})`,
+      skipped: (list) => `Not restored: ${list}.`,
+      reason: { gone: "no longer exists", cycle: "would close a dependency cycle", invalid: "unexpected shape — left out" },
+      renamedRecords: (list) => `archive records updated to the new name (restore puts their dependencies back): ${list}`,
+      prunedDependents: (list) => `its dependents' links to it left the roadmap: ${list} (recorded — restore puts them back)`,
+      prunedIncomplete: (slug, pct, list) => `'${slug}' was not complete (${pct}%), yet ${list} depended on it: the roadmap no longer shows them blocked by it — restore it, or re-declare the dependency with spec_depend, if they still need that work`,
+    },
+    drift: {
+      none: "No finished feature has a drift baseline yet — spec_finish {write: true} (dev-spec finish <feature> --write) records one when a feature is ready to finish.",
+      clean: (f, n, d, archived) => `  ✓ ${f}${archived ? " (archived)" : ""}: ${n} implementing file(s) unchanged since finish (${d})`,
+      drifted: (f, n, total, d, archived) => `  ⚠ ${f}${archived ? " (archived)" : ""}: ${n} of ${total} implementing file(s) changed since finish (${d})`,
+      changed: (list) => `      changed: ${list}`,
+      missing: (list) => `      missing: ${list}`,
+      nowPresent: (list) => `      now present (missing at finish): ${list}`,
+      reopened: (list) => `  · reopened since finish (tasks open again — checked once finished again): ${list}`,
+      unbaselined: (list) => `  · no finish baseline yet: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (archived)" : ""}: changed since finish (${d}) — ${why}; its baseline no longer covers it: ${archived ? `restore it (dev-spec feature restore ${f}), finish it again (dev-spec finish ${f} --write), then archive it again` : `finish it again (dev-spec finish ${f} --write)`}`,
+      staleWhy: {
+        changeRequests: (list) => `change request ${list}`,
+        approvals: (list) => `re-approved: ${list}`,
+        newFiles: (n, list) => `${n} implementing file(s) not in the baseline: ${list}`,
+      },
+      hookLine: (f, n) => `  ⚠ ${f}: ${n} implementing file(s) changed since finish — run dev-spec drift ${f}`,
+      baselineRecorded: (n, missing) => `Drift baseline recorded: ${n} implementing file(s)${missing ? ` (${missing} missing)` : ""} — dev-spec drift shows what changes after this finish.`,
+      baselineReplaced: (n, day, list) => `Replaced the baseline of ${day}, in which ${n} file(s) had drifted: ${list} — the new baseline accepts them as they are now.`,
+    },
+
+    // Guard mode (hooks/guard-hook.js, PreToolUse · spec_init {guard} · `dev-spec init --guard on|off`).
+    guardMode: {
+      ask: (pending, stale) => "dev-spec guard: no approved tasks cover code changes right now — approve a feature's tasks (spec_approve) or confirm to proceed." +
+        (pending ? ` Features with tasks awaiting approval: ${pending}.` : "") +
+        (stale ? ` Tasks changed after their approval (review, then re-approve the tasks phase): ${stale}.` : "") + " (Guard mode is on — dev-spec init --guard off disables it.)",
+      forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
+      on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard).",
+      off: "Guard mode OFF — code edits are not gated.",
+      badValue: (v) => `--guard takes on or off (got '${v}').`,
+    },
+    // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
+    scopedSteering: {
+      customHint: "— or a custom scoped steering file: lowercase letters, digits and '-', ending in .md (e.g. api-conventions.md).",
+      reservedName: (file) => `'${file}' is a reserved name (a Windows device name or a JavaScript built-in) — pick another steering file name.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Scoped steering. The front matter decides when spec_task_brief includes this file:\n" +
+        "     inclusion: always    → in every task brief\n" +
+        "     inclusion: fileMatch → only for tasks whose _Implements:_ paths match fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; a list is allowed: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → never automatically; briefs list it as available on request\n" +
+        "     Replace the example pattern and the bracketed lines below. -->\n\n" +
+        "## Rules\n- [A rule every file matching the pattern must follow.]\n\n## Examples\n- [A short example — or a pointer to a file that shows the pattern.]\n",
+      placeholders: (list) => `still template placeholders: ${list}`,
+      scoped: "Scoped steering (fileMatch — matches this task's files):",
+      manual: "Available on request (manual steering):",
+    },
+    // PostToolUse hook: design.md saved → its mandatory checks for the ACTIVE tracks.
+    designSaveCheck: {
+      head: (slug, tracks) => `Design check on design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Design check [${tracks}]: mandatory sections${constitution ? " and the Constitution Check" : ""} filled, no template placeholders ✓`,
+      sections: (marker, list) => `${marker} sections: ${list}`,
+      constitution: {
+        missing: "Constitution Check: missing — add the section and check each principle of steering/constitution.md",
+        unfilled: "Constitution Check: not filled in",
+      },
+      placeholders: (n, list) => `${n} template placeholder(s) left: ${list}`,
+      hint: (slug) => `Fill them before approving the design — details: /spec-doctor ${slug}.`,
+    },
+    // spec_upgrade / `dev-spec upgrade` / the SessionStart notice / .specs/UPGRADE.md. The result's codes (status, review,
+    // group, attention, history skip reasons) stay English; these are their labels.
+    upgrade: {
+      // mode: behind (no stamp / an older one) · pending (stamped, but a migration is still due) · current · unknown (no engine version)
+      head: (from, to, mode) => mode === "unknown" ? "dev-spec upgrade — this engine's version is unknown (no package.json beside it): nothing will be stamped."
+        : mode === "behind" ? `dev-spec upgrade — .specs/ ${from ? `at ${from}` : "from before 1.13 (no version stamp)"} → dev-spec ${to}`
+        : mode === "pending" ? `dev-spec upgrade — .specs/ at ${from} (this dev-spec: ${to}), but some migrations are still pending`
+        : `dev-spec upgrade — .specs/ at ${from}: up to date with this dev-spec (${to})`,
+      newer: (from, to) => `.specs/ was last upgraded by a newer dev-spec (${from}) than this one (${to}) — update the plugin before relying on this audit.`,
+      summary: (n, blocked, attention, ok, archived) => `${n} active feature(s): ${blocked} blocked · ${attention} need attention · ${ok} ok` + (archived ? ` · ${archived} archived (not reviewed)` : ""),
+      noFeatures: "No active features — nothing to review.",
+      group: { blocked: "⛔ Blocked — doctor fails:", attention: "▲ Needs attention:", ok: "✓ OK:" },
+      status: { "not-started": "not started", planning: "planning", executing: "executing", complete: "complete", finished: "finished" },
+      feature: (name, status, tracks, phase, done, total, bugfix) => `${name} — ${status} · [${tracks}] · ${phase} · ${done}/${total} tasks${bugfix ? " · bugfix" : ""}`,
+      tracksInferred: "its tracks were inferred from the files — apply saves them to .state.json",
+      item: {
+        error: (e) => `Fix it by hand first: ${e}`,
+        fix: (list) => `Fix what doctor fails on: ${list}`,
+        approve: (list, slug) => `Approve the pending gate(s), in order: ${list} — /approve ${slug} <phase>`,
+        reReview: (list, cmds) => `Re-review what changed after its approval: ${list}` + (cmds ? ` — diff it first: ${cmds}` : "") + "; then re-approve",
+        reapprove: (list) => `Re-approve to start the change history (spec_impact can't diff these yet): ${list}`,
+        verify: (list, slug) => `Record a passing run for the ticked tasks without one: ${list} — dev-spec done ${slug} <n> --run`,
+        drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — dev-spec drift ${slug}`,
+        stale: (slug) => `It changed after its finish — finish it again: /spec-finish ${slug}`,
+        critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
+        converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
+        none: "No spec review needed — every task is done",
+        next: (rec) => `Next: ${rec}`,
+        warnings: (list) => `Warnings: ${list}`,
+      },
+      reason: { "no-fingerprint": "approved before content fingerprints", changed: "changed after its approval", missing: "its file is missing", untracked: "a 1.12 bugfix design approval — bug.md was never tracked", "snapshot-missing": "its snapshot file is gone" },
+      planHead: "Apply would change (spec_upgrade {apply: true} · dev-spec upgrade --apply) — never an artifact, an approval or a tick:",
+      migHead: "Migrations applied — no artifact edited, nothing approved, ticked or deleted:",
+      migStamp: (from, to) => `meta.specVersion: ${from || "none"} → ${to}`,
+      migTracks: (list) => `tracks saved to .state.json: ${list}`,
+      migSeeded: (list) => `approval baselines saved: ${list}`,
+      planSeed: (list) => `approval baselines to save to .history/ (the file still matches its approval): ${list}`,
+      migRecords: (n) => `${n} earlier approval(s) recorded in approvalHistory`,
+      migSkipped: (list) => `no baseline — re-approve to start the history: ${list}`,
+      migGitignore: (n) => `.specs/.gitignore: ${n} line(s) added`,
+      migErrors: (list) => `not migrated: ${list} — fix it, then run the upgrade again (meta.specVersion stays as it is until then)`,
+      nothing: "Nothing to migrate — .specs/ is already up to date; nothing was changed.",
+      upToDate: "Nothing to migrate — the list above is what the current rules flag.",
+      applyHint: "Nothing was changed. Review the list, then apply the safe migrations: dev-spec upgrade --apply (spec_upgrade {apply: true}).",
+      reportAt: (file) => `Report: ${file} — a checklist to work through (/spec-upgrade).`,
+      reportKept: (file) => `${file} exists and was not generated by dev-spec — left untouched (no report written).`,
+      hookLine: (from) => `⬆ .specs/ was created with an older dev-spec (${from || "before 1.13"}) — run /spec-upgrade (dev-spec upgrade) to review what isn't implemented yet (or just ask to update the specs)`,
+      md: {
+        title: (proj) => `dev-spec upgrade — ${proj}`,
+        autogen: "AUTO-GENERATED by dev-spec — tick the boxes as you go; spec_upgrade {apply: true} (dev-spec upgrade --apply) writes it when it migrates something.",
+        intro: (from, to) => `.specs/ upgraded from ${from || "a dev-spec before 1.13"} to ${to || "?"}. Per feature: what the ${to || "?"} rules flag, what to do and which review to run. Work through it with /spec-upgrade (Claude Code) or dev-spec upgrade; re-run the audit any time for the current state.`,
+        migrations: "Migrations",
+        group: { blocked: "⛔ Blocked — doctor fails", attention: "▲ Needs attention", ok: "✓ OK" },
+        footer: "Every change goes through the normal gates: re-approvals with spec_approve (/approve), spec edits after an approval with spec_impact (/spec-impact), follow-up work with spec_append_tasks (/spec-converge). Nothing here is applied automatically.",
+      },
     },
   },
 
@@ -1936,7 +2755,7 @@ const MSG = {
     addTrackAlready: (tr) => `já tem +${tr}`,
     notes: {
       scan: "Apenas um inventário heurístico — o agente interpreta-o para inferir o steering/constituição e fazer engenharia reversa das specs.",
-      coverage: "Heurística grosseira: associa as pastas de código de topo às features documentadas pelo nome. Usa-a como ponto de partida, não como métrica rigorosa.",
+      coverage: "Heurística a partir da intenção declarada: a parte dos ficheiros de código (sem os testes) nomeados por um marcador _Implements:_ de alguma feature, ativa ou arquivada. Um ficheiro conta como coberto quando uma tarefa o reclama — mantém os _Implements:_ atualizados.",
     },
     evidence: {
       failed: (n, code) => `Tarefa ${n}: a verificação falhou (exit ${code}) — não a marco como feita.`,
@@ -1969,6 +2788,8 @@ const MSG = {
       prRootCause: "## Causa raiz",
       prFix: "## Correção",
       noEvidence: "sem evidência registada",
+      changedByDate: (list, slug) => `avaliado só pela data do ficheiro (aprovado antes das impressões digitais de conteúdo — um clone ou uma cópia repõe as datas, por isso pode nem ser uma edição): ${list} — revê e volta a aprovar para o seguir pelo conteúdo (/approve ${slug} <fase>)`,
+      untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
@@ -1977,10 +2798,15 @@ const MSG = {
       reserved: (slug) => `'${slug}' é um nome reservado — escolhe outro nome para a feature.`,
       reservedWin: (slug) => `'${slug}' é um nome reservado no Windows — escolhe outro nome para a feature.`,
       notFound: (slug, root) => `Feature '${slug}' não encontrada em ${root}`,
+      archivedHint: (slug) => `— está arquivada (.specs/_archive/${slug}): restaura-a primeiro (dev-spec feature restore ${slug}).`,
       invalidJson: (rel, detail) => `${rel} não é JSON válido (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
       tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarefa ${n} não encontrada em tasks.md`,
+      featureBusy: (slug, rel) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (${rel || `.specs/${slug}/.lock`}) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
+      roadmapBusy: "Outro processo dev-spec está a atualizar o .specs/roadmap.json neste momento (.specs/.roadmap.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.",
+      folderInUse: (rel) => `A pasta ${rel} está a ser usada por outro programa (um editor, um indexador ou antivírus, um terminal aberto lá dentro) — nada foi movido nem apagado; fecha-o e tenta de novo.`,
+      lockStuck: (rel) => `Um lock dev-spec abandonado (${rel}) não pôde ser removido — o ficheiro (ou uma pasta com esse nome) está aberto noutro programa, é só de leitura ou não é um ficheiro. Nada foi alterado. Apaga ${rel} à mão (verifica as permissões) e tenta de novo.`,
       numberInt: "o número tem de ser um inteiro",
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
@@ -1988,7 +2814,7 @@ const MSG = {
       renameNeedsName: "para renomear é preciso um nome novo.",
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
-      badAction: "a ação tem de ser: remove | archive | rename",
+      badAction: "a ação tem de ser: remove | archive | rename | restore",
       badTrack: "o track tem de ser: tdd | saas | ai",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
@@ -2026,8 +2852,9 @@ const MSG = {
       header: "dev-spec-driven pre-commit:",
       earsErrors: (f, n) => `✗ ${f}: ${n} erro(s) EARS`,
       earsClean: (f, n) => `✓ ${f}: EARS limpo (${n} critérios)`,
-      phantom: (f, n) => `✗ ${f}: ${n} referência(s) AC/teste fantasma — provavelmente erros de escrita`,
-      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) sem tarefa (aviso)`,
+      earsWarnings: (f, n, w, p) => `⚠ ${f}: sem erros EARS (${n} critérios), mas ${[w ? `${w} aviso(s)` : null, p ? `${p} placeholder(s) do template por preencher` : null].filter(Boolean).join(" e ")} — não bloqueia`,
+      phantom: (f, n, list) => `✗ ${f}: ${n} referência(s) AC/teste fantasma — provavelmente erros de escrita: ${list}`,
+      uncovered: (f, n, list) => `⚠ ${f}: ${n} AC(s) sem tarefa (aviso): ${list}`,
       traceClean: (f, n) => `✓ ${f}: rastreabilidade limpa (${n} ACs)`,
       blocked: (n) => `\nCommit bloqueado: ${n} problema(s) bloqueante(s) nos ficheiros de spec em staging. Corrige-os, ou usa 'git commit --no-verify' para passar à frente.`,
     },
@@ -2043,6 +2870,7 @@ const MSG = {
       prioritiesMissing: "sem prioridade P1 (MVP) numa história de utilizador",
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
+      earsDetail: (n, e, w) => `critérios=${n}, erros=${e}, avisos=${w}`,
       designMissing: "design.md em falta",
       mermaidOk: "tem um diagrama",
       mermaidMissing: "nenhum diagrama mermaid encontrado",
@@ -2067,9 +2895,22 @@ const MSG = {
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Revê e aprova o plano de testes — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revê e aprova o plano de evals — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Revê e aprova o bug.md (Reprodução + Causa Raiz — o design de um bugfix) — /approve ${slug} design.`,
+      signOffTests: (slug, what) => `Aprovação da Fase 4: a implementação já começou, por isso os testes já não se escrevem primeiro — ${({ tdd: "confirma que cada teste planeado existe com o seu T-ID no nome do teste (test(\"T-01 …\")) para que o tests-in-code o encontre", ai: `confirma que o conjunto de evals é o da própria feature e regista a baseline (/eval ${slug} --set-baseline)`, both: `confirma que cada teste planeado existe com o seu T-ID no nome do teste (test("T-01 …")) e que o conjunto de evals é o da própria feature, e regista a baseline (/eval ${slug} --set-baseline)` })[what]}. Depois aprova — /approve ${slug} tests.`,
+      approveTests: (slug, what) => `Fase 4, o gate rígido: ${({ tdd: "escreve todos os testes planeados e confirma que cada um falha pela razão certa", ai: "escreve os testes determinísticos e o harness de evals, e regista a baseline", both: "escreve todos os testes planeados (cada um a falhar pela razão certa) e o harness de evals, e regista a baseline" })[what]} — /writeTests ${slug}; nenhum código de implementação antes disso. Depois aprova — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "Todas as tarefas feitas — verifica e depois fecha a feature.",
+      allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
+      finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
+        (!signOff ? ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`
+          : signOff.why ? ` A aprovação final (execution, ${signOff.at}) foi registada antes destas alterações: ${signOff.why} — volta a confirmá-la: /approve ${slug} execution.` : ` Falta a aprovação final: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `aprovação de ${list}`, changeRequests: (list) => `pedido de alteração ${list}`, join: "; " },
+      refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão todas feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
+      driftedStale: (why) => `Também mudou desde esse fecho (${why}): decidas o que decidires, volta a fechá-la depois — /spec-finish (spec_finish {write: true}) regista a baseline nova.`,
+      verify: (slug, list, n, runnable) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — o /spec-finish e a aprovação final recusam até cada uma ter uma execução com sucesso. ` +
+        (runnable ? `Volta a correr o comando _Verify:_ da tarefa ${n} e regista o resultado: dev-spec done ${slug} ${n} --run` : `Regista uma execução com sucesso da tarefa ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
+        "; uma execução que falha quer dizer que o código tem de ser corrigido primeiro.",
     },
     clarify: {
       resolveMarker: (mk) => "Resolve [NEEDS CLARIFICATION]: " + (mk || "(não especificado)"),
@@ -2078,7 +2919,6 @@ const MSG = {
       prioritize: "Prioriza as histórias de utilizador (P1 = a fatia MVP que entrega valor sozinha; P2/P3 incrementais).",
       independentTest: "Indica como cada história de utilizador pode ser testada de forma independente (para ser lançável por si só).",
       quantifyVague: (line, text) => `Quantifica o termo vago na linha ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resolve o placeholder/TBD na linha ${line}.`,
       edgeCases: "Lista os casos limite e o comportamento de tratamento de erros (cada um como um AC SE…ENTÃO).",
       outOfScope: "Indica explicitamente o que está FORA de âmbito.",
       nfr: "Especifica os requisitos não-funcionais (desempenho / segurança / acessibilidade) com alvos mensuráveis.",
@@ -2094,13 +2934,623 @@ const MSG = {
         `Verificação EARS em requirements.md — ${errs} erro(s), ${warns} aviso(s):\n${top}` + (hasErr ? "\nCorrige os erros antes de avançar para o design." : ""),
       traceOk: (n) => `Rastreabilidade: todos os ${n} ACs cobertos por tarefas ✓`,
       traceGaps: (feature, parts) => `Lacunas de rastreabilidade em ${feature}:\n  - ${parts}`,
-      traceUncovered: (list) => `ACs sem tarefa: ${list}`,
-      tracePhantomAc: (list) => `tarefas referem ACs desconhecidos (erros de escrita?): ${list}`,
-      traceUncoveredTests: (list) => `ACs sem teste planeado: ${list}`,
-      tracePhantomTests: (list) => `tarefas referem testes desconhecidos: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap atualizado → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features em .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
+    },
+
+    evidenceGate: {
+      noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
+      manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
+      redPhaseTestWord: "o teste",
+      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção), ou tira o _Verify:_ da tarefa ${n} e regista a execução vermelha como nota: dev-spec done ${slug} ${n} --evidence "${test} falha: <o motivo>".`,
+      failedRun: (n, code, slug, runnable) => `Tarefa ${n}: a última execução registada falhou (exit ${code}) — uma nota não muda isso; continua não verificada até se registar uma execução com sucesso ` +
+        (runnable ? `do comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(um comando com exit code 0)."),
+      duplicateNumber: (n) => `Tarefa ${n}: outra tarefa também usa o número ${n} e a evidência registada é dessa — esta continua não verificada; renumera as tarefas e depois regista a evidência desta.`,
+      staleEvidence: (n, slug, runnable) => `Tarefa ${n}: a evidência registada é de outra tarefa ou de um comando _Verify:_ anterior — continua não verificada até se registar ` +
+        (runnable ? `uma execução desta: dev-spec done ${slug} ${n} --run` : "a evidência desta."),
+      reason: { "no-evidence": "sem evidência", "failed-run": "a última execução falhou", "manual-note-on-runnable-verify": "só uma nota, comando _Verify:_ por correr", "duplicate-number": "número partilhado com outra tarefa",
+        "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_" },
+      duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
+    },
+    taskDone: {
+      done: (n, verified, done, total) => `Tarefa ${n} feita${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `A tarefa ${n} já estava feita${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  próxima → #${n} ${text}`,
+      allDone: "  — tudo feito ✓",
+      numberInt: "o número da tarefa tem de ser um inteiro",
+      noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
+      shellHint: "Dica: a shell por omissão do Windows (cmd.exe) não conseguiu correr esta linha de comando tal como está escrita. Se o comando _Verify:_ foi escrito para uma shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
+      posixOnWindows: (cmd, kinds) => `o comando _Verify:_ \`${cmd}\` usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar: não tem plicas e nunca expande $VAR, por isso uma verificação partida podia ficar registada como execução bem-sucedida. Nada foi executado; a tarefa continua aberta. Corre de novo com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para o correr mesmo assim no cmd.exe.`,
+    },
+
+    tracks: {
+      unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (querias dizer '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
+      cannotRemoveCore: "O 'core' está sempre ativo — não pode ser removido.",
+      bugfixNeedsTdd: "Um bugfix é sempre test-first — não se pode remover o +tdd.",
+      notActive: (list) => `Não ativo: ${list} — nada a remover.`,
+      removed: (list, slug) => `Tracks desativados: ${list}. Nenhum ficheiro foi apagado — os artefactos inativos ficam no sítio e voltam a contar se voltares a adicionar o track. Volta a correr /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' já existia — tracks adicionados: ${list} (artefactos, secções de design, steering, tarefas) — nada foi substituído.`,
+      designTitle: (name) => `# Design: ${name}`,
+      acPlaceholder: (tr) => `[o critério +${tr} que esta tarefa prova]`,
+      designSections: (marker) => `design.md (secções ${marker})`,
+      addedDesign: "design.md (+secções)",
+      addedTasks: "tasks.md (+tarefas)",
+      addedActiveTracks: "classification.md (Tracks Ativos)",
+      taskBlock: (track, start) => BUILD.pt.trackTasks({ track, start }),
+    },
+
+    args: {
+      missing: (list) => `Argumento(s) obrigatório(s) em falta: ${list}`,
+      invalid: (list) => `Argumento(s) inválido(s): ${list}`,
+      item: (arg, expected, got) => `${arg} tem de ser ${expected} (recebido: ${got})`,
+      type: { string: "uma string", integer: "um inteiro", number: "um número", boolean: "um booleano (true/false)", array: "um array", object: "um objeto", null: "null" },
+      arrayOf: (t) => `um array (cada item ${t})`,
+      oneOf: (list) => `um de: ${list}`,
+      atLeast: (n) => `≥ ${n}`,
+      notObject: "arguments tem de ser um objeto JSON.",
+      dotdot: "projectDir não pode conter segmentos de caminho '..'.",
+      network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
+    },
+    jsonShape: {
+      invalid: (rel, detail) => `${rel} tem uma estrutura inesperada (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
+      topLevel: "o nível de topo tem de ser um objeto",
+      features: "'features' tem de ser um objeto",
+      featureEntry: (k) => `features.${k} tem de ser um objeto`,
+      dependsOn: (k) => `features.${k}.dependsOn tem de ser um array de nomes de features`,
+      meta: "'meta' tem de ser um objeto",
+      backlog: "'backlog' tem de ser um array",
+      backlogEntry: "cada entrada de 'backlog' tem de ser um objeto com 'name'",
+      approvals: "'approvals' tem de ser um objeto",
+      evidence: "'evidence' tem de ser um objeto",
+      tracks: "'tracks' tem de ser um array",
+      approvalHistory: "'approvalHistory' tem de ser um array",
+      changes: "'changes' tem de ser um array",
+    },
+    depend: {
+      unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
+      orderInt: (v) => `order tem de ser um inteiro (recebido: '${v}').`,
+    },
+    evals: {
+      usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
+      noEvalsDir: (slug, dir) => `Sem pasta evals/ para '${slug}' em ${dir}`,
+      requireLive: "harness de evals: a ANTHROPIC_API_KEY não está definida e foi pedido --require-live — recuso fazer um dry run em alternativa.",
+      header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
+      config: (model, prompt, mode) => `  modelo: ${model}   prompt: ${prompt}   modo: ${mode}`,
+      none: "(nenhum)",
+      modeDry: "DRY-RUN (sem chamadas ao modelo)",
+      modeLive: "REAL",
+      noKey: "  (ANTHROPIC_API_KEY não definida — a correr a seco. Define-a para uma execução real.)",
+      badJson: (set, err) => `  ✗ ${set}.json — JSON inválido: ${err}`,
+      badItems: (set) => `  ✗ ${set}.json — 'items' tem de ser um array`,
+      emptySet: (set) => `  ✗ ${set}.json — sem itens para avaliar: um conjunto que não avalia nada não pode passar — acrescenta itens de eval (evals/README.md) ou apaga o ficheiro`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — item ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} item(s) inválido(s)`,
+      itemWhy: {
+        notObject: "não é um objeto",
+        noId: "sem 'id' (texto não vazio)",
+        noInput: "sem 'input' (texto não vazio)",
+        noExpect: "sem objeto 'expect'",
+        unknownType: (t, types) => `tipo de avaliador desconhecido '${t}' (usa ${types})`,
+        noValue: (t) => `'${t}' precisa de um 'value'`,
+        badRegex: (msg) => `a regex não compila: ${msg}`,
+        noRubric: "'judge' precisa de uma 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "tem de ser um objeto que dá a cada conjunto (golden / adversarial / regression) um número entre 0 e 1",
+      capped: (set, max, total) => `  ⚠ ${set}: limitado a ${max}/${total} itens (aumenta com --max-items=N)`,
+      wouldRun: (set, n, kinds) => `  • ${set}: ${n} item(ns) — correria ${kinds}`,
+      score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (limiar ${thr}%)`,
+      failure: (id, detail) => `      - ${id}: ${detail}`,
+      error: (msg) => `ERRO ${msg}`,
+      resp: (sample) => ` | resposta: ${sample}`,
+      fail: "falhou",
+      judge: "juiz",
+      judgeSkipped: "juiz não usado (heurística aplicada)",
+      unknownGrader: (t) => `avaliador desconhecido '${t}'`,
+      vsBaseline: "\n  vs baseline:",
+      delta: (set, base, cur, sign, pp) => `    ${set}: ${base}% → ${cur}% (${sign}${pp}pp)`,
+      baselineWritten: (rel) => `\n  baseline gravada → ${rel}`,
+      tokens: (i, o) => `\n  tokens: ${i} de entrada / ${o} de saída`,
+      dryInvalid: "\nO dry run encontrou conjunto(s) de evals inválido(s) — corrige-os antes de uma execução real.",
+      liveInvalid: "\nConjunto(s) de evals inválido(s) — corrige-os primeiro; nenhum modelo foi chamado.",
+      dryOk: "\nDry run concluído — os conjuntos são válidos. Define a ANTHROPIC_API_KEY e volta a correr para obter resultados reais.",
+      verdict: (below) => `\nVeredicto: ${below ? "ABAIXO DO LIMIAR ✗" : "todos os conjuntos passam ✓"}`,
+      crashed: (msg) => `erro no harness de evals: ${msg}`,
+    },
+
+    traceGapText: {
+      kinds: {
+        uncoveredByTasks: "ACs sem tarefa",
+        phantomAcsInTasks: "tarefas referem ACs desconhecidos (erros de escrita?)",
+        uncoveredByTests: "ACs sem teste planeado",
+        phantomAcsInTests: "o plano de testes cobre ACs desconhecidos (erros de escrita?)",
+        phantomTestsInTasks: "tarefas referem testes desconhecidos (erros de escrita?)",
+        testsNotMappedToTasks: "testes planeados que nenhuma tarefa põe a verde",
+        missingImplFiles: "ficheiros _Implements:_ que não existem",
+      },
+      gap: (label, list) => `${label}: ${list}`,
+      allCovered: (n) => `todos os ${n} ACs cobertos por tarefas`,
+      removedKinds: {
+        phantomAcsInTasks: "tarefas ainda citam ACs que um pedido de alteração removeu (apaga ou atualiza essas tarefas — não é erro de escrita)",
+        phantomAcsInTests: "o plano de testes ainda cobre ACs que um pedido de alteração removeu (apaga ou atualiza essas linhas — não é erro de escrita)",
+      },
+      removedRef: (id, n) => `${id} (pedido de alteração #${n})`,
+    },
+    phaseNames: {
+      complete: "concluída", executing: "em execução", "tasks-ready": "tarefas prontas", "eval-plan": "plano de evals", "test-plan": "plano de testes",
+      design: "design", requirements: "requisitos", classified: "classificada", empty: "vazia",
+    },
+    featureOps: {
+      removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
+      backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
+    },
+    cliOutput: {
+      words: { pass: "ok", warn: "aviso", fail: "falha", "gaps-found": "com lacunas", clear: "clara", "needs-clarification": "precisa de clarificação", error: "erro" },
+      yes: "sim", no: "não",
+      tracks: (label, conf) => `Tracks: ${label}   confiança: ${conf}`,
+      note: (n) => `\nNota: ${n}`,
+      created: (dir, lang, files, kept) => `Criado em ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (já existiam, mantidos: ${kept})` : ""),
+      nothingNew: "(nada de novo)",
+      steeringCreated: (f) => `Criado ${f}`,
+      steeringExists: (f) => `Já existe (não foi alterado) ${f}`,
+      feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
+      noFeatures: (dir) => `Não há features em ${dir}`,
+      listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tarefas)`,
+      statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  fase: ${phase}`,
+      statusTasks: (done, total, next) => `Tarefas: ${done}/${total}` + (next ? `  próxima → ${next}` : ""),
+      doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  pronta para avançar: ${ready}`,
+      traceHead: (f, verdict, acs, covered) => `Rastreabilidade: ${f}  veredicto=${verdict}  ACs=${acs}  cobertos por tarefas=${covered}`,
+      earsHead: (n, m, verdict) => `EARS: ${n} critérios, ${m} com verbo modal, veredicto=${verdict}`,
+      next: (n, text, left, total) => `Próxima → #${n} ${text}  (faltam ${left}/${total})`,
+      allDone: "Todas as tarefas feitas ✓",
+      batch: (list) => `  lote paralelo: ${list}`,
+      mergeSummaryAt: (p) => `\nResumo do merge → ${p}`,
+      briefAt: (p, inline) => `Brief → ${p}` + (inline ? "  (só inline: tarefa de prompt +ai)" : ""),
+      reportAt: (p) => `  relatório → ${p}`,
+      ledgerAt: (p) => `  ledger → ${p}`,
+      unresolved: (list) => `  ⚠ por resolver: ${list}`,
+      approved: (phase, f) => `Fase '${phase}' de ${f} aprovada ✓`,
+      backlogHead: (n) => `Backlog (${n}):`,
+      backlogAdded: (name) => `✓ '${name}' adicionada ao backlog`,
+      backlogRemoved: (name) => `✓ '${name}' removida do backlog`,
+      wrote: (file, pct, c, t) => `✎ gerado ${file}` + (pct != null ? `  (${pct}%, ${c}/${t})` : ""),
+      noRoadmapFeatures: (dir) => `Ainda não há features em ${dir}`,
+      roadmapHead: (pct, c, t, cycle) => `Roadmap — progresso global ${pct}%  (${c}/${t} completas)` + (cycle ? `  ⚠ CICLO: ${cycle}` : ""),
+      deps: (list, unmet) => `  deps: ${list}` + (unmet ? ` (por cumprir: ${unmet})` : ""),
+      scanHead: (root, truncated) => `Análise de ${root}` + (truncated ? " (truncada no limite)" : ""),
+      scanFiles: (n, stack) => `  ficheiros: ${n}  | stack: ${stack || "desconhecida"}`,
+      scanDirs: (list) => `  pastas de topo: ${list}`,
+      scanExt: (list) => `  por extensão: ${list}`,
+      scanEndpoints: (n, files) => `  endpoints: ${n} rota(s) em ${files} ficheiro(s)`,
+      coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheiros de código nomeados em _Implements:_)`,
+      undocumented: (list) => `  pastas sem cobertura: ${list}`,
+      clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
+      naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprovados: ${gatesOk}`,
+      changed: (list) => `  ⚠ alterado desde a última aprovação: ${list}`,
+      renamed: (a, b) => `'${a}' renomeada → '${b}' ✓`,
+      archived: (f, dest) => `'${f}' arquivada → .specs/${dest} ✓`,
+      removed: (f) => `'${f}' removida ✓`,
+      wouldRemove: (slug, dir, n, entries) => `Isto apagaria '${slug}' de vez: ${dir} (${n} ficheiro(s): ${entries})`,
+      confirmHint: (slug) => `Nada foi apagado. Volta a correr com --yes para confirmar — ou arquiva-a: dev-spec feature archive ${slug}`,
+      missingValue: (flag) => `falta o valor de --${flag}`,
+      unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
+      scaleSections: (list) => `Secções de escala: ${list}`,
+      aiSections: (list) => `Secções de IA: ${list}`,
+      dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(nenhuma)"}` + (order != null ? `  ordem=${order}` : "") + (unknown ? `  ⚠ dependências desconhecidas: ${unknown}` : ""),
+      trackNow: (f, tracks) => `'${f}' agora [${tracks}]`,
+      usage: (syntax) => `uso: ${syntax}`,
+      unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`dev-spec help\`.`,
+      unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
+    },
+
+    gates: {
+      empty: "sem conteúdo além dos títulos",
+      more: (n) => `+${n} a mais`,
+      placeholdersNone: "nenhum placeholder do template na fase atual",
+      placeholdersFail: (list) => `placeholders do template por preencher na fase atual (ou numa anterior): ${list}`,
+      placeholdersLater: (list) => `as fases seguintes ainda são template (ainda não bloqueia): ${list}`,
+      traceDeferred: (files) => `ainda não rastreado — ainda é o template de uma fase seguinte: ${files} (as referências do template não são erros de escrita nem bloqueiam esta fase); rastreado quando for escrito`,
+      earsPlaceholder: (list) => `O critério ainda tem placeholder(s) do template ${list} — escreve o gatilho/comportamento real.`,
+      constitutionUnfilled: "a secção Verificação da Constituição está em falta ou por preencher",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `Não é possível aprovar '${phase}' de '${slug}' — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}), ou passa force: true (CLI: --force) para registar a aprovação mesmo assim — fica assinalada como forçada.`,
+      approveNothing: (phase, slug, file) => `Nada para aprovar: '${phase}' não tem artefacto em '${slug}' (${file} não existe, ou o track está desativado) — nem com force.`,
+      approveForced: (ids) => `Aprovado com force — as verificações a falhar ficam registadas com a aprovação: ${ids}.`,
+      phaseOrder: (list, slug, first) => `há fases anteriores ainda por aprovar: ${list} — aprova-as primeiro, por ordem (/approve ${slug} ${first})`,
+      forcedGates: (list) => `aprovado com force apesar de verificações a falhar: ${list}`,
+      finishRootCause: "bug.md → Causa Raiz por preencher — nenhuma correção antes de se conhecer a causa",
+      finishPlaceholders: (list) => `placeholders do template por preencher na cadeia da spec: ${list}`,
+      finishChanged: (list) => `alterados depois da aprovação (rever e voltar a aprovar): ${list}`,
+      bugGate: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher. Nenhuma correção antes de a causa raiz estar escrita no bug.md — faz primeiro a tarefa ${first} (encontra a causa raiz com evidência e escreve-a lá).`,
+      bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
+      bugGateTicked: (n, rc) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz continua vazia — a tarefa ${rc} está marcada, mas o que ela entrega é essa secção. Escreve lá a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
+      rootCauseTaskEmpty: (n) => `A tarefa ${n} está marcada, mas bug.md → Causa Raiz continua vazia — escreve lá a causa raiz, com a evidência: as tarefas seguintes (o teste de regressão, a correção) continuam recusadas até estar escrita.`,
+      fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,
+      fillMissing: "ainda não existe",
+      fillEmpty: "não tem conteúdo além dos títulos",
+      fillPlaceholders: (n, first) => `${n} placeholder(s) do template por preencher (primeiro: ${first})`,
+      fillHint: {
+        "classification.md": (slug) => `confirma os tracks e escreve o raio de impacto e as etiquetas de conformidade (/classify ${slug}), depois /approve ${slug} classification`,
+        "requirements.md": (slug) => `verifica-o com /clarify ${slug} e ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `escreve a Reprodução e a Causa Raiz com evidência (/spec-doctor ${slug})`,
+        "design.md": (slug) => `corre /spec-doctor ${slug} (secções obrigatórias, Verificação da Constituição)`,
+        "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `define os limiares e a baseline, depois /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `divide o design em tarefas reais (/createTask ${slug}), depois trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirma e aprova a classificação — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Antes de aprovar '${phase}', corrige o que o gate de aprovação recusaria: ${list} — depois /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `aprovar '${phase}' seria recusado (${ids})`,
+      noRealTasks: "só as tarefas do template — divide o design em pelo menos uma tarefa real tua",
+      testsNotInCode: (list) => `testes planeados que nenhum ficheiro de teste nomeia ainda: ${list} — escreve cada teste a falhar com o seu T-ID no nome (trace_check {code: true} encontra-os)`,
+      testsNotInCodeSignOff: (list) => `testes planeados que nenhum ficheiro de teste nomeia ainda: ${list} — a implementação já começou: confirma que cada um existe com o seu T-ID no nome do teste (test("T-01 …")) para que o trace_check {code: true} o encontre`,
+      noPlannedTests: "o test-plan.md não lista nenhum T-ID — planeia os testes primeiro",
+      evalSetsSample: "o evals/golden.json ainda é o conjunto de exemplo do scaffold — escreve os casos golden desta feature, corre o harness e regista a baseline",
+      evalSetsMissing: "o evals/golden.json não existe ou não tem itens de eval ({\"items\": […]}) — escreve primeiro o conjunto golden desta feature",
+      testsGateChecks: (ids) => `(o gate de aprovação verifica isto: ${ids})`,
+      clarifyPlaceholders: (file, n, list) => `Substitui os ${n} placeholder(s)/TBD do template em ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Placeholders do template: ${n} por preencher em requirements.md (${list}) — substitui-os antes de aprovar os requisitos.`,
+    },
+
+    brownfield: {
+      frameworks: (list) => `  frameworks: ${list}`,
+      routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
+      moreRoutes: (n) => `    … mais ${n} (--json lista-as, até ao limite)`,
+      routesTruncated: (shown, total) => `A mostrar as primeiras ${shown} de ${total} rotas — a contagem de endpoints inclui todas.`,
+      readCapped: (n) => `Só foram lidos os primeiros ${n} ficheiros de código (rotas, nomes de variáveis de ambiente, pistas de testes) — essas listas podem estar incompletas.`,
+      tests: (n, fws) => `  testes: ${n} ficheiro(s) · frameworks: ${fws}`,
+      entrypoints: (list) => `  pontos de entrada: ${list}`,
+      env: (list, more) => `  variáveis de ambiente (só nomes): ${list}` + (more ? ` … +${more}` : ""),
+      migrations: (n, dirs) => `  migrações/esquema: ${n} ficheiro(s)` + (dirs ? ` — ${dirs}` : ""),
+      none: "nenhum",
+      coverageTests: (n) => `  ficheiros de teste (à parte, não contam): ${n}`,
+      coverageFolder: (folder, covered, files, pct) => `  ${folder.padEnd(24)} ${String(covered + "/" + files).padStart(9)}  ${pct}%`,
+      root: "(raiz)",
+      coverageUnmatched: (list) => `  ⚠ entradas _Implements:_ que não nomeiam nada no disco: ${list}`,
+      coverageNonCode: (list) => `  · entradas _Implements:_ que nomeiam testes ou ficheiros que não são código (não contam): ${list}`,
+      integrationPlanPlaceholder: "integration-plan.md ainda é o template — preenche os pontos de integração, as modificações e os riscos antes de implementar",
+      integrationPlanOk: "plano de integração preenchido",
+    },
+    importSpec: {
+      note: (tool, rel, date) => `> Importado de ${tool} \`${rel}\` em ${date}.`,
+      unknownTool: (tool, known) => `Formato de spec desconhecido '${tool}'. Conhecidos: ${known}.`,
+      pathRequired: "falta o caminho — a pasta (ou um ficheiro) da spec a importar.",
+      outside: (p) => `'${p}' está fora do projeto — o spec_import só lê dentro da pasta do projeto.`,
+      notFound: (p) => `'${p}' não encontrado.`,
+      nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
+      exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
+      featureTitle: (name) => `# Feature: ${name}`,
+      tasksTitle: (name) => `# Tasks: ${name}`,
+      summary: "## Resumo",
+      summaryPlaceholder: "[1-2 frases: o que faz e porque importa]",
+      stories: "## Histórias de Utilizador",
+      story: (n, pri, title) => `### US-${n}${pri ? ` (${pri})` : ""}: ${title}`,
+      criteria: "#### Critérios de Aceitação (EARS)",
+      functional: "## Requisitos Funcionais",
+      entities: "## Entidades-Chave",
+      success: "## Critérios de Sucesso",
+      edge: "## Casos Limite e Tratamento de Erros",
+      original: (tool, text) => `<!-- ${tool}: ${text} -->`,
+      notEars: "[NEEDS CLARIFICATION: ainda não é uma frase EARS — acrescenta o gatilho (QUANDO/SE) e a resposta do sistema]",
+      noCriteria: "[NEEDS CLARIFICATION: esta história não tem critérios de aceitação]",
+      optional: "(opcional)",
+      modified: "(modificado)",
+      importedNotes: "## Notas importadas",
+      otherTasks: "## Outras tarefas",
+      ears: { while: "ENQUANTO", when: "QUANDO", if: "SE", where: "ONDE", then: "ENTÃO", shall: "O SISTEMA DEVE", not: "NÃO", ensure: "O SISTEMA DEVE garantir que" },
+      wNotEars: (ids) => `não convertidos para EARS (texto mantido, marcado [NEEDS CLARIFICATION]): ${ids}`,
+      wNoCriteria: (ids) => `histórias sem critérios de aceitação: ${ids}`,
+      wUnknownRef: (task, ref) => `tarefa ${task}: a referência _Requirements:_ '${ref}' não corresponde a nenhum critério importado — mantida como estava`,
+      wUnknownRefLine: (line, ref) => `tasks.md, linha ${line}: a referência _Requirements:_ '${ref}' não corresponde a nenhum critério importado — mantida como estava`,
+      wCarried: (list) => `copiado tal como estava, sem correspondência com histórias ou critérios (revê-o): ${list}`,
+      wNoRefs: "as tarefas importadas não têm referências _Requirements:_ — acrescenta-as para o trace_check associar cada AC a uma tarefa",
+      wNoTasks: "a origem não tem tasks.md — foi mantido o tasks.md do scaffold (os _Requirements:_ / _Makes green:_ do template limitados aos critérios importados)",
+      taskAcPlaceholder: "[um critério importado que esta tarefa prova]",
+      taskTestPlaceholder: "[o teste planeado que esta tarefa põe a verde]",
+      wNoDesign: (file) => `a origem não tem ${file} — foi mantido o design.md do scaffold`,
+      wNoRequirements: (file) => `não foram encontrados requisitos em ${file}`,
+      wRemoved: (name) => `o requisito REMOVED '${name}' não foi importado`,
+      wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado com o nome novo)`,
+      wSkipped: (files) => `não importados (ficam onde estão): ${files}`,
+      wUnreadable: (file) => `${file} aponta para fora do projeto — ignorado`,
+      done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
+      mapping: (n, sample) => `  correspondência: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
+    },
+
+    appendTasks: {
+      heading: "Fase: Convergência",
+      checkpoint: "as tarefas de convergência estão concluídas e verificadas — a spec e o código voltam a coincidir.",
+      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Tarefa ${i}: o texto é obrigatório.`,
+      badStory: (i, v) => `Tarefa ${i}: story tem de ser US<n> (ex.: US1) ou shared (recebido '${v}').`,
+      badPath: (i, p) => `Tarefa ${i}: os caminhos de _Implements:_ têm de ser relativos à raiz do projeto, sem '..' (recebido '${p}').`,
+      badVerify: (i) => `Tarefa ${i}: _Verify:_ tem de ser um comando numa só linha.`,
+      placeholderVerify: (i, v) => `Tarefa ${i}: '${v}' lê-se como um marcador de posição, não como um comando (um _Verify:_ entre [parênteses retos] é ignorado) — indica o comando real (para um teste de shell, 'test …' em vez de '[ … ]').`,
+      unstorable: (i, marker) => `Tarefa ${i}: o seu ${marker} não seria lido de tasks.md tal como foi dado — mantém os marcadores fora do texto da tarefa, ',' e ';' fora dos caminhos, e '_ ' fora dos caminhos e dos comandos.`,
+      phantom: (list) => `Critérios de aceitação desconhecidos (não estão em requirements.md): ${list}. Nada foi escrito — corrige os IDs ou acrescenta primeiro os critérios.`,
+      badHeading: "o cabeçalho tem de ser uma só linha de texto.",
+      constraintsHeading: (h) => `'${h}' contém as restrições que todas as tarefas respeitam, não tarefas — escolhe um cabeçalho de fase. Nada foi escrito.`,
+      inactiveHeading: (h, track) => `'${h}' é a secção de tarefas do track ${track}, que está inativo — volta a adicionar o track ou escolhe outro cabeçalho. Nada foi escrito.`,
+      unsafe: (n) => `Não foi possível acrescentar com segurança: ${n ? `a tarefa ${n} não seria lida tal como foi escrita` : "as tarefas existentes mudariam"} (um comentário ou bloco de código por fechar perto do fim da fase?). Nada foi escrito.`,
+      reapprove: (slug) => `O tasks.md mudou depois da sua aprovação — revê as novas tarefas e volta a aprovar: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Acrescentado a tasks.md → '${heading}'${created ? " (nova fase)" : ""}:`,
+      oneTaskPerCall: "append-tasks aceita um --task por chamada — volta a corrê-lo para a tarefa seguinte (spec_append_tasks aceita uma lista).",
+      oneValue: (flag) => `append-tasks aceita --${flag} uma só vez por chamada — ${flag === "verify" ? "junta as verificações num só comando (a && b)" : "indica um único valor"}. Nada foi escrito.`,
+    },
+
+    impact: {
+      badPhase: (p, known) => `Fase '${p}' desconhecida para spec_impact. Conhecidas: ${known}.`,
+      reopenTasks: "reopen aplica-se a requirements, design, test-plan e eval-plan — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Testes removidos que tarefas ainda põem a verde — ${list}: não refaças essas tarefas; tira o T-ID do _Makes green:_ delas ou aponta-o para o teste que o substitui.` +
+          (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Testes removidos não se refazem — ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui.`,
+        recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um teste removido não se refazem. Ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
+      },
+      missing: (file, slug) => `${file} não encontrado em '${slug}' — nada para comparar.`,
+      neverApproved: (phase, slug) => `'${phase}' nunca foi aprovada em '${slug}' — não há versão aprovada com que comparar. Aprova-a primeiro: /approve ${slug} ${phase}.`,
+      fingerprintOnly: (phase, slug) => `Esta aprovação é anterior ao histórico de alterações: só ficou registada a sua impressão digital, por isso não é possível listar o que mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} ${phase}.`,
+      noFingerprint: (phase, slug) => `Esta aprovação é anterior às impressões digitais de conteúdo: nada da versão aprovada ficou registado, por isso não é possível dizer se mudou nem o quê (a data de um ficheiro não é prova — um clone ou uma cópia repõe-na). Volta a aprovar para a começar a seguir: /approve ${slug} ${phase}.`,
+      reopenNeedsSnapshot: (phase) => `Nada foi reaberto: sem um snapshot de '${phase}' aprovada não é possível determinar as tarefas afetadas.`,
+      nothingNew: "Nada de novo desde a última reabertura sobre esta aprovação — nada foi alterado.",
+      nothingToReopen: (changed) => (changed ? "Nada a reabrir: a edição não alterou nenhum critério nem secção (só texto fora deles) — nada foi alterado."
+        : "Nada mudou desde a aprovação — nada a reabrir."),
+      designFingerprintOnly: (slug) => `O design.md também mudou desde a aprovação, mas esta aprovação não guardou um snapshot dele (só a impressão digital), por isso não é possível listar o que lá mudou. Volta a aprovar para iniciar o histórico: /approve ${slug} design.`,
+      reopenDesignUnknown: "Nada foi reaberto: o design.md mudou, mas sem um snapshot dele tal como foi aprovado não é possível determinar as tarefas afetadas.",
+      reopened: (list, slug, phase) => `Reabertas ${list}: desmarcadas, com a evidência marcada como desatualizada — refaz-as com evidência nova e volta a aprovar: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tarefas " + tasks.join(", ") : "", tests.length ? "testes " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Critérios removidos ainda citados — ${list}: não refaças essas tarefas; apaga-as (e as linhas de teste) ou aponta-as para o critério que o substitui.` +
+        (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Critérios removidos não se refazem — ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui.`,
+      recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um critério removido não se refazem. Ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
+      recordedOnly: (n, slug, phase) => `Pedido de alteração #${n} registado — nenhuma tarefa concluída foi afetada. Revê-o e volta a aprovar: /approve ${slug} ${phase}.`,
+      reopenHint: (slug, phase) => `Para desmarcar as tarefas concluídas afetadas e marcar a evidência como desatualizada: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
+      nextHint: (slug, phases) => `Vê primeiro o que a edição afeta com spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
+      doctorChanged: (list, slug, phases) => `alterado(s) após a aprovação: ${list} — vê o que a edição afeta com spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}) e volta a aprovar`,
+      doctorChangedPlain: (list, slug) => `alterado(s) após a aprovação: ${list} — revê e volta a aprovar (/approve ${slug} <fase>)`,
+      staleNote: (n, slug, runnable) => `Tarefa ${n}: a evidência é anterior a uma alteração da spec (o spec_impact reabriu-a) — continua não verificada até se registar ` +
+        (runnable ? `uma nova execução com sucesso: dev-spec done ${slug} ${n} --run` : "evidência nova."),
+      head: (slug, phase, date, snap) => `Impacto: ${slug} · ${phase} — face à aprovação de ${date} (${snap})`,
+      headFp: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — só impressão digital: ${changed ? "alterado desde a aprovação" : "sem alterações desde a aprovação"}`,
+      headNone: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — sem impressão digital registada: ${changed ? "alterado desde a aprovação (um ficheiro criado depois dela)" : "não é possível dizer se mudou"}`,
+      noChanges: "sem alterações desde a aprovação",
+      noStructural: "editado, mas nenhum critério, secção ou tarefa mudou (só texto fora deles)",
+      affected: "Afetado:",
+      tasksLabel: "tarefas",
+      testsLabel: "testes",
+      designLabel: "design",
+      idsLabel: "IDs",
+      none: "nenhum",
+      change: { added: "acrescentado", modified: "alterado", removed: "removido" },
+      verified: "verificada",
+      nothingToVerify: "nada a verificar (sem comando _Verify:_, nada registado)",
+      staleSpec: "a spec mudou desde esta evidência; o spec_impact reabriu a tarefa",
+      uncovered: (list) => `novos, ainda sem tarefa que os cite: ${list}`,
+      reReview: (slug, phase) => `revê a alteração e volta a aprovar: /approve ${slug} ${phase}`,
+    },
+    metrics: {
+      writeNeedsName: "write precisa do nome de uma feature — a retrospetiva é por feature (spec_metrics {name, write: true} / dev-spec metrics <feature> --write).",
+      retroWritten: (p) => `Retrospetiva → ${p} (pré-preenchida com as métricas — o resto é contigo).`,
+      retroExists: (p) => `${p} já existe — não foi alterado (uma retrospetiva nunca é substituída).`,
+      unknown: "desconhecida",
+      source: { approval: "aproximada: a partir da primeira aprovação", filesystem: "aproximada: a partir da data da pasta" },
+      phase: { classification: "classificação", requirements: "requisitos", design: "design", "test-plan": "plano de testes", "eval-plan": "plano de evals", tests: "testes", tasks: "tarefas", execution: "execução", complete: "concluída", finished: "fechada" },
+      head: (slug, tracks, created, approx) => `Métricas: ${slug} [${tracks}] — criada a ${created}${approx ? ` (${approx})` : ""}`,
+      leadTimes: (list) => `  tempo desde a criação: ${list}`,
+      noLeadTimes: "  tempo desde a criação: ainda nada aprovado",
+      rework: (total, n, list, forced) => `  aprovações: ${total} · retrabalho: ${n}${list ? ` (${list})` : ""} · forçadas: ${forced}`,
+      reworkUnknown: (forced) => `  retrabalho: desconhecido (aprovações anteriores ao histórico de alterações) · forçadas: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  aprovações: ${total} · retrabalho: pelo menos ${n}${list ? ` (${list})` : ""} · forçadas: ${forced} — retrabalho desconhecido em ${legacy} (aprovações anteriores ao histórico de alterações)`,
+      changes: (n, reopened) => `  pedidos de alteração: ${n} · tarefas reabertas: ${reopened}`,
+      evidence: (rate, pass, runs) => `  evidência: ${rate}% das execuções com sucesso (${pass}/${runs})`,
+      noRuns: "  evidência: nenhuma execução registada",
+      tasks: (done, total, clar) => `  tarefas: ${done}/${total} · marcadores de clarificação por resolver: ${clar}`,
+      noFeatures: (dir) => `Ainda não há features em ${dir}`,
+      projectHead: (n) => `Métricas — ${n} feature(s)`,
+      row: (created, complete, rework, forced, changes, pass, tasks) => [created ? `criada ${created}` : null, `concluída ${complete}`, `retrabalho ${rework}`,
+        `forçadas ${forced}`, `alterações ${changes}`, `sucesso ${pass}`, tasks ? `tarefas ${tasks}` : null].filter(Boolean).join(" · "),
+      avg: "média",
+      median: "mediana",
+      medianLeads: (list) => `  mediana do tempo desde a criação: ${list}`,
+      totals: (done, total, pass, runs, changes, reopened) => `  total: tarefas ${done}/${total} · ${runs ? `evidência ${pass} de ${runs} execução(ões) com sucesso` : "nenhuma execução registada"} · pedidos de alteração ${changes} · tarefas reabertas ${reopened}`,
+      retroText: {
+        title: (f) => `# Retrospetiva: ${f}`,
+        intro: (date) => `> Gerada pelo dev-spec a ${date} a partir de .state.json, .history/ e dos artefactos. Os números são calculados localmente; o resto é contigo. Nada aqui é aplicado automaticamente.`,
+        metrics: "## Métricas",
+        header: "| Métrica | Valor |",
+        created: "Criada",
+        approximate: "aproximado",
+        unknown: "desconhecida",
+        lead: (ph) => `Tempo até ${ph}`,
+        rework: "Retrabalho (novas aprovações)",
+        reworkUnknown: "desconhecido — as aprovações são anteriores ao histórico de alterações",
+        reworkPartial: (value, legacy) => `pelo menos ${value} — desconhecido em ${legacy} (aprovações anteriores ao histórico de alterações)`,
+        forced: "Aprovações forçadas",
+        changes: "Pedidos de alteração",
+        reopened: (n) => `${n} tarefa(s) reaberta(s)`,
+        passRate: "Taxa de sucesso da evidência",
+        runs: (rate, pass, runs) => `${rate}% (${pass}/${runs} execuções)`,
+        noRuns: "nenhuma execução registada",
+        tasks: "Tarefas",
+        tasksValue: (done, total) => `${done}/${total} feitas`,
+        clar: "Marcadores de clarificação por resolver",
+        well: "## O que correu bem",
+        hurt: "## O que custou",
+        signals: (list) => `<!-- Sinais das métricas: ${list}. -->`,
+        sigRework: (ph, n) => `'${ph}' aprovada ${n} vez(es)`,
+        sigForced: (n) => `${n} aprovação(ões) forçada(s) com verificações a falhar`,
+        sigReopened: (n) => `${n} tarefa(s) reaberta(s) por pedidos de alteração`,
+        sigPass: (rate) => `só ${rate}% das execuções de verificação passaram`,
+        sigClar: (n) => `${n} marcador(es) de clarificação ainda por resolver`,
+        amend: "## Alterações propostas ao steering ou à constituição",
+        amendNote: "<!-- Para aprovação humana — nunca aplicadas automaticamente. Indica o ficheiro (.specs/steering/constitution.md, tech.md, …), a alteração exata e o porquê. -->",
+        followUps: "## Seguimento",
+        followUpsNote: "<!-- Candidatos ao backlog — acrescenta os que aceitares com spec_backlog (dev-spec backlog add \"<nome>\" \"<nota>\"). -->",
+      },
+      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.pt.metrics.retroText, MSG.pt.metrics.phase, m, fmt),
+    },
+
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "casos limite (EC) sem tarefa nem teste que os cubra",
+        uncoveredNfr: "requisitos não funcionais (NFR) sem tarefa nem teste que os cubra",
+        uncoveredSuccessCriteria: "critérios de sucesso (SC) sem teste nem passo do quickstart que os verifique",
+        phantomSecondary: "tarefas / plano de testes citam IDs EC/NFR/SC desconhecidos (gralhas?)",
+        plannedNotInCode: "testes planeados que nenhum ficheiro de teste nomeia (põe o T-ID no nome do teste)",
+        inCodeNotInPlan: "T-IDs no código de teste que nenhum plano de testes lista",
+        unresolvedImplGlobs: "globs de _Implements:_ não resolvidos por completo (a leitura dos ficheiros parou no limite antes de uma correspondência — não contam como em falta)",
+      },
+      secondaryOk: (n) => `todos os ${n} IDs EC/NFR/SC cobertos`,
+      testsInCodeOk: (n) => `cada T-ID planeado que uma tarefa feita põe a verde aparece num ficheiro de teste (${n})`,
+      testsInCodeMissing: (list) => `postos a verde por tarefas feitas, mas nenhum ficheiro de teste os nomeia: ${list} — põe o T-ID no nome de um teste (test("T-01 …"), def test_T01_…) num ficheiro de teste (uma pasta tests/, *.test.*, *_test.* …), no ficheiro que a coluna Ficheiro do plano indica, se indicar um; uma verificação feita fora do código de teste (um script de carga, um conjunto de evals) indica antes o seu artefacto não-código na coluna Ficheiro (load-test.md, evals/golden.json) e não é esperada num ficheiro de teste`,
+      truncated: "a pesquisa de ficheiros de teste parou no limite — alguns ficheiros não foram lidos",
+      codeSummary: (found, planned, scanned, truncated, outside) => `  testes no código: ${found}/${planned} T-ID(s) planeado(s) nomeado(s) em ${scanned} ficheiro(s) de teste` + (outside ? ` · verificados fora do código de teste (a coluna Ficheiro indica um artefacto que não é código): ${outside}` : "") + (truncated ? " (pesquisa truncada no limite)" : ""),
+      warningsHead: "Avisos (não bloqueiam):",
+    },
+
+    catalog: {
+      title: (proj) => `Catálogo de specs — ${proj}`,
+      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_catalog {write: true} (dev-spec catalog --write).",
+      intro: "O que o sistema faz hoje: todos os critérios de aceitação, agrupados por feature. Um critério substituído por uma feature posterior (_Supersedes:_) aparece riscado e indica o critério que o substitui.",
+      totals: (f, acs, current, sup) => `**${f} feature(s) · ${acs} critérios de aceitação — ${current} em vigor, ${sup} substituído(s)**`,
+      status: { active: "em curso", complete: "completa", finished: "fechada", archived: "arquivada" },
+      finishedOn: (d) => `fechada a ${d}`,
+      archivedOn: (d) => `arquivada a ${d}`,
+      supersededBy: (list) => `substituído por ${list}`,
+      supersedes: (list) => `substitui ${list}`,
+      template: "template — ainda por escrever",
+      noAcs: "Ainda sem critérios de aceitação.",
+      noFeatures: "Ainda sem features.",
+      cliWrote: (file, f, acs, sup) => `✎ gerado ${file}  (${f} feature(s), ${acs} critério(s), ${sup} substituído(s))`,
+    },
+    supersedes: {
+      phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (em ${by})` : ""} — ${reason}`,
+      renamed: (list) => `as referências _Supersedes:_ a ela passam a usar o nome novo, em: ${list}`,
+      reason: { "bad-ref": "não está no formato <feature>/US-n.AC-m", "unknown-feature": "essa feature não existe (ativa ou arquivada)", "unknown-ac": "essa feature não tem esse critério", self: "uma feature não pode substituir um critério seu", unterminated: "o marcador nunca é fechado — termina-o com um underscore: _Supersedes: <feature>/US-n.AC-m_" },
+    },
+    restore: {
+      notArchived: (slug) => `Não há nada arquivado como '${slug}' (.specs/_archive/${slug}/ não existe).`,
+      activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a ou arquiva-a antes de restaurar a arquivada.`,
+      done: (slug) => `'${slug}' restaurada de .specs/_archive/ ✓`,
+      noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_depend, se as tinha.",
+      skipDependsOn: (d, reason) => `a sua dependência '${d}' (${reason})`,
+      skipDependent: (k, reason) => `'${k}', que dependia dela (${reason})`,
+      skipRecord: (field, reason) => `o campo ${field} do registo de arquivo (${reason})`,
+      skipped: (list) => `Não restaurado: ${list}.`,
+      reason: { gone: "já não existe", cycle: "fecharia um ciclo de dependências", invalid: "formato inesperado — deixado de fora" },
+      renamedRecords: (list) => `registos de arquivo atualizados para o nome novo (o restore repõe as suas dependências): ${list}`,
+      prunedDependents: (list) => `as dependências das features que dependiam dela saíram do roadmap: ${list} (registado — o restore repõe-nas)`,
+      prunedIncomplete: (slug, pct, list) => `'${slug}' não estava completa (${pct}%), mas ${list} dependia(m) dela: o roadmap deixa de a(s) mostrar bloqueada(s) por ela — restaura-a, ou volta a declarar a dependência com spec_depend, se ainda precisa(m) desse trabalho`,
+    },
+    drift: {
+      none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (dev-spec finish <feature> --write) regista uma quando a feature está pronta para fechar.",
+      clean: (f, n, d, archived) => `  ✓ ${f}${archived ? " (arquivada)" : ""}: ${n} ficheiro(s) de implementação sem alterações desde o fecho (${d})`,
+      drifted: (f, n, total, d, archived) => `  ⚠ ${f}${archived ? " (arquivada)" : ""}: ${n} de ${total} ficheiro(s) de implementação alterado(s) desde o fecho (${d})`,
+      changed: (list) => `      alterados: ${list}`,
+      missing: (list) => `      em falta: ${list}`,
+      nowPresent: (list) => `      agora presentes (em falta no fecho): ${list}`,
+      reopened: (list) => `  · reabertas depois do fecho (há tarefas por fazer — verificadas quando voltarem a fechar): ${list}`,
+      unbaselined: (list) => `  · ainda sem baseline de fecho: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (arquivada)" : ""}: mudou desde o fecho (${d}) — ${why}; a baseline já não a cobre: ${archived ? `restaura-a (dev-spec feature restore ${f}), volta a fechá-la (dev-spec finish ${f} --write) e arquiva-a de novo` : `volta a fechá-la (dev-spec finish ${f} --write)`}`,
+      staleWhy: {
+        changeRequests: (list) => `pedido de alteração ${list}`,
+        approvals: (list) => `reaprovado: ${list}`,
+        newFiles: (n, list) => `${n} ficheiro(s) de implementação fora da baseline: ${list}`,
+      },
+      hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
+      baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
+      baselineReplaced: (n, day, list) => `Substituída a baseline de ${day}, na qual ${n} ficheiro(s) tinham mudado: ${list} — a nova baseline aceita-os tal como estão agora.`,
+    },
+
+    guardMode: {
+      ask: (pending, stale) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
+        (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") +
+        (stale ? ` Tarefas alteradas depois da aprovação (revê e volta a aprovar a fase tasks): ${stale}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
+      forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
+      on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard).",
+      off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
+      badValue: (v) => `--guard aceita on ou off (recebido '${v}').`,
+    },
+    scopedSteering: {
+      customHint: "— ou um ficheiro de steering próprio, com âmbito: letras minúsculas, algarismos e '-', a terminar em .md (ex.: api-conventions.md).",
+      reservedName: (file) => `'${file}' é um nome reservado (um nome de dispositivo do Windows ou um membro nativo do JavaScript) — escolhe outro nome para o ficheiro de steering.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Steering com âmbito. O front matter decide quando o spec_task_brief inclui este ficheiro:\n" +
+        "     inclusion: always    → em todos os briefs de tarefa\n" +
+        "     inclusion: fileMatch → só nas tarefas cujos caminhos _Implements:_ correspondem ao fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; aceita uma lista: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → nunca automaticamente; os briefs listam-no como disponível a pedido\n" +
+        "     Substitui o padrão de exemplo e as linhas entre parênteses retos abaixo. -->\n\n" +
+        "## Regras\n- [Uma regra que todos os ficheiros que correspondem ao padrão têm de seguir.]\n\n## Exemplos\n- [Um exemplo curto — ou uma referência a um ficheiro que mostre o padrão.]\n",
+      placeholders: (list) => `ainda com placeholders do template: ${list}`,
+      scoped: "Steering com âmbito (fileMatch — corresponde aos ficheiros desta tarefa):",
+      manual: "Disponível a pedido (steering manual):",
+    },
+    designSaveCheck: {
+      head: (slug, tracks) => `Verificação do design em design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Verificação do design [${tracks}]: secções obrigatórias${constitution ? " e Verificação da Constituição" : ""} preenchidas, sem placeholders do template ✓`,
+      sections: (marker, list) => `secções ${marker}: ${list}`,
+      constitution: {
+        missing: "Verificação da Constituição: em falta — acrescenta a secção e verifica cada princípio de steering/constitution.md",
+        unfilled: "Verificação da Constituição: por preencher",
+      },
+      placeholders: (n, list) => `${n} placeholder(s) do template por substituir: ${list}`,
+      hint: (slug) => `Preenche-os antes de aprovar o design — detalhes: /spec-doctor ${slug}.`,
+    },
+    upgrade: {
+      head: (from, to, mode) => mode === "unknown" ? "dev-spec upgrade — a versão deste motor é desconhecida (não há package.json ao lado): nada será carimbado."
+        : mode === "behind" ? `dev-spec upgrade — .specs/ ${from ? `na ${from}` : "de antes da 1.13 (sem carimbo de versão)"} → dev-spec ${to}`
+        : mode === "pending" ? `dev-spec upgrade — .specs/ na ${from} (este dev-spec: ${to}), mas ainda há migrações pendentes`
+        : `dev-spec upgrade — .specs/ na ${from}: em dia com este dev-spec (${to})`,
+      newer: (from, to) => `.specs/ foi atualizado por último por um dev-spec mais recente (${from}) do que este (${to}) — atualiza o plugin antes de confiar nesta auditoria.`,
+      summary: (n, blocked, attention, ok, archived) => `${n} feature(s) ativa(s): ${blocked} bloqueada(s) · ${attention} a precisar de atenção · ${ok} ok` + (archived ? ` · ${archived} arquivada(s) (não revista(s))` : ""),
+      noFeatures: "Não há features ativas — nada a rever.",
+      group: { blocked: "⛔ Bloqueadas — o doctor falha:", attention: "▲ Precisam de atenção:", ok: "✓ OK:" },
+      status: { "not-started": "por começar", planning: "em planeamento", executing: "em execução", complete: "completa", finished: "fechada" },
+      feature: (name, status, tracks, phase, done, total, bugfix) => `${name} — ${status} · [${tracks}] · ${phase} · ${done}/${total} tarefas${bugfix ? " · bugfix" : ""}`,
+      tracksInferred: "os tracks foram inferidos dos ficheiros — o apply guarda-os no .state.json",
+      item: {
+        error: (e) => `Corrige-o primeiro à mão: ${e}`,
+        fix: (list) => `Corrige o que o doctor dá como falha: ${list}`,
+        approve: (list, slug) => `Aprova o(s) gate(s) pendente(s), por ordem: ${list} — /approve ${slug} <fase>`,
+        reReview: (list, cmds) => `Revê o que mudou depois da aprovação: ${list}` + (cmds ? ` — vê primeiro a diferença: ${cmds}` : "") + "; depois volta a aprovar",
+        reapprove: (list) => `Volta a aprovar para começar o histórico de alterações (o spec_impact ainda não consegue comparar estas): ${list}`,
+        verify: (list, slug) => `Regista uma execução bem-sucedida das tarefas marcadas que não a têm: ${list} — dev-spec done ${slug} <n> --run`,
+        drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — dev-spec drift ${slug}`,
+        stale: (slug) => `Mudou depois do fecho — volta a fechá-la: /spec-finish ${slug}`,
+        critic: (files) => `Revê-a com o agente spec-critic (só leitura), fase a fase: ${files || "—"}`,
+        converge: (files) => "Corre a passagem de convergência do spec-reviewer (as tarefas feitas face aos seus ACs)" + (files ? `, depois o agente spec-critic sobre ${files}` : ""),
+        none: "Não precisa de revisão da spec — todas as tarefas estão feitas",
+        next: (rec) => `A seguir: ${rec}`,
+        warnings: (list) => `Avisos: ${list}`,
+      },
+      reason: { "no-fingerprint": "aprovada antes das impressões digitais de conteúdo", changed: "alterada depois da aprovação", missing: "o ficheiro não existe", untracked: "uma aprovação de design de bugfix da 1.12 — o bug.md nunca foi seguido", "snapshot-missing": "o ficheiro do snapshot desapareceu" },
+      planHead: "O apply mudaria (spec_upgrade {apply: true} · dev-spec upgrade --apply) — nunca um artefacto, uma aprovação ou uma marcação:",
+      migHead: "Migrações aplicadas — nenhum artefacto editado, nada aprovado, marcado ou apagado:",
+      migStamp: (from, to) => `meta.specVersion: ${from || "nenhuma"} → ${to}`,
+      migTracks: (list) => `tracks guardados no .state.json: ${list}`,
+      migSeeded: (list) => `baselines de aprovação guardadas: ${list}`,
+      planSeed: (list) => `baselines de aprovação a guardar em .history/ (o ficheiro ainda corresponde à aprovação): ${list}`,
+      migRecords: (n) => `${n} aprovação(ões) anterior(es) registada(s) no approvalHistory`,
+      migSkipped: (list) => `sem baseline — volta a aprovar para começar o histórico: ${list}`,
+      migGitignore: (n) => `.specs/.gitignore: ${n} linha(s) acrescentada(s)`,
+      migErrors: (list) => `não migrado: ${list} — corrige e volta a correr o upgrade (o meta.specVersion fica como está até lá)`,
+      nothing: "Nada a migrar — .specs/ já está em dia; nada foi alterado.",
+      upToDate: "Nada a migrar — a lista acima é o que as regras atuais assinalam.",
+      applyHint: "Nada foi alterado. Revê a lista e depois aplica as migrações seguras: dev-spec upgrade --apply (spec_upgrade {apply: true}).",
+      reportAt: (file) => `Relatório: ${file} — uma checklist para ir cumprindo (/spec-upgrade).`,
+      reportKept: (file) => `${file} existe e não foi gerado pelo dev-spec — ficou intacto (relatório não escrito).`,
+      hookLine: (from) => `⬆ .specs/ foi criado com um dev-spec mais antigo (${from || "anterior à 1.13"}) — corre /spec-upgrade (dev-spec upgrade) para rever o que ainda não está implementado (ou pede simplesmente para atualizar as specs)`,
+      md: {
+        title: (proj) => `dev-spec upgrade — ${proj}`,
+        autogen: "AUTO-GERADO por dev-spec — marca as caixas à medida que avanças; o spec_upgrade {apply: true} (dev-spec upgrade --apply) escreve-o quando migra alguma coisa.",
+        intro: (from, to) => `.specs/ atualizado de ${from || "um dev-spec anterior à 1.13"} para ${to || "?"}. Por feature: o que as regras da ${to || "?"} assinalam, o que fazer e que revisão correr. Trabalha-o com /spec-upgrade (Claude Code) ou dev-spec upgrade; volta a correr a auditoria quando quiseres para ver o estado atual.`,
+        migrations: "Migrações",
+        group: { blocked: "⛔ Bloqueadas — o doctor falha", attention: "▲ Precisam de atenção", ok: "✓ OK" },
+        footer: "Todas as alterações passam pelos gates normais: novas aprovações com spec_approve (/approve), edições da spec depois de uma aprovação com spec_impact (/spec-impact), trabalho de seguimento com spec_append_tasks (/spec-converge). Nada aqui é aplicado automaticamente.",
+      },
     },
   },
 
@@ -2111,7 +3561,7 @@ const MSG = {
     addTrackAlready: (tr) => `ya tiene +${tr}`,
     notes: {
       scan: "Solo un inventario heurístico — el agente lo interpreta para inferir el steering/constitución y hacer ingeniería inversa de las specs.",
-      coverage: "Heurística aproximada: asocia las carpetas de código de primer nivel con las funciones documentadas por nombre. Úsala como punto de partida, no como métrica estricta.",
+      coverage: "Heurística a partir de la intención declarada: la parte de los ficheros de código (sin las pruebas) nombrados por un marcador _Implements:_ de alguna función, activa o archivada. Un fichero cuenta como cubierto cuando una tarea lo reclama — mantén los _Implements:_ al día.",
     },
     evidence: {
       failed: (n, code) => `Tarea ${n}: la verificación falló (exit ${code}) — no se marca como hecha.`,
@@ -2144,6 +3594,8 @@ const MSG = {
       prRootCause: "## Causa raíz",
       prFix: "## Corrección",
       noEvidence: "sin evidencia registrada",
+      changedByDate: (list, slug) => `juzgado solo por la fecha del fichero (aprobado antes de las huellas de contenido — un clon o una copia restablece las fechas, así que puede no ser una edición): ${list} — revísalo y vuelve a aprobar para seguirlo por contenido (/approve ${slug} <fase>)`,
+      untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     kindKept: (kept, asked) => `Esta función ya es del tipo '${kept}' — se mantiene (pediste '${asked}'). Crea otra para un tipo distinto.`,
     langKept: (kept, asked) => `Esta función ya está en '${kept}' — se mantiene (pediste '${asked}'). Una función, un idioma.`,
@@ -2152,10 +3604,15 @@ const MSG = {
       reserved: (slug) => `'${slug}' es un nombre reservado — elige otro nombre para la función.`,
       reservedWin: (slug) => `'${slug}' es un nombre reservado en Windows — elige otro nombre para la función.`,
       notFound: (slug, root) => `Función '${slug}' no encontrada en ${root}`,
+      archivedHint: (slug) => `— está archivada (.specs/_archive/${slug}): restáurala primero (dev-spec feature restore ${slug}).`,
       invalidJson: (rel, detail) => `${rel} no es JSON válido (${detail}) — corrígelo a mano; no se sobrescribirá.`,
       tasksMissing: (slug) => `tasks.md no encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md no encontrado para '${slug}'`,
       taskNotFound: (n) => `Tarea ${n} no encontrada en tasks.md`,
+      featureBusy: (slug, rel) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (${rel || `.specs/${slug}/.lock`}) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
+      roadmapBusy: "Otro proceso de dev-spec está actualizando .specs/roadmap.json en este momento (.specs/.roadmap.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.",
+      folderInUse: (rel) => `La carpeta ${rel} está en uso por otro programa (un editor, un indexador o antivirus, una terminal abierta dentro) — no se ha movido ni borrado nada; ciérralo y vuelve a intentarlo.`,
+      lockStuck: (rel) => `Un bloqueo de dev-spec abandonado (${rel}) no se ha podido eliminar — el archivo (o una carpeta con ese nombre) está abierto en otro programa, es de solo lectura o no es un archivo. No se ha cambiado nada. Borra ${rel} a mano (revisa sus permisos) y vuelve a intentarlo.`,
       numberInt: "el número debe ser un entero",
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
@@ -2163,7 +3620,7 @@ const MSG = {
       renameNeedsName: "para renombrar hace falta un nombre nuevo.",
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
-      badAction: "la acción debe ser: remove | archive | rename",
+      badAction: "la acción debe ser: remove | archive | rename | restore",
       badTrack: "el track debe ser: tdd | saas | ai",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
@@ -2201,8 +3658,9 @@ const MSG = {
       header: "dev-spec-driven pre-commit:",
       earsErrors: (f, n) => `✗ ${f}: ${n} error(es) EARS`,
       earsClean: (f, n) => `✓ ${f}: EARS limpio (${n} criterios)`,
-      phantom: (f, n) => `✗ ${f}: ${n} referencia(s) AC/prueba fantasma — probablemente erratas`,
-      uncovered: (f, n) => `⚠ ${f}: ${n} AC(s) sin tarea (aviso)`,
+      earsWarnings: (f, n, w, p) => `⚠ ${f}: sin errores EARS (${n} criterios), pero ${[w ? `${w} aviso(s)` : null, p ? `${p} placeholder(s) de la plantilla sin rellenar` : null].filter(Boolean).join(" y ")} — no bloquea`,
+      phantom: (f, n, list) => `✗ ${f}: ${n} referencia(s) AC/prueba fantasma — probablemente erratas: ${list}`,
+      uncovered: (f, n, list) => `⚠ ${f}: ${n} AC(s) sin tarea (aviso): ${list}`,
       traceClean: (f, n) => `✓ ${f}: trazabilidad limpia (${n} ACs)`,
       blocked: (n) => `\nCommit bloqueado: ${n} problema(s) bloqueante(s) en los ficheros de spec preparados. Corrígelos o usa 'git commit --no-verify' para omitirlos.`,
     },
@@ -2218,6 +3676,7 @@ const MSG = {
       prioritiesMissing: "sin prioridad P1 (MVP) en una historia de usuario",
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
+      earsDetail: (n, e, w) => `criterios=${n}, errores=${e}, avisos=${w}`,
       designMissing: "falta design.md",
       mermaidOk: "tiene un diagrama",
       mermaidMissing: "no se encontró diagrama mermaid",
@@ -2242,9 +3701,22 @@ const MSG = {
       approveTasks: (slug) => `Revisa y aprueba el desglose de tareas — /approve ${slug} tasks.`,
       approveTestPlan: (slug) => `Revisa y aprueba el plan de pruebas — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revisa y aprueba el plan de evals — /approve ${slug} eval-plan.`,
+      approveBugDesign: (slug) => `Revisa y aprueba bug.md (Reproducción + Causa Raíz — el diseño de un bugfix) — /approve ${slug} design.`,
+      signOffTests: (slug, what) => `Aprobación de la Fase 4: la implementación ya empezó, así que las pruebas ya no se escriben primero — ${({ tdd: "comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test(\"T-01 …\")) para que tests-in-code la encuentre", ai: `comprueba que el conjunto de evals es el de la propia función y registra la línea base (/eval ${slug} --set-baseline)`, both: `comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test("T-01 …")) y que el conjunto de evals es el de la propia función, y registra la línea base (/eval ${slug} --set-baseline)` })[what]}. Después apruébalo — /approve ${slug} tests.`,
+      approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /writeTests ${slug}; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: "Todas las tareas hechas — verifica y luego cierra la función.",
+      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (dev-spec drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
+      finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
+        (!signOff ? ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`
+          : signOff.why ? ` La aprobación final (execution, ${signOff.at}) es anterior a ${signOff.why} — vuelve a confirmarla: /approve ${slug} execution.` : ` Falta la aprobación final: /approve ${slug} execution.`),
+      signOffWhy: { approvals: (list) => `la aprobación de ${list}`, changeRequests: (list) => `la solicitud de cambio ${list}`, join: " y " },
+      refinish: (slug, day, why) => `'${slug}' se cerró el ${day}, pero cambió desde entonces (${why}) y todas sus tareas están hechas — ciérrala de nuevo: /spec-finish ${slug} (spec_finish {write: true}) renueva el informe de preparación, el resumen del merge y la línea base de drift; después vuelve a dar la aprobación final: /approve ${slug} execution.`,
+      driftedStale: (why) => `También cambió desde ese cierre (${why}): decidas lo que decidas, vuelve a cerrarla después — /spec-finish (spec_finish {write: true}) registra la línea base nueva.`,
+      verify: (slug, list, n, runnable) => `Todas las tareas están marcadas, pero no todas están verificadas: ${list} — /spec-finish y la aprobación final se niegan hasta que cada una tenga una ejecución correcta. ` +
+        (runnable ? `Vuelve a ejecutar el comando _Verify:_ de la tarea ${n} y registra el resultado: dev-spec done ${slug} ${n} --run` : `Registra una ejecución correcta de la tarea ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
+        "; una ejecución que falla significa que primero hay que corregir el código.",
     },
     clarify: {
       resolveMarker: (mk) => "Resuelve [NEEDS CLARIFICATION]: " + (mk || "(sin especificar)"),
@@ -2253,7 +3725,6 @@ const MSG = {
       prioritize: "Prioriza las historias de usuario (P1 = la porción MVP que entrega valor sola; P2/P3 incrementales).",
       independentTest: "Indica cómo cada historia de usuario puede testearse de forma independiente (para ser lanzable por sí sola).",
       quantifyVague: (line, text) => `Cuantifica el término vago en la línea ${line}: ${text}`,
-      resolvePlaceholder: (line) => `Resuelve el placeholder/TBD en la línea ${line}.`,
       edgeCases: "Lista los casos límite y el comportamiento de manejo de errores (cada uno como un AC SI…ENTONCES).",
       outOfScope: "Indica explícitamente qué está FUERA de alcance.",
       nfr: "Especifica los requisitos no funcionales (rendimiento / seguridad / accesibilidad) con objetivos medibles.",
@@ -2269,13 +3740,623 @@ const MSG = {
         `Verificación EARS en requirements.md — ${errs} error(es), ${warns} aviso(s):\n${top}` + (hasErr ? "\nCorrige los errores antes de avanzar al diseño." : ""),
       traceOk: (n) => `Trazabilidad: los ${n} ACs cubiertos por tareas ✓`,
       traceGaps: (feature, parts) => `Lagunas de trazabilidad en ${feature}:\n  - ${parts}`,
-      traceUncovered: (list) => `ACs sin tarea: ${list}`,
-      tracePhantomAc: (list) => `tareas referencian ACs desconocidos (¿erratas?): ${list}`,
-      traceUncoveredTests: (list) => `ACs sin prueba planeada: ${list}`,
-      tracePhantomTests: (list) => `tareas referencian pruebas desconocidas: ${list}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap actualizado → ${pct}% (${complete}/${total} funciones).`,
       sessionHeader: "dev-spec-driven — funciones en .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tareas)`,
+    },
+
+    evidenceGate: {
+      noContent: "La evidencia necesita un comando (con su exit code) o un resumen — un exit code solo no prueba nada.",
+      manualOnRunnable: (n, slug) => `Tarea ${n}: se registró una nota, pero su comando _Verify:_ no se ejecutó — sigue sin verificar hasta que se registre una ejecución correcta: dev-spec done ${slug} ${n} --run`,
+      redPhaseTestWord: "la prueba",
+      redPhaseVerify: (n, slug, test) => `La tarea ${n} escribe una prueba que debe FALLAR (la fase roja), así que un _Verify:_ que debe pasar nunca pasará en ella. O mueve el comando a la tarea que la pone en verde (el arreglo — su _Verify:_ prueba entonces el arreglo), o quita el _Verify:_ de la tarea ${n} y registra la ejecución en rojo como nota: dev-spec done ${slug} ${n} --evidence "${test} falla: <el motivo>".`,
+      failedRun: (n, code, slug, runnable) => `Tarea ${n}: su última ejecución registrada falló (exit ${code}) — una nota no cambia eso; sigue sin verificar hasta que se registre una ejecución correcta ` +
+        (runnable ? `de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(un comando con exit code 0)."),
+      duplicateNumber: (n) => `Tarea ${n}: otra tarea también usa el número ${n} y la evidencia registrada es de esa — esta sigue sin verificar; renumera las tareas y luego registra la evidencia de esta.`,
+      staleEvidence: (n, slug, runnable) => `Tarea ${n}: la evidencia registrada es de otra tarea o de un comando _Verify:_ anterior — sigue sin verificar hasta que se registre ` +
+        (runnable ? `una ejecución de esta: dev-spec done ${slug} ${n} --run` : "la evidencia de esta."),
+      reason: { "no-evidence": "sin evidencia", "failed-run": "la última ejecución falló", "manual-note-on-runnable-verify": "solo una nota, comando _Verify:_ sin ejecutar", "duplicate-number": "número compartido con otra tarea",
+        "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_" },
+      duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
+    },
+    taskDone: {
+      done: (n, verified, done, total) => `Tarea ${n} hecha${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      already: (n, verified, done, total) => `La tarea ${n} ya estaba hecha${verified ? " (verificada)" : ""}. ${done}/${total}`,
+      next: (n, text) => `  siguiente → #${n} ${text}`,
+      allDone: "  — todo hecho ✓",
+      numberInt: "el número de tarea debe ser un entero",
+      noRunnable: (n) => `la tarea ${n} no tiene un marcador _Verify: <comando>_ ejecutable`,
+      shellHint: "Consejo: la shell predeterminada de Windows (cmd.exe) no pudo ejecutar esta línea de comandos tal como está escrita. Si el comando _Verify:_ está escrito para una shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
+      posixOnWindows: (cmd, kinds) => `el comando _Verify:_ \`${cmd}\` usa sintaxis de shell POSIX (${kinds.map((k) => ({ "single-quotes": "comillas simples '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) que cmd.exe — la shell predeterminada de --run en Windows — interpreta de otra forma, a menudo sin fallar: no tiene comillas simples y nunca expande $VAR, así que una comprobación rota podría registrarse como ejecución correcta. No se ejecutó nada; la tarea sigue abierta. Vuelve a ejecutarlo con --shell bash (Git Bash; o define DEV_SPEC_SHELL=bash) — o con --shell cmd para ejecutarlo igualmente en cmd.exe.`,
+    },
+
+    tracks: {
+      unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (¿querías decir '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
+      cannotRemoveCore: "'core' está siempre activo — no se puede quitar.",
+      bugfixNeedsTdd: "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+      notActive: (list) => `No activo: ${list} — nada que quitar.`,
+      removed: (list, slug) => `Tracks desactivados: ${list}. No se borró ningún archivo — los artefactos inactivos se quedan donde están y vuelven a contar si vuelves a añadir el track. Vuelve a ejecutar /spec-doctor ${slug}.`,
+      addedOnCreate: (slug, list) => `'${slug}' ya existía — tracks añadidos: ${list} (artefactos, secciones de diseño, steering, tareas) — no se sobrescribió nada.`,
+      designTitle: (name) => `# Diseño: ${name}`,
+      acPlaceholder: (tr) => `[el criterio +${tr} que prueba esta tarea]`,
+      designSections: (marker) => `design.md (secciones ${marker})`,
+      addedDesign: "design.md (+secciones)",
+      addedTasks: "tasks.md (+tareas)",
+      addedActiveTracks: "classification.md (Tracks Activos)",
+      taskBlock: (track, start) => BUILD.es.trackTasks({ track, start }),
+    },
+
+    args: {
+      missing: (list) => `Falta(n) argumento(s) obligatorio(s): ${list}`,
+      invalid: (list) => `Argumento(s) no válido(s): ${list}`,
+      item: (arg, expected, got) => `${arg} debe ser ${expected} (recibido: ${got})`,
+      type: { string: "una cadena", integer: "un entero", number: "un número", boolean: "un booleano (true/false)", array: "un array", object: "un objeto", null: "null" },
+      arrayOf: (t) => `un array (cada elemento ${t})`,
+      oneOf: (list) => `uno de: ${list}`,
+      atLeast: (n) => `≥ ${n}`,
+      notObject: "arguments debe ser un objeto JSON.",
+      dotdot: "projectDir no puede contener segmentos de ruta '..'.",
+      network: (dir) => `projectDir debe ser una carpeta local — una ruta de red o de dispositivo (${dir}) se rechaza, para que una llamada a una herramienta nunca apunte este servidor local a otra máquina; abre el proyecto localmente (o inicia el servidor con él como carpeta de trabajo).`,
+    },
+    jsonShape: {
+      invalid: (rel, detail) => `${rel} tiene una estructura inesperada (${detail}) — corrígelo a mano; no se sobrescribirá.`,
+      topLevel: "el nivel superior debe ser un objeto",
+      features: "'features' debe ser un objeto",
+      featureEntry: (k) => `features.${k} debe ser un objeto`,
+      dependsOn: (k) => `features.${k}.dependsOn debe ser un array de nombres de funciones`,
+      meta: "'meta' debe ser un objeto",
+      backlog: "'backlog' debe ser un array",
+      backlogEntry: "cada entrada de 'backlog' debe ser un objeto con 'name'",
+      approvals: "'approvals' debe ser un objeto",
+      evidence: "'evidence' debe ser un objeto",
+      tracks: "'tracks' debe ser un array",
+      approvalHistory: "'approvalHistory' debe ser un array",
+      changes: "'changes' debe ser un array",
+    },
+    depend: {
+      unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
+      orderInt: (v) => `order debe ser un entero (recibido: '${v}').`,
+    },
+    evals: {
+      usage: "Uso: node run-evals.js <función> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
+      noEvalsDir: (slug, dir) => `No hay carpeta evals/ para '${slug}' en ${dir}`,
+      requireLive: "harness de evals: ANTHROPIC_API_KEY no está definida y se pidió --require-live — no se hará un dry run en su lugar.",
+      header: (slug) => `dev-spec-driven evals — función '${slug}'`,
+      config: (model, prompt, mode) => `  modelo: ${model}   prompt: ${prompt}   modo: ${mode}`,
+      none: "(ninguno)",
+      modeDry: "DRY-RUN (sin llamadas al modelo)",
+      modeLive: "REAL",
+      noKey: "  (ANTHROPIC_API_KEY no definida — ejecución en seco. Defínela para una ejecución real.)",
+      badJson: (set, err) => `  ✗ ${set}.json — JSON no válido: ${err}`,
+      badItems: (set) => `  ✗ ${set}.json — 'items' debe ser un array`,
+      emptySet: (set) => `  ✗ ${set}.json — sin elementos que evaluar: un conjunto que no evalúa nada no puede aprobar — añade elementos de eval (evals/README.md) o borra el archivo`,
+      badItem: (set, label, why) => `  ✗ ${set}.json — elemento ${label}: ${why}`,
+      moreBad: (n) => `      … +${n} elemento(s) no válido(s)`,
+      itemWhy: {
+        notObject: "no es un objeto",
+        noId: "sin 'id' (texto no vacío)",
+        noInput: "sin 'input' (texto no vacío)",
+        noExpect: "sin objeto 'expect'",
+        unknownType: (t, types) => `tipo de evaluador desconocido '${t}' (usa ${types})`,
+        noValue: (t) => `'${t}' necesita un 'value'`,
+        badRegex: (msg) => `la regex no compila: ${msg}`,
+        noRubric: "'judge' necesita una 'rubric'",
+      },
+      badThresholds: (why) => `  ✗ thresholds.json — ${why}`,
+      thresholdsShape: "debe ser un objeto que dé a cada conjunto (golden / adversarial / regression) un número entre 0 y 1",
+      capped: (set, max, total) => `  ⚠ ${set}: limitado a ${max}/${total} elementos (auméntalo con --max-items=N)`,
+      wouldRun: (set, n, kinds) => `  • ${set}: ${n} elemento(s) — ejecutaría ${kinds}`,
+      score: (ok, set, pass, n, pct, thr) => `  ${ok ? "✓" : "✗"} ${set}: ${pass}/${n} = ${pct}% (umbral ${thr}%)`,
+      failure: (id, detail) => `      - ${id}: ${detail}`,
+      error: (msg) => `ERROR ${msg}`,
+      resp: (sample) => ` | respuesta: ${sample}`,
+      fail: "falló",
+      judge: "juez",
+      judgeSkipped: "juez no usado (heurística aplicada)",
+      unknownGrader: (t) => `evaluador desconocido '${t}'`,
+      vsBaseline: "\n  vs baseline:",
+      delta: (set, base, cur, sign, pp) => `    ${set}: ${base}% → ${cur}% (${sign}${pp}pp)`,
+      baselineWritten: (rel) => `\n  baseline guardada → ${rel}`,
+      tokens: (i, o) => `\n  tokens: ${i} de entrada / ${o} de salida`,
+      dryInvalid: "\nEl dry run encontró conjunto(s) de evals no válido(s) — corrígelos antes de una ejecución real.",
+      liveInvalid: "\nConjunto(s) de evals no válido(s) — corrígelos primero; no se ha llamado a ningún modelo.",
+      dryOk: "\nDry run completado — los conjuntos son válidos. Define ANTHROPIC_API_KEY y vuelve a ejecutar para obtener resultados reales.",
+      verdict: (below) => `\nVeredicto: ${below ? "POR DEBAJO DEL UMBRAL ✗" : "todos los conjuntos pasan ✓"}`,
+      crashed: (msg) => `error en el harness de evals: ${msg}`,
+    },
+
+    traceGapText: {
+      kinds: {
+        uncoveredByTasks: "ACs sin tarea",
+        phantomAcsInTasks: "tareas referencian ACs desconocidos (¿erratas?)",
+        uncoveredByTests: "ACs sin prueba planeada",
+        phantomAcsInTests: "el plan de pruebas cubre ACs desconocidos (¿erratas?)",
+        phantomTestsInTasks: "tareas referencian pruebas desconocidas (¿erratas?)",
+        testsNotMappedToTasks: "pruebas planeadas que ninguna tarea pone en verde",
+        missingImplFiles: "ficheros _Implements:_ que no existen",
+      },
+      gap: (label, list) => `${label}: ${list}`,
+      allCovered: (n) => `los ${n} ACs cubiertos por tareas`,
+      removedKinds: {
+        phantomAcsInTasks: "las tareas aún citan ACs que una solicitud de cambio eliminó (elimina o actualiza esas tareas — no es una errata)",
+        phantomAcsInTests: "el plan de pruebas aún cubre ACs que una solicitud de cambio eliminó (elimina o actualiza esas filas — no es una errata)",
+      },
+      removedRef: (id, n) => `${id} (solicitud de cambio #${n})`,
+    },
+    phaseNames: {
+      complete: "completada", executing: "en ejecución", "tasks-ready": "tareas listas", "eval-plan": "plan de evals", "test-plan": "plan de pruebas",
+      design: "diseño", requirements: "requisitos", classified: "clasificada", empty: "vacía",
+    },
+    featureOps: {
+      removeNeedsConfirm: (slug, n) => `Eliminar '${slug}' borra .specs/${slug}/ definitivamente (${n} fichero(s)). No se ha borrado nada — pasa confirm: true para eliminarla, o archívala (reversible).`,
+      backlogNotFound: (name, known) => `'${name}' no está en el backlog${known ? ` (backlog: ${known})` : " (el backlog está vacío)"}.`,
+    },
+    cliOutput: {
+      words: { pass: "ok", warn: "aviso", fail: "falla", "gaps-found": "con lagunas", clear: "clara", "needs-clarification": "requiere aclaración", error: "error" },
+      yes: "sí", no: "no",
+      tracks: (label, conf) => `Tracks: ${label}   confianza: ${conf}`,
+      note: (n) => `\nNota: ${n}`,
+      created: (dir, lang, files, kept) => `Creado en ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (ya existían, se mantienen: ${kept})` : ""),
+      nothingNew: "(nada nuevo)",
+      steeringCreated: (f) => `Creado ${f}`,
+      steeringExists: (f) => `Ya existe (no se ha modificado) ${f}`,
+      feature: (slug, label, lang) => `Función '${slug}' [${label}] (${lang})`,
+      noFeatures: (dir) => `No hay funciones en ${dir}`,
+      listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tareas)`,
+      statusHead: (f, tracks, phase) => `Función: ${f}  [${tracks}]  fase: ${phase}`,
+      statusTasks: (done, total, next) => `Tareas: ${done}/${total}` + (next ? `  siguiente → ${next}` : ""),
+      doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  lista para avanzar: ${ready}`,
+      traceHead: (f, verdict, acs, covered) => `Trazabilidad: ${f}  veredicto=${verdict}  ACs=${acs}  cubiertos por tareas=${covered}`,
+      earsHead: (n, m, verdict) => `EARS: ${n} criterios, ${m} con verbo modal, veredicto=${verdict}`,
+      next: (n, text, left, total) => `Siguiente → #${n} ${text}  (quedan ${left}/${total})`,
+      allDone: "Todas las tareas hechas ✓",
+      batch: (list) => `  lote paralelo: ${list}`,
+      mergeSummaryAt: (p) => `\nResumen del merge → ${p}`,
+      briefAt: (p, inline) => `Brief → ${p}` + (inline ? "  (solo inline: tarea de prompt +ai)" : ""),
+      reportAt: (p) => `  informe → ${p}`,
+      ledgerAt: (p) => `  ledger → ${p}`,
+      unresolved: (list) => `  ⚠ sin resolver: ${list}`,
+      approved: (phase, f) => `Fase '${phase}' de ${f} aprobada ✓`,
+      backlogHead: (n) => `Backlog (${n}):`,
+      backlogAdded: (name) => `✓ '${name}' añadida al backlog`,
+      backlogRemoved: (name) => `✓ '${name}' eliminada del backlog`,
+      wrote: (file, pct, c, t) => `✎ generado ${file}` + (pct != null ? `  (${pct}%, ${c}/${t})` : ""),
+      noRoadmapFeatures: (dir) => `Aún no hay funciones en ${dir}`,
+      roadmapHead: (pct, c, t, cycle) => `Hoja de ruta — progreso global ${pct}%  (${c}/${t} completas)` + (cycle ? `  ⚠ CICLO: ${cycle}` : ""),
+      deps: (list, unmet) => `  deps: ${list}` + (unmet ? ` (pendientes: ${unmet})` : ""),
+      scanHead: (root, truncated) => `Análisis de ${root}` + (truncated ? " (truncado en el límite)" : ""),
+      scanFiles: (n, stack) => `  ficheros: ${n}  | stack: ${stack || "desconocido"}`,
+      scanDirs: (list) => `  carpetas de primer nivel: ${list}`,
+      scanExt: (list) => `  por extensión: ${list}`,
+      scanEndpoints: (n, files) => `  endpoints: ${n} ruta(s) en ${files} fichero(s)`,
+      coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheros de código nombrados en _Implements:_)`,
+      undocumented: (list) => `  carpetas sin cobertura: ${list}`,
+      clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,
+      naHead: (f, tracks, phase, verdict, gatesOk) => `Función: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprobados: ${gatesOk}`,
+      changed: (list) => `  ⚠ modificado desde la última aprobación: ${list}`,
+      renamed: (a, b) => `'${a}' renombrada → '${b}' ✓`,
+      archived: (f, dest) => `'${f}' archivada → .specs/${dest} ✓`,
+      removed: (f) => `'${f}' eliminada ✓`,
+      wouldRemove: (slug, dir, n, entries) => `Esto eliminaría '${slug}' definitivamente: ${dir} (${n} fichero(s): ${entries})`,
+      confirmHint: (slug) => `No se ha eliminado nada. Vuelve a ejecutar con --yes para confirmar — o archívala: dev-spec feature archive ${slug}`,
+      missingValue: (flag) => `falta el valor de --${flag}`,
+      unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
+      scaleSections: (list) => `Secciones de escala: ${list}`,
+      aiSections: (list) => `Secciones de IA: ${list}`,
+      dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(ninguna)"}` + (order != null ? `  orden=${order}` : "") + (unknown ? `  ⚠ dependencias desconocidas: ${unknown}` : ""),
+      trackNow: (f, tracks) => `'${f}' ahora [${tracks}]`,
+      usage: (syntax) => `uso: ${syntax}`,
+      unknownCommand: (c) => `comando desconocido '${c}'. Ejecuta \`dev-spec help\`.`,
+      unknownClient: (c, known) => `cliente desconocido '${c}'. Conocidos: ${known}`,
+    },
+
+    gates: {
+      empty: "sin contenido además de los títulos",
+      more: (n) => `+${n} más`,
+      placeholdersNone: "ningún placeholder de la plantilla en la fase actual",
+      placeholdersFail: (list) => `placeholders de la plantilla sin rellenar en la fase actual (o en una anterior): ${list}`,
+      placeholdersLater: (list) => `las fases siguientes aún son plantilla (todavía no bloquea): ${list}`,
+      traceDeferred: (files) => `aún no trazado — sigue siendo la plantilla de una fase posterior: ${files} (sus referencias de plantilla no son erratas ni bloquean esta fase); se traza cuando se escriba`,
+      earsPlaceholder: (list) => `El criterio aún tiene placeholder(s) de la plantilla ${list} — escribe el disparador/comportamiento real.`,
+      constitutionUnfilled: "la sección Verificación de la Constitución falta o está sin rellenar",
+      checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
+      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}), o pasa force: true (CLI: --force) para registrar la aprobación igualmente — queda marcada como forzada.`,
+      approveNothing: (phase, slug, file) => `Nada que aprobar: '${phase}' no tiene artefacto en '${slug}' (${file} no existe, o su track está desactivado) — ni con force.`,
+      approveForced: (ids) => `Aprobado con force — las verificaciones que fallan quedan registradas con la aprobación: ${ids}.`,
+      phaseOrder: (list, slug, first) => `hay fases anteriores aún sin aprobar: ${list} — apruébalas primero, en orden (/approve ${slug} ${first})`,
+      forcedGates: (list) => `aprobado con force pese a verificaciones que fallan: ${list}`,
+      finishRootCause: "bug.md → Causa Raíz sin rellenar — ninguna corrección antes de conocer la causa",
+      finishPlaceholders: (list) => `placeholders de la plantilla sin rellenar en la cadena de la spec: ${list}`,
+      finishChanged: (list) => `modificados tras su aprobación (revisar y volver a aprobar): ${list}`,
+      bugGate: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar. Ninguna corrección antes de que la causa raíz esté escrita en bug.md — haz primero la tarea ${first} (encuentra la causa raíz con evidencia y escríbela allí).`,
+      bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
+      bugGateTicked: (n, rc) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz sigue vacía — la tarea ${rc} está marcada, pero lo que entrega es esa sección. Escribe allí la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
+      rootCauseTaskEmpty: (n) => `La tarea ${n} está marcada, pero bug.md → Causa Raíz sigue vacía — escribe allí la causa raíz, con su evidencia: las tareas siguientes (la prueba de regresión, la corrección) siguen rechazadas hasta que esté escrita.`,
+      fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
+      fillMissing: "aún no existe",
+      fillEmpty: "no tiene contenido además de los títulos",
+      fillPlaceholders: (n, first) => `${n} placeholder(s) de la plantilla sin rellenar (primero: ${first})`,
+      fillHint: {
+        "classification.md": (slug) => `confirma los tracks y escribe el radio de impacto y las etiquetas de cumplimiento (/classify ${slug}), luego /approve ${slug} classification`,
+        "requirements.md": (slug) => `compruébalo con /clarify ${slug} y ears_validate (dev-spec ears ${slug})`,
+        "bug.md": (slug) => `escribe la Reproducción y la Causa Raíz con evidencia (/spec-doctor ${slug})`,
+        "design.md": (slug) => `ejecuta /spec-doctor ${slug} (secciones obligatorias, Verificación de la Constitución)`,
+        "test-plan.md": (slug) => `comprueba la cobertura de los ACs con trace_check (dev-spec trace ${slug})`,
+        "eval-plan.md": (slug) => `define los umbrales y la baseline, luego /spec-doctor ${slug}`,
+        "tasks.md": (slug) => `desglosa el diseño en tareas reales (/createTask ${slug}), luego trace_check`,
+        default: (slug) => `/spec-doctor ${slug}`,
+      },
+      approveClassification: (slug) => `Confirma y aprueba la clasificación — /approve ${slug} classification.`,
+      fixGate: (phase, list, slug) => `Antes de aprobar '${phase}', corrige lo que el gate de aprobación rechazaría: ${list} — después /approve ${slug} ${phase}.`,
+      gateWouldRefuse: (phase, ids) => `aprobar '${phase}' sería rechazado (${ids})`,
+      noRealTasks: "solo las tareas de la plantilla — divide el diseño en al menos una tarea real propia",
+      testsNotInCode: (list) => `pruebas planeadas que ningún fichero de prueba nombra todavía: ${list} — escribe cada prueba que falla con su T-ID en el nombre (trace_check {code: true} las encuentra)`,
+      testsNotInCodeSignOff: (list) => `pruebas planeadas que ningún fichero de prueba nombra todavía: ${list} — la implementación ya empezó: comprueba que cada una existe con su T-ID en el nombre de la prueba (test("T-01 …")) para que trace_check {code: true} la encuentre`,
+      noPlannedTests: "test-plan.md no lista ningún T-ID — planea las pruebas primero",
+      evalSetsSample: "evals/golden.json sigue siendo el conjunto de ejemplo del scaffold — escribe los casos golden de esta función, ejecuta el harness y registra la baseline",
+      evalSetsMissing: "evals/golden.json no existe o no tiene ítems de eval ({\"items\": […]}) — escribe primero el conjunto golden de esta función",
+      testsGateChecks: (ids) => `(el gate de aprobación comprueba esto: ${ids})`,
+      clarifyPlaceholders: (file, n, list) => `Sustituye los ${n} placeholder(s)/TBD de la plantilla en ${file}: ${list}`,
+      hookPlaceholders: (n, list) => `Placeholders de la plantilla: ${n} sin rellenar en requirements.md (${list}) — sustitúyelos antes de aprobar los requisitos.`,
+    },
+
+    brownfield: {
+      frameworks: (list) => `  frameworks: ${list}`,
+      routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
+      moreRoutes: (n) => `    … ${n} más (--json las lista, hasta el límite)`,
+      routesTruncated: (shown, total) => `Se muestran las primeras ${shown} de ${total} rutas — el recuento de endpoints las incluye todas.`,
+      readCapped: (n) => `Solo se leyeron los primeros ${n} ficheros de código (rutas, nombres de variables de entorno, pistas de pruebas) — esas listas pueden estar incompletas.`,
+      tests: (n, fws) => `  pruebas: ${n} fichero(s) · frameworks: ${fws}`,
+      entrypoints: (list) => `  puntos de entrada: ${list}`,
+      env: (list, more) => `  variables de entorno (solo nombres): ${list}` + (more ? ` … +${more}` : ""),
+      migrations: (n, dirs) => `  migraciones/esquema: ${n} fichero(s)` + (dirs ? ` — ${dirs}` : ""),
+      none: "ninguno",
+      coverageTests: (n) => `  ficheros de prueba (aparte, no cuentan): ${n}`,
+      coverageFolder: (folder, covered, files, pct) => `  ${folder.padEnd(24)} ${String(covered + "/" + files).padStart(9)}  ${pct}%`,
+      root: "(raíz)",
+      coverageUnmatched: (list) => `  ⚠ entradas _Implements:_ que no nombran nada en el disco: ${list}`,
+      coverageNonCode: (list) => `  · entradas _Implements:_ que nombran pruebas o ficheros que no son código (no cuentan): ${list}`,
+      integrationPlanPlaceholder: "integration-plan.md sigue siendo la plantilla — rellena los puntos de integración, las modificaciones y los riesgos antes de implementar",
+      integrationPlanOk: "plan de integración rellenado",
+    },
+    importSpec: {
+      note: (tool, rel, date) => `> Importado de ${tool} \`${rel}\` el ${date}.`,
+      unknownTool: (tool, known) => `Formato de spec desconocido '${tool}'. Conocidos: ${known}.`,
+      pathRequired: "falta la ruta — la carpeta (o un fichero) de la spec a importar.",
+      outside: (p) => `'${p}' está fuera del proyecto — spec_import solo lee dentro de la carpeta del proyecto.`,
+      notFound: (p) => `'${p}' no encontrado.`,
+      nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
+      exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
+      featureTitle: (name) => `# Función: ${name}`,
+      tasksTitle: (name) => `# Tareas: ${name}`,
+      summary: "## Resumen",
+      summaryPlaceholder: "[1-2 frases: qué hace y por qué importa]",
+      stories: "## Historias de Usuario",
+      story: (n, pri, title) => `### US-${n}${pri ? ` (${pri})` : ""}: ${title}`,
+      criteria: "#### Criterios de Aceptación (EARS)",
+      functional: "## Requisitos Funcionales",
+      entities: "## Entidades Clave",
+      success: "## Criterios de Éxito",
+      edge: "## Casos Límite y Manejo de Errores",
+      original: (tool, text) => `<!-- ${tool}: ${text} -->`,
+      notEars: "[NEEDS CLARIFICATION: aún no es una frase EARS — añade su disparador (CUANDO/SI) y la respuesta del sistema]",
+      noCriteria: "[NEEDS CLARIFICATION: esta historia no tiene criterios de aceptación]",
+      optional: "(opcional)",
+      modified: "(modificado)",
+      importedNotes: "## Notas importadas",
+      otherTasks: "## Otras tareas",
+      ears: { while: "MIENTRAS", when: "CUANDO", if: "SI", where: "DONDE", then: "ENTONCES", shall: "EL SISTEMA DEBE", not: "NO", ensure: "EL SISTEMA DEBE garantizar que" },
+      wNotEars: (ids) => `no convertidos a EARS (texto conservado, marcado [NEEDS CLARIFICATION]): ${ids}`,
+      wNoCriteria: (ids) => `historias sin criterios de aceptación: ${ids}`,
+      wUnknownRef: (task, ref) => `tarea ${task}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
+      wUnknownRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
+      wCarried: (list) => `copiado tal cual, sin correspondencia con historias o criterios (revísalo): ${list}`,
+      wNoRefs: "las tareas importadas no tienen referencias _Requirements:_ — añádelas para que trace_check asocie cada AC a una tarea",
+      wNoTasks: "el origen no tiene tasks.md — se conservó el tasks.md del scaffold (los _Requirements:_ / _Makes green:_ de la plantilla limitados a los criterios importados)",
+      taskAcPlaceholder: "[un criterio importado que prueba esta tarea]",
+      taskTestPlaceholder: "[la prueba planificada que esta tarea pone en verde]",
+      wNoDesign: (file) => `el origen no tiene ${file} — se conservó el design.md del scaffold`,
+      wNoRequirements: (file) => `no se encontraron requisitos en ${file}`,
+      wRemoved: (name) => `el requisito REMOVED '${name}' no se importó`,
+      wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado con el nombre nuevo)`,
+      wSkipped: (files) => `no importados (se quedan donde están): ${files}`,
+      wUnreadable: (file) => `${file} apunta fuera del proyecto — omitido`,
+      done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
+      mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
+    },
+
+    appendTasks: {
+      heading: "Fase: Convergencia",
+      checkpoint: "las tareas de convergencia están completadas y verificadas — la spec y el código vuelven a coincidir.",
+      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noText: (i) => `Tarea ${i}: el texto es obligatorio.`,
+      badStory: (i, v) => `Tarea ${i}: story debe ser US<n> (p. ej., US1) o shared (recibido '${v}').`,
+      badPath: (i, p) => `Tarea ${i}: las rutas de _Implements:_ deben ser relativas a la raíz del proyecto, sin '..' (recibido '${p}').`,
+      badVerify: (i) => `Tarea ${i}: _Verify:_ debe ser un comando de una sola línea.`,
+      placeholderVerify: (i, v) => `Tarea ${i}: '${v}' se lee como un marcador de posición, no como un comando (un _Verify:_ entre [corchetes] se ignora) — indica el comando real (para una prueba de shell, 'test …' en lugar de '[ … ]').`,
+      unstorable: (i, marker) => `Tarea ${i}: su ${marker} no se leería desde tasks.md tal como se dio — deja los marcadores fuera del texto de la tarea, ',' y ';' fuera de las rutas, y '_ ' fuera de rutas y comandos.`,
+      phantom: (list) => `Criterios de aceptación desconocidos (no están en requirements.md): ${list}. No se ha escrito nada — corrige los IDs o añade primero los criterios.`,
+      badHeading: "el encabezado debe ser una sola línea de texto.",
+      constraintsHeading: (h) => `'${h}' contiene las restricciones que respetan todas las tareas, no tareas — elige un encabezado de fase. No se ha escrito nada.`,
+      inactiveHeading: (h, track) => `'${h}' es la sección de tareas del track ${track}, que está inactivo — vuelve a añadir el track o elige otro encabezado. No se ha escrito nada.`,
+      unsafe: (n) => `No se pudo añadir con seguridad: ${n ? `la tarea ${n} no se leería tal como se escribió` : "las tareas existentes cambiarían"} (¿un comentario o bloque de código sin cerrar cerca del final de la fase?). No se ha escrito nada.`,
+      reapprove: (slug) => `tasks.md cambió después de su aprobación — revisa las nuevas tareas y vuelve a aprobar: /approve ${slug} tasks.`,
+      appended: (heading, created) => `Añadido a tasks.md → '${heading}'${created ? " (nueva fase)" : ""}:`,
+      oneTaskPerCall: "append-tasks admite un --task por llamada — vuelve a ejecutarlo para la siguiente tarea (spec_append_tasks admite una lista).",
+      oneValue: (flag) => `append-tasks admite --${flag} una sola vez por llamada — ${flag === "verify" ? "une las comprobaciones en un solo comando (a && b)" : "indica un único valor"}. No se ha escrito nada.`,
+    },
+
+    impact: {
+      badPhase: (p, known) => `Fase '${p}' desconocida para spec_impact. Conocidas: ${known}.`,
+      reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
+      retireTests: {
+        retireHint: (list, slug, phase, offer) => `Pruebas eliminadas que aún ponen en verde algunas tareas — ${list}: no rehagas esas tareas; quita el T-ID de su _Makes green:_ o apúntalo a la prueba que la sustituye.` +
+          (offer ? ` --reopen registra la solicitud de cambio sin desmarcarlas (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        retireNote: (list) => `Las pruebas eliminadas no se rehacen — aún nombradas en _Makes green:_: ${list}: quita el T-ID de esas tareas, o apúntalo a la prueba que la sustituye.`,
+        recordedRetire: (n, list, slug, phase) => `Solicitud de cambio #${n} registrada — nada desmarcado: las tareas de una prueba eliminada no se rehacen. Aún nombradas en _Makes green:_: ${list}: quita el T-ID de esas tareas, o apúntalo a la prueba que la sustituye; después vuelve a aprobar: /approve ${slug} ${phase}.`,
+      },
+      missing: (file, slug) => `No se encontró ${file} en '${slug}' — nada que comparar.`,
+      neverApproved: (phase, slug) => `'${phase}' nunca se aprobó en '${slug}' — no hay versión aprobada con la que comparar. Apruébala primero: /approve ${slug} ${phase}.`,
+      fingerprintOnly: (phase, slug) => `Esta aprobación es anterior al historial de cambios: solo se registró su huella, así que no se puede listar qué cambió. Vuelve a aprobar para iniciar el historial: /approve ${slug} ${phase}.`,
+      noFingerprint: (phase, slug) => `Esta aprobación es anterior a las huellas de contenido: no se registró nada de la versión aprobada, así que no se puede saber si cambió ni qué (la fecha de un fichero no es prueba — un clon o una copia la restablece). Vuelve a aprobar para empezar a seguirla: /approve ${slug} ${phase}.`,
+      reopenNeedsSnapshot: (phase) => `No se ha reabierto nada: sin una instantánea de '${phase}' aprobada no se pueden determinar las tareas afectadas.`,
+      nothingNew: "Nada nuevo desde la última reapertura sobre esta aprobación — no se ha cambiado nada.",
+      nothingToReopen: (changed) => (changed ? "Nada que reabrir: la edición no cambió ningún criterio ni sección (solo texto fuera de ellos) — no se ha cambiado nada."
+        : "Nada ha cambiado desde la aprobación — nada que reabrir."),
+      designFingerprintOnly: (slug) => `design.md también ha cambiado desde la aprobación, pero esta aprobación no guardó una instantánea de él (solo su huella), así que no se puede listar qué cambió allí. Vuelve a aprobar para iniciar su historial: /approve ${slug} design.`,
+      reopenDesignUnknown: "No se ha reabierto nada: design.md ha cambiado, pero sin una instantánea de él tal como se aprobó no se pueden determinar las tareas afectadas.",
+      reopened: (list, slug, phase) => `Reabiertas ${list}: desmarcadas y con su evidencia marcada como obsoleta — rehazlas con evidencia nueva y vuelve a aprobar: /approve ${slug} ${phase}.`,
+      retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tareas " + tasks.join(", ") : "", tests.length ? "pruebas " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
+      retireHint: (list, slug, phase, offer) => `Criterios eliminados aún citados — ${list}: no rehagas esas tareas; elimínalas (y las filas de prueba) o apúntalas al criterio que lo sustituye.` +
+        (offer ? ` --reopen registra la solicitud de cambio sin desmarcarlas (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+      retireNote: (list) => `Los criterios eliminados no se rehacen — aún citados: ${list}: elimina esas tareas y filas de prueba, o apúntalas al criterio que lo sustituye.`,
+      recordedRetire: (n, list, slug, phase) => `Solicitud de cambio #${n} registrada — nada desmarcado: las tareas de un criterio eliminado no se rehacen. Aún citados: ${list}: elimina esas tareas y filas de prueba, o apúntalas al criterio que lo sustituye; después vuelve a aprobar: /approve ${slug} ${phase}.`,
+      recordedOnly: (n, slug, phase) => `Solicitud de cambio #${n} registrada — ninguna tarea completada se ha visto afectada. Revísala y vuelve a aprobar: /approve ${slug} ${phase}.`,
+      reopenHint: (slug, phase) => `Para desmarcar las tareas completadas afectadas y marcar su evidencia como obsoleta: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
+      nextHint: (slug, phases) => `Mira primero qué afecta la edición con spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
+      doctorChanged: (list, slug, phases) => `modificado(s) tras su aprobación: ${list} — mira qué afecta la edición con spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}) y vuelve a aprobar`,
+      doctorChangedPlain: (list, slug) => `modificado(s) tras su aprobación: ${list} — revisa y vuelve a aprobar (/approve ${slug} <fase>)`,
+      staleNote: (n, slug, runnable) => `Tarea ${n}: su evidencia es anterior a un cambio de la spec (spec_impact la reabrió) — sigue sin verificar hasta que se registre ` +
+        (runnable ? `una nueva ejecución correcta: dev-spec done ${slug} ${n} --run` : "evidencia nueva."),
+      head: (slug, phase, date, snap) => `Impacto: ${slug} · ${phase} — frente a la aprobación del ${date} (${snap})`,
+      headFp: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — solo huella: ${changed ? "modificado desde la aprobación" : "sin cambios desde la aprobación"}`,
+      headNone: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — sin huella registrada: ${changed ? "modificado desde la aprobación (un fichero creado después)" : "no se puede saber si cambió"}`,
+      noChanges: "sin cambios desde la aprobación",
+      noStructural: "editado, pero ningún criterio, sección o tarea cambió (solo texto fuera de ellos)",
+      affected: "Afectado:",
+      tasksLabel: "tareas",
+      testsLabel: "pruebas",
+      designLabel: "diseño",
+      idsLabel: "IDs",
+      none: "ninguno",
+      change: { added: "añadido", modified: "modificado", removed: "eliminado" },
+      verified: "verificada",
+      nothingToVerify: "nada que verificar (sin comando _Verify:_, nada registrado)",
+      staleSpec: "la spec cambió desde esta evidencia; spec_impact reabrió la tarea",
+      uncovered: (list) => `nuevos, aún sin una tarea que los cite: ${list}`,
+      reReview: (slug, phase) => `revisa el cambio y vuelve a aprobar: /approve ${slug} ${phase}`,
+    },
+    metrics: {
+      writeNeedsName: "write necesita el nombre de una función — la retrospectiva es por función (spec_metrics {name, write: true} / dev-spec metrics <función> --write).",
+      retroWritten: (p) => `Retrospectiva → ${p} (rellenada con las métricas — el resto te toca a ti).`,
+      retroExists: (p) => `${p} ya existe — no se ha modificado (una retrospectiva nunca se sobrescribe).`,
+      unknown: "desconocida",
+      source: { approval: "aproximada: a partir de la primera aprobación", filesystem: "aproximada: a partir de la fecha de la carpeta" },
+      phase: { classification: "clasificación", requirements: "requisitos", design: "diseño", "test-plan": "plan de pruebas", "eval-plan": "plan de evals", tests: "pruebas", tasks: "tareas", execution: "ejecución", complete: "completada", finished: "cerrada" },
+      head: (slug, tracks, created, approx) => `Métricas: ${slug} [${tracks}] — creada el ${created}${approx ? ` (${approx})` : ""}`,
+      leadTimes: (list) => `  tiempo desde la creación: ${list}`,
+      noLeadTimes: "  tiempo desde la creación: aún no hay nada aprobado",
+      rework: (total, n, list, forced) => `  aprobaciones: ${total} · retrabajo: ${n}${list ? ` (${list})` : ""} · forzadas: ${forced}`,
+      reworkUnknown: (forced) => `  retrabajo: desconocido (aprobaciones anteriores al historial de cambios) · forzadas: ${forced}`,
+      reworkPartial: (total, n, list, forced, legacy) => `  aprobaciones: ${total} · retrabajo: al menos ${n}${list ? ` (${list})` : ""} · forzadas: ${forced} — retrabajo desconocido en ${legacy} (aprobaciones anteriores al historial de cambios)`,
+      changes: (n, reopened) => `  solicitudes de cambio: ${n} · tareas reabiertas: ${reopened}`,
+      evidence: (rate, pass, runs) => `  evidencia: ${rate}% de ejecuciones correctas (${pass}/${runs})`,
+      noRuns: "  evidencia: ninguna ejecución registrada",
+      tasks: (done, total, clar) => `  tareas: ${done}/${total} · marcadores de aclaración abiertos: ${clar}`,
+      noFeatures: (dir) => `Aún no hay funciones en ${dir}`,
+      projectHead: (n) => `Métricas — ${n} función(es)`,
+      row: (created, complete, rework, forced, changes, pass, tasks) => [created ? `creada ${created}` : null, `completada ${complete}`, `retrabajo ${rework}`,
+        `forzadas ${forced}`, `cambios ${changes}`, `correctas ${pass}`, tasks ? `tareas ${tasks}` : null].filter(Boolean).join(" · "),
+      avg: "media",
+      median: "mediana",
+      medianLeads: (list) => `  mediana del tiempo desde la creación: ${list}`,
+      totals: (done, total, pass, runs, changes, reopened) => `  total: tareas ${done}/${total} · ${runs ? `evidencia ${pass} de ${runs} ejecución(es) correctas` : "ninguna ejecución registrada"} · solicitudes de cambio ${changes} · tareas reabiertas ${reopened}`,
+      retroText: {
+        title: (f) => `# Retrospectiva: ${f}`,
+        intro: (date) => `> Generada por dev-spec el ${date} a partir de .state.json, .history/ y los artefactos. Los números se calculan localmente; el resto te toca a ti. Nada de esto se aplica automáticamente.`,
+        metrics: "## Métricas",
+        header: "| Métrica | Valor |",
+        created: "Creada",
+        approximate: "aproximado",
+        unknown: "desconocida",
+        lead: (ph) => `Tiempo hasta ${ph}`,
+        rework: "Retrabajo (nuevas aprobaciones)",
+        reworkUnknown: "desconocido — las aprobaciones son anteriores al historial de cambios",
+        reworkPartial: (value, legacy) => `al menos ${value} — desconocido en ${legacy} (aprobaciones anteriores al historial de cambios)`,
+        forced: "Aprobaciones forzadas",
+        changes: "Solicitudes de cambio",
+        reopened: (n) => `${n} tarea(s) reabierta(s)`,
+        passRate: "Tasa de éxito de la evidencia",
+        runs: (rate, pass, runs) => `${rate}% (${pass}/${runs} ejecuciones)`,
+        noRuns: "ninguna ejecución registrada",
+        tasks: "Tareas",
+        tasksValue: (done, total) => `${done}/${total} hechas`,
+        clar: "Marcadores de aclaración abiertos",
+        well: "## Qué salió bien",
+        hurt: "## Qué costó",
+        signals: (list) => `<!-- Señales de las métricas: ${list}. -->`,
+        sigRework: (ph, n) => `'${ph}' aprobada ${n} vez/veces`,
+        sigForced: (n) => `${n} aprobación(es) forzada(s) con comprobaciones fallidas`,
+        sigReopened: (n) => `${n} tarea(s) reabierta(s) por solicitudes de cambio`,
+        sigPass: (rate) => `solo el ${rate}% de las ejecuciones de verificación pasaron`,
+        sigClar: (n) => `${n} marcador(es) de aclaración aún abiertos`,
+        amend: "## Cambios propuestos al steering o a la constitución",
+        amendNote: "<!-- Para aprobación humana — nunca se aplican automáticamente. Indica el archivo (.specs/steering/constitution.md, tech.md, …), el cambio exacto y por qué. -->",
+        followUps: "## Seguimiento",
+        followUpsNote: "<!-- Candidatos al backlog — añade los que aceptes con spec_backlog (dev-spec backlog add \"<nombre>\" \"<nota>\"). -->",
+      },
+      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.es.metrics.retroText, MSG.es.metrics.phase, m, fmt),
+    },
+
+    deepTrace: {
+      kinds: {
+        uncoveredEdgeCases: "casos límite (EC) sin tarea ni prueba que los cubra",
+        uncoveredNfr: "requisitos no funcionales (NFR) sin tarea ni prueba que los cubra",
+        uncoveredSuccessCriteria: "criterios de éxito (SC) sin prueba ni paso del quickstart que los verifique",
+        phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
+        plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
+        inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",
+        unresolvedImplGlobs: "globs de _Implements:_ no resueltos del todo (el recorrido de ficheros se detuvo en su límite antes de una coincidencia — no cuentan como ausentes)",
+      },
+      secondaryOk: (n) => `los ${n} IDs EC/NFR/SC cubiertos`,
+      testsInCodeOk: (n) => `cada T-ID planificado que una tarea hecha pone en verde aparece en un fichero de prueba (${n})`,
+      testsInCodeMissing: (list) => `puestos en verde por tareas hechas, pero ningún fichero de prueba los nombra: ${list} — pon el T-ID en el nombre de una prueba (test("T-01 …"), def test_T01_…) en un fichero de prueba (una carpeta tests/, *.test.*, *_test.* …), en el archivo que indica la columna Archivo (o Fichero) del plan, si indica uno; una comprobación hecha fuera del código de prueba (un script de carga, un conjunto de evals) indica en su lugar su artefacto no código en la columna Archivo (load-test.md, evals/golden.json) y no se espera en un fichero de prueba`,
+      truncated: "la búsqueda de ficheros de prueba se detuvo en el límite — algunos ficheros no se leyeron",
+      codeSummary: (found, planned, scanned, truncated, outside) => `  pruebas en el código: ${found}/${planned} T-ID(s) planificado(s) nombrado(s) en ${scanned} fichero(s) de prueba` + (outside ? ` · comprobados fuera del código de prueba (la columna Archivo indica un artefacto que no es código): ${outside}` : "") + (truncated ? " (búsqueda truncada en el límite)" : ""),
+      warningsHead: "Avisos (no bloquean):",
+    },
+
+    catalog: {
+      title: (proj) => `Catálogo de specs — ${proj}`,
+      autogen: "AUTO-GENERADO por dev-spec — no editar a mano. Para regenerar: spec_catalog {write: true} (dev-spec catalog --write).",
+      intro: "Lo que el sistema hace hoy: todos los criterios de aceptación, agrupados por función. Un criterio sustituido por una función posterior (_Supersedes:_) aparece tachado e indica el criterio que lo sustituye.",
+      totals: (f, acs, current, sup) => `**${f} función(es) · ${acs} criterios de aceptación — ${current} vigentes, ${sup} sustituido(s)**`,
+      status: { active: "en curso", complete: "completada", finished: "cerrada", archived: "archivada" },
+      finishedOn: (d) => `cerrada el ${d}`,
+      archivedOn: (d) => `archivada el ${d}`,
+      supersededBy: (list) => `sustituido por ${list}`,
+      supersedes: (list) => `sustituye a ${list}`,
+      template: "plantilla — aún sin escribir",
+      noAcs: "Aún sin criterios de aceptación.",
+      noFeatures: "Aún sin funciones.",
+      cliWrote: (file, f, acs, sup) => `✎ generado ${file}  (${f} función(es), ${acs} criterio(s), ${sup} sustituido(s))`,
+    },
+    supersedes: {
+      phantom: (ref, reason, by) => `_Supersedes:_ ${ref}${by ? ` (en ${by})` : ""} — ${reason}`,
+      renamed: (list) => `las referencias _Supersedes:_ a ella usan ahora el nombre nuevo, en: ${list}`,
+      reason: { "bad-ref": "no tiene el formato <función>/US-n.AC-m", "unknown-feature": "esa función no existe (activa o archivada)", "unknown-ac": "esa función no tiene ese criterio", self: "una función no puede sustituir un criterio propio", unterminated: "el marcador nunca se cierra — termínalo con un guion bajo: _Supersedes: <función>/US-n.AC-m_" },
+    },
+    restore: {
+      notArchived: (slug) => `No hay nada archivado como '${slug}' (.specs/_archive/${slug}/ no existe).`,
+      activeExists: (slug) => `'${slug}' ya es una función activa — renómbrala o archívala antes de restaurar la archivada.`,
+      done: (slug) => `'${slug}' restaurada desde .specs/_archive/ ✓`,
+      noRecord: "Se archivó antes de que el archivado registrara su entrada en la hoja de ruta — vuelve a declarar sus dependencias con spec_depend, si las tenía.",
+      skipDependsOn: (d, reason) => `su dependencia '${d}' (${reason})`,
+      skipDependent: (k, reason) => `'${k}', que dependía de ella (${reason})`,
+      skipRecord: (field, reason) => `el campo ${field} del registro de archivado (${reason})`,
+      skipped: (list) => `No restaurado: ${list}.`,
+      reason: { gone: "ya no existe", cycle: "cerraría un ciclo de dependencias", invalid: "formato inesperado — se omite" },
+      renamedRecords: (list) => `registros de archivo actualizados al nombre nuevo (restore repone sus dependencias): ${list}`,
+      prunedDependents: (list) => `las dependencias de las funciones que dependían de ella salieron de la hoja de ruta: ${list} (registrado — restore las repone)`,
+      prunedIncomplete: (slug, pct, list) => `'${slug}' no estaba completa (${pct}%), pero ${list} dependía(n) de ella: la hoja de ruta deja de mostrarla(s) bloqueada(s) por ella — restáurala, o vuelve a declarar la dependencia con spec_depend, si aún necesita(n) ese trabajo`,
+    },
+    drift: {
+      none: "Ninguna función cerrada tiene todavía una línea base de drift — spec_finish {write: true} (dev-spec finish <función> --write) registra una cuando la función está lista para cerrar.",
+      clean: (f, n, d, archived) => `  ✓ ${f}${archived ? " (archivada)" : ""}: ${n} fichero(s) de implementación sin cambios desde el cierre (${d})`,
+      drifted: (f, n, total, d, archived) => `  ⚠ ${f}${archived ? " (archivada)" : ""}: ${n} de ${total} fichero(s) de implementación modificado(s) desde el cierre (${d})`,
+      changed: (list) => `      modificados: ${list}`,
+      missing: (list) => `      ausentes: ${list}`,
+      nowPresent: (list) => `      ahora presentes (ausentes en el cierre): ${list}`,
+      reopened: (list) => `  · reabiertas después del cierre (hay tareas pendientes — se comprueban al volver a cerrar): ${list}`,
+      unbaselined: (list) => `  · aún sin línea base de cierre: ${list}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (archivada)" : ""}: cambió desde el cierre (${d}) — ${why}; su línea base ya no la cubre: ${archived ? `restáurala (dev-spec feature restore ${f}), ciérrala de nuevo (dev-spec finish ${f} --write) y vuelve a archivarla` : `ciérrala de nuevo (dev-spec finish ${f} --write)`}`,
+      staleWhy: {
+        changeRequests: (list) => `solicitud de cambio ${list}`,
+        approvals: (list) => `reaprobado: ${list}`,
+        newFiles: (n, list) => `${n} fichero(s) de implementación fuera de la línea base: ${list}`,
+      },
+      hookLine: (f, n) => `  ⚠ ${f}: ${n} fichero(s) de implementación modificado(s) desde el cierre — ejecuta dev-spec drift ${f}`,
+      baselineRecorded: (n, missing) => `Línea base de drift registrada: ${n} fichero(s) de implementación${missing ? ` (${missing} ausente(s))` : ""} — dev-spec drift muestra lo que cambie después de este cierre.`,
+      baselineReplaced: (n, day, list) => `Sustituida la línea base del ${day}, en la que ${n} fichero(s) habían cambiado: ${list} — la nueva línea base los acepta tal como están ahora.`,
+    },
+
+    guardMode: {
+      ask: (pending, stale) => "dev-spec guard: ninguna tarea aprobada cubre cambios de código ahora mismo — aprueba las tareas de una función (spec_approve) o confirma para continuar." +
+        (pending ? ` Funciones con tareas pendientes de aprobación: ${pending}.` : "") +
+        (stale ? ` Tareas modificadas después de su aprobación (revísalas y vuelve a aprobar la fase tasks): ${stale}.` : "") + " (El modo guardia está activado — dev-spec init --guard off lo desactiva.)",
+      forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
+      on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard).",
+      off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
+      badValue: (v) => `--guard admite on u off (recibido '${v}').`,
+    },
+    scopedSteering: {
+      customHint: "— o un fichero de steering propio, con alcance: letras minúsculas, dígitos y '-', terminado en .md (p. ej. api-conventions.md).",
+      reservedName: (file) => `'${file}' es un nombre reservado (un nombre de dispositivo de Windows o un miembro nativo de JavaScript) — elige otro nombre para el fichero de steering.`,
+      customStub: (title, pattern) => `---\ninclusion: fileMatch\nfileMatchPattern: "${pattern}"\n---\n\n# ${title}\n\n` +
+        "<!-- Steering con alcance. El front matter decide cuándo spec_task_brief incluye este fichero:\n" +
+        "     inclusion: always    → en todos los briefs de tarea\n" +
+        "     inclusion: fileMatch → solo en las tareas cuyas rutas _Implements:_ coinciden con fileMatchPattern\n" +
+        "                            (glob: ** · * · ? · {a,b}; admite una lista: [\"src/api/**\", \"src/routes/**\"])\n" +
+        "     inclusion: manual    → nunca automáticamente; los briefs lo listan como disponible bajo petición\n" +
+        "     Sustituye el patrón de ejemplo y las líneas entre corchetes de abajo. -->\n\n" +
+        "## Reglas\n- [Una regla que todo fichero que coincida con el patrón debe seguir.]\n\n## Ejemplos\n- [Un ejemplo breve — o una referencia a un fichero que muestre el patrón.]\n",
+      placeholders: (list) => `aún con placeholders de la plantilla: ${list}`,
+      scoped: "Steering con alcance (fileMatch — coincide con los ficheros de esta tarea):",
+      manual: "Disponible bajo petición (steering manual):",
+    },
+    designSaveCheck: {
+      head: (slug, tracks) => `Verificación del diseño en design.md (${slug} [${tracks}]):`,
+      clean: (tracks, constitution) => `Verificación del diseño [${tracks}]: secciones obligatorias${constitution ? " y Verificación de la Constitución" : ""} rellenadas, sin placeholders de la plantilla ✓`,
+      sections: (marker, list) => `secciones ${marker}: ${list}`,
+      constitution: {
+        missing: "Verificación de la Constitución: falta — añade la sección y verifica cada principio de steering/constitution.md",
+        unfilled: "Verificación de la Constitución: sin rellenar",
+      },
+      placeholders: (n, list) => `${n} placeholder(s) de la plantilla por sustituir: ${list}`,
+      hint: (slug) => `Rellénalos antes de aprobar el diseño — detalles: /spec-doctor ${slug}.`,
+    },
+    upgrade: {
+      head: (from, to, mode) => mode === "unknown" ? "dev-spec upgrade — la versión de este motor es desconocida (no hay package.json a su lado): no se sellará nada."
+        : mode === "behind" ? `dev-spec upgrade — .specs/ ${from ? `en la ${from}` : "de antes de la 1.13 (sin sello de versión)"} → dev-spec ${to}`
+        : mode === "pending" ? `dev-spec upgrade — .specs/ en la ${from} (este dev-spec: ${to}), pero aún hay migraciones pendientes`
+        : `dev-spec upgrade — .specs/ en la ${from}: al día con este dev-spec (${to})`,
+      newer: (from, to) => `.specs/ lo actualizó por última vez un dev-spec más reciente (${from}) que este (${to}) — actualiza el plugin antes de fiarte de esta auditoría.`,
+      summary: (n, blocked, attention, ok, archived) => `${n} función(es) activa(s): ${blocked} bloqueada(s) · ${attention} necesita(n) atención · ${ok} ok` + (archived ? ` · ${archived} archivada(s) (no revisada(s))` : ""),
+      noFeatures: "No hay funciones activas — nada que revisar.",
+      group: { blocked: "⛔ Bloqueadas — el doctor falla:", attention: "▲ Necesitan atención:", ok: "✓ OK:" },
+      status: { "not-started": "sin empezar", planning: "en planificación", executing: "en ejecución", complete: "completada", finished: "cerrada" },
+      feature: (name, status, tracks, phase, done, total, bugfix) => `${name} — ${status} · [${tracks}] · ${phase} · ${done}/${total} tareas${bugfix ? " · bugfix" : ""}`,
+      tracksInferred: "sus tracks se dedujeron de los ficheros — el apply los guarda en .state.json",
+      item: {
+        error: (e) => `Corrígelo primero a mano: ${e}`,
+        fix: (list) => `Corrige lo que el doctor da como fallo: ${list}`,
+        approve: (list, slug) => `Aprueba el/los gate(s) pendiente(s), por orden: ${list} — /approve ${slug} <fase>`,
+        reReview: (list, cmds) => `Revisa lo que cambió después de su aprobación: ${list}` + (cmds ? ` — mira primero la diferencia: ${cmds}` : "") + "; después vuelve a aprobar",
+        reapprove: (list) => `Vuelve a aprobar para empezar el historial de cambios (spec_impact aún no puede comparar estas): ${list}`,
+        verify: (list, slug) => `Registra una ejecución correcta de las tareas marcadas que no la tienen: ${list} — dev-spec done ${slug} <n> --run`,
+        drift: (n, slug) => `Decide sobre la deriva: ${n} fichero(s) de implementación cambiado(s) desde el cierre — dev-spec drift ${slug}`,
+        stale: (slug) => `Cambió después del cierre — ciérrala de nuevo: /spec-finish ${slug}`,
+        critic: (files) => `Revísala con el agente spec-critic (solo lectura), fase a fase: ${files || "—"}`,
+        converge: (files) => "Ejecuta la pasada de convergencia del spec-reviewer (las tareas hechas frente a sus ACs)" + (files ? `, después el agente spec-critic sobre ${files}` : ""),
+        none: "No necesita revisión de la spec — todas las tareas están hechas",
+        next: (rec) => `Siguiente: ${rec}`,
+        warnings: (list) => `Avisos: ${list}`,
+      },
+      reason: { "no-fingerprint": "aprobada antes de las huellas de contenido", changed: "cambiada después de su aprobación", missing: "su fichero no existe", untracked: "una aprobación de diseño de bugfix de la 1.12 — bug.md nunca se siguió", "snapshot-missing": "el fichero de su snapshot ha desaparecido" },
+      planHead: "El apply cambiaría (spec_upgrade {apply: true} · dev-spec upgrade --apply) — nunca un artefacto, una aprobación ni una marca:",
+      migHead: "Migraciones aplicadas — ningún artefacto editado, nada aprobado, marcado ni borrado:",
+      migStamp: (from, to) => `meta.specVersion: ${from || "ninguna"} → ${to}`,
+      migTracks: (list) => `tracks guardados en .state.json: ${list}`,
+      migSeeded: (list) => `líneas base de aprobación guardadas: ${list}`,
+      planSeed: (list) => `líneas base de aprobación a guardar en .history/ (el fichero aún coincide con su aprobación): ${list}`,
+      migRecords: (n) => `${n} aprobación(es) anterior(es) registrada(s) en approvalHistory`,
+      migSkipped: (list) => `sin línea base — vuelve a aprobar para empezar el historial: ${list}`,
+      migGitignore: (n) => `.specs/.gitignore: ${n} línea(s) añadida(s)`,
+      migErrors: (list) => `no migrado: ${list} — corrígelo y vuelve a ejecutar el upgrade (meta.specVersion se queda como está hasta entonces)`,
+      nothing: "Nada que migrar — .specs/ ya está al día; no se ha cambiado nada.",
+      upToDate: "Nada que migrar — la lista de arriba es lo que señalan las reglas actuales.",
+      applyHint: "No se ha cambiado nada. Revisa la lista y después aplica las migraciones seguras: dev-spec upgrade --apply (spec_upgrade {apply: true}).",
+      reportAt: (file) => `Informe: ${file} — una lista de comprobación para ir cumpliendo (/spec-upgrade).`,
+      reportKept: (file) => `${file} existe y no lo generó dev-spec — se ha dejado intacto (informe no escrito).`,
+      hookLine: (from) => `⬆ .specs/ se creó con un dev-spec más antiguo (${from || "anterior a la 1.13"}) — ejecuta /spec-upgrade (dev-spec upgrade) para revisar lo que aún no está implementado (o pide simplemente actualizar las specs)`,
+      md: {
+        title: (proj) => `dev-spec upgrade — ${proj}`,
+        autogen: "AUTO-GENERADO por dev-spec — marca las casillas a medida que avanzas; spec_upgrade {apply: true} (dev-spec upgrade --apply) lo escribe cuando migra algo.",
+        intro: (from, to) => `.specs/ actualizado de ${from || "un dev-spec anterior a la 1.13"} a ${to || "?"}. Por función: lo que señalan las reglas de la ${to || "?"}, qué hacer y qué revisión ejecutar. Trabájalo con /spec-upgrade (Claude Code) o dev-spec upgrade; vuelve a ejecutar la auditoría cuando quieras para ver el estado actual.`,
+        migrations: "Migraciones",
+        group: { blocked: "⛔ Bloqueadas — el doctor falla", attention: "▲ Necesitan atención", ok: "✓ OK" },
+        footer: "Todo cambio pasa por los gates normales: nuevas aprobaciones con spec_approve (/approve), ediciones de la spec tras una aprobación con spec_impact (/spec-impact), trabajo de seguimiento con spec_append_tasks (/spec-converge). Nada de esto se aplica automáticamente.",
+      },
     },
   },
 };
@@ -2295,6 +4376,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Inline only** — prompt/eval task: the controller runs it in the main session (evals cost money; accept/revert is a judgment call). Do not delegate it.",
     task: "## Task",
     context: "## Where this fits (user story)",
+    bug: "## The bug (bug.md)", bugRepro: "Reproduction", bugRootCause: "Root cause",
+    bugUnfilled: "_Not written yet — no fix before the root cause is written in bug.md._",
     acs: "## Acceptance criteria (binding)",
     acsNone: "_No acceptance criteria referenced — report NEEDS_CONTEXT rather than inventing scope._",
     tests: "## Tests to make green",
@@ -2350,6 +4433,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Só inline** — tarefa de prompt/evals: o controlador executa-a na sessão principal (as evals custam dinheiro; aceitar/reverter é uma decisão). Não a delegues.",
     task: "## Tarefa",
     context: "## Onde isto encaixa (história de utilizador)",
+    bug: "## O bug (bug.md)", bugRepro: "Reprodução", bugRootCause: "Causa raiz",
+    bugUnfilled: "_Ainda por escrever — nenhuma correção antes de a causa raiz estar escrita no bug.md._",
     acs: "## Critérios de aceitação (vinculativos)",
     acsNone: "_Nenhum critério de aceitação referido — responde NEEDS_CONTEXT em vez de inventar âmbito._",
     tests: "## Testes a pôr a verde",
@@ -2405,6 +4490,8 @@ const BRIEF = {
     inlineOnly: "⚠ **Solo inline** — tarea de prompt/evals: el controlador la ejecuta en la sesión principal (las evals cuestan dinero; aceptar/revertir es una decisión). No la delegues.",
     task: "## Tarea",
     context: "## Dónde encaja (historia de usuario)",
+    bug: "## El bug (bug.md)", bugRepro: "Reproducción", bugRootCause: "Causa raíz",
+    bugUnfilled: "_Aún sin escribir — ninguna corrección antes de que la causa raíz esté escrita en bug.md._",
     acs: "## Criterios de aceptación (vinculantes)",
     acsNone: "_Ningún criterio de aceptación referenciado — responde NEEDS_CONTEXT en vez de inventar alcance._",
     tests: "## Pruebas a poner en verde",
@@ -2470,6 +4557,9 @@ function renderBrief(d, lang) {
     push("", t.context);
     d.stories.forEach((s, i) => { if (i) push(""); push(`**${s[0]}**`, ...s.slice(1)); });
   }
+  if (d.bug) { // a bugfix task: the reproduction and the root cause it must respect (or that they are still unwritten)
+    push("", t.bug, `**${t.bugRepro}**`, d.bug.reproduction || t.bugUnfilled, "", `**${t.bugRootCause}**`, d.bug.rootCause || t.bugUnfilled);
+  }
 
   push("", t.acs);
   if (d.acceptanceCriteria.length) d.acceptanceCriteria.forEach((a) => push("- " + a.text));
@@ -2499,11 +4589,18 @@ function renderBrief(d, lang) {
   }
 
   const constraints = d.globalConstraints || [];
-  if (constraints.length || d.steering.length) {
+  const scoped = d.steeringScoped || []; // fileMatch steering matching this task's files, quoted (front matter stripped)
+  const manual = d.steeringManual || [];
+  if (constraints.length || d.steering.length || manual.length) {
     push("", t.steering);
     if (constraints.length) push(t.constraintsIntro, ...constraints);
     if (constraints.length && d.steering.length) push("");
     if (d.steering.length) push(t.steeringRead + " " + d.steering.map((p) => "`" + p + "`").join(", "));
+    const S = MSG[normalizeLang(lang)].scopedSteering;
+    // Quoted as a blockquote: the file's own headings can't break the brief's outline.
+    if (scoped.length) push("", S.scoped);
+    scoped.forEach((s) => push("", `**\`${s.path}\`** (fileMatch: ${s.patterns.map((p) => "`" + p + "`").join(", ")})`, ...s.body.split(/\r?\n/).map((l) => (l ? "> " + l : ">"))));
+    if (manual.length) push("", S.manual + " " + manual.map((p) => "`" + p + "`").join(", "));
   }
 
   if (d.unresolved.acs.length || d.unresolved.tests.length) {
@@ -2536,7 +4633,8 @@ module.exports = {
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
   tasks: (a, lang) => L(lang).tasks(a),
-  testPlan: (name, lang) => L(lang).testPlan(name),
+  testPlan: (name, lang, tracks, acs) => L(lang).testPlan(name, tracks, acs), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each)
+  templateAcIds: (tracks) => Object.keys(templateTests(tracks)), // the template AC IDs a test plan scaffolded for these tracks covers
   evalPlan: (name, lang) => L(lang).evalPlan(name),
   loadTest: (name, lang) => L(lang).loadTest(name),
   quickstart: (name, lang) => L(lang).quickstart(name),
@@ -2545,7 +4643,11 @@ module.exports = {
   promptStub: (name, lang) => L(lang).promptStub(name),
   evalsReadme: (lang) => EVALS_README[normalizeLang(lang)],
   // steering
-  steeringStub: (file, lang) => STEERING[normalizeLang(lang)][file],
+  // Own keys only: 'constructor' / '__proto__' / 'toString' must be "unknown file", not Object.prototype members.
+  steeringStub: (file, lang) => {
+    const t = STEERING[normalizeLang(lang)];
+    return typeof file === "string" && Object.prototype.hasOwnProperty.call(t, file) ? t[file] : undefined;
+  },
   steeringKnownFiles: () => Object.keys(STEERING.en),
   // tool messages
   msg: (lang) => MSG[normalizeLang(lang)],

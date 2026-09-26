@@ -36,7 +36,16 @@ requirements, the spec is the authority behind it, and the controller holds ever
    - **core:** implement per design; the existing suite stays green.
    - **Metrics** (`_Emits metrics:_`): show each metric actually emitting.
    - **Verification** (`_Verify:_` in the brief): run each command on the FINAL code, fresh — not "it
-     passed earlier". Evidence before claims: no command output, no DONE.
+     passed earlier". Evidence before claims: no command output, no DONE. The engine's rules, which decide
+     whether the controller can tick your task:
+     - a `_Verify:_` that holds a **runnable command must be run** and reported with the exact command and its
+       **exit code** — a prose note ("works", "checked manually") leaves the task unverified;
+     - a non-zero exit code means **not done**: the controller's `spec_complete_task` refuses the tick and records
+       the failed run, and only a later passing run clears it — so report failures honestly, never a subset
+       that happens to pass;
+     - only a `[bracketed]` manual check (no command) may be attested by a written summary of what you checked;
+     - if the command in the brief can't run as written (wrong path, missing script), report NEEDS_CONTEXT —
+       don't substitute a different command silently.
 3. While iterating, run the focused test for what you are changing; run the full suite once before
    committing.
 4. Commit with a conventional message citing the task (and on tdd, the tests it makes green).
@@ -75,8 +84,10 @@ Write the full report to the report path, in the brief's language:
 - Tests run and results; on tdd, **RED** (command, failing output, why expected) and **GREEN**
   (command, passing output)
 - **Verification evidence:** for every `_Verify:_` command — the exact command, its exit code and the
-  last lines of output. The controller records exactly this with `spec_complete_task`; a non-zero exit
-  means the task is not done (say so; don't report DONE).
+  last lines of output (the pass/fail counts). The controller records exactly this with
+  `spec_complete_task {evidence: {command, exitCode, summary}}`; a non-zero exit means the task is not done
+  (say so; don't report DONE). Several `_Verify:_` commands → report each; they are recorded as one run
+  (`cmd1 && cmd2`, exit 0 only if every one passed).
 - Files changed; commits (short SHA + subject)
 - Self-review findings and any concerns
 

@@ -12,11 +12,20 @@ tasks; summarize your understanding. Use `spec_next_task` to find the next task 
 number). Pick the loop per task: plain implement-and-test (core); red → green → refactor against the
 target tests (+tdd); prompt-iteration gated on eval delta with a new `prompts/vN.md` (+ai). After each
 task, run its `_Verify:_` command fresh and call `spec_complete_task {…, evidence}` with the command, exit
-code and output summary — evidence before claims (`references/verification.md`); a failing run means the
-task is not done.
+code and output summary — evidence before claims (`references/verification.md`). The rules the engine applies:
+- a task whose `_Verify:_` holds a runnable command is **verified only by `{command, exitCode: 0}`** — a text
+  note ticks it but leaves it unverified (`unverifiedReason: manual-note-on-runnable-verify`);
+- a **non-zero exit code refuses the tick** and the failed run is **recorded** (a failed re-check of a ticked task
+  makes it unverified until a passing run is recorded) — a failing run means the task is not done;
+- evidence marked **stale** by `/spec-impact --reopen` (or recorded for an earlier `_Verify:_` command) no longer
+  counts: run the check again;
+- duplicate task numbers resolve to the first open one — renumber them (doctor warns `duplicate-tasks`);
+- a bugfix refuses tasks after the root-cause task until `bug.md → Root Cause` is filled.
+CLI: `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` and records the result.
 
 **`--subagents` (or the user asks for subagents).** Follow `references/subagent-execution.md`: check the
-preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes),
+preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes,
+baseline green: run the full suite once and ledger the result),
 then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:spec-implementer` agent with the brief and
 report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
 fix loop (max 5 rounds) → `spec_complete_task` only after a clean review. Keep the ledger. Stop at every
@@ -25,7 +34,7 @@ AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt
 host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate
 worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol).
 
-When the last task is done, close with `/spec-finish`.
+When the last task is done, run `/spec-converge` if you doubt every AC is delivered, then close with `/spec-finish`.
 
 Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
 validation (+saas), cost + safety validation (+ai). If blocked, pause and discuss rather than

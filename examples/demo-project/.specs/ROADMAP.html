@@ -45,13 +45,14 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
   <button class="toggle" id="tg" aria-label="Theme">◐ Theme</button>
 </header>
 
-<div class="prog">Progress: 70%</div>
-<div class="pbar"><span style="width:70%"></span></div>
+<div class="prog">Progress: 19%</div>
+<div class="pbar"><span style="width:19%"></span></div>
 <div class="sub">0/2 features complete · 0/16 tasks done</div>
 <div class="legend">
   <span><span class="dot" style="background:var(--c-done)"></span>done</span>
   <span><span class="dot" style="background:var(--c-prog)"></span>in progress</span>
   <span><span class="dot" style="background:var(--c-block)"></span>blocked</span>
+  <span><span class="dot" style="background:var(--accent)"></span>planned</span>
   <span><span class="dot" style="background:var(--c-muted)"></span>not started</span>
 </div>
 
@@ -60,15 +61,16 @@ footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid 
 <div class="cards"><div class="card"><b>api-keys</b><span class="tracks">core +tdd +saas</span><div>next #1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</div></div></div>
 
 <h2>Features</h2>
-<table><thead><tr><th></th><th>Feature</th><th>Tracks</th><th>Phase</th><th>%</th><th>Tasks</th><th>Deps</th><th>Next</th></tr></thead><tbody><tr><td><span class="dot" style="background:var(--c-muted)"></span></td><td><a href="./api-keys/requirements.md">api-keys</a></td><td><span class="tracks">core +tdd +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:70%"></span></span>70%</td><td>0/8</td><td>—</td><td class="next">#1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</td></tr>
-<tr><td><span class="dot" style="background:var(--c-block)"></span></td><td><a href="./usage-metering/requirements.md">usage-metering</a></td><td><span class="tracks">core +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:70%"></span></span>70%</td><td>0/8</td><td><span class="unmet">api-keys</span></td><td class="next">blocked</td></tr></tbody></table>
+<table><thead><tr><th></th><th>Feature</th><th>Tracks</th><th>Phase</th><th>%</th><th>Tasks</th><th>Deps</th><th>Next</th></tr></thead><tbody><tr><td><span class="dot" style="background:var(--accent)"></span></td><td><a href="./api-keys/requirements.md">api-keys</a></td><td><span class="tracks">core +tdd +saas</span></td><td>tasks-ready</td><td class="pct"><span class="bar"><span style="width:30%"></span></span>30%</td><td>0/8</td><td>—</td><td class="next">#1 Add `api_keys` table migration + indexes (`hash`, `(tenant_i</td></tr>
+<tr><td><span class="dot" style="background:var(--c-block)"></span></td><td><a href="./usage-metering/requirements.md">usage-metering</a></td><td><span class="tracks">core +saas</span></td><td>requirements</td><td class="pct"><span class="bar"><span style="width:8%"></span></span>8%</td><td>0/8</td><td><span class="unmet">api-keys</span></td><td class="next">blocked</td></tr></tbody></table>
 
 <h2>Dependencies</h2>
 <ul><li><b>usage-metering</b> ← <span class="unmet">api-keys</span></li></ul>
 
 <h2>⚠ Needs attention</h2>
 <ul><li><b>usage-metering</b> — blocked by api-keys</li>
-<li><b>usage-metering</b> — design has unfilled (TODO) sections</li></ul>
+<li><b>usage-metering</b> — mandatory sections missing/unfilled: [SaaS] Performance Budget (unfilled), [SaaS] Scale Design (unfilled), [SaaS] Multi-tenancy (unfilled), [SaaS] Observability (unfilled), [SaaS] Cost Envelope (unfilled)</li>
+<li><b>usage-metering</b> — template placeholders in the current phase: requirements.md</li></ul>
 
 <h2>Backlog (planned, not yet specced)</h2>
 <ul><li><input type="checkbox" disabled> <b>two-factor-auth</b> — TOTP via authenticator</li></ul>

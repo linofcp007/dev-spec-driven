@@ -47,6 +47,16 @@ and rewritten from the test — not "kept as reference", not "adapted".
 | "I'll tick it now and verify later" | A tick is a claim. Evidence first (`_Verify:_`, `spec_complete_task {evidence}`). |
 | "While I'm here I'll also refactor X" | Out of the task = out of scope. File it. |
 | "The subagent said DONE" | Review the diff and the evidence. A report is a claim. |
+| "The command is slow, a note will do" | A runnable `_Verify:_` counts only with its command and exit 0. Run it. |
+
+## Gates & changes after approval
+
+| Thought | Reality |
+|---|---|
+| "The approval was refused — I'll just `--force` it" | Force is the human's call, over named failures, and it stays flagged. Fix the checks or ask. |
+| "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `/spec-impact`, then re-approve. |
+| "I'll add the missing tasks myself" | Follow-up work goes through `/spec-converge`: the human approves the list first. |
+| "The finished feature's spec is stale, I'll rewrite it" | Write the new behaviour in a new feature with `_Supersedes:_`; keep history. |
 
 ## Verification & finishing
 

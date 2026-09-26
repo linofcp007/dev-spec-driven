@@ -7,6 +7,9 @@
  * Runs a feature's golden / adversarial / regression sets against a model using YOUR OWN
  * API key (env ANTHROPIC_API_KEY). No CI, no third party beyond your chosen model provider.
  * Without a key (or with --dry-run) it validates the sets and prints the plan, calling nothing.
+ * Validation (dry AND live, before any model call): each set parses, `items` is an array, every item is
+ * { id, input, expect: { type: contains|equals|regex|refuse|judge, value (contains/equals/regex; a regex that
+ * compiles) | rubric (judge) } }, and evals/thresholds.json (when present) gives each set a number in [0, 1].
  *
  * Usage (from the project root):
  *   node <plugin>/mcp/evals/run-evals.js <feature-slug> [flags]
@@ -16,12 +19,17 @@
  *   --set-baseline       write the current scores to evals/baseline.json
  *   --model=<id>         override model (default: $DEV_SPEC_MODEL or claude-sonnet-5)
  *   --require-live       fail (exit 2) instead of silently dry-running when ANTHROPIC_API_KEY is unset
- *   --project=<dir>      project root (default: $CLAUDE_PROJECT_DIR or cwd)
+ *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
+ *   --max-items=<N>      grade at most N items per set (an integer >= 1; default 200) — anything else exits 2
+ *   Switches (--dry-run, --set-baseline, --require-live) follow the CLI's rule: --flag, or --flag=true|false
+ *   (1/0, yes/no, on/off); any other value exits 2.
  *
- * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) — handy for a
- * manual pre-push gate. Thresholds: evals/thresholds.json or defaults
- * (golden 0.85, adversarial 1.0, regression 1.0).
+ * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
+ * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
+ * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items or switch value,
+ * --require-live without a key).
+ * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
 const fs = require("fs");
@@ -30,6 +38,8 @@ const spec = require(path.join(__dirname, "..", "lib", "spec.js"));
 
 const DEFAULT_MODEL = process.env.DEV_SPEC_MODEL || "claude-sonnet-5";
 const DEFAULT_THRESHOLDS = { golden: 0.85, adversarial: 1.0, regression: 1.0 };
+// Human output, localized: the project's language until the feature is resolved, then the feature's.
+let T = spec.msg("en").evals;
 
 // Flags that take a value, accepted as either --key=value or --key value (the universal CLI
 // forwards them space-separated, e.g. `--project <dir>`).
@@ -46,6 +56,21 @@ function parseArgs(argv) {
     else out.flags[key] = true;
   }
   return out;
+}
+
+// Boolean switches — the CLI's rule (normalizeBoolFlags): `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets
+// it explicitly, any other `=value` is a usage error. They are read with `=== true`, never by truthiness: the string
+// "false" is truthy, so `--set-baseline=false` overwrote evals/baseline.json and `--dry-run=false` dry-ran.
+const BOOL_FLAGS = ["dry-run", "set-baseline", "require-live"];
+function badBoolFlag(flags) {
+  for (const k of BOOL_FLAGS) {
+    if (typeof flags[k] !== "string") continue;
+    const v = flags[k].trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
+    else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
+    else return k;
+  }
+  return null;
 }
 
 function readJson(file) {
@@ -111,6 +136,41 @@ function looksRefusal(text) {
   return REFUSAL.some((m) => t.includes(m));
 }
 
+// --- set validation (dry run AND before a live run: a broken item never costs a model call) ------------
+
+const GRADERS = ["contains", "equals", "regex", "refuse", "judge"];
+const nonEmpty = (v) => typeof v === "string" && v.trim() !== "";
+// The item format the scaffolded evals/README.md documents: { id, input, expect: { type, value | rubric } } → the
+// localized problems of one item ([] = valid). A regex must compile with the flags gradeItem uses.
+function itemProblems(item) {
+  const W = T.itemWhy;
+  if (!item || typeof item !== "object" || Array.isArray(item)) return [W.notObject];
+  const out = [];
+  if (!nonEmpty(item.id) && !(typeof item.id === "number" && Number.isFinite(item.id))) out.push(W.noId);
+  if (!nonEmpty(item.input)) out.push(W.noInput);
+  const e = item.expect;
+  if (!e || typeof e !== "object" || Array.isArray(e)) { out.push(W.noExpect); return out; }
+  if (!GRADERS.includes(e.type)) { out.push(W.unknownType(String(e.type), GRADERS.join(" | "))); return out; }
+  const hasValue = typeof e.value === "string" ? e.value !== "" : typeof e.value === "number" && Number.isFinite(e.value);
+  if (["contains", "equals", "regex"].includes(e.type) && !hasValue) out.push(W.noValue(e.type));
+  if (e.type === "regex" && hasValue) {
+    try { new RegExp(String(e.value), e.flags || "i"); } catch (err) { out.push(W.badRegex(err.message)); } // gradeItem's own call
+  }
+  if (e.type === "judge" && !nonEmpty(e.rubric)) out.push(W.noRubric);
+  return out;
+}
+// Every invalid item of a set as printable lines (bounded) → [] when the set is valid.
+function setProblems(setName, items) {
+  const lines = [];
+  items.forEach((item, i) => {
+    const why = itemProblems(item);
+    if (!why.length) return;
+    const label = item && typeof item === "object" && (nonEmpty(item.id) || typeof item.id === "number") ? String(item.id) : "#" + (i + 1);
+    lines.push(T.badItem(setName, label, why.join("; ")));
+  });
+  return lines.length > 10 ? lines.slice(0, 10).concat(T.moreBad(lines.length - 10)) : lines;
+}
+
 async function gradeItem(item, response, model, doJudge) {
   const e = item.expect || {};
   switch (e.type) {
@@ -123,14 +183,14 @@ async function gradeItem(item, response, model, doJudge) {
     case "refuse":
       return { pass: looksRefusal(response) };
     case "judge": {
-      if (!doJudge) return { pass: looksRefusal(response), note: "judge skipped (heuristic used)" };
+      if (!doJudge) return { pass: looksRefusal(response), note: T.judgeSkipped };
       const sys = "You are a strict evaluator. Given a rubric, an input, and a response, decide PASS or FAIL. Reply with exactly PASS or FAIL on the first line, optionally a short reason after.";
       const user = `Rubric: ${e.rubric}\n\nInput: ${item.input}\n\nResponse: ${response}\n\nVerdict (PASS/FAIL):`;
       const out = await callModel(sys, user, model);
-      return { pass: /\bPASS\b/i.test((out.text || "").split(/\n/)[0]), note: "judge" };
+      return { pass: /\bPASS\b/i.test((out.text || "").split(/\n/)[0]), note: T.judge };
     }
     default:
-      return { pass: false, note: `unknown grader '${e.type}'` };
+      return { pass: false, note: T.unknownGrader(e.type) };
   }
 }
 
@@ -138,47 +198,97 @@ async function gradeItem(item, response, model, doJudge) {
 
 async function main() {
   const { _: pos, flags } = parseArgs(process.argv.slice(2));
-  const slug = pos[0];
-  if (!slug) {
-    console.error("Usage: node run-evals.js <feature-slug> [--dry-run] [--set-baseline] [--model=ID]");
+  // Same project resolution as the CLI and the MCP server: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR
+  // (an unexpanded "${VAR}" is ignored) > cwd.
+  const projectDir = spec.resolveProjectDir(typeof flags.project === "string" ? flags.project : undefined);
+  T = spec.msg(spec.projectLang(projectDir)).evals;
+  if (!pos[0]) {
+    console.error(T.usage);
     process.exit(2);
   }
-  const projectDir = path.resolve(flags.project || process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || process.cwd());
-  const dir = path.join(spec.specsRoot(projectDir), spec.slugify(slug));
+  // The feature folder is resolved like every other operation (transliterated + pre-1.11 legacy slugs,
+  // reserved names refused) — never path.join(specsRoot, slugify(name)).
+  const feat = spec.existingFeature(projectDir, pos[0]);
+  if (!feat.ok) {
+    console.error(feat.error);
+    process.exit(2);
+  }
+  const slug = feat.slug;
+  const dir = feat.dir;
+  T = spec.msg(spec.featureLang(projectDir, slug)).evals;
   const evalsDir = path.join(dir, "evals");
   if (!fs.existsSync(evalsDir)) {
-    console.error(`No evals/ dir for '${spec.slugify(slug)}' at ${evalsDir}`);
+    console.error(T.noEvalsDir(slug, evalsDir));
     process.exit(2);
   }
 
-  const model = flags.model || DEFAULT_MODEL;
-  const hasKey = !!process.env.ANTHROPIC_API_KEY;
-  if (flags["require-live"] && !hasKey && !flags["dry-run"]) {
-    console.error("eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.");
+  // --max-items: an integer >= 1 (the CLI's rule for --cap / --max). parseInt read a bare flag or "abc" as NaN and "0" /
+  // "-5" as themselves — slice(0, NaN | 0 | -5) graded nothing, and 0/0 scored 100%: every set "passed" (exit 0) and
+  // --set-baseline wrote a 100% baseline. Refused before anything runs.
+  let maxItems = 200;
+  if (flags["max-items"] !== undefined) {
+    const v = String(flags["max-items"]).trim();
+    if (!(/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1)) {
+      const A = spec.msg(spec.featureLang(projectDir, slug)).args;
+      console.error(A.invalid(A.item("--max-items", A.type.integer + " " + A.atLeast(1), JSON.stringify(flags["max-items"] === true ? "" : String(flags["max-items"])))));
+      process.exit(2);
+    }
+    maxItems = Number(v);
+  }
+  // --dry-run / --set-baseline / --require-live: true|false (1/0, yes/no, on/off) or a usage error, before anything runs.
+  const badBool = badBoolFlag(flags);
+  if (badBool) {
+    const A = spec.msg(spec.featureLang(projectDir, slug)).args;
+    console.error(A.invalid(A.item("--" + badBool, A.type.boolean, JSON.stringify(flags[badBool]))));
     process.exit(2);
   }
-  const dryRun = !!flags["dry-run"] || !hasKey;
+  const on = (k) => flags[k] === true;
+
+  const model = flags.model || DEFAULT_MODEL;
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  if (on("require-live") && !hasKey && !on("dry-run")) {
+    console.error(T.requireLive);
+    process.exit(2);
+  }
+  const dryRun = on("dry-run") || !hasKey;
   const doJudge = !dryRun;
 
   // System prompt
   const promptFile = latestPrompt(path.join(dir, "prompts"), flags.prompt);
   const system = promptFile ? systemFromPrompt(fs.readFileSync(promptFile, "utf8")) : "";
 
-  // Thresholds
-  let thresholds = { ...DEFAULT_THRESHOLDS };
-  try {
-    Object.assign(thresholds, readJson(path.join(evalsDir, "thresholds.json")));
-  } catch {}
-
   const setNames = ["golden", "adversarial", "regression"];
-  console.log(`dev-spec-driven evals — feature '${spec.slugify(slug)}'`);
-  console.log(`  model: ${model}   prompt: ${promptFile ? path.basename(promptFile) : "(none)"}   mode: ${dryRun ? "DRY-RUN (no model calls)" : "LIVE"}`);
-  if (dryRun && !hasKey) console.log("  (no ANTHROPIC_API_KEY set — running dry. Set it to do a live run.)");
+  console.log(T.header(slug));
+  console.log(T.config(model, promptFile ? path.basename(promptFile) : T.none, dryRun ? T.modeDry : T.modeLive));
+  if (dryRun && !hasKey) console.log(T.noKey);
   console.log("");
 
-  const report = { feature: spec.slugify(slug), model, sets: {}, totalCost: { inTok: 0, outTok: 0 } };
+  const report = { feature: slug, model, sets: {}, totalCost: { inTok: 0, outTok: 0 } };
   let belowThreshold = false;
+  let invalid = false; // a set, an item or thresholds.json that can't be run as written — found BEFORE any model call
 
+  // Thresholds: evals/thresholds.json overrides the defaults per set; one that doesn't parse, or gives a set a value that
+  // is not a number in [0, 1], is invalid (it used to be ignored silently). Other keys (a "note") are left alone.
+  const thresholds = { ...DEFAULT_THRESHOLDS };
+  const thrFile = path.join(evalsDir, "thresholds.json");
+  if (fs.existsSync(thrFile)) {
+    let thr;
+    try {
+      thr = readJson(thrFile);
+    } catch (e) {
+      console.log(T.badThresholds(e.message));
+      invalid = true;
+    }
+    if (thr !== undefined) {
+      const bad = !thr || typeof thr !== "object" || Array.isArray(thr) ||
+        setNames.some((s) => thr[s] !== undefined && !(typeof thr[s] === "number" && thr[s] >= 0 && thr[s] <= 1));
+      if (bad) { console.log(T.badThresholds(T.thresholdsShape)); invalid = true; }
+      else for (const s of setNames) if (thr[s] !== undefined) thresholds[s] = thr[s];
+    }
+  }
+
+  // Load + validate every set first: a live run starts only when all of them are valid (no tokens spent on a broken set).
+  const toRun = [];
   for (const setName of setNames) {
     const file = path.join(evalsDir, setName + ".json");
     if (!fs.existsSync(file)) continue;
@@ -186,20 +296,44 @@ async function main() {
     try {
       set = readJson(file);
     } catch (e) {
-      console.log(`  ✗ ${setName}.json — invalid JSON: ${e.message}`);
-      belowThreshold = true;
+      console.log(T.badJson(setName, e.message));
+      invalid = true;
+      continue;
+    }
+    // Valid JSON of the wrong shape (null, an array, "items": {…}) is an invalid set, not a crash.
+    if (!set || typeof set !== "object" || Array.isArray(set) || (set.items !== undefined && !Array.isArray(set.items))) {
+      console.log(T.badItems(setName));
+      invalid = true;
       continue;
     }
     const allItems = set.items || [];
-    const maxItems = flags["max-items"] ? parseInt(flags["max-items"], 10) : 200;
+    // A set with nothing to grade can't pass: 0/0 used to score 100% (and a baseline of 1). Add items or delete the file.
+    if (!allItems.length) {
+      console.log(T.emptySet(setName));
+      invalid = true;
+      continue;
+    }
+    const problems = setProblems(setName, allItems); // every item, also past --max-items: the set is what's on disk
+    if (problems.length) {
+      problems.forEach((l) => console.log(l));
+      invalid = true;
+      continue;
+    }
     const items = allItems.slice(0, maxItems);
-    if (allItems.length > items.length) console.log(`  ⚠ ${setName}: capped at ${maxItems}/${allItems.length} items (raise with --max-items=N)`);
+    if (allItems.length > items.length) console.log(T.capped(setName, maxItems, allItems.length));
     if (dryRun) {
-      console.log(`  • ${setName}: ${items.length} item(s) — would run ${items.map((i) => i.expect && i.expect.type).join(", ")}`);
+      console.log(T.wouldRun(setName, items.length, items.map((i) => i.expect.type).join(", ")));
       report.sets[setName] = { items: items.length, dryRun: true };
       continue;
     }
+    toRun.push({ setName, set, items });
+  }
+  if (invalid) {
+    console.log(dryRun ? T.dryInvalid : T.liveInvalid);
+    process.exit(1);
+  }
 
+  for (const { setName, set, items } of toRun) {
     let pass = 0;
     const failures = [];
     for (const item of items) {
@@ -214,13 +348,13 @@ async function main() {
         failures.push({ id: item.id, error: e.message });
       }
     }
-    const score = items.length ? pass / items.length : 1;
+    const score = items.length ? pass / items.length : 0; // never reached with 0 items (an empty set is invalid above)
     const thr = thresholds[setName] != null ? thresholds[setName] : 0;
     const okThr = score >= thr;
     if (!okThr) belowThreshold = true;
     report.sets[setName] = { items: items.length, pass, score: +score.toFixed(3), threshold: thr, ok: okThr, failures };
-    console.log(`  ${okThr ? "✓" : "✗"} ${setName}: ${pass}/${items.length} = ${(score * 100).toFixed(1)}% (threshold ${(thr * 100).toFixed(0)}%)`);
-    failures.slice(0, 5).forEach((f) => console.log(`      - ${f.id}: ${f.error ? "ERROR " + f.error : (f.note || "fail") + (f.sample ? " | resp: " + f.sample : "")}`));
+    console.log(T.score(okThr, setName, pass, items.length, (score * 100).toFixed(1), (thr * 100).toFixed(0)));
+    failures.slice(0, 5).forEach((f) => console.log(T.failure(f.id, f.error ? T.error(f.error) : (f.note || T.fail) + (f.sample ? T.resp(f.sample) : ""))));
   }
 
   // Baseline compare / set
@@ -230,39 +364,35 @@ async function main() {
     try {
       baseline = readJson(baselineFile);
     } catch {}
-    if (baseline && baseline.sets) {
-      console.log("\n  vs baseline:");
+    if (baseline && baseline.sets && typeof baseline.sets === "object") {
+      console.log(T.vsBaseline);
       for (const s of Object.keys(report.sets)) {
         const cur = report.sets[s].score;
         const base = baseline.sets[s] && baseline.sets[s].score;
         if (base != null && cur != null) {
           const delta = +(cur - base).toFixed(3);
-          console.log(`    ${s}: ${(base * 100).toFixed(1)}% → ${(cur * 100).toFixed(1)}% (${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(1)}pp)`);
+          console.log(T.delta(s, (base * 100).toFixed(1), (cur * 100).toFixed(1), delta >= 0 ? "+" : "", (delta * 100).toFixed(1)));
         }
       }
     }
-    if (flags["set-baseline"]) {
+    if (on("set-baseline")) {
       fs.writeFileSync(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
-      console.log(`\n  baseline written → ${path.relative(projectDir, baselineFile)}`);
+      console.log(T.baselineWritten(path.relative(projectDir, baselineFile)));
     }
     if (report.totalCost.inTok || report.totalCost.outTok) {
-      console.log(`\n  tokens: ${report.totalCost.inTok} in / ${report.totalCost.outTok} out`);
+      console.log(T.tokens(report.totalCost.inTok, report.totalCost.outTok));
     }
   }
 
-  if (dryRun) {
-    if (belowThreshold) {
-      console.log("\nDry run found invalid eval set(s) — fix them before a live run.");
-      process.exit(1);
-    }
-    console.log("\nDry run complete — sets are valid. Set ANTHROPIC_API_KEY and re-run for live scores.");
+  if (dryRun) { // an invalid set already exited 1 above
+    console.log(T.dryOk);
     process.exit(0);
   }
-  console.log(`\nVerdict: ${belowThreshold ? "BELOW THRESHOLD ✗" : "all sets pass ✓"}`);
+  console.log(T.verdict(belowThreshold));
   process.exit(belowThreshold ? 1 : 0);
 }
 
 main().catch((e) => {
-  console.error("eval harness error:", e.message);
+  console.error(T.crashed(e.message));
   process.exit(2);
 });

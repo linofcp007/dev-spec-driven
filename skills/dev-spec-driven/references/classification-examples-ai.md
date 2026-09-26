@@ -1,5 +1,10 @@
 # AI Classification Matrix: Worked Examples
 
+> **Vocabulary map.** These examples use the older *Fast AI Path / Rigor AI Path* names. Read
+> **Rigor AI Path** as **Spec mode + `+ai`** (plus `+tdd` / `+saas` when their signals fire too), and
+> **Fast AI Path** as **Vibe or Bounded mode**, or Spec mode with `core` only — or `+ai` with a minimal
+> eval set, which `classification-matrix.md` allows for internal, advisory, low-volume assists.
+
 This document calibrates the Fast AI Path vs Rigor AI Path decision with 12 worked
 examples across common AI product patterns.
 

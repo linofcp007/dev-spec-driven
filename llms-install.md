@@ -17,7 +17,7 @@ no API key.
 2. **(Optional) Verify it runs** — no dependencies required:
 
    ```bash
-   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # 181 assertions, exits 0 on success
+   node /ABSOLUTE/PATH/dev-spec-driven/mcp/test.js   # ends `N passed, 0 failed`, exits 0 on success
    ```
 
 3. **Register the server** with your MCP client. For **Cline**, add this to
@@ -40,10 +40,10 @@ no API key.
 
    ```bash
    node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config generic
-   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | all
+   # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
-4. **Reload the MCP client.** The server advertises **23 tools** over stdio — `spec_init`,
+4. **Reload the MCP client.** The server advertises **30 tools** over stdio — `spec_init`,
    `spec_classify`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`, `spec_roadmap`,
    and more — for spec-driven development (EARS requirements → design → traceable tasks →
    approval-gated execution).
@@ -53,3 +53,6 @@ no API key.
 - **Requirements:** Node.js ≥ 18. Nothing to install — zero runtime dependencies.
 - **Privacy:** every operation is a local file op on `.specs/`; the server never reaches the network.
 - **Transport:** stdio, newline-delimited JSON-RPC 2.0.
+- **Updating:** `git pull` the clone and restart the client; in a project that already has a `.specs/`, call
+  `spec_upgrade` (read-only audit against the new rules), then `spec_upgrade {apply: true}` once the user agrees
+  (CLI: `dev-spec upgrade [--apply]`).

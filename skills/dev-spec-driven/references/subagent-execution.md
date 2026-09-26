@@ -24,9 +24,9 @@ when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the us
 
 ## Preconditions (check before Task 1)
 
-1. `spec_doctor <feature>` → `readyToAdvance: true` and the **tasks** phase approved (`gatesOk`). On
-   +tdd, Phase 4 (failing tests) is approved too — implementers make planned tests green, they don't
-   write the test plan.
+1. `spec_doctor <feature>` → `readyToAdvance: true` and every gate approved (`gatesOk` — the **tasks** phase
+   and, on +tdd / +ai, Phase 4 `tests`: the failing tests are written and approved — implementers make planned
+   tests green, they don't write the test plan).
 2. **Not on the default branch** without the user's explicit consent — create a feature branch (or a
    worktree) first.
 3. `trace_check <feature>` passes — phantom AC/T references become `unresolved` in every brief and
@@ -79,7 +79,9 @@ test is not yours to rule on — see "Where autonomy stops".
 
 ### 1. Brief
 
-`spec_task_brief {name, number: N, write: true}` → paths only (the brief never enters your context).
+`spec_task_brief {name, number: N, write: true}` → the paths plus the task's identifiers (number and
+text, `loop`, `inlineOnly`, its `_Verify:_` command, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
+bugfix `gated`), never the spec text the brief quotes: the brief never enters your context.
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 
@@ -162,7 +164,8 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
 
 1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next open task
    plus the following open `[P]` tasks **of the same section** whose `_Implements:_` files are declared
-   and disjoint (max 3 by default). No `_Implements:_`, a shared file, a non-`[P]` task or a section
+   and disjoint (max 3 by default). No `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js`
+   are one file; a folder shares every file under it), a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
 2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
    worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own
@@ -219,16 +222,45 @@ list, ONE scoped re-review, then adjudicate residuals as in the breaker. No seco
 load-bearing findings go to the human.
 
 Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
-fails, open tasks, tasks without evidence, pending approvals), the track-gated checks to run fresh (full
-suite, load test, observability, cost/safety) and writes a merge summary built from the spec chain to
-`.execution/merge-summary.md`. **Collect every `Ruling:` line from the ledger into your final message**
+fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, template
+placeholders, a bugfix's missing root cause) and non-blocking warnings, the track-gated checks to run fresh
+(full suite, load test, observability, cost/safety), writes a merge summary built from the spec chain to
+`.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
 (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history is the record now.
 
+## Converge mode (whole feature, AC by AC)
+
+`/spec-converge` asks a different question from the task loop: not "is this diff right?" but "does the code, as it
+stands, deliver every AC?". Use it when implementation drifted from the plan, after a review found follow-up
+work, or before `/spec-finish` when every task is ticked but you doubt the feature is complete. It works on any
+feature, inline-executed or not.
+
+1. **Gather.** `spec_status` and `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
+   planned tests missing from the code).
+2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
+   security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the
+   `trace_check` result (its gaps and `code` block, pasted) and the source roots to inspect. The reviewer is
+   read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then
+   returns — in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
+3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
+   needs a different AC, design decision or test expectation is a **spec change** — back to its phase
+   (`/spec-impact` after the edit), never a task.
+4. **Human approves** the list (edited as needed) → `spec_append_tasks {name, tasks: [{text, requirements,
+   implements, verify, story, parallel}]}`: appended under "Phase: Convergence", numbered after the highest task,
+   existing tasks untouched, an unknown AC ID refuses the whole call. `needsReapproval` → `trace_check`, then
+   re-approve the **tasks** phase.
+5. Execute the new tasks with the normal loop (inline or per-task subagents), each with its evidence.
+
+**No subagent tool?** Run the same AC-by-AC checklist inline and write the same per-AC table before proposing
+tasks. Either way, never append a task the human hasn't approved.
+
 ## Model selection
 
-Always pass `model` explicitly — an omitted model inherits the session's (usually the most expensive).
+Pass `model` explicitly on every dispatch. The three plugin agents declare `model: sonnet` in their
+frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and reviewer work,
+wrong for the cheap transcription tasks and the final review below.
 
 | Role | Tier (Claude Code alias) |
 |---|---|

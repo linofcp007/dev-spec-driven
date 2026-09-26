@@ -38,9 +38,10 @@ function stagedContent(relPath) {
 }
 
 const root = (git(["rev-parse", "--show-toplevel"]) || process.cwd()).trim();
-const files = (git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]) || "")
-  .split(/\r?\n/)
-  .map((s) => s.trim().replace(/\\/g, "/"))
+// NUL-separated and unquoted. With the default core.quotePath git printed "servi\303\247os/.specs/…" (in
+// quotes) for any non-ASCII path, which never matched ".specs/" — accented paths were silently skipped.
+const files = (git(["-c", "core.quotePath=false", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]) || "")
+  .split("\0")
   .filter(Boolean);
 
 const P = spec.msg(spec.projectLang(root)).precommit; // messages in the project's language
@@ -69,7 +70,17 @@ for (const f of files) {
         out.push(PF.earsErrors(f, errs.length));
         errs.slice(0, 5).forEach((i) => out.push(`    L${i.line} ${i.msg}`));
       } else {
-        out.push(PF.earsClean(f, r.summary.criteriaDetected));
+        // Never "clean" while warnings or template placeholders remain (the PostToolUse hook's rule) — listed, not blocking.
+        // Placeholders in the STAGED text, judged like the gates do (a removed track's criteria are inactive).
+        const warns = r.issues.filter((i) => i.severity === "warn");
+        const phRep = spec.featurePlaceholders(featureProject, feature, "requirements.md", text);
+        const ph = phRep ? phRep.items : spec.placeholderReport(text);
+        if (warns.length || ph.length) {
+          out.push(PF.earsWarnings(f, r.summary.criteriaDetected, warns.length, ph.length));
+          warns.slice(0, 3).forEach((i) => out.push(`    L${i.line} ${i.msg}`));
+        } else {
+          out.push(PF.earsClean(f, r.summary.criteriaDetected));
+        }
       }
     }
   }
@@ -88,13 +99,14 @@ for (const f of files) {
     if (fs.existsSync(path.join(root, featureRel, "tests"))) fs.mkdirSync(path.join(dir, "tests"), { recursive: true }); // +tdd detection
     const tr = spec.traceCheck(mirror, feature);
     if (tr.ok) {
-      const phantom = tr.phantomAcsInTasks.length + (tr.phantomTestsInTasks ? tr.phantomTestsInTasks.length : 0);
-      if (phantom) {
-        blocking += phantom;
-        out.push(PF.phantom(f, phantom));
+      // Name the IDs, not just a count — the author has to find the typo.
+      const phantom = [...tr.phantomAcsInTasks, ...(tr.phantomTestsInTasks || [])];
+      if (phantom.length) {
+        blocking += phantom.length;
+        out.push(PF.phantom(f, phantom.length, phantom.join(", ")));
       }
-      if (tr.uncoveredByTasks.length) out.push(PF.uncovered(f, tr.uncoveredByTasks.length));
-      if (!phantom && !tr.uncoveredByTasks.length) out.push(PF.traceClean(f, tr.totalAcs));
+      if (tr.uncoveredByTasks.length) out.push(PF.uncovered(f, tr.uncoveredByTasks.length, tr.uncoveredByTasks.join(", ")));
+      if (!phantom.length && !tr.uncoveredByTasks.length) out.push(PF.traceClean(f, tr.totalAcs));
     }
   }
 }

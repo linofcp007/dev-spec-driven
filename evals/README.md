@@ -3,19 +3,22 @@
 Behaviour tests for the plugin itself, run with Claude Code's `claude plugin eval` — the "test the
 skill under pressure" idea from obra/superpowers' *writing-skills*. They check that the workflow
 **triggers** on planning and bug-fix requests in English, Portuguese and Spanish, and **stays silent** on
-an unrelated question. These are not the `+ai` feature evals of a user's project (those live in
+an unrelated question and on near-misses that only share a keyword (`requirements.txt`, `eval()`, one LLM
+call). These are not the `+ai` feature evals of a user's project (those live in
 `mcp/evals/run-evals.js`).
 
 | Case | Expects |
 |---|---|
 | `trigger-spec-en` / `-pt` / `-es` | a `dev-spec-driven:*` skill or command fires on "spec this before coding" |
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
+| `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
+| `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call — trivial edits the description excludes |
 
 ## Run (local only — no CI, by design)
 
 ```bash
-claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 3
+claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5
 claude plugin eval . --ablation none --tag pt --trust-plugin --no-publish        # one language
 claude plugin eval . --ablation none --json results.json --trust-plugin --no-publish
 ```
@@ -30,7 +33,8 @@ this suite is a triggering check, so without the flag nothing would be scored.
 
 Each case runs 3 times in a throwaway sandbox with only the plugin under test (the target path) loaded;
 it uses your own Claude credentials and costs tokens (`--max-cost-usd` caps it). Reference run
-(2026-09-24, CLI 2.1.282, default model, `-j 3`): **5/5 cases at 1.0 (15 runs), $1.71**. Exit code 0 = every case
+(2026-09-24, CLI 2.1.282, default model, `-j 3`, before the near-miss cases were added): **5/5 cases at
+1.0 (15 runs), $1.71**. Exit code 0 = every case
 at the threshold (default: all runs pass). Results land in `evals/results/` (git-ignored).
 
 Case layout — `<case>/prompt.md` (YAML frontmatter + the prompt) and `<case>/graders/*.md` — matches what
@@ -47,7 +51,7 @@ Meanwhile, the copy bundled with the VS Code extension works:
 ```powershell
 $claude = (Get-ChildItem "$env:USERPROFILE\.vscode\extensions\anthropic.claude-code-*\resources\native-binary\claude.exe" |
   Sort-Object LastWriteTime | Select-Object -Last 1).FullName
-& $claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 3
+& $claude plugin eval . --ablation none --trust-plugin --no-publish --max-cost-usd 5
 ```
 
 When you change the skill's `description`, add a case for any new trigger phrase before relying on it.

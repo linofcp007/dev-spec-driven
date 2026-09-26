@@ -1,25 +1,76 @@
 {
   "approvals": {
     "classification": {
-      "at": "2026-06-05T19:17:26.839Z",
-      "by": "example"
+      "at": "2026-09-25T17:44:18.317Z",
+      "by": "example",
+      "fingerprint": "ef5de0a8359666887889356cc58ed6898fd6de58"
     },
     "requirements": {
-      "at": "2026-06-05T19:17:26.864Z",
-      "by": "example"
+      "at": "2026-09-25T17:44:18.499Z",
+      "by": "example",
+      "fingerprint": "3d88f1483031449dc3d81311b64b11d7a1f2fa28"
     },
     "design": {
-      "at": "2026-06-05T19:17:26.873Z",
-      "by": "example"
+      "at": "2026-09-25T17:44:18.663Z",
+      "by": "example",
+      "fingerprint": "c66d4c27207eb81fe98230dc170420f60ae088e9"
     },
     "test-plan": {
-      "at": "2026-06-05T19:17:26.881Z",
+      "at": "2026-09-25T17:44:18.837Z",
+      "by": "example",
+      "fingerprint": "0788459c7a5c9f7d2c2f7dae3862e8e709f1d6fa"
+    },
+    "tests": {
+      "at": "2026-09-25T17:44:19.012Z",
       "by": "example"
     },
     "tasks": {
-      "at": "2026-06-05T19:17:26.890Z",
-      "by": "example"
+      "at": "2026-09-25T17:44:19.195Z",
+      "by": "example",
+      "fingerprint": "75158691140bfc47629f57fd2b27b8ae738d3d0c"
     }
   },
+  "approvalHistory": [
+    {
+      "phase": "classification",
+      "at": "2026-09-25T17:44:18.317Z",
+      "by": "example",
+      "fingerprint": "ef5de0a8359666887889356cc58ed6898fd6de58",
+      "snapshot": ".history/classification@1.md"
+    },
+    {
+      "phase": "requirements",
+      "at": "2026-09-25T17:44:18.499Z",
+      "by": "example",
+      "fingerprint": "3d88f1483031449dc3d81311b64b11d7a1f2fa28",
+      "snapshot": ".history/requirements@1.md"
+    },
+    {
+      "phase": "design",
+      "at": "2026-09-25T17:44:18.663Z",
+      "by": "example",
+      "fingerprint": "c66d4c27207eb81fe98230dc170420f60ae088e9",
+      "snapshot": ".history/design@1.md"
+    },
+    {
+      "phase": "test-plan",
+      "at": "2026-09-25T17:44:18.837Z",
+      "by": "example",
+      "fingerprint": "0788459c7a5c9f7d2c2f7dae3862e8e709f1d6fa",
+      "snapshot": ".history/test-plan@1.md"
+    },
+    {
+      "phase": "tests",
+      "at": "2026-09-25T17:44:19.012Z",
+      "by": "example"
+    },
+    {
+      "phase": "tasks",
+      "at": "2026-09-25T17:44:19.195Z",
+      "by": "example",
+      "fingerprint": "75158691140bfc47629f57fd2b27b8ae738d3d0c",
+      "snapshot": ".history/tasks@1.md"
+    }
+  ],
   "lastApprovedPhase": "tasks"
 }

@@ -4,7 +4,9 @@
 for a defect: `bug.md` (reproduction · expected vs actual · **root cause** · fix · regression test), a
 one-story `requirements.md` whose criterion is the corrected behaviour as `IF … THEN THE SYSTEM SHALL …`,
 a regression test plan (`T-01` reproduces the bug, `T-02` guards the neighbouring behaviour) and a
-fixed task order. It sits between Vibe (no discipline) and a full Spec (too heavy for one defect).
+fixed task order. It sits between Vibe (no discipline) and a full Spec (too heavy for one defect), and
+it is not Bounded mode either: Bounded (a short design in chat for a contained change to an existing flow)
+has no reproduction, root cause or regression test — a real defect needs all three.
 Adapted from the `systematic-debugging` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
 ## The iron law
@@ -12,6 +14,24 @@ Adapted from the `systematic-debugging` skill of [obra/superpowers](https://gith
 **No fix before the root cause is known.** `spec_doctor` fails the `root-cause` check until
 `bug.md → Root Cause` holds real content — the cause *with evidence*, never "probably". A symptom fix
 that makes the error go away without explaining it is a new bug waiting.
+
+The engine enforces it at every step, not only in doctor:
+
+- **Approvals.** A bugfix has no design of its own: `bug.md` stands in for it. The **requirements** gate checks
+  `bug.md → Reproduction`; the **design** approval signs off `bug.md` (and any track sections in `design.md`) and
+  is refused until `Root Cause` is filled. It is pending like any other gate (`pendingGates` looks for `bug.md`,
+  not a `design.md`), so `spec_next_action` asks for it, `gatesOk` counts it and `spec_finish` blocks without it.
+  Its snapshot and fingerprint are `bug.md`'s, so an edit to the root cause after approval shows up as
+  `changed-since-approval` and in `spec_impact --phase design` (sections keyed `bug.md: Root Cause`). A bugfix has
+  no Phase 4 (`tests`) gate: its failing regression test is task 3.
+- **Execution gate.** While `Root Cause` is unfilled, `spec_complete_task` (and `dev-spec done --run`, which then
+  runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
+  test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the
+  first task naming `bug.md` and the root cause that carries no `_Makes green:_` / `_Verify:_` (the scaffold's
+  task 2); without one, only the first task can be completed. That task itself can be ticked — it is the one that
+  writes the section — but while `Root Cause` is still empty the result carries `rootCausePending: true` and a note,
+  and a later task's refusal says the section is still empty (never "do task 2 first" for a task already ticked).
+- **Finish.** `spec_finish` blocks on an unwritten root cause; the merge summary quotes the Root Cause and Fix.
 
 ## The four phases (= the scaffolded tasks)
 

@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 30 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 35 commands, the 3 agents, and
-the `spec-driven` MCP server load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 44 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (30 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell
@@ -45,17 +45,19 @@ the `spec-driven` MCP server load for that session.
 
 ---
 
-## Option C — Make it always-on for this user
+## Option C — Always-on from your local clone
 
-Copy the plugin into your user plugins directory so it loads automatically:
+Register the clone itself as a local marketplace, then install from it — it loads in every session
+(after pulling new commits, refresh it with `/plugin marketplace update dev-spec-driven-marketplace`):
 
-```powershell
-$dest = "$env:USERPROFILE\.claude\plugins\dev-spec-driven"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item -Recurse -Force "$plugin\*" $dest
+```text
+/plugin marketplace add <path-to-your-clone>
+/plugin install dev-spec-driven@dev-spec-driven-marketplace
 ```
 
-(The GitHub marketplace flow in Option A is the supported path and is recommended over manual copying.)
+(`dev-spec-driven-marketplace` is the `name` in `.claude-plugin/marketplace.json`.) Don't copy the folder
+into `~/.claude/plugins/` by hand: that directory is Claude Code's marketplace cache, not an auto-load
+location, so a manual copy never loads.
 
 ---
 
@@ -67,7 +69,8 @@ You don't need Claude to test the server — run the bundled smoke test:
 node "$plugin\mcp\test.js"
 ```
 
-Expected tail: `181 passed, 0 failed`. (And `node "$plugin\cli\test-cli.js"` → `53 passed, 0 failed`.)
+Expected tail: `N passed, 0 failed` and exit code 0 — N is the assertion count, which grows with every release
+(the exact figure is in CHANGELOG.md); what matters is `0 failed`. The same goes for `node "$plugin\cli\test-cli.js"`.
 
 To watch the raw protocol, you can pipe a request in by hand:
 
@@ -85,16 +88,23 @@ The server resolves the project directory in this order:
 3. the process working directory
 
 Every tool also accepts an explicit `projectDir` argument if you ever need to override it. It writes
-to `.specs/` in that project, and **never overwrites** existing files.
+to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must be a
+local folder: a network path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
+server at another machine. A project that lives on a share can still be the server's working directory
+(or `SPEC_PROJECT_DIR`) — that is your own configuration, not a tool argument.
 
 ---
 
 ## Validate the plugin manifest
 
 ```powershell
-claude plugin validate "$plugin"
+claude plugin validate "$plugin\.claude-plugin\plugin.json"   # the plugin (manifest + its components)
+claude plugin validate "$plugin"                               # the marketplace (.claude-plugin/marketplace.json)
 claude plugin details dev-spec-driven
 ```
+
+On the repo root, `validate` checks only the marketplace file (it is present), not the plugin itself —
+validate the plugin through its `plugin.json`.
 
 ---
 
@@ -102,8 +112,23 @@ claude plugin details dev-spec-driven
 
 **Hooks** load automatically with the plugin from the standard `hooks/hooks.json` (the manifest must
 NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): saving a
-`requirements.md` lints EARS, saving a `tasks.md` checks traceability, and session start prints
-feature status. To turn them off, disable the plugin (or empty `hooks/hooks.json`).
+`requirements.md` lints EARS (and reports template placeholders), saving a `tasks.md` checks
+traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
+prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (and one
+line while `.specs/` comes from an older dev-spec — see *Updating*). To
+turn them off, disable the plugin (or empty `hooks/hooks.json`).
+
+**Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
+it on for a project, asks for confirmation before Claude writes or edits a code file outside `.specs/`
+while no feature has approved, unfinished tasks. It stays silent when the guard is off and never blocks
+on its own errors:
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-guard, or spec_init {guard: true}; --guard off to disable
+```
+
+The setting lives in `.specs/roadmap.json` (`meta.guard`). Only Claude Code runs the hook; other tools
+store the setting but don't enforce it.
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the
@@ -131,9 +156,33 @@ or generate a config instantly (prints the correct absolute path for your machin
 
 ```powershell
 node "$plugin\cli\dev-spec.js" mcp-config all
+node "$plugin\cli\dev-spec.js" rules cursor    # the workflow rule file for your project (also windsurf|copilot|gemini|agents)
 ```
 
+To save a rule file into your project, use the recipe in INTEGRATIONS.md → *Rule files for your own
+project*. In Windows PowerShell 5.1, a plain `>` writes UTF-16.
+
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
+
+## Updating
+
+1. **Update the plugin.** Options A and C: `/plugin marketplace update dev-spec-driven-marketplace` (for C, `git pull`
+   in the clone first), then restart Claude Code. Option B or another tool: `git pull` in the clone, then restart the
+   session / MCP client.
+2. **Upgrade each project that already has a `.specs/`.** The session-start hook prints one line while `.specs/`
+   comes from an older version (`roadmap.json → meta.specVersion` absent or older than the plugin). Run
+   `/spec-upgrade` in Claude Code, or from any shell:
+
+   ```powershell
+   node "$plugin\cli\dev-spec.js" upgrade           # the audit, read-only: every active feature against the new rules
+   node "$plugin\cli\dev-spec.js" upgrade --apply   # the safe migrations + the checklist .specs/UPGRADE.md
+   ```
+
+   The audit groups the features (blocked · needs attention · ok) with their status, what the current rules flag,
+   the next step and the review to run (the `spec-critic` agent for specs not implemented yet, the converge pass for
+   half-done ones). `--apply` saves inferred tracks, gives each pre-1.13 approval a history baseline when its file
+   still matches what was approved, completes `.specs/.gitignore` and stamps `meta.specVersion`. It never edits a
+   spec, approves, ticks or deletes anything, and a second run changes nothing.
 
 ## Uninstall
 
