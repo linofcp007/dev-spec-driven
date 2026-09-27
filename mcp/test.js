@@ -9901,6 +9901,16 @@ function endRun() {
     const rmMd = S.roadmapReport(cr, { write: true }) && fs.readFileSync(path.join(cr, ".specs", "ROADMAP.md"), "utf8");
     ok((rmMd.match(/^## ⚠/gm) || []).length === 1 && /\*\*search later\*\* — soon ## ⚠ Needs attention x/.test(rmMd),
       "full review C6: backlog name / note are one line (folded on add and when rendered) — no heading injected into ROADMAP.md (got " + JSON.stringify((rmMd.match(/^.*search.*$/m) || [])[0]) + ")");
+    // C7: the export shows a stored entity reference as its character (decisions.md keeps "<!--" as "&lt;!--"), never a
+    // literal "&lt;"; a link loses its brackets only in the <…> form (a trailing '>' belongs to the URL).
+    const c7 = mk("Esc view");
+    S.decide(cr, "esc-view", { title: "Comments", decision: "keep <!-- as text" });
+    const rq7 = path.join(c7.dir, "requirements.md");
+    fs.writeFileSync(rq7, fs.readFileSync(rq7, "utf8").replace(/(## Summary\s*\n)/, "$1See [a](https://a.b/c>) and [b](<https://a.b/d>).\n\n"));
+    const ex7 = S.exportSpecs(cr, { name: "esc-view" }).content || "";
+    ok(/keep &lt;!-- as text/.test(ex7) && !/&amp;lt;!--/.test(ex7) && ex7.includes('href="https://a.b/c&gt;"') && ex7.includes('href="https://a.b/d"'),
+      "full review C7: export renders decisions.md's '&lt;!--' as '<!--' (no double escape); only a <…> link target loses its brackets (got " +
+      JSON.stringify([(ex7.match(/keep [^<]{0,30}/) || [])[0], (ex7.match(/href="https:\/\/a\.b\/[^"]*"/g) || [])]) + ")");
   }
 
   // 1.14 full review (Ga) — evidence, project checks, CLI runs.

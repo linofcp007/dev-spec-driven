@@ -11499,9 +11499,12 @@ function expInline(text) {
   // "[a [b] c](url)" never matched as a whole either (its first ']' is no "](").
   s = s.replace(new RegExp("!\\[([^\\[\\]]*)\\]\\(" + target + "\\)", "g"), (m, alt) => alt);
   s = s.replace(new RegExp("\\[([^\\[\\]]+)\\]\\(" + target + "\\)", "g"), (m, label, url) => {
-    const u = url.replace(/^<|>$/g, "");
+    const u = /^<.*>$/.test(url) ? url.slice(1, -1) : url; // only the <…> form loses its brackets (a trailing '>' is the URL's)
     return /^(?:https?:\/\/|mailto:)/i.test(u) ? put(`<a href="${htmlEsc(u)}" rel="noopener noreferrer">`) + label + put("</a>") : label;
   });
+  // An entity reference is text in markdown (`&lt;!--` — how spec_decide stores a comment opener — reads "<!--"): kept as
+  // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup.
+  s = s.replace(/&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
   s = htmlEsc(s)
     .replace(/\*\*(?=\S)([\s\S]{0,2000}?\S)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]{0,2000}?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
