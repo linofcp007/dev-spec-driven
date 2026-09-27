@@ -7410,11 +7410,11 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const target = matches.filter((h) => !off.has(h.i)).pop(); // the latest round, when the heading repeats
   if (!target && matches.length) return { ok: false, error: A.inactiveHeading(matches[0].text, "+" + off.get(matches[0].i)) };
 
-  // Numbered after every number in use — tasks.md's, and any evidence record a removed task left behind (a new
-  // task must never inherit an old run).
+  // Numbered after every number in use — tasks.md's, and any evidence record or tick time a removed task left behind (a
+  // new task must never inherit an old run, nor an old completion time the forecasts would count).
   const before = taskBlocks(raw);
-  const evKeys = Object.keys(isRecord(state.evidence) ? state.evidence : {}).filter((k) => /^\d+$/.test(k)).map(Number);
-  let n = Math.max(0, ...before.map((b) => b.number), ...evKeys);
+  const usedKeys = (o) => Object.keys(isRecord(o) ? o : {}).filter((k) => /^\d+$/.test(k)).map(Number);
+  let n = Math.max(0, ...before.map((b) => b.number), ...usedKeys(state.evidence), ...usedKeys(state.ticks));
   const numbered = items.map((t) => ({ ...t, number: ++n }));
   const taskLines = numbered.flatMap((t) => [`- [ ] ${t.number}. ${t.lineText}`, ...t.body.map((b) => "  - " + b)]);
   let at;
@@ -9110,8 +9110,10 @@ function roadmap(projectDir) {
 // Backlog — planned features that don't have a .specs/<feature>/ folder yet
 // ---------------------------------------------------------------------------
 
+// One line: a line break in a backlog name or note became markdown structure (a heading) in ROADMAP.md and the export.
+const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
 function addBacklog(projectDir, name, note) {
-  const nm = String(name || "").trim();
+  const nm = flatText(name);
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
   const r = withRoadmapLock(projectDir, () => addBacklogUnlocked(projectDir, nm, note));
   if (r.ok) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
@@ -9122,7 +9124,7 @@ function addBacklogUnlocked(projectDir, nm, note) {
   if (bad) return { ok: false, error: bad };
   const rm = readRoadmap(projectDir);
   rm.backlog = rm.backlog || [];
-  if (!rm.backlog.some((b) => b.name.toLowerCase() === nm.toLowerCase())) rm.backlog.push({ name: nm, note: String(note || "").trim() });
+  if (!rm.backlog.some((b) => b.name.toLowerCase() === nm.toLowerCase())) rm.backlog.push({ name: nm, note: flatText(note) });
   writeRoadmap(projectDir, rm);
   return { ok: true, backlog: rm.backlog };
 }
@@ -9332,7 +9334,7 @@ function renderRoadmapMd(projectDir, lang, data) {
   md += attention.length ? attention.map((a) => `- **${a.name}** — ${a.msg}`).join("\n") + "\n" : `_${t.nothingFlagged}_\n`;
 
   md += `\n## ${t.backlog}\n\n`;
-  md += rmv.backlog.length ? rmv.backlog.map((b) => `- [ ] **${b.name}**${b.note ? " — " + b.note : ""}`).join("\n") + "\n" : `_${t.backlogEmpty}_\n`;
+  md += rmv.backlog.length ? rmv.backlog.map((b) => `- [ ] **${flatText(b.name)}**${b.note ? " — " + flatText(b.note) : ""}`).join("\n") + "\n" : `_${t.backlogEmpty}_\n`;
   return md;
 }
 
@@ -10453,8 +10455,14 @@ function decide(projectDir, name, input) {
   } else {
     // Append only: the file's bytes stay as they are (BOM, line ends, a missing final newline) — the entry follows its line ends.
     const eol = /\r\n/.test(raw) ? "\r\n" : "\n";
-    const sep = /(?:^|\n)[ \t]*\r?\n$/.test(raw) ? "" : /\n$/.test(raw) ? eol : eol + eol;
-    out = raw + sep + lines.join(eol) + eol;
+    // A code block left open at the end (a snippet pasted by hand) would swallow the entry — every reader skips fenced
+    // lines, so it was written, unreadable, and its number handed out again. Close it first (appended; nothing rewritten).
+    const fst = { fence: null };
+    for (const l of blankHtmlComments(raw.replace(RE_LEADING_BOM, "")).split(/\r?\n/)) fenceStep(fst, l);
+    const closer = fst.fence && !(fst.fence.indent > 0) ? fst.fence.mark : null;
+    const body = closer ? raw + (/\n$/.test(raw) ? "" : eol) + closer + eol : raw;
+    const sep = /(?:^|\n)[ \t]*\r?\n$/.test(body) ? "" : /\n$/.test(body) ? eol : eol + eol;
+    out = body + sep + lines.join(eol) + eol;
   }
   writeFileAtomic(file, out);
   maybeRefreshRoadmap(projectDir); // + SPECS.md once it exists (the catalog lists the decisions)
@@ -11185,7 +11193,7 @@ function exportProjectDoc(projectDir, lang, cat) {
     return `| ${f.name} | ${f.tracks} | ${P[f.phase] || f.phase} | ${f.percent}% | ${counts(f.name).tasksDone}/${counts(f.name).tasks} | ${mdCell(deps)} |`;
   });
   const blocks = [{ id: "roadmap", h: X.sections.roadmap, md: rows.length ? head(X.cols.roadmap) + rows.join("\n") : italic(X.noFeatures),
-    children: rmv.backlog.length ? [{ h: X.sections.backlog, md: rmv.backlog.map((b) => `- **${b.name}**${b.note ? " — " + b.note : ""}`).join("\n") }] : [] }];
+    children: rmv.backlog.length ? [{ h: X.sections.backlog, md: rmv.backlog.map((b) => `- **${flatText(b.name)}**${b.note ? " — " + flatText(b.note) : ""}`).join("\n") }] : [] }];
   // Every active feature's requirements digest — summary, stories with their ACs, success criteria — on its own page.
   for (const f of rmv.features) {
     const dir = path.join(root, f.name);
@@ -11412,7 +11420,8 @@ function changelogData(projectDir, since) {
     const hist = Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
     const firstFin = isObj(st.finished) ? timeOf(st.finished.firstAt) : null; // a re-finished feature shipped at its first finish
     const before = since != null && ([fin, firstFin, exe].some((t) => t != null && t <= since) ||
-      hist.some((h) => isRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since));
+      // a role's partial sign-off approves nothing (the phase waits for every role) — only a completed one shipped it
+      hist.some((h) => isRecord(h) && h.phase === "execution" && h.partial !== true && timeOf(h.at) != null && timeOf(h.at) <= since));
     if (before) continue;
     shipped.add(s.dir);
     const at = Math.max(...events);
@@ -11595,13 +11604,47 @@ function restoreFeatureLocked(projectDir, name, moved) {
     const invalid = (field) => skipped.push({ feature: slug, kind: "record", field, reason: "invalid" });
     // Only references to features that still exist come back (by their folder, as at archive time).
     const exists = (k) => typeof k === "string" && k !== slug && isFeatureFolder(k, f.root) && isDirSafe(path.join(f.root, k));
+    // A reference to a feature that is ARCHIVED too (not gone) is handed to that feature's own archive record, so ITS
+    // restore puts the edge back — in either order of archive → restore it used to be dropped as "gone" for good.
+    const archRoot = path.join(f.root, "_archive");
+    const others = new Map(); // archived slug → its state (null: unusable), written back below when handed an edge
+    const handed = new Set();
+    const archivedState = (k) => {
+      if (typeof k !== "string" || k === slug || !isFeatureFolder(k, archRoot) || !isDirSafe(path.join(archRoot, k))) return null;
+      if (!others.has(k)) {
+        const o = stateFromFile(projectDir, statePath(path.join(archRoot, k)));
+        others.set(k, o.invalid || !isObj(o.archived) ? null : o);
+      }
+      return others.get(k);
+    };
+    // `slug` depends on archived `d`: d's restore re-links it as one of its dependents.
+    const handDependsOn = (d, original) => {
+      const o = archivedState(d);
+      if (!o) return false;
+      const deps = Array.isArray(o.archived.dependents) ? o.archived.dependents : (o.archived.dependents = []);
+      if (!deps.some((x) => isObj(x) && x.feature === slug)) deps.push({ feature: slug, dependsOn: original.slice() });
+      handed.add(d);
+      return true;
+    };
+    // Archived `k` depended on `slug`: k's restore brings the dependency back with its entry.
+    const handDependent = (k, original) => {
+      const o = archivedState(k);
+      if (!o) return false;
+      if (!isObj(o.archived.entry)) o.archived.entry = {};
+      const cur = Array.isArray(o.archived.entry.dependsOn) ? o.archived.entry.dependsOn.filter((d) => typeof d === "string") : [];
+      if (!cur.includes(slug)) o.archived.entry.dependsOn = reinsertDep(cur, slug, original);
+      handed.add(k);
+      return true;
+    };
     if (rec.entry != null && !isObj(rec.entry)) invalid("entry");
     if (isObj(rec.entry) && !rm.features[slug]) {
       const entry = JSON.parse(JSON.stringify(rec.entry));
       if (entry.dependsOn !== undefined && !Array.isArray(entry.dependsOn)) { invalid("entry.dependsOn"); delete entry.dependsOn; }
       if (Array.isArray(entry.dependsOn)) {
         if (!entry.dependsOn.every((d) => typeof d === "string")) invalid("entry.dependsOn");
-        entry.dependsOn = entry.dependsOn.filter((d) => typeof d === "string" && (exists(d) || (skipped.push({ feature: d, kind: "dependsOn", reason: "gone" }), false)));
+        const original = entry.dependsOn.filter((d) => typeof d === "string");
+        entry.dependsOn = original.filter((d) => exists(d) ||
+          (skipped.push({ feature: d, kind: "dependsOn", reason: handDependsOn(d, original) ? "archived" : "gone" }), false));
         restored.dependsOn = entry.dependsOn.slice();
       }
       rm.features[slug] = entry;
@@ -11612,7 +11655,11 @@ function restoreFeatureLocked(projectDir, name, moved) {
     for (const dep of Array.isArray(rec.dependents) ? rec.dependents : []) {
       if (!isObj(dep) || typeof dep.feature !== "string") continue;
       const k = dep.feature;
-      if (!exists(k)) { skipped.push({ feature: k, kind: "dependent", reason: "gone" }); continue; }
+      if (!exists(k)) {
+        const original = Array.isArray(dep.dependsOn) ? dep.dependsOn.filter((d) => typeof d === "string") : [slug];
+        skipped.push({ feature: k, kind: "dependent", reason: handDependent(k, original) ? "archived" : "gone" });
+        continue;
+      }
       const cur = rm.features[k] && Array.isArray(rm.features[k].dependsOn) ? rm.features[k].dependsOn : [];
       if (cur.includes(slug)) continue;
       const next = reinsertDep(cur, slug, Array.isArray(dep.dependsOn) ? dep.dependsOn.filter((d) => typeof d === "string") : [slug]);
@@ -11625,6 +11672,8 @@ function restoreFeatureLocked(projectDir, name, moved) {
       restored.dependents.push(k);
     }
     writeRoadmap(projectDir, rm);
+    // under the roadmap lock, like every archive record write (rename's renamePlan, archive itself)
+    for (const k of handed) writeFileAtomic(statePath(path.join(archRoot, k)), JSON.stringify(others.get(k), null, 2));
     delete st.archived;
     writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
   }

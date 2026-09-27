@@ -2737,6 +2737,14 @@ if (inSection("pfr")) { // 1.14 final review — CLI parity findings
   ok(sp && sp.ok && sp.kind === "spike" && typeof sp.note === "string" && /fluxo ignorado/.test(sp.note), "spike --flow design-first gets create's 'flow ignored' note (got " + JSON.stringify(sp && [sp.kind, sp.note]) + ")");
 }
 
+// 1.14 full review (G) — CLI side of gates and evidence.
+
+// 1.14 full review (P) — CLI side of parsing, templates, import.
+
+// 1.14 full review (S) — CLI surfaces and hooks.
+
+// 1.14 full review (D) — CLI help and docs.
+
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
 

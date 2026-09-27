@@ -3384,7 +3384,8 @@ function endRun() {
       "a CRLF tasks.md with no final newline: the last line is ended with CRLF and the file still has no final newline");
     fs.writeFileSync(crTasks, BOM7);
     const crR3 = S.appendTasks(w7, "crlf", [{ text: "first" }]);
-    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 1. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
+    // numbered 3: task 2's tick time is still on record (a removed task's number is never reused — full review C5)
+    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 3. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
       "a BOM-only tasks.md: the new heading starts one line down (a BOM'd first line is not read as a heading)");
 
     // PT feature: localized default heading, checkpoint and errors; markers stay English-stable.
@@ -9843,6 +9844,67 @@ function endRun() {
     ok(!/faça T-01|siga a sua|— siga/.test(brTexts.join(" ")) && /que faz T-01 passar/.test(brTexts[0]) && /que faz T-01 passar/.test(brTexts[1]) && /geradas em 2026-09-26/.test(brDate) && /arquivada em 2026-09-26/.test(brDate),
       "final review pt-BR: 'põe … a verde' / 'segue' stay descriptive (no 'faça' / 'siga'); 'geradas / arquivada a <date>' → 'em' (got " + JSON.stringify(brTexts.map((t) => t.slice(0, 70)).concat(brDate)) + ")");
   }
+
+  // 1.14 full review (C) — change management: one regression per confirmed finding.
+  {
+    const cr = path.join(tmp, "proj-full-review-c");
+    S.initProject(cr, ["core"], "en");
+    const mk = (name) => S.createFeature(cr, name, ["core"], "x", undefined, "en");
+    const stOf = (c) => path.join(c.dir, ".state.json");
+    // C1: a role's PARTIAL execution sign-off before `since` doesn't hide the feature from Added once the last role signs.
+    const c1 = mk("Partial ship");
+    const tA = "2026-09-20T10:00:00.000Z", tB = "2026-09-22T10:00:00.000Z";
+    const s1 = JSON.parse(fs.readFileSync(stOf(c1), "utf8"));
+    s1.approvals = { execution: { at: tB, by: "pat", roles: { qa: { by: "quinn", at: tA }, product: { by: "pat", at: tB } } } };
+    s1.approvalHistory = [{ phase: "execution", at: tA, by: "quinn", role: "qa", partial: true }, { phase: "execution", at: tB, by: "pat", role: "product", roles: ["qa", "product"] }];
+    fs.writeFileSync(stOf(c1), JSON.stringify(s1, null, 2));
+    const cl1 = S.changelog(cr, { since: "2026-09-21" });
+    ok(cl1.ok && cl1.added.some((x) => x.feature === "partial-ship"),
+      "full review C1: a partial (one role) execution sign-off before `since` is no shipment — the feature is Added once the last role signs (got " + JSON.stringify([cl1.ok, cl1.counts]) + ")");
+    // C2: decisions.md ending inside an unclosed fence: the new entry is readable and numbers are never reused.
+    const c2 = mk("Fenced log");
+    S.decide(cr, "fenced-log", { title: "First", decision: "x" });
+    fs.appendFileSync(path.join(c2.dir, "decisions.md"), "\n```js\nconst x = 1;\n");
+    const d2 = S.decide(cr, "fenced-log", { title: "Second", decision: "y" });
+    const d3 = S.decide(cr, "fenced-log", { title: "Third", decision: "z" });
+    const log2 = S.decisionLog(fs.readFileSync(path.join(c2.dir, "decisions.md"), "utf8")).map((e) => e.id);
+    ok(d2.id === "D-2" && d3.id === "D-3" && JSON.stringify(log2) === '["D-1","D-2","D-3"]' && /const x = 1;\n```\n/.test(fs.readFileSync(path.join(c2.dir, "decisions.md"), "utf8")),
+      "full review C2: spec_decide closes a code fence left open at the end of decisions.md (appended) — the entries stay readable, D-n never reused (got " + JSON.stringify([d2.id, d3.id, log2]) + ")");
+    // C3: a dependency on a feature that is archived too comes back, whichever of the two is restored first.
+    for (const order of [["dep-b", "dep-a"], ["dep-a", "dep-b"]]) {
+      mk("Dep A"); mk("Dep B");
+      S.setDependency(cr, "dep-b", ["dep-a"]);
+      S.manageFeature(cr, "archive", "dep-b"); S.manageFeature(cr, "archive", "dep-a");
+      const first = S.restoreFeature(cr, order[0]);
+      S.restoreFeature(cr, order[1]);
+      const deps = JSON.parse(fs.readFileSync(path.join(cr, ".specs", "roadmap.json"), "utf8")).features["dep-b"];
+      ok(deps && JSON.stringify(deps.dependsOn) === '["dep-a"]' && (order[0] !== "dep-b" || first.skipped.some((s) => s.reason === "archived")),
+        "full review C3: restoring " + order.join(" then ") + " (both archived) keeps dep-b → dep-a — the edge is handed to the archived feature's record, never dropped as 'gone' (got " + JSON.stringify([deps, first.skipped]) + ")");
+      S.manageFeature(cr, "remove", "dep-a", undefined, { confirm: true }); S.manageFeature(cr, "remove", "dep-b", undefined, { confirm: true });
+    }
+    // C5: a task number held only by a leftover tick time is not reused by append.
+    const c5 = mk("Tick gap");
+    fs.writeFileSync(path.join(c5.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] one\n- [ ] 2. [US1] two\n");
+    const s5 = JSON.parse(fs.readFileSync(stOf(c5), "utf8"));
+    s5.ticks = { 3: "2026-09-01T10:00:00.000Z" };
+    fs.writeFileSync(stOf(c5), JSON.stringify(s5, null, 2));
+    const ap5 = S.appendTasks(cr, "tick-gap", [{ text: "New" }]);
+    ok(ap5.ok && ap5.appended[0].number === 4,
+      "full review C5: append_tasks numbers after a removed task's leftover tick time (never inherits its completion time) (got " + JSON.stringify(ap5.appended || ap5.error) + ")");
+    // C6: a line break in a backlog note never becomes markdown structure in ROADMAP.md.
+    S.backlog(cr, "add", "search\nlater", "soon\n\n## ⚠ Needs attention\n\nx");
+    const rmMd = S.roadmapReport(cr, { write: true }) && fs.readFileSync(path.join(cr, ".specs", "ROADMAP.md"), "utf8");
+    ok((rmMd.match(/^## ⚠/gm) || []).length === 1 && /\*\*search later\*\* — soon ## ⚠ Needs attention x/.test(rmMd),
+      "full review C6: backlog name / note are one line (folded on add and when rendered) — no heading injected into ROADMAP.md (got " + JSON.stringify((rmMd.match(/^.*search.*$/m) || [])[0]) + ")");
+  }
+
+  // 1.14 full review (G) — gates and evidence.
+
+  // 1.14 full review (P) — parsing, templates, import, i18n.
+
+  // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
+
+  // 1.14 full review (D) — docs and prose.
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
