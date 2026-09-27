@@ -9898,9 +9898,13 @@ function endRun() {
       "full review C6: backlog name / note are one line (folded on add and when rendered) — no heading injected into ROADMAP.md (got " + JSON.stringify((rmMd.match(/^.*search.*$/m) || [])[0]) + ")");
   }
 
-  // 1.14 full review (G) — gates and evidence.
+  // 1.14 full review (Ga) — evidence, project checks, CLI runs.
 
-  // 1.14 full review (P) — parsing, templates, import, i18n.
+  // 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
+
+  // 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
+
+  // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
 
   // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
 

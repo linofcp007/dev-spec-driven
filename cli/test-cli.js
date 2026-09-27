@@ -2737,9 +2737,13 @@ if (inSection("pfr")) { // 1.14 final review — CLI parity findings
   ok(sp && sp.ok && sp.kind === "spike" && typeof sp.note === "string" && /fluxo ignorado/.test(sp.note), "spike --flow design-first gets create's 'flow ignored' note (got " + JSON.stringify(sp && [sp.kind, sp.note]) + ")");
 }
 
-// 1.14 full review (G) — CLI side of gates and evidence.
+// 1.14 full review (Ga) — evidence, project checks, CLI runs.
 
-// 1.14 full review (P) — CLI side of parsing, templates, import.
+// 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
+
+// 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
+
+// 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
 
 // 1.14 full review (S) — CLI surfaces and hooks.
 
