@@ -9,7 +9,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
-  `readline`, `child_process`, `crypto`, built-in `fetch`). No `npm install` required. Keep it that way.
+  `readline`, `string_decoder`, `child_process`, `crypto`, built-in `fetch`). No `npm install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Layout
@@ -38,7 +38,8 @@ scripts/test-docker.js         both suites in Linux containers — `npm run test
 hooks/hooks.json               PreToolUse → guard-hook.js · PostToolUse + SessionStart → spec-hook.js ·
                                Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$) → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
-hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status, drift, upgrade and overlap lines
+hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
+                               "+N more"), drift, upgrade and overlap lines
 hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
 hooks/precommit-check.js       optional git pre-commit validator
 AGENTS.md                      portable workflow for non-Claude agent tools
@@ -485,7 +486,7 @@ sections.
 - **`spec_metrics`** derives everything from `.state.json`, `.history/` and the artifacts (`createdAt` is
   stored by createFeature; older features get an approximate one). `write` creates `retro.md` (writeIfAbsent).
 - **`spec_append_tasks`** (converge) appends only: numbers after every number in use (tasks.md + leftover
-  evidence), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
+  evidence records and tick times — a new task never inherits a removed one's run or completion time), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
   inactive-track / Global Constraints headings), a read-back check that existing tasks didn't change, and
   CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`.
 
@@ -513,7 +514,9 @@ sections.
   SessionStart adds one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
 - **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
   BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
-  in their old position (only for features that still exist; a now-circular edge is skipped and reported). The
+  in their old position (only for features that still exist; a now-circular edge is skipped and reported). An edge to a
+  feature that is ARCHIVED too is handed to that feature's own archive record (reason `archived`), so its restore puts it
+  back — in either order (it was dropped as "gone" for good). The
   archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
   warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
   meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
@@ -531,6 +534,8 @@ sections.
   `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
   normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
+  Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
+  symlink to the project is inside — read only when the text comparison says outside; errors fall back to it).
   **It never blocks on its own errors:** a malformed payload, a broken roadmap.json or any exception exits 0.
   1.14 adds the stricter `"scope"` level (see End-of-turn evidence gate and scope guard); a phase still waiting for a
   role's sign-off is not an approved tasks phase.
@@ -633,7 +638,8 @@ sections.
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
   criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since
   then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
-  root-cause one-liner. A feature shipped before `since` is never Added again; a spike is never listed. `since`: an ISO
+  root-cause one-liner. A feature shipped before `since` is never Added again (a role's `partial` execution sign-off is no shipment — only the
+  completing one); a spike is never listed. `since`: an ISO
   date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.
   `write` → `.specs/RELEASE-NOTES.md` (AUTO-GENERATED, never over a hand-written one) and stamps `meta.changelogAt`, both
   under the roadmap lock; nothing to report → nothing written or stamped (`note`).
@@ -733,7 +739,8 @@ sections.
   ```
   The IDs and markers are English-stable; markers are read only between the heading and the first label; HTML comments
   and fenced code never hold an entry. `spec_decide` appends under the feature lock: numbered after the highest D-n, the
-  existing bytes never rewritten (a BOM and CRLF kept — the entry follows the file's line ends); title ≤ 200 and texts ≤
+  existing bytes never rewritten (a BOM and CRLF kept — the entry follows the file's line ends; a code fence left open at
+  the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again); title ≤ 200 and texts ≤
   20 000 characters. `_Affects:_` is validated when written (an AC defined in requirements.md, a T-ID planned in
   test-plan.md, an EC/NFR/SC ID written in requirements.md, anything else a design.md section heading — bug.md /
   design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written) and `_Supersedes:_ D-n`
@@ -981,7 +988,9 @@ sections.
   `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
   best-effort. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
   `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
-  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug.
+  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
+  line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
+  already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
 - **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /
   `PRIVACY_SECTIONS`) are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
   (a `loose` one only in the track's context — see The track model). `doctor`/`clarify` use `RE_CONSTITUTION_CHECK`,
@@ -1022,10 +1031,17 @@ sections.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
 - **Protocol**: stdio transport is newline-delimited JSON; messages must not contain embedded
-  newlines (tool descriptions are single-line strings). `initialize` echoes the client's `protocolVersion`
-  when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`. Notifications
-  never get a reply (and never run tools); a JSON-RPC batch gets ONE array reply; `null`/malformed input gets
-  -32600/-32700; an unknown method -32601; prompts/resources use -32602 / -32002 (see Capabilities).
+  newlines (tool descriptions are single-line strings). Framing splits on `
+` ONLY (a `StringDecoder` keeps multibyte
+  characters whole across chunks; one trailing `` is dropped) — never `readline`, which also splits on U+2028 / U+2029,
+  both legal raw inside a JSON string (text pasted from Word / PDF): a valid request was cut in two and never answered.
+  Replies escape U+2028 / U+2029 (`frame()`) so readline-based clients survive them. `initialize` echoes the client's
+  `protocolVersion` when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`.
+  A message without an `id` member is a notification: never a reply (and never runs a tool). An `id` must be a string or
+  an integer — null, an object, an array, a boolean or a fraction gets -32600 (id null); an id without a string `method`
+  gets -32600, except a client's JSON-RPC response (`result` / `error`), which is ignored. A JSON-RPC batch gets ONE array
+  reply; `null`/malformed input gets -32600/-32700; an unknown method -32601; an unknown tool (or `tools/call` without a
+  name) -32602, localized (`args.unknownTool` / `args.noTool`); prompts/resources use -32602 / -32002 (see Capabilities).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
@@ -1054,7 +1070,11 @@ sections.
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
-  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`.
+  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`, a new
+  value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
+  localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
+  run-evals.js untouched); `--` ends the options; `--help` anywhere prints the help and runs nothing. An explicit
+  `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
   Numeric flags that MCP bounds (`--cap`, `--max`) go through `intFlag()` (integer ≥ 1). The engine refuses what
