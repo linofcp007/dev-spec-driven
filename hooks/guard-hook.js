@@ -10,7 +10,8 @@
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
  * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
  * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
- * naming the task to add it to.
+ * naming the task to add it to. At both levels a test file is allowed while a feature has an approved test plan and is
+ * unfinished (Phase 4), and any code file while a spike is under way (its prototype) — spec.guardCheck decides.
  *
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),

@@ -1577,7 +1577,10 @@ function guardEnabled(projectDir) {
 //          Windows batch, SQL, Kotlin script, CUDA, Fortran, shaders, code-bearing templates…;
 //          notebooks count as code — NotebookEdit only edits them. Docs, config, markup and styles are not code) ·
 //          some non-archived feature has an approved tasks phase and open
-//          tasks (a FORCED approval still counts, with a `note` saying so);
+//          tasks (a FORCED approval still counts, with a `note` saying so) · an active spike — undecided or with open tasks —
+//          (why "spike": its prototype work; a spike has no tasks gate, so it is never "awaiting approval") · a TEST file while
+//          a feature has an approved test plan and is unfinished (why "tests-phase": Phase 4 writes the failing tests before
+//          the tasks can be approved);
 //   ask:   otherwise, with a localized `reason` (project language).
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
 // it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
@@ -1597,17 +1600,28 @@ function guardCheck(projectDir, filePath, cwd) {
   const ext = path.extname(abs).toLowerCase();
   if (!GUARD_CODE_EXT.has(ext)) return allow("not-code");
   const root = specsRoot(pdir);
-  const covering = [], forced = [], pending = [], stale = [];
+  const covering = [], forced = [], pending = [], stale = [], spikes = [], testing = [];
   const texts = new Map(); // feature → tasks.md (the scope level reads its open tasks' _Implements:_)
   for (const name of safeReaddir(root).sort()) {
     if (!isFeatureFolder(name, root)) continue; // _archive, steering, dot folders are not features
     const dir = path.join(root, name);
-    const tasksText = readIfExists(path.join(dir, "tasks.md"));
-    if (tasksText == null) continue;
-    if (!parseTasks(activeTasks(tasksText, detectTracks(dir))).some((t) => !t.done)) continue; // complete (or no tasks)
-    texts.set(name, tasksText);
     const st = readJson(statePath(dir)).data;
-    const ap = isObj(st) && isObj(st.approvals) ? st.approvals.tasks : null;
+    const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
+    const tasksText = readIfExists(path.join(dir, "tasks.md"));
+    const tasks = tasksText == null ? [] : parseTasks(activeTasks(tasksText, detectTracks(dir)));
+    const unfinished = !tasks.length || tasks.some((t) => !t.done);
+    // A spike has no tasks gate (question → investigate → decide): while it is undecided or has open investigation tasks its
+    // prototype work is covered — never listed as "awaiting approval" (approve refuses a spike's tasks phase).
+    if (isObj(st) && st.kind === "spike") {
+      if (tasks.some((t) => !t.done) || !spikeInfo(dir).decisionFilled) spikes.push(name);
+      continue;
+    }
+    // Phase 4 (+tdd): an approved test plan, the feature not finished — the failing tests are written BEFORE the tasks can be
+    // approved (next_action refuses the tasks approval until the tests gate passes), so test files are covered then.
+    if (approvals["test-plan"] && unfinished) testing.push(name);
+    if (tasksText == null || !tasks.some((t) => !t.done)) continue; // complete (or no tasks)
+    texts.set(name, tasksText);
+    const ap = approvals.tasks || null;
     if (!ap) pending.push(name);
     else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !fingerprintMatches(tasksText, "tasks", ap.fingerprint)) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
@@ -1615,10 +1629,14 @@ function guardCheck(projectDir, filePath, cwd) {
   }
   // scope: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
   if (level === "scope" && (covering.length || forced.length)) {
-    return scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
+    const d = scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
+    // Out of the plan, but an active spike's prototype work (no _Implements:_ to plan it in) is still covered.
+    return d.decision === "ask" && spikes.length ? allow("spike", { level: "scope", covering: spikes, spikes }) : d;
   }
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
+  if (spikes.length) return allow("spike", { covering: spikes, spikes });
+  if (testing.length && isTestFile(toPosix(path.relative(pdir, abs)))) return allow("tests-phase", { covering: testing });
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
 }
@@ -1712,19 +1730,62 @@ function setStopCheck(projectDir, on) {
   writeRoadmap(projectDir, rm);
 }
 
-// The claim patterns of every language (i18n stopGate.claims / negators / admissions), compiled once: whole words (unicode
-// boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line.
+// The claim patterns of every language (i18n stopGate.claims / negators / admissions / fixed), compiled once: whole words
+// (unicode boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line. Each claim pattern keeps the base
+// languages that list it (pt-BR is pt): the two negators the languages disagree on are read by language (stopNegates).
 let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
   const word = (src) => new RegExp("(?<![\\p{L}\\p{N}_])(?:" + src + ")(?![\\p{L}\\p{N}_])", "gimu");
   const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
+  const langsOf = new Map();
+  for (const l of i18n.LANGS) for (const src of (i18n.msg(l).stopGate || {}).claims || []) {
+    if (!langsOf.has(src)) langsOf.set(src, new Set());
+    langsOf.get(src).add(i18n.baseLang(l));
+  }
   STOP_PATTERNS = {
-    claims: all("claims").map(word),
+    claims: [...langsOf].map(([src, langs]) => ({ re: word(src), langs })),
     admissions: all("admissions").map(word),
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
+    fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
   };
   return STOP_PATTERNS;
+}
+// Where the clause holding position `i` starts: after the last line / sentence break, or a colon or a dash ("No problem — task
+// 2 is done": the "no" belongs to another clause). → the index of the break (−1: the text's start)
+function stopClauseStart(text, i) {
+  const before = text.slice(0, i);
+  return Math.max(...["\n", ".", "!", "?", ";", ":", "—", "–", " - "].map((c) => before.lastIndexOf(c)));
+}
+// ES "no" before a verb, a clitic or "todo" is a negation ("no está terminado", "no se ha completado", "no todo está hecho");
+// PT "no" (em + o) comes before a noun ("a correção no módulo").
+const RE_ES_NO_NEXT = /^(?:est[áa]n?|estaba|estaban|es|son|era|eran|fue|fueron|ha|han|he|hemos|has|había|habían|hay|se|lo|la|los|las|le|les|me|te|nos|queda|quedan|quedó|quedaron|funciona|funcionan|pasa|pasan|puede|pueden|tiene|tienen|debe|deben|todo|todos|todas|del|todavía|aún)$/u;
+// ES reflexive "se" before an auxiliary or a preterite ("se ha completado", "se han implementado", "se completó") — PT "se" (if)
+// is never followed by those (PT writes "há", with the accent).
+const RE_ES_SE_NEXT = /^(?:ha|han|has|he|hemos|había|habían|hubo|fue|fueron|queda|quedan|quedó|quedaron|\p{L}{3,}ó|\p{L}{3,}(?:aron|ieron))$/u;
+// Is words[i] a negator for a claim that reads as `langs` (its pattern's languages and those of any other pattern matching at the
+// same place — "está terminado" is PT and ES) in a message guessed as `lang`? Pooled across languages, except the two words they
+// disagree on: "no" (EN / ES: not; PT: em + o) and "se" (PT: if; ES: the reflexive pronoun).
+function stopNegates(words, i, langs, lang) {
+  const w = words[i];
+  if (/n['’]t$/.test(w) || /['’]ll$/.test(w)) return true;
+  if (!stopPatterns().negators.has(w)) return false;
+  const next = words[i + 1] || "";
+  if (w === "no") return lang !== "pt" && (langs.has("en") || (langs.has("es") && (i === words.length - 2 || RE_ES_NO_NEXT.test(next))));
+  if (w === "se") return lang !== "es" && langs.has("pt") && !RE_ES_SE_NEXT.test(next);
+  return true;
+}
+// Does a failure the message names (an admission at [start, end)) describe what was already FIXED — "I fixed the 2 failing
+// tests", "Previously 4 tests failed", "the 3 failures from yesterday are fixed"? A fixed-word (i18n stopGate.fixed) among the 4
+// words before it in its clause, or the 4 words after it before the clause ends — unless a negator stands before that word
+// ("I haven't fixed the 2 failing tests", "2 failing tests are not fixed yet").
+function stopPastFailure(text, start, end, wordsOf) {
+  const P = stopPatterns();
+  const neg = (w) => P.negators.has(w) || /n['’]t$/.test(w);
+  const before = wordsOf(text.slice(stopClauseStart(text, start) + 1, start)).slice(-4).map((w) => w.toLowerCase());
+  const after = wordsOf((text.slice(end).match(/^[^\n.!?;:,—–]*/) || [""])[0]).slice(0, 4).map((w) => w.toLowerCase());
+  const fixedIn = (ws) => { const k = ws.findIndex((w) => P.fixed.has(w)); return k >= 0 && !ws.slice(0, k).some(neg); };
+  return fixedIn(before) || fixedIn(after);
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
@@ -1737,31 +1798,47 @@ function stopProse(message) {
     .split("\n").filter((l) => !/^[ \t]*>/.test(l)).join("\n");
 }
 // Does the message claim the work is done / verified? → { claim, admitted, claims: [matched text] }. A match does not count
-// when a negator or condition sits up to STOP_WINDOW words before it in the same sentence ("not done", "once the tests
-// pass", "I'll verify"; words ending in n't / 'll too), nor when its sentence is a question. `admitted`: the message says
-// plainly that something is NOT verified or fails ("task 3 is not verified", "2 failing") — the honest answer is never sent back.
+// when a negator or condition sits up to STOP_WINDOW words before it in the same clause ("not done", "once the tests
+// pass", "I'll verify"; words ending in n't / 'll too; a colon or a dash starts a new clause; "no" / "se" read by language —
+// stopNegates), nor when its sentence is a question. `admitted`: the message says plainly that something is NOT verified or
+// fails ("task 3 is not verified", "2 failing") — the honest answer is never sent back — unless that failure is one already
+// fixed ("I fixed the 2 failing tests", stopPastFailure).
 function stopClaims(message) {
   const P = stopPatterns();
   const text = stopProse(message);
+  const lang = guessLang(text); // decides "no" (a PT text: em + o) and "se" (an ES text: reflexive) — see stopNegates
   const found = [];
   const wordsOf = (s) => s.split(/[^\p{L}\p{N}_'’]+/u).filter(Boolean);
-  for (const re of P.claims) {
+  const hits = [];
+  for (const c of P.claims) {
+    c.re.lastIndex = 0;
+    let m;
+    while ((m = c.re.exec(text)) !== null) {
+      if (m[0] === "") { c.re.lastIndex++; continue; }
+      hits.push({ start: m.index, end: m.index + m[0].length, text: m[0], langs: c.langs });
+    }
+  }
+  const langsAt = new Map(); // the languages every claim starting at an index reads as
+  for (const h of hits) { const s = langsAt.get(h.start) || new Set(); h.langs.forEach((l) => s.add(l)); langsAt.set(h.start, s); }
+  for (const h of hits) {
+    // The words before it in its clause, and the claim's own first word ("Nothing is done", "None of the tests pass" match
+    // from their subject on).
+    const words = wordsOf(text.slice(stopClauseStart(text, h.start) + 1, h.start)).slice(-STOP_WINDOW).concat(wordsOf(h.text).slice(0, 1)).map((w) => w.toLowerCase());
+    if (words.some((w, i) => stopNegates(words, i, langsAt.get(h.start), lang))) continue;
+    const tail = text.slice(h.end).match(/^[^\n.!?]*([.!?]?)/);
+    if (tail && tail[1] === "?") continue; // a question claims nothing
+    if (found.length < 10) found.push(h.text.trim());
+  }
+  // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed").
+  const admitted = P.admissions.some((re) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
       if (m[0] === "") { re.lastIndex++; continue; }
-      const start = m.index, end = m.index + m[0].length;
-      const before = text.slice(0, start);
-      const cut = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"), before.lastIndexOf(";"));
-      // …and the claim's own first word ("Nothing is done", "None of the tests pass" match from their subject on).
-      const words = wordsOf(before.slice(cut + 1)).slice(-STOP_WINDOW).concat(wordsOf(m[0]).slice(0, 1)).map((w) => w.toLowerCase());
-      if (words.some((w) => P.negators.has(w) || /n['’]t$/.test(w) || /['’]ll$/.test(w))) continue;
-      const tail = text.slice(end).match(/^[^\n.!?]*([.!?]?)/);
-      if (tail && tail[1] === "?") continue; // a question claims nothing
-      if (found.length < 10) found.push(m[0].trim());
+      if (!stopPastFailure(text, m.index, m.index + m[0].length, wordsOf)) return true;
     }
-  }
-  const admitted = P.admissions.some((re) => { re.lastIndex = 0; return re.test(text); });
+    return false;
+  });
   return { claim: found.length > 0, admitted, claims: [...new Set(found)] };
 }
 // The feature's last activity (ms, or null): lastTickAt, every ticks[n], every evidence record's run / note time (history and
@@ -1824,13 +1901,15 @@ function stopCheck(projectDir, opts = {}) {
     const tracks = detectTracks(f.dir);
     const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
     const vs = verificationStatus(pdir, f.slug, f.dir);
-    const suite = blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state).missing : [];
+    // A spike has no project-check gate anywhere (spec_finish, doctor and next_action close it on its decision): never here either.
+    const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state).missing : [];
     if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
     features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite });
   }
   if (!features.length) return res(false, clean.length ? "verified" : "no-recent", { claims: cl.claims, verifiedFeatures: clean });
   const S = i18n.msg(lng).stopGate;
-  const lines = [S.head];
+  // The head says what is missing: ticked tasks without evidence, or — when only project checks are listed — the checks' runs.
+  const lines = [features.some((f) => f.unverified.length) ? S.head : S.headSuite];
   for (const f of features) {
     if (f.unverified.length) {
       const shown = f.unverified.slice(0, STOP_TASKS_SHOWN).map((d) => stopTaskLabel(d, lng));
@@ -6045,7 +6124,10 @@ function approveThrough(projectDir, name, phase, by, opts) {
     }
     if (r.failing) step.failing = r.failing;
     steps.push(step);
-    const why = r.refused ? E.ffWhyRefused(r.failing.join(", "), r.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n"), f.slug, ph) : r.error;
+    // A role refusal: approvePhase's own text ends "Nothing recorded." — wrong once earlier phases of this run were approved
+    // (they are listed before it): say that nothing was recorded for THIS phase, and how to resume.
+    const why = r.refused ? E.ffWhyRefused(r.failing.join(", "), r.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n"), f.slug, ph)
+      : (r.roleRequired || r.roleNotListed) && Array.isArray(r.roles) ? E.ffWhyRole(r.roles.join(", "), f.slug, ph, t, r.roleNotListed ? normRole(opts.role) : null) : r.error;
     const reason = r.refused ? "refused" : r.nothingToApprove ? "nothing-to-approve" : r.roleRequired || r.roleNotListed || r.badRole ? "role" : r.busy ? "busy" : "error";
     const res = { ok: false, ...base, approved, steps, complete: false, stoppedAt: ph, stopReason: reason, approvals, error: E.ffStopped(f.slug, ph, list, why) };
     if (r.refused) Object.assign(res, { refused: true, failing: r.failing, checks: r.checks });
@@ -6226,19 +6308,27 @@ function impactReport(projectDir, name, opts = {}) {
   if (!isRecord(appr)) return { ok: false, neverApproved: true, error: I.neverApproved(phase, slug) };
   const tracks = detectTracks(dir);
   const res = { ok: true, feature: slug, lang: lng, phase, file, approvedAt: appr.at || null };
+  // 1.14 — roadmap.json meta.approvalRoles: a re-approval of a phase signed off per role names the role to sign as (a role-less
+  // /approve is refused); `missingRoles` (stable, when the artifact changed) lists every role that hasn't signed the current content.
+  const phaseRoles = approvalRolesOf(projectDir)[phase] || [];
+  const roleMissing = phaseRoles.length ? roleSignOffs(state, phase, phaseRoles, phaseContent(dir, phase, state.kind || "feature")).missing : [];
+  const ap = roleMissing.length ? `${phase} --role ${roleMissing[0]}` : phase; // what the /approve hints name
+  const withRoles = () => { if (roleMissing.length && res.changed) res.missingRoles = roleMissing; };
   const snap = latestSnapshot(dir, state, phase);
   if (!snap && !appr.fingerprint) {
     // Approved before content fingerprints (≤1.10, or a 1.12 bugfix design approval): nothing about the approved version
     // was recorded. `changed` is true only for a change known without a date (a bugfix's design.md created since), else
     // null — unknown: a file date is no evidence (a clone or copy resets it).
     const cs = changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind, { detail: true });
-    Object.assign(res, { baseline: "none", changed: cs.changed.some((x) => !cs.byDate.includes(x)) ? true : null, hint: I.noFingerprint(phase, slug) });
+    Object.assign(res, { baseline: "none", changed: cs.changed.some((x) => !cs.byDate.includes(x)) ? true : null, hint: I.noFingerprint(ap, slug) });
+    withRoles();
     if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
     return res;
   }
   if (!snap) {
     // Approved before 1.13: only the fingerprint was recorded — WHETHER it changed, not what.
-    Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind).length > 0, hint: I.fingerprintOnly(phase, slug) });
+    Object.assign(res, { baseline: "fingerprint-only", changed: changedSinceApproval(dir, { [phase]: appr }, tracks, state.kind).length > 0, hint: I.fingerprintOnly(ap, slug) });
+    withRoles();
     if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
     return res;
   }
@@ -6262,6 +6352,7 @@ function impactReport(projectDir, name, opts = {}) {
       if (designChanged && !designBase) res.designHint = I.designFingerprintOnly(slug);
     }
   }
+  withRoles();
 
   const tasksFile = path.join(dir, "tasks.md");
   const tasksText = readIfExists(tasksFile);
@@ -6411,8 +6502,8 @@ function impactReport(projectDir, name, opts = {}) {
   state.changes = (state.changes || []).concat([change]);
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   maybeRefreshRoadmap(projectDir);
-  const note = change.reopened.length ? [I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, phase), retireList ? RT.retireNote(retireList) : null].filter(Boolean).join(" ")
-    : retireList ? RT.recordedRetire(state.changes.length, retireList, slug, phase) : I.recordedOnly(state.changes.length, slug, phase);
+  const note = change.reopened.length ? [I.reopened(change.reopened.map((n) => "#" + n).join(", "), slug, ap), retireList ? RT.retireNote(retireList) : null].filter(Boolean).join(" ")
+    : retireList ? RT.recordedRetire(state.changes.length, retireList, slug, ap) : I.recordedOnly(state.changes.length, slug, ap);
   return Object.assign(res, { reopened: change.reopened, recorded: true, changeRequest: state.changes.length, note });
 }
 
@@ -6453,7 +6544,7 @@ function impactLines(r) {
   if (uncovered.length) out.push("  " + I.uncovered(uncovered.join(", ")));
   if (r.note) out.push("  " + r.note);
   else if (r.hint) out.push("  " + r.hint);
-  if (r.changed) out.push("  → " + I.reReview(r.feature, r.phase));
+  if (r.changed) out.push("  → " + I.reReview(r.feature, r.phase, r.missingRoles)); // 1.14: with the role(s) still to sign
   return out;
 }
 
@@ -7542,7 +7633,8 @@ function nextAction(projectDir, name, opts = {}) {
   //     never an approval the gate would refuse); else → approve it. Only that approval opens the next phase;
   // (3) every phase approved: failing checks of the current phase (or an earlier one — e.g. a forced approval) → fix;
   // (4) the next task; (5) all tasks done → a ticked task without passing evidence → verify it (spec_finish would
-  //     refuse), else drift since a finish → decide, else spec_finish (again, when its baseline is stale) or finished.
+  //     refuse), else drift since a finish → decide, else spec_finish (again, when its baseline is stale), else — finished —
+  //     project checks without a passing run since the last task activity → verify (res.suite), else finished.
   const pending = gateWalk(dir, tracks, kind).find((ph) => !approvals[ph]) || null;
   let open = null;
   let refused = null;
@@ -7575,6 +7667,9 @@ function nextAction(projectDir, name, opts = {}) {
   let finishedDrift = null;
   let staleBaseline = null;
   let approveExtras = null; // 1.14 B3: {missingRoles?, fastForward?} of the approve step
+  let reReviewRefused = null; // the re-review phase whose approve gate would refuse (refusedGate names it)
+  let finishedRoles = null; // the roles still to sign the execution phase off (finished step)
+  let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
@@ -7584,6 +7679,18 @@ function nextAction(projectDir, name, opts = {}) {
   if (reReviewNow.length) {
     step = "re-review";
     recommendation = nx.reReview(reReviewNow.join(", "));
+    // Never "re-approve" what the approve gate would refuse (an edit added a [NEEDS CLARIFICATION], a placeholder…): it
+    // looped re-review → refused → re-review. The first changed phase whose gate fails is named with its failing checks
+    // (refusedGate, as the fix step) — fix them, then re-approve.
+    for (const ph of walk.filter((p) => reReviewNow.some((file) => phaseOfFile(file) === p))) {
+      const g = approvalChecks(projectDir, slug, dir, ph, tracks, kind, lng);
+      if (!g.artifact || !g.checks.length) continue;
+      refused = g.checks;
+      reReviewRefused = ph;
+      gateFix = true;
+      recommendation += " " + G.fixGate(ph, g.checks.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; "), slug);
+      break;
+    }
     // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
     impactPhases = snapshotPhases(dir, st, reReviewNow);
     if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
@@ -7642,16 +7749,23 @@ function nextAction(projectDir, name, opts = {}) {
       // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
       // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
       const vs = verificationStatus(projectDir, slug, dir);
+      const suiteGap = fin && !vs.unverified.length ? suiteStatus(projectDir, st).missing : [];
       if (vs.unverified.length) {
         step = "verify";
         const n = vs.unverified[0];
         const blk = taskBlocks(activeText || "").find((b) => b.number === n && b.done);
         const runnable = !!blk && taskMarkers(blk).verify.some((c) => !/^\[.*\]$/.test(c.trim())); // what `done --run` would run
-        recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
-        // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
-        const red = redPhaseHint(blk, slug, lng);
-        if (red) recommendation += " " + red;
-        if (expectsFail(blk)) recommendation += " " + i18n.msg(lng).redGreen.naVerify(n, slug); // B5: its proof is a FAILING run, not a passing one
+        const detail = (vs.unverifiedDetail || []).find((d) => d.number === n);
+        // A number two tasks share: `done N` resolves to the first open "N." (or answers alreadyDone), so no re-run can
+        // ever verify the other one — it looped "re-run task N" forever. The way out is renumbering (doctor: duplicate-tasks).
+        if (detail && detail.reason === "duplicate-number") recommendation = nx.verifyDuplicate(slug, unverifiedLabel(vs, lng), n);
+        else {
+          recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
+          // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
+          const red = redPhaseHint(blk, slug, lng);
+          if (red) recommendation += " " + red;
+          if (expectsFail(blk)) recommendation += " " + i18n.msg(lng).redGreen.naVerify(n, slug); // B5: its proof is a FAILING run, not a passing one
+        }
       } else if (dr && dr.drifted) {
         // Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it
         // also needs finishing again, after that decision.
@@ -7663,6 +7777,13 @@ function nextAction(projectDir, name, opts = {}) {
         // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
         // "finish"; staleBaseline says why.
         recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, lng));
+      } else if (fin && suiteGap.length) {
+        // Finished, but a project check (meta.checks) has no passing run since the last task activity (a task re-run after
+        // the finish, a check whose command changed…): spec_finish refuses on it, doctor warns, the stop gate sends a "done"
+        // back — never "finished — nothing left to do". Any status but pass counts (suiteStatus().missing).
+        step = "verify";
+        suiteMissing = suiteGap.map((i) => ({ name: i.name, status: i.status }));
+        recommendation = nx.verifySuite(slug, suiteLabel(suiteGap, lng));
       } else if (fin) {
         // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if
         // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
@@ -7671,6 +7792,16 @@ function nextAction(projectDir, name, opts = {}) {
         // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
         const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
         const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
+        // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
+        // the roles still missing and the one to sign as. A stale sign-off is renewed by any role's new sign-off.
+        const exRoles = approvalRolesOf(projectDir).execution || [];
+        if (signOff && exRoles.length) {
+          if (!approvals.execution) {
+            const v = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind));
+            finishedRoles = v.missing;
+            Object.assign(signOff, { role: v.missing[0] || exRoles[0], missing: v.missing.length ? fm.governance.missing(v.missing) : null, signed: v.signed.join(", ") });
+          } else signOff.role = exRoles[0];
+        }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
       }
     }
@@ -7681,7 +7812,9 @@ function nextAction(projectDir, name, opts = {}) {
   if (finishedDrift) res.drift = finishedDrift; // stable: {finishedAt, files, changed, missing, nowPresent, drifted}
   if (staleBaseline) res.staleBaseline = staleBaseline; // stable: {finishedAt, since: [{kind, n | phase, at}], newFiles}
   if (open) res.file = open.file;
-  if (gateFix) res.refusedGate = { phase: pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
+  if (gateFix) res.refusedGate = { phase: reReviewRefused || pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
+  if (finishedRoles) res.missingRoles = finishedRoles; // the execution sign-off's roles still to sign (finished step)
+  if (suiteMissing) res.suite = suiteMissing; // stable: [{name, status}] — the project checks the verify step asks to run
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
@@ -8838,7 +8971,12 @@ function specDoctor(projectDir, name, opts = {}) {
   // so doctor, next_action and approve agree instead of next_action recommending an approval approve refuses.
   let nextGate = null;
   // 1.14 B3 — approvals by role: the roles each pending phase still waits for (named in the list), stale / missing sign-offs.
-  const rv = roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng);
+  // The execution sign-off joins them once a finish is recorded (spec_finish {write}) and it isn't approved yet — only for the
+  // roles view (pendingRoles, the approval-gates line): pendingGates stays the planning chain, which spec_finish's blockers read
+  // (the sign-off comes after the finish, never a blocker of it).
+  const execDue = !approvals.execution && isRecord(state.finished);
+  const rv = roleGateView(projectDir, dir, state, execDue ? pendingGates.concat("execution") : pendingGates, tracks, kind, lng);
+  const shownPending = rv.pending.execution ? pendingGates.concat("execution") : pendingGates;
   if (pendingGates.length) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
     nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
@@ -8853,8 +8991,8 @@ function specDoctor(projectDir, name, opts = {}) {
     add("changed-since-approval", "warn", impactPhases.length
       ? fm.impact.doctorChanged(changedArts.join(", "), slug, impactPhases) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
-  add("approval-gates", pendingGates.length || forcedGates.length || rv.notes.length ? "warn" : "pass",
-    [pendingGates.length ? m.gatesPending(pendingGates.map(rv.label).join(", ")) : null,
+  add("approval-gates", shownPending.length || forcedGates.length || rv.notes.length ? "warn" : "pass",
+    [shownPending.length ? m.gatesPending(shownPending.map(rv.label).join(", ")) : null,
       nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
       forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null,
       ...rv.notes]
@@ -9766,8 +9904,8 @@ function roadmapTailLines(r, lang) {
 // implementsKey — anchors, ./ and case where the file system folds it dropped; a folder covers every file under it, as in
 // next --batch; a glob covers what it matches and its literal folder), or an active feature planning a file a FINISHED
 // feature recorded in its drift baseline (state.finished.files): they land on the same files at merge time and one of
-// them drifts silently. Not an overlap: two active features already ordered by a dependency (either way, transitively),
-// or either one declaring `_Supersedes:_` of the other's criteria (a finished one: the active one declaring it). Bounded:
+// them drifts silently. Not an overlap: two features already ordered by a dependency (either way, transitively — a finished
+// one too), or either one declaring `_Supersedes:_` of the other's criteria (a finished one: the active one declaring it). Bounded:
 // OVERLAP_MAX_KEYS entries per feature (each at most OVERLAP_MAX_REF_LEN characters), OVERLAP_MAX_GLOB_CHECKS glob comparisons
 // whose cost (pattern length × path length) stays under OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS pairs listed.
 // Text reads only — nothing is hashed (the SessionStart hook runs it).
@@ -9882,8 +10020,10 @@ function featureOverlaps(projectDir, feats, opts = {}) {
     }
     return supCache.get(s.name).has(other.name);
   };
+  // A finished pair too: a dependency either way orders them (the active one builds on the finished one — the advice SessionStart
+  // and doctor give, "order them with /depend"), or the active one declares _Supersedes:_ of its criteria.
   let list = [...pairs.values()]
-    .filter(({ a, b }) => (b.kind === "finished" ? !supersedes(a, b) : !(reaches(a.name, b.name) || reaches(b.name, a.name) || supersedes(a, b) || supersedes(b, a))))
+    .filter(({ a, b }) => !(reaches(a.name, b.name) || reaches(b.name, a.name) || supersedes(a, b) || (b.kind !== "finished" && supersedes(b, a))))
     .sort((x, y) => x.a.idx - y.a.idx || x.b.idx - y.b.idx)
     .map(({ a, b, files }) => {
       const all = [...files.values()].sort();
