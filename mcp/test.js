@@ -9904,6 +9904,232 @@ function endRun() {
   // 1.14 full review (Ga) — evidence, project checks, CLI runs.
 
   // 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
+  {
+    const gbDir = (n) => path.join(tmp, "gb-" + n);
+    const gbW = (dir, rel, txt) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), txt); };
+    const gbR = (dir, rel) => fs.readFileSync(path.join(dir, rel), "utf8");
+    const gbRun = 'node -e "process.exit(0)"';
+    const gbTasks = (verify) => "# Tasks: login\n\n## Global Constraints\n- Node >= 18\n\n## Story US-1 (P1 — MVP)\n" +
+      "- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + verify + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + verify + "_\n**Checkpoint:** US-1 works.\n";
+    // A core feature whose whole planning chain is filled (the fast-forward through tasks passes every gate).
+    const gbFeature = (p, name, tasks) => {
+      const r = S.createFeature(p, name, ["core"], "", null, "en");
+      gbW(r.dir, "classification.md", `# Classification: ${name}\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n`);
+      gbW(r.dir, "requirements.md", `# Feature: ${name}\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n` +
+        "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+        "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+        "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+        "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+      gbW(r.dir, "design.md", `# Design: ${name}\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n` +
+        "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+        "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+      gbW(r.dir, "tasks.md", tasks || gbTasks(gbRun));
+      return r;
+    };
+
+    // Gb1: a re-review whose approve gate would refuse (a [NEEDS CLARIFICATION] added after the approval) names the failing checks.
+    const p1 = gbDir("rereview");
+    S.initProject(p1, ["core"], "en");
+    const f1 = gbFeature(p1, "login");
+    const ff1 = S.approvePhase(p1, "login", null, "u", { through: "tasks" });
+    gbW(f1.dir, "requirements.md", gbR(f1.dir, "requirements.md").replace("- Social login", "- Social login [NEEDS CLARIFICATION: which providers?]"));
+    const na1 = S.nextAction(p1, "login");
+    const ap1 = S.approvePhase(p1, "login", "requirements", "u");
+    ok(ff1.ok && na1.step === "re-review" && na1.refusedGate && na1.refusedGate.phase === "requirements" && na1.refusedGate.failing.includes("clarifications") &&
+      /fix what the approve gate would refuse: clarifications/.test(na1.recommendation) && ap1.ok === false && ap1.failing.includes("clarifications"),
+      "full review Gb1: re-review of a phase whose approve gate refuses names the failing checks (refusedGate + ids) — never a bare 're-approve' that loops (got " + JSON.stringify([na1.step, na1.refusedGate, na1.recommendation]) + ")");
+
+    // Gb2: the execution sign-off with roles (meta.approvalRoles.execution): next_action names the role, doctor lists the pending sign-off.
+    const p2 = gbDir("exec-roles");
+    S.initProject(p2, ["core"], "en", { approvalRoles: { execution: ["qa", "product"] } });
+    gbFeature(p2, "login");
+    S.approvePhase(p2, "login", null, "u", { through: "tasks" });
+    S.completeTask(p2, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p2, "login", 2, { command: gbRun, exitCode: 0 });
+    const fin2 = S.finishFeature(p2, "login", { write: true });
+    const na2a = S.nextAction(p2, "login");
+    const doc2a = S.specDoctor(p2, "login");
+    const qa2 = S.approvePhase(p2, "login", "execution", "u", { role: "qa" });
+    const na2b = S.nextAction(p2, "login");
+    const doc2b = S.specDoctor(p2, "login");
+    const fin2b = S.finishFeature(p2, "login", {});
+    const po2 = S.approvePhase(p2, "login", "execution", "u", { role: "product" });
+    const na2c = S.nextAction(p2, "login");
+    const gates2 = (d) => d.checks.find((c) => c.id === "approval-gates");
+    ok(fin2.readyToFinish && na2a.step === "finished" && /Sign it off — missing roles: qa, product: \/approve login execution --role qa\./.test(na2a.recommendation) && JSON.stringify(na2a.missingRoles) === '["qa","product"]' &&
+      doc2a.pendingRoles.execution && JSON.stringify(doc2a.pendingRoles.execution.missing) === '["qa","product"]' && gates2(doc2a).status === "warn" &&
+      qa2.ok && qa2.complete === false && /--role product\./.test(na2b.recommendation) && /\(signed: qa\)/.test(na2b.recommendation) && JSON.stringify(na2b.missingRoles) === '["product"]' &&
+      /awaiting human approval: execution \(missing role: product\)/.test(gates2(doc2b).detail) && fin2b.readyToFinish === true && doc2b.gatesOk === true &&
+      po2.ok && po2.complete === true && na2c.step === "finished" && /Nothing left to do here/.test(na2c.recommendation) && na2c.missingRoles === undefined,
+      "full review Gb2: with execution roles, next_action names the role to sign as (--role qa, then --role product), doctor lists the pending execution sign-off (pendingRoles, approval-gates) once a finish is recorded — never a blocker of the finish itself (got " +
+      JSON.stringify([na2a.recommendation, na2b.recommendation, gates2(doc2b).detail, na2c.step]) + ")");
+
+    // Gb3: finished, then a task re-run after the project checks' run → next_action asks for the checks (verify), not "nothing left to do".
+    const p3 = gbDir("finished-suite");
+    S.initProject(p3, ["core"], "en", { checks: { test: "npm test" } });
+    gbFeature(p3, "login");
+    S.approvePhase(p3, "login", null, "u", { through: "tasks" });
+    S.completeTask(p3, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p3, "login", 2, { command: gbRun, exitCode: 0 });
+    const fin3 = S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }], write: true });
+    S.approvePhase(p3, "login", "execution", "u");
+    const na3a = S.nextAction(p3, "login");
+    S.completeTask(p3, "login", 1, { command: gbRun, exitCode: 0 }); // a re-check after the finish: the checks ran before it
+    const na3b = S.nextAction(p3, "login");
+    const fin3b = S.finishFeature(p3, "login", {});
+    S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }] });
+    const na3c = S.nextAction(p3, "login");
+    ok(fin3.readyToFinish && na3a.step === "finished" && na3b.step === "verify" && JSON.stringify(na3b.suite) === '[{"name":"test","status":"before-last-tick"}]' &&
+      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /dev-spec finish login --run/.test(na3b.recommendation) &&
+      !/Nothing left to do/.test(na3b.recommendation) && fin3b.readyToFinish === false && na3c.step === "finished" && na3c.suite === undefined,
+      "full review Gb3: a finished feature whose project checks have no passing run since the last task activity → step verify naming the checks (suite: [{name, status}]) — never 'finished, nothing left to do' while spec_finish refuses (got " +
+      JSON.stringify([na3a.step, na3b.step, na3b.suite, na3c.step]) + ")");
+
+    // Gb4: the stop gate never applies project checks to a spike; a checks-only reason has its own head (EN / PT / ES).
+    const p4 = gbDir("spike-stop");
+    S.initProject(p4, ["core"], "en", { checks: { test: gbRun } });
+    const sp4 = S.createFeature(p4, "cache spike", null, "", null, null, "spike", { question: "Should we use Redis for the session cache?", timebox: "3d" });
+    gbW(sp4.dir, "spike.md", gbR(sp4.dir, "spike.md").replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Go: Redis cut p95 latency by 40% in the prototype.").replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+    for (const n of [1, 2, 3, 4]) S.completeTask(p4, "cache-spike", n);
+    const fin4 = S.finishFeature(p4, "cache-spike", {});
+    const st4 = S.stopCheck(p4, { message: "The spike is done: the decision is go." });
+    const p4b = gbDir("suite-head");
+    S.initProject(p4b, ["core"], "en", { checks: { test: "npm test" } });
+    const f4b = S.createFeature(p4b, "Export", ["core"], "", undefined, "en");
+    gbW(f4b.dir, "tasks.md", "- [ ] 1. [US1] Export CSV\n");
+    S.completeTask(p4b, "export", 1, { summary: "downloaded a CSV" });
+    const st4b = S.stopCheck(p4b, { message: "Finished — the feature is complete." });
+    ok(fin4.readyToFinish && st4.block === false && !st4.features.length && st4b.block === true && st4b.features[0].suite.length === 1 &&
+      /^dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:\n {2}- export: /.test(st4b.reason) &&
+      !/tasks are ticked without verification evidence/.test(st4b.reason) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
+      "full review Gb4: a decided spike with every task ticked is never sent back over project checks (it has none); a checks-only reason heads with the checks, not 'tasks are ticked without verification evidence' (got " +
+      JSON.stringify([st4.block, st4.why, st4.features, st4b.reason.split("\n")[0]]) + ")");
+
+    // Gb5: stop claims read "no" / "se" by language — PT "no" (em + o) and ES reflexive "se" never cancel a real claim; real negations still do.
+    const claimed = (m) => { const r = S.stopClaims(m); return r.claim && !r.admitted; };
+    const gb5Yes = ["A correção no módulo está concluída.", "O login no servidor foi implementado.", "La tarea 3 se ha completado.", "Se han implementado todos los cambios.", "Todo se ha verificado."];
+    const gb5No = ["Todavía no está terminado.", "Aún no está terminado.", "No está hecho.", "La tarea no se ha completado.", "No todo está hecho.", "Não está feito ainda.", "Se os testes passarem, fica feito?"];
+    const p5 = gbDir("stop-lang");
+    S.initProject(p5, ["core"], "en");
+    const f5 = S.createFeature(p5, "Login", ["core"], "", undefined, "en");
+    gbW(f5.dir, "tasks.md", "- [ ] 1. [US1] Handler\n  - _Verify: " + gbRun + "_\n- [ ] 2. [US1] Error\n");
+    S.completeTask(p5, "login", 1);
+    const st5 = ["A correção no módulo está concluída.", "La tarea 1 se ha completado."].map((m) => S.stopCheck(p5, { message: m }));
+    ok(gb5Yes.every(claimed) && !gb5No.some(claimed) && st5.every((r) => r.block === true && r.why === "unverified"),
+      "full review Gb5: PT 'no' (em + o) and ES reflexive 'se' no longer cancel a claim (the claim is sent back while a task is unverified); 'no está', 'no se ha', 'não está', PT 'se' (if) still negate (missed: " +
+      JSON.stringify(gb5Yes.filter((m) => !claimed(m))) + ", false: " + JSON.stringify(gb5No.filter(claimed)) + ", stop: " + JSON.stringify(st5.map((r) => r.why)) + ")");
+
+    // Gb6: a failure already fixed is no admission; "2 are failing" is one; the claims the gate missed.
+    const gb6Fixed = ["Done! I fixed the 2 failing tests and everything works now.", "Implemented and verified. Previously 4 tests failed; now all 12 pass.",
+      "All tasks are complete. The 3 failures from yesterday are fixed.", "Feito. Corrigi os 2 testes a falhar.", "Listo. Corregí las 2 pruebas fallando."];
+    const gb6Admit = ["The tests passed before my change; after it, 2 are failing.", "I haven't fixed the 2 failing tests, but task 1 is done.", "Task 1 is done, but 2 failing tests are not fixed yet.",
+      "Done. 12 passing, 2 failing.", "Tests pass locally; task 3 is not verified."];
+    const gb6Claims = ["All tasks done.", "All tasks done ✓", "All 5 tasks done.", "All green.", "✅ Done", "Done ✅", "Tasks 1-3 done.", "Feature complete.", "No problem — task 2 is done.",
+      "Todas as tarefas feitas.", "Todas las tareas hechas.", "Tarefas 1-3 feitas.", "Tareas 1 a 3 hechas.", "✅ Feito", "✅ Hecho"];
+    const st6 = S.stopCheck(p5, { message: gb6Fixed[0] });
+    ok(gb6Fixed.every(claimed) && gb6Admit.every((m) => S.stopClaims(m).admitted) && gb6Claims.every(claimed) && st6.block === true && st6.why === "unverified" &&
+      !claimed("Should I mark tasks 1-3 done?") && !claimed("Not done yet: the feature is incomplete."),
+      "full review Gb6: 'I fixed the 2 failing tests' / 'Previously 4 tests failed' / 'failures … are fixed' are no admission (the false done is sent back); '2 are failing' / 'haven't fixed' / 'not fixed yet' still are; 'All tasks done', 'All green', '✅ Done', 'Tasks 1-3 done', 'Feature complete', 'No problem — task 2 is done', PT/ES 'Todas as/las tarefas/tareas feitas/hechas' are claims (fixed-not-claimed: " +
+      JSON.stringify(gb6Fixed.filter((m) => !claimed(m))) + ", not admitted: " + JSON.stringify(gb6Admit.filter((m) => !S.stopClaims(m).admitted)) + ", missed: " + JSON.stringify(gb6Claims.filter((m) => !claimed(m))) + ")");
+
+    // Gb7: two tasks share a number → the verify step asks to renumber (a re-run can never reach the second one); renumbered, it ends.
+    const p7 = gbDir("dup-number");
+    S.initProject(p7, ["core"], "en");
+    const f7 = gbFeature(p7, "login", gbTasks(gbRun).replace("- [ ] 2. [US1] Show", "- [ ] 1. [US1] Show"));
+    S.approvePhase(p7, "login", null, "u", { through: "tasks" });
+    S.completeTask(p7, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p7, "login", 1);
+    const na7a = S.nextAction(p7, "login");
+    const rerun7 = S.completeTask(p7, "login", 1, { command: gbRun, exitCode: 0 });
+    const na7b = S.nextAction(p7, "login");
+    gbW(f7.dir, "tasks.md", gbR(f7.dir, "tasks.md").replace("- [x] 1. [US1] Show", "- [x] 2. [US1] Show"));
+    S.approvePhase(p7, "login", "tasks", "u");
+    S.completeTask(p7, "login", 2, { command: gbRun, exitCode: 0 });
+    const na7c = S.nextAction(p7, "login");
+    ok(na7a.step === "verify" && /two tasks are numbered 1/.test(na7a.recommendation) && /Renumber the tasks in \.specs\/login\/tasks\.md/.test(na7a.recommendation) && /duplicate-tasks/.test(na7a.recommendation) &&
+      !/--run/.test(na7a.recommendation) && rerun7.alreadyDone === true && na7b.recommendation === na7a.recommendation && na7c.step === "finish",
+      "full review Gb7: an unverified task whose number another task shares → the verify step asks to renumber (duplicate-tasks), never 're-run task N --run' (which answers alreadyDone forever); once renumbered and run, the feature moves on to finish (got " +
+      JSON.stringify([na7a.recommendation, rerun7.alreadyDone, na7c.step]) + ")");
+
+    // Gb8: guard on / scope during Phase 4 (+tdd, test plan approved, tasks not yet approvable) — test files are covered, code still asks.
+    for (const level of ["on", "scope"]) {
+      const p8 = gbDir("guard-tests-" + level);
+      S.initProject(p8, ["tdd"], "en", { guard: level });
+      const f8 = S.createFeature(p8, "Shortener", ["tdd"], "", undefined, "en");
+      const s8 = JSON.parse(gbR(f8.dir, ".state.json"));
+      s8.approvals = { classification: { at: "2026-09-01T00:00:00.000Z", by: "u" }, requirements: { at: "2026-09-01T00:00:00.000Z", by: "u" }, design: { at: "2026-09-01T00:00:00.000Z", by: "u" }, "test-plan": { at: "2026-09-01T00:00:00.000Z", by: "u" } };
+      gbW(f8.dir, ".state.json", JSON.stringify(s8, null, 2));
+      const t8 = S.guardCheck(p8, "test/shortener.test.js");
+      const c8 = S.guardCheck(p8, "src/shortener.js");
+      ok(t8.decision === "allow" && t8.why === "tests-phase" && JSON.stringify(t8.covering) === '["shortener"]' && c8.decision === "ask" && c8.why === "no-approved-tasks",
+        "full review Gb8 (" + level + "): with an approved test plan and unfinished tasks (Phase 4), a test file is allowed ('tests-phase') — the failing tests come before the tasks gate; a code file still asks (got " +
+        JSON.stringify([t8.decision, t8.why, c8.decision, c8.why]) + ")");
+    }
+
+    // Gb9: guard during a spike — its prototype edits are covered (no tasks gate to approve), never "awaiting approval"; a decided, done spike covers nothing.
+    for (const level of ["on", "scope"]) {
+      const p9 = gbDir("guard-spike-" + level);
+      S.initProject(p9, ["core"], "en", { guard: level });
+      const sp9 = S.createFeature(p9, "cache spike", null, "", null, "en", "spike", { question: "Should we use Redis?", timebox: "3d" });
+      const g9a = S.guardCheck(p9, "proto/redis.js");
+      gbW(sp9.dir, "spike.md", gbR(sp9.dir, "spike.md").replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Go: Redis cut p95 latency by 40%.").replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+      for (const n of [1, 2, 3, 4]) S.completeTask(p9, "cache-spike", n);
+      const g9b = S.guardCheck(p9, "proto/redis.js");
+      ok(g9a.decision === "allow" && g9a.why === "spike" && JSON.stringify(g9a.spikes) === '["cache-spike"]' &&
+        g9b.decision === "ask" && !g9b.pending.includes("cache-spike") && !/cache-spike/.test(g9b.reason),
+        "full review Gb9 (" + level + "): an active spike (undecided or with open tasks) covers prototype code edits ('spike'); a decided spike with every task done covers nothing — and a spike is never listed as awaiting a tasks approval it can't have (got " +
+        JSON.stringify([g9a.decision, g9a.why, g9b.decision, g9b.pending, g9b.reason]) + ")");
+    }
+
+    // Gb10: a dependency (either way) exempts a pair with a FINISHED feature from the overlap warning, like an active pair.
+    const p10 = gbDir("overlap");
+    S.initProject(p10, ["core"], "en");
+    const a10 = S.createFeature(p10, "Url shortener", ["core"], "", undefined, "en");
+    gbW(a10.dir, "tasks.md", "- [x] 1. [US1] Shorten\n  - _Implements: src/shortener.js_\n");
+    const sa10 = JSON.parse(gbR(a10.dir, ".state.json"));
+    sa10.finished = { at: "2026-09-20T10:00:00.000Z", files: { "src/shortener.js": null } };
+    gbW(a10.dir, ".state.json", JSON.stringify(sa10, null, 2));
+    S.createFeature(p10, "Custom aliases", ["core"], "", undefined, "en");
+    gbW(path.join(p10, ".specs", "custom-aliases"), "tasks.md", "- [ ] 1. [US1] Aliases\n  - _Implements: src/shortener.js_\n");
+    const ov10a = S.featureOverlaps(p10).pairs;
+    S.setDependency(p10, "custom-aliases", undefined, undefined, { add: "url-shortener" });
+    const ov10b = S.featureOverlaps(p10).pairs;
+    const doc10 = S.specDoctor(p10, "custom-aliases").checks.find((c) => c.id === "cross-feature-overlap");
+    S.setDependency(p10, "custom-aliases", []);
+    S.setDependency(p10, "url-shortener", ["custom-aliases"]);
+    const ov10c = S.featureOverlaps(p10).pairs;
+    ok(ov10a.length === 1 && ov10a[0].kind === "finished" && /spec_depend/.test(S.msg("en").forecast.overlap.doctorFinished("x", "y")) && ov10b.length === 0 && doc10 === undefined && ov10c.length === 0,
+      "full review Gb10: an active feature planning a finished feature's baseline files is no overlap once either depends on the other (the advice /depend works); undepended it is (got " +
+      JSON.stringify([ov10a.map((x) => x.kind), ov10b.length, doc10 && doc10.status, ov10c.length]) + ")");
+
+    // Gb11: impact names the role to re-approve as (meta.approvalRoles), in the result (missingRoles) and the printed lines / notes.
+    const p11 = gbDir("impact-roles");
+    S.initProject(p11, ["core"], "en", { approvalRoles: { requirements: ["product"] } });
+    const f11 = gbFeature(p11, "login");
+    const ff11 = S.approvePhase(p11, "login", null, "u", { through: "tasks", role: "product" });
+    S.completeTask(p11, "login", 1, { command: gbRun, exitCode: 0 });
+    gbW(f11.dir, "requirements.md", gbR(f11.dir, "requirements.md").replace("THE SYSTEM SHALL open a session", "THE SYSTEM SHALL open a session within 2 seconds"));
+    const im11 = S.impactReport(p11, "login", { phase: "requirements" });
+    const lines11 = S.impactLines(im11).join("\n");
+    const re11 = S.impactReport(p11, "login", { phase: "requirements", reopen: true });
+    ok(ff11.ok && im11.changed === true && JSON.stringify(im11.missingRoles) === '["product"]' && /→ review the change, then re-approve: \/approve login requirements --role product/.test(lines11) &&
+      re11.ok && re11.reopened.includes(1) && /\/approve login requirements --role product\./.test(re11.note),
+      "full review Gb11: spec_impact on a phase signed off per role names the role (missingRoles; '→ … /approve <f> <phase> --role <role>'; the --reopen note too) — the role-less command is refused (got " +
+      JSON.stringify([im11.missingRoles, lines11.split("\n").pop(), re11.note]) + ")");
+
+    // Gb12: a fast-forward stopped by a role error after approving earlier phases says what was recorded — never "Nothing recorded."
+    const p12 = gbDir("ff-roles");
+    S.initProject(p12, ["core"], "en", { approvalRoles: { requirements: ["product"], design: ["tech"] } });
+    gbFeature(p12, "login");
+    const ff12a = S.approvePhase(p12, "login", null, "u", { through: "tasks" });
+    const ff12b = S.approvePhase(p12, "login", null, "u", { through: "tasks", role: "product" });
+    ok(ff12a.ok === false && ff12a.stopReason === "role" && ff12a.stoppedAt === "requirements" && JSON.stringify(ff12a.approved) === '["classification"]' &&
+      !/Nothing recorded/.test(ff12a.error) && /\(approved before it: classification\)/.test(ff12a.error) && /nothing was recorded for 'requirements'/.test(ff12a.error) && /--through tasks --role <role>/.test(ff12a.error) &&
+      ff12b.ok === false && ff12b.stoppedAt === "design" && /'product' is not a role that signs off 'design' \(roles: tech\) — nothing was recorded for 'design'/.test(ff12b.error) && !/Nothing recorded/.test(ff12b.error),
+      "full review Gb12: a fast-forward stopped by a role refusal names what it approved before and that nothing was recorded for the stopping phase — the approve refusal's 'Nothing recorded.' contradicted it (got " +
+      JSON.stringify([ff12a.error, ff12b.error]) + ")");
+  }
 
   // 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
 
