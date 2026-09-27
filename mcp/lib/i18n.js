@@ -80,6 +80,9 @@ function templateTestRows(tracks, row, L, acs) {
   if (Array.isArray(acs) && acs.length) {
     return acs.map((ac, i) => row("T-" + String(i + 1).padStart(2, "0"), "unit", "example", L.behavior, ac, "tests/unit/...")).join("\n");
   }
+  // An EMPTY list: requirements.md was written and defines no AC ID (an import without criteria) — one generic row whose
+  // Covers cell is a slot, never the template's US-1.AC-1… rows (phantoms for trace_check). 1.14 full review Pa4.
+  if (Array.isArray(acs)) return row("T-01", "unit", "example", L.behavior, L.acSlot, "tests/unit/...");
   const T = templateTests(tracks);
   const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
   const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
@@ -598,7 +601,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 
     testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
-        { integration: "integration", load: "load", behavior: "[behavior]", recovery: "[error condition → recovery]", property: "[always-true property]",
+        { integration: "integration", load: "load", behavior: "[behavior]", acSlot: "[the AC IDs this test covers]", recovery: "[error condition → recovery]", property: "[always-true property]",
           tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
           golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget",
           unauthenticated: "abuse case: an unauthenticated request gets 401 and no data", forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
@@ -1253,7 +1256,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 
     testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
-        { integration: "integração", load: "carga", behavior: "[comportamento]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
+        { integration: "integração", load: "carga", behavior: "[comportamento]", acSlot: "[os IDs de AC que este teste cobre]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
           tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
           golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento",
           unauthenticated: "caso de abuso: um pedido não autenticado recebe 401 e nenhum dado", forbidden: "caso de abuso: o utilizador B nunca lê o recurso do utilizador A (403 + evento de auditoria)",
@@ -1908,7 +1911,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 
     testPlan(name, tracks, acs) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
-        { integration: "integración", load: "carga", behavior: "[comportamiento]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
+        { integration: "integración", load: "carga", behavior: "[comportamiento]", acSlot: "[los IDs de AC que cubre esta prueba]", recovery: "[condición de error → recuperación]", property: "[propiedad siempre verdadera]",
           tenant: "el inquilino A nunca lee registros del inquilino B", latency: "latencia P95 dentro del presupuesto de rendimiento",
           golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto",
           unauthenticated: "caso de abuso: una solicitud no autenticada recibe 401 y ningún dato", forbidden: "caso de abuso: el usuario B nunca lee el recurso del usuario A (403 + evento de auditoría)",
@@ -2308,6 +2311,7 @@ const MSG = {
       acDup: (list) => `duplicate AC IDs: ${list}`,
       acUnique: "AC IDs unique",
       earsDetail: (n, e, w) => `criteria=${n}, errors=${e}, warnings=${w}`,
+      earsNoCriteria: (ids) => `requirements.md cites AC IDs (${ids}) but no criterion was linted — EARS checks an AC written as a list item, heading or line that starts with its ID, or as a table row under an Acceptance Criteria heading`,
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
@@ -2703,6 +2707,7 @@ const MSG = {
       ears: { while: "WHILE", when: "WHEN", if: "IF", where: "WHERE", then: "THEN", shall: "THE SYSTEM SHALL", not: "NOT", ensure: "THE SYSTEM SHALL ensure that" },
       wNotEars: (ids) => `not converted to EARS (text kept, marked [NEEDS CLARIFICATION]): ${ids}`,
       wNoCriteria: (ids) => `stories without acceptance criteria: ${ids}`,
+      wNoCriteriaAtAll: "the source holds no acceptance criteria — requirements.md defines no AC yet: write them before approving the requirements (a +tdd test plan gets one generic row until then)",
       wUnknownRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
@@ -3105,6 +3110,16 @@ const MSG = {
         privacyRights: "Specify the data subject rights the feature must serve (access, erasure, portability…) as ACs, with the one-month deadline.",
         privacyRetention: "Specify how long each category of personal data is kept and what happens when that period ends.",
       },
+    },
+
+    // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
+    markerSyntax: {
+      doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ (italics, the value inside).`,
+    },
+    // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
+    // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).
+    outsideCode: {
+      doctor: (list) => `tests planned outside test code point at an artifact that is still a template: ${list} — fill it in (the real load run, the feature's own eval set) before calling them verified.`,
     },
 
     // A _Verify:_ command that pipes into another one (`npm test | tee log`): a pipeline's exit code is its LAST command's.
@@ -3685,6 +3700,7 @@ _Outcome: [go | no-go | pivot]_
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
       earsDetail: (n, e, w) => `critérios=${n}, erros=${e}, avisos=${w}`,
+      earsNoCriteria: (ids) => `o requirements.md cita IDs de AC (${ids}) mas nenhum critério foi validado — o EARS valida um AC escrito como item de lista, título ou linha que comece pelo seu ID, ou como linha de tabela sob um título de Critérios de Aceitação`,
       designMissing: "design.md em falta",
       mermaidOk: "tem um diagrama",
       mermaidMissing: "nenhum diagrama mermaid encontrado",
@@ -4059,6 +4075,7 @@ _Outcome: [go | no-go | pivot]_
       ears: { while: "ENQUANTO", when: "QUANDO", if: "SE", where: "ONDE", then: "ENTÃO", shall: "O SISTEMA DEVE", not: "NÃO", ensure: "O SISTEMA DEVE garantir que" },
       wNotEars: (ids) => `não convertidos para EARS (texto mantido, marcado [NEEDS CLARIFICATION]): ${ids}`,
       wNoCriteria: (ids) => `histórias sem critérios de aceitação: ${ids}`,
+      wNoCriteriaAtAll: "a origem não tem critérios de aceitação — o requirements.md ainda não define nenhum AC: escreve-os antes de aprovar os requisitos (até lá, um plano de testes +tdd recebe uma linha genérica)",
       wUnknownRef: (task, ref) => `tarefa ${task}: a referência _Requirements:_ '${ref}' não corresponde a nenhum critério importado — mantida como estava`,
       wUnknownRefLine: (line, ref) => `tasks.md, linha ${line}: a referência _Requirements:_ '${ref}' não corresponde a nenhum critério importado — mantida como estava`,
       wCarried: (list) => `copiado tal como estava, sem correspondência com histórias ou critérios (revê-o): ${list}`,
@@ -4424,6 +4441,13 @@ _Outcome: [go | no-go | pivot]_
         privacyRights: "Especifica os direitos dos titulares que a feature tem de satisfazer (acesso, apagamento, portabilidade…) como ACs, com o prazo de um mês.",
         privacyRetention: "Especifica durante quanto tempo é conservada cada categoria de dados pessoais e o que acontece quando esse prazo termina.",
       },
+    },
+
+    markerSyntax: {
+      doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ (em itálico, com o valor lá dentro).`,
+    },
+    outsideCode: {
+      doctor: (list) => `testes planeados fora do código de testes apontam para um artefacto que ainda é um modelo: ${list} — preenche-o (a execução de carga real, o conjunto de avaliação da própria feature) antes de considerar esses testes verificados.`,
     },
 
     verifyPipe: {
@@ -4981,6 +5005,7 @@ _Outcome: [go | no-go | pivot]_
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
       earsDetail: (n, e, w) => `criterios=${n}, errores=${e}, avisos=${w}`,
+      earsNoCriteria: (ids) => `requirements.md cita IDs de AC (${ids}) pero no se validó ningún criterio — EARS valida un AC escrito como elemento de lista, título o línea que empiece por su ID, o como fila de tabla bajo un título de Criterios de Aceptación`,
       designMissing: "falta design.md",
       mermaidOk: "tiene un diagrama",
       mermaidMissing: "no se encontró diagrama mermaid",
@@ -5355,6 +5380,7 @@ _Outcome: [go | no-go | pivot]_
       ears: { while: "MIENTRAS", when: "CUANDO", if: "SI", where: "DONDE", then: "ENTONCES", shall: "EL SISTEMA DEBE", not: "NO", ensure: "EL SISTEMA DEBE garantizar que" },
       wNotEars: (ids) => `no convertidos a EARS (texto conservado, marcado [NEEDS CLARIFICATION]): ${ids}`,
       wNoCriteria: (ids) => `historias sin criterios de aceptación: ${ids}`,
+      wNoCriteriaAtAll: "el origen no tiene criterios de aceptación — requirements.md aún no define ningún AC: escríbelos antes de aprobar los requisitos (hasta entonces, un plan de pruebas +tdd recibe una fila genérica)",
       wUnknownRef: (task, ref) => `tarea ${task}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
       wUnknownRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
       wCarried: (list) => `copiado tal cual, sin correspondencia con historias o criterios (revísalo): ${list}`,
@@ -5720,6 +5746,13 @@ _Outcome: [go | no-go | pivot]_
         privacyRights: "Especifica los derechos de los interesados que la función debe atender (acceso, supresión, portabilidad…) como ACs, con el plazo de un mes.",
         privacyRetention: "Especifica cuánto tiempo se conserva cada categoría de datos personales y qué ocurre cuando vence ese plazo.",
       },
+    },
+
+    markerSyntax: {
+      doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ (en cursiva, con el valor dentro).`,
+    },
+    outsideCode: {
+      doctor: (list) => `pruebas planificadas fuera del código de pruebas apuntan a un artefacto que aún es una plantilla: ${list} — rellénalo (la ejecución de carga real, el conjunto de evaluación propio de la función) antes de darlas por verificadas.`,
     },
 
     verifyPipe: {

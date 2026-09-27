@@ -583,8 +583,92 @@ function invalidateReadCache() {
   TEMPLATE_MEMO = null;
 }
 
+// The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
+// that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
 function stripHtmlComments(s) {
-  return String(s || "").replace(/<!--[\s\S]*?-->/g, "");
+  const text = String(s || "");
+  if (!text.includes("<!--")) return text;
+  const lines = text.split("\n");
+  const cl = commentLines(lines);
+  let out = "";
+  cl.forEach((c, i) => {
+    if (c.hidden) return;
+    out += c.vis;
+    if (!c.open && i < lines.length - 1) out += "\n";
+  });
+  return out;
+}
+// HTML comments as a markdown reader sees them, line by line — the ONE comment rule of stripHtmlComments, criterionBlocks
+// and visibleLines (the tasks scanner, scanTaskLines, adds its own list-item / paragraph reach). Fenced code (fenceStep)
+// and inline code spans are code: a "<!--" there is text (1.14 full review Pa3 — an AC saying "contains `<!--`" hid every
+// criterion down to the next "-->" from EARS, trace_check and the placeholder scan). A "<!--" outside code opens a
+// comment only when a "-->" outside code follows it, on its line or a later one (one that never closes is text); an open
+// comment ends at the first "-->", whatever it sits in (inside a comment nothing is code). Linear.
+// lines: the text split on "\n" (a trailing "\r" is harmless). → per line { vis, fence, hidden, open }: vis = the line
+// minus its comments; fence = fenceStep's verdict ("open" | "code" | null — a fence line keeps vis = the line); hidden =
+// the line lies wholly inside a comment; open = a comment is still open at its end.
+function commentLines(lines) {
+  const n = lines.length;
+  let closerAfter = null; // closerAfter[i]: a "-->" outside fenced code and code spans on a line after i
+  const later = (i) => {
+    if (!closerAfter) {
+      const pre = { fence: null };
+      const has = lines.map((l) => !fenceStep(pre, l) && l.includes("-->") && hasOutsideCode(l, "-->"));
+      closerAfter = new Array(n).fill(false);
+      for (let j = n - 2; j >= 0; j--) closerAfter[j] = has[j + 1] || closerAfter[j + 1];
+    }
+    return closerAfter[i];
+  };
+  const out = [];
+  const st = { fence: null };
+  let comment = false;
+  for (let i = 0; i < n; i++) {
+    const raw = lines[i];
+    let k = 0;
+    if (comment) {
+      const end = raw.indexOf("-->");
+      if (end === -1) { out.push({ vis: "", fence: null, hidden: true, open: true }); continue; }
+      comment = false;
+      k = end + 3;
+    } else {
+      const fl = fenceStep(st, raw);
+      if (fl) { out.push({ vis: raw, fence: fl, hidden: false, open: false }); continue; }
+    }
+    let lt = raw.indexOf("<!--", k);
+    if (lt === -1) { out.push({ vis: k ? raw.slice(k) : raw, fence: null, hidden: false, open: false }); continue; }
+    const ticks = backtickRuns(raw);
+    let closers = null; // this line's "-->" outside code spans, ascending
+    const closesOnLine = (from) => {
+      if (!closers) {
+        closers = [];
+        const t2 = backtickRuns(raw);
+        for (let q = 0; q < raw.length;) {
+          if (raw[q] === "`") q = t2.spanEnd(q);
+          else if (raw.startsWith("-->", q)) { closers.push(q); q += 3; } else q++;
+        }
+      }
+      return closers.length > 0 && closers[closers.length - 1] >= from;
+    };
+    let vis = "";
+    let bt = raw.indexOf("`", k);
+    while (k < raw.length) {
+      if (comment) {
+        const end = raw.indexOf("-->", k);
+        if (end === -1) { k = raw.length; break; }
+        comment = false;
+        k = end + 3;
+        continue;
+      }
+      if (bt !== -1 && bt < k) bt = raw.indexOf("`", k);
+      if (lt !== -1 && lt < k) lt = raw.indexOf("<!--", k);
+      if (lt === -1) { vis += raw.slice(k); break; }
+      if (bt !== -1 && bt < lt) { const e = ticks.spanEnd(bt); vis += raw.slice(k, e); k = e; continue; } // a code span: text
+      if (closesOnLine(lt + 4) || later(i)) { vis += raw.slice(k, lt); comment = true; } else vis += raw.slice(k, lt + 4);
+      k = lt + 4;
+    }
+    out.push({ vis, fence: null, hidden: false, open: comment });
+  }
+  return out;
 }
 // Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
 // is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
@@ -2761,7 +2845,7 @@ function checkTemplates(projectDir, key, lang, lng) {
       const tk = effective(tasksK, l, ["core", "tdd"]), pk = effective(planK, l, ["core", "tdd"]);
       if (!tk.f && !pk.f) continue;
       const planned = new Set([...extractTestIds(planIdText(pk.rendered))].map((id) => parseInt(id.slice(2), 10)));
-      const green = [...tasksProseText(tk.rendered).matchAll(/_Makes green:\s*([^_\n]+)_/gi)].flatMap((m) => [...extractTestIds(m[1])]);
+      const green = taskMarkerValues(tasksProseText(tk.rendered), "makes green").flatMap((v) => [...extractTestIds(v)]);
       const phantom = [...new Set(green.filter((id) => !planned.has(parseInt(id.slice(2), 10))))];
       if (!phantom.length) continue;
       if (tk.f) add(tk.f, "warn", "phantom-test", P["phantom-test"](phantom.join(", "), pk.f ? pk.f.rel : TEMPLATE_ARTIFACTS[planK]));
@@ -3303,8 +3387,9 @@ const E = "(?![\\p{L}\\p{N}_])"; // unicode word boundary (after)
 const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
 const RE_MODAL_CAPS = new RegExp(B + "(DEVE|DEVER[ÁA]|DEVEM|DEVER[ÃA]O|DEBE|DEBER[ÁA]|DEBEN|DEBER[ÁA]N)" + E, "u");
 const RE_MODAL_SYSTEM = new RegExp(B + "sistema\\s+(n[ãa]o\\s+|no\\s+)?(deve|dever[áa]|debe|deber[áa])" + E, "iu");
-// A list item that opens with a stable AC ID defines a criterion, whatever section it sits in.
-const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\*\*|__)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+// A list item that opens with a stable AC ID defines a criterion, whatever section it sits in — a checkbox item
+// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2).
+const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
 const RE_MODAL = { test: (s) => RE_MODAL_EN.test(s) || RE_MODAL_CAPS.test(s) || RE_MODAL_SYSTEM.test(s) };
 // Lowercase PT/ES modal — only trusted on a numbered item inside an acceptance-criteria context.
 const RE_MODAL_LOOSE = new RegExp(B + "(deve|dever[áa]|devem|dever[ãa]o|debe|deber[áa]|deben|deber[áa]n)" + E, "iu");
@@ -3320,22 +3405,25 @@ const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
-// closerBelow(lines)[i] — does a "-->" appear on a line AFTER line i? A "<!--" that never closes is plain text, as
-// stripHtmlComments (trace_check, requirementAcIds) and scanTaskLines read it: one stray marker must not hide every
-// criterion / placeholder below it (EARS saw 0 criteria and passed while trace_check counted them all).
-function closerBelow(lines) {
-  const out = new Array(lines.length).fill(false);
-  for (let i = lines.length - 2; i >= 0; i--) out[i] = out[i + 1] || lines[i + 1].includes("-->");
-  return out;
-}
+// A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
+// linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
+// trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID; a table row
+// with a cell that is exactly an AC ID.
+const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+const RE_CELL_AC = /^(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?:\*\*|__|\*|_|`)?$/;
 
-// Strip HTML comments (possibly multi-line) so template guidance doesn't count as real content,
+// Strip HTML comments (possibly multi-line — commentLines) so template guidance doesn't count as real content,
 // then fold the surviving lines into criterion blocks.
-function criterionBlocks(text) {
+// opts.acUnits (earsValidate): every unit that defines an AC is its own criterion — a line starting with an AC ID (two
+// such lines in a row were ONE block), a checkbox item, a table row with a cell that is exactly an AC ID (under an
+// acceptance-criteria / user-story heading or no heading at all, or holding a modal verb — elsewhere a table of IDs is a
+// summary, not a criterion) and a heading that starts with an AC ID, whose body (paragraphs and list items up to the next heading,
+// table, quote, rule or AC-defining unit — blank lines included) is its text. Those blocks carry definesAc: true.
+// Without it (acIndex, the secondary IDs, _Supersedes:_) table rows and headings stay block breaks, as they always were.
+function criterionBlocks(text, opts = {}) {
+  const acUnits = !!(opts && opts.acUnits);
   const cleaned = []; // every content line, comments removed — [NEEDS CLARIFICATION] scans these
   const blocks = [];
-  let inComment = false;
-  const fst = { fence: null }; // the open code fence (fenceStep): its body is code, never a criterion ("const shall = 1")
   let cur = null;
   let section = null; // the heading path the criterion sits under, "H2 / H3 / …" (null = no heading yet)
   const stack = []; // open headings [{ level, text }] — a sub-heading inherits its parents' context
@@ -3345,28 +3433,18 @@ function criterionBlocks(text) {
   };
 
   const all = text.split(/\r?\n/);
-  const closes = closerBelow(all);
+  const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
   all.forEach((raw, i) => {
     const ln = i + 1;
-    let line = raw;
-    if (inComment) {
-      const end = line.indexOf("-->");
-      if (end === -1) return; // wholly inside a comment: no content, and no break in the criterion
-      line = line.slice(end + 3);
-      inComment = false;
-    }
-    line = line.replace(/<!--.*?-->/g, "");
-    const openIdx = line.indexOf("<!--");
-    if (openIdx !== -1 && closes[i]) {
-      inComment = true;
-      line = line.slice(0, openIdx);
-    }
-    const fl = fenceStep(fst, line); // an unclosed fence in a list item ends with the item
-    if (fl === "open") return flush();
-    if (fl) return; // inside a fence: no content, no criteria
+    const c = cl[i];
+    if (c.hidden) return; // wholly inside a comment: no content, and no break in the criterion
+    if (c.fence === "open") return flush(); // an unclosed fence in a list item ends with the item (fenceStep)
+    if (c.fence) return; // inside a fence: no content, no criteria ("const shall = 1")
+    const line = c.vis;
     if (!line.trim()) {
-      // A blank source line ends the criterion; a line that held only a comment does not.
-      if (!raw.trim()) flush();
+      // A blank source line ends the criterion; a line that held only a comment does not. An AC heading's body may
+      // follow it after a blank line.
+      if (!raw.trim() && !(cur && cur.heading)) flush();
       return;
     }
     cleaned.push({ line: ln, text: line.trim() });
@@ -3375,31 +3453,61 @@ function criterionBlocks(text) {
       while (stack.length && stack[stack.length - 1].level >= hd[1].length) stack.pop();
       stack.push({ level: hd[1].length, text: hd[2].trim() });
       section = stack.map((h) => h.text).join(" / ");
+      if (acUnits && RE_LEAD_DEFINES_AC.test(hd[2].trim())) {
+        flush();
+        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd[2].trim()], definesAc: true, heading: true };
+        return;
+      }
+    }
+    if (acUnits && /^\s*\|/.test(line)) {
+      flush();
+      const cells = tableCells(line);
+      if (cells.some((x) => RE_CELL_AC.test(x)) && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line))) { // earsValidate's AC context
+        blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
+      }
+      return;
     }
     if (RE_BLOCK_BREAK.test(line)) return flush();
+    const trimmed = line.trim();
     if (RE_LIST_ITEM.test(line)) {
+      // An AC heading's body: its list items are its text (one that defines an AC of its own is a new criterion).
+      if (cur && cur.heading && !RE_LIST_DEFINES_AC.test(trimmed)) {
+        cur.endLine = ln;
+        cur.parts.push(trimmed);
+        return;
+      }
       // A sub-list indented deeper than a criterion's first line continues it ("THE SYSTEM SHALL:" followed by
       // its numbered points is ONE criterion) — when the parent reads as a criterion (a modal verb or a defined
       // AC) and the sub-item doesn't define an AC of its own.
-      if (cur && indentOf(line) > cur.indent && !RE_LIST_DEFINES_AC.test(line.trim()) &&
+      if (cur && indentOf(line) > cur.indent && !RE_LIST_DEFINES_AC.test(trimmed) &&
         (RE_MODAL.test(cur.parts.join(" ")) || RE_LIST_DEFINES_AC.test(cur.parts[0]))) {
         cur.endLine = ln;
-        cur.parts.push(line.trim());
+        cur.parts.push(trimmed);
         return;
       }
       flush();
-      cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, indent: indentOf(line), parts: [line.trim()] };
+      cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, indent: indentOf(line), parts: [trimmed] };
+      if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) cur.definesAc = true;
+      return;
+    }
+    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed)) {
+      // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
+      flush();
+      cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
       return;
     }
     if (cur) {
-      cur.endLine = ln; // indented or lazy continuation of the criterion above
-      cur.parts.push(line.trim());
+      cur.endLine = ln; // indented or lazy continuation of the criterion above (or an AC heading's body)
+      cur.parts.push(trimmed);
       return;
     }
-    cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [line.trim()] };
+    cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed] };
   });
   flush();
-  return { cleaned, blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, section: b.section, text: b.parts.join(" ") })) };
+  return {
+    cleaned,
+    blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, section: b.section, text: b.parts.join(" "), ...(b.definesAc ? { definesAc: true } : {}) })),
+  };
 }
 
 // ears_validate {name} / `dev-spec ears <feature>`: lint a feature's requirements.md (resolver-aware).
@@ -3412,6 +3520,14 @@ function earsFeature(projectDir, name) {
   return earsValidate(text, lng);
 }
 
+// requirements.md defines AC IDs (trace_check's reading, requirementAcIds) but EARS linted no criterion at all: the IDs,
+// shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements approval gate fail on it
+// (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
+function earsUnlinted(reqText, ears) {
+  if (!ears || !ears.summary || ears.summary.criteriaDetected > 0) return null;
+  const ids = [...requirementAcIds(reqText || "")];
+  return ids.length ? ids.slice(0, 5).join(", ") + (ids.length > 5 ? " …" : "") : null;
+}
 // Issues carry a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification · placeholder) —
 // callers branch on it, never on the (localized) `msg`.
 function earsValidate(text, lang) {
@@ -3419,7 +3535,7 @@ function earsValidate(text, lang) {
   const G = i18n.msg(lang).gates;
   if (!text || !text.trim()) return { ok: false, error: i18n.msg(lang).err.noText };
   const issues = [];
-  const { cleaned, blocks } = criterionBlocks(text);
+  const { cleaned, blocks } = criterionBlocks(text, { acUnits: true }); // every unit that defines an AC is linted (Pa2)
   let acCount = 0;
   let withShall = 0;
   let withId = 0;
@@ -3447,10 +3563,10 @@ function earsValidate(text, lang) {
     const acContext = !b.section || RE_AC_HEADING.test(b.section);
     // EARS modal verb — SHALL, PT DEVE/DEVERÁ, ES DEBE/DEBERÁ (capitals, or after "sistema"); lowercase
     // deve/debe only on a numbered item in an AC context.
-    const definesAc = RE_LIST_DEFINES_AC.test(b.text);
+    const definesAc = !!b.definesAc || RE_LIST_DEFINES_AC.test(b.text); // a list item, checkbox, table row, heading or line opening with an AC ID
     const isList = RE_LIST_ITEM.test(b.text);
     const mentionsShall = RE_MODAL.test(b.text) || ((definesAc || (isList && acContext)) && RE_MODAL_LOOSE.test(b.text));
-    // A list item that defines an AC is always linted (a missing modal is an error). Other numbered items
+    // A unit that defines an AC is always linted (a missing modal is an error). Other numbered items
     // count only in an AC context, when they carry an ID, a CAPITALISED EARS keyword, or read like one.
     const looksLikeAc = mentionsShall || definesAc ||
       (b.numbered && acContext && (RE_STABLE_ID.test(b.text) || RE_EARS_CAPS.test(b.text) || RE_AC_SHAPE.test(b.text)));
@@ -3540,11 +3656,10 @@ function traceCheck(projectDir, name, opts = {}) {
 
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
-  // The path runs to the LAST underscore on the line (`src/user_service.py` must not become `src/user`).
-  const reImpl = /_Implements:\s*(.+?)_(?=\s|$)/g;
-  let im;
-  while ((im = reImpl.exec(tasks)) !== null) {
-    im[1].split(/[,;]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean).forEach((p) => { if (!implFiles.includes(p)) implFiles.push(p); });
+  // The task-marker reader (taskMarkerSpans): `src/user_service.py` stays whole, and `_Implements: src/a.ts_;` /
+  // `(see _Implements: src/old.ts_).` are markers too (1.14 full review Pa1 — they read as no file at all).
+  for (const v of taskMarkerValues(tasks, "implements")) {
+    v.split(/[,;]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean).forEach((p) => { if (!implFiles.includes(p)) implFiles.push(p); });
   }
   // Clamp to the project root: paths that escape it count as missing without probing arbitrary FS.
   const projRoot = path.resolve(projectDir);
@@ -3920,30 +4035,97 @@ function codePathToken(t) {
 // cut. outside: the keys whose EVERY plan row names only non-code artifacts (nonCodeArtifactPath) in its File column —
 // verified outside test code, never expected in a test file; a row with no File cell, a template slot or a code path
 // keeps its T-ID expected in code.
+// files: every concrete test FILE the plan's File column names (a test path with an extension — never a folder), any row:
+// what the plan claims as its own (traceTestCode's cross-feature rule, 1.14 full review Pa5).
 function planFileScopes(planText) {
   const scopes = new Map();
+  const files = new Set();
   const outsideRows = new Set();
   const inCodeRows = new Set();
   for (const e of testPlanEntries(planText)) {
     const keys = e.ids.map((id) => tKey(id.slice(2)));
-    const col = e.cells && e.header ? e.header.findIndex((h) => RE_FILE_COLUMN.test(h.replace(/[*_`]/g, "").trim())) : -1;
-    if (col < 0 || col >= e.cells.length) { keys.forEach((k) => inCodeRows.add(k)); continue; }
-    const cell = e.cells[col];
-    const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
-    const raw = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
-      .map((t) => t.replace(/\\/g, "/").replace(/::.*$/, "").replace(/#.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/^(?:\.\/)+/, "").replace(/^\/+/, ""))
-      .filter(Boolean);
-    const tokens = raw.filter((t) => !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t)); // template slots out
+    const fc = fileCellTokens(e);
+    if (!fc) { keys.forEach((k) => inCodeRows.add(k)); continue; }
+    const { raw, tokens } = fc;
     const paths = tokens.filter((t) => isTestCodePath(t) && scannableTestPath(t));
     const outside = !paths.length && tokens.length === raw.length && tokens.some(nonCodeArtifactPath) && !tokens.some(codePathToken);
     for (const k of keys) (outside ? outsideRows : inCodeRows).add(k);
     if (!paths.length) continue;
+    for (const p of paths) if (!p.endsWith("/") && path.posix.extname(p)) files.add(p);
     for (const k of keys) scopes.set(k, [...new Set([...(scopes.get(k) || []), ...paths])]);
   }
-  return { scopes, outside: new Set([...outsideRows].filter((k) => !inCodeRows.has(k))) };
+  return { scopes, files, outside: new Set([...outsideRows].filter((k) => !inCodeRows.has(k))) };
+}
+// The File column of one test-plan entry (testPlanEntries) as path tokens → { raw, tokens } or null (no File column / cell):
+// raw = every token (code spans first; `::test_x`, `#L3` and `:12` suffixes cut, `./` and a leading `/` dropped), tokens =
+// those that are no template slot (`[path]`, `tests/unit/...`, `<file>`, a glob).
+function fileCellTokens(e) {
+  const col = e.cells && e.header ? e.header.findIndex((h) => RE_FILE_COLUMN.test(h.replace(/[*_`]/g, "").trim())) : -1;
+  if (col < 0 || col >= e.cells.length) return null;
+  const cell = e.cells[col];
+  const spans = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+  const raw = (spans.length ? spans.join(" ") : cell).split(/[\s,;]+/)
+    .map((t) => t.replace(/\\/g, "/").replace(/::.*$/, "").replace(/#.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/^(?:\.\/)+/, "").replace(/^\/+/, ""))
+    .filter(Boolean);
+  const tokens = raw.filter((t) => !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t)); // template slots out
+  return { raw, tokens };
+}
+// 1.14 full review Pa6 — the tests this feature's plan checks OUTSIDE test code (planFileScopes' outside: every row's File
+// column names only non-code artifacts — load-test.md, evals/golden.json) whose artifact is still the scaffold: a
+// load-test.md holding template placeholders (artifactState), the scaffold's sample eval set. Judged once such a test is
+// due — a DONE task makes it green (greenDone), or every active task is done; a scaffold nobody filled in used to let the
+// feature finish "ready" with no load run at all. A token is looked up in the feature folder, then from the project root
+// (inside it only); a missing file, or a kind this can't judge (.feature, .jmx …), is not reported. → [{ id, file }]
+function outsideCodeTemplates(projectDir, dir, tracks, greenDone) {
+  if (!tracks.includes("tdd")) return [];
+  const planText = planIdText(readIfExists(path.join(dir, "test-plan.md")) || "");
+  const { outside } = planFileScopes(planText);
+  if (!outside.size) return [];
+  const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
+  const allDone = blocks.length > 0 && blocks.every((b) => b.done);
+  const due = new Set([...(greenDone || [])].map((id) => tKey(id.slice(2))));
+  const root = path.resolve(projectDir);
+  const samples = new Set([SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL].map((x) => JSON.stringify(JSON.parse(x))));
+  useTemplateScopeOf(dir); // the project's own templates are template text too
+  const judged = new Map(); // file token → template?
+  const isTemplate = (t) => {
+    if (judged.has(t)) return judged.get(t);
+    let res = false;
+    const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+    const abs = [path.resolve(dir, t), path.resolve(root, t)].find((p) => withinRoot(root, p) && isFile(p));
+    const ext = path.extname(t).toLowerCase();
+    if (abs && (ext === ".md" || ext === ".markdown")) res = artifactState({ file: abs }) === "placeholder";
+    else if (abs && ext === ".json") { const j = readJson(abs); res = !!j.data && samples.has(JSON.stringify(j.data)); }
+    judged.set(t, res);
+    return res;
+  };
+  const out = [];
+  const seen = new Set();
+  for (const e of testPlanEntries(planText)) {
+    const ids = e.ids.filter((id) => { const k = tKey(id.slice(2)); return outside.has(k) && (allDone || due.has(k)); });
+    const fc = ids.length ? fileCellTokens(e) : null;
+    if (!fc) continue;
+    for (const t of fc.tokens.filter(nonCodeArtifactPath)) {
+      if (!isTemplate(t)) continue;
+      for (const id of ids) { const key = id + " " + t; if (!seen.has(key)) { seen.add(key); out.push({ id, file: t }); } }
+    }
+  }
+  return out;
+}
+// The concrete test files OTHER features' plans (active and archived) name in their File column (planFileScopes' files).
+function otherPlanTestFiles(projectDir, ownDir) {
+  const own = dirKey(ownDir);
+  const out = new Set();
+  for (const d of specFeatureDirs(projectDir)) {
+    if (dirKey(d) === own) continue;
+    const plan = readIfExists(path.join(d, "test-plan.md"));
+    if (plan != null) for (const p of planFileScopes(planIdText(plan)).files) out.add(p);
+  }
+  return [...out];
 }
 // trace_check {code: true}: this feature's plan against the test code. T-IDs restart at T-01 in every plan, so a file
-// counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/; and a planned T-ID whose plan row's File
+// counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/ or another feature's plan names that file
+// in its File column while this plan doesn't (1.14 full review Pa5); and a planned T-ID whose plan row's File
 // column names a concrete test path counts only in that file / under that folder (pathNames: written from the project
 // root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
 // number would pass it. Without a File path the match is by number across the project.
@@ -3963,13 +4145,25 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   const specsRel = toPosix(path.relative(root, specsRoot(projectDir)));
   const mine = (rel) => !pathUnder(rel, specsRel) || pathUnder(rel, own);
   const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
-  const { scopes, outside } = planFileScopes(planText);
+  const { scopes, files: ownFiles, outside } = planFileScopes(planText);
   const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathNames(rel, p));
+  // 1.14 full review Pa5 — T-IDs restart at T-01 in every plan, so a test FILE another feature's plan (active or
+  // archived) names in its File column is that feature's: it never counts for this plan's T-IDs unless this plan names
+  // that file too. A folder (`test/`) claims nothing — it scopes, it doesn't own. Without it a new feature whose rows say
+  // File `test/` passed the Phase 4 gate, doctor and trace --code on another feature's test/shortener.test.js.
+  const claimed = otherPlanTestFiles(projectDir, dir);
+  const foreignMemo = new Map();
+  const foreign = (rel) => {
+    if (!claimed.length) return false;
+    if (!foreignMemo.has(rel)) foreignMemo.set(rel, claimed.some((p) => pathNames(rel, p)) && ![...ownFiles].some((p) => pathNames(rel, p)));
+    return foreignMemo.get(rel);
+  };
+  const counts = (rel) => mine(rel) && !foreign(rel);
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
   const found = new Set();
   for (const [k, e] of s.tids) {
-    const files = e.files.filter((rel) => mine(rel) && (!planned.has(k) || inScope(k, rel)));
+    const files = e.files.filter((rel) => counts(rel) && (!planned.has(k) || inScope(k, rel)));
     if (!files.length) continue;
     found.add(k);
     testsInCode[planned.get(k) || e.id] = files.slice(0, CODE_TRACE_FILES_PER_ID);
@@ -3980,7 +4174,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     plannedNotInCode: [...planned].filter(([k]) => !found.has(k) && !outside.has(k)).map(([, id]) => id),
     plannedOutsideCode: [...planned].filter(([k]) => outside.has(k)).map(([, id]) => id),
     inCodeNotInPlan: [...s.tids].filter(([k]) => found.has(k) && !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
-    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(mine)),
+    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(counts)),
     scanned: s.scanned,
     truncated: s.truncated,
   };
@@ -4255,7 +4449,7 @@ const RE_RED_PHASE_TASK = new RegExp([
   "verl[ao]s? fallar", "fall(?:ar|e|a|en) por (?:la|el) (?:raz[óo]n|motivo) correct[ao]", "prueba(?:s)? (?:de regresi[óo]n )?que falla", "fase roja",
 ].join("|"), "i");
 function redPhaseTask(block) {
-  return RE_RED_PHASE_TASK.test(taskProse(block).join(" ").replace(RE_TASK_MARKER, " "));
+  return RE_RED_PHASE_TASK.test(taskProse(block).map(withoutTaskMarkers).join(" "));
 }
 // The redPhaseVerify hint for a block (null unless it is a red-phase task with a runnable _Verify:_ and no _Expect: fail_ —
 // with it, the red run IS the proof): the hint points at _Expect: fail_ and names its first T-ID (text or _Makes green:_),
@@ -4273,21 +4467,99 @@ function tasksProseText(tasksText) {
   return scanTaskLines(tasksText).map((l) => (l.code ? "" : l.vis)).join("\n");
 }
 
-// `_Label: value_` markers on the task line or its sub-lines. The value runs to the LAST underscore
-// before whitespace/end, so paths like `src/keys_util.js` survive.
-const RE_TASK_MARKER = /_(Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Expect):\s*(.+?)_(?=\s|$)/gi;
+// `_Label: value_` markers on the task line or its sub-lines — or `*Label: value*`, the same italics (a renderer shows
+// both alike). ONE reader, taskMarkerSpans(), for every consumer of the English-stable task markers: taskMarkers (so
+// the brief, the evidence gate, the bugfix gate, red-green, overlaps, the guard), trace_check's and implementsRefs'
+// _Implements:_, _Size:_ and the templates check. The value ends at the first `_` (`*`) that closes the italics — one
+// followed by whitespace, the end of the line, or closing punctuation first: `(_Verify: npm test_)`, `… _Verify: x_.`,
+// `_Implements: src/a.ts_;` (1.14 full review Pa1 — those yielded NO marker: a task whose check fails ticked as "nothing
+// to verify", and a done task's missing file passed trace_check). An underscore inside the value survives
+// (`src/keys_util.js`, `src/__init__.py`). Linear: a line's closers are found once, its openers walk them with a cursor.
+const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size"];
+const RE_TASK_MARKER_OPEN = new RegExp("(?:_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
+// → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
+function taskMarkerSpans(line) {
+  const s = String(line == null ? "" : line);
+  const out = [];
+  if (!s.includes(":")) return out;
+  let closers = null; // per delimiter: the indices of the `_` / `*` that can close a marker, ascending
+  const cursor = { _: 0, "*": 0 };
+  const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    if (!closers) {
+      closers = { _: [], "*": [] };
+      const ok = new Array(s.length + 1).fill(false); // ok[i]: from i, closing punctuation then whitespace or the end
+      ok[s.length] = true;
+      for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
+      for (let j = 0; j < s.length; j++) if ((s[j] === "_" || s[j] === "*") && ok[j + 1]) closers[s[j]].push(j);
+    }
+    const d = s[m.index];
+    const v = m.index + m[0].length;
+    const list = closers[d];
+    let p = cursor[d];
+    while (p < list.length && list[p] <= v) p++; // the value holds one character at least
+    cursor[d] = p;
+    if (p >= list.length) continue;
+    out.push({ key: m[1].toLowerCase(), value: s.slice(v, list[p]), start: m.index, end: list[p] + 1 });
+    re.lastIndex = list[p] + 1;
+  }
+  return out;
+}
+// Every raw value of one marker (`key`, lower-case) in a text, line by line — callers split and trim.
+function taskMarkerValues(text, key) {
+  const out = [];
+  for (const line of String(text || "").split("\n")) for (const sp of taskMarkerSpans(line)) if (sp.key === key) out.push(sp.value);
+  return out;
+}
+// The line with every marker blanked (a red-phase task's prose is read without its _Verify:_ values).
+function withoutTaskMarkers(line) {
+  const s = String(line == null ? "" : line);
+  let out = "", at = 0;
+  for (const sp of taskMarkerSpans(s)) { out += s.slice(at, sp.start) + " "; at = sp.end; }
+  return out + s.slice(at);
+}
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
 function taskMarkers(block) {
   const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [] };
   for (const line of taskProse(block)) {
-    let m;
-    RE_TASK_MARKER.lastIndex = 0;
-    while ((m = RE_TASK_MARKER.exec(line)) !== null) {
-      const key = m[1].toLowerCase();
-      let parts = WHOLE_VALUE_MARKERS.has(key) ? [m[2].trim()] : m[2].split(/[,;]/).map((s) => s.trim());
+    for (const sp of taskMarkerSpans(line)) {
+      const key = sp.key;
+      if (!out[key]) continue; // _Size:_ — taskSize reads it
+      let parts = WHOLE_VALUE_MARKERS.has(key) ? [sp.value.trim()] : sp.value.split(/[,;]/).map((s) => s.trim());
       if (key === "verify") parts = parts.map((p) => p.replace(/^`+|`+$/g, "").trim()).filter((p) => p && !/^\[.*\]$/.test(p));
       parts.filter(Boolean).forEach((p) => { if (!out[key].includes(p)) out[key].push(p); });
     }
+  }
+  return out;
+}
+// Marker-shaped text on a task's own lines that yielded NO marker (1.14 full review Pa1): "Verify:" / "Implements:" /
+// "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test`,
+// `_Verify:_ npm test`. The tools read nothing there (no check to run, no file to trace). → [{ number, labels }] — doctor's
+// malformed-markers warn.
+const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect)[ \t]*:/giu;
+const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect" };
+function malformedMarkers(blocks) {
+  const out = [];
+  for (const b of blocks) {
+    const labels = new Set();
+    for (const line of taskProse(b)) {
+      if (!/verify|implements|green|expect/i.test(line)) continue;
+      const masked = withoutTaskMarkers(line);
+      const ticks = backtickRuns(masked);
+      let plain = "";
+      for (let k = 0; k < masked.length;) {
+        if (masked[k] !== "`") { plain += masked[k++]; continue; }
+        let r = k;
+        while (masked[r] === "`") r++;
+        const e = ticks.spanEnd(k);
+        plain += e > r ? " " : masked.slice(k, e); // a code span is code; an unmatched run is literal backticks
+        k = e;
+      }
+      for (const m of plain.matchAll(RE_MARKER_WORD)) labels.add(MARKER_WORD_LABEL[m[1].toLowerCase().replace(/[ \t]+/g, " ")]);
+    }
+    if (labels.size) out.push({ number: b.number, labels: [...labels] });
   }
   return out;
 }
@@ -5435,6 +5707,10 @@ function finishFeature(projectDir, name, opts = {}) {
   // 1.14 B3: phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
   const unsigned = doc.ok && isObj(doc.unsignedRoles) ? Object.entries(doc.unsignedRoles) : [];
   if (unsigned.length) warnings.push(i18n.msg(lng).governance.unsigned(unsigned.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
+  // 1.14 full review Pa6: a test planned outside test code whose artifact (load-test.md, an eval set) is still the scaffold —
+  // doctor's outside-code-artifacts warn, repeated here as a warning (never a blocker).
+  const ocWarn = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "outside-code-artifacts") : null;
+  if (ocWarn) warnings.push(ocWarn.detail);
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
@@ -7080,12 +7356,17 @@ function trackTemplateAcs(tr) {
 // (a fresh feature), else one generic row per REAL AC ID — spec_add_track tdd / spec_create +tdd on a feature whose
 // requirements were already written (an import, a finished spec): a template row would plan a test for a criterion the
 // feature doesn't have (US-1.AC-4 on a feature with three ACs) — a phantom trace_check reports (phantomAcsInTests).
+// requirements.md WRITTEN with no AC ID at all (an import whose source had no criteria, spec_add_track tdd on ID-less
+// requirements): one generic row whose Covers cell is a slot — the template's rows were phantoms there (1.14 full review
+// Pa4). Only a missing / blank requirements.md still gets the template rows.
 function scaffoldTestPlan(dir, name, lng, tracks) {
-  const reqIds = requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
+  const reqText = readIfExists(path.join(dir, "requirements.md"));
+  const reqIds = requirementAcIds(reqText || "");
   const t = testPlanTracks(dir, tracks, reqIds);
   const tmpl = i18n.templateAcIds(t);
   const same = reqIds.size === tmpl.length && tmpl.every((id) => reqIds.has(id));
-  return testPlanMd(name, lng, t, same || !reqIds.size ? undefined : [...reqIds]);
+  const written = reqText != null && !!reqText.trim();
+  return testPlanMd(name, lng, t, same || (!reqIds.size && !written) ? undefined : [...reqIds]);
 }
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
@@ -7817,7 +8098,7 @@ function storeCreateFlow(dir, flow) {
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
-  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, verification: 6 };
+  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -8131,6 +8412,7 @@ function templateCorpus(langs) {
       add(() => i18n.checklist(a, l));
     }
     add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
+    add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row (Pa4)
     for (const tr of VALID_TRACKS) {
       add(() => i18n.trackDesignBlock(tr, l));
       add(() => M.tracks.taskBlock(tr, 1));
@@ -8201,21 +8483,13 @@ function visibleLines(text) {
   const lines = String(text || "").split(/\r?\n/);
   const refs = new Set();
   const visible = [];
-  let inComment = false;
-  const fst = { fence: null }; // fenceStep: an unclosed fence in a list item ends with the item
-  const closes = closerBelow(lines); // a "<!--" that never closes is text — it hides no placeholder below it
+  // commentLines: fenced code (an unclosed fence in a list item ends with the item) and comments — a "<!--" that never
+  // closes, or that sits in a code span or a fence, is text: it hides no placeholder below it.
+  const cl = commentLines(lines);
   lines.forEach((raw, i) => {
-    let line = raw;
-    if (inComment) {
-      const end = line.indexOf("-->");
-      if (end === -1) return;
-      line = line.slice(end + 3);
-      inComment = false;
-    }
-    line = line.replace(/<!--.*?-->/g, "");
-    const open = line.indexOf("<!--");
-    if (open !== -1 && closes[i]) { inComment = true; line = line.slice(0, open); }
-    if (fenceStep(fst, line)) return;
+    const c = cl[i];
+    if (c.hidden || c.fence) return;
+    const line = c.vis;
     const def = line.match(RE_REF_DEFINITION);
     if (def) { refs.add(def[1].trim().toLowerCase()); return; }
     visible.push([i + 1, line]);
@@ -8548,8 +8822,11 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
     case "requirements": {
       if (!exists("requirements.md")) return nothing("requirements.md");
       const reqs = read("requirements.md");
-      const errs = (earsValidate(reqs, lang).issues || []).filter((i) => i.severity === "error");
+      const ev = earsValidate(reqs, lang);
+      const errs = (ev.issues || []).filter((i) => i.severity === "error");
       need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
+      const unlinted = earsUnlinted(reqs, ev); // AC IDs trace_check counts, none linted (doctor's rule — Pa2)
+      need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted) : "");
       noPlaceholders("requirements.md");
       const mk = clarificationMarkers(reqs);
       need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
@@ -8686,8 +8963,11 @@ function specDoctor(projectDir, name, opts = {}) {
     const e = earsValidate(reqs, featureLang(projectDir, slug));
     const nErr = e.issues ? e.issues.filter((i) => i.severity === "error").length : 0;
     const nCrit = e.summary ? e.summary.criteriaDetected : 0;
-    // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean".
-    add("ears", nErr ? "fail" : nCrit === 0 ? "warn" : "pass", m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
+    // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean". And requirements.md whose AC
+    // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
+    const unlinted = earsUnlinted(reqs, e);
+    add("ears", nErr || unlinted ? "fail" : nCrit === 0 ? "warn" : "pass",
+      unlinted ? m.earsNoCriteria(unlinted) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqs);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
@@ -8811,6 +9091,14 @@ function specDoctor(projectDir, name, opts = {}) {
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
     .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
   if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
+  // 1.14 full review Pa1 — marker-shaped text that yields no marker (`**Verify:** npm test`, `Verify: npm test`): the tools
+  // read nothing there — no check runs, no file is traced. Active tasks only; a warn.
+  const oddMarkers = malformedMarkers(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
+  if (oddMarkers.length) add("malformed-markers", "warn", fm.markerSyntax.doctor(oddMarkers.map((o) => "#" + o.number + " (" + o.labels.map((l) => l + ":").join(", ") + ")").join("; ")));
+  // 1.14 full review Pa6 — a test planned outside test code (load-test.md, evals/*.json) whose artifact is still the
+  // scaffold, once that test is due (a done task makes it green, or every task is done). A warn; spec_finish repeats it.
+  const ocTemplates = outsideCodeTemplates(projectDir, dir, tracks, greenDone);
+  if (ocTemplates.length) add("outside-code-artifacts", "warn", fm.outsideCode.doctor(ocTemplates.map((o) => o.id + " → " + o.file).join(", ")));
   // 1.14 B4 — cross-feature file overlap (featureOverlaps): this feature's open tasks plan files another active feature's open
   // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
   const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
@@ -9583,7 +9871,7 @@ function roadmapReport(projectDir, opts = {}) {
 // window: no ETA ("not enough data"). Pure reads of tasks.md + .state.json.
 // ---------------------------------------------------------------------------
 const SIZE_POINTS = Object.freeze({ XS: 1, S: 2, M: 3, L: 5, XL: 8 });
-const RE_SIZE_MARKER = /_Size:\s*`?(XS|S|M|L|XL)`?\s*_(?=\s|$|[.,;:)\]])/i;
+const RE_SIZE_VALUE = /^\s*`?(XS|S|M|L|XL)`?\s*$/i; // a _Size:_ marker's value (taskMarkerSpans reads the marker)
 const FORECAST_WINDOW_DAYS = 28;
 const FORECAST_MIN_TASKS = 3;
 const FORECAST_SPREAD = 0.25;
@@ -9591,8 +9879,10 @@ const FC_DAY_MS = 24 * 60 * 60 * 1000;
 // A task's `_Size:_` (its line or a sub-line, never fenced code) → "XS" | "S" | "M" | "L" | "XL", or null (unsized).
 function taskSize(block) {
   for (const line of taskProse(block)) {
-    const m = RE_SIZE_MARKER.exec(line);
-    if (m) return m[1].toUpperCase();
+    for (const sp of taskMarkerSpans(line)) {
+      const m = sp.key === "size" && sp.value.match(RE_SIZE_VALUE);
+      if (m) return m[1].toUpperCase();
+    }
   }
   return null;
 }
@@ -12898,14 +13188,11 @@ function scanCodebase(projectDir, opts = {}) {
 }
 
 // _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments and fenced code out, the
-// path runs to the LAST underscore before whitespace, comma/semicolon lists, backticks dropped).
+// task-marker reader taskMarkerSpans, comma/semicolon lists, backticks dropped).
 function implementsRefs(tasksText) {
   const out = [];
-  const re = /_Implements:\s*(.+?)_(?=\s|$)/g;
-  const t = tasksProseText(tasksText || "");
-  let m;
-  while ((m = re.exec(t)) !== null) {
-    m[1].split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+  for (const v of taskMarkerValues(tasksProseText(tasksText || ""), "implements")) {
+    v.split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
   }
   return out;
 }
@@ -14522,6 +14809,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const written = [];
   const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
   put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+  // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
+  // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
+  if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "").size) warnings.push(W.wNoCriteriaAtAll);
   // createFeature scaffolded the +tdd test plan from the TEMPLATE requirements (the imported ones weren't written yet):
   // its T-01…T-05 rows covered US-1.AC-3 / US-1.AC-4 / US-2.AC-1 the feature doesn't have — "(typos?)" in trace_check,
   // and a doctor FAIL once real tasks were imported. Re-planned from the imported ACs: the plan `spec_add_track tdd`
@@ -14690,6 +14980,8 @@ module.exports = {
   traceCheck,
   taskBrief: featureLocked(taskBrief, (a) => !!(a[3] && a[3].write)), // write: .execution/ resolved and written under the lock (a move waits)
   taskBlocks,
+  taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
+  stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
   globalConstraints,
   finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && (a[2].write || a[2].evidence != null))), // write: the drift baseline · evidence (B5): finishChecks — both in .state.json
   parseTasks,
