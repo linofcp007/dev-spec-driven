@@ -2378,6 +2378,7 @@ const MSG = {
       roadmapUpdated: (pct, complete, total) => `Roadmap updated → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features in .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tasks)`,
+      sessionMore: (n) => `  … +${n} more feature(s) — /spec-status (or dev-spec list) lists them all`,
     },
 
     // Evidence gate (spec_complete_task / doctor / spec_finish). Reason codes stay English-stable.
@@ -2438,6 +2439,9 @@ const MSG = {
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
+      // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
+      unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
+      noTool: "tools/call needs params.name — the tool to call (tools/list lists them).",
     },
     // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
     jsonShape: {
@@ -2537,6 +2541,7 @@ const MSG = {
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
+      backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: dev-spec status ${slug}).`,
     },
     // CLI human output (--json output is the structured result, never localized).
     cliOutput: {
@@ -2588,6 +2593,7 @@ const MSG = {
       wouldRemove: (slug, dir, n, entries) => `Would permanently delete '${slug}': ${dir} (${n} file(s): ${entries})`,
       confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: dev-spec feature archive ${slug}`,
       missingValue: (flag) => `missing value for --${flag}`,
+      unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `dev-spec help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
       scaleSections: (list) => `Scale sections: ${list}`,
       aiSections: (list) => `AI sections: ${list}`,
@@ -3751,6 +3757,7 @@ _Outcome: [go | no-go | pivot]_
       roadmapUpdated: (pct, complete, total) => `Roadmap atualizado → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features em .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
+      sessionMore: (n) => `  … +${n} feature(s) — /spec-status (ou dev-spec list) mostra todas`,
     },
 
     evidenceGate: {
@@ -3806,6 +3813,8 @@ _Outcome: [go | no-go | pivot]_
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
       network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
+      unknownTool: (name) => `Ferramenta desconhecida: ${name} — tools/list lista as ferramentas deste servidor.`,
+      noTool: "tools/call precisa de params.name (o nome da ferramenta — ver tools/list).",
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tem uma estrutura inesperada (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
@@ -3901,6 +3910,7 @@ _Outcome: [go | no-go | pivot]_
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
+      backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: dev-spec status ${slug}).`,
     },
     cliOutput: {
       words: { pass: "ok", warn: "aviso", fail: "falha", "gaps-found": "com lacunas", clear: "clara", "needs-clarification": "precisa de clarificação", error: "erro" },
@@ -3951,6 +3961,7 @@ _Outcome: [go | no-go | pivot]_
       wouldRemove: (slug, dir, n, entries) => `Isto apagaria '${slug}' de vez: ${dir} (${n} ficheiro(s): ${entries})`,
       confirmHint: (slug) => `Nada foi apagado. Volta a correr com --yes para confirmar — ou arquiva-a: dev-spec feature archive ${slug}`,
       missingValue: (flag) => `falta o valor de --${flag}`,
+      unknownFlag: (flag, suggestion) => `opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : ".") + " As opções estão em `dev-spec help`.",
       unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
       scaleSections: (list) => `Secções de escala: ${list}`,
       aiSections: (list) => `Secções de IA: ${list}`,
@@ -5047,6 +5058,7 @@ _Outcome: [go | no-go | pivot]_
       roadmapUpdated: (pct, complete, total) => `Roadmap actualizado → ${pct}% (${complete}/${total} funciones).`,
       sessionHeader: "dev-spec-driven — funciones en .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tareas)`,
+      sessionMore: (n) => `  … +${n} función(es) más — /spec-status (o dev-spec list) las muestra todas`,
     },
 
     evidenceGate: {
@@ -5102,6 +5114,8 @@ _Outcome: [go | no-go | pivot]_
       notObject: "arguments debe ser un objeto JSON.",
       dotdot: "projectDir no puede contener segmentos de ruta '..'.",
       network: (dir) => `projectDir debe ser una carpeta local — una ruta de red o de dispositivo (${dir}) se rechaza, para que una llamada a una herramienta nunca apunte este servidor local a otra máquina; abre el proyecto localmente (o inicia el servidor con él como carpeta de trabajo).`,
+      unknownTool: (name) => `Herramienta desconocida: ${name} — tools/list lista las herramientas de este servidor.`,
+      noTool: "tools/call necesita params.name — la herramienta a llamar (tools/list las lista).",
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tiene una estructura inesperada (${detail}) — corrígelo a mano; no se sobrescribirá.`,
@@ -5197,6 +5211,7 @@ _Outcome: [go | no-go | pivot]_
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Eliminar '${slug}' borra .specs/${slug}/ definitivamente (${n} fichero(s)). No se ha borrado nada — pasa confirm: true para eliminarla, o archívala (reversible).`,
       backlogNotFound: (name, known) => `'${name}' no está en el backlog${known ? ` (backlog: ${known})` : " (el backlog está vacío)"}.`,
+      backlogIsFeature: (name, slug) => `'${name}' ya tiene una spec (.specs/${slug}/) — el backlog es para funciones aún sin spec (estado: dev-spec status ${slug}).`,
     },
     cliOutput: {
       words: { pass: "ok", warn: "aviso", fail: "falla", "gaps-found": "con lagunas", clear: "clara", "needs-clarification": "requiere aclaración", error: "error" },
@@ -5247,6 +5262,7 @@ _Outcome: [go | no-go | pivot]_
       wouldRemove: (slug, dir, n, entries) => `Esto eliminaría '${slug}' definitivamente: ${dir} (${n} fichero(s): ${entries})`,
       confirmHint: (slug) => `No se ha eliminado nada. Vuelve a ejecutar con --yes para confirmar — o archívala: dev-spec feature archive ${slug}`,
       missingValue: (flag) => `falta el valor de --${flag}`,
+      unknownFlag: (flag, suggestion) => `opción desconocida ${flag}` + (suggestion ? ` — ¿quizás ${suggestion}?` : ".") + " Las opciones están en `dev-spec help`.",
       unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
       scaleSections: (list) => `Secciones de escala: ${list}`,
       aiSections: (list) => `Secciones de IA: ${list}`,

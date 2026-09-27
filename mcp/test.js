@@ -5760,8 +5760,9 @@ function endRun() {
     fs.mkdirSync(path.join(n13, "src"), { recursive: true });
     fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
     const sc13 = S.scanCodebase(n13, { cap: -3 });
+    // (1.14 full review S7: the action list now names rm's alias remove — the spec_backlog enum.)
     ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
-      bl13.ok === false && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
+      bl13.ok === false && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
       sc13.filesScanned === 1 && !sc13.truncated,
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
     const mx13 = await call("spec_next_task", { name: "billing", batch: true, max: 0, projectDir: n13 });
@@ -9909,6 +9910,144 @@ function endRun() {
   // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
 
   // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
+  {
+    // A private server fed RAW bytes; every reply line is kept as text (the raw form matters for S1) and parsed.
+    const frsProj = path.join(tmp, "proj-frs");
+    S.initProject(frsProj, ["core"], "en");
+    const frsPt = path.join(tmp, "proj-frs-pt");
+    S.initProject(frsPt, ["core"], "pt");
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const frsServer = () => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: frsProj }, stdio: ["pipe", "pipe", "inherit"] });
+      const raw = [];
+      let b = Buffer.alloc(0);
+      kid.stdout.on("data", (d) => {
+        b = Buffer.concat([b, d]);
+        let nl;
+        while ((nl = b.indexOf(0x0a)) >= 0) { raw.push(b.slice(0, nl).toString("utf8")); b = b.slice(nl + 1); }
+      });
+      const done = new Promise((resolve) => kid.on("exit", resolve));
+      const timer = setTimeout(() => { try { kid.kill(); } catch {} }, 15000); // a hung server fails the assertions, never the suite
+      const end = async () => { kid.stdin.end(); await done; clearTimeout(timer); return raw.map((l) => { try { return JSON.parse(l); } catch { return { unparsable: l }; } }); };
+      return { write: (x) => kid.stdin.write(x), raw, end };
+    };
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+    const byId = (msgs, id) => msgs.find((m) => m && m.id === id);
+
+    // S1 — framing on "\n" only: U+2028 / U+2029 raw inside a JSON string no longer cut a request in two.
+    const s1 = frsServer();
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-a", method: "tools/call", params: { name: "spec_classify", arguments: { description: "Stripe" + LS + "billing" + PS + "webhook" } } }) + "\n");
+    s1.write(JSON.stringify([{ jsonrpc: "2.0", id: "s1-b1", method: "ping" }, { jsonrpc: "2.0", id: "s1-b2", method: "prompts/get", params: { name: "no" + LS + "such" } }]) + "\n");
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-u", method: "resources/read", params: { uri: "specs://feature/x" + LS + "y/requirements.md" } }) + "\n");
+    // a multibyte character split across two chunks stays whole; a CRLF line; a last line without its newline
+    const mb = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: "s1-m", method: "tools/call", params: { name: "spec_classify", arguments: { description: "faturação multi-inquilino" } } }) + "\n", "utf8");
+    const cut = mb.indexOf(0xc3) + 1;
+    s1.write(mb.slice(0, cut));
+    await sleep(60);
+    s1.write(mb.slice(cut));
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-crlf", method: "ping" }) + "\r\n");
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-last", method: "ping" }));
+    const r1 = await s1.end();
+    const cls1 = byId(r1, "s1-a");
+    const batch1 = r1.find((m) => Array.isArray(m));
+    const uri1 = byId(r1, "s1-u");
+    const uriLine = s1.raw.find((l) => /"s1-u"/.test(l)) || "";
+    const esc = String.fromCharCode(92) + "u2028"; // the 6-character JSON escape
+    ok(cls1 && cls1.result && !cls1.result.isError && JSON.parse(cls1.result.content[0].text).tracks.includes("saas") &&
+      !r1.some((m) => m && m.error && m.error.code === -32700) && batch1 && batch1.map((m) => m.id).join() === "s1-b1,s1-b2" &&
+      byId(r1, "s1-m") && byId(r1, "s1-m").result && JSON.parse(byId(r1, "s1-m").result.content[0].text).lang === "pt" &&
+      byId(r1, "s1-crlf") && byId(r1, "s1-last") && byId(r1, "s1-last").result,
+      "full review S1: a request carrying raw U+2028 / U+2029 inside a JSON string is ONE message (answered, no -32700 pair); batches, a UTF-8 character split across chunks, CRLF and a last unterminated line still work (got " +
+      JSON.stringify(r1.map((m) => (m && (m.id !== undefined ? m.id + ":" + (m.error ? m.error.code : "ok") : Array.isArray(m) ? "batch" : m.unparsable)))) + ")");
+    ok(uri1 && uri1.error && uri1.error.data && uri1.error.data.uri === "specs://feature/x" + LS + "y/requirements.md" && uriLine.includes(esc) &&
+      !s1.raw.some((l) => l.includes(LS) || l.includes(PS)),
+      "full review S1: replies never carry a raw U+2028 / U+2029 (written as their JSON escapes — readline-framed clients survive them), the value is unchanged (got " + JSON.stringify(uriLine.slice(0, 160)) + ")");
+
+    // S2 — JSON-RPC / MCP conformance: ids, method, unknown tools.
+    const s2 = frsServer();
+    [
+      { jsonrpc: "2.0", id: null, method: "ping" },
+      { jsonrpc: "2.0", id: { a: 1 }, method: "ping" },
+      { jsonrpc: "2.0", id: [1], method: "ping" },
+      { jsonrpc: "2.0", id: true, method: "ping" },
+      { jsonrpc: "2.0", id: 1.5, method: "ping" },
+      { jsonrpc: "2.0", id: "s2-nomethod" },
+      { jsonrpc: "2.0", id: "s2-response", result: {} }, // a response: never answered
+      { jsonrpc: "2.0", method: "notifications/initialized" }, // a notification: never answered
+      { jsonrpc: "2.0", id: "s2-unknown", method: "tools/call", params: { name: "nope", arguments: {} } },
+      { jsonrpc: "2.0", id: "s2-noparams", method: "tools/call" },
+      { jsonrpc: "2.0", id: "s2-pt", method: "tools/call", params: { name: "nope", arguments: { projectDir: frsPt } } },
+      { jsonrpc: "2.0", id: 0, method: "ping" },
+      { jsonrpc: "2.0", id: -7, method: "ping" },
+      { jsonrpc: "2.0", id: "s2-ok", method: "tools/call", params: { name: "spec_list", arguments: {} } },
+    ].forEach((m) => s2.write(JSON.stringify(m) + "\n"));
+    const r2 = await s2.end();
+    const nullIds = r2.filter((m) => m && m.id === null);
+    const e2 = (id) => (byId(r2, id) || {}).error || {};
+    ok(nullIds.length === 5 && nullIds.every((m) => m.error && m.error.code === -32600) && e2("s2-nomethod").code === -32600 && !byId(r2, "s2-response") &&
+      r2.length === 12 && byId(r2, 0) && byId(r2, 0).result && byId(r2, -7) && byId(r2, -7).result && byId(r2, "s2-ok").result && !byId(r2, "s2-ok").result.isError,
+      "full review S2: id null / object / array / boolean / fractional → -32600 (id null, never echoed); an id without a string method → -32600; a response or a notification gets no reply; ids 0 / -7 / strings are answered (got " +
+      JSON.stringify(r2.map((m) => (m ? m.id + ":" + (m.error ? m.error.code : "ok") : m))) + ")");
+    ok(e2("s2-unknown").code === -32602 && /Unknown tool: nope/.test(e2("s2-unknown").message) && e2("s2-noparams").code === -32602 && /params\.name/.test(e2("s2-noparams").message) &&
+      e2("s2-pt").code === -32602 && /Ferramenta desconhecida: nope/.test(e2("s2-pt").message) && !byId(r2, "s2-unknown").result,
+      "full review S2: tools/call of an unknown tool (or without params / a name) is a JSON-RPC error -32602 Invalid params, localized in the project language — never a successful isError result (got " +
+      JSON.stringify([e2("s2-unknown"), e2("s2-noparams").code, e2("s2-pt").message]) + ")");
+
+    // S3 — the guard sees an alias of the project (a junction / symlink; an 8.3 short name) as the project, not "outside".
+    const g3 = path.join(tmp, "proj-frs-guard");
+    S.initProject(g3, ["core"], "en", { guard: true });
+    const g3link = path.join(tmp, "frs-guard-link");
+    let linked = false;
+    try { fs.symlinkSync(g3, g3link, "junction"); linked = true; } catch { /* no links here: the link assertions are skipped */ }
+    if (linked) {
+      const viaLink = S.guardCheck(g3, path.join(g3link, "src", "a.ts"));
+      const fromLink = S.guardCheck(g3link, path.join(g3, "src", "a.ts"));
+      const specsViaLink = S.guardCheck(g3, path.join(g3link, ".specs", "x.ts"));
+      const outside = S.guardCheck(g3, path.join(tmp, "frs-elsewhere", "a.ts"));
+      ok(viaLink.decision === "ask" && viaLink.why === "no-approved-tasks" && fromLink.decision === "ask" && specsViaLink.why === "specs" && outside.why === "outside",
+        "full review S3: guard on, no approved tasks — a code file reached through a junction / symlink of the project (either side) asks like the real path; .specs/ through the link is the spec folder; a real outside file stays allowed (got " +
+        JSON.stringify([viaLink.why, fromLink.why, specsViaLink.why, outside.why]) + ")");
+      // scope: an absolute _Implements:_ spelled through the link plans the real file.
+      const f3 = S.createFeature(g3, "Scoped", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Implements: " + path.join(g3link, "src", "a.ts").split(path.sep).join("/") + "_\n");
+      approveBefore(g3, f3.slug, "tasks");
+      S.approvePhase(g3, f3.slug, "tasks", "t", { force: true });
+      S.initProject(g3, [], "en", { guard: "scope" });
+      const sc3 = S.guardCheck(g3, path.join(g3, "src", "a.ts"));
+      ok(sc3.decision === "allow" && sc3.why === "in-scope" && sc3.task && sc3.task.number === 1,
+        "full review S3: scope guard — an absolute _Implements:_ path written through the project's link plans the real file (in-scope, task 1) (got " + JSON.stringify([sc3.decision, sc3.why]) + ")");
+    }
+    let realTmp = tmp;
+    try { realTmp = fs.realpathSync.native(tmp); } catch { /* keep */ }
+    if (realTmp !== tmp) { // this machine's temp folder has another spelling (an 8.3 short name, /tmp → /private/tmp)
+      const g3b = path.join(tmp, "proj-frs-guard83");
+      S.initProject(g3b, ["core"], "en", { guard: true });
+      const other = S.guardCheck(path.join(realTmp, "proj-frs-guard83"), path.join(g3b, "src", "b.ts"));
+      ok(other.decision === "ask", "full review S3: the project given in one spelling, the file in the other (" + tmp + " vs " + realTmp + ") — the guard asks (got " + other.why + ")");
+    }
+
+    // S6 — backlog add of a name that already has an active feature folder is refused (it was listed twice in ROADMAP.md).
+    const p6 = path.join(tmp, "proj-frs-backlog");
+    S.initProject(p6, ["core"], "en");
+    S.createFeature(p6, "Pay", ["core"], "", undefined, "en");
+    const b6 = S.backlog(p6, "add", "pay", "later");
+    const b6mcp = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "add", name: "PAY", projectDir: p6 } });
+    S.manageFeature(p6, "archive", "pay");
+    const b6arch = S.backlog(p6, "add", "Pay", "again");
+    ok(b6.ok === false && b6.feature === "pay" && /already has a spec \(\.specs\/pay\/\)/.test(b6.error) && b6mcp.result.isError === true &&
+      /already has a spec/.test(payload(b6mcp).error) && b6arch.ok === true && b6arch.backlog.map((x) => x.name).join() === "Pay",
+      "full review S6: spec_backlog add refuses a name an active feature already has (engine + MCP, nothing stored); once archived it can be planned again (got " + JSON.stringify([b6.error, b6arch.backlog]) + ")");
+
+    // S7 — backlog 'remove' is rm's alias on every surface (the enum lists it); the templates description names pt-BR.
+    const tl7 = (await rpc("tools/list", {})).result.tools;
+    const bl7 = tl7.find((t) => t.name === "spec_backlog");
+    const tp7 = tl7.find((t) => t.name === "spec_templates");
+    const rm7 = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "REMOVE", name: "pay", projectDir: p6 } });
+    ok(bl7.inputSchema.properties.action.enum.join() === "add,rm,remove,list" && !rm7.result.isError && payload(rm7).backlog.length === 0 &&
+      S.backlog(p6, "add", "X").ok && S.backlog(p6, "remove", "x").ok && /\(en \| pt \| pt-BR \| es\)/.test(tp7.description),
+      "full review S7: spec_backlog's action enum lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
+      JSON.stringify([bl7.inputSchema.properties.action.enum, rm7.result.isError]) + ")");
+  }
 
   // 1.14 full review (D) — docs and prose.
   {
