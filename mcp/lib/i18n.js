@@ -6252,7 +6252,7 @@ const BRIEF = {
       core: [
         "Implementa exatamente o que a tarefa e os seus critérios de aceitação exigem — nada a mais (YAGNI).",
         "Corre a suite de testes existente: tudo o que estava verde continua verde.",
-        "Faz commit com uma mensagem convencional que cite a tarefa (ex.: `feat(âmbito): … — tarefa #N`).",
+        "Faz commit com uma mensagem convencional que cite a tarefa (ex.: `feat(módulo): … — tarefa #N`).",
         "Nunca alteres um teste existente para o pôr a passar. Se um teste parecer errado, pára e responde BLOCKED.",
       ],
       tdd: [
@@ -6475,6 +6475,9 @@ const PTBR_OVERRIDES = [
   ["O que correu bem", "O que deu certo"],
   ["decidas o que decidires, volta", "decida o que decidir, volte"],
   ["decidas o que decidires", "decida o que decidir"],
+  // full review Pb7 — the LGPD's name for the DPIA (a masculine report) and its article; the heading stays matched by the
+  // DPIA section's synonyms ("ripd").
+  ["AIPD (quando obrigatória — art. 35.º)", "RIPD (quando obrigatório — LGPD art. 38)"],
   ["o controlador pára para revisão", "o controlador faz uma pausa para revisão"],
   ["— lê de outra forma", "— lê de outra forma"], // cmd.exe "reads it differently": a 3rd person after a parenthetical dash
   ["; aceita uma lista", "; aceita uma lista"], // a glob syntax note: "accepts a list"
@@ -6526,6 +6529,16 @@ const PTBR_PHRASES = {
   "pela monitorização": "pelo monitoramento", "uma monitorização": "um monitoramento", "o arranque": "a inicialização",
   "do arranque": "da inicialização", "no arranque": "na inicialização", "ao arranque": "à inicialização", "um arranque": "uma inicialização",
   "uma gralha": "um erro de digitação", "a gralha": "o erro de digitação", "as gralhas": "os erros de digitação",
+  // full review Pb7 — "ter de" + infinitive is "ter que" in Brazil; enclisis after a verb reads European (mantém-se → se mantém,
+  // lê-se como → é lido como); acessar takes a direct object (never "lhe pode acessar").
+  "tem de": "tem que", "têm de": "têm que", "temos de": "temos que", "tenho de": "tenho que", "tens de": "tens que",
+  "terá de": "terá que", "terão de": "terão que", "teria de": "teria que", "teriam de": "teriam que", "ter de": "ter que",
+  "tinha de": "tinha que", "tenha de": "tenha que", "tenham de": "tenham que", "tiver de": "tiver que",
+  "mantém-se": "se mantém", "mantêm-se": "se mantêm", "lê-se como": "é lido como", "quem lhe pode aceder": "quem pode acessá-lo",
+  // LGPD vocabulary (full review Pb7): the processor is the "operador", the DPIA the RIPD (a masculine report) — the
+  // section synonyms (spec.js PRIVACY_SECTIONS) read the Brazilian headings
+  "subcontratantes ulteriores": "suboperadores", "conservação e eliminação": "retenção e eliminação",
+  "a aipd": "o RIPD", "da aipd": "do RIPD", "na aipd": "no RIPD", "à aipd": "ao RIPD", "pela aipd": "pelo RIPD", "uma aipd": "um RIPD",
 };
 // "põe X a verde" (make X pass) → "faz X passar"; "postos a verde" → "deixados verdes"; a leftover "a verde" → "verde(s)".
 const PTBR_GREEN_VERB = { põe: ["faz", "passar"], põem: ["fazem", "passar"], pôr: ["fazer", "passar"], pondo: ["fazendo", "passar"],
@@ -6650,6 +6663,8 @@ const PTBR_WORDS = {
   num: "em um", numa: "em uma", nuns: "em uns", numas: "em umas", noutro: "em outro", noutra: "em outra", noutros: "em outros",
   noutras: "em outras", nalgum: "em algum", nalguma: "em alguma", nalguns: "em alguns", nalgumas: "em algumas", dum: "de um",
   duma: "de uma", duns: "de uns", dumas: "de umas", doutro: "de outro", doutra: "de outra", doutros: "de outros", doutras: "de outras",
+  // full review Pb7 — LGPD / Brazilian SaaS vocabulary (the section synonyms in spec.js read these headings)
+  "multi-inquilino": "multilocatário", subcontratante: "operador", subcontratantes: "operadores", aipd: "RIPD",
 };
 
 function ptbrEscape(s) {
@@ -6720,7 +6735,20 @@ function ptbrProtect(text, masks, store) {
     .replace(/\{[^{}\n]*(?:\{[^{}\n]*\}[^{}\n]*)*\}/g, hold) // {json} / {{var}}
     .replace(/(?<![\p{L}\p{N}_-])--?[A-Za-z][\w-]*(?:=[^\s,;)]*)?/gu, hold) // --flags
     .replace(/(?<![\p{L}\p{N}_.\/-])(?:\.{0,2}\/|~\/|\.(?=[\w-]+\/))[^\s,;)'"`\]]*/gu, hold) // /commands, ./paths, .specs/…
-    .replace(/[\w.\/<>*-]*[\w>*-]\.(?:md|json|jsonl|js|mjs|cjs|ts|tsx|jsx|py|sh|ps1|cmd|bat|html|yml|yaml|toml|txt|lock|exe|gitignore)(?![\w])/g, hold);
+    .replace(/[\w.\/<>*-]+/g, (run) => { // file names: a run up to its LAST "<name>.<ext>" (tasks.md, src/a.test.js)
+      const end = ptbrFileEnd(run);
+      return end ? hold(run.slice(0, end)) + run.slice(end) : run;
+    });
+}
+// Where a run of path characters stops being a file name: the end of its last "x.<ext>" not followed by a word character, or 0.
+// One overlapping scan of the run — the pattern /[\w.\/<>*-]*[\w>*-]\.(?:md|…)/ it replaces backtracked over the whole run from
+// every start: quadratic ("a" × 40 000 took a second — full review Pb6). Same matches: a run holds at most one, from its start.
+const RE_PTBR_FILE_EXT = /[\w>*-]\.(?:md|json|jsonl|js|mjs|cjs|ts|tsx|jsx|py|sh|ps1|cmd|bat|html|yml|yaml|toml|txt|lock|exe|gitignore)(?![\w])/g;
+function ptbrFileEnd(run) {
+  let end = 0, m;
+  RE_PTBR_FILE_EXT.lastIndex = 0;
+  while ((m = RE_PTBR_FILE_EXT.exec(run))) { end = m.index + m[0].length; RE_PTBR_FILE_EXT.lastIndex = m.index + 1; }
+  return end;
 }
 function ptbrRestore(s, store) {
   let out = s, prev;

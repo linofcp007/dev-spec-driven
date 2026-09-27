@@ -875,10 +875,16 @@ const SIGNALS = {
       // ES
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
+      // full review Pb5 — the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
+      // criptografar as VERB_STEMS — their conjugations only, one signal per verb (like encrypt / encryption). Never a bare
+      // "cifra": PT/ES also a figure, an amount ("as cifras do trimestre").
+      "encript", "cifr", "criptograf",
     ],
     // C4: CORROBORATING-only — evidence for +sec only beside another +sec signal ("RBAC permissions"); alone it is no hint at
     // all, not even a "possible" note (file permission bits, app permissions, "permiso" = a leave of absence).
-    context: ["permission", "permissão", "permiso"],
+    // Full review Pb5: "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
+    // ("Encrypt customer PII at rest and in transit"), alone they are a patient at rest or a parcel in transit.
+    context: ["permission", "permissão", "permiso", "at rest", "in transit", "em repouso", "em trânsito", "em transito", "en reposo", "en tránsito", "en transito"],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
   privacy: {
@@ -960,14 +966,29 @@ const ES_STRONG = W("una|unos|pero|también|tambien|usted|esto|eso|entonces|toda
 const ES_STRONG_CHARS = /ción|ciones|ñ/giu;
 const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
 const EN_WORDS = W("the|and|with|for|of|is|are|to|an|in|on|by|from|that|this|it|should|must|when|without");
-function guessLang(text) {
+// fallback (full review Pb2 — an imported source): the project's language, used when the text shows no language of its own
+// (no PT/ES marker to speak of and fewer than two English function words) — and its variant (pt-BR) when the text is in
+// its family. Without it the answer is the plain guess ('en' when nothing says otherwise).
+function guessLang(text, fallback) {
   const distinct = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
   const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS)) + distinct(PT_WEAK);
   const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS)) + distinct(ES_WEAK);
   const en = distinct(EN_WORDS);
   const best = Math.max(pt, es);
-  if (best < 2 || best <= en) return "en";
-  return pt >= es ? "pt" : "es";
+  const g = best < 2 || best <= en ? "en" : pt >= es ? "pt" : "es";
+  if (!fallback) return g;
+  const f = normalizeLang(fallback);
+  if (i18n.baseLang(f) === g) return f;
+  return g === "en" && best < 2 && en < 2 ? f : g;
+}
+// The language the classifier reads a NEW feature's summary in (full review Pb2): the explicit one, else the project's
+// configured language (roadmap.json meta.lang, set by spec_init) — the language the feature is written in. Never the 'en'
+// fallback: a project without meta.lang keeps the guess. ("Corrigir o cálculo do IVA no checkout" in a PT project read
+// 'no' as a negator — the guess said 'en' — and kept +tdd off.)
+function configuredLang(projectDir, lang) {
+  if (lang) return lang;
+  const l = (readRoadmap(projectDir).meta || {}).lang;
+  return typeof l === "string" && l.trim() ? normalizeLang(l) : undefined;
 }
 
 function isNegated(text, idx, kwLen, lang, cased) {
@@ -1008,6 +1029,14 @@ const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina",
   // +sec / +privacy: vulnerability / vulnerabilities / vulnerabilidade(s) / vulnerabilidad(es); sanitize / sanitização;
   // anonymize / anonymisation / anonimização / anonimización; data minimization / minimisation.
   "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza"]);
+// VERB stems (full review Pb5): the stem + one of the listed endings, nothing else — 'cifr' is cifrar / cifrado / cifram…,
+// never "cifra" (a figure); 'encript' never "encriptação" (a keyword of its own). The stem is the keyword (its literal and
+// its name in notes), so a verb and its noun (encriptar / encriptação) are one signal, as encrypt / encryption are.
+const VERB_STEMS = new Map([
+  ["encript", "(?:ar|a|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
+  ["cifr", "(?:ar|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
+  ["criptograf", "(?:ar|a|am|amos|ando|ado|ada|ados|adas|ou|aram|em)"],
+]);
 // Inflections accepted on an exact keyword: payment→payments, cache→cached, rate-limit→rate-limiting.
 const INFLECTION = "(?:e?s|ed|ing|d)?";
 // Short acronyms ('rag', 'sla', 'slo', 'gpt', 'llm', 'ai') pluralize but never conjugate — without
@@ -1052,7 +1081,7 @@ function keywordRe(kw) {
   let re = KW_RE.get(kw);
   if (re) return re;
   const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
-  const tail = STEMS.has(kw) ? "\\p{L}*" : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX;
+  const tail = STEMS.has(kw) ? "\\p{L}*" : VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX;
   // Left edge: not glued to a word char, and not part of a dotted/slashed/hyphenated identifier
   // ('.claude-plugin', 'src/rag.ts'). Right edge: after the optional inflection/adjective, no word
   // char and no '-<letter>' compound ('claude-plugin') — but '-<digit>' stays legal ('gpt-4').
@@ -1086,7 +1115,7 @@ function classify(description, opts = {}) {
   const raw = [opts.name, description].filter((s) => s != null && String(s).trim()).map(String).join(". ");
   const cased = " " + splitWordPairs(raw) + " ";
   const text = cased.toLowerCase();
-  const lang = opts.lang ? normalizeLang(opts.lang) : guessLang(text);
+  const lang = opts.lang ? normalizeLang(opts.lang) : guessLang(text, opts.fallbackLang);
   const C = i18n.msg(lang).classify;
   // Accented/unaccented twins ("sessão"/"sessao") match the same word: one span counts once per track.
   const perTrack = (mk) => Object.fromEntries(OPTIONAL_TRACKS.map((t) => [t, mk()]));
@@ -2059,11 +2088,15 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
   // through the add_track path too, so running the same command twice gives the same track set.
   const current = existed ? detectTracks(dir) : null;
+  // The summary's classification (the tracks of a new feature, the signals classification.md lists), read in the feature's
+  // language: the explicit one, else the project's configured one (full review Pb2 — spec_create / create used to classify
+  // with the explicit lang only; they now leave it to the engine, so both surfaces read it the same way).
+  const clsR = cls || (bugfix || spike ? null : classify(summary || "", { name, lang: existed ? featureLang(projectDir, slug) : configuredLang(projectDir, lang) }));
   const t = spike ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to)
     : existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
     : bugfix ? VALID_TRACKS.filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
     : given ? pt.tracks
-    : (cls || classify(summary || "", { name, lang })).tracks;
+    : clsR.tracks;
   const newTracks = existed ? t.filter((x) => !current.includes(x)) : [];
   const bugExtra = !existed && bugfix ? t.filter((x) => x !== "core" && x !== "tdd") : [];
   if (newTracks.length) {
@@ -2152,7 +2185,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
 
   // A project template (.specs/templates/) replaces the built-in one; design / requirements / tasks still get the active
   // tracks' blocks the template doesn't carry (withTrackBlocks).
-  put("classification.md", scaf("classification", () => classificationMd(name, t, summary, cls, lng)));
+  put("classification.md", scaf("classification", () => classificationMd(name, t, summary, clsR, lng)));
   put("requirements.md", scaf("requirements", () => requirementsMd(name, t, summary, lng), { tracks: t }));
   put("design.md", scaf("design", () => designMd(name, t, lng), { tracks: t }));
   if (t.includes("tdd")) {
@@ -2323,10 +2356,16 @@ function templateFileList(projectDir) {
 
 // → { key, text, rel } of the project's template for `key` in language `lang` (its <lang>/ file first), or null. Only the
 // files templateFileList knows (exact names, no linked folder) — the list, the corpus and the scaffolds read the same ones.
+// A regional variant falls back to its family's folder before the shared one (full review Pb8): a pt-BR feature reads
+// templates/pt-BR/<a>.md, then templates/pt/<a>.md, then templates/<a>.md, then the built-in.
+function templateLangChain(lang) {
+  const l = normalizeLang(lang);
+  const b = i18n.baseLang(l);
+  return b !== l ? [l, b] : [l];
+}
 function templateOverride(projectDir, key, lang) {
   const files = templateFileList(projectDir).filter((f) => f.key === key);
-  const l = normalizeLang(lang);
-  for (const f of [files.find((x) => x.lang === l), files.find((x) => x.lang == null)]) {
+  for (const f of [...templateLangChain(lang).map((l) => files.find((x) => x.lang === l)), files.find((x) => x.lang == null)]) {
     const text = f ? readTemplateFile(f.abs, projectDir) : null;
     if (text != null) return { key, text, rel: f.rel };
   }
@@ -2603,7 +2642,7 @@ function listTemplates(projectDir, key, lng) {
   const readable = (f) => readTemplateFile(f.abs, projectDir) != null;
   const entries = keys.map((k) => {
     const overrides = files.filter((f) => f.key === k && readable(f)).map((f) => ({ lang: f.lang, path: f.rel }));
-    const eff = overrides.find((o) => o.lang === lng) || overrides.find((o) => o.lang == null) || null;
+    const eff = templateLangChain(lng).map((l) => overrides.find((o) => o.lang === l)).find(Boolean) || overrides.find((o) => o.lang == null) || null;
     return { artifact: k, file: k.startsWith("steering/") ? k : TEMPLATE_ARTIFACTS[k], source: eff ? "override" : "built-in", override: eff ? eff.path : null, overrides };
   });
   const ignored = files.filter((f) => !f.key).map((f) => f.rel);
@@ -2697,7 +2736,7 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
 function checkTemplates(projectDir, key, lang, lng) {
   const T = i18n.msg(lng).templates;
   const P = T.problems;
-  const inLang = templateFileList(projectDir).filter((f) => !lang || f.lang == null || f.lang === lang);
+  const inLang = templateFileList(projectDir).filter((f) => !lang || f.lang == null || templateLangChain(lang).includes(f.lang));
   const all = inLang.filter((f) => !key || f.key === key); // the files checked (and reported on)
   const problems = [];
   const add = (f, severity, code, message, line) => {
@@ -2737,7 +2776,8 @@ function checkTemplates(projectDir, key, lang, lng) {
   // AC IDs across the trio of one language context: a tasks / test-plan template citing IDs the requirements template
   // (the project's, else the built-in) doesn't define — and a requirements template the built-in tasks / test plan don't fit.
   const effective = (k, l, tracks) => {
-    const hit = [...texts.values()].find((x) => x.f.key === k && x.f.lang === l) || [...texts.values()].find((x) => x.f.key === k && x.f.lang == null);
+    const hit = templateLangChain(l).map((c) => [...texts.values()].find((x) => x.f.key === k && x.f.lang === c)).find(Boolean) ||
+      [...texts.values()].find((x) => x.f.key === k && x.f.lang == null);
     return hit ? { rendered: hit.rendered, f: hit.f } : { rendered: renderTemplate(builtInTemplate(k, l, tracks), templateVars(sample(), l)), f: null };
   };
   const contexts = [...new Set([lang || lng, ...[...texts.values()].map((x) => x.f.lang).filter(Boolean)])].filter((l) => !lang || l === lang);
@@ -7828,7 +7868,9 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
 const SAAS_SECTIONS = [
   { name: "Performance Budget", syn: ["performance budget", "orçamento de desempenho", "orcamento de desempenho", "orçamento de performance", "presupuesto de rendimiento"] },
   { name: "Scale Design", syn: ["scale design", "design de escala", "desenho de escala", "diseño de escala", "escalabilidade", "escalabilidad"] },
-  { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino"] },
+  { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino",
+    // pt-BR (full review Pb4 / Pb7): the Brazilian word for tenant — its scaffold writes "Modelo Multilocatário"
+    "multilocatário", "multilocatario", "multi-locatário", "multi-locatario", "modelo multilocatário", "modelo multilocatario", "modelo multi-locatário"] },
   { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"] },
   { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"] },
 ];
@@ -7851,7 +7893,8 @@ const SEC_SECTIONS = [
   { name: "Authentication & Authorization", syn: ["authentication & authorization", "authentication and authorization", "authn & authz", "authn/authz",
     "autenticação e autorização", "autenticacao e autorizacao", "autenticación y autorización", "autenticacion y autorizacion"] },
   { name: "Secrets & Key Management", syn: ["secrets & key management", "secrets and key management", "secrets management", "secret management", "key management",
-    "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves"] },
+    "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves",
+    "gerenciamento de segredos", "gerenciamento de chaves"] }, // pt-BR (full review Pb4)
   { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"] },
 ];
 // +privacy (1.14) — GDPR / RGPD. `loose` (C4, see extractSection): the synonyms that are ordinary design words — they
@@ -7862,14 +7905,19 @@ const PRIVACY_SECTIONS = [
   { name: "Lawful Basis & Purpose", syn: ["lawful basis", "legal basis", "fundamento de licitude", "fundamento jurídico", "fundamento juridico", "base de licitude",
     "base jurídica", "base juridica", "base legal", "base de legitimación", "base de legitimacion"] },
   { name: "Retention & Deletion", syn: ["retention & deletion", "retention and deletion", "retention", "data retention", "conservação e eliminação", "conservacao e eliminacao",
-    "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion"],
+    "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion",
+    "retenção e eliminação", "retencao e eliminacao", "retenção e exclusão", "retencao e exclusao"], // pt-BR (full review Pb4 / Pb7)
   loose: ["retention", "conservação", "retenção", "retencao", "conservación", "retención", "retencion"] },
   { name: "Data Subject Rights", syn: ["data subject rights", "direitos dos titulares", "direitos do titular", "derechos de los interesados", "derechos del interesado", "derechos arco"] },
+  // pt-BR / LGPD (full review Pb4 / Pb7): the processor is the "operador" — an ordinary word alone (loose), the whole heading strict.
   { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
-    "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales"],
-  loose: ["processors", "sub-processors"] },
-  { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto"],
-    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto"] },
+    "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales",
+    "operadores e transferências internacionais", "operadores e transferencias internacionais", "operadores", "suboperadores"],
+  loose: ["processors", "sub-processors", "operadores", "suboperadores"] },
+  // pt-BR / LGPD (full review Pb4 / Pb7): the RIPD (Relatório de Impacto à Proteção de Dados), art. 38.
+  { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto",
+    "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
+    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"] },
 ];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
@@ -7895,13 +7943,19 @@ function headingIndex(lines) {
 // synonym must START the heading text, after an optional [SaaS]/[AI] marker, numbering ("1.", "10)",
 // "Section 1:" — the form references/mandatory-ai-design-sections.md uses) and emphasis, and end at a word
 // boundary ("fix" ≠ "Fixtures").
-const RE_HEADING_LEAD = new RegExp("^(?:[\\s*_—–:-]+|\\[(?:" + MARKER_TRACKS.join("|") + ")\\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\\s+\\d+[.:)]?(?=\\s|$)|\\d+(?:\\.\\d+)*[.):]?(?=\\s))");
-function headingMatches(line, syns) {
+// An emoji (with its variation selector / joiner / skin tone) before or after the marker is decoration too:
+// "## 🔐 [SEC] Threat Model" (full review Pb4).
+const RE_HEADING_LEAD = new RegExp("^(?:[\\s*_—–:-]+|[\\p{Extended_Pictographic}\\u{1F3FB}-\\u{1F3FF}\\u{FE0E}\\u{FE0F}\\u{200D}\\u{20E3}]+|\\[(?:" + MARKER_TRACKS.join("|") +
+  ")\\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\\s+\\d+[.:)]?(?=\\s|$)|\\d+(?:\\.\\d+)*[.):]?(?=\\s))", "u");
+// inflect (the marker tracks' sections — full review Pb4): an English inflection of the synonym's last word names the same
+// section — "Threat Modeling" / "Threat Modelling" / "Threat Models" are the Threat Model.
+const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
+function headingMatches(line, syns, inflect) {
   const m = line.match(/^#{2,6}\s+(.*)$/);
   if (!m) return false;
   let t = m[1].toLowerCase();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(RE_HEADING_LEAD, ""); }
-  return syns.some((s) => t.startsWith(s) && !/[\p{L}\p{N}]/u.test(t.charAt(s.length)));
+  return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
 }
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
@@ -7920,7 +7974,7 @@ function extractSection(md, synonyms, marker, loose) {
   const strict = looseSet.size ? syns.filter((s) => !looseSet.has(s)) : syns;
   const lines = (md || "").split(/\r?\n/);
   const heads = headingIndex(lines);
-  const matches = (i, list) => headingMatches(lines[i], list || syns);
+  const matches = (i, list) => headingMatches(lines[i], list || syns, !!marker); // a track section's heading may inflect its name
   const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
   // The nearest enclosing heading (a lower level, above i) carries the marker: the heading sits in the track's context.
   const inTrackContext = (i) => {
@@ -10840,8 +10894,10 @@ function expInline(text) {
   // Spans are bounded (4000 / 2000 chars): an unclosed `, * or ~~ used to rescan the rest of the paragraph from every opener.
   s = s.replace(/(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"));
   const target = "(<[^<>\\s]*>|[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)(?:\\s+\"[^\"]*\")?";
-  s = s.replace(new RegExp("!\\[([^\\]]*)\\]\\(" + target + "\\)", "g"), (m, alt) => alt);
-  s = s.replace(new RegExp("\\[([^\\]]+)\\]\\(" + target + "\\)", "g"), (m, label, url) => {
+  // A label holds no '[' (full review Pb6): "[" × N rescanned the rest of the paragraph from every '[' — quadratic. A nested
+  // "[a [b] c](url)" never matched as a whole either (its first ']' is no "](").
+  s = s.replace(new RegExp("!\\[([^\\[\\]]*)\\]\\(" + target + "\\)", "g"), (m, alt) => alt);
+  s = s.replace(new RegExp("\\[([^\\[\\]]+)\\]\\(" + target + "\\)", "g"), (m, label, url) => {
     const u = url.replace(/^<|>$/g, "");
     return /^(?:https?:\/\/|mailto:)/i.test(u) ? put(`<a href="${htmlEsc(u)}" rel="noopener noreferrer">`) + label + put("</a>") : label;
   });
@@ -13256,19 +13312,39 @@ function earsFromGwt(text) {
   return null;
 }
 // A Kiro criterion is usually EARS already ("WHEN … THEN the system SHALL …") — kept verbatim; a WHEN/IF … THEN
-// without SHALL gets its response rewritten.
+// without SHALL gets its response rewritten. A spec written in Portuguese / Spanish (QUANDO … ENTÃO … / CUANDO … ENTONCES …)
+// the same way, in its language (full review Pb1: only the English keywords were read).
+const KIRO_COND = [
+  ["en", /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i, { when: "when", if: "if", while: "while", where: "where" }],
+  ["pt", /^(QUANDO|SE|ENQUANTO|ONDE)\s+(.+?),?\s+ENT[ÃA]O\s+(.+)$/i, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
+  ["es", /^(CUANDO|SI|MIENTRAS|DONDE)\s+(.+?),?\s+ENTONCES\s+(.+)$/i, { cuando: "when", si: "if", mientras: "while", donde: "where" }],
+];
+// Kiro's requirements.md headings in EN / PT / ES: the document title, "## Introduction", "## Requirements" and the story
+// headings "### Requirement N" (PT/ES "Requisito N" — or a translated "História de Utilizador / Usuário N", "Historia de
+// Usuario N"). The English forms read exactly as before; a PT/ES "## Requisitos" wrapper only when it is the whole heading
+// ("## Requisitos Não Funcionais" is a section of its own, carried).
+const RE_KIRO_REQ_TITLE = /^(?:requirements?(?:\s+document)?|(?:documento\s+de\s+)?requisitos)$/i;
+const RE_KIRO_INTRO = /^(?:introduction\b|introdu[çc][ãa]o(?![\p{L}\p{N}_])|introducci[óo]n(?![\p{L}\p{N}_]))/iu;
+const RE_KIRO_REQS = /^(?:requirements\b|requisitos\s*$)/i;
+const RE_KIRO_STORY = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i;
 function earsFromKiro(text) {
   const t = String(text).trim();
   if (RE_MODAL.test(t)) return t;
-  const m = t.match(/^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i);
-  if (!m) return null;
-  const E = i18n.msg("en").importSpec.ears;
-  const then = earsThen(m[3], "en", E);
-  const kw = m[1].toUpperCase();
-  return kw === "IF" ? `${E.if} ${trimClause(m[2])}, ${E.then} ${then}` : `${E[kw.toLowerCase()]} ${trimClause(m[2])}, ${then}`;
+  for (const [lng, re, kws] of KIRO_COND) {
+    const m = t.match(re);
+    if (!m) continue;
+    const E = i18n.msg(lng).importSpec.ears;
+    const then = earsThen(m[3], lng, E);
+    const kw = kws[m[1].toLowerCase()];
+    return kw === "if" ? `${E.if} ${trimClause(m[2])}, ${E.then} ${then}` : `${E[kw]} ${trimClause(m[2])}, ${then}`;
+  }
+  return null;
 }
+// The story's title from its "I want …" clause (PT "quero …", ES "quiero …").
 function titleFromStory(prose) {
-  const m = prose.join(" ").match(/\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i);
+  const s = prose.join(" ");
+  const m = s.match(/\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i) ||
+    s.match(/(?<![\p{L}\p{N}_])(?:quero|quiero)\s+(?:que\s+)?(.+?)(?:,|\s+(?:para|de modo a|de forma a)(?![\p{L}\p{N}_])|$)/iu);
   return m ? shortTitle(m[1].charAt(0).toUpperCase() + m[1].slice(1), 60) : null;
 }
 function newImportModel() {
@@ -13290,17 +13366,21 @@ function parseKiro(dir, read, W) {
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) used.add(h1.i);
-    model.title = h1 && !/^requirements?(?:\s+document)?$/i.test(h1.text) ? h1.text : null;
-    const introK = hs.findIndex((h) => /^introduction\b/i.test(h.text));
+    model.title = h1 && !RE_KIRO_REQ_TITLE.test(h1.text) ? h1.text : null;
+    const introK = hs.findIndex((h) => RE_KIRO_INTRO.test(h.text));
     if (introK !== -1) used.add(hs[introK].i);
     const [sLo, sHi] = introK !== -1 ? mdRange(lines, hs, introK) : [h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
     const sAt = [];
     model.summary = firstParagraph(lines.slice(sLo, sHi), sAt);
     sAt.forEach((r) => used.add(sLo + r)); // the rest of the introduction is carried verbatim
     hs.forEach((h, k) => {
-      if (h.level === 2 && /^requirements\b/i.test(h.text)) { used.add(h.i); return; }
-      const m = h.text.match(/^requirement\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i);
-      if (!m) return;
+      if (h.level === 2 && RE_KIRO_REQS.test(h.text)) { used.add(h.i); return; }
+      const hm = h.text.match(RE_KIRO_STORY);
+      if (!hm) return;
+      // m = [, number, title] as the English form always had it; the heading's own word names the story in the mapping
+      // ("Requisito 1") — English keeps "Requirement N" whatever its case.
+      const m = [hm[0], hm[2], hm[3]];
+      const word = /^requirement$/i.test(hm[1]) ? "Requirement" : hm[1].charAt(0).toUpperCase() + hm[1].slice(1).toLowerCase().replace(/\s+/g, " ");
       const [lo, hi] = mdRange(lines, hs, k);
       markRange(used, h.i, hi); // prose, criteria AND what follows them are all written into the story
       const body = lines.slice(lo, hi);
@@ -13317,7 +13397,7 @@ function parseKiro(dir, read, W) {
       // Anything under the label that is not a criterion (a note, a sub-heading, a table) follows the criteria.
       const after = acAt === -1 ? [] : tidyLines(acBody.filter((l, r) => !inItem.has(r + off) && !RE_MD_HR.test(l)));
       model.stories.push({
-        printed: +m[1], key: `Requirement ${m[1]}`, title: m[2].trim() || titleFromStory(proseLines) || `Requirement ${m[1]}`, priority: null,
+        printed: +m[1], key: `${word} ${m[1]}`, title: m[2].trim() || titleFromStory(proseLines) || `${word} ${m[1]}`, priority: null,
         prose: proseLines, quote: [], after,
         criteria: items.map((it, j) => ({ key: `${m[1]}.${it.n != null ? it.n : j + 1}`, raw: it.text, ears: earsFromKiro(it.text) })),
       });
@@ -13325,7 +13405,7 @@ function parseKiro(dir, read, W) {
     if (!model.stories.length) model.warnings.push(W.wNoRequirements("requirements.md"));
     // Other top-level sections (Glossary, non-functional notes…) travel verbatim.
     hs.forEach((h, k) => {
-      if (h.level !== 2 || /^(?:introduction|requirements)\b/i.test(h.text) || used.has(h.i)) return;
+      if (h.level !== 2 || RE_KIRO_INTRO.test(h.text) || RE_KIRO_REQS.test(h.text) || used.has(h.i)) return;
       const [lo, hi] = mdRange(lines, hs, k);
       const rest = unusedLines(lines, used, lo, hi);
       markRange(used, h.i, hi);
@@ -13748,12 +13828,24 @@ function planPaths(text) {
   };
   const s = String(text || "");
   for (const m of s.matchAll(/`([^`\n]+)`/g)) add(m[1], true);
-  const rest = s.replace(/`[^`\n]*`/g, " ").replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, " $1 $2 ");
+  // Linear (full review Pb6): a link text holds no '[' (each '[' scans only up to the next bracket — "[" × N was quadratic)
+  // and a link target is bounded (add() refuses a path over 200 characters anyway).
+  const rest = s.replace(/`[^`\n]*`/g, " ").replace(/\[([^[\]\n]*)\]\(([^)\s]{1,256})\)/g, " $1 $2 ");
   for (const tok of rest.split(/\s+/)) {
-    const t = tok.replace(/^[("'[{<*_]+|[)"'\]}>.,;:!?*_]+$/g, "");
+    const t = planTokenTrim(tok);
     if (t.includes("/")) add(t, false);
   }
   return out;
+}
+// A token's wrapping punctuation dropped — a plain scan: the anchored regex (/[)…]+$/) rescanned a long run of ')' from every
+// position (full review Pb6).
+const PLAN_TOKEN_LEAD = new Set(["(", '"', "'", "[", "{", "<", "*", "_"]);
+const PLAN_TOKEN_TRAIL = new Set([")", '"', "'", "]", "}", ">", ".", ",", ";", ":", "!", "?", "*", "_"]);
+function planTokenTrim(tok) {
+  let a = 0, b = tok.length;
+  while (a < b && PLAN_TOKEN_LEAD.has(tok[a])) a++;
+  while (b > a && PLAN_TOKEN_TRAIL.has(tok[b - 1])) b--;
+  return tok.slice(a, b);
 }
 // A shell command a step names (a backticked span, or a line of its code block) — the first that reads as a CHECK (a test, lint,
 // build or curl run) becomes the task's _Verify:_. A `$ ` prompt and a leading `cd <dir> &&` are dropped; one line only.
@@ -14004,7 +14096,11 @@ function unwrapDocFence(text) {
 }
 
 const RE_PLAN_CRITERIA = /^(?:goals?|objectives?|acceptance(?:\s+criteria)?|success\s+criteria|requirements|definition\s+of\s+done|done\s+when|expected\s+(?:outcomes?|behaviou?r|results?)|verification|validation|objetivos?|metas?|crit[ée]rios\s+de\s+(?:aceita[çc][ãa]o|sucesso)|requisitos|defini[çc][ãa]o\s+de\s+(?:pronto|conclu[íi]do)|resultados?\s+esperados?|verifica[çc][ãa]o|valida[çc][ãa]o|criterios\s+de\s+(?:aceptaci[óo]n|[ée]xito)|definici[óo]n\s+de\s+(?:hecho|terminado)|verificaci[óo]n|validaci[óo]n)\b/i;
-const RE_PLAN_STEPS = /^(?:(?:implementation\s+)?steps?|implementation(?:\s+(?:plan|details|order|steps))?|(?:work\s+)?plan(?:\s+of\s+work)?|tasks?|to-?dos?|work\s+items?|(?:proposed\s+)?changes|approach|phases?|milestones?|passos|etapas|implementa[çc][ãa]o|plano(?:\s+de\s+implementa[çc][ãa]o)?|tarefas|altera[çc][õo]es|abordagem|fases|pasos|implementaci[óo]n|plan\s+de\s+implementaci[óo]n|tareas|cambios|enfoque)\b/i;
+const RE_PLAN_STEPS = /^(?:(?:implementation\s+)?steps?|implementation(?:\s+(?:plan|details|order|steps))?|(?:work\s+)?plan(?:\s+of\s+work)?|tasks?|to-?dos?|work\s+items?|(?:proposed\s+)?changes|phases?|milestones?|passos|etapas|implementa[çc][ãa]o|plano(?:\s+de\s+implementa[çc][ãa]o)?|tarefas|altera[çc][õo]es|fases|pasos|implementaci[óo]n|plan\s+de\s+implementaci[óo]n|tareas|cambios)\b/i;
+// An Approach section (PT abordagem, ES enfoque) holds the plan's steps only when the plan has no other steps section (full
+// review Pb3): beside a Steps section it is design prose — its "### Files to modify" inventory became tasks duplicating the
+// real steps, and left design.md.
+const RE_PLAN_APPROACH = /^(?:approach|abordagem|enfoque)\b/i;
 const RE_PLAN_SUMMARY = /^(?:summary|overview|goal|objective|context|problem(?:\s+statement)?|purpose|background|tl;?dr|resumo|vis[ãa]o\s+geral|objetivo|contexto|problema|prop[óo]sito|resumen|visi[óo]n\s+general)\b/i;
 
 // plan — Claude Code plan mode / Cursor plans (see the block comment above).
@@ -14031,7 +14127,10 @@ function parsePlan(dir, read, W, src) {
   const stem = path.basename(doc.file).replace(/\.md$/i, "").replace(/\.plan$/i, "").replace(/[-_][0-9a-f]{6,}$/i, "");
   model.nameHint = model.title || stem;
   // The title is no section ("# Plan: Add dark mode" is not a Plan-of-work heading its sub-sections inherit).
-  const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : RE_PLAN_CRITERIA.test(t) ? "criteria" : RE_PLAN_STEPS.test(t) ? "steps" : RE_PLAN_SUMMARY.test(t) ? "summary" : null));
+  const stepsHead = (t) => !RE_PLAN_CRITERIA.test(t) && RE_PLAN_STEPS.test(t);
+  const approachSteps = !hs.some((h) => h !== h1 && stepsHead(planHeadingText(h.text))); // no Steps section: an Approach is one
+  const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : RE_PLAN_CRITERIA.test(t) ? "criteria"
+    : RE_PLAN_STEPS.test(t) || (approachSteps && RE_PLAN_APPROACH.test(t)) ? "steps" : RE_PLAN_SUMMARY.test(t) ? "summary" : null));
   // Summary: Cursor's overview, else the first paragraph of a Summary / Goal / Context section, else the one under the title.
   if (typeof fmData.overview === "string" && fmData.overview.trim()) model.summary = fmData.overview.trim();
   else {
@@ -14472,7 +14571,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // Tracks: explicit, else classified from the requirements-level text (not design/tasks — "data model" is not +ai).
   const evidence = [model.title, model.summary, ...model.stories.flatMap((s) => [s.title, ...s.prose, ...s.quote, ...s.criteria.map((c) => c.raw)]),
     ...model.extra.flatMap((x) => x.lines)].filter(Boolean).join("\n");
-  const cls = classify(evidence, { name, lang: opts.lang });
+  // Read in the source's own language when it shows one (an English plan imported into a PT project reads "no LLM" as a
+  // negation), else in the project's configured language (full review Pb2); an explicit lang wins.
+  const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir) });
   const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang);
   if (!cr.ok) return cr;
   const lng = cr.lang;
@@ -14546,7 +14647,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     const refs = (ref) => {
       if (/^US-\d+\.AC-\d+$/.test(ref) || /^(?:FR|SC|NFR|EC)-\d+$/.test(ref)) return [ref];
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];
-      const whole = ref.match(/^(?:requirement\s+|user story\s+|US-?)?(\d+)$/i);
+      const whole = ref.match(/^(?:requirement\s+|requisito\s+|user story\s+|US-?)?(\d+)$/i);
       if (whole) { const sn = storyNo(+whole[1]); if (sn != null && acOf.get(sn).length) return acOf.get(sn); }
       return null;
     };

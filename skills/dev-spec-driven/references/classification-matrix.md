@@ -30,9 +30,9 @@ is a draft for the human, who confirms Phase 0.
 - **Strong** signals turn a track on alone; **weak** ones need a second signal: score = 2 × strong + weak, a track
   turns ON at 2 (one strong, or two weak — then a note says "on from weak signals only — double-check"), and a lone
   weak signal is reported as **possible** (a note), not enabled.
-- **Corroborating-only** signals (`permission` / `permissão` / `permiso` for +sec) count as weak evidence only beside
-  another signal of the same track ("RBAC permissions"); alone they are no hint at all (file permission bits, a leave of
-  absence).
+- **Corroborating-only** signals (`permission` / `permissão` / `permiso`, `at rest` / `in transit` and their PT/ES
+  forms for +sec) count as weak evidence only beside another signal of the same track ("RBAC permissions", "encrypt
+  customer PII at rest"); alone they are no hint at all (file permission bits, a leave of absence, a parcel in transit).
 - A weak word inside a longer strong phrase of another track is part of that phrase: `model` in "threat model" is no
   +ai hint, `security` in "row-level security" no +sec one.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
@@ -150,8 +150,9 @@ ASVS, secrets management, encryption at rest / in transit, security audit / revi
 privilege escalation, SSRF, credential stuffing, zero trust, mTLS, content security policy (and their PT/ES forms:
 *modelo de ameaças, teste de intrusão, gestão de segredos · modelo de amenazas, prueba de penetración*). **Weak:**
 authentication, authorization, RBAC, access control, access / refresh token, API key, credential, encryption, TLS,
-CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, brute force, `STRIDE`.
-**Corroborating only:** permission. Never a bare "injection" (dependency injection) or "https".
+CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, brute force, `STRIDE` (and the
+encryption verbs *encriptar, cifrar, criptografar*).
+**Corroborating only:** permission, at rest, in transit. Never a bare "injection" (dependency injection) or "https".
 
 Skip `+sec` when the feature crosses no trust boundary and handles nothing sensitive (a static page, an internal
 report over public data). Details: `security-track.md`.

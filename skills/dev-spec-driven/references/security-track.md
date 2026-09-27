@@ -18,8 +18,8 @@ the OWASP Top 10), abuse cases, and security testing you can run locally before 
 | Signal strength | Examples |
 |---|---|
 | **Strong** (one is enough) | threat model, OWASP, XSS, CSRF, SQL injection, pentest, vulnerability, CVE, ASVS, secrets management, encryption at rest, security audit / review, SAST / DAST, attack surface, privilege escalation, SSRF · *modelo de ameaças, teste de intrusão, gestão de segredos* · *modelo de amenazas, prueba de penetración, gestión de secretos* |
-| **Weak** (needs a second one) | authentication, authorization, RBAC, access token, API key, credentials, encryption, audit log, input validation, security, brute force, `STRIDE` (upper case only — a lower-case "stride" is an array stride) · *autenticação, autorização, segurança* · *autenticación, autorización, seguridad* |
-| **Corroborating only** | permission · *permissão* · *permiso* — evidence only beside another `+sec` signal ("RBAC permissions"); alone it is no hint (file permission bits, a leave of absence) |
+| **Weak** (needs a second one) | authentication, authorization, RBAC, access token, API key, credentials, encryption, audit log, input validation, security, brute force, `STRIDE` (upper case only — a lower-case "stride" is an array stride) · *autenticação, autorização, segurança, encriptar, criptografar* · *autenticación, autorización, seguridad, cifrar* |
+| **Corroborating only** | permission, at rest, in transit · *permissão, em repouso, em trânsito* · *permiso, en reposo, en tránsito* — evidence only beside another `+sec` signal ("RBAC permissions", "encrypt the backups at rest"); alone it is no hint (file permission bits, a leave of absence, a parcel in transit) |
 
 Auth words are **weak** on purpose — they are `+tdd`'s strong signals. "Login with a password" is
 `core +tdd` with a *possible* `+sec` note; "login with a password, RBAC and an audit log" turns `+sec` on
