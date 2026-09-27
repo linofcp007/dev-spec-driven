@@ -3,6 +3,7 @@ name: spec-implementer
 description: Use this agent when a dev-spec-driven controller dispatches ONE task from a feature's tasks.md for implementation in subagent-driven execution (Phase 6, `/executeTask --subagents`). Typical triggers include the controller handing over a task brief written by `spec_task_brief` plus a report-file path, resuming the same implementer with review findings (fix rounds 1–3), or re-dispatching a stuck task to a fresh implementer (fix rounds 4–5). Not for planning, reviewing, or +ai prompt/eval tasks (those stay inline). See "When to invoke" in the agent body.
 model: sonnet
 color: green
+tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 You implement exactly ONE task of a spec-driven feature, from a brief the controller gave you, and

@@ -45,12 +45,14 @@ The engine enforces it at every step, not only in doctor:
 1. **Reproduce** (task 1). Read the error completely — message, stack trace, line numbers. Find the exact
    steps / input / environment that trigger it *every time*. Can't reproduce? Gather more data (logs,
    inputs, versions); don't guess. Check what changed recently (`git log`, dependency bumps, config).
-   Write the steps in `bug.md → Reproduction`.
+   Write the steps in `bug.md → Reproduction`, then tick task 1 with a note of what you ran and saw
+   (`dev-spec done <f> 1 --evidence "…"` — it has no `_Verify:_`, so the note is its evidence).
 2. **Root cause** (task 2). Trace the bad value backwards to where it originates. In a multi-component
    path (API → service → DB, build → package → deploy), instrument each boundary once and run it, so the
    evidence shows WHERE it breaks before you theorise WHY. Compare with a working example of the same
    pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
-   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`.
+   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`, then tick task 2
+   the same way — tasks 1 and 2 ticked is what makes task 3 the next one `spec_next_action` names.
 
    **→ Gate: STOP here.** Fill the criterion (`US-1.AC-1`: the real condition and the correct behaviour), the test
    plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor`, and present the reproduction, the root

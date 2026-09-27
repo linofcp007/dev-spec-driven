@@ -27,10 +27,11 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   no test file names), `verification` (ticked tasks without a passing run — the reason per task: no evidence,
   note on a runnable `_Verify:_`, failed run, stale evidence, duplicate number, unexpected pass on an
   `_Expect: fail_` task), `red-green` (+tdd: T-IDs made green with no recorded red run — a test that never failed
-  proves nothing; a bugfix's guard test T-02 is expected here), `suite-evidence` (project checks without a passing run
-  since the last task activity — `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code
-  is the last command's), `duplicate-tasks`, `integration-plan` (still the template), `changed-since-approval`
-  (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
+  proves nothing; only `_Makes green:_` IDs count, so a bugfix's guard test T-02 appears here only on a bugfix
+  scaffolded before 1.14, whose task 4 still lists it — remove T-02 from that `_Makes green:_`), `suite-evidence`
+  (project checks without a passing run since the last task activity — `/spec-finish` blocks on it), `verify-pipes`
+  (a `_Verify:_` that pipes: its exit code is the last command's), `duplicate-tasks`, `integration-plan` (still the
+  template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),
   `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai, a phase still

@@ -21,7 +21,9 @@ they choose to keep the feature, archive it or remove it.
 3. **Classify** — `spec_classify` on the change. *Gate: the tracks decide which artifacts and checks apply.* For the
    tour, prefer core: if it proposes +saas / +ai / +sec / +privacy, say why, and suggest a smaller change or keep
    core with the user's OK. Then `spec_init {tracks, lang}` if `.specs/` doesn't exist yet and
-   `spec_create {name, tracks, lang, summary}` once.
+   `spec_create {name, tracks, lang, summary}` once, and record the decision in the `classification.md` it seeds (as
+   `/classify` does): the tracks and why, the blast radius, the compliance tags — every bracketed template line
+   replaced with the real answer, or the classification approval in step 7 is refused on `placeholders`.
 4. **Requirements** — write a short `requirements.md`: one user story with **1–2 EARS criteria** (`US-1.AC-1`
    "WHEN … THE SYSTEM SHALL …"), then `ears_validate`. *Gate: every later artifact traces back to these IDs.*
 5. **Design** — a stub `design.md`: the files touched, the approach in three or four lines, the Constitution

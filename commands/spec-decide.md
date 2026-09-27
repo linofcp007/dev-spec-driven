@@ -15,7 +15,7 @@ Decisions and discoveries made while planning or implementing get lost in chat a
    - optional **context** (why it had to be decided, the options weighed) and **consequences** (what changes, what it
      rules out, the follow-up work);
    - **affects** — what it touches: AC IDs (`US-1.AC-2`), T-IDs (`T-03`), EC/NFR/SC IDs, design section names
-     (`Data Model`; for a bugfix bug.md's sections, for a spike spike.md's);
+     (`Data Models`, as design.md spells them; for a bugfix bug.md's sections, for a spike spike.md's);
    - **supersedes** — an earlier entry it replaces (`D-1`); **kind** `discovery` for a fact learnt while working.
 2. Call `spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?}`
    (CLI: `dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"]

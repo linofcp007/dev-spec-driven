@@ -20,7 +20,7 @@
 
 ## Coverage Check
 Every AC appears in at least one "Covers" cell (US-1.AC-1..4, US-2.AC-1). No gaps. The edge cases are
-covered too (EC-1 by T-06, EC-2 by T-07); NFR-1 and SC-001 are measured by the load test (task 8).
+covered too (EC-1 by T-06, EC-2 by T-07); NFR-1 and SC-001 are measured by the load test (task 9).
 
 ## Test Data & Fixtures
 - Two seed tenants (A, B) for the isolation probe; a clock helper for expiry/grace.

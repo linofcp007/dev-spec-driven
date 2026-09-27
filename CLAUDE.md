@@ -411,7 +411,10 @@ sections.
   record is refused and recorded (`unexpectedPass: true`, reason `unexpected-pass`; a ticked task becomes unverified);
   a pass after a red run is the fix going green — the red run is kept as `red` and stays the proof (`redProof()`; a
   `stale` record proves nothing). Exit 126 / 127 / 9009 (`CANT_RUN_EXIT`: not executable, not found, cmd.exe "not
-  recognized") is never a red test — refused like a failed run, and `done --run` records nothing for it. Every result for
+  recognized") is never a red test — refused and recorded like a failed (re-)check (`recorded: true`; a ticked task turns
+  unverified, while a red run already on record is kept, so the pass after the fix still counts as green); only on an
+  `_Expect: fail_` task under `done --run` on Windows' cmd.exe, a line cmd.exe itself could not run
+  (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded. Every result for
   such a task carries `expected: "fail"`. Doctor `red-green` (warn, +tdd): T-IDs DONE tasks make green with no recorded
   red run of an `_Expect: fail_` task citing them. Metrics count a red run as a pass and an unexpected pass as a failure.
 - **Project checks** — `roadmap.json → meta.checks` `{name: command}` (`spec_init {checks}` / `init --check name="cmd"`,

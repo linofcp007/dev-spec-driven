@@ -351,9 +351,11 @@ that writes a test before its code — a bugfix's regression test, a red phase �
 - Task 4 then turns them green with a normal must-pass `_Verify:_`.
 - `spec_doctor` warns **`red-green`** (+tdd) for every T-ID a done task makes green with no recorded red run of an
   `_Expect: fail_` task citing it. When Phase 4 wrote all the failing tests up front, one Setup task "confirm the
-  failing tests T-01…T-07 are red" marked `_Expect: fail_`, ticked before any implementation task, records that red
-  run for all of them. A guard test that passes before the
-  change by design (a bugfix's T-02) is named there too — note it rather than making it fail artificially.
+  failing tests T-01, T-02, T-03, T-04, T-05, T-06, T-07 are red" marked `_Expect: fail_`, ticked before any
+  implementation task, records that red run for all of them — it must name each T-ID (a range such as "T-01…T-07"
+  names only its two ends). A guard test that passes before the change by design (a bugfix's T-02) goes in no
+  `_Makes green:_`, so the check never asks for its red run; a bugfix scaffolded before 1.14 still lists T-02 in task
+  4's `_Makes green:_` — remove it from there rather than making the test fail artificially.
 
 Details: `verification.md` (Red → green).
 

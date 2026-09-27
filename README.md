@@ -1068,7 +1068,7 @@ dev-spec-driven/                      ← plugin root
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)
-├── examples/demo-project/            ← a worked feature (1.13 shape) that passes doctor + trace
+├── examples/demo-project/            ← a worked feature (1.14 shape) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md
 └── INSTALL.md
