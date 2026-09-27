@@ -387,9 +387,9 @@ function runTool(name, args) {
     case "spec_classify":
       return spec.classify(args.description, { name: args.name, lang: args.lang });
     case "spec_create": {
-      // No tracks → the engine keeps an existing feature's tracks, or classifies a new one (same as the CLI).
-      const cls = spec.classify(args.summary || "", { name: args.name, lang: args.lang });
-      return spec.createFeature(pdir, args.name, args.tracks, args.summary, cls, args.lang, args.kind, { brownfield: args.brownfield === true, flow: args.flow, question: args.question, timebox: args.timebox }); // flow (C3), question / timebox (C2 spike)
+      // No tracks → the engine keeps an existing feature's tracks, or classifies a new one in the feature's language — the explicit
+      // lang, else the project's (same as the CLI: the engine classifies, never the surface — full review Pb2).
+      return spec.createFeature(pdir, args.name, args.tracks, args.summary, undefined, args.lang, args.kind, { brownfield: args.brownfield === true, flow: args.flow, question: args.question, timebox: args.timebox }); // flow (C3), question / timebox (C2 spike)
     }
     case "spec_list":
       return spec.listFeatures(pdir);

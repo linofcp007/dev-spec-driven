@@ -362,10 +362,10 @@ function main() {
     case "create": {
       if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
-      const cls = spec.classify(flags.summary || "", { name, lang: flags.lang }); // same as the MCP tool
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
-      const r = spec.createFeature(projectDir, name, tracks, flags.summary, cls, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
+      // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
+      const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox }); // = spec_create {brownfield, flow, question, timebox}
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });

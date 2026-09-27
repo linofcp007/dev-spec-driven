@@ -6927,10 +6927,12 @@ function endRun() {
       !bruteAlgo.tracks.includes("sec") && bruteAlgo.possible.some((p) => p.track === "sec") && bruteAttack.tracks.includes("sec"),
       "A2: no phantom +sec from 'dependency injection' or a brute-force SEARCH (weak, possible only) — a brute-force ATTACK is strong; no +privacy from 'storage'");
     const sweep = [];
+    // (full review Pb5: a VERB stem matches only with one of its endings — probed as its infinitive)
+    const verbStem = { encript: "encriptar", cifr: "cifrar", criptograf: "criptografar" };
     for (const tr of ["sec", "privacy"]) {
       const sg = S.trackSignals(tr);
       for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
-        const r = S.classify("We need " + kw + " here");
+        const r = S.classify("We need " + (verbStem[kw] || kw) + " here");
         if (!r.signals[tr].some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes(tr))) sweep.push(tr + ":" + kw);
       }
     }
@@ -10248,6 +10250,148 @@ function endRun() {
   }
 
   // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
+  {
+    const I = require("./lib/i18n.js");
+    const put = (root, rel, text) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
+    const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
+    const secStatus = (pd, slug, id) => (S.specDoctor(pd, slug).checks.find((c) => c.id === id) || {}).status;
+    const fillTodo = (text) => text.replace(/^> \*\*TODO\*\*.*$/gm, "Written by the team.");
+    // Pb1: a Kiro spec written in Portuguese / Spanish — "### Requisito N", "## Introdução" / "## Introducción" and the
+    // QUANDO … ENTÃO / CUANDO … ENTONCES criteria are read like the English ones.
+    const kiro = {
+      pt: ["# Documento de Requisitos\n\n## Introdução\n\nEsta funcionalidade permite repor a palavra-passe por email.\n\n## Requisitos\n\n### Requisito 1\n\n" +
+        "**História de Utilizador:** Como utilizador registado, quero repor a minha palavra-passe, para que possa voltar a aceder à conta.\n\n#### Critérios de Aceitação\n\n" +
+        "1. QUANDO o utilizador pede a reposição ENTÃO o sistema DEVE enviar um email com uma ligação única\n2. SE a ligação tiver mais de 30 minutos ENTÃO o sistema DEVE rejeitá-la\n" +
+        "3. QUANDO o token expira ENTÃO o sistema rejeita o pedido\n", /## Resumo\nEsta funcionalidade permite repor a palavra-passe por email\./,
+      /\*\*US-1\.AC-3\*\* — QUANDO o token expira, O SISTEMA DEVE garantir que o sistema rejeita o pedido/, "Repor a minha palavra-passe"],
+      es: ["# Documento de Requisitos\n\n## Introducción\n\nPermite restablecer la contraseña por correo.\n\n## Requisitos\n\n### Requisito 1\n\n" +
+        "**Historia de Usuario:** Como usuario, quiero restablecer mi contraseña, para poder acceder de nuevo.\n\n#### Criterios de Aceptación\n\n" +
+        "1. CUANDO el usuario solicita el restablecimiento ENTONCES el sistema DEBE enviar un correo con un enlace único\n2. SI el enlace tiene más de 30 minutos ENTONCES el sistema DEBE rechazarlo\n" +
+        "3. CUANDO el token caduca ENTONCES el sistema rechaza la solicitud\n", /## Resumen\nPermite restablecer la contraseña por correo\./,
+      /\*\*US-1\.AC-3\*\* — CUANDO el token caduca, EL SISTEMA DEBE garantizar que el sistema rechaza la solicitud/, "Restablecer mi contraseña"],
+    };
+    for (const [lng, [req, summaryRe, rewrittenRe, title]] of Object.entries(kiro)) {
+      const kp = path.join(tmp, "proj-full-review-pb1-" + lng);
+      S.initProject(kp, ["core"], lng);
+      put(kp, ".kiro/specs/reset/requirements.md", req);
+      put(kp, ".kiro/specs/reset/tasks.md", "# Plano\n\n- [ ] 1. Criar o modelo de token\n  - _Requirements: 1.1, 1.2, 1.3_\n");
+      const k = S.importSpec(kp, "kiro", ".kiro/specs/reset", {});
+      const kReq = k.ok ? rd(k.dir, "requirements.md") : "", kTasks = k.ok ? rd(k.dir, "tasks.md") : "";
+      const kEars = S.earsValidate(kReq, lng);
+      ok(k.ok && k.mapping["Requisito 1"] === "US-1" && k.mapping["1.3"] === "US-1.AC-3" && k.warnings.length === 1 && summaryRe.test(kReq) &&
+        kReq.includes("### US-1: " + title) && rewrittenRe.test(kReq) && /_Requirements: US-1\.AC-1, US-1\.AC-2, US-1\.AC-3_/.test(kTasks) && kEars.verdict === "pass",
+        "full review Pb1: a " + lng.toUpperCase() + " Kiro spec imports its story (Requisito 1 → US-1, its 3 criteria), the introduction as the summary, a QUANDO/CUANDO … ENTÃO/ENTONCES " +
+        "criterion without a modal rewritten in its language, tasks' _Requirements: 1.x_ resolved (got " + JSON.stringify([k.error, k.mapping, k.warnings, kEars.verdict]) + ")");
+    }
+
+    // Pb2: spec_create / spec_import classify a new feature in the project's configured language — "no checkout" is PT em+o.
+    const p2 = path.join(tmp, "proj-full-review-pb2");
+    S.initProject(p2, ["core"], "pt");
+    const c2 = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "IVA", summary: "Corrigir o cálculo do IVA no checkout", projectDir: p2 } }));
+    const c2b = S.createFeature(p2, "IVA B", undefined, "Corrigir o cálculo do IVA no checkout");
+    put(p2, "plans/iva.md", "# Corrigir o cálculo do IVA no checkout\n\n## Passos\n\n1. Corrigir `src/iva.js`\n");
+    const i2 = S.importSpec(p2, "plan", "plans/iva.md", {});
+    // an English source in the PT project is still read as English: "no LLM" is a negation there
+    put(p2, "plans/export.md", "# Export the report\n\nThe export has no LLM and it writes the report to the file for the user.\n\n## Steps\n\n1. Write the export in `src/export.js`\n");
+    const i2en = S.importSpec(p2, "plan", "plans/export.md", {});
+    ok(c2.ok && c2.tracks.join() === "core,tdd" && c2b.tracks.join() === "core,tdd" && i2.ok && i2.tracks.includes("tdd") && i2en.ok && !i2en.tracks.includes("ai"),
+      "full review Pb2: in a meta.lang pt project spec_create (MCP and engine) and spec_import read 'no checkout' as em+o (+tdd on); an English plan imported there keeps 'no LLM' negated (got " +
+      JSON.stringify([c2.tracks, c2b.tracks, i2.tracks, i2en.tracks]) + ")");
+
+    // Pb3: a plan's "## Approach" beside a "## Steps" section is design prose — its "### Files to modify" is no task list.
+    const p3 = path.join(tmp, "proj-full-review-pb3");
+    S.initProject(p3, ["core"], "en");
+    put(p3, "plans/rate-limit.md", "# Add rate limiting to the public API\n\n## Context\n\nOne client took the API down last week.\n\n## Approach\n\n" +
+      "Use a token bucket in Redis, keyed by API key.\n\n### Files to modify\n\n- `src/middleware/rateLimit.ts` — new middleware\n- `src/server.ts` — register it\n\n" +
+      "## Steps\n\n1. **Create the middleware** in `src/middleware/rateLimit.ts`\n2. **Register** it in `src/server.ts`\n3. **Add tests** in `test/rateLimit.test.ts`\n");
+    const i3 = S.importSpec(p3, "plan", "plans/rate-limit.md", {});
+    const t3 = i3.ok ? S.parseTasks(rd(i3.dir, "tasks.md")) : [];
+    put(p3, "plans/only-approach.md", "# Dark mode\n\n## Approach\n\n1. Add a theme store in `src/theme.ts`\n2. Wire the toggle in `src/header.tsx`\n");
+    const i3b = S.importSpec(p3, "plan", "plans/only-approach.md", {});
+    ok(i3.ok && t3.length === 3 && /### Files to modify\n\n- `src\/middleware\/rateLimit\.ts` — new middleware/.test(rd(i3.dir, "design.md")) &&
+      i3b.ok && S.parseTasks(rd(i3b.dir, "tasks.md")).length === 2,
+      "full review Pb3: an Approach section beside Steps stays in design.md (3 tasks from the 3 steps, not 5); a plan with only an Approach still takes its items as tasks (got " +
+      JSON.stringify([t3.map((t) => t.text), i3b.ok && S.parseTasks(rd(i3b.dir, "tasks.md")).length]) + ")");
+
+    // Pb4: track-section headings — an inflected name, an emoji before / after the marker, the pt-BR vocabulary.
+    const p4 = path.join(tmp, "proj-full-review-pb4");
+    S.initProject(p4, ["core"], "en");
+    const f4 = S.createFeature(p4, "Vault", ["sec"], "x", undefined, "en");
+    const d4 = fillTodo(rd(f4.dir, "design.md"));
+    const heads4 = ["## [SEC] Threat Modeling", "## [SEC] Threat Models", "## 🔐 [SEC] Threat Model", "## [SEC] 🛡️ Threat Modelling"].map((h) => {
+      fs.writeFileSync(path.join(f4.dir, "design.md"), d4.replace(/^## \[SEC\] Threat Model.*$/m, h));
+      return [h, secStatus(p4, f4.slug, "sec-sections")];
+    });
+    const b4 = path.join(tmp, "proj-full-review-pb4-br");
+    S.initProject(b4, ["core"], "pt-BR");
+    const g4 = S.createFeature(b4, "Cobranca", ["saas", "sec", "privacy"], "Cobrança por locatário");
+    const gd = fillTodo(rd(g4.dir, "design.md"))
+      .replace(/^## \[SaaS\] Modelo Multi.*$/m, "## [SaaS] Modelo Multilocatário").replace(/^## \[SEC\] Gest.*Segredos.*$/m, "## [SEC] Gerenciamento de Segredos e Chaves")
+      .replace(/^## \[PRIVACY\] (?:Subcontratantes|Operadores).*$/m, "## [PRIVACY] Operadores e Transferências Internacionais")
+      .replace(/^## \[PRIVACY\] (?:AIPD|RIPD).*$/m, "## [PRIVACY] RIPD — Relatório de Impacto à Proteção de Dados");
+    fs.writeFileSync(path.join(g4.dir, "design.md"), gd);
+    const br4 = ["saas-sections", "sec-sections", "privacy-sections"].map((id) => secStatus(b4, g4.slug, id));
+    // "operadores" alone is an ordinary word: a core "## Operadores de fila" never stands in for a deleted [PRIVACY] section
+    fs.writeFileSync(path.join(g4.dir, "design.md"), gd.replace(/^## \[PRIVACY\] Operadores e Transferências Internacionais$/m, "## Operadores de fila"));
+    const loose4 = secStatus(b4, g4.slug, "privacy-sections");
+    ok(heads4.every(([, st]) => st === "pass") && br4.every((st) => st === "pass") && loose4 !== "pass",
+      "full review Pb4: '[SEC] Threat Modeling / Models / Modelling' and an emoji beside the marker name the Threat Model; pt-BR Multilocatário, Gerenciamento de Segredos, " +
+      "Operadores e Transferências Internacionais, RIPD pass doctor; a core 'Operadores de fila' heading does not (got " + JSON.stringify([heads4, br4, loose4]) + ")");
+
+    // Pb5: the encryption verbs in PT / ES and at rest / in transit (corroborating only).
+    const sig = (t) => { const c = S.classify(t); return [c.tracks.includes("sec"), c.signals.sec]; };
+    const on5 = ["Encriptar os dados dos cartões em repouso", "Encrypt customer PII at rest and in transit", "Os dados são criptografados em repouso e em trânsito", "Los datos se cifran en reposo"].map(sig);
+    // one verb is one signal, whatever its forms (as encrypt / encryption): a lone verb is only "possible"
+    const weak5 = ["Criptografar os backups", "Cifrar las contraseñas", "O sistema encripta os backups", "Encriptar os dados e guardar os dados encriptados"].map(sig);
+    const none5 = ["As cifras do trimestre sobem", "O paciente fica em repouso", "Packages in transit are tracked"].map(sig);
+    ok(on5.every(([on]) => on) && weak5.every(([on, s]) => !on && s.length === 1) && none5.every(([on, s]) => !on && !s.length),
+      "full review Pb5: encriptar / criptografar / cifrar are +sec signals, 'at rest' / 'in transit' (EN/PT/ES) corroborate them; 'cifras' (figures), a patient at rest, parcels in transit are none (got " +
+      JSON.stringify([on5, weak5, none5]) + ")");
+
+    // Pb6: linear scans — a long run of '[' / ')' / word characters (the old patterns took seconds at 80 000 characters).
+    const timed = (f) => { const t0 = Date.now(); f(); return Date.now() - t0; };
+    const n6 = 80000;
+    const t6 = [timed(() => S.planPaths("[".repeat(n6))), timed(() => S.planPaths(")".repeat(n6) + "a/b.ts")), timed(() => S.planPaths("[](a".repeat(n6 / 4))),
+      timed(() => S.markdownToHtml("[".repeat(n6))), timed(() => S.markdownToHtml("![".repeat(n6 / 2))), timed(() => I.toPtBr("a".repeat(n6))), timed(() => I.toPtBr("ab.".repeat(n6 / 3)))];
+    ok(t6.every((ms) => ms < 1000) && JSON.stringify(S.planPaths("see [the store](src/theme.ts) and [[x](lib/y.js)")) === '["src/theme.ts","lib/y.js"]' &&
+      I.toPtBr("O utilizador guarda o ficheiro tasks.md e src/a.test.js.") === "O usuário guarda o arquivo tasks.md e src/a.test.js." &&
+      S.markdownToHtml("[[see](https://x.io)") === '<p>[<a href="https://x.io" rel="noopener noreferrer">see</a></p>',
+      "full review Pb6: planPaths / markdownToHtml / toPtBr stay linear on 80 000 '[' / ')' / letters (each < 1 s), links and file names still read (got " + JSON.stringify(t6) + " ms)");
+
+    // Pb7: pt-BR — ter que, proclisis, acessá-lo, the LGPD headings (still matched by the section synonyms); pt unchanged.
+    const brM = I.msg("pt-BR"), all5 = { name: "X", tracks: ["core", "tdd", "saas", "ai", "sec", "privacy"], label: "x", summary: "" };
+    const brDesign = I.design(all5, "pt-BR"), ptDesign = I.design(all5, "pt");
+    const txt7 = [brM.evidence.badExit("x"), brM.appendTasks.badPath(1, "x"), brM.appendTasks.placeholderVerify(1, "x"), I.brief("pt-BR").evalsRule, brDesign].join("\n");
+    ok(/tem que ser um inteiro/.test(txt7) && /têm que ser relativos/.test(txt7) && /'x' é lido como um marcador/.test(txt7) && /o golden se mantém ou melhora, o adversarial se mantém/.test(txt7) &&
+      /quem pode acessá-lo\./.test(brDesign) && /## \[SaaS\] Modelo Multilocatário/.test(brDesign) && /## \[PRIVACY\] Retenção e Eliminação/.test(brDesign) &&
+      /## \[PRIVACY\] Operadores e Transferências Internacionais/.test(brDesign) && /## \[PRIVACY\] RIPD \(quando obrigatório — LGPD art\. 38\)/.test(brDesign) &&
+      !/tem de|têm de|lê-se|mantém-se|lhe pode|Subcontratantes|AIPD|Multi-inquilino|Conservação e Eliminação/.test(txt7) &&
+      /## \[SaaS\] Modelo Multi-inquilino/.test(ptDesign) && /## \[PRIVACY\] AIPD \(quando obrigatória — art\. 35\.º\)/.test(ptDesign) &&
+      /`feat\(módulo\): … — tarefa #N`/.test(I.brief("pt-BR").loopRules.core[2]) &&
+      /`feat\(módulo\): … — tarefa #N`/.test(I.brief("pt").loopRules.core[2]),
+      "full review Pb7: pt-BR says 'tem que ser', 'é lido como', 'se mantém', 'quem pode acessá-lo', Modelo Multilocatário, Retenção e Eliminação, Operadores, RIPD (LGPD art. 38); " +
+      "pt keeps Multi-inquilino / AIPD; the commit example `feat(módulo)` is the same code span in both (got " + JSON.stringify(txt7.match(/.{0,30}(?:tem de|têm de|lê-se|mantém-se|lhe pode|Subcontratantes|AIPD|Multi-inquilino).{0,30}/g)) + ")");
+    const b7 = S.createFeature(b4, "Tudo BR", ["saas", "sec", "privacy"], "x");
+    fs.writeFileSync(path.join(b7.dir, "design.md"), fillTodo(rd(b7.dir, "design.md")));
+    const br7 = ["saas-sections", "sec-sections", "privacy-sections"].map((id) => secStatus(b4, b7.slug, id));
+    ok(br7.every((st) => st === "pass"), "full review Pb7: a filled pt-BR scaffold with the Brazilian headings passes doctor's section checks (got " + JSON.stringify(br7) + ")");
+
+    // Pb8: a pt-BR feature falls back to .specs/templates/pt/ (then templates/, then the built-in); pt-BR/ wins over pt/.
+    const p8 = path.join(tmp, "proj-full-review-pb8");
+    S.initProject(p8, ["core"], "pt-BR");
+    put(p8, ".specs/templates/pt/quickstart.md", "# Arranque rápido PT: {{name}}\n\n[passos]\n");
+    put(p8, ".specs/templates/quickstart.md", "# Root quickstart: {{name}}\n\n[steps]\n");
+    put(p8, ".specs/templates/pt/checklist.md", "# Checklist PT: {{name}}\n\n- [ ] [item]\n");
+    put(p8, ".specs/templates/pt-BR/checklist.md", "# Checklist BR: {{name}}\n\n- [ ] [item]\n");
+    const f8 = S.createFeature(p8, "Alfa", ["core"], "x");
+    const l8 = S.templates(p8, "list", { artifact: "quickstart" });
+    const e8 = S.createFeature(p8, "Beta", ["core"], "x", undefined, "en");
+    ok(f8.lang === "pt-BR" && /^# Arranque rápido PT: Alfa/.test(rd(f8.dir, "quickstart.md")) && /^# Checklist BR: Alfa/.test(rd(f8.dir, "checklist.md")) &&
+      f8.templates && f8.templates["quickstart.md"] === ".specs/templates/pt/quickstart.md" && l8.templates[0].override === ".specs/templates/pt/quickstart.md" &&
+      /^# Root quickstart: Beta/.test(rd(e8.dir, "quickstart.md")),
+      "full review Pb8: a pt-BR feature reads templates/pt-BR/ → templates/pt/ → templates/ (an English one skips pt/); spec_templates list names the same file (got " +
+      JSON.stringify([f8.templates, l8.templates && l8.templates[0].override, e8.templates]) + ")");
+  }
 
   // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
   {

@@ -474,7 +474,7 @@ review sections, a tasks template with its Definition of Done, a stricter consti
 | File | Replaces |
 |---|---|
 | `.specs/templates/<artifact>.md` | the built-in template of `classification`, `requirements`, `design`, `tasks`, `test-plan`, `eval-plan`, `load-test`, `quickstart`, `checklist`, `integration-plan`, `bug` (bug.md), the bugfix variants `bug-requirements` / `bug-test-plan` / `bug-tasks`, and the spike ones `spike` (spike.md) / `spike-tasks` |
-| `.specs/templates/<lang>/<artifact>.md` | the same, for features in that language (`en` · `pt` · `pt-BR` · `es`) — wins over the shared file |
+| `.specs/templates/<lang>/<artifact>.md` | the same, for features in that language (`en` · `pt` · `pt-BR` · `es`) — wins over the shared file; a `pt-BR` feature without a `pt-BR/` file reads `pt/` first |
 | `.specs/templates/steering/<file>.md` (also under `<lang>/`) | a steering stub (`constitution.md`, `security.md`, …) |
 
 `spec_create`, `spec_add_track`, `spec_init`, `steering_scaffold` and `spec_import` (through `spec_create`) use an

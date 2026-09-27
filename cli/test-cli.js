@@ -30,6 +30,7 @@ function run(args) {
 const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1", "pfr"];
 SECTIONS.push("frs"); // 1.14 full review (S) — CLI surfaces and hooks
 SECTIONS.push("frgb"); // 1.14 full review (Gb) — next_action, doctor, stop gate, guard
+SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -2687,7 +2688,8 @@ if (inSection("pd1")) { // 1.14 package D1 (CLI tests) — Brazilian Portuguese 
     aliasEu.code === 0 && rmD1(path.join(tmp, "pd1-eu")).meta.lang === "pt",
     "init --lang pt_BR / PTBR → project language pt-BR (reported in pt-BR); --lang pt-PT stays European pt (got " + initBr.out.trim().split("\n")[0] + ")");
   const bad = run(["create", "Zed", "--lang", "pt-XX", "--project", d1]);
-  ok(bad.code === 1 && /--lang tem de ser um de: en, pt, es, pt-BR \(recebido: "pt-XX"\)/.test(bad.out) && !fs.existsSync(path.join(d1, ".specs", "zed")),
+  // (full review Pb7: pt-BR says "tem que ser" — "tem de ser" is the European form)
+  ok(bad.code === 1 && /--lang tem que ser um de: en, pt, es, pt-BR \(recebido: "pt-XX"\)/.test(bad.out) && !fs.existsSync(path.join(d1, ".specs", "zed")),
     "--lang pt-XX is refused (the message lists pt-BR, in the project's pt-BR) and nothing is written");
   const cr = run(["create", "Cadastro", "tdd", "--summary", "Cadastro com senha", "--project", d1]);
   const req = fs.readFileSync(path.join(d1, ".specs", "cadastro", "requirements.md"), "utf8");
@@ -2831,6 +2833,17 @@ if (inSection("frgb")) { // 1.14 full review (Gb) — the CLI surfaces of next-a
 // 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
 
 // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
+if (inSection("frpb")) {
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  // Pb2: `create` classifies a new feature in the project's configured language (= spec_create) — "no checkout" is PT em+o.
+  const pb = path.join(tmp, "frpb-proj");
+  run(["init", "--lang", "pt", "--project", pb]);
+  const c2 = jsonOf(run(["create", "IVA", "--summary", "Corrigir o cálculo do IVA no checkout", "--json", "--project", pb]));
+  const c2en = jsonOf(run(["create", "IVA EN", "--summary", "Corrigir o cálculo do IVA no checkout", "--lang", "en", "--json", "--project", pb]));
+  ok(c2 && c2.ok && c2.tracks.join() === "core,tdd" && c2en && c2en.ok && c2en.tracks.join() === "core",
+    "full review Pb2: create in a meta.lang pt project reads the summary in PT ('no checkout' = em+o → +tdd); an explicit --lang en still reads 'no' as a negator (got " +
+    JSON.stringify([c2 && c2.tracks, c2en && c2en.tracks]) + ")");
+}
 
 // 1.14 full review (S) — CLI surfaces and hooks.
 if (inSection("frs")) {
