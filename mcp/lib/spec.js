@@ -1590,8 +1590,10 @@ function guardCheck(projectDir, filePath, cwd) {
   const G = i18n.msg(projectLang(pdir)).guardMode;
   const allow = (why, extra) => Object.assign({ guard: true, decision: "allow", why }, extra);
   if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
-  const abs = path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath);
-  if (!isInsideDir(pdir, abs)) return allow("outside");
+  // Inside the project as text or through an alias of it (8.3 short name, junction, symlink — they were "outside" and
+  // allowed), spelled under pdir from here on.
+  const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath));
+  if (!abs) return allow("outside");
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   if (toPosix(path.relative(pdir, abs)).split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
   const ext = path.extname(abs).toLowerCase();
@@ -1911,7 +1913,7 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
       const refs = [];
       for (const ref of taskMarkers(b).implements) {
         let r = implementsRel(ref);
-        if (path.isAbsolute(r)) { const a = path.resolve(r); r = isInsideDir(pdir, a) ? toPosix(path.relative(pdir, a)) : ""; }
+        if (path.isAbsolute(r)) { const a = insideDirAlias(pdir, path.resolve(r)); r = a ? toPosix(path.relative(pdir, a)) : ""; } // an alias of the project counts
         if (usable(r)) refs.push({ rel: r, key: fold(r), glob: isImplementsGlob(r) });
       }
       open.push({ feature: name, number: b.number, refs });
@@ -9115,6 +9117,10 @@ const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
 function addBacklog(projectDir, name, note) {
   const nm = flatText(name);
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
+  // The backlog is what has NO spec folder yet: a name an active feature already answers to was listed twice in
+  // ROADMAP.md (under Features and under Backlog). An archived feature's name may be planned again.
+  const f = existingFeature(projectDir, nm);
+  if (f.ok) return { ok: false, feature: f.slug, error: i18n.msg(projectLang(projectDir)).featureOps.backlogIsFeature(nm, f.slug) };
   const r = withRoadmapLock(projectDir, () => addBacklogUnlocked(projectDir, nm, note));
   if (r.ok) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
   return r;
@@ -9150,15 +9156,17 @@ function removeBacklogUnlocked(projectDir, nm) {
   return { ok: true, backlog: rm.backlog };
 }
 
+const BACKLOG_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_backlog enum (server.js reads it from here)
 function backlog(projectDir, action, name, note) {
   const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
   if (a === "add") return addBacklog(projectDir, name, note);
-  if (a === "rm") return removeBacklog(projectDir, name);
-  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list, and
-  // a CLI-only `backlog remove X` alias removed what spec_backlog {action: "remove"} refused.
+  // "remove" is an alias of "rm" on EVERY surface (the spec_backlog enum lists it too) — it used to be a CLI-only alias,
+  // then refused everywhere while the docs still named it.
+  if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
+  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.
   if (a && a !== "list") {
     const A = i18n.msg(projectLang(projectDir)).args;
-    return { ok: false, error: A.invalid(A.item("action", A.oneOf("add, rm, list"), JSON.stringify(String(action)))) };
+    return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
   }
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
@@ -13106,6 +13114,36 @@ function isInsideDir(root, p) {
   return f(p) === f(root) || f(p).startsWith(r);
 }
 
+// The real path of p even when it doesn't exist yet: the real path (fs.realpathSync.native — 8.3 short names, junctions
+// and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves.
+function realPathLoose(p) {
+  let cur = path.resolve(p);
+  const rest = [];
+  for (let i = 0; i < 256; i++) {
+    try {
+      return path.join(fs.realpathSync.native(cur), ...rest);
+    } catch (e) {
+      if (!e || (e.code !== "ENOENT" && e.code !== "ENOTDIR")) return null; // EACCES, ELOOP…: no answer
+    }
+    const up = path.dirname(cur);
+    if (up === cur) return null;
+    rest.unshift(path.basename(cur));
+    cur = up;
+  }
+  return null;
+}
+// p spelled under root when it lies inside root — as text, or through an alias of either (an 8.3 short name
+// `C:\Users\ADMINI~1\…`, a junction, a symlink); null when it is outside. The text comparison answers first; the real
+// paths are read only when it says "outside" (the guard hook calls this on every edit). Never throws.
+function insideDirAlias(root, p) {
+  if (isInsideDir(root, p)) return p;
+  try {
+    const rr = realPathLoose(root), rp = realPathLoose(p);
+    if (rr && rp && isInsideDir(rr, rp)) return path.join(root, path.relative(rr, rp));
+  } catch { /* the text answer stands */ }
+  return null;
+}
+
 // Headings outside fenced code: [{ i, level, text }].
 function mdHeadings(lines) {
   return headingIndex(lines).map((i) => {
@@ -14708,6 +14746,7 @@ module.exports = {
   setDependency,
   roadmap,
   backlog,
+  BACKLOG_ACTIONS, // the spec_backlog `action` enum (rm and its alias remove)
   renderRoadmapMd,
   writeRoadmapMd,
   renderRoadmapHtml,

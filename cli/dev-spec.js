@@ -157,6 +157,9 @@ VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
+  // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
+  // argv is cut there, so the repeated-flag collectors below (depend --add, init --check, decide --affects…) stop there too.
+  if (a === "--") { pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
   if (a === "--json") flags.json = true;
   else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
@@ -177,6 +180,37 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
 const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery"];
 const on = (k) => flags[k] === true;
+// A switch passed through to an engine option whose default depends on others (finish's includeBody, brief's includeBrief:
+// true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
+// is false, as spec_finish {includeBody: false} (on() ? true : undefined turned it into the default).
+const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
+BOOL_FLAGS.push("help"); // --help anywhere prints the help (`done big 2 --help` ticked the task)
+// An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so
+// `done big 2 --rnu` ticked the task with no evidence (exit 0). Known = VALUE_FLAGS ∪ BOOL_FLAGS, with a did-you-mean.
+// `evals` forwards its flags untouched to mcp/evals/run-evals.js, which checks its own (--dry-run, --max-items…).
+function refuseUnknownFlags() {
+  if (cmd === "evals") return;
+  const known = [...VALUE_FLAGS, ...BOOL_FLAGS];
+  const bad = Object.keys(flags).find((k) => !known.includes(k));
+  if (bad === undefined) return;
+  // Optimal-string-alignment distance (a transposition — --rnu — costs 1), as the track did-you-mean.
+  const dist = (a, b) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+    return d[a.length][b.length];
+  };
+  const k = bad.toLowerCase();
+  let best = null;
+  for (const c of known) {
+    const n = dist(k, c);
+    if (n <= Math.max(1, Math.floor(c.length / 3)) && (!best || n < best.n)) best = { c, n };
+  }
+  die(projectText().unknownFlag("--" + bad, best ? "--" + best.c : null));
+}
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
     if (typeof flags[k] !== "string") continue;
@@ -254,6 +288,7 @@ function mcpConfig(client) {
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
 function main() {
+  refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
@@ -266,6 +301,7 @@ function main() {
     flags.lang = l;
   }
   normalizeBoolFlags(); // `--run=false` is false, `--run=maybe` an error — before any command runs
+  if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
   switch (cmd) {
     case undefined:
     case "help":
@@ -431,7 +467,7 @@ function main() {
         if (!rc.ok) return fail(rc, rc.hint);
         evidence = rc.evidence;
       }
-      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: on("include-body") ? true : undefined, evidence }); // = spec_finish {includeBody, evidence}
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence }); // = spec_finish {includeBody, evidence}
       if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
@@ -465,7 +501,7 @@ function main() {
     case "brief": {
       // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
       if (!pos[0]) usage("dev-spec brief <feature> [task-number] [--write]");
-      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: on("include-brief") ? true : undefined });
+      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: boolFlag("include-brief") }); // = spec_task_brief {includeBrief}
       if (!r.ok) return fail(r);
       const T = cliText(r.lang);
       return out(r, (r) => {
@@ -583,7 +619,7 @@ function main() {
       const T = projectText();
       return out(r, (r) => {
         if (action === "add") console.log(T.backlogAdded(String(pos[1]).trim()));
-        else if (action === "rm") console.log(T.backlogRemoved(String(pos[1]).trim()));
+        else if (action === "rm" || action === "remove") console.log(T.backlogRemoved(String(pos[1]).trim()));
         console.log(T.backlogHead(r.backlog.length));
         r.backlog.forEach((b) => console.log("  - " + b.name + (b.note ? " — " + b.note : "")));
       });

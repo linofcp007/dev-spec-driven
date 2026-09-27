@@ -14,7 +14,7 @@
  * Both live in lib/prompts-resources.js.
  */
 
-const readline = require("readline");
+const { StringDecoder } = require("string_decoder"); // stdin framing (main): "\n"-delimited, never readline
 const fs = require("fs");
 const path = require("path");
 const spec = require("./lib/spec.js");
@@ -162,8 +162,8 @@ const TOOLS = [
   },
   {
     name: "spec_backlog",
-    description: "Manage the backlog — planned features that don't have a `.specs/<feature>/` folder yet (so the roadmap's 'what's left' includes work not yet started). Actions: 'add' (name + optional note), 'rm', or omit to list. Stored in .specs/roadmap.json.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["add", "rm", "list"] }, name: { type: "string" }, note: { type: "string" }, projectDir: { type: "string" } } },
+    description: "Manage the backlog — planned features that don't have a `.specs/<feature>/` folder yet (so the roadmap's 'what's left' includes work not yet started). Actions: 'add' (name + optional note; a name that already has an active feature folder is refused — it is specced, not planned), 'rm' (alias 'remove'), or omit / 'list' to list. Stored in .specs/roadmap.json.",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: spec.BACKLOG_ACTIONS.slice() }, name: { type: "string" }, note: { type: "string" }, projectDir: { type: "string" } } },
   },
   {
     name: "spec_depend",
@@ -304,7 +304,7 @@ const TOOLS = [
   {
     name: "spec_templates",
     description:
-      "Project templates: a team's own scaffolds in .specs/templates/. `<artifact>.md` replaces the built-in template of classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan, bug (bug.md), the bugfix variants bug-requirements / bug-test-plan / bug-tasks or the spike ones spike (spike.md — {{summary}} is the spike's question) / spike-tasks; `<lang>/<artifact>.md` (en | pt | es) replaces it for features in that language and wins over the shared one; `steering/<file>.md` (also under <lang>/) replaces a steering stub. spec_create, spec_add_track, spec_init, steering_scaffold and spec_import (through spec_create) use an override when present — create-only, never over an existing file — with {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} substituted (an unknown {{x}} is left as is; no summary → a generic [TBD] slot). Track blocks: an overridden design.md still gets each active track's sections (+tdd Testability Notes, [SaaS] / [AI] / [SEC] / [PRIVACY]), requirements.md each marker track's criteria (renumbered after the template's own US-1 ACs when they would collide), tasks.md its task block and test-plan.md its test rows, appended at the end as spec_add_track does — unless the template already has that track's heading (for the test plan: already cites its criteria). The [bracketed] slots, code-span slots and task lines of the project's templates count as template placeholders, so an untouched custom scaffold still reads 'placeholder' for spec_doctor, spec_approve and spec_next_action. `action`: 'list' (default) — built-in vs project template per artifact for `lang` (default: the project language), plus files that are not a template name (ignored); 'init' — copy the built-in template(s) (`artifact`, or all of them) into .specs/templates/ for editing, variables in place — with `lang` into .specs/templates/<lang>/, else the shared folder in the project language; never overwrites; 'check' — validate the project's templates against the current rules: a design template with some of a track's marker headings but not all its mandatory sections (error), a track section without its > **TODO** line, EARS / AC-ID problems (a criterion with no modal verb or duplicate AC IDs are errors), AC IDs a tasks / test-plan template cites that the requirements template doesn't define and _Makes green:_ T-IDs the test plan doesn't plan (built-in ones included when only one side is the team's), bug.md without a Root Cause section or with one that already reads as written (errors), unknown {{variables}}, chain templates with no placeholder at all, empty files, names that are not templates — each problem with {file, line?, code, severity, message} and a verdict pass | warn | fail (`lang` limits it to the templates that apply to that language). Every path is built from the allowlisted names; nothing outside .specs/templates/ is read or written (a linked folder, or a file whose real path is outside the project, is ignored); a .specs/templates/ that is a feature created before 1.14 (it holds a .state.json) stays that feature — every action refuses with legacyFeature: true. Returns localized `lines`.",
+      "Project templates: a team's own scaffolds in .specs/templates/. `<artifact>.md` replaces the built-in template of classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan, bug (bug.md), the bugfix variants bug-requirements / bug-test-plan / bug-tasks or the spike ones spike (spike.md — {{summary}} is the spike's question) / spike-tasks; `<lang>/<artifact>.md` (en | pt | pt-BR | es) replaces it for features in that language and wins over the shared one; `steering/<file>.md` (also under <lang>/) replaces a steering stub. spec_create, spec_add_track, spec_init, steering_scaffold and spec_import (through spec_create) use an override when present — create-only, never over an existing file — with {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} substituted (an unknown {{x}} is left as is; no summary → a generic [TBD] slot). Track blocks: an overridden design.md still gets each active track's sections (+tdd Testability Notes, [SaaS] / [AI] / [SEC] / [PRIVACY]), requirements.md each marker track's criteria (renumbered after the template's own US-1 ACs when they would collide), tasks.md its task block and test-plan.md its test rows, appended at the end as spec_add_track does — unless the template already has that track's heading (for the test plan: already cites its criteria). The [bracketed] slots, code-span slots and task lines of the project's templates count as template placeholders, so an untouched custom scaffold still reads 'placeholder' for spec_doctor, spec_approve and spec_next_action. `action`: 'list' (default) — built-in vs project template per artifact for `lang` (default: the project language), plus files that are not a template name (ignored); 'init' — copy the built-in template(s) (`artifact`, or all of them) into .specs/templates/ for editing, variables in place — with `lang` into .specs/templates/<lang>/, else the shared folder in the project language; never overwrites; 'check' — validate the project's templates against the current rules: a design template with some of a track's marker headings but not all its mandatory sections (error), a track section without its > **TODO** line, EARS / AC-ID problems (a criterion with no modal verb or duplicate AC IDs are errors), AC IDs a tasks / test-plan template cites that the requirements template doesn't define and _Makes green:_ T-IDs the test plan doesn't plan (built-in ones included when only one side is the team's), bug.md without a Root Cause section or with one that already reads as written (errors), unknown {{variables}}, chain templates with no placeholder at all, empty files, names that are not templates — each problem with {file, line?, code, severity, message} and a verdict pass | warn | fail (`lang` limits it to the templates that apply to that language). Every path is built from the allowlisted names; nothing outside .specs/templates/ is read or written (a linked folder, or a file whose real path is outside the project, is ignored); a .specs/templates/ that is a feature created before 1.14 (it holds a .state.json) stays that feature — every action refuses with legacyFeature: true. Returns localized `lines`.",
     inputSchema: {
       type: "object",
       properties: {
@@ -469,9 +469,17 @@ function runTool(name, args) {
 // --- JSON-RPC / MCP plumbing ----------------------------------------------
 
 let batchSink = null; // while handling a batch, replies are collected and sent as ONE array
+// One outgoing message = one line. JSON.stringify leaves U+2028 / U+2029 raw inside strings (legal JSON), and a client
+// that frames our replies with Node's readline (or any splitter honouring the Unicode line separators) cut such a reply
+// in two — so both go out as their JSON escapes (backslash-u 2028 / 2029: the same value). The class is built from char
+// codes: a raw U+2028 in a regex literal (or a comment) is a line terminator.
+const RE_UNICODE_LINE_SEP = new RegExp("[" + String.fromCharCode(0x2028, 0x2029) + "]", "g");
+function frame(msg) {
+  return JSON.stringify(msg).replace(RE_UNICODE_LINE_SEP, (c) => "\\u" + c.charCodeAt(0).toString(16)) + "\n";
+}
 function send(msg) {
   if (batchSink) batchSink.push(msg);
-  else process.stdout.write(JSON.stringify(msg) + "\n");
+  else process.stdout.write(frame(msg));
 }
 
 function result(id, value) {
@@ -651,9 +659,17 @@ function handleContent(id, method, params) {
 function handle(msg) {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
-  const isNotification = id === undefined || id === null;
-  // Notifications never get a response — and never run tools.
-  if (isNotification) return;
+  // A notification is a message WITHOUT an id member: it never gets a response — and never runs anything.
+  if (!hasOwn(msg, "id")) return;
+  // MCP: a request id is a string or an integer, never null. `id: null` used to be read as a notification and dropped (the
+  // client waited forever), and an object / array / boolean / fractional id was echoed back. Invalid Request — with id
+  // null, as JSON-RPC answers a request whose id can't be used.
+  if (!(typeof id === "string" || Number.isInteger(id))) return error(null, -32600, "Invalid Request: the id must be a string or an integer");
+  if (typeof method !== "string") {
+    // A JSON-RPC RESPONSE (result / error, no method) is no request: never answered (this server sends no requests).
+    if (hasOwn(msg, "result") || hasOwn(msg, "error")) return;
+    return error(id, -32600, "Invalid Request: method must be a string"); // it was -32601 "Method not found: undefined"
+  }
 
   try {
     switch (method) {
@@ -679,8 +695,14 @@ function handle(msg) {
       case "prompts/list": case "prompts/get": case "resources/list": case "resources/templates/list": case "resources/read":
         return handleContent(id, method, params);
       case "tools/call": {
-        const toolName = params && params.name;
-        const rawArgs = params ? params.arguments : undefined;
+        const toolName = TYPE_CHECK.object(params) ? params.name : undefined;
+        // No such tool — or no params / no name at all: JSON-RPC Invalid params (-32602), as MCP specifies for an unknown
+        // tool. It used to be a SUCCESSFUL result {isError: true, "ERROR: Unknown tool: nope"}. Localized (project language).
+        if (typeof toolName !== "string" || !TOOLS.some((t) => t.name === toolName)) {
+          const A = argMessages(TYPE_CHECK.object(params) && TYPE_CHECK.object(params.arguments) ? params.arguments : undefined);
+          return error(id, -32602, typeof toolName === "string" && toolName.trim() ? A.unknownTool(toolName) : A.noTool);
+        }
+        const rawArgs = params.arguments;
         if (rawArgs != null && !TYPE_CHECK.object(rawArgs)) return argError(id, argMessages().notObject);
         const args = foldEnumArgs(toolName, rawArgs || {});
         const missing = missingArgs(toolName, args);
@@ -721,34 +743,69 @@ function onStdoutError(e) {
   process.exit(1);
 }
 
+// One incoming line = one message: a JSON value, or a batch (an array) answered with ONE array.
+function onLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  let msg;
+  try {
+    msg = JSON.parse(trimmed);
+  } catch {
+    return error(null, -32700, "Parse error");
+  }
+  if (Array.isArray(msg)) {
+    if (!msg.length) return error(null, -32600, "Invalid Request");
+    batchSink = [];
+    try {
+      msg.forEach(handle);
+    } finally {
+      const replies = batchSink;
+      batchSink = null;
+      if (replies.length) process.stdout.write(frame(replies));
+    }
+  } else handle(msg);
+}
+
+// Framing: messages end at "\n" ONLY (one trailing "\r" is dropped — CRLF clients). Node's readline also ended a line at
+// U+2028 / U+2029 (and at a lone "\r"); both separators are legal RAW inside JSON strings — JSON.stringify emits them as
+// they are (text pasted from Word / Docs / PDF) — so a valid request was cut in two, answered with two -32700 id:null
+// errors and never answered itself (the client hung). Bytes go through a StringDecoder: a multibyte UTF-8 character split
+// across two chunks stays whole.
 function main() {
   process.stdout.on("error", onStdoutError);
-  const rl = readline.createInterface({ input: process.stdin, terminal: false });
-  rl.on("line", (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    let msg;
-    try {
-      msg = JSON.parse(trimmed);
-    } catch {
-      return error(null, -32700, "Parse error");
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let scanned = 0; // pending[0, scanned) holds no "\n": a long message arriving in many chunks is scanned once
+  const drain = () => {
+    let nl;
+    while ((nl = pending.indexOf("\n", scanned)) >= 0) {
+      const line = pending.slice(0, nl);
+      pending = pending.slice(nl + 1);
+      scanned = 0;
+      onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
     }
-    if (Array.isArray(msg)) {
-      if (!msg.length) return error(null, -32600, "Invalid Request");
-      batchSink = [];
-      try {
-        msg.forEach(handle);
-      } finally {
-        const replies = batchSink;
-        batchSink = null;
-        if (replies.length) process.stdout.write(JSON.stringify(replies) + "\n");
-      }
-    } else handle(msg);
+    scanned = pending.length;
+  };
+  process.stdin.on("data", (chunk) => {
+    pending += typeof chunk === "string" ? chunk : decoder.write(chunk);
+    drain();
   });
-  // stdin closed: exit once the replies already written have flushed. On Linux a pipe takes writes asynchronously once
-  // its 64 KB buffer is full, and a bare process.exit() dropped the queued replies — a client that sends its requests and
-  // closes stdin (`printf … | node mcp/server.js | jq`) lost the tail of a large answer.
-  rl.on("close", () => process.stdout.write("", () => process.exit(0)));
+  // stdin closed: a last line without its newline is still a message; then exit once the replies already written have
+  // flushed. On Linux a pipe takes writes asynchronously once its 64 KB buffer is full, and a bare process.exit() dropped
+  // the queued replies — a client that sends its requests and closes stdin (`printf … | node mcp/server.js | jq`) lost the
+  // tail of a large answer. A stdin read error ends the session the same way (it used to be an unhandled 'error' event).
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    pending += decoder.end();
+    drain();
+    if (pending) onLine(pending.endsWith("\r") ? pending.slice(0, -1) : pending);
+    pending = "";
+    process.stdout.write("", () => process.exit(0));
+  };
+  process.stdin.on("end", close);
+  process.stdin.on("error", close);
 }
 
 main();

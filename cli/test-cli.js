@@ -28,6 +28,7 @@ function run(args) {
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
 const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1", "pfr"];
+SECTIONS.push("frs"); // 1.14 full review (S) — CLI surfaces and hooks
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -519,15 +520,15 @@ let frmJ = null;
 try { frmJ = JSON.parse(run(["feature", "remove", "doomed", "--json", "--project", w4]).out); } catch { /* invalid JSON */ }
 ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requirements\.md/.test(frm.out) && /--yes/.test(frm.out) &&
   frmJ && frmJ.needsConfirm === true && fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove without --yes deletes nothing, lists what it would delete, exits 1");
-// No hidden aliases: `feature delete` and `backlog remove` are refused like the MCP enums (spec_feature / spec_backlog)
-// refuse them — exit 1, nothing deleted.
+// No hidden aliases: `feature delete` is refused like the MCP enum (spec_feature) refuses it — exit 1, nothing deleted.
+// CHANGED in the 1.14 full review (S7): `backlog remove` is now a DOCUMENTED alias of rm on both surfaces (the engine and
+// the spec_backlog enum accept it, as CLAUDE.md says) — it removes, exit 0; an unknown action (delete) is still refused.
 run(["backlog", "add", "Zeta", "--project", w4]);
 const fdel = run(["feature", "delete", "doomed", "--yes", "--project", w4]);
 const brem = run(["backlog", "remove", "Zeta", "--project", w4]);
 ok(fdel.code === 1 && /remove \| archive \| rename \| restore/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
-  brem.code === 1 && /add, rm, list/.test(brem.out) && /Zeta/.test(run(["backlog", "--project", w4]).out),
-  "feature delete / backlog remove are not aliases: exit 1 and change nothing, as over MCP (got " + JSON.stringify([fdel.code, brem.code]) + ")");
-run(["backlog", "rm", "Zeta", "--project", w4]);
+  brem.code === 0 && /removed from the backlog/.test(brem.out) && !/Zeta/.test(run(["backlog", "--project", w4]).out),
+  "feature delete is not an alias (exit 1, nothing deleted, as over MCP); backlog remove is rm's alias on both surfaces (got " + JSON.stringify([fdel.code, brem.code]) + ")");
 const fry = run(["feature", "remove", "doomed", "--yes", "--project", w4]);
 ok(fry.code === 0 && /Removed 'doomed'/.test(fry.out) && !fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove --yes deletes it");
 // A broken roadmap.json: the preview reports the roadmap error instead of promising a delete --yes can't do.
@@ -1393,7 +1394,8 @@ if (inSection("wp13")) { // 1.13 batch 4 — boolean switches read strictly, CLI
   ok(kind13.code === 1 && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
     "create --kind bugfx exits 1 and scaffolds nothing (a typo can no longer fix the kind for good); --kind Bugfix works");
   const bl13 = run(["backlog", "delete", "Pay", "--project", b13]);
-  ok(bl13.code === 1 && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.out) && run(["backlog", "--project", b13]).code === 0 && run(["backlog", "list", "--project", b13]).code === 0,
+  // (1.14 full review S7: the list now names rm's alias remove — the spec_backlog enum.)
+  ok(bl13.code === 1 && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.out) && run(["backlog", "--project", b13]).code === 0 && run(["backlog", "list", "--project", b13]).code === 0,
     "backlog delete (an unknown action) exits 1 like spec_backlog; a bare backlog / backlog list still list");
   // --json on a refusal: the engine result on stdout (= the MCP tool's), exit 1.
   const runJ = (args) => {
@@ -2746,6 +2748,68 @@ if (inSection("pfr")) { // 1.14 final review — CLI parity findings
 // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
 
 // 1.14 full review (S) — CLI surfaces and hooks.
+if (inSection("frs")) {
+  const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const pf = path.join(tmp, "frs-proj");
+  run(["init", "core", "--project", pf]);
+  run(["create", "Big", "core", "--project", pf]);
+  fs.writeFileSync(path.join(pf, ".specs", "big", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] one\n- [ ] 2. [US1] two\n");
+  const tasksOf = () => fs.readFileSync(path.join(pf, ".specs", "big", "tasks.md"), "utf8");
+
+  // S4 — an explicit --include-body=false / --include-brief=false reaches the engine (= spec_finish / spec_task_brief {…: false}).
+  const fin0 = jsonOf(run(["finish", "big", "--include-body=false", "--json", "--project", pf]));
+  const fin1 = jsonOf(run(["finish", "big", "--json", "--project", pf]));
+  const fin2 = jsonOf(run(["finish", "big", "--include-body", "--write", "--json", "--project", pf]));
+  const br0 = jsonOf(run(["brief", "big", "1", "--include-brief=false", "--json", "--project", pf]));
+  const br1 = jsonOf(run(["brief", "big", "1", "--json", "--project", pf]));
+  ok(fin0 && !("mergeSummary" in fin0) && fin1 && typeof fin1.mergeSummary === "string" && fin2 && typeof fin2.mergeSummary === "string" &&
+    br0 && br0.ok && !("brief" in br0) && br1 && typeof br1.brief === "string",
+    "full review S4: finish --include-body=false omits mergeSummary and brief --include-brief=false omits the brief, as the MCP tools do with false; absent keeps the default (got " +
+    JSON.stringify([fin0 && "mergeSummary" in fin0, fin1 && typeof fin1.mergeSummary, br0 && "brief" in br0]) + ")");
+
+  // S5 — an unknown --flag is a usage error before anything runs (with a did-you-mean); `--` ends the options.
+  const typo = run(["done", "big", "1", "--rnu", "--project", pf]);
+  const typoEq = run(["done", "big", "1", "--evidnce=ok", "--project", pf]);
+  ok(typo.code === 1 && /unknown option --rnu — did you mean --run\?/.test(typo.out) && typoEq.code === 1 && /unknown option --evidnce — did you mean --evidence\?/.test(typoEq.out) &&
+    /^- \[ \] 1\./m.test(tasksOf()),
+    "full review S5: done big 1 --rnu (and --evidnce=…) exits 1 with a did-you-mean and ticks nothing — an unknown flag was a silent switch (got " + JSON.stringify([typo.code, typo.out.trim().slice(0, 90)]) + ")");
+  run(["init", "core", "--lang", "pt", "--project", path.join(tmp, "frs-pt")]);
+  const ptTypo2 = run(["list", "--jsno", "--project", path.join(tmp, "frs-pt")]);
+  ok(ptTypo2.code === 1 && /opção desconhecida --jsno — será --json\?/.test(ptTypo2.out),
+    "full review S5: the unknown-option error is localized in the project language (PT) (got " + ptTypo2.out.trim() + ")");
+  const dd = run(["backlog", "add", "--project", pf, "--", "--later", "plan"]);
+  const bl5 = SF.backlog(pf).backlog.map((b) => b.name + "|" + b.note).join();
+  ok(dd.code === 0 && bl5 === "--later|plan",
+    "full review S5: `--` ends the options — the tokens after it are positional (backlog add -- --later plan) (got " + JSON.stringify([dd.code, bl5, dd.out.trim().slice(0, 80)]) + ")");
+  // Every flag the help documents is known (the evals harness's and git log's own flags excepted); --help anywhere prints help.
+  const helpFlags = [...new Set((run(["help"]).out.match(/--[a-z][a-z-]*/g) || []).map((f) => f.slice(2)))]
+    .filter((f) => !["flag", "dry-run", "name-only", "relative"].includes(f));
+  const allFlags = run(["help", ...helpFlags.map((f) => (f === "lang" ? "--lang=en" : f === "project" ? "--project=" + pf : "--" + f + "=1"))]);
+  const helpAnywhere = run(["done", "big", "2", "--help", "--project", pf]);
+  ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /universal spec-driven CLI/.test(helpAnywhere.out) &&
+    /^- \[ \] 2\./m.test(tasksOf()),
+    "full review S5: every --flag the help documents (" + helpFlags.length + ") is accepted; done … --help prints the help and ticks nothing (got " + JSON.stringify([allFlags.code, allFlags.out.trim().split("\n")[0].slice(0, 100)]) + ")");
+
+  // S7 — backlog remove (rm's alias) prints the removal like rm.
+  run(["backlog", "add", "Zeta Seven", "--project", pf]);
+  const rm7 = run(["backlog", "remove", "zeta seven", "--project", pf]);
+  ok(rm7.code === 0 && /'zeta seven' removed from the backlog/.test(rm7.out) && !/Zeta Seven/.test(run(["backlog", "--project", pf]).out),
+    "full review S7: backlog remove is rm's alias on the CLI too (removed, same message) (got " + rm7.out.trim().split(/\r?\n/)[0] + ")");
+
+  // S8 — SessionStart lists at most 20 features (the most relevant), then ONE '+N more' line.
+  const p8 = path.join(tmp, "frs-many");
+  SF.initProject(p8, ["core"], "en");
+  for (let i = 1; i <= 22; i++) SF.createFeature(p8, "Feat " + String(i).padStart(2, "0"), ["core"], "", undefined, "en");
+  const zz = SF.createFeature(p8, "Zz Active", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(zz.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] one\n- [ ] 2. [US1] two\n");
+  const hk = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: p8 }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: p8, SPEC_PROJECT_DIR: p8 } });
+  let ctx = "";
+  try { ctx = JSON.parse(hk.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
+  const bullets = ctx.split("\n").filter((l) => /^ {2}• /.test(l));
+  ok(hk.status === 0 && bullets.length === 20 && /• zz-active \[core\] — executing \(1\/2 tasks\)/.test(ctx) && /\+3 more feature\(s\) — \/spec-status/.test(ctx),
+    "full review S8: SessionStart with 23 features prints 20 feature lines — the executing one included, though last by name — and '+3 more … /spec-status' (got " + bullets.length + " lines, " + JSON.stringify(ctx.split("\n").slice(-2)) + ")");
+}
 
 // 1.14 full review (D) — CLI help and docs.
 
