@@ -2017,7 +2017,7 @@ function stopCheck(projectDir, opts = {}) {
     const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
     const vs = verificationStatus(pdir, f.slug, f.dir);
     // A spike has no project-check gate anywhere (spec_finish, doctor and next_action close it on its decision): never here either.
-    const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state).missing : [];
+    const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state, f.dir).missing : [];
     if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
     features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite });
   }
@@ -2078,9 +2078,14 @@ function implementerStopCheck(pdir, message, cl, res) {
   else {
     const body = flat(report);
     // "exit 0", "exit code: 1", "exitCode 0", "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0"
-    const exitShown = /(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}-?\d+/iu.test(body);
+    const codes = [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)].map((x) => parseInt(x[1], 10));
     const missing = verify.filter((c) => !body.includes(flat(c)));
-    if (missing.length || !exitShown) problem = X.noRun(rel, (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", "));
+    const cmds = (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", ");
+    if (missing.length || !codes.length) problem = X.noRun(rel, cmds);
+    // full review Ga5: the exit code must be the one the task needs — a must-pass _Verify:_ an exit 0 ("Status: DONE … exit
+    // code: 1" was allowed), an _Expect: fail_ one a non-zero exit (its red run). A +tdd report may show the red run and then
+    // the green one: any matching code counts.
+    else if (expectsFail(task) ? !codes.some((c) => c !== 0) : !codes.includes(0)) problem = (expectsFail(task) ? X.notFailing : X.notPassing)(rel, cmds);
   }
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
@@ -4894,6 +4899,42 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
 function windowsShellFailure(output, code) {
   return code === 9009 || RE_CMD_SHELL_FAILURE.test(String(output == null ? "" : output).slice(0, 200000));
 }
+// full review Ga9 — the shell `dev-spec done --run` / `finish --run` runs a command with. requested: --shell / DEV_SPEC_SHELL
+// ("" = the platform default: cmd.exe on Windows, /bin/sh elsewhere). On Windows a bare `bash` resolves to Git Bash — never
+// to WSL's launcher (C:\Windows\System32\bash.exe, …\WindowsApps\bash.exe): PATH lists it first from PowerShell / cmd, and it
+// runs the command inside a Linux distribution or fails ("execvpe(/bin/bash) failed", exit 1 for every command — a passing
+// check recorded as failed, a bogus red run). Candidates, in order: git --exec-path's install (<git>/mingw64/libexec/git-core
+// → <git>/bin/bash.exe, then usr/bin), %ProgramFiles% / %ProgramW6432% / %ProgramFiles(x86)% / %LOCALAPPDATA%\Programs \Git\bin,
+// then the first bash.exe on PATH that is not WSL's (MSYS2, Cygwin). An explicit path to WSL's launcher is refused too. Pure:
+// the CLI passes what it knows (opts.gitExecPath — git's own output —, opts.env, opts.exists, opts.platform); the engine
+// never runs a command or git. → { shell: true | "<shell>", cmd: <cmd.exe runs it>, resolved?: true } | { error:
+// "wsl-bash", path } | { error: "no-git-bash" }
+const RE_WSL_LAUNCHER_DIR = /[\\/](?:system32|syswow64|sysnative|windowsapps)[\\/][^\\/]*$/i;
+function isWslLauncher(p) {
+  const s = String(p == null ? "" : p).trim().replace(/^"|"$/g, "");
+  return /^(?:bash|wsl)(?:\.exe)?$/i.test(path.win32.basename(s)) && RE_WSL_LAUNCHER_DIR.test(s);
+}
+function resolveRunShell(requested, opts = {}) {
+  const platform = opts.platform || process.platform;
+  const req = typeof requested === "string" ? requested.trim() : "";
+  if (platform !== "win32") return { shell: req || true, cmd: false };
+  if (!req) return { shell: true, cmd: true }; // Node's default there: %ComSpec% (cmd.exe)
+  if (/^(?:.*[\\/])?cmd(?:\.exe)?$/i.test(req)) return { shell: req, cmd: true }; // --shell cmd / a ComSpec path: cmd.exe anyway
+  if (/[\\/]/.test(req)) return isWslLauncher(req) ? { error: "wsl-bash", path: req } : { shell: req, cmd: false };
+  if (!/^bash(?:\.exe)?$/i.test(req)) return { shell: req, cmd: false }; // sh, pwsh, zsh…: as given
+  const env = opts.env || process.env;
+  const envOf = (k) => { const hit = Object.keys(env).find((x) => x.toLowerCase() === k.toLowerCase()); return hit ? String(env[hit] || "") : ""; };
+  const exists = opts.exists || ((p) => { try { return fs.statSync(p).isFile(); } catch { return false; } });
+  const W = path.win32;
+  const cands = [];
+  const git = typeof opts.gitExecPath === "string" ? opts.gitExecPath.trim() : "";
+  if (/^[A-Za-z]:[\\/]/.test(git)) { const top = W.resolve(git, "..", "..", ".."); cands.push(W.join(top, "bin", "bash.exe"), W.join(top, "usr", "bin", "bash.exe")); }
+  for (const k of ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"]) if (envOf(k)) cands.push(W.join(envOf(k), "Git", "bin", "bash.exe"));
+  if (envOf("LOCALAPPDATA")) cands.push(W.join(envOf("LOCALAPPDATA"), "Programs", "Git", "bin", "bash.exe"));
+  for (const d of envOf("PATH").split(";").slice(0, 200)) { const dir = d.trim().replace(/^"|"$/g, ""); if (dir) cands.push(W.join(dir, "bash.exe")); }
+  for (const c of cands) if (!isWslLauncher(c) && exists(c)) return { shell: c, cmd: false, resolved: true };
+  return { error: "no-git-bash" };
+}
 function posixShellSyntax(cmd) {
   const s = String(cmd == null ? "" : cmd);
   const found = new Set();
@@ -5088,9 +5129,49 @@ function expectsFail(block) {
 // Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
 // found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
 const CANT_RUN_EXIT = new Set([126, 127, 9009]);
-// A run that proves a red test: a command that ran and exited non-zero (not a could-not-run code).
+// full review Ga2 / Ga9 — the OUTPUT of a run that never exercised the check, whatever its exit code: the shell or its
+// launcher could not start it (`wsl`: WSL's bash.exe relay with no Linux distribution / no /bin/bash; `spawn`: a spawn error
+// Node reported), or the test runner found nothing to run (`test`: a missing test file, module or script, no test collected).
+// Such a run is no red test — the brief says so: "not a missing file or import" — so on an _Expect: fail_ task it is
+// refused (`done --run` records nothing, spec_complete_task refuses a run whose summary shows it). Conservative: literal
+// phrases of the runners' own messages, every pattern linear (bounded classes, no nested quantifier), over ≤ 200 000 chars.
+const CANT_RUN_OUTPUT = [
+  ["wsl", /<\d>WSL \(\d+[^)\n]{0,40}\) ERROR:[^\n]{0,200}/], // "<3>WSL (10 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed…"
+  ["wsl", /execvpe\([^)\n]{0,300}\) failed[^\n]{0,120}/],
+  ["wsl", /Windows Subsystem for Linux (?:has no installed distributions|is not installed|must be updated)[^\n]{0,120}/i],
+  ["spawn", /\bspawn(?:Sync)? [^\n]{1,300} (?:ENOENT|EACCES|ENOEXEC)\b/], // Node: the shell itself could not be started
+  ["test", /^[ \t]*Could not find '[^'\n]{1,400}'/m], // node --test <missing file>
+  ["test", /\bCannot find module '[^'\n]{1,400}'/], // node / jest / ts: a module the test loads doesn't exist
+  ["test", /\bERR_MODULE_NOT_FOUND\b/],
+  ["test", /can't open file '[^'\n]{1,400}': \[Errno 2\]/], // python <missing file>
+  ["test", /\bModuleNotFoundError: No module named\b[^\n]{0,200}/],
+  ["test", /\bERROR: file or directory not found: [^\n]{0,300}/], // pytest <missing path>
+  ["test", /\bno tests ran in \d/], // pytest: nothing collected (exit 5)
+  ["test", /\bNo tests found, exiting with code \d/], // jest
+  ["test", /\bNo test files found\b[^\n]{0,200}/i], // vitest / mocha
+  ["test", /\bMissing script: [^\n]{0,120}/], // npm run / npm test without that script
+  ["test", /\bNo rule to make target [^\n]{0,200}/], // make <missing target>
+  ["test", /\bnpm (?:ERR!|error) (?:code )?ENOENT\b/], // npm with no package.json
+];
+// → null | { kind: "wsl" | "spawn" | "test", text: "<the matched text, ≤ 160 chars>" }. NUL bytes are dropped first (the WSL
+// launcher writes UTF-16).
+function couldNotRunOutput(output) {
+  const s = String(output == null ? "" : output).slice(0, 200000).replace(/\u0000/g, "");
+  if (!s.trim()) return null;
+  for (const [kind, re] of CANT_RUN_OUTPUT) {
+    const m = s.match(re);
+    if (m) return { kind, text: m[0].trim().replace(/\s+/g, " ").slice(0, 160) };
+  }
+  return null;
+}
+// A recorded run that could not run at all: a could-not-run exit code, or a non-zero one whose output (summary) shows it.
+function cantRunRecord(r) {
+  if (!isRecord(r) || typeof r.command !== "string" || r.command.trim() === "" || !Number.isInteger(r.exitCode)) return false;
+  return CANT_RUN_EXIT.has(r.exitCode) || (r.exitCode !== 0 && !!couldNotRunOutput(r.summary));
+}
+// A run that proves a red test: a command that ran and exited non-zero (not a could-not-run code or output).
 function isRedRun(r) {
-  return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !CANT_RUN_EXIT.has(r.exitCode);
+  return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !cantRunRecord(r);
 }
 // The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
 // stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more.
@@ -5104,7 +5185,7 @@ function redProof(e) {
 function expectFailIssue(e, runnable) {
   // A could-not-run latest run is a failed re-check even while the red run it carries forward stays on record (so the
   // pass after the fix is still accepted as the green one).
-  const cantRun = typeof e.command === "string" && e.command.trim() !== "" && Number.isInteger(e.exitCode) && CANT_RUN_EXIT.has(e.exitCode);
+  const cantRun = cantRunRecord(e); // full review Ga2: a could-not-run OUTPUT too (a missing test file…)
   if (!cantRun && redProof(e)) return null;
   if (e.command && e.exitCode === 0) return "unexpected-pass";
   if (e.command && e.exitCode != null) return "failed-run";
@@ -5124,7 +5205,11 @@ function expectFailRun(ev, prev) {
 function expectFailRefusal(n, ev, ticked, lng) {
   const X = i18n.msg(lng).redGreen;
   if (ev.exitCode === 0) return { ok: false, recorded: true, expected: "fail", unexpectedPass: true, error: ticked ? X.passTicked(n) : X.passRefused(n) };
-  return { ok: false, recorded: true, expected: "fail", error: X.cantRun(n, ev.exitCode, ticked) };
+  // couldNotRun (stable): "exit-code" (126 / 127 / 9009) · "output" (full review Ga2: its summary shows the test never ran —
+  // a missing test file, module or script, no test collected, a shell that could not start).
+  const out = !CANT_RUN_EXIT.has(ev.exitCode) ? couldNotRunOutput(ev.summary) : null;
+  if (out) return { ok: false, recorded: true, expected: "fail", couldNotRun: "output", error: X.cantRunOutput(n, ev.exitCode, out.text, ticked) };
+  return { ok: false, recorded: true, expected: "fail", couldNotRun: "exit-code", error: X.cantRun(n, ev.exitCode, ticked) };
 }
 function expectFailResult(res, xf, n, lng) {
   res.expected = "fail"; // stable: the task carries _Expect: fail_
@@ -5154,10 +5239,13 @@ function gitEvidence(ev) {
   return out;
 }
 // The feature's last task activity (ms): the last tick completeTask stamped (lastTickAt) or the newest recorded task run. A
-// box ticked by hand in tasks.md leaves no time; null = nothing known (then any passing check run counts).
+// box ticked by hand in tasks.md leaves no time; null = nothing known (then any passing check run counts). A stamp in the
+// future is ignored, as the stop gate's stopActivity does (full review Ga4): a .state.json committed from a machine with a
+// fast clock made every check run "before the last task activity" until that time had passed.
 function lastTaskActivity(state) {
   let best = null;
-  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && (best == null || t > best)) best = t; };
+  const horizon = Date.now() + 5 * 60 * 1000; // clock skew tolerated
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t <= horizon && (best == null || t > best)) best = t; };
   see(state.lastTickAt);
   for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
     for (const r of evidenceRecords(slot)) {
@@ -5253,11 +5341,14 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
   if (state.invalid) return { error: state.invalid };
   const at = new Date().toISOString();
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
+  // full review Ga3: each run is stamped `code` — a hash of the feature's implementing files as they are now (the set the
+  // finish baseline records); code edited after the run makes it `code-changed`. No stamp when the walk was capped.
+  const code = suiteCodeStamp(projectDir, dir);
   for (const r of runs) {
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
     const run = runOf({ ...r.run, at });
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
-    fc[r.name] = { ...run, check: r.check, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   }
   state.finishChecks = fc;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
@@ -5265,20 +5356,42 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
-// command changed since the run) · before-last-tick. → { items, missing (not pass), invalid, lastActivity }
-function suiteStatus(projectDir, state) {
+// command changed since the run) · before-last-tick · code-changed (full review Ga3: the run's `code` stamp no longer matches
+// the feature's implementing files — code edited after the checks ran; a run recorded without a stamp keeps the older rule).
+// dir: the feature folder (the stamp is only compared with it). → { items, missing (not pass), invalid, lastActivity }
+function suiteStatus(projectDir, state, dir) {
   const { checks, invalid } = projectChecks(projectDir);
   const last = lastTaskActivity(state);
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
+  let codeNow; // computed once, only when a passing stamped run needs it
+  const codeChanged = (r) => {
+    if (!dir || typeof r.code !== "string") return false;
+    if (codeNow === undefined) codeNow = suiteCodeStamp(projectDir, dir);
+    return codeNow != null && codeNow !== r.code;
+  };
   const items = checks.map(({ name, command }) => {
     const r = Object.prototype.hasOwnProperty.call(fc, name) && isRecord(fc[name]) ? fc[name] : null;
     if (!r || typeof r.command !== "string" || !Number.isInteger(r.exitCode)) return { name, command, status: "no-run" };
     const it = { name, command, exitCode: r.exitCode, at: typeof r.at === "string" ? r.at : null, ranCommand: r.command, ...runOf({ summary: r.summary, ...gitEvidence(r) }) };
     const t = Date.parse(r.at);
-    it.status = r.check !== command ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick" : "pass";
+    it.status = r.check !== command ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
+      : codeChanged(r) ? "code-changed" : "pass";
     return it;
   });
   return { items, missing: items.filter((i) => i.status !== "pass"), invalid, lastActivity: last != null ? new Date(last).toISOString() : null };
+}
+// The code a project check run tested (full review Ga3): one sha1 over the feature's implementing files — the ACTIVE tasks'
+// _Implements:_ set the finish baseline records (baselineFiles: files, folders expanded, globs, inside the project, bounded),
+// each file's CRLF-normalized content hash (fileHash; a missing file counts as missing). null when the walk was capped (a
+// partial set proves nothing) — the run is then judged by the older rule alone.
+function suiteCodeStamp(projectDir, dir) {
+  const root = path.resolve(projectDir);
+  const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "";
+  const { files, truncated } = baselineFiles(root, tasksText);
+  if (truncated) return null;
+  const h = require("crypto").createHash("sha1");
+  for (const rel of files.slice().sort()) h.update(rel + "\u0000" + (fileHash(path.resolve(root, rel)) || "-") + "\n");
+  return h.digest("hex");
 }
 function suiteLabel(items, lng) {
   const P = i18n.msg(lng).projectChecks;
@@ -5308,7 +5421,7 @@ function b5DoctorChecks(projectDir, slug, dir, tracks, lng) {
     if (rg.greened.length) out.push({ id: "red-green", status: rg.missing.length ? "warn" : "pass", detail: rg.missing.length ? X.redGreen.doctorMissing(rg.missing.join(", ")) : X.redGreen.doctorOk(rg.greened.length) });
   }
   if (blocks.length && blocks.every((b) => b.done)) {
-    const s = suiteStatus(projectDir, state);
+    const s = suiteStatus(projectDir, state, dir);
     if (s.items.length) out.push({ id: "suite-evidence", status: s.missing.length ? "warn" : "pass", detail: s.missing.length ? X.projectChecks.doctorWarn(suiteLabel(s.missing, lng), slug) : X.projectChecks.doctorOk(s.items.length) });
   }
   return out;
@@ -5846,7 +5959,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
   if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
   // B5: meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
-  const suite = suiteStatus(projectDir, state);
+  const suite = suiteStatus(projectDir, state, dir);
   if (suite.missing.length) block("suite-evidence", i18n.msg(lng).projectChecks.blocker(suiteLabel(suite.missing, lng), slug));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for (1.14 B3)
@@ -5883,7 +5996,11 @@ function finishFeature(projectDir, name, opts = {}) {
       const ev = ownEvidence(vs.evidence, b, dups.has(b.number)); // never the other "N."'s run
       const hasVerify = taskMarkers(b).verify.length > 0;
       // A record with nothing to show (a v1.12 bare {exitCode: 0}) prints its exit code — never a dangling " — ".
-      const shown = ev ? [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") : ev.exitCode != null ? "exit " + ev.exitCode : "",
+      // full review Ga8: an _Expect: fail_ task's red run is labelled as the EXPECTED failure (a bare "→ exit 1" read as a
+      // failing check), and a passing re-run after the fix names the red run it keeps as the proof.
+      const RG = i18n.msg(lng).redGreen;
+      const redTag = ev && expectsFail(b) ? (isRedRun(ev) ? RG.prRed : ev.exitCode === 0 && isRedRun(ev.red) ? RG.prRedKept(ev.red.exitCode, typeof ev.red.at === "string" ? ev.red.at.slice(0, 10) : "") : "") : "";
+      const shown = ev ? [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") + (redTag ? ` (${redTag})` : "") : ev.exitCode != null ? "exit " + ev.exitCode : "",
         oneLine(ev.summary), commitTag(ev)].filter(Boolean) : [];
       const tail = shown.length ? " — " + shown.join(" · ") : hasVerify ? " — " + F.noEvidence : "";
       body.push(`- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}${tail}`);
@@ -7735,23 +7852,43 @@ function newTaskSpec(t, i, A) {
       stored = /^`|`$/.test(verify) ? `${fence} ${verify} ${fence}` : verify;
     }
   }
+  // full review Ga6: _Makes green:_ (planned T-IDs — appendTasks checks them against test-plan.md), _Expect: fail_ (a red
+  // task: its proof is a FAILING run) and _Size:_ (XS…XL, the forecasts' points). "t-1" is T-1; T-01 and T-1 are one test.
+  const makesGreen = [];
+  for (const id of list(t.makesGreen, /[,;\s]+/)) {
+    const m = id.match(/^T-?(\d{1,6})$/i);
+    if (!m) return { error: A.badTestId(i, id) };
+    if (!makesGreen.some((x) => tKey(x.slice(2)) === tKey(m[1]))) makesGreen.push("T-" + m[1]);
+  }
+  const expectFail = t.expectFail === true;
+  let size = null;
+  if (t.size != null && String(t.size).trim()) {
+    size = String(t.size).trim().toUpperCase();
+    if (!Object.prototype.hasOwnProperty.call(SIZE_POINTS, size)) return { error: A.badSize(i, String(t.size).trim()) };
+  }
   const tags = (story ? `[${story}]` : "") + (parallel ? "[P]" : "");
   const lineText = (tags ? tags + " " : "") + text;
   const body = [];
   if (requirements.length) body.push(`_Requirements: ${requirements.join(", ")}_`);
+  if (makesGreen.length) body.push(`_Makes green: ${makesGreen.join(", ")}_`);
   if (files.length) body.push(`_Implements: ${files.join(", ")}_`);
   if (stored) body.push(`_Verify: ${stored}_`);
+  if (expectFail) body.push("_Expect: fail_");
+  if (size) body.push(`_Size: ${size}_`);
   // Round trip: the markers must read back exactly as given — a "_ " inside a path or command, a marker typed in
   // the text… would make trace/brief/complete see something other than what was asked for.
   const mk = taskMarkers({ text: lineText, body });
   const same = (a, b) => a.length === b.length && a.every((x, k) => x === b[k]);
   if (!same(mk.requirements, requirements)) return { error: A.unstorable(i, "_Requirements:_") };
+  if (!same(mk["makes green"], makesGreen)) return { error: A.unstorable(i, "_Makes green:_") };
   if (!same(mk.implements, files)) return { error: A.unstorable(i, "_Implements:_") };
   if (!same(mk.verify, verify ? [verify] : [])) return { error: A.unstorable(i, "_Verify:_") };
-  return { text, lineText, body, story, parallel, requirements, implements: files, verify, markers: mk };
+  if (!same(mk.expect, expectFail ? ["fail"] : [])) return { error: A.unstorable(i, "_Expect:_") };
+  if (taskSize({ text: lineText, body }) !== size) return { error: A.unstorable(i, "_Size:_") };
+  return { text, lineText, body, story, parallel, requirements, makesGreen, expectFail, size, implements: files, verify, markers: mk };
 }
 
-// spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, story?, parallel?}], heading?}.
+// spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel?}], heading?}.
 // Tasks are numbered after every number in use and appended under a phase heading: an existing heading with that
 // text (at the end of its phase, before its closing checkpoint) or a new one (default: the localized
 // "Phase: Convergence", with a closing **Checkpoint:**) placed after the last ACTIVE line — never inside a removed
@@ -7791,6 +7928,24 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     };
     const phantom = cited.filter((id) => !isKnown(id));
     if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", ")), phantom };
+  }
+  // full review Ga6: every _Makes green:_ T-ID must be planned in test-plan.md (its IDs as every reader takes them —
+  // planIdText: comments and fenced examples out; T-01 = T-1), like an AC must exist in requirements.md.
+  const citedTests = [...new Set(items.flatMap((t) => t.makesGreen))];
+  if (citedTests.length) {
+    const planText = readIfExists(path.join(dir, "test-plan.md"));
+    if (planText == null) return { ok: false, error: A.noTestPlan(slug) };
+    const planned = new Map(); // tKey → the T-ID as test-plan.md spells it
+    for (const id of extractTestIds(planIdText(planText))) if (!planned.has(tKey(id.slice(2)))) planned.set(tKey(id.slice(2)), id);
+    const phantomTests = citedTests.filter((id) => !planned.has(tKey(id.slice(2))));
+    if (phantomTests.length) return { ok: false, error: A.phantomTests(phantomTests.join(", ")), phantomTests };
+    // Stored as test-plan.md spells them: trace_check compares T-IDs as written (T-1 given for a planned T-01 would be a gap).
+    for (let i = 0; i < items.length; i++) {
+      if (!items[i].makesGreen.length) continue;
+      const again = newTaskSpec({ ...tasks[i], makesGreen: items[i].makesGreen.map((id) => planned.get(tKey(id.slice(2)))) }, i + 1, A);
+      if (again.error) return { ok: false, error: again.error };
+      items[i] = again;
+    }
   }
 
   let heading = A.heading;
@@ -7899,7 +8054,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     const b = hits[0];
     const mk = b && taskMarkers(b);
     const fits = hits.length === 1 && !b.done && b.text === t.lineText && b.phase === phase && active.has(t.number) &&
-      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "implements", "verify"].every((k) => same(mk[k], t.markers[k]));
+      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "makes green", "implements", "verify", "expect"].every((k) => same(mk[k], t.markers[k])) && taskSize(b) === t.size;
     if (!fits) return { ok: false, error: A.unsafe(t.number) };
   }
 
@@ -7915,7 +8070,8 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     lang: lng,
     heading: phase,
     headingCreated: !target,
-    appended: numbered.map((t) => ({ number: t.number, text: t.lineText, story: t.story, parallel: t.parallel, requirements: t.requirements, implements: t.implements, verify: t.verify })),
+    appended: numbered.map((t) => ({ number: t.number, text: t.lineText, story: t.story, parallel: t.parallel, requirements: t.requirements, implements: t.implements, verify: t.verify,
+      makesGreen: t.makesGreen, expectFail: t.expectFail, size: t.size })), // full review Ga6: _Makes green:_ / _Expect: fail_ / _Size:_
     total: now.length,
     remaining: now.filter((t) => !t.done).length,
     needsReapproval,
@@ -8072,7 +8228,7 @@ function nextAction(projectDir, name, opts = {}) {
       // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
       // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
       const vs = verificationStatus(projectDir, slug, dir);
-      const suiteGap = fin && !vs.unverified.length ? suiteStatus(projectDir, st).missing : [];
+      const suiteGap = fin && !vs.unverified.length ? suiteStatus(projectDir, st, dir).missing : [];
       if (vs.unverified.length) {
         step = "verify";
         const n = vs.unverified[0];
@@ -8126,6 +8282,13 @@ function nextAction(projectDir, name, opts = {}) {
           } else signOff.role = exRoles[0];
         }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
+      }
+      // full review Ga8: with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
+      // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
+      // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
+      if ((step === "finish" || step === "drift") && !st.invalid) {
+        const suite = suiteStatus(projectDir, st, dir);
+        if (suite.missing.length) recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng));
       }
     }
   }
@@ -15300,6 +15463,9 @@ module.exports = {
   summarizeRunOutput,
   posixShellSyntax, // `done --run` on Windows: POSIX-only syntax cmd.exe would misread (refused unless --shell)
   windowsShellFailure, // `done --run` on Windows: did cmd.exe itself fail (unknown command / its syntax error)? — the --shell hint
+  resolveRunShell, // full review Ga9: `done --run` / `finish --run` — the shell (a bare bash → Git Bash on Windows; WSL's launcher refused)
+  isWslLauncher,
+  couldNotRunOutput, // full review Ga2 / Ga9: a run's output shows it never exercised the check (WSL relay, spawn error, missing test file…)
 
   parseTracks,
   detectTracks,

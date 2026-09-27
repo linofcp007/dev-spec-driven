@@ -2741,7 +2741,7 @@ const MSG = {
     appendTasks: {
       heading: "Phase: Convergence",
       checkpoint: "the convergence tasks are done and verified — the spec and the code agree again.",
-      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
       noText: (i) => `Task ${i}: text is required.`,
       badStory: (i, v) => `Task ${i}: story must be US<n> (e.g. US1) or shared (got '${v}').`,
       badPath: (i, p) => `Task ${i}: _Implements:_ paths must be relative to the project root, without '..' (got '${p}').`,
@@ -2757,6 +2757,10 @@ const MSG = {
       appended: (heading, created) => `Appended to tasks.md → '${heading}'${created ? " (new phase)" : ""}:`,
       oneTaskPerCall: "append-tasks takes one --task per call — run it again for the next task (spec_append_tasks takes a list).",
       oneValue: (flag) => `append-tasks takes --${flag} once per call — ${flag === "verify" ? "join the checks into one command (a && b)" : "give a single value"}. Nothing was written.`,
+      badSize: (i, v) => `Task ${i}: size must be one of XS, S, M, L, XL (got '${v}').`,
+      badTestId: (i, v) => `Task ${i}: makesGreen takes planned test IDs (T-01, T-2 …) (got '${v}').`,
+      phantomTests: (list) => `Unknown tests (not planned in test-plan.md): ${list}. Nothing was written — fix the T-IDs or plan the tests first.`,
+      noTestPlan: (slug) => `makesGreen needs a test plan: .specs/${slug}/test-plan.md does not exist (add +tdd first). Nothing was written.`,
     },
 
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
@@ -3316,6 +3320,11 @@ const MSG = {
       unexpectedPassNote: (n, slug) => `Task ${n} expects its test to FAIL (_Expect: fail_), but its latest run passed with no red run before it — it stays unverified until a failing run is recorded: dev-spec done ${slug} ${n} --run`,
       redRecorded: (n, code) => `  ✓ red run recorded for task ${n} (exit ${code}) — the test fails before its fix, as _Expect: fail_ expects.`,
       shellNotRed: (cmd) => `the default Windows shell (cmd.exe) could not run \`${cmd}\` as written — that is no red test (_Expect: fail_). Nothing was recorded; the task stays open.`,
+      // full review Ga2: a non-zero run whose output shows the test never ran (a missing test file, module or script…).
+      cantRunOutput: (n, code, what, ticked) => `Task ${n}: the run exited ${code}, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Write the test so it fails on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
+      notRed: (cmd, what) => `\`${cmd}\` failed, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Nothing was recorded; the task stays open. Write the test so it fails on an assertion (or "not implemented"); then run done --run again.`,
+      prRed: "the expected red run (_Expect: fail_)",
+      prRedKept: (code, day) => `red run before the fix: exit ${code}${day ? " on " + day : ""}`,
       doctorMissing: (list) => `T-IDs made green by done tasks without a recorded red run: ${list} — a test that never failed proves nothing. Mark the task that writes it with _Expect: fail_ and record its failing run before the fix (dev-spec done <feature> <n> --run).`,
       doctorOk: (n) => `every T-ID made green by a done task (${n}) has a recorded red run`,
       briefExpect: "**Expected result: FAIL** (_Expect: fail_) — the run must exit non-zero: the test fails for the right reason before the fix (an assertion / not implemented — not a typo, a missing import or a command that doesn't run). A passing run is refused: it would mean the test tests nothing.",
@@ -3336,7 +3345,7 @@ const MSG = {
       unknownCheck: (name, list) => `'${name}' is not a project check — one of: ${list}`,
       needsCommand: "the command that ran is required",
       needsExit: "its exit code (an integer) is required",
-      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "its command changed since the run", "before-last-tick": "ran before the last task activity" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "its command changed since the run", "before-last-tick": "ran before the last task activity", "code-changed": "the implementing files changed since the run" })[i.status] || i.status,
       blocker: (list, slug) => `project checks without a passing run since the last task activity: ${list} — run them: dev-spec finish ${slug} --run (or record the runs with spec_finish {evidence})`,
       doctorWarn: (list, slug) => `every task is done, but project checks have no passing run since the last task activity: ${list} — spec_finish refuses until they pass: dev-spec finish ${slug} --run`,
       doctorOk: (n) => `every project check (${n}) has a passing run since the last task activity`,
@@ -3344,10 +3353,29 @@ const MSG = {
       prChecks: "## Project checks",
       prNoRun: "no run recorded",
       briefDod: (list) => `Run the project checks and put each command, its exit code and the last lines of its output in the report — nothing that passed before this task may fail after it: ${list}.`,
+      briefDodRed: (list) => `Run the project checks and put each command, its exit code and the last lines of its output in the report — the only failures allowed are this task's new red test(s); everything that passed before must still pass: ${list}.`,
+      naFinish: (slug, list) => `Project checks are configured (${list}): finishing needs a passing run of each since the last task activity — dev-spec finish ${slug} --run runs and records them (or run them and record each with spec_finish {evidence: [{name, command, exitCode, summary}]}).`,
       recorded: (n) => `Recorded ${n} project check run(s) in .state.json → finishChecks.`,
       noneToRun: 'no project checks to run (roadmap.json meta.checks) — set them: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check expects name=command (got '${v}') — an empty command (name=) removes that check`,
       posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
+    },
+    // full review Ga1 / Ga9 / Ga10 — `done --run` / `finish --run`: a command that could not run (the shell never started, a
+    // signal, --timeout, output over the buffer, WSL's bash launcher) is refused and NOTHING is recorded (never an exit 1).
+    runGate: {
+      taskRefused: (cmd, why) => `\`${cmd}\` could not run (${why}) — nothing was recorded; the task stays open.`,
+      checkRefused: (name, cmd, why) => `the project check '${name}' (\`${cmd}\`) could not run (${why}) — nothing was recorded; fix that and run finish --run again.`,
+      why: {
+        spawn: (shell, code) => `the shell '${shell}' could not be started: ${code}`,
+        signal: (sig) => `it was killed by signal ${sig}`,
+        timeout: (s) => `it did not finish within --timeout ${s} s`,
+        buffer: "its output exceeded 64 MB",
+        wsl: (text) => `the bash that ran it is WSL's launcher, not a shell on this machine: ${text}`,
+        shell: (text) => `the shell could not start it: ${text}`,
+        error: (code) => `the run could not start: ${code}`,
+      },
+      wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — refused, nothing was run. Use Git Bash: --shell bash finds it (Git for Windows), or give the full path of a bash.exe.`,
+      noGitBash: "--shell bash: no Git Bash was found (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — a bash.exe in System32 or WindowsApps is WSL's launcher, which runs the command inside a Linux distribution, so it is never used. Nothing was run. Install Git for Windows, or pass --shell with the full path of a bash.exe.",
     },
     gitLog: {
       head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) read${truncated ? " (the window is full: older commits were not read — --max N)" : ""}, ${citing} cite its tasks`,
@@ -3411,6 +3439,8 @@ const MSG = {
         head: (n, slug) => `dev-spec evidence gate: you report task ${n} of '${slug}' as DONE, but`,
         noReport: (file) => `its report (${file}) does not exist.`,
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
+        notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
+        notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
       // `dev-spec stop-check` when nothing is sent back (the why code → one line).
@@ -4126,7 +4156,7 @@ _Outcome: [go | no-go | pivot]_
     appendTasks: {
       heading: "Fase: Convergência",
       checkpoint: "as tarefas de convergência estão concluídas e verificadas — a spec e o código voltam a coincidir.",
-      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
       noText: (i) => `Tarefa ${i}: o texto é obrigatório.`,
       badStory: (i, v) => `Tarefa ${i}: story tem de ser US<n> (ex.: US1) ou shared (recebido '${v}').`,
       badPath: (i, p) => `Tarefa ${i}: os caminhos de _Implements:_ têm de ser relativos à raiz do projeto, sem '..' (recebido '${p}').`,
@@ -4142,6 +4172,10 @@ _Outcome: [go | no-go | pivot]_
       appended: (heading, created) => `Acrescentado a tasks.md → '${heading}'${created ? " (nova fase)" : ""}:`,
       oneTaskPerCall: "append-tasks aceita um --task por chamada — volta a corrê-lo para a tarefa seguinte (spec_append_tasks aceita uma lista).",
       oneValue: (flag) => `append-tasks aceita --${flag} uma só vez por chamada — ${flag === "verify" ? "junta as verificações num só comando (a && b)" : "indica um único valor"}. Nada foi escrito.`,
+      badSize: (i, v) => `Tarefa ${i}: size tem de ser um de XS, S, M, L, XL (recebido '${v}').`,
+      badTestId: (i, v) => `Tarefa ${i}: makesGreen aceita IDs de testes planeados (T-01, T-2 …) (recebido '${v}').`,
+      phantomTests: (list) => `Testes desconhecidos (não planeados em test-plan.md): ${list}. Nada foi escrito — corrige os T-IDs ou planeia primeiro os testes.`,
+      noTestPlan: (slug) => `makesGreen precisa de um plano de testes: .specs/${slug}/test-plan.md não existe (adiciona primeiro o +tdd). Nada foi escrito.`,
     },
 
     impact: {
@@ -4654,6 +4688,10 @@ _Outcome: [go | no-go | pivot]_
       unexpectedPassNote: (n, slug) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a última execução passou sem nenhuma execução vermelha antes — continua não verificada até ser registada uma execução a falhar: dev-spec done ${slug} ${n} --run`,
       redRecorded: (n, code) => `  ✓ execução vermelha registada para a tarefa ${n} (exit ${code}) — o teste falha antes da correção, como o _Expect: fail_ espera.`,
       shellNotRed: (cmd) => `a shell por omissão do Windows (cmd.exe) não conseguiu correr \`${cmd}\` tal como está escrito — isso não é um teste vermelho (_Expect: fail_). Nada foi registado; a tarefa continua aberta.`,
+      cantRunOutput: (n, code, what, ticked) => `Tarefa ${n}: a execução saiu com exit ${code}, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Escreve o teste para que falhe numa asserção (ou "não implementado") e regista essa execução. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
+      notRed: (cmd, what) => `\`${cmd}\` falhou, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Nada foi registado; a tarefa continua aberta. Escreve o teste para que falhe numa asserção (ou "não implementado"); depois, repete o done --run.`,
+      prRed: "a execução vermelha esperada (_Expect: fail_)",
+      prRedKept: (code, day) => `execução vermelha antes da correção: exit ${code}${day ? " em " + day : ""}`,
       doctorMissing: (list) => `T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: ${list} — um teste que nunca falhou não prova nada. Marca a tarefa que o escreve com _Expect: fail_ e regista a execução a falhar antes da correção (dev-spec done <feature> <n> --run).`,
       doctorOk: (n) => `todos os T-IDs postos a verde por tarefas feitas (${n}) têm uma execução vermelha registada`,
       briefExpect: "**Resultado esperado: FALHA** (_Expect: fail_) — a execução tem de terminar com um exit diferente de zero: o teste falha pela razão certa antes da correção (uma asserção / não implementado — não um erro de escrita, um import em falta ou um comando que não corre). Uma execução que passe é recusada: significaria que o teste não testa nada.",
@@ -4674,7 +4712,7 @@ _Outcome: [go | no-go | pivot]_
       unknownCheck: (name, list) => `'${name}' não é uma verificação do projeto — uma de: ${list}`,
       needsCommand: "falta o comando que correu",
       needsExit: "falta o exit code (um inteiro)",
-      status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "o comando mudou desde a execução", "before-last-tick": "correu antes da última atividade nas tarefas" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "o comando mudou desde a execução", "before-last-tick": "correu antes da última atividade nas tarefas", "code-changed": "os ficheiros de implementação mudaram desde a execução" })[i.status] || i.status,
       blocker: (list, slug) => `verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — corre-as: dev-spec finish ${slug} --run (ou regista as execuções com spec_finish {evidence})`,
       doctorWarn: (list, slug) => `todas as tarefas estão feitas, mas há verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o spec_finish recusa até passarem: dev-spec finish ${slug} --run`,
       doctorOk: (n) => `todas as verificações do projeto (${n}) têm uma execução bem-sucedida desde a última atividade nas tarefas`,
@@ -4682,10 +4720,27 @@ _Outcome: [go | no-go | pivot]_
       prChecks: "## Verificações do projeto",
       prNoRun: "nenhuma execução registada",
       briefDod: (list) => `Corre as verificações do projeto e põe no relatório cada comando, o exit code e as últimas linhas do output — nada do que passava antes desta tarefa pode falhar depois dela: ${list}.`,
+      briefDodRed: (list) => `Corre as verificações do projeto e põe no relatório cada comando, o exit code e as últimas linhas do output — as únicas falhas permitidas são os novos testes vermelhos desta tarefa; tudo o que passava antes tem de continuar a passar: ${list}.`,
+      naFinish: (slug, list) => `Há verificações do projeto configuradas (${list}): para fechar a feature é preciso uma execução bem-sucedida de cada uma desde a última atividade nas tarefas — dev-spec finish ${slug} --run corre-as e regista-as (ou corre-as tu e regista cada uma com spec_finish {evidence: [{name, command, exitCode, summary}]}).`,
       recorded: (n) => `Registada(s) ${n} execução(ões) de verificações do projeto em .state.json → finishChecks.`,
       noneToRun: 'não há verificações do projeto para correr (roadmap.json meta.checks) — define-as: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check espera nome=comando (recebido '${v}') — um comando vazio (nome=) remove essa verificação`,
       posixOnWindows: (name, cmd, kinds) => `a verificação do projeto '${name}' (\`${cmd}\`) usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar. Nada foi executado. Volta a correr com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para a correr no cmd.exe mesmo assim.`,
+    },
+    runGate: {
+      taskRefused: (cmd, why) => `\`${cmd}\` não pôde correr (${why}) — nada foi registado; a tarefa continua aberta.`,
+      checkRefused: (name, cmd, why) => `a verificação do projeto '${name}' (\`${cmd}\`) não pôde correr (${why}) — nada foi registado; corrige isso e volta a correr finish --run.`,
+      why: {
+        spawn: (shell, code) => `não foi possível iniciar a shell '${shell}': ${code}`,
+        signal: (sig) => `foi terminado pelo sinal ${sig}`,
+        timeout: (s) => `não terminou dentro do --timeout de ${s} s`,
+        buffer: "o output passou dos 64 MB",
+        wsl: (text) => `o bash que o correu é o lançador do WSL, não uma shell desta máquina: ${text}`,
+        shell: (text) => `a shell não o conseguiu iniciar: ${text}`,
+        error: (code) => `a execução não conseguiu arrancar: ${code}`,
+      },
+      wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — recusado, nada foi executado. Usa o Git Bash (o --shell bash encontra-o, com o Git for Windows) ou indica o caminho completo de um bash.exe.`,
+      noGitBash: "--shell bash: não foi encontrado nenhum Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — um bash.exe em System32 ou WindowsApps é o lançador do WSL, que corre o comando dentro de uma distribuição Linux, por isso nunca é usado. Nada foi executado. Instala o Git for Windows, ou indica em --shell o caminho completo de um bash.exe.",
     },
     gitLog: {
       head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) lido(s)${truncated ? " (a janela está cheia: os commits mais antigos não foram lidos — --max N)" : ""}, ${citing} citam as suas tarefas`,
@@ -4734,6 +4789,8 @@ _Outcome: [go | no-go | pivot]_
         head: (n, slug) => `dev-spec — gate de evidência: reportas a tarefa ${n} de '${slug}' como DONE, mas`,
         noReport: (file) => `o relatório (${file}) não existe.`,
         noRun: (file, cmds) => `o relatório (${file}) não mostra a execução do _Verify:_ — o comando exato e o seu exit code: ${cmds}.`,
+        notPassing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução com sucesso (exit 0) de ${cmds} — o _Verify:_ de uma tarefa DONE tem de passar.`,
+        notFailing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução a falhar (um exit code diferente de zero) de ${cmds} — a tarefa tem _Expect: fail_: a prova é a execução vermelha.`,
         todo: "Corre o comando no código final e põe no relatório o comando, o exit code e as últimas linhas do output — ou reporta BLOCKED / NEEDS_CONTEXT se não puder passar. (Evidência antes de afirmações: o controlador só marca a tarefa com essa execução.)",
       },
       allow: {
@@ -5445,7 +5502,7 @@ _Outcome: [go | no-go | pivot]_
     appendTasks: {
       heading: "Fase: Convergencia",
       checkpoint: "las tareas de convergencia están completadas y verificadas — la spec y el código vuelven a coincidir.",
-      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, story?, parallel? }].",
+      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
       noText: (i) => `Tarea ${i}: el texto es obligatorio.`,
       badStory: (i, v) => `Tarea ${i}: story debe ser US<n> (p. ej., US1) o shared (recibido '${v}').`,
       badPath: (i, p) => `Tarea ${i}: las rutas de _Implements:_ deben ser relativas a la raíz del proyecto, sin '..' (recibido '${p}').`,
@@ -5461,6 +5518,10 @@ _Outcome: [go | no-go | pivot]_
       appended: (heading, created) => `Añadido a tasks.md → '${heading}'${created ? " (nueva fase)" : ""}:`,
       oneTaskPerCall: "append-tasks admite un --task por llamada — vuelve a ejecutarlo para la siguiente tarea (spec_append_tasks admite una lista).",
       oneValue: (flag) => `append-tasks admite --${flag} una sola vez por llamada — ${flag === "verify" ? "une las comprobaciones en un solo comando (a && b)" : "indica un único valor"}. No se ha escrito nada.`,
+      badSize: (i, v) => `Tarea ${i}: size debe ser uno de XS, S, M, L, XL (recibido '${v}').`,
+      badTestId: (i, v) => `Tarea ${i}: makesGreen admite IDs de pruebas planificadas (T-01, T-2 …) (recibido '${v}').`,
+      phantomTests: (list) => `Pruebas desconocidas (no planificadas en test-plan.md): ${list}. No se ha escrito nada — corrige los T-IDs o planifica primero las pruebas.`,
+      noTestPlan: (slug) => `makesGreen necesita un plan de pruebas: .specs/${slug}/test-plan.md no existe (añade primero +tdd). No se ha escrito nada.`,
     },
 
     impact: {
@@ -5973,6 +6034,10 @@ _Outcome: [go | no-go | pivot]_
       unexpectedPassNote: (n, slug) => `La tarea ${n} espera que su prueba FALLE (_Expect: fail_), pero su última ejecución pasó sin ninguna ejecución en rojo antes — sigue sin verificar hasta que se registre una ejecución que falle: dev-spec done ${slug} ${n} --run`,
       redRecorded: (n, code) => `  ✓ ejecución en rojo registrada para la tarea ${n} (exit ${code}) — la prueba falla antes de su arreglo, como espera _Expect: fail_.`,
       shellNotRed: (cmd) => `la shell predeterminada de Windows (cmd.exe) no pudo ejecutar \`${cmd}\` tal como está escrito — eso no es una prueba en rojo (_Expect: fail_). No se registró nada; la tarea sigue abierta.`,
+      cantRunOutput: (n, code, what, ticked) => `Tarea ${n}: la ejecución salió con exit ${code}, pero su salida muestra que la prueba ni llegó a ejecutarse (${what}) — eso no es una prueba en rojo (_Expect: fail_): un fichero de prueba, módulo o script que falta no es la razón correcta. Escribe la prueba para que falle en una aserción (o "no implementado") y registra esa ejecución. ` + (ticked ? "Registrado; la tarea cuenta ahora como no verificada." : "No la marco como hecha."),
+      notRed: (cmd, what) => `\`${cmd}\` falló, pero su salida muestra que la prueba ni llegó a ejecutarse (${what}) — eso no es una prueba en rojo (_Expect: fail_): un fichero de prueba, módulo o script que falta no es la razón correcta. No se registró nada; la tarea sigue abierta. Escribe la prueba para que falle en una aserción (o "no implementado"); después, repite el done --run.`,
+      prRed: "la ejecución en rojo esperada (_Expect: fail_)",
+      prRedKept: (code, day) => `ejecución en rojo antes del arreglo: exit ${code}${day ? " el " + day : ""}`,
       doctorMissing: (list) => `T-IDs puestos en verde por tareas hechas sin una ejecución en rojo registrada: ${list} — una prueba que nunca falló no prueba nada. Marca la tarea que la escribe con _Expect: fail_ y registra su ejecución que falla antes del arreglo (dev-spec done <función> <n> --run).`,
       doctorOk: (n) => `todos los T-IDs puestos en verde por tareas hechas (${n}) tienen una ejecución en rojo registrada`,
       briefExpect: "**Resultado esperado: FALLO** (_Expect: fail_) — la ejecución debe terminar con un exit distinto de cero: la prueba falla por la razón correcta antes del arreglo (una aserción / no implementado — no una errata, un import que falta o un comando que no se ejecuta). Una ejecución que pase se rechaza: significaría que la prueba no prueba nada.",
@@ -5993,7 +6058,7 @@ _Outcome: [go | no-go | pivot]_
       unknownCheck: (name, list) => `'${name}' no es una verificación del proyecto — una de: ${list}`,
       needsCommand: "falta el comando que se ejecutó",
       needsExit: "falta su exit code (un entero)",
-      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "su comando cambió desde la ejecución", "before-last-tick": "se ejecutó antes de la última actividad en las tareas" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "su comando cambió desde la ejecución", "before-last-tick": "se ejecutó antes de la última actividad en las tareas", "code-changed": "los ficheros de implementación cambiaron desde la ejecución" })[i.status] || i.status,
       blocker: (list, slug) => `verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — ejecútalas: dev-spec finish ${slug} --run (o registra las ejecuciones con spec_finish {evidence})`,
       doctorWarn: (list, slug) => `todas las tareas están hechas, pero hay verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — spec_finish rechaza hasta que pasen: dev-spec finish ${slug} --run`,
       doctorOk: (n) => `todas las verificaciones del proyecto (${n}) tienen una ejecución correcta desde la última actividad en las tareas`,
@@ -6001,10 +6066,27 @@ _Outcome: [go | no-go | pivot]_
       prChecks: "## Verificaciones del proyecto",
       prNoRun: "ninguna ejecución registrada",
       briefDod: (list) => `Ejecuta las verificaciones del proyecto y pon en el informe cada comando, su exit code y las últimas líneas de la salida — nada de lo que pasaba antes de esta tarea puede fallar después: ${list}.`,
+      briefDodRed: (list) => `Ejecuta las verificaciones del proyecto y pon en el informe cada comando, su exit code y las últimas líneas de la salida — los únicos fallos permitidos son las nuevas pruebas en rojo de esta tarea; todo lo que pasaba antes debe seguir pasando: ${list}.`,
+      naFinish: (slug, list) => `Hay verificaciones del proyecto configuradas (${list}): el cierre necesita una ejecución correcta de cada una desde la última actividad en las tareas — dev-spec finish ${slug} --run las ejecuta y las registra (o ejecútalas tú y registra cada una con spec_finish {evidence: [{name, command, exitCode, summary}]}).`,
       recorded: (n) => `Registrada(s) ${n} ejecución(es) de verificaciones del proyecto en .state.json → finishChecks.`,
       noneToRun: 'no hay verificaciones del proyecto que ejecutar (roadmap.json meta.checks) — defínelas: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check espera nombre=comando (recibido '${v}') — un comando vacío (nombre=) elimina esa verificación`,
       posixOnWindows: (name, cmd, kinds) => `la verificación del proyecto '${name}' (\`${cmd}\`) usa sintaxis de shell POSIX (${kinds.map((k) => ({ "single-quotes": "comillas simples '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) que cmd.exe — la shell predeterminada de --run en Windows — interpreta de otra forma, a menudo sin fallar. No se ejecutó nada. Vuelve a ejecutar con --shell bash (Git Bash; o define DEV_SPEC_SHELL=bash) — o --shell cmd para ejecutarla en cmd.exe de todos modos.`,
+    },
+    runGate: {
+      taskRefused: (cmd, why) => `\`${cmd}\` no pudo ejecutarse (${why}) — no se registró nada; la tarea sigue abierta.`,
+      checkRefused: (name, cmd, why) => `la verificación del proyecto '${name}' (\`${cmd}\`) no pudo ejecutarse (${why}) — no se registró nada; corrígelo y vuelve a ejecutar finish --run.`,
+      why: {
+        spawn: (shell, code) => `no se pudo iniciar la shell '${shell}': ${code}`,
+        signal: (sig) => `lo terminó la señal ${sig}`,
+        timeout: (s) => `no terminó dentro del --timeout de ${s} s`,
+        buffer: "su salida superó los 64 MB",
+        wsl: (text) => `el bash que lo ejecutó es el lanzador de WSL, no una shell de esta máquina: ${text}`,
+        shell: (text) => `la shell no pudo iniciarlo: ${text}`,
+        error: (code) => `la ejecución no pudo arrancar: ${code}`,
+      },
+      wslBash: (p) => `--shell ${p} es el lanzador bash.exe de WSL: ejecuta el comando dentro de una distribución Linux (o falla con "execvpe(/bin/bash) failed"), no en una shell de esta máquina — rechazado, no se ejecutó nada. Usa Git Bash: --shell bash lo encuentra (Git for Windows), o indica la ruta completa de un bash.exe.`,
+      noGitBash: "--shell bash: no se encontró ningún Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — un bash.exe en System32 o WindowsApps es el lanzador de WSL, que ejecuta el comando dentro de una distribución Linux, así que nunca se usa. No se ejecutó nada. Instala Git for Windows, o indica en --shell la ruta completa de un bash.exe.",
     },
     gitLog: {
       head: (slug, n, citing, truncated) => `Commits: ${slug} — ${n} commit(s) leído(s)${truncated ? " (la ventana está llena: los commits más antiguos no se leyeron — --max N)" : ""}, ${citing} citan sus tareas`,
@@ -6053,6 +6135,8 @@ _Outcome: [go | no-go | pivot]_
         head: (n, slug) => `dev-spec — gate de evidencia: informas la tarea ${n} de '${slug}' como DONE, pero`,
         noReport: (file) => `su informe (${file}) no existe.`,
         noRun: (file, cmds) => `su informe (${file}) no muestra la ejecución del _Verify:_ — el comando exacto y su exit code: ${cmds}.`,
+        notPassing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución correcta (exit 0) de ${cmds} — el _Verify:_ de una tarea DONE debe pasar.`,
+        notFailing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución que falle (un exit code distinto de cero) de ${cmds} — la tarea tiene _Expect: fail_: su prueba es la ejecución en rojo.`,
         todo: "Ejecuta el comando sobre el código final y pon en el informe el comando, su exit code y las últimas líneas de su salida — o informa BLOCKED / NEEDS_CONTEXT si no puede pasar. (Evidencia antes que afirmaciones: el controlador solo marca la tarea con esa ejecución.)",
       },
       allow: {
@@ -6260,6 +6344,7 @@ const BRIEF = {
     acs: "## Acceptance criteria (binding)",
     acsNone: "_No acceptance criteria referenced — report NEEDS_CONTEXT rather than inventing scope._",
     tests: "## Tests to make green",
+    testsRed: "## Tests this task writes — they must FAIL first (red)",
     evals: "## Evals affected",
     metrics: "## Metrics to emit",
     files: "## Files (_Implements:_)",
@@ -6296,6 +6381,13 @@ const BRIEF = {
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
+    // full review Ga7: the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
+    redRules: [
+      "This is a RED task: write (or keep) the planned test(s) exactly as the test plan describes them — no production code and no fix in this task.",
+      "Run them: they must FAIL for the right reason — an assertion or \"not implemented\". A missing test file, module or script, a typo or a command that doesn't run is no red test (it is refused as one).",
+      "Tests that passed before stay green: only this task's new test(s) may fail. Never edit an existing test.",
+      "Commit the failing test citing the task and its T-IDs (`test(scope): T-01 red — task #N`).",
+    ],
     evalsRule: "This change touches an AI path: run the eval harness afterwards — golden holds or improves, adversarial holds — and put the scores in the report.",
     checkpoint: "When this story's last task is done, the controller stops for human review at the checkpoint:",
     report: "## Report",
@@ -6317,6 +6409,7 @@ const BRIEF = {
     acs: "## Critérios de aceitação (vinculativos)",
     acsNone: "_Nenhum critério de aceitação referido — responde NEEDS_CONTEXT em vez de inventar âmbito._",
     tests: "## Testes a pôr a verde",
+    testsRed: "## Testes que esta tarefa escreve — têm de FALHAR primeiro (vermelho)",
     evals: "## Evals afetadas",
     metrics: "## Métricas a emitir",
     files: "## Ficheiros (_Implements:_)",
@@ -6353,6 +6446,12 @@ const BRIEF = {
       ],
     },
     metricsRule: "Cada métrica listada acima é mesmo emitida — mostra a evidência no relatório.",
+    redRules: [
+      "Esta é uma tarefa VERMELHA: escreve (ou mantém) os testes planeados exatamente como o plano de testes os descreve — nenhum código de produção e nenhuma correção nesta tarefa.",
+      "Corre-os: têm de FALHAR pela razão certa — uma asserção ou \"não implementado\". Um ficheiro de teste, módulo ou script em falta, um erro de escrita ou um comando que não corre não é um teste vermelho (é recusado como tal).",
+      "Os testes que passavam antes continuam verdes: só os testes novos desta tarefa podem falhar. Nunca alteres um teste existente.",
+      "Faz commit do teste a falhar citando a tarefa e os seus T-IDs (`test(âmbito): T-01 red — tarefa #N`).",
+    ],
     evalsRule: "Esta alteração toca num caminho de IA: corre o harness de evals no fim — o golden mantém-se ou melhora, o adversarial mantém-se — e põe as pontuações no relatório.",
     checkpoint: "Quando a última tarefa desta história estiver feita, o controlador pára para revisão humana no checkpoint:",
     report: "## Relatório",
@@ -6374,6 +6473,7 @@ const BRIEF = {
     acs: "## Criterios de aceptación (vinculantes)",
     acsNone: "_Ningún criterio de aceptación referenciado — responde NEEDS_CONTEXT en vez de inventar alcance._",
     tests: "## Pruebas a poner en verde",
+    testsRed: "## Pruebas que escribe esta tarea — deben FALLAR primero (rojo)",
     evals: "## Evals afectadas",
     metrics: "## Métricas a emitir",
     files: "## Ficheros (_Implements:_)",
@@ -6410,6 +6510,12 @@ const BRIEF = {
       ],
     },
     metricsRule: "Cada métrica listada arriba se emite de verdad — muestra la evidencia en el informe.",
+    redRules: [
+      "Esta es una tarea ROJA: escribe (o conserva) las pruebas planificadas exactamente como las describe el plan de pruebas — nada de código de producción ni de arreglo en esta tarea.",
+      "Ejecútalas: deben FALLAR por la razón correcta — una aserción o \"no implementado\". Un fichero de prueba, módulo o script que falta, una errata o un comando que no se ejecuta no es una prueba en rojo (se rechaza como tal).",
+      "Las pruebas que pasaban antes siguen en verde: solo pueden fallar las pruebas nuevas de esta tarea. Nunca modifiques una prueba existente.",
+      "Haz commit de la prueba que falla citando la tarea y sus T-IDs (`test(ámbito): T-01 red — tarea #N`).",
+    ],
     evalsRule: "Este cambio toca una ruta de IA: ejecuta el harness de evals al final — golden se mantiene o mejora, adversarial se mantiene — y pon las puntuaciones en el informe.",
     checkpoint: "Cuando la última tarea de esta historia esté hecha, el controlador se detiene para revisión humana en el checkpoint:",
     report: "## Informe",
@@ -6445,7 +6551,7 @@ function renderBrief(d, lang) {
   else push(t.acsNone);
 
   if (d.tests.length) {
-    push("", t.tests);
+    push("", d.expectFail ? t.testsRed : t.tests); // full review Ga7: a red task writes the tests; it never makes them green
     let lastHeader;
     for (const r of d.tests) {
       if (r.header && r.header !== lastHeader) {
@@ -6496,14 +6602,17 @@ function renderBrief(d, lang) {
     push("", t.unresolved, t.unresolvedNote, ...[...d.unresolved.acs, ...d.unresolved.tests].map((id) => "- " + id));
   }
 
-  push("", t.dod, ...t.loopRules[d.loop].map((r, i) => `${i + 1}. ${r}`));
-  let extra = t.loopRules[d.loop].length;
+  // full review Ga7: an _Expect: fail_ task's definition of done is the red task's (write the test, it must FAIL for the right
+  // reason, no production code) — the loop's "make the target tests green" / "nothing that passed may fail" contradicted it.
+  const rules = d.expectFail ? t.redRules : t.loopRules[d.loop];
+  push("", t.dod, ...rules.map((r, i) => `${i + 1}. ${r}`));
+  let extra = rules.length;
   if (d.metrics.length) push(`${++extra}. ${t.metricsRule}`);
   if (d.evals.length && d.loop !== "ai-prompt") push(`${++extra}. ${t.evalsRule}`);
   if (verify.length) push(`${++extra}. ${t.verifyRule}`);
   const B5 = MSG[normalizeLang(lang)]; // B5: the red run, then the project checks (roadmap.json meta.checks)
   if (d.expectFail) push(`${++extra}. ${B5.redGreen.dodExpect}`);
-  if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks.briefDod(d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
+  if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks[d.expectFail ? "briefDodRed" : "briefDod"](d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
 
   push("", t.report, t.reportTo(d.reportPath), "");

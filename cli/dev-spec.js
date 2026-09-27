@@ -53,6 +53,7 @@
  *   finish <feature> [--write] [--include-body] [--run]  Readiness report + merge summary (no PRs);
  *                                      --run [--shell bash|<path>] runs the project checks (meta.checks) and records them
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
+ *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
@@ -81,8 +82,10 @@
  *                                      prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
- *        done: --run · --shell bash|<path> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
- *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · log: --max N (default 1000)
+ *        done: --run · --shell bash|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
+ *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · --timeout <s> · log: --max N (default 1000)
+ *        --run: a command that could not run (missing shell, signal, --timeout, WSL's bash launcher) records nothing;
+ *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
@@ -141,8 +144,9 @@ function withTracksFlag(list) {
   return typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list;
 }
 
-// append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--story US1] [--heading "<phase>"]
-["task", "req", "implements", "verify", "story", "heading"].forEach((k) => VALUE_FLAGS.add(k));
+// append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--makes-green T-01] [--size M] [--story US1] [--heading "<phase>"]
+["task", "req", "implements", "verify", "story", "heading", "makes-green", "size"].forEach((k) => VALUE_FLAGS.add(k));
+VALUE_FLAGS.add("timeout"); // done --run / finish --run --timeout <seconds> (full review Ga10): a run past it is could-not-run, nothing recorded
 
 VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
 
@@ -178,7 +182,7 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
-const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery"];
+const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail"];
 const on = (k) => flags[k] === true;
 // A switch passed through to an engine option whose default depends on others (finish's includeBody, brief's includeBrief:
 // true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
@@ -458,7 +462,7 @@ function main() {
 
     case "finish": {
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
-      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|<path>]]");
+      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
       let evidence;
@@ -517,7 +521,7 @@ function main() {
     }
 
     case "done": {
-      if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|<path>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
+      if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
       if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
@@ -532,41 +536,46 @@ function main() {
         if (b.gated) return fail({ ok: false, gated: b.gated, error: b.gateError }); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
-        // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash).
-        const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
+        const M = spec.msg(spec.featureLang(projectDir, pos[0]));
+        // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash — Git Bash on
+        // Windows, never WSL's launcher: b5Shell). A shell that can't be used is refused before anything runs.
+        const sh = b5Shell();
+        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash });
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
         // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
-        if (process.platform === "win32" && shell === true) {
+        if (process.platform === "win32" && sh.shell === true) {
           const posix = cmds.map((c) => [c, spec.posixShellSyntax(c)]).find(([, k]) => k.length);
           if (posix) return fail({ ok: false, error: D.posixOnWindows(posix[0], posix[1]) });
         }
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
-        const VP = spec.msg(spec.featureLang(projectDir, pos[0])).verifyPipe;
-        cmds.filter(spec.verifyPipeMasked).forEach((c) => say(VP.runHint(c)));
+        cmds.filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
         const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
         for (const cmd of cmds) {
           say("$ " + cmd);
-          // Runs the user's OWN _Verify:_ command from their tasks.md, only on an explicit --run (the same
-          // trust as an npm script) — a shell is the point: the marker is a shell command line.
-          // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
-          const run = spawnSync(cmd, { shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-          const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
-          const summary = spec.summarizeRunOutput(output);
-          if (summary) say(summary.replace(/^/gm, "  "));
-          const code = run.status == null ? 1 : run.status;
+          const x = b5Exec(cmd, sh, M);
+          if (x.summary) say(x.summary.replace(/^/gm, "  "));
+          // full review Ga1 / Ga9 / Ga10: a command that could not run (the shell never started, a signal, --timeout, output
+          // over the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an
+          // _Expect: fail_ task was then ticked on a red run that never happened; a passing check recorded as failed).
+          if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
+          const code = x.code;
           if (code !== 0) {
             // B5: an _Expect: fail_ task needs a run that FAILS — but cmd.exe failing to run the line at all (a path it can't
-            // find, its syntax error; exit 1) is no red test: refused, nothing recorded. (9009 goes to the engine: a failed run.)
-            if (b.expect === "fail" && code !== 9009 && process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) {
-              return fail({ ok: false, expected: "fail", error: spec.msg(spec.featureLang(projectDir, pos[0])).redGreen.shellNotRed(cmd) }, D.shellHint);
+            // find, its syntax error; exit 1) is no red test: refused, nothing recorded — whenever cmd.exe is the shell (the
+            // default or --shell cmd, full review Ga10). (9009 goes to the engine: a failed run.)
+            if (b.expect === "fail" && code !== 9009 && sh.cmd && spec.windowsShellFailure(x.output, code)) {
+              return fail({ ok: false, expected: "fail", couldNotRun: "cmd", error: M.redGreen.shellNotRed(cmd) }, D.shellHint);
             }
-            evidence = { command: cmd, exitCode: code, summary, ...git };
+            // full review Ga2: …nor is a run whose output shows the test never ran (a missing test file, module or script).
+            const notRun = b.expect === "fail" ? spec.couldNotRunOutput(x.output) : null;
+            if (notRun) return fail({ ok: false, expected: "fail", couldNotRun: "output", error: M.redGreen.notRed(cmd, notRun.text) });
+            evidence = { command: cmd, exitCode: code, summary: x.summary, ...git };
             // The cmd.exe / --shell bash hint only when cmd.exe itself failed (unknown command, its syntax error) — a check
             // that ran and failed (node tests/x.js → exit 1) needs a code fix, not another shell.
-            if (process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) hint = D.shellHint;
+            if (sh.cmd && spec.windowsShellFailure(x.output, code)) hint = D.shellHint;
             break;
           }
-          evidence = { command: cmds.join(" && "), exitCode: 0, summary, ...git };
+          evidence = { command: cmds.join(" && "), exitCode: 0, summary: x.summary, ...git };
         }
       } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
@@ -830,7 +839,7 @@ function main() {
 
     case "append-tasks": {
       // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
-      if (!pos[0] || typeof flags.task !== "string") usage('dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
+      if (!pos[0] || typeof flags.task !== "string") usage('dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--makes-green T-01[,…]] [--expect-fail] [--size XS|S|M|L|XL] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
       const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
       // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a.
       // Collect every occurrence, walking argv with the parser's own rules (as `depend` does for --add/--rm).
@@ -847,7 +856,7 @@ function main() {
       if (every("task").length > 1) die(T.oneTaskPerCall);
       // Single-valued like over MCP: a second --verify would silently drop the first check (the evidence gate would
       // never ask for it), a second --story/--heading the first choice — refused, never last-wins.
-      const twice = ["verify", "story", "heading"].find((k) => every(k).length > 1);
+      const twice = ["verify", "story", "heading", "size"].find((k) => every(k).length > 1);
       if (twice) die(T.oneValue(twice));
       const task = { text: flags.task };
       const reqs = every("req"), impls = every("implements");
@@ -856,6 +865,11 @@ function main() {
       if (typeof flags.verify === "string") task.verify = flags.verify;
       if (typeof flags.story === "string") task.story = flags.story;
       if (flags.parallel != null) task.parallel = on("parallel");
+      // full review Ga6: = the MCP task fields makesGreen / expectFail / size (repeatable --makes-green, "T-01,T-02" split by the engine)
+      const greens = every("makes-green");
+      if (greens.length) task.makesGreen = greens;
+      if (flags["expect-fail"] != null) task.expectFail = on("expect-fail");
+      if (typeof flags.size === "string") task.size = flags.size;
       const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -1045,8 +1059,9 @@ function main() {
       const M = spec.msg(spec.featureLang(projectDir, fx.slug));
       const { checks } = spec.projectChecks(projectDir);
       if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
-      const shell = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || true;
-      if (process.platform === "win32" && shell === true) {
+      const sh = b5Shell();
+      if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash };
+      if (process.platform === "win32" && sh.shell === true) {
         const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
         if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
       }
@@ -1057,19 +1072,57 @@ function main() {
       let cmdFailed = false;
       for (const c of checks) {
         say("$ " + c.command + "   (" + c.name + ")");
-        // Runs the project's OWN meta.checks commands (set by its user with init --check / spec_init), only on an explicit
-        // --run — the same trust as an npm script; a shell is the point: each check is a shell command line.
-        // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
-        const run = spawnSync(c.command, { shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-        const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
-        const summary = spec.summarizeRunOutput(output);
-        if (summary) say(summary.replace(/^/gm, "  "));
-        const code = run.status == null ? 1 : run.status;
-        if (code !== 0 && process.platform === "win32" && shell === true && spec.windowsShellFailure(output, code)) cmdFailed = true;
-        evidence.push({ name: c.name, command: c.command, exitCode: code, summary, ...git });
+        const x = b5Exec(c.command, sh, M);
+        if (x.summary) say(x.summary.replace(/^/gm, "  "));
+        // full review Ga1 / Ga9 / Ga10: a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
+        // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
+        if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
+        if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
+        evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary: x.summary, ...git });
       }
       if (cmdFailed) console.error(M.taskDone.shellHint);
       return { ok: true, evidence };
+    }
+    // full review Ga9: the shell of done --run / finish --run — --shell > DEV_SPEC_SHELL > the platform default, resolved by the
+    // engine (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's
+    // bash.exe launcher refused). → spec.resolveRunShell's result.
+    function b5Shell() {
+      intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 — refused (exit 1) before anything runs
+      const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
+      const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
+      return spec.resolveRunShell(req, { gitExecPath: needsGit ? b5Git(["--exec-path"]) : null });
+    }
+    // Runs ONE command line — the user's own _Verify:_ (done --run) or meta.checks command (finish --run), only on an explicit
+    // --run: the same trust as an npm script; a shell is the point, each is a shell command line. → { code, output, summary,
+    // cantRun: null | { code, why } } — cantRun (full review Ga1 / Ga9 / Ga10, stable codes): the run never exercised the check,
+    // so nothing may be recorded for it: shell-not-started (spawn error: a missing or unusable shell) · timeout (--timeout) ·
+    // output-too-large (over 64 MB) · signal (killed) · run-error (any other spawn error) · wsl (WSL's launcher answered).
+    function b5Exec(command, sh, M) {
+      const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
+      let run;
+      try {
+        // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+        run = spawnSync(command, { shell: sh.shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true,
+          ...(timeoutS ? { timeout: timeoutS * 1000 } : {}) });
+      } catch (e) { run = { status: null, signal: null, error: e }; }
+      const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
+      const summary = spec.summarizeRunOutput(output);
+      const W = M.runGate.why;
+      const shellName = sh.shell === true ? (process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : "/bin/sh") : String(sh.shell);
+      let cantRun = null;
+      if (run.error) {
+        const ec = String(run.error.code || "");
+        cantRun = ec === "ETIMEDOUT" ? { code: "timeout", why: W.timeout(timeoutS) }
+          : ec === "ENOBUFS" ? { code: "output-too-large", why: W.buffer }
+          : ["ENOENT", "EACCES", "ENOEXEC", "EPERM", "EISDIR", "ENOTDIR", "UNKNOWN"].includes(ec) ? { code: "shell-not-started", why: W.spawn(shellName, ec) }
+          : { code: "run-error", why: W.error(ec || String(run.error.message || "?").slice(0, 120)) };
+      } else if (run.status == null) {
+        cantRun = { code: "signal", why: W.signal(run.signal || "?") };
+      } else if (run.status !== 0) {
+        const o = spec.couldNotRunOutput(output);
+        if (o && o.kind === "wsl") cantRun = { code: "wsl", why: W.wsl(o.text) }; // WSL's relay answered: no command of this machine ran
+      }
+      return { code: run.status, output, summary, cantRun };
     }
 
     case "stop-check": {
@@ -1191,7 +1244,8 @@ function helpText() {
   brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
   done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records the evidence
-                                  (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell); or --evidence "…" [--exit N] [--cmd "…"]
+                                  (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell — bash = Git Bash on
+                                  Windows, never WSL's launcher; --timeout <s>; a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
                                   A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
                                   records the git commit (and whether the tree was dirty) when git is available
   finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
@@ -1200,6 +1254,7 @@ function helpText() {
                                   set, finish needs a passing run of each since the last task activity
   append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
+                                  · --makes-green T-01[,…] (planned in test-plan.md) · --expect-fail (_Expect: fail_) · --size XS|S|M|L|XL
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
                                   that role (required for a phase init --roles lists)
