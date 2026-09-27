@@ -7,7 +7,7 @@ Use the **dev-spec-driven** skill, guard mode (opt-in).
 
 Args: $ARGUMENTS
 
-Call the `spec_init` MCP tool with `guard: true` (on), `guard: "scope"` (scope) or `guard: false` (off) — CLI
+Call the `spec_init` MCP tool with `guard: "on"`, `guard: "scope"` or `guard: "off"` (a string) — CLI
 `dev-spec init --guard on|off|scope`. It can be combined with tracks or used alone, writes `roadmap.json → meta.guard`,
 scaffolds any missing core steering file like every `spec_init` (never overwrites one), and the result always
 reports the current `guard` state. With no argument, read

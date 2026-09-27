@@ -114,6 +114,10 @@ claude plugin details dev-spec-driven
 On the repo root, `validate` checks only the marketplace file (it is present), not the plugin itself —
 validate the plugin through its `plugin.json`.
 
+The plugin check ends with `Validation passed with warnings` and one warning — `CLAUDE.md at the plugin root is not
+loaded as project context`. That is expected: `CLAUDE.md` holds the maintainers' notes for working on the plugin
+itself, not context for your projects (the workflow ships as the skill). Any other warning or error is worth a look.
+
 ---
 
 ## Local automation (optional, all free)

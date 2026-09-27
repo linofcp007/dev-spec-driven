@@ -6527,12 +6527,14 @@ function endRun() {
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
   const agentFiles = fs.readdirSync(agentsDir).filter((x) => x.endsWith(".md"));
-  // The read-only critic is limited to Read/Grep/Glob; implementer + reviewer need a shell, so stay unrestricted.
+  // The read-only critic is limited to Read/Grep/Glob; the reviewer adds Bash (a focused test, read-only git); the
+  // implementer edits files and runs commands — neither gets the Agent tool (they never dispatch subagents).
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
   ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
-    ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
-    "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
+    agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash" &&
+    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
+    "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
   ok(cmdFiles.length === 51 && ["spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
@@ -9909,6 +9911,118 @@ function endRun() {
   // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
 
   // 1.14 full review (D) — docs and prose.
+  {
+    const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const dRef = (f) => dRead("skills", "dev-spec-driven", "references", f);
+    const dWs = (t) => t.replace(/\s+/g, " ");
+    // D1: red-green counts only _Makes green:_ IDs — a bugfix's guard test T-02 shows up only on a pre-1.14 bugfix
+    // (its task 4 still lists it); the docs said it "is expected here" / "is named there too" on every bugfix.
+    const d1Docs = [dRead("commands", "spec-doctor.md"), dRef("verification.md"), dRef("test-patterns.md")].map(dWs);
+    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)),
+      "full review D1: spec-doctor / verification / test-patterns — T-02 in red-green only on a pre-1.14 bugfix; the fix is removing it from task 4's _Makes green:_");
+    // D2: the canonical _Expect: fail_ example keeps _Makes green:_ off the red task (the fix task makes it green).
+    const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";
+    ok(/_Expect: fail_/.test(d2Ex) && !/_Makes green:/.test(d2Ex), "full review D2: verification.md's _Expect: fail_ example has no _Makes green:_ on the red task");
+    // D3: design section examples use the template's heading ("Data Models"); decide refuses "Data Model" on a fresh scaffold.
+    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-decide.md"), dRef("change-management.md")];
+    const d3p = path.join(tmp, "fr-d3");
+    S.initProject(d3p, ["core"], "en");
+    S.createFeature(d3p, "Keys", ["core"]);
+    const d3bad = S.decide(d3p, "keys", { title: "t", decision: "d", affects: ["Data Model"] });
+    const d3ok = S.decide(d3p, "keys", { title: "t", decision: "d", affects: ["Data Models"] });
+    ok(d3Surfaces.every((t) => !/["'`]Data Model["'`]|Data Model_/.test(t)) && d3Surfaces.every((t) => /Data Models/.test(t)) && d3bad.ok === false && d3ok.ok === true,
+      "full review D3: no \"Data Model\" example (the design template's heading is Data Models) — decide refuses the singular, accepts the heading (got " + JSON.stringify([d3bad.ok, d3ok.ok]) + ")");
+    // D4: every command / agent / SKILL.md front matter is strict `key: value` YAML — a plain scalar never holds ": " or
+    // " #" nor starts with an indicator; quoted values are valid; block scalars are indented. The prompts reader agrees.
+    const d4Files = [...fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md")).map((x) => ["commands", x]),
+      ...fs.readdirSync(path.join(root, "agents")).filter((x) => x.endsWith(".md")).map((x) => ["agents", x]), ["skills", "dev-spec-driven", "SKILL.md"]];
+    const d4Bad = [];
+    for (const f of d4Files) {
+      const lines = dRead(...f).split("\n");
+      const end = lines.indexOf("---", 1);
+      if (lines[0] !== "---" || end < 0) { d4Bad.push(f.join("/") + ": no front matter"); continue; }
+      for (let i = 1; i < end; i++) {
+        const m = /^([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?$/.exec(lines[i]);
+        if (!m) { d4Bad.push(f.join("/") + ":" + (i + 1)); continue; }
+        const v = (m[2] || "").trim();
+        if (v === "") continue;
+        if (/^[|>][+-]?$/.test(v)) { while (i + 1 < end && /^(?:\s+\S.*)?$/.test(lines[i + 1])) i++; continue; }
+        if (v[0] === "\"") { try { JSON.parse(v); } catch { d4Bad.push(f.join("/") + ":" + (i + 1) + " bad quoted"); } continue; }
+        if (v[0] === "'") { if (!/^'(?:[^']|'')*'$/.test(v)) d4Bad.push(f.join("/") + ":" + (i + 1) + " bad quoted"); continue; }
+        if (/^[[\]{}#&*!|>%@`,]/.test(v) || /^[-?:](?:\s|$)/.test(v) || /: |:$/.test(v) || /\s#/.test(v)) d4Bad.push(f.join("/") + ":" + (i + 1) + " plain scalar");
+      }
+    }
+    const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
+    ok(d4Files.length === 55 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 51 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
+    const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
+    const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
+    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope" &&
+      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t)),
+      "full review D5: /spec-guard, /spec-init and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
+    // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
+    const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
+    ok(!/\n/.test(d6Desc) && /spec_finish's blockers:[^)]*\bsuite-evidence\b/.test(d6Desc) && /a spike: spike, decision/.test(d6Desc),
+      "full review D6: spec_approve's description names the execution gate's suite-evidence and a spike's spike / decision checks");
+    // D7: the demo is in the 1.14 shape (stamp, stored tracks, the .gitignore init writes) — no upgrade notice — and its
+    // +tdd feature records the Phase 4 red run, so executing it as written leaves no red-green warning.
+    const d7Src = path.join(root, "examples", "demo-project");
+    const d7 = path.join(tmp, "fr-d7", "demo-project");
+    fs.cpSync(d7Src, d7, { recursive: true });
+    const d7Init = path.join(tmp, "fr-d7-init");
+    S.initProject(d7Init, ["core"], "en");
+    const d7States = ["api-keys", "usage-metering"].map((f) => JSON.parse(fs.readFileSync(path.join(d7, ".specs", f, ".state.json"), "utf8")));
+    const d7Tasks = fs.readFileSync(path.join(d7, ".specs", "api-keys", "tasks.md"), "utf8");
+    const d7Verify = (d7Tasks.match(/^ {2}- _Verify: (.*)_$/m) || [])[1];
+    const d7Red = S.completeTask(d7, "api-keys", 1, { command: d7Verify, exitCode: 1, summary: "7 failed" });
+    for (let n = 2; n <= 9; n++) S.completeTask(d7, "api-keys", n, { summary: "done" });
+    const d7Doc = S.specDoctor(d7, "api-keys");
+    const d7Rg = d7Doc.checks.find((c) => c.id === "red-green");
+    const d7Readme = dRead("examples", "README.md");
+    ok(S.specVersionStatus(d7).behind === false && d7States.every((st) => Array.isArray(st.tracks) && st.tracks.includes("core")) &&
+      fs.readFileSync(path.join(d7, ".specs", ".gitignore"), "utf8") === fs.readFileSync(path.join(d7Init, ".specs", ".gitignore"), "utf8") &&
+      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && /^# Example — a fully worked spec \(1\.14 shape\)/.test(d7Readme) && /0\/9 tasks done/.test(d7Readme),
+      "full review D7: the demo is 1.14-shaped (no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
+      JSON.stringify([S.specVersionStatus(d7), d7Red.ok, d7Rg && d7Rg.status]) + ")");
+    // The +tdd reference example: an _Expect: fail_ task names every T-ID the other tasks make green; the combined example
+    // no longer claims "all four tracks" (there are six).
+    const d7ExTasks = (dRef("example-spec.md").split("## tasks.md")[1] || "").split(/\n(?=- \[ \] )/);
+    const d7ExRed = d7ExTasks.find((b) => /_Expect: fail_/.test(b)) || "";
+    const d7Greened = d7ExTasks.flatMap((b) => ((b.match(/_Makes green: ([^_]*)_/) || [])[1] || "").split(/,\s*/).filter(Boolean));
+    ok(d7ExRed && d7Greened.length >= 13 && d7Greened.every((id) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(d7ExRed.split("\n")[0])) &&
+      !/all four tracks|every track at once/.test(dRef("example-spec-combined.md")),
+      "full review D7: example-spec.md's red-run task (_Expect: fail_) names every T-ID made green; example-spec-combined is no longer titled 'all four tracks'");
+    // D8: the tour fills classification.md before it approves it; the bugfix flow ticks tasks 1 and 2 before task 3.
+    const d8Tour = dWs(dRead("commands", "spec-tour.md")), d8Bug = dWs(dRead("commands", "spec-bugfix.md"));
+    ok(/3\. \*\*Classify\*\*.*classification\.md.*7\. \*\*Approve\*\*/.test(d8Tour) &&
+      /done <feature> 1 --evidence/.test(d8Bug) && /done <feature> 2 --evidence/.test(d8Bug) && d8Bug.indexOf("done <feature> 2") < d8Bug.indexOf("done <feature> 3"),
+      "full review D8: /spec-tour records the decision in classification.md (step 3) before approving it (step 7); /spec-bugfix ticks tasks 1 and 2 before task 3's red run");
+    // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
+    const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
+    ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&
+      !/\b(?:Write|Edit)\b/.test(d9Tools("spec-reviewer.md")) && /\bBash\b/.test(d9Tools("spec-reviewer.md")) && /\bWrite\b.*\bEdit\b/.test(d9Tools("spec-implementer.md")),
+      "full review D9: spec-implementer (Read/Write/Edit/Glob/Grep/Bash) and spec-reviewer (read-only + Bash) declare tools — neither can dispatch subagents");
+    // D10: spec_scan takes no path — /scan says to pass the folder as projectDir.
+    const d10 = dRead("commands", "scan.md");
+    ok(!list.result.tools.find((t) => t.name === "spec_scan").inputSchema.properties.path && !/\[optional path\]/.test(d10) && /as `projectDir`/.test(d10),
+      "full review D10: /scan no longer hints at a path argument spec_scan doesn't have; it passes the folder as projectDir");
+    // D11: the evidence rule sits in the initialize instructions, but not first — the CHANGELOG said they "open with it".
+    ok(/Evidence before claims/.test(init.result.instructions) && !/^Evidence/.test(init.result.instructions) && !/instructions open with it/.test(dWs(dRead("CHANGELOG.md"))),
+      "full review D11: the CHANGELOG no longer says the initialize instructions open with the evidence rule");
+    // D12: INSTALL.md (and CONTRIBUTING.md) call the CLAUDE.md warning of `claude plugin validate` expected.
+    ok([dWs(dRead("INSTALL.md")), dWs(dRead("CONTRIBUTING.md"))].every((t) => /CLAUDE\.md at the plugin root is not loaded as project context/.test(t) && /expected/.test(t)),
+      "full review D12: INSTALL / CONTRIBUTING say the CLAUDE.md warning of plugin validate is expected");
+    // D13: exit 126 / 127 / 9009 on an _Expect: fail_ task is refused AND recorded (a red run already there is kept).
+    const d13p = path.join(tmp, "fr-d13");
+    S.initProject(d13p, ["core"], "en");
+    S.createFeature(d13p, "Red", ["core"]);
+    fs.writeFileSync(path.join(d13p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node t.js_\n  - _Expect: fail_\n");
+    const d13a = S.completeTask(d13p, "red", 1, { command: "node t.js", exitCode: 127 });
+    const d13Rec = (JSON.parse(fs.readFileSync(path.join(d13p, ".specs", "red", ".state.json"), "utf8")).evidence || {})["1"] || {};
+    ok(d13a.ok === false && d13a.recorded === true && d13Rec.exitCode === 127 && !/`done --run` records nothing for it/.test(dRead("CLAUDE.md")),
+      "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — CLAUDE.md no longer says done --run records nothing for it");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");

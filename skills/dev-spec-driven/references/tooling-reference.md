@@ -12,7 +12,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | Tool | Use it for |
 |---|---|
 | `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware) |
-| `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`true` / `false` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands) and `approvalRoles` (phase → roles) — each stored in `roadmap.json → meta` and always reported back |
+| `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`"on"` / `"off"` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands) and `approvalRoles` (phase → roles) — each stored in `roadmap.json → meta` and always reported back |
 | `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |

@@ -1140,7 +1140,7 @@ function helpText() {
                                   timebox, options, evidence, decision (go / no-go / pivot) — + investigation tasks; no
                                   requirements/design gates (= create --kind spike; prototype code stays outside .specs/)
   decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
-                                  [--consequences "…"] [--affects US-1.AC-2,T-03,"Data Model"] [--supersedes D-1] [--discovery]
+                                  [--consequences "…"] [--affects US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]
                                   — an unknown _Affects:_ reference is refused (exit 1, nothing written)
   list                            List features (phase + task progress)
   status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)

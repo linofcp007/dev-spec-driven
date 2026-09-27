@@ -10,11 +10,15 @@ Bug: $ARGUMENTS
 1. Scaffold it: `spec_create {name, kind: "bugfix", summary}` (CLI: `dev-spec bugfix "<name>" --summary "…"`)
    — `bug.md`, a one-story `requirements.md` (`IF … THEN THE SYSTEM SHALL …`), a regression test plan
    and the fixed task order. Pass the user's language (`lang`). A bugfix is always +tdd.
-2. **Reproduce** — exact steps/input/environment in `bug.md → Reproduction` (the requirements gate checks it).
+2. **Reproduce** — exact steps/input/environment in `bug.md → Reproduction` (the requirements gate checks it). That
+   is task 1: tick it with a note of what you ran and saw — `spec_complete_task {name, number: 1, evidence: {summary}}`
+   (CLI `dev-spec done <feature> 1 --evidence "…"`; the task has no `_Verify:_`, so the note is its evidence).
 3. **Root cause with evidence** in `bug.md → Root Cause`. The iron law: **no fix before the cause is
    known** — `spec_doctor` fails the `root-cause` check until it is, and `spec_complete_task` **refuses every task
    after the root-cause task** (regression test, fix, verify) while the section is empty. One
-   hypothesis at a time, tested with the smallest change.
+   hypothesis at a time, tested with the smallest change. Once the section is written, tick task 2 the same way
+   (`dev-spec done <feature> 2 --evidence "…"`) — ticked earlier, the result warns that the Root Cause is still empty.
+   `spec_next_action` points at the first open task, so tasks 1 and 2 must be ticked before task 3 is next.
 4. **STOP for the approvals.** Fill the AC with the real condition and correct behaviour, the test plan's File column
    and the tasks' `_Verify:_` commands, run `spec_doctor`, then present the reproduction, the root cause with its
    evidence and the fix you propose — and wait. "Fix it" / "corrige isto" / "arréglalo" asks for the outcome; it is

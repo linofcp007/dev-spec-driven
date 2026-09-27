@@ -57,7 +57,9 @@ For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the
 - Update `CHANGELOG.md` and bump the version in `package.json`, `.claude-plugin/plugin.json` **and**
   `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree).
 - Validate both manifests and make sure `npm test` is green:
-  - `claude plugin validate .claude-plugin/plugin.json` — the plugin (manifest + its components);
+  - `claude plugin validate .claude-plugin/plugin.json` — the plugin (manifest + its components); it passes with
+    one expected warning, `CLAUDE.md at the plugin root is not loaded as project context` (CLAUDE.md is these
+    maintainer notes, not context meant for users' projects);
   - `claude plugin validate .` — the marketplace (`.claude-plugin/marketplace.json`). Run on the repo
     root, `validate` only checks the marketplace file when one is present, not the plugin itself.
 - No machine-specific absolute paths in committed files (use `${CLAUDE_PLUGIN_ROOT}`, `${workspaceFolder}`,

@@ -1,11 +1,11 @@
-# Example — a fully worked spec (1.13 shape)
+# Example — a fully worked spec (1.14 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
 methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, **Constitution Check**,
 **story-organized tasks** tagged `[US1]`/`[shared]` with `[P]` parallel markers and **Checkpoints**,
 a **quickstart** acceptance scenario, **spec↔code** wiring via `_Implements:_`, the **Phase 4 failing tests**
-named by their T-IDs, and **fingerprinted approvals** with their `.history/` snapshots. It also shows a
-**multi-feature roadmap with a dependency**.
+named by their T-IDs with a first task that records their **red run** (`_Expect: fail_`), and **fingerprinted
+approvals** with their `.history/` snapshots. It also shows a **multi-feature roadmap with a dependency**.
 
 It is real and verifiable — the primary feature (`api-keys`) passes `doctor` (verdict PASS, no warnings) and
 `trace`, from a fresh clone too: each approval records a content fingerprint, so the new file dates a checkout
@@ -18,17 +18,18 @@ copy of the demo and compares their output with this page.
 demo-project/
 ├── .specs/
 │   ├── steering/                       # constitution (the principles the design is checked against) + filled product/tech/structure/testing/scale/cost/observability
-│   ├── roadmap.json                    # usage-metering depends on api-keys
+│   ├── roadmap.json                    # usage-metering depends on api-keys; meta.specVersion 1.14.0
+│   ├── .gitignore                      # the lock and temp files dev-spec writes stay out of git
 │   ├── api-keys/                        # ← the fully-worked feature (core +tdd +saas), approved up to tasks
 │   │   ├── classification.md           # tracks + the signals, blast radius and hot-path call behind them
 │   │   ├── requirements.md             # US-1 (P1) + US-2 (P2), Independent Test, SC-001/002, EC-1/2, NFR-1, EARS ACs
 │   │   ├── design.md                   # mermaid + Constitution Check + Complexity + 5 scale sections
 │   │   ├── test-plan.md                # T-01..T-07 mapped to every AC and edge case
-│   │   ├── tasks.md                    # by story, [US1]/[shared] tags, [P], Checkpoints, _Implements:_
+│   │   ├── tasks.md                    # task 1 records the red run (_Expect: fail_); by story, [US1]/[shared] tags, [P], Checkpoints, _Implements:_
 │   │   ├── quickstart.md               # human-runnable acceptance scenario
 │   │   ├── load-test.md                # scenarios + budget for the hot path (+saas)
 │   │   ├── checklist.md
-│   │   ├── .state.json                 # approvals, each with a content fingerprint
+│   │   ├── .state.json                 # its tracks + approvals, each with a content fingerprint
 │   │   └── .history/                   # what each approval signed off (the baseline spec_impact diffs)
 │   └── usage-metering/                  # a second feature, earlier phase, depends on api-keys
 ├── src/api-keys/service.js              # stub the tasks _Implement_ (so trace closes the loop)
@@ -63,6 +64,7 @@ Doctor: api-keys  [core +tdd +saas]  verdict=PASS  readyToAdvance=true
   ✓ test-plan
   ✓ traceability — all 5 ACs covered by tasks
   ✓ secondary-trace — all 5 EC/NFR/SC IDs covered
+  ✓ verification — every ticked task with a _Verify:_ command has evidence
   ✓ approval-gates — all present phases approved
 ```
 
@@ -87,7 +89,7 @@ Roadmap — overall 19%  (0/2 complete)
   ⛔ usage-metering               8%  [core +saas]  requirements  deps: api-keys (unmet: api-keys)
 ```
 
-`api-keys` has every planning gate approved and 0/8 tasks done; `usage-metering` is an earlier-phase
+`api-keys` has every planning gate approved and 0/9 tasks done; `usage-metering` is an earlier-phase
 scaffold (its requirements are still the template). It is **blocked (⛔)** until `api-keys` reaches 100% —
 exactly what `spec_depend` records and `spec_roadmap` computes (cycle-checked). The same data is in the
 generated `.specs/ROADMAP.md`.
@@ -110,3 +112,9 @@ in `requirements.md`, while a technical reader keeps build-order *within* each s
 cross-cutting work — so membership is unmistakable even for foundational/setup/polish tasks. See
 `api-keys/tasks.md`. (If a feature's stories aren't independently shippable, that's a mis-slice
 signal; fall back to a technical-layer layout keeping the `[US1]` tags — see the skill's Phase 5.)
+
+Task 1 comes before any implementation task on purpose: it names every T-ID Phase 4 wrote and carries
+`_Expect: fail_` next to its `_Verify:_`, so its **failing** run is its proof (the demo ships no test runner; in a
+real project `dev-spec done api-keys 1 --run` records it while the tests are still red). Once the later tasks make
+those tests green, doctor's `red-green` check finds a red run for each of them — a test that never failed proves
+nothing.

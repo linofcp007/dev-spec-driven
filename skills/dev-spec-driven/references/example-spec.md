@@ -3,8 +3,8 @@
 A complete example of the spec artifacts for a user authentication feature: `requirements.md`, `design.md`,
 `test-plan.md` and `tasks.md`. It shows the conventions the engine checks — stable IDs (`US-1.AC-1`, `SC-001`,
 `EC-1`, `NFR-1`, `T-01`), prioritized stories, the test plan's **Kind** column, story-organized tasks with
-`[US1]`/`[shared]`/`[P]` tags and `**Checkpoint:**` lines, and every traceability marker (`_Requirements:_`,
-`_Makes green:_`, `_Implements:_`, `_Verify:_`).
+`[US1]`/`[shared]`/`[P]` tags and `**Checkpoint:**` lines, every traceability marker (`_Requirements:_`,
+`_Makes green:_`, `_Implements:_`, `_Verify:_`) and the red-run task (`_Expect: fail_`).
 
 ---
 
@@ -224,7 +224,7 @@ database, one E2E journey (register → verify → login → logout). See test-p
 | T-13 | integration | example | the 11th request in a minute from one IP gets 429 | NFR-2 | `tests/integration/rate-limit.test.ts` |
 
 ## Coverage Check
-Every AC appears in at least one "Covers" cell. EC-3 and NFR-1 are covered by tasks 9 and 8; SC-001 by the
+Every AC appears in at least one "Covers" cell. EC-3 and NFR-1 are covered by tasks 10 and 9; SC-001 by the
 quickstart.md walk-through. No gaps.
 
 ## Test Data & Fixtures
@@ -248,18 +248,21 @@ Each test carries its T-ID in its name — `it("T-03 one error per broken passwo
 - bcrypt cost 12 · access token 15 min · refresh token 7 days · lockout 5 failures / 15 min · 10 req/min per IP
 
 ## Phase: Setup
-- [ ] 1. [shared] User and Session models + migration (unique email, googleId index)
+- [ ] 1. [shared] Confirm the Phase 4 tests T-01, T-02, T-03, T-04, T-05, T-06, T-07, T-08, T-09, T-10, T-11, T-12, T-13 fail for the right reason (record the red run)
+  - _Verify: npx vitest run_
+  - _Expect: fail_
+- [ ] 2. [shared] User and Session models + migration (unique email, googleId index)
   - _Requirements: US-1.AC-1, US-2.AC-1_
   - _Implements: prisma/schema.prisma_
   - _Verify: npx prisma validate_
 
 ## Phase: Foundational
-- [ ] 2. [shared][P] Password utilities: bcrypt hash/verify (cost 12) + complexity rules
+- [ ] 3. [shared][P] Password utilities: bcrypt hash/verify (cost 12) + complexity rules
   - _Requirements: US-1.AC-3, US-2.AC-5_
   - _Makes green: T-03, T-09_
   - _Implements: src/lib/password.ts_
   - _Verify: npx vitest run src/lib/password.test.ts_
-- [ ] 3. [shared][P] Rate limiting on /auth/* (10 req/min per IP)
+- [ ] 4. [shared][P] Rate limiting on /auth/* (10 req/min per IP)
   - _Requirements: NFR-2_
   - _Makes green: T-13_
   - _Implements: src/middleware/rate-limit.ts_
@@ -268,12 +271,12 @@ Each test carries its T-ID in its name — `it("T-03 one error per broken passwo
 **Checkpoint:** password and rate-limit tests green; every story can start.
 
 ## Phase: Story US-1 (P1)
-- [ ] 4. [US1] POST /auth/register — validation, 409 on duplicate, unverified user, verification email queued
+- [ ] 5. [US1] POST /auth/register — validation, 409 on duplicate, unverified user, verification email queued
   - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_
   - _Makes green: T-01, T-02_
   - _Implements: src/auth/register.ts_
   - _Verify: npx vitest run tests/integration/register.test.ts_
-- [ ] 5. [US1] GET /auth/verify/:token — 24 h expiry, resend on an expired link
+- [ ] 6. [US1] GET /auth/verify/:token — 24 h expiry, resend on an expired link
   - _Requirements: US-1.AC-4, EC-1_
   - _Makes green: T-04_
   - _Implements: src/auth/verify.ts_
@@ -282,24 +285,24 @@ Each test carries its T-ID in its name — `it("T-03 one error per broken passwo
 **Checkpoint:** US-1 independently testable — register and verify.
 
 ## Phase: Story US-2 (P1)
-- [ ] 6. [US2] POST /auth/login with lockout and security alert
+- [ ] 7. [US2] POST /auth/login with lockout and security alert
   - _Requirements: US-2.AC-1, US-2.AC-2, US-2.AC-3_
   - _Makes green: T-05, T-06, T-07_
   - _Implements: src/auth/login.ts_
   - _Verify: npx vitest run tests/integration/login.test.ts tests/integration/lockout.test.ts_
-- [ ] 7. [US2] Sessions — refresh (7 days), at most 3 concurrent, requireAuth middleware
+- [ ] 8. [US2] Sessions — refresh (7 days), at most 3 concurrent, requireAuth middleware
   - _Requirements: US-2.AC-4, EC-2_
   - _Makes green: T-08, T-12_
   - _Implements: src/auth/session.ts, src/middleware/require-auth.ts_
   - _Verify: npx vitest run tests/integration/session.test.ts_
-- [ ] 8. [US2] Latency check — auth endpoints P95 ≤ 300 ms at 50 req/s
+- [ ] 9. [US2] Latency check — auth endpoints P95 ≤ 300 ms at 50 req/s
   - _Requirements: NFR-1_
   - _Verify: k6 run load/auth.js_
 
 **Checkpoint:** the MVP (US-1 + US-2) — register, verify, log in and stay logged in.
 
 ## Phase: Story US-3 (P2)
-- [ ] 9. [US3] Google OAuth — redirect, callback, find-or-link by email, failure path, provider-down message
+- [ ] 10. [US3] Google OAuth — redirect, callback, find-or-link by email, failure path, provider-down message
   - _Requirements: US-3.AC-1, US-3.AC-2, US-3.AC-3, EC-3_
   - _Makes green: T-10_
   - _Implements: src/auth/google.ts_
@@ -308,7 +311,7 @@ Each test carries its T-ID in its name — `it("T-03 one error per broken passwo
 **Checkpoint:** Google sign-in works against the mocked provider.
 
 ## Phase: Story US-4 (P2)
-- [ ] 10. [US4] POST /auth/logout — invalidate the session, clear client tokens
+- [ ] 11. [US4] POST /auth/logout — invalidate the session, clear client tokens
   - _Requirements: US-4.AC-1, US-4.AC-2_
   - _Makes green: T-11_
   - _Implements: src/auth/logout.ts_
@@ -317,12 +320,15 @@ Each test carries its T-ID in its name — `it("T-03 one error per broken passwo
 **Checkpoint:** logout ends the session everywhere.
 
 ## Phase: Polish
-- [ ] 11. [shared] Full suite green + quickstart.md walk-through (time the SC-001 journey)
+- [ ] 12. [shared] Full suite green + quickstart.md walk-through (time the SC-001 journey)
   - _Requirements: US-1.AC-1, US-2.AC-1_
   - _Verify: npx vitest run_
 ```
 
 This example demonstrates the full traceability chain: every AC is covered by a test and a task, every planned
 T-ID is made green by a task, edge cases and NFRs trace too, and every task names the command that proves it.
-Each task is ticked only with `spec_complete_task {evidence: {command, exitCode: 0, …}}` — for task 4:
-`{command: "npx vitest run tests/integration/register.test.ts", exitCode: 0, summary: "2 passed"}`.
+Each task is ticked only with `spec_complete_task {evidence: {command, exitCode: 0, …}}` — for task 5:
+`{command: "npx vitest run tests/integration/register.test.ts", exitCode: 0, summary: "2 passed"}` — except task 1:
+its `_Expect: fail_` makes the run that FAILS the proof (`{command: "npx vitest run", exitCode: 1, summary: "13
+failed"}`, recorded before any implementation task), so doctor's `red-green` check finds a red run for every
+T-ID the later tasks make green.

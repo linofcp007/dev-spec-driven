@@ -179,7 +179,7 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
 Decisions and discoveries made while planning or implementing get lost in chat and in the self-ignored
 `.execution/ledger.md`. `spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?}`
 (CLI `dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects
-US-1.AC-2,T-03,"Data Model"] [--supersedes D-1] [--discovery]`; `/spec-decide`) appends ONE entry to
+US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]`; `/spec-decide`) appends ONE entry to
 `.specs/<feature>/decisions.md` — committed with the spec, created with a localized header when absent:
 
 ```markdown
@@ -187,7 +187,7 @@ US-1.AC-2,T-03,"Data Model"] [--supersedes D-1] [--discovery]`; `/spec-decide`) 
 
 - _Kind: decision_
 - _Date: 2026-09-26T10:12:00.000Z_
-- _Affects: US-1.AC-2, T-03, Data Model_
+- _Affects: US-1.AC-2, T-03, Data Models_
 - _Supersedes: D-1_
 
 **Context:** clients cache keys for up to a day

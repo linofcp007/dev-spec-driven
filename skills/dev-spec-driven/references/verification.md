@@ -83,10 +83,12 @@ command that runs that test:
 ```markdown
 - [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason
   - _Requirements: US-1.AC-1_
-  - _Makes green: T-01_
   - _Verify: node --test test/discount.test.js_
   - _Expect: fail_
 ```
+
+The red task names the T-IDs it writes in its text; `_Makes green: T-01_` belongs to the task that turns the test
+green (the fix), not to this one.
 
 - Its proof is a **failing run** `{command, exitCode ≠ 0}`: recorded with `expected: "fail"`, it ticks and verifies the
   task (`redRecorded: true`).
@@ -101,8 +103,9 @@ command that runs that test:
   saying to mark it `_Expect: fail_` (or move the command to the task that makes it green).
 - `spec_doctor` warns **`red-green`** (+tdd): T-IDs that done tasks make green (`_Makes green:_`) with no recorded red
   run of an `_Expect: fail_` task citing them — a test that never failed proves nothing. A guard test that passes
-  before the change by design (a bugfix's T-02, "the neighbouring behaviour still works") is named there too: say so
-  when you present doctor's verdict; don't make it fail artificially.
+  before the change by design (a bugfix's T-02, "the neighbouring behaviour still works") belongs in no
+  `_Makes green:_`, so the check never asks for its red run. A bugfix scaffolded before 1.14 still lists T-02 in task
+  4's `_Makes green:_` and gets the warning for it: remove T-02 from there — never make the test fail artificially.
 - `/next-action`'s verify step explains the red proof: record the red run while the test still fails (before the fix,
   or with the fix stashed), or drop `_Expect: fail_` if the task is no red test.
 
