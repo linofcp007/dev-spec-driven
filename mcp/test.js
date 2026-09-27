@@ -9899,6 +9899,218 @@ function endRun() {
   }
 
   // 1.14 full review (Ga) — evidence, project checks, CLI runs.
+  {
+    const ga = (n) => path.join(tmp, "full-review-ga-" + n);
+    const gaW = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+    const gaState = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const gaSetState = (f, st) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify(st, null, 2));
+    const gaTasks = (f) => fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+    const suiteOf = (r) => (r.suiteChecks || []).map((c) => c.status).join();
+    const PASS = 'node -e "process.exit(0)"';
+    // A written core feature the gates accept (approved through tasks) — the chain next_action walks to its finish step.
+    const GA_CLASS = "# Classification: x\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n";
+    const GA_REQ = "# Feature: x\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n" +
+      "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+      "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n";
+    const GA_DESIGN = "# Design: x\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n" +
+      "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+      "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n";
+    const gaFilled = (dir, name, tasks) => {
+      const f = S.createFeature(dir, name, ["core"], "", undefined, "en");
+      gaW(f.dir, "classification.md", GA_CLASS); gaW(f.dir, "requirements.md", GA_REQ); gaW(f.dir, "design.md", GA_DESIGN); gaW(f.dir, "tasks.md", tasks);
+      S.approvePhase(dir, f.slug, null, "u", { through: "tasks" });
+      return f;
+    };
+
+    // Ga2: a failing run whose output shows the test never ran (node --test on a missing file, a missing module / script, no
+    // test collected) is no red run — spec_complete_task refuses it (recorded, couldNotRun: "output"); an assertion failure
+    // stays the red proof; a record made before (a ticked task) no longer counts as one.
+    const cnr = (s) => (S.couldNotRunOutput(s) || {}).kind || null;
+    const cnrPos = ["Could not find '/app/test/uppercase.test.js'", "Error: Cannot find module '../src/upper'", "python3: can't open file '/app/t.py': [Errno 2] No such file or directory",
+      "ModuleNotFoundError: No module named 'upper'", "ERROR: file or directory not found: tests/test_x.py", "============ no tests ran in 0.01s ============",
+      "No tests found, exiting with code 1", "No test files found, exiting with code 1", 'npm error Missing script: "test"', "make: *** No rule to make target 'test'.  Stop.", "npm ERR! code ENOENT"];
+    const cnrNeg = ["AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n'a' !== 'A'", "✖ T-01 fails: 302 back to /login", "FAILED tests/test_x.py::test_upper - assert 'a' == 'A'", "Tests: 1 failed, 3 passed", ""];
+    const wslOut = "<3>WSL (10 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed: No such file or directory";
+    ok(cnrPos.every((s) => cnr(s) === "test") && cnrNeg.every((s) => cnr(s) === null) && cnr(wslOut) === "wsl" && cnr(wslOut.split("").join(String.fromCharCode(0))) === "wsl" &&
+      cnr("spawnSync no-such-shell-xyz ENOENT") === "spawn",
+      "full review Ga2: couldNotRunOutput recognises a run that never exercised its test (missing file / module / script, nothing collected; the WSL relay, also as UTF-16; a spawn error) and never an assertion failure (got " +
+      JSON.stringify([cnrPos.filter((s) => cnr(s) !== "test"), cnrNeg.filter((s) => cnr(s) !== null)]) + ")");
+    const p2 = ga("red");
+    S.initProject(p2, ["core"], "en");
+    const f2 = S.createFeature(p2, "Red missing", ["core"], "", undefined, "en");
+    gaW(f2.dir, "tasks.md", "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: node --test test/uppercase.test.js_\n  - _Expect: fail_\n");
+    const RED_CMD = "node --test test/uppercase.test.js";
+    const miss2 = S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 1, summary: "Could not find 'test/uppercase.test.js'" });
+    const open2 = /- \[ \] 1\./.test(gaTasks(f2));
+    const red2 = S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 1, summary: "✖ uppercases (1.2ms)\nAssertionError [ERR_ASSERTION]: 'a' !== 'A'\nℹ fail 1" });
+    const f2b = S.createFeature(p2, "Red legacy", ["core"], "", undefined, "en");
+    gaW(f2b.dir, "tasks.md", "- [x] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Expect: fail_\n");
+    const st2b = gaState(f2b);
+    st2b.evidence = { 1: { command: 'node -e "process.exit(0)"', exitCode: 1, summary: "spawnSync no-such-shell-xyz ENOENT", expected: "fail", at: new Date().toISOString() } }; // what `done --run --shell <missing>` used to record
+    gaSetState(f2b, st2b);
+    const vs2b = S.verificationStatus(p2, f2b.slug, f2b.dir);
+    const fPt2 = S.createFeature(p2, "Vermelho", ["core"], "", undefined, "pt");
+    gaW(fPt2.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const pt2 = S.completeTask(p2, fPt2.slug, 1, { command: "npm test", exitCode: 1, summary: 'npm error Missing script: "test"' });
+    ok(miss2.ok === false && miss2.recorded === true && miss2.couldNotRun === "output" && miss2.expected === "fail" && open2 &&
+      /the run exited 1, but its output shows the test never ran \(Could not find 'test\/uppercase\.test\.js'\) — that is no red test/.test(miss2.error) &&
+      red2.ok === true && red2.redRecorded === true && red2.verified === true && /- \[x\] 1\./.test(gaTasks(f2)) &&
+      vs2b.unverifiedDetail.some((d) => d.number === 1 && d.reason === "failed-run") &&
+      pt2.ok === false && pt2.couldNotRun === "output" && /o output mostra que o teste nunca foi executado \(Missing script: "test"\)/.test(pt2.error),
+      "full review Ga2: an _Expect: fail_ run whose summary shows the test never ran is refused (recorded, couldNotRun: output, task open; PT); an assertion failure is the red proof; an old 'spawnSync … ENOENT' record proves nothing (got " +
+      JSON.stringify([miss2.couldNotRun, miss2.error && miss2.error.slice(0, 120), red2.redRecorded, vs2b.unverifiedDetail, pt2.error && pt2.error.slice(0, 80)]) + ")");
+
+    // Ga3: a project check run is stamped with the code it tested (a hash of the implementing files): code edited after the
+    // run → suiteChecks status `code-changed` — a finish blocker, doctor's suite-evidence warn and the stop gate's suite line —
+    // never "ready" on an old run. A run recorded without the stamp keeps the older rule.
+    const p3 = ga("code");
+    S.initProject(p3, ["core"], "en", { checks: { test: PASS } });
+    const f3 = S.createFeature(p3, "Limiter", ["core"], "", undefined, "en");
+    gaW(p3, "src/limiter.js", "module.exports = 1;\n");
+    gaW(f3.dir, "tasks.md", "- [ ] 1. [US1] Limit\n  - _Implements: src/limiter.js_\n");
+    S.completeTask(p3, f3.slug, 1);
+    const fin3a = S.finishFeature(p3, f3.slug, { evidence: [{ name: "test", command: PASS, exitCode: 0 }] });
+    const stamp3 = gaState(f3).finishChecks.test.code;
+    gaW(p3, "src/limiter.js", "module.exports = 2; // edited after the check ran\n");
+    const fin3b = S.finishFeature(p3, f3.slug, {});
+    const doc3 = S.specDoctor(p3, f3.slug).checks.find((c) => c.id === "suite-evidence");
+    const stop3 = S.stopCheck(p3, { message: "All done." });
+    const st3 = gaState(f3);
+    delete st3.finishChecks.test.code; // a run recorded before 1.14's full review
+    gaSetState(f3, st3);
+    const fin3c = S.finishFeature(p3, f3.slug, {});
+    ok(/^[0-9a-f]{40}$/.test(stamp3 || "") && suiteOf(fin3a) === "pass" && suiteOf(fin3b) === "code-changed" &&
+      fin3b.blockers.some((b) => /test \(the implementing files changed since the run\)/.test(b)) && doc3 && doc3.status === "warn" && /implementing files changed since the run/.test(doc3.detail) &&
+      stop3.block === true && stop3.features.some((x) => x.suite.some((s) => s.status === "code-changed")) && suiteOf(fin3c) === "pass",
+      "full review Ga3: a check run stamped with the implementing files' hash turns code-changed once src/limiter.js is edited (finish blocker, doctor warn, stop gate); an unstamped run keeps the older rule (got " +
+      JSON.stringify([stamp3, suiteOf(fin3a), suiteOf(fin3b), doc3 && doc3.status, stop3.why, suiteOf(fin3c)]) + ")");
+
+    // Ga4: a task-activity stamp in the future (a .state.json committed from a machine with a fast clock) is ignored, as the
+    // stop gate ignores it — a fresh check run is not "before the last task activity".
+    const p4 = ga("future");
+    S.initProject(p4, ["core"], "en", { checks: { test: PASS } });
+    const f4 = S.createFeature(p4, "Clock", ["core"], "", undefined, "en");
+    gaW(f4.dir, "tasks.md", "- [x] 1. [US1] Done\n");
+    const st4 = gaState(f4);
+    st4.lastTickAt = "2099-01-01T00:00:00.000Z";
+    gaSetState(f4, st4);
+    const fin4 = S.finishFeature(p4, f4.slug, { evidence: [{ name: "test", command: PASS, exitCode: 0 }] });
+    ok(suiteOf(fin4) === "pass" && !fin4.blockers.some((b) => /ran before the last task activity/.test(b)),
+      "full review Ga4: a lastTickAt in the future is ignored — a check run recorded now passes (got " + JSON.stringify([suiteOf(fin4), fin4.blockers]) + ")");
+
+    // Ga5: the spec-implementer gate reads the exit code its report shows: a must-pass _Verify:_ needs an exit 0 (a red then
+    // green report passes), an _Expect: fail_ one a non-zero exit.
+    const p5 = ga("impl");
+    S.initProject(p5, ["core"], "en");
+    const f5 = S.createFeature(p5, "Impl", ["core"], "", undefined, "en");
+    gaW(f5.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: npm test_\n- [ ] 2. [US1] Write T-01 red\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const rep5 = (n, body) => gaW(f5.dir, ".execution/task-" + n + "-report.md", body);
+    const stop5 = (n) => S.stopCheck(p5, { message: "Status: DONE — implemented. Report: .specs/" + f5.slug + "/.execution/task-" + n + "-report.md", agent: "dev-spec-driven:spec-implementer" });
+    rep5(1, "# Task 1\n\n$ npm test\nexit code: 1\n1 failing\n");
+    const i1 = stop5(1);
+    rep5(1, "# Task 1\n\nRED: `npm test` → exit code: 1\nGREEN: `npm test` → exit 0\n");
+    const i1b = stop5(1);
+    rep5(2, "# Task 2\n\n`npm test` → exit 0\n");
+    const i2 = stop5(2);
+    rep5(2, "# Task 2\n\n`npm test` → exit code: 1 (AssertionError: expected 'A')\n");
+    const i2b = stop5(2);
+    ok(i1.block === true && i1.why === "implementer-evidence" && /shows no passing run \(exit 0\) of `npm test`/.test(i1.reason) && i1b.block === false && i1b.why === "report-ok" &&
+      i2.block === true && /shows no failing run \(a non-zero exit code\) of `npm test` — the task is marked _Expect: fail_/.test(i2.reason) && i2b.block === false && i2b.why === "report-ok",
+      "full review Ga5: a DONE report of a must-pass task showing only 'exit code: 1' is sent back (red + green passes); an _Expect: fail_ task's report needs its non-zero exit (got " +
+      JSON.stringify([i1.why, i1b.why, i2.why, i2b.why]) + ")");
+
+    // Ga6: spec_append_tasks takes makesGreen (planned T-IDs, stored as test-plan.md spells them), expectFail and size —
+    // validated all-or-nothing like the AC IDs; the MCP schema advertises them.
+    const p6 = ga("append");
+    S.initProject(p6, ["tdd"], "en");
+    const f6 = S.createFeature(p6, "Converge", ["tdd"], "", undefined, "en");
+    const apTool6 = list.result.tools.find((t) => t.name === "spec_append_tasks");
+    const props6 = apTool6.inputSchema.properties.tasks.items.properties;
+    const call6 = async (args) => { const r = await rpc("tools/call", { name: "spec_append_tasks", arguments: { projectDir: p6, name: f6.slug, ...args } }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const before6 = gaTasks(f6);
+    const bad6a = await call6({ tasks: [{ text: "ok", makesGreen: ["T-01"] }, { text: "phantom", makesGreen: ["T-99"] }] });
+    const bad6b = await call6({ tasks: [{ text: "big", size: "XXL" }] });
+    const bad6c = await call6({ tasks: [{ text: "x", expectFail: "yes" }] });
+    const bad6d = await call6({ tasks: [{ text: "x", makesGreen: ["test one"] }] });
+    const same6 = gaTasks(f6) === before6;
+    const ap6 = await call6({ tasks: [{ text: "Write the regression test", requirements: ["US-1.AC-1"], makesGreen: ["t-1"], expectFail: true, size: "s", verify: "npm test" }] });
+    const blk6 = S.taskBlocks(gaTasks(f6)).find((b) => ap6.p.appended && b.number === ap6.p.appended[0].number);
+    const noPlan = S.appendTasks(p2, f2.slug, [{ text: "x", makesGreen: ["T-01"] }]);
+    ok(props6.makesGreen && props6.makesGreen.type === "array" && props6.expectFail && props6.expectFail.type === "boolean" && props6.size && props6.size.type === "string" &&
+      bad6a.p.ok === false && /Unknown tests \(not planned in test-plan\.md\): T-99/.test(bad6a.p.error) && bad6b.p.ok === false && /size must be one of XS, S, M, L, XL \(got 'XXL'\)/.test(bad6b.p.error) &&
+      bad6c.isError && bad6d.p.ok === false && /makesGreen takes planned test IDs/.test(bad6d.p.error) && same6 &&
+      ap6.p.ok === true && JSON.stringify(ap6.p.appended[0].makesGreen) === '["T-01"]' && ap6.p.appended[0].expectFail === true && ap6.p.appended[0].size === "S" &&
+      blk6 && JSON.stringify(blk6.body.map((l) => l.replace(/^- /, ""))) === JSON.stringify(["_Requirements: US-1.AC-1_", "_Makes green: T-01_", "_Verify: npm test_", "_Expect: fail_", "_Size: S_"]) &&
+      S.expectsFail(blk6) && S.traceCheck(p6, f6.slug).phantomTestsInTasks.length === 0 &&
+      noPlan.ok === false && /makesGreen needs a test plan/.test(noPlan.error),
+      "full review Ga6: spec_append_tasks writes _Makes green:_ (as the test plan spells the T-ID) / _Expect: fail_ / _Size:_; an unplanned T-ID, a bad size or T-ID, a non-boolean expectFail or no test plan writes nothing (got " +
+      JSON.stringify([ap6.p.appended || ap6.p.error, blk6 && blk6.body, bad6a.p.error, bad6b.p.error]).slice(0, 500) + ")");
+
+    // Ga7: the brief of an _Expect: fail_ task is a red task's — its tests section and definition of done say write the test and
+    // watch it FAIL (no production code), never "make the target tests green" / "nothing that passed before may fail".
+    const p7 = ga("brief");
+    S.initProject(p7, ["tdd"], "en", { checks: { test: "npm test" } });
+    const f7 = S.createFeature(p7, "Brief red", ["tdd"], "", undefined, "en");
+    gaW(f7.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 red\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: npm test_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Make T-01 green\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: npm test_\n");
+    const br7 = S.taskBrief(p7, f7.slug, 1).brief;
+    const br7g = S.taskBrief(p7, f7.slug, 2).brief;
+    const f7pt = S.createFeature(p7, "Brief vermelho", ["tdd"], "", undefined, "pt");
+    gaW(f7pt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Makes green: T-01_\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const br7pt = S.taskBrief(p7, f7pt.slug, 1).brief;
+    ok(/## Tests this task writes — they must FAIL first \(red\)/.test(br7) && !/## Tests to make green/.test(br7) && /\n1\. This is a RED task: write \(or keep\) the planned test\(s\)/.test(br7) &&
+      !/turns the target tests green/.test(br7) && !/nothing that passed before this task may fail/.test(br7) && /the only failures allowed are this task's new red test\(s\)/.test(br7) &&
+      /## Tests to make green/.test(br7g) && /turns the target tests green/.test(br7g) && /nothing that passed before this task may fail/.test(br7g) &&
+      /## Testes que esta tarefa escreve — têm de FALHAR primeiro \(vermelho\)/.test(br7pt) && /\n1\. Esta é uma tarefa VERMELHA/.test(br7pt),
+      "full review Ga7: an _Expect: fail_ task's brief: 'Tests this task writes — they must FAIL first', a red definition of done, the project checks allow its red test (PT too); a green task's brief is unchanged (got " +
+      JSON.stringify(br7.split("\n").filter((l) => /^## |^\d+\. /.test(l)).slice(-8)).slice(0, 400) + ")");
+
+    // Ga8: with meta.checks set, next_action's finish step says how to run and record them; the merge summary labels an
+    // _Expect: fail_ task's red run as the expected one (and, after the fix passes, the red run it keeps).
+    const p8 = ga("finish");
+    S.initProject(p8, ["core"], "en", { checks: { test: PASS } });
+    const f8 = gaFilled(p8, "Login", "# Tasks\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + PASS + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + PASS + "_\n**Checkpoint:** US-1 works.\n");
+    S.completeTask(p8, f8.slug, 1, { command: PASS, exitCode: 0 });
+    S.completeTask(p8, f8.slug, 2, { command: PASS, exitCode: 0 });
+    const na8 = S.nextAction(p8, f8.slug);
+    const sum8a = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
+    S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 0, summary: "ℹ pass 1" }); // the fix is in: the test passes now
+    const sum8b = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
+    ok(na8.step === "finish" && new RegExp("dev-spec finish " + f8.slug + " --run runs and records them").test(na8.recommendation) && /spec_finish \{evidence: \[/.test(na8.recommendation) &&
+      /1\. Write test T-01 and watch it fail — `node --test test\/uppercase\.test\.js` → exit 1 \(the expected red run \(_Expect: fail_\)\)/.test(sum8a) &&
+      /`node --test test\/uppercase\.test\.js` → exit 0 \(red run before the fix: exit 1 on \d{4}-\d{2}-\d{2}\)/.test(sum8b),
+      "full review Ga8: next_action's finish step names dev-spec finish --run / spec_finish {evidence} when project checks are configured; the merge summary marks the expected red run (and the red run kept after the fix) (got " +
+      JSON.stringify([na8.step, na8.recommendation.slice(-260), (sum8a.match(/.*uppercase.*/) || [""])[0], (sum8b.match(/.*uppercase.*/) || [""])[0]]) + ")");
+
+    // Ga9: the shell done --run / finish --run use — a bare bash on Windows is Git Bash (git --exec-path, %ProgramFiles%, a
+    // non-WSL bash on PATH), never WSL's System32 / WindowsApps launcher (refused, also as an explicit path); cmd is cmd.exe.
+    const BS = String.fromCharCode(92);
+    const wp = (...p) => p.join(BS);
+    const sys32 = wp("C:", "Windows", "System32"), apps = wp("C:", "Users", "u", "AppData", "Local", "Microsoft", "WindowsApps"), msys = wp("C:", "msys64", "usr", "bin");
+    const gitBash = wp("C:", "Program Files", "Git", "bin", "bash.exe");
+    const have = (...files) => (p) => files.includes(p);
+    const envW = (dirs, extra) => ({ PATH: dirs.join(";"), ...(extra || {}) });
+    const r9 = {
+      git: S.resolveRunShell("bash", { platform: "win32", env: envW([sys32, apps]), gitExecPath: "C:/Program Files/Git/mingw64/libexec/git-core\n", exists: have(gitBash, wp(sys32, "bash.exe")) }),
+      wslOnly: S.resolveRunShell("bash", { platform: "win32", env: envW([sys32, apps]), exists: have(wp(sys32, "bash.exe"), wp(apps, "bash.exe")) }),
+      msys: S.resolveRunShell("BASH.EXE", { platform: "win32", env: envW([sys32, msys]), exists: have(wp(sys32, "bash.exe"), wp(msys, "bash.exe")) }),
+      progFiles: S.resolveRunShell("bash", { platform: "win32", env: { ProgramFiles: wp("C:", "Program Files"), Path: sys32 }, exists: have(gitBash, wp(sys32, "bash.exe")) }),
+      sys32Path: S.resolveRunShell(wp(sys32, "bash.exe"), { platform: "win32", env: {} }),
+      appsPath: S.resolveRunShell("C:/Users/u/AppData/Local/Microsoft/WindowsApps/bash.exe", { platform: "win32", env: {} }),
+      wslExe: S.resolveRunShell(wp(sys32, "wsl.exe"), { platform: "win32", env: {} }),
+      def: S.resolveRunShell("", { platform: "win32" }), cmd: S.resolveRunShell("cmd", { platform: "win32" }), comspec: S.resolveRunShell(wp(sys32, "cmd.exe"), { platform: "win32" }),
+      pwsh: S.resolveRunShell("pwsh", { platform: "win32" }), linuxBash: S.resolveRunShell("bash", { platform: "linux" }), linuxDef: S.resolveRunShell("", { platform: "linux" }),
+    };
+    ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
+      r9.sys32Path.error === "wsl-bash" && r9.appsPath.error === "wsl-bash" && r9.wslExe.error === "wsl-bash" &&
+      r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
+      r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
+      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), WSL's System32 / WindowsApps launcher is refused (no-git-bash / wsl-bash), cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
+      JSON.stringify(r9).slice(0, 500) + ")");
+  }
 
   // 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
 
