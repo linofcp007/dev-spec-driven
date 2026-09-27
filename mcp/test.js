@@ -10133,6 +10133,120 @@ function endRun() {
 
   // 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
 
+  {
+    const pa = path.join(tmp, "proj-full-review-pa");
+    S.initProject(pa, ["core"], "en");
+    const paDir = (slug) => path.join(pa, ".specs", slug);
+    const paPut = (rel, text) => { const p = path.join(pa, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
+    const paReq = (body) => "# Feature: X\n\n## Summary\nPay for the cart.\n\n## User Stories\n\n### US-1 (P1 — MVP): Pay\n**As a** buyer, **I want** to pay, **so that** I get my order.\n\n#### Acceptance Criteria (EARS)\n\n" + body + "\n\n## Success Criteria\n- **SC-001** — 95% of payments complete in under 3 s.\n";
+    const earsGood = "1. **US-1.AC-1** — WHEN the buyer pays THE SYSTEM SHALL charge the card.\n2. **US-1.AC-2** — WHEN the charge succeeds THE SYSTEM SHALL email a receipt.";
+
+    // Pa1: a marker followed by punctuation — or written in *italics* — is a marker (the evidence gate reads its _Verify:_).
+    S.createFeature(pa, "Markers", ["core"], "x", undefined, "en");
+    paPut(".specs/markers/requirements.md", paReq(earsGood));
+    paPut(".specs/markers/tasks.md", "# Tasks\n\n- [ ] 1. Route (_Implements: src/routes.ts_; _Verify: npm test_)\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n" +
+      "- [ ] 2. Wire the handler — _Verify: `node -e \"process.exit(1)\"`_.\n- [x] 3. Old module (see _Implements: src/old.ts_).\n" +
+      "- [ ] 4. Italic *Verify: npm run lint* and *Implements: src/__init__.py*\n- [ ] 5. Inner _Implements: src/keys_util.js, src/a_b.ts_\n");
+    const b1 = S.taskBrief(pa, "markers", 1, {}), b2 = S.taskBrief(pa, "markers", 2, {}), b4 = S.taskBrief(pa, "markers", 4, {});
+    ok(JSON.stringify(b1.verify) === '["npm test"]' && JSON.stringify(b2.verify) === '["node -e \\"process.exit(1)\\""]' && JSON.stringify(b4.verify) === '["npm run lint"]',
+      "full review Pa1: _Verify:_ followed by ')' or '.', and *Verify: …* in italics, are markers — the brief names the command (got " + JSON.stringify([b1.verify, b2.verify, b4.verify]) + ")");
+    const c2 = S.completeTask(pa, "markers", 2, {});
+    ok(c2.ok && c2.verified === false && c2.unverifiedReason === "no-evidence" && !c2.nothingToVerify,
+      "full review Pa1: completing a task whose _Verify:_ ends in '_.' without a run is unverified (no-evidence), never 'nothing to verify' (got " + JSON.stringify([c2.ok, c2.verified, c2.unverifiedReason, c2.nothingToVerify]) + ")");
+    const tr1 = S.traceCheck(pa, "markers");
+    ok(tr1.implementsFiles.includes("src/routes.ts") && tr1.implementsFiles.includes("src/__init__.py") && tr1.implementsFiles.includes("src/keys_util.js") && tr1.implementsFiles.includes("src/a_b.ts") &&
+      tr1.missingImplFiles.includes("src/old.ts") && tr1.verdict === "gaps-found",
+      "full review Pa1: trace_check reads '_Implements: x_;', '(see _Implements: x_).', *Implements: …* and inner underscores — a done task's missing file is a gap (got " + JSON.stringify([tr1.implementsFiles, tr1.missingImplFiles, tr1.verdict]) + ")");
+    paPut(".specs/markers/tasks.md", "# Tasks\n\n- [ ] 1. Route _Verify: npm test_\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n- [ ] 2. Odd — **Verify:** npm test\n  - Implements: src/x.ts\n  - the `Verify:` label in code is no marker\n");
+    const mm = (S.specDoctor(pa, "markers").checks || []).find((c) => c.id === "malformed-markers");
+    ok(mm && mm.status === "warn" && /#2 \(Verify:, Implements:\)/.test(mm.detail) && !/#1/.test(mm.detail),
+      "full review Pa1: doctor warns malformed-markers for marker-shaped text that yields no marker (**Verify:** …, a bare Implements:) — never for a real marker or a code span (got " + JSON.stringify(mm) + ")");
+
+    // Pa2: an AC written as a table row, a bold line, a heading or a checkbox item is EARS-checked; AC IDs nobody lints fail.
+    S.createFeature(pa, "Ears units", ["core"], "x", undefined, "en");
+    const earsOf = (body) => { paPut(".specs/ears-units/requirements.md", paReq(body)); return S.earsFeature(pa, "ears-units"); };
+    const table = earsOf("| ID | Criterion |\n|----|-----------|\n| US-1.AC-1 | Checkout should be fast and user-friendly |\n| US-1.AC-2 | Payment works |");
+    const bold = earsOf("**US-1.AC-1** — Payment works.\n**US-1.AC-2** — WHEN paid THE SYSTEM SHALL email a receipt.");
+    const heading = earsOf("##### US-1.AC-1 — Payment works\n\n##### US-1.AC-2\n\nWHEN paid THE SYSTEM SHALL email a receipt.");
+    const checkbox = earsOf("- [ ] **US-1.AC-1** — Payment works.\n- [x] **US-1.AC-2** — WHEN paid THE SYSTEM SHALL email a receipt.");
+    const noModal = (e) => e.issues.filter((i) => i.code === "no-modal").map((i) => i.line);
+    ok(table.verdict === "fail" && table.summary.criteriaDetected === 2 && noModal(table).length === 2 && table.issues.some((i) => i.code === "vague"),
+      "full review Pa2: ACs in a table row under the Acceptance Criteria heading are linted — no modal verb is an error, vague terms warn (got " + JSON.stringify([table.verdict, table.summary, table.issues.map((i) => i.code)]) + ")");
+    ok([bold, heading, checkbox].every((e) => e.verdict === "fail" && e.summary.criteriaDetected === 2 && JSON.stringify(noModal(e)) === "[13]"),
+      "full review Pa2: a bold line, a heading and a checkbox item that start with an AC ID are each their own criterion (two in a row never merge) (got " + JSON.stringify([bold, heading, checkbox].map((e) => [e.verdict, e.summary.criteriaDetected, noModal(e)])) + ")");
+    earsOf("- Payment works (see US-1.AC-1).");
+    const dEars = (S.specDoctor(pa, "ears-units").checks || []).find((c) => c.id === "ears");
+    approveBefore(pa, "ears-units", "requirements");
+    const apEars = S.approvePhase(pa, "ears-units", "requirements", "t");
+    ok(dEars && dEars.status === "fail" && /US-1\.AC-1/.test(dEars.detail) && !apEars.ok && (apEars.failing || []).includes("ears"),
+      "full review Pa2: requirements.md citing AC IDs that no criterion lints — doctor's ears check fails and the requirements approval is refused (got " + JSON.stringify([dEars, apEars.ok, apEars.failing]) + ")");
+    const summaryTable = earsOf(earsGood + "\n\n## Priorities\n\n| AC | Priority |\n|----|----------|\n| US-1.AC-1 | P1 |");
+    ok(summaryTable.verdict === "pass" && summaryTable.summary.criteriaDetected === 2,
+      "full review Pa2: a summary table of AC IDs outside the acceptance criteria (no modal verb) is not a criterion (got " + JSON.stringify([summaryTable.verdict, summaryTable.summary]) + ")");
+
+    // Pa3: "<!--" / "-->" inside an inline code span (or a fence) open no comment — EARS, trace_check and the placeholders see every line.
+    S.createFeature(pa, "Comment sanitizer", ["core"], "x", undefined, "en");
+    paPut(".specs/comment-sanitizer/requirements.md", paReq("1. **US-1.AC-1** — IF a comment body contains `<!--`, THEN THE SYSTEM SHALL escape it as text.\n" +
+      "2. **US-1.AC-2** — WHEN a comment holds a script tag THE SYSTEM SHALL strip it.\n3. **US-1.AC-3** — IF a comment body contains `-->`, THEN THE SYSTEM SHALL escape it as text.\n" +
+      "4. **US-1.AC-4** — WHEN a comment is posted THE SYSTEM SHALL render it within 200 ms."));
+    paPut(".specs/comment-sanitizer/tasks.md", "# Tasks\n\n- [ ] 1. Escape comment markers\n  - _Requirements: US-1.AC-1_\n");
+    const tr3 = S.traceCheck(pa, "comment-sanitizer");
+    const e3 = S.earsFeature(pa, "comment-sanitizer");
+    ok(tr3.totalAcs === 4 && JSON.stringify(tr3.uncoveredByTasks) === '["US-1.AC-2","US-1.AC-3","US-1.AC-4"]' && e3.summary.criteriaDetected === 4,
+      "full review Pa3: a `<!--` in an inline code span opens no comment — trace_check sees all 4 ACs (3 uncovered) and EARS lints 4 criteria (got " + JSON.stringify([tr3.totalAcs, tr3.uncoveredByTasks, e3.summary.criteriaDetected]) + ")");
+    const strip = S.stripHtmlComments("a `<!--` b\n```html\n<!-- in a fence\n```\nc <!-- real\ncomment --> d\ne `-->` f");
+    const ph3 = S.placeholderReport("Say `<!--` here.\n\n- [TBD]\n\nand `-->` there\n<!-- [TBD] hidden -->");
+    ok(strip === "a `<!--` b\n```html\n<!-- in a fence\n```\nc  d\ne `-->` f" && ph3.length === 1 && ph3[0].line === 3,
+      "full review Pa3: stripHtmlComments and the placeholder scan keep a code span's / a fence's `<!--` as text; a real comment is still stripped (got " + JSON.stringify([strip, ph3]) + ")");
+
+    // Pa4: requirements.md written with NO AC ID (an OpenSpec change of proposal.md + tasks.md) — the +tdd plan has no template AC rows.
+    paPut("openspec/changes/add-reset/proposal.md", "# Change: Add password reset\n\n## Why\nUsers who forget their password cannot recover their accounts.\n\n## What Changes\n- Add password reset via an emailed link\n");
+    paPut("openspec/changes/add-reset/tasks.md", "## 1. Implementation\n- [ ] 1.1 Create the reset token table\n- [ ] 1.2 Implement the reset endpoint\n");
+    const im4 = S.importSpec(pa, "openspec", "openspec/changes/add-reset", { tracks: "tdd" });
+    const plan4 = im4.ok ? fs.readFileSync(path.join(paDir(im4.feature), "test-plan.md"), "utf8") : "";
+    const tr4 = im4.ok ? S.traceCheck(pa, im4.feature) : {};
+    const d4 = im4.ok ? (S.specDoctor(pa, im4.feature).checks || []).find((c) => c.id === "traceability") : null;
+    ok(im4.ok && !/US-\d+\.AC-\d+/.test(plan4) && /\| T-01 \|/.test(plan4) && !(tr4.phantomAcsInTests || []).length && d4 && d4.status !== "fail" &&
+      (im4.warnings || []).some((w) => /no acceptance criteria/.test(w)),
+      "full review Pa4: importing a source with no criteria (+tdd) plans one generic row, no template AC phantoms, and warns that requirements.md defines no AC (got " + JSON.stringify([im4.ok, im4.error, plan4.split("\n").filter((l) => /^\| T-/.test(l)), tr4.phantomAcsInTests, d4 && d4.status, im4.warnings]) + ")");
+    S.createFeature(pa, "No ids", ["core"], "x", undefined, "en");
+    paPut(".specs/no-ids/requirements.md", "# Feature: No ids\n\n## Summary\nThings.\n\n## User Stories\n\n### US-1 (P1): Do\n- the system shall work\n");
+    const at4 = S.addTrack(pa, "no-ids", "tdd");
+    const plan4b = fs.readFileSync(path.join(paDir("no-ids"), "test-plan.md"), "utf8");
+    ok(at4.ok && !/US-\d+\.AC-\d+/.test(plan4b) && S.featurePlaceholders(pa, "no-ids", "test-plan.md").state === "placeholder",
+      "full review Pa4: spec_add_track tdd on requirements without AC IDs scaffolds a plan with no template AC rows (still a template to fill) (got " + JSON.stringify([at4.ok, plan4b.split("\n").filter((l) => /^\| T-/.test(l))]) + ")");
+
+    // Pa5: T-IDs restart per feature — a test file another feature's plan names never counts for this feature's T-IDs.
+    const plan5 = (rows) => "# Test Plan\n\n## Traceability Matrix\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" + rows + "\n";
+    for (const n of ["Shortener", "QR codes"]) { S.createFeature(pa, n, ["tdd"], "x", undefined, "en"); }
+    for (const sl of ["shortener", "qr-codes"]) paPut(".specs/" + sl + "/requirements.md", paReq(earsGood));
+    paPut(".specs/shortener/test-plan.md", plan5("| T-01 | unit | example | shortens | US-1.AC-1 | `test/shortener.test.js` |\n| T-02 | unit | example | expands | US-1.AC-2 | `test/shortener.test.js` |"));
+    paPut(".specs/qr-codes/test-plan.md", plan5("| T-01 | unit | example | encodes | US-1.AC-1 | `test/` |\n| T-02 | unit | example | decodes | US-1.AC-2 | `test/` |"));
+    paPut("test/shortener.test.js", 'test("T-01 shortens", () => {});\ntest("T-02 expands", () => {});\n');
+    const trA = S.traceCheck(pa, "shortener", { code: true }), trB = S.traceCheck(pa, "qr-codes", { code: true });
+    approveBefore(pa, "qr-codes", "tests");
+    const ap5 = S.approvePhase(pa, "qr-codes", "tests", "t");
+    ok(JSON.stringify(trA.code.plannedNotInCode) === "[]" && JSON.stringify(trB.code.plannedNotInCode) === '["T-01","T-02"]' && !Object.keys(trB.code.testsInCode).length &&
+      !ap5.ok && (ap5.failing || []).includes("tests-in-code"),
+      "full review Pa5: another feature's test file (named in ITS plan) never proves this feature's T-01/T-02 — trace --code and the Phase 4 gate see no qr test (got " + JSON.stringify([trA.code.plannedNotInCode, trB.code.plannedNotInCode, trB.code.testsInCode, ap5.ok, ap5.failing]) + ")");
+    paPut("test/qr.test.js", 'test("T-01 encodes", () => {});\ntest("T-02 decodes", () => {});\n');
+    const trB2 = S.traceCheck(pa, "qr-codes", { code: true });
+    ok(JSON.stringify(trB2.code.testsInCode) === '{"T-01":["test/qr.test.js"],"T-02":["test/qr.test.js"]}' && !trB2.code.plannedNotInCode.length,
+      "full review Pa5: the feature's own test file under its folder scope counts (got " + JSON.stringify(trB2.code) + ")");
+
+    // Pa6: a test planned outside test code whose artifact is still a template — doctor warns, spec_finish warns (never blocks).
+    S.createFeature(pa, "Load", ["tdd", "saas"], "x", undefined, "en");
+    paPut(".specs/load/test-plan.md", plan5("| T-01 | load | example | P95 within budget | US-1.AC-1 | `load-test.md` |\n| T-02 | unit | example | charges | US-1.AC-2 | `tests/unit/charge.test.js` |"));
+    paPut(".specs/load/tasks.md", "# Tasks\n\n- [x] 1. Run the load test\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n- [ ] 2. Charge\n  - _Requirements: US-1.AC-2_\n  - _Makes green: T-02_\n");
+    const oc6 = (S.specDoctor(pa, "load").checks || []).find((c) => c.id === "outside-code-artifacts");
+    const fin6 = S.finishFeature(pa, "load");
+    ok(oc6 && oc6.status === "warn" && /T-01 → load-test\.md/.test(oc6.detail) && (fin6.warnings || []).includes(oc6.detail) && !(fin6.blockers || []).some((b) => /load-test/.test(b)),
+      "full review Pa6: a done task's load test whose load-test.md is still the template — doctor outside-code-artifacts warn, and a spec_finish warning, never a blocker (got " + JSON.stringify([oc6, fin6.warnings, fin6.blockers]) + ")");
+    paPut(".specs/load/load-test.md", "# Load test\n\nk6 run at 200 rps for 10 minutes: p95 412 ms, error rate 0.02% — within the 800 ms budget.\n");
+    const oc6b = (S.specDoctor(pa, "load").checks || []).find((c) => c.id === "outside-code-artifacts");
+    ok(!oc6b, "full review Pa6: once load-test.md holds the real run, no outside-code-artifacts warn (got " + JSON.stringify(oc6b) + ")");
+  }
+
   // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
 
   // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
