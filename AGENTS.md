@@ -83,7 +83,7 @@ dev-spec drift [feature]                       # implementing files changed / mi
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
 dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
-dev-spec backlog [add|rm "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
+dev-spec backlog [add|rm|remove "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
 dev-spec scan [path]  /  dev-spec coverage     # brownfield: routes, tests, entrypoints, env var names, migrations + % of code named in _Implements:_
 dev-spec evals <feature> [--dry-run]           # run local eval harness (+ai; your API key)
 dev-spec mcp-config [client]                   # print MCP config for your tool

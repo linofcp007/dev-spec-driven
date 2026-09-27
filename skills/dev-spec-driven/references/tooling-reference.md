@@ -125,7 +125,7 @@ log <feature> [--max N] [-]              stop-check [--message "…" | -] [--age
 add-track <feature> <track...> [--remove]
 feature <remove|archive|rename|restore> <name> [new] [--yes]     feature flow <name> <requirements-first|design-first>
 roadmap [--write] [--html] [--lang]      depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]
-backlog [add|rm <name> [note]]           scan [path] [--cap N] · coverage
+backlog [add|rm|remove <name> [note]]    scan [path] [--cap N] · coverage
 evals <feature> [--dry-run ...]          mcp-config [client] · rules <cursor|windsurf|copilot|gemini|agents>
 prompts [name] [--args "…"]
 ```

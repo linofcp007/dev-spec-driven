@@ -68,7 +68,7 @@
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap: ETA forecasts, cross-feature overlaps (+ .specs/ROADMAP.md / .html)
  *   depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]  Show / set dependencies (rejects cycles)
- *   backlog [add|rm <name> [note]]     Planned-but-unspecced features
+ *   backlog [add|rm|remove <name> [note]]  Planned-but-unspecced features
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
  *   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
@@ -1238,7 +1238,7 @@ function helpText() {
   roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|pt-BR|es
   depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)
-  backlog [add|rm <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
+  backlog [add|rm|remove <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)
   scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
