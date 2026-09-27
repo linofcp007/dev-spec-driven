@@ -319,7 +319,8 @@ sections.
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
 - **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
-  when a snapshot exists) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
+  when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
+  named — never an approval that would be refused) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
   when `testsGateDue()`; classification only when classification.md exists): `fill` (one of its `gateArtifacts()` is
   missing / a template; `file`) → `fix` (its `approvalChecks()` fail — `refusedGate`, so it never recommends an
   approval that would be refused) → `approve`; the next phase only after that approval (1.13 filled the whole chain
@@ -330,7 +331,8 @@ sections.
   it; it looped "close the feature" / "finished — nothing left" → refused → the same) → `finish` (or `tasks` when
   there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`
   exists (finish `{write}` recorded it), `finish` becomes `finished` (asks for the `execution` sign-off while it is
-  missing) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
+  missing — with execution roles configured it names the missing ones, `missingRoles`, `--role <next>`; project checks
+  without a passing run turn it into `verify` with `suite` [{name, status}] and `finish --run`) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
   nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
   baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts. A baseline is STALE
   (`staleFinish()`) once a change request or a re-approval of another phase is newer than `finished.at`, or an active
@@ -342,7 +344,8 @@ sections.
 - **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates (a phase still
   missing a role's sign-off is pending), and — with `meta.checks` set (1.14) — `suite-evidence`.
-  `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role) never block.
+  `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role, a T-ID planned outside test code whose
+  artifact is still the scaffold — `outside-code-artifacts`) never block.
 - **Bugfix execution gate (`bugfixGate()`):** while bug.md → Root Cause is unfilled, no task after the one
   that writes it (names bug.md + a Root Cause synonym, carries no `_Makes green:_`/`_Verify:_`) can be ticked
   or given evidence; `done --run` refuses before running anything. The root-cause task itself can be ticked
@@ -351,7 +354,12 @@ sections.
 
 ## Evidence (v1.12, gate tightened in 1.13)
 - **`_Verify: <command>_`** is an English-stable task marker; `taskMarkers()` keeps its value whole (commas
-  belong to the command), drops wrapping backticks and ignores a `[placeholder]`. The MCP server never
+  belong to the command), drops wrapping backticks and ignores a `[placeholder]`. ONE reader, `taskMarkerSpans()`, serves
+  every task marker (taskMarkers, trace_check, implementsRefs, `_Size:_`, the templates check): a value ends at the
+  closing `_` — or `*`: `*Verify: …*` is the same marker — followed by whitespace, the end of the line, or closing
+  punctuation (`.,;:!?)]`) then whitespace / end, so `(_Verify: npm test_)` and `_Implements: a.ts_;` are markers (they
+  were silently dropped: nothing to verify, a verified tick). Doctor warns `malformed-markers` for text on a task line that
+  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
   `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
@@ -470,7 +478,9 @@ sections.
   `traceGapLines()` name the change request instead of "(typos?)" — the phantom stays a gap.
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); on written requirements (add_track tdd, create +tdd on an existing
-  feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks.
+  feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks; written
+  requirements with NO AC get one generic row whose Covers cell is a slot (`acSlot`) — never the template's rows (an
+  ID-less import used to fail traceability on phantoms). spec_import warns when it found no criterion (`wNoCriteriaAtAll`).
   `spec_import` re-plans after writing the imported requirements (createFeature scaffolded from the template ones) and
   fits a kept scaffold tasks.md with `fitTemplateTasks()` (known ACs only, `_Makes green:_` = the tests covering them).
   A +saas / +ai track block (there and in `trackTaskBlock()`, spec_add_track) keeps an ID only when `trackAcIds()` finds it
@@ -531,7 +541,11 @@ sections.
   source file"; add a language there (and to the guard test) rather than rewording. Docs, config, data, markup and
   styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
-  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). A
+  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). Two exceptions,
+  at both levels: a TEST file while some non-archived feature has an approved test plan and is unfinished (why
+  `tests-phase` — Phase 4 writes the failing tests before tasks can be approved), and any code edit while an ACTIVE spike
+  (undecided, or with open tasks) exists (why `spike`, field `spikes` — prototype work; a spike has no tasks gate, so it
+  is never listed as "awaiting approval"). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
   normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
   Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
@@ -587,7 +601,7 @@ sections.
 
 ## Project templates (1.14) — `.specs/templates/`
 - **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
-  built-in i18n builder (`templateOverride()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
+  built-in i18n builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
   (classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan,
   bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks) plus `steering/<file>.md` (a known stub, or a name
   steering_scaffold accepts). Every path is built from the allowlist and `LANGS`, never from a caller's string; at most
@@ -657,6 +671,8 @@ sections.
   / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
   approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
   tests, execution — keeps its sign-offs until approved). readState refuses a non-object `signoffs`.
+- `spec_impact` returns `missingRoles` when the changed phase needs roles, and its "→ re-approve" line carries
+  `--role <first>`; a fast-forward stopped by a role error says what it approved before (`ffWhyRole`).
 - **Legacy rule:** a phase approved WITHOUT the roles now required (approved before roles were configured, or before a
   role was added) stays approved — by an unknown role, never retroactively pending; doctor / finish warn and ask each
   role to re-sign.
@@ -684,7 +700,7 @@ sections.
 - **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
   covers the files under it, a glob what it matches and its literal folder), or an active feature planning a file a
   FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
-  transitively) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
+  transitively — a finished pair included) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
   `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS` 50), text reads only — nothing hashed, since SessionStart runs it.
   Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_depend or
   `_Supersedes:_`), one SessionStart line.
@@ -705,8 +721,13 @@ sections.
   characters minus fenced code, inline code, HTML comments and quoted (`>`) lines. A claim doesn't count when a negator or
   condition sits up to 3 words before it in its sentence ("not done", "once the tests pass", words ending in `n't` /
   `'ll`, or the claim's own first word — "Nothing is done"), nor when its sentence is a question. An ADMISSION anywhere
-  ("task 3 is not verified", "2 failing") means the honest answer is never sent back. When you add a language, add its
-  three lists.
+  ("task 3 is not verified", "2 failing", "2 are failing") means the honest answer is never sent back — unless a `fixed`
+  word sits within 4 words of it ("I fixed the 2 failing tests", "previously 4 failed"). The negator window is cut at
+  `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
+  clitic, never in guessed-PT text — em+o; "se" never before a Spanish auxiliary or preterite). Claims include "All tasks
+  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
+  held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
+  language, add its four lists (claims, negators, admissions, fixed).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
   task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
   every one of those commands (backticks / whitespace flattened) and an exit code ("exit 0", "exit code: 1", "exited with
@@ -767,7 +788,8 @@ sections.
   - `plan` — a Claude Code plan-mode file (plansDirectory defaults to `~/.claude/plans`, OUTSIDE the project — the refusal
     says to copy it in or point plansDirectory inside) or a Cursor `.cursor/plans/*.plan.md` (front matter name / overview /
     todos): goals and acceptance-like bullets → US-1's criteria (EARS when they already read like one, else
-    `[NEEDS CLARIFICATION]`); checklists, else Cursor todos, else a Steps / Implementation section's items, else its
+    `[NEEDS CLARIFICATION]`); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
+    only when there is no other), else its
     sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
     home path, `..`, alias, glob; `:line` / `#L10` dropped); the rest → design.md. A folder holding several plans is
     refused (name the file).
@@ -905,7 +927,8 @@ sections.
   include `EC-n`, `NFR-n`, `SC-nnn`; a deeper sub-list continues its parent criterion.
 - **Mandatory sections**: `extractSection(md, syn, marker)` prefers the heading carrying the track
   marker (`[SaaS]`/`[AI]`), skips fenced code, **never matches the H1 title** (it carries the feature name)
-  and requires the synonym to START the heading (after marker / numbering / "Section N:"), word-bounded.
+  and requires the synonym to START the heading (after marker / numbering / "Section N:" / an emoji), word-bounded; a
+  track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling").
   "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing).
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
@@ -923,7 +946,10 @@ sections.
 - **`trace --code` T-ID convention:** a test names its T-ID — `T-01` anywhere (`test("T-01 …")`), or without
   the hyphen an uppercase `T` + zero-padded number (`test_T01_…`, `testT01`, `TestT01`, `T01_…`) — see
   `RE_CODE_TID`. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
-  concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts.
+  concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
+  ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
+  for this feature's T-IDs (T-IDs restart at T-01 in every feature: a new feature's Phase 4 gate passed on another
+  feature's tests). A folder token (`test/`) scopes rows but claims no file.
   A T-ID whose EVERY row names only non-code artifacts in its File column (`load-test.md`, `evals/*.json`, a
   `.feature` — any extension outside `GUARD_CODE_EXT`) is run outside test code: `plannedOutsideCode`, never
   `plannedNotInCode`, so neither doctor, finish nor the Phase 4 gate expects it in a test file (the scaffold's own
@@ -942,7 +968,11 @@ sections.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`).
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). Every unit
+  that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
+  body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
+  heading, or carrying a modal — elsewhere it is a summary table). Doctor's `ears` FAILS (and the requirements approval
+  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsNoCriteria`).
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
   `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
@@ -958,7 +988,8 @@ sections.
   `tran·sla·te`, `auth` inside `auth·or` — and a phantom STRONG signal auto-enables a track, which
   then *hides* the negation the classifier computed for it. The regex allows inflections
   (`payment→payments`, `rate-limit→rate-limiting`), plural-only for ≤3-char acronyms (so `rag`+`ing`
-  ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`),
+  ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`), `VERB_STEMS` (a stem + its
+  listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
   (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). When you add a
   keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
@@ -969,8 +1000,9 @@ sections.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template
-  examples inside comments. A `<!--` that never closes is plain text everywhere — `stripHtmlComments` (closed only),
-  `scanTaskLines`, and `criterionBlocks` / `placeholderReport` via `closerBelow()`: a stray marker used to hide every
+  examples inside comments. A `<!--` that never closes is plain text everywhere — ONE comment reader, `commentLines()`, serves
+  `stripHtmlComments`, `criterionBlocks` and the placeholder scan (and `scanTaskLines` keeps its own): a `<!--` inside
+  fenced code or an inline code span is text, and a comment opens only when a `-->` outside code follows it: a stray marker used to hide every
   criterion below it (EARS 0 criteria → pass, the requirements approval passed) while trace_check counted them.
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
@@ -1057,7 +1089,9 @@ sections.
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.
   The guess decides how `no` is read — a negator in EN/ES, the contraction *em+o* in PT ("aplicado no
   checkout"; also after a lowercase participle, never after a capitalised name like "Canada"). An
-  explicit `lang` overrides the guess for negation too. One matched span counts once per track. Prose pairs like
+  explicit `lang` overrides the guess for negation too; spec_create / create classify a new feature with the explicit lang,
+  else roadmap.json `meta.lang` (`configuredLang()` — never the 'en' default), and spec_import with the source's own
+  language, else meta.lang when the text is inconclusive (`guessLang(text, fallback)`). One matched span counts once per track. Prose pairs like
   `login/signup` are split before matching; path-like tokens (`src/rag.ts`) are not. PT/ES plurals
   (`-ções`, `-ciones`, first word of a phrase) are generated by `pluralize()`.
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
