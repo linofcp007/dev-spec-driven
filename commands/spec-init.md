@@ -32,6 +32,7 @@ unchanged):
   `spec_feature` remove, `dev-spec approve` / `feature remove --yes` through the shell, or lowering this guard, asks the
   user first (`ask` — a prompt Claude Code's auto / bypass modes may skip) or is refused in every mode (`deny` — the user
   runs it in their own terminal or with Claude Code's `!` prefix). Lowering it is guarded too — only the user switches it off.
+- `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —
 a steering file full of placeholders is a liability (`spec_doctor` warns about each one by name). For rules that
