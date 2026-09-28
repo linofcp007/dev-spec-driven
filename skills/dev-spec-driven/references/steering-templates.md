@@ -2,8 +2,10 @@
 
 Steering files are short (20–60 lines each) and sit at `.specs/steering/`. They encode the
 context every spec needs — product vision, tech stack, conventions, and (when the relevant
-tracks are active) scale targets, observability standards, cost budget, AI strategy, and
-testing standards — so each feature spec doesn't relitigate the basics.
+tracks are active) scale targets, observability standards, cost budget, AI strategy, testing,
+security and privacy standards — so each feature spec doesn't relitigate the basics. The last
+section covers **project templates** (`.specs/templates/`): a team's own scaffolds for new features and
+steering files.
 
 ## Which files to create — driven by the active tracks
 
@@ -20,6 +22,8 @@ testing standards — so each feature spec doesn't relitigate the basics.
 | `observability.md` | `+saas` (also useful for `+ai`) | when SaaS or AI track is used |
 | `cost.md` | `+saas` | when the SaaS track is used |
 | `ai-strategy.md` | `+ai` | when the AI track is used |
+| `security.md` | `+sec` | when the security track is used |
+| `privacy.md` | `+privacy` | when the privacy track is used |
 
 At project start, create at least the four `core` files. Add the others the first time a
 feature pulls in that track. Fill them in once, revisit once a quarter. `spec_doctor`'s `steering` check warns,
@@ -386,13 +390,129 @@ Features projecting > $0.10/user/month additional cost need explicit approval be
 
 ---
 
+## `security.md` (+sec)
+
+```markdown
+# Security Standards
+
+## Assurance Level
+- Target OWASP ASVS level: [L1 | L2 | L3] — why: [e.g. L2: personal data and payments]
+
+## Threat Modeling
+- Method: STRIDE per component and trust boundary, reviewed at every design change.
+- Where threat models live: each +sec feature's design.md → Threat Model.
+
+## Authentication & Authorization
+- Identity provider / session model: [e.g. OIDC via the company IdP; 30 min idle session]
+- Authorization model (RBAC / ABAC / ownership checks), deny by default: [roles and who may do what]
+
+## Secrets & Cryptography
+- Secret store: [e.g. Vault / cloud secrets manager] — never in code, in committed config, in logs or in tickets.
+- Encryption at rest / in transit (TLS version, key rotation): [TLS 1.2+, keys rotated every 90 days]
+
+## Secure Coding Rules
+- Validate input at trust boundaries; encode output; parameterized queries only.
+- No secrets, tokens or stack traces in responses or logs.
+
+## Security Testing (local)
+- SAST: [Semgrep] · dependency audit: [npm audit / pip-audit] · secret scan: [gitleaks] · DAST (exposed services): [ZAP baseline]
+- Every material threat has an abuse-case test.
+
+## Vulnerability Handling
+- Fix deadlines per severity (critical / high / medium): [48 h / 7 d / 30 d] · who triages: [owner]
+```
+
+How to fill each item: `references/security-track.md`.
+
+---
+
+## `privacy.md` (+privacy)
+
+```markdown
+# Privacy Standards (GDPR)
+
+## Roles
+- Controller: [legal entity] · DPO / privacy contact: [name, email] · supervisory authority: [e.g. CNPD]
+
+## Principles (GDPR Art. 5)
+- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.
+
+## Records of Processing (Art. 30)
+- Where the record of processing activities lives: [link]
+
+## Lawful Bases in Use (Art. 6)
+- [processing activity → lawful basis, e.g. account management → contract; newsletter → consent]
+
+## Retention Schedule
+| Data category | Retention period | Deletion method |
+|---|---|---|
+| [account data] | [account lifetime + 30 days] | [hard delete + backups expire in 35 days] |
+
+## Data Subject Requests
+- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: [team]
+
+## Processors & Transfers
+- Approved processors (Art. 28 contracts): [list] · transfers outside the EEA and their safeguard: [SCCs / adequacy]
+
+## Privacy by Design (Art. 25)
+- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.
+
+## Breach Response
+- Notify the supervisory authority within 72 hours (Art. 33) · runbook: [link]
+```
+
+How to fill each item (not legal advice — the DPO or counsel decides): `references/privacy-track.md`.
+
+---
+
+## Project templates — `.specs/templates/`
+
+The built-in scaffolds are a starting point. A team with its own house style (a design template with the company's
+review sections, a tasks template with its Definition of Done, a stricter constitution stub) keeps its versions in
+`.specs/templates/`, and every NEW feature or steering file is scaffolded from them. Existing features never change.
+
+| File | Replaces |
+|---|---|
+| `.specs/templates/<artifact>.md` | the built-in template of `classification`, `requirements`, `design`, `tasks`, `test-plan`, `eval-plan`, `load-test`, `quickstart`, `checklist`, `integration-plan`, `bug` (bug.md), the bugfix variants `bug-requirements` / `bug-test-plan` / `bug-tasks`, and the spike ones `spike` (spike.md) / `spike-tasks` |
+| `.specs/templates/<lang>/<artifact>.md` | the same, for features in that language (`en` · `pt` · `pt-BR` · `es`) — wins over the shared file; a `pt-BR` feature without a `pt-BR/` file reads `pt/` first |
+| `.specs/templates/steering/<file>.md` (also under `<lang>/`) | a steering stub (`constitution.md`, `security.md`, …) |
+
+`spec_create`, `spec_add_track`, `spec_init`, `steering_scaffold` and `spec_import` (through `spec_create`) use an
+override when present — create-only, never over an existing file.
+
+- **Commands:** `spec_templates {action: "list" | "init" | "check", artifact?, lang?}` (CLI `dev-spec templates
+  [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`; `/spec-templates`). `list` shows built-in vs project per artifact
+  (and files that are not a template name — ignored); `init` copies the built-in template(s) into `.specs/templates/`
+  (with `lang`: into `<lang>/`) to edit, never overwriting; `check` validates them against the current rules — each
+  problem with `{file, line?, code, severity, message}` and a verdict (the CLI exits 1 on an error).
+- **Variables:** `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` (`{{summary}}` is a spike's
+  question); an unknown `{{x}}` is left as is; no summary → a generic `[TBD]` slot.
+- **Track blocks are the engine's.** An overridden `design.md` still gets each active track's sections (+tdd
+  Testability Notes, `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]`), `requirements.md` each marker track's criteria
+  (renumbered after the template's own US-1 ACs when they would collide), `tasks.md` its task block and
+  `test-plan.md` its test rows — appended at the end, as `spec_add_track` does — unless the template already has that
+  track's heading (for the test plan: already cites its criteria). A design template that carries some of a track's
+  marker headings must carry all of that track's mandatory sections, each with its `> **TODO**` line (`check`: a
+  missing section is an error, a missing `TODO` line a warning).
+- **Slots stay slots.** The `[bracketed]` slots, code-span slots and task lines of the project's templates count as
+  template placeholders, so an untouched custom scaffold still reads "placeholder" for `spec_doctor`, `spec_approve`
+  and `spec_next_action`. A template with no slot at all scaffolds a file its gate could approve unedited (`check`
+  warns). Keep the English-stable tokens exactly (`US-n.AC-m`, `T-nn`, the markers, `> **TODO**`, `_Verify:_`,
+  `**Checkpoint:**`); a `bug.md` template needs a Root Cause section that still reads as unwritten.
+- **Confinement:** only the allowlisted names are read or written, nothing outside `.specs/templates/` (a linked
+  folder, or a file whose real path is outside the project, is ignored). A pre-1.14 *feature* named `templates` (its
+  folder holds a `.state.json`) stays a feature — every action refuses with `legacyFeature: true`. The PostToolUse hook
+  and the pre-commit check skip `.specs/templates/`.
+
+---
+
 ## Applying These Templates
 
 1. **At project start:** create the four `core` files with real content. Edit every line —
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.

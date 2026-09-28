@@ -19,7 +19,31 @@ const path = require("path");
 // everything else (handshake, the 1.x tests, DOCS, release checks). `MCP_TEST_SECTION=wp8 node mcp/test.js` runs one.
 const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16"];
 const SECTION = process.env.MCP_TEST_SECTION || "";
+// Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
+// asynchronously once its 64 KB buffer is full, and process.exit() drops whatever is still queued — the tail of the
+// output, FAIL lines and the total line included (Windows makes stdio pipes blocking, so it never showed there).
+function exitFlushed(code) {
+  process.stdout.write("", () => process.exit(code));
+}
+// Temp dirs: a crashed, killed or timed-out run — or, on Windows, a file a just-exited child or a virus scanner still
+// held (rmSync threw EBUSY / EPERM; `force` only silences ENOENT) — left its spec-test-XXXXXX folder behind, run after
+// run. Every removal retries (maxRetries), and the parent sweeps this runner's OWN leftovers first: exactly the mkdtemp
+// shape, a real directory, untouched for 2 h.
+function rmTmpDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 100 }); } catch {}
+}
+function sweepStaleTmp() {
+  let names = [];
+  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  const cutoff = Date.now() - 2 * 3600 * 1000;
+  for (const n of names) {
+    if (!/^spec-test-[A-Za-z0-9]{6}$/.test(n)) continue;
+    const p = path.join(os.tmpdir(), n);
+    try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
+  }
+}
 if (!SECTION) {
+  sweepStaleTmp();
   const runSection = (name) => new Promise((resolve) => {
     let out = "";
     const kid = spawn(process.execPath, [__filename], { env: { ...process.env, MCP_TEST_SECTION: name }, stdio: ["ignore", "pipe", "pipe"] });
@@ -42,7 +66,7 @@ if (!SECTION) {
       if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
     }
     console.log(`\n${passed} passed, ${failed} failed`);
-    process.exit(failed ? 1 : 0);
+    exitFlushed(failed ? 1 : 0);
   });
   return; // CommonJS module scope: the parent only dispatches
 }
@@ -103,12 +127,24 @@ child.stdout.on("data", (d) => {
 
 // A server that dies or stops answering must FAIL the suite — never let the event loop drain and exit 0.
 function abort(reason) {
+  if (aborting) return; // a second timer, or the server's exit after the first abort
+  aborting = true;
+  finished = true;
   console.log("  FAIL - " + reason);
   console.log(`\n${pass} passed, ${fail + 1} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(1);
+  try { child.kill(); } catch {}
+  closeRun(1, 2000);
 }
 let finished = false;
+let aborting = false;
+// Remove the temp dir only once the server has exited — while it runs it may hold a file under it, and Windows then
+// refuses the removal (the folder stayed behind, run after run) — with a fallback timer; then exit once stdout flushed.
+function closeRun(code, waitMs) {
+  const done = () => { rmTmpDir(tmp); exitFlushed(code); };
+  if (child.exitCode !== null || child.signalCode !== null) return done();
+  const t = setTimeout(() => { try { child.kill(); } catch {} done(); }, waitMs);
+  child.once("exit", () => { clearTimeout(t); done(); });
+}
 child.on("exit", (code) => { if (!finished) abort("MCP server exited early (code " + code + ") with " + pending.size + " request(s) pending"); });
 
 let idc = 1;
@@ -140,8 +176,7 @@ function endRun() {
   finished = true;
   child.stdin.end();
   console.log(`\n${pass} passed, ${fail} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(fail ? 1 : 0);
+  closeRun(fail ? 1 : 0, 5000);
 }
 
 (async () => {
@@ -150,7 +185,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 30, "tools/list returns 30 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 34, "tools/list returns 34 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -426,6 +461,158 @@ function endRun() {
   const enOver = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Override EN", tracks: ["core"], lang: "en", projectDir: ptDir } }));
   const enOverReq = fs.readFileSync(path.join(ptDir, ".specs", "override-en", "requirements.md"), "utf8");
   ok(enOver.lang === "en" && /## User Stories/.test(enOverReq), "per-feature lang overrides the project default (EN feature in a PT project)");
+
+  // --- 1.14 D1: Brazilian Portuguese (pt-BR) — a fourth locale, DERIVED from European pt (i18n.js toPtBr) ---
+  {
+    const I = require("./lib/i18n.js");
+    // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])a correr(?![\p{L}])|por defeito|por omissão/iu;
+    // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
+    ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
+      ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&
+      S.normalizeLang("es-MX") === "es" && S.normalizeLang("fr") === "en" && S.canonicalLang("fr") === null && S.canonicalLang("br") === null &&
+      S.LANGS.join() === "en,pt,es,pt-BR" && I.baseLang("pt-BR") === "pt" && I.baseLang("pt") === "pt",
+      "pD1: pt-BR / pt_BR / pt-br / ptbr → pt-BR; pt and pt-PT stay European; unknown: normalizeLang → en, canonicalLang → null");
+    const langEnums = list.result.tools.filter((t) => t.inputSchema.properties && t.inputSchema.properties.lang).map((t) => (t.inputSchema.properties.lang.enum || []).join());
+    ok(langEnums.length >= 7 && langEnums.every((e) => e === "en,pt,es,pt-BR"), "pD1: every MCP `lang` enum is en, pt, es, pt-BR (" + langEnums.length + " tools)");
+
+    // 2. a pt-BR project end to end over MCP: init → create → Brazilian scaffold → filled → doctor → approve → done → roadmap
+    const brDir = path.join(tmp, "proj-ptbr-d1");
+    const brInit = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["tdd"], lang: "pt_BR", projectDir: brDir } }));
+    const brRm = () => JSON.parse(fs.readFileSync(path.join(brDir, ".specs", "roadmap.json"), "utf8"));
+    const brSteer = fs.readdirSync(path.join(brDir, ".specs", "steering")).map((n) => fs.readFileSync(path.join(brDir, ".specs", "steering", n), "utf8"));
+    ok(brInit.lang === "pt-BR" && brRm().meta.lang === "pt-BR" && /# Constituição/.test(brSteer.join("\n")) && /usuário/.test(brSteer.join("\n")) &&
+      !brSteer.some((t) => EU_ONLY.test(t)),
+      "pD1: spec_init lang 'pt_BR' (an alias the MCP enum folds) stores meta.lang 'pt-BR' and writes Brazilian steering (usuário, no utilizador/ficheiro)");
+    const brFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Cadastro de Usuários", tracks: ["tdd"], summary: "Cadastro com e-mail e senha", projectDir: brDir } }));
+    const bf = path.join(brDir, ".specs", brFeat.slug);
+    const brRead = (n) => fs.readFileSync(path.join(bf, n), "utf8");
+    const brScaffold = fs.readdirSync(bf).filter((n) => n.endsWith(".md"));
+    const brReq = brRead("requirements.md");
+    ok(brFeat.ok && brFeat.lang === "pt-BR" && JSON.parse(brRead(".state.json")).lang === "pt-BR" && brScaffold.length >= 6 &&
+      /## Histórias de Usuário/.test(brReq) && /## Fora do Escopo/.test(brReq) && /usuários completam/.test(brReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — QUANDO \[gatilho\] O SISTEMA DEVE \[comportamento\]/.test(brReq) && /\[NEEDS CLARIFICATION: que provedor\?\]/.test(brReq) &&
+      /\(arquivos diferentes, sem deps\)/.test(brRead("tasks.md")) && /_Requirements: US-1\.AC-1_/.test(brRead("tasks.md")) && /\| T-01 \| unit \| example \|/.test(brRead("test-plan.md")) &&
+      !brScaffold.some((n) => EU_ONLY.test(brRead(n))),
+      "pD1: spec_create inherits pt-BR — Brazilian headings and vocabulary (Histórias de Usuário, Fora do Escopo, arquivos), stable IDs / EARS / markers, no European-only word in any artifact (" +
+      brScaffold.filter((n) => EU_ONLY.test(brRead(n))).join(", ") + ")");
+    const keepTag = (m) => /^\[(?:US\d+|P|shared|x| )\]$/.test(m) || /^\[NEEDS/.test(m);
+    const fillBr = (t) => t.replace(/> \*\*TODO\*\*[^\n]*\n?/g, "").replace(/\[[^\]\n]*\]/g, (m) => (keepTag(m) ? m : "o usuário envia o formulário de cadastro"));
+    for (const n of ["classification.md", "requirements.md", "design.md", "test-plan.md"]) fs.writeFileSync(path.join(bf, n), fillBr(brRead(n)));
+    fs.writeFileSync(path.join(bf, "tasks.md"), ["# Tasks: Cadastro de Usuários", "", "## História US-1 (P1 — MVP)",
+      "- [ ] 1. [US1] Validar o e-mail e a senha no cadastro", "  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_", "  - _Makes green: T-01, T-02, T-03, T-04_",
+      "  - _Implements: src/cadastro.js_", "**Checkpoint:** o cadastro funciona sozinho.", "", "## História US-2 (P2)",
+      "- [ ] 2. [US2] Confirmar o e-mail do usuário", "  - _Requirements: US-2.AC-1_", "  - _Makes green: T-05_", "  - _Implements: src/cadastro.js_", ""].join("\n"));
+    fs.mkdirSync(path.join(brDir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(brDir, "src", "cadastro.js"), "module.exports = {};\n");
+    fs.mkdirSync(path.join(brDir, "tests", "unit"), { recursive: true });
+    fs.writeFileSync(path.join(brDir, "tests", "unit", "cadastro.test.js"), ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} cadastro", () => {});`).join("\n") + "\n");
+    const brDoc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    const brGate = brDoc.checks.find((c) => c.id === "approval-gates");
+    ok(brDoc.verdict !== "fail" && brDoc.readyToAdvance === true && !brDoc.checks.some((c) => c.status === "fail") &&
+      /^aguardando aprovação humana: .* — execute \/approve antes de avançar$/.test(brGate.detail) && !brDoc.checks.some((c) => EU_ONLY.test(String(c.detail))),
+      "pD1: a filled pt-BR spec passes spec_doctor, its details in Brazilian Portuguese (got " + JSON.stringify(brDoc.checks.filter((c) => c.status !== "pass").map((c) => c.id + ": " + c.detail)) + ")");
+    const brCl = payload(await rpc("tools/call", { name: "spec_clarify", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    ok(brCl.verdict === "clear", "pD1: spec_clarify reads the Brazilian headings (Fora do Escopo, Critérios de Sucesso…) — clear (got " + JSON.stringify(brCl.questions) + ")");
+    const brAppr = [];
+    for (const ph of ["classification", "requirements", "design", "test-plan", "tests", "tasks"]) brAppr.push(payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: brFeat.slug, phase: ph, by: "ana", projectDir: brDir } })));
+    const brDone = [];
+    for (const n of [1, 2]) brDone.push(payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: brFeat.slug, number: n, evidence: { summary: "verificado à mão no navegador" }, projectDir: brDir } })));
+    const brNext = payload(await rpc("tools/call", { name: "spec_next_action", arguments: { name: brFeat.slug, projectDir: brDir } }));
+    ok(brAppr.every((a) => a.ok && !a.forced) && brDone.every((d) => d.ok && d.verified) && brNext.step === "finish" &&
+      /^Todas as tarefas feitas — feche a feature com \/spec-finish cadastro-de-usuarios/.test(brNext.recommendation),
+      "pD1: every phase approves clean, both tasks tick, next_action says (in pt-BR) 'feche a feature' (got " + JSON.stringify([brAppr.map((a) => a.error || a.ok), brNext.recommendation]) + ")");
+    const brRoad = payload(await rpc("tools/call", { name: "spec_roadmap", arguments: { write: true, html: true, projectDir: brDir } }));
+    const brMd = fs.readFileSync(path.join(brDir, ".specs", "ROADMAP.md"), "utf8"), brHtml = fs.readFileSync(path.join(brDir, ".specs", "ROADMAP.html"), "utf8");
+    ok(brRoad.ok !== false && /AUTO-GERADO por dev-spec/.test(brMd) && /Legenda: ✅ feito · 🟡 em andamento · ⛔ bloqueada · 📋 planejada · ⬜ não iniciada/.test(brMd) &&
+      /Backlog \(planejadas, ainda sem spec\)/.test(brMd) && /Nada a sinalizar ✓/.test(brMd) && !/em curso|planeada|por começar|assinalar/.test(brMd) && /<html lang="pt-BR">/.test(brHtml),
+      "pD1: ROADMAP.md / .html chrome in Brazilian Portuguese (em andamento, planejada, não iniciada; <html lang=\"pt-BR\">)");
+    // per-feature override inside the pt-BR project: a European feature stays European; the MCP enum folds 'PT-pt' → pt
+    const euFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Faturas", tracks: ["core"], lang: "PT-pt", projectDir: brDir } }));
+    ok(euFeat.ok && euFeat.lang === "pt" && /## Histórias de Utilizador/.test(fs.readFileSync(path.join(brDir, ".specs", euFeat.slug, "requirements.md"), "utf8")),
+      "pD1: a per-feature lang 'PT-pt' in a pt-BR project is European Portuguese (Histórias de Utilizador)");
+    // every fresh pt-BR artifact (all tracks, and a bugfix) reads 'placeholder' — pt-BR's slots are known to the gates
+    const brAll = S.createFeature(brDir, "Tudo Junto", ["tdd", "saas", "ai", "sec", "privacy"]);
+    const brBug = S.createFeature(brDir, "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
+    const brStates = [brAll, brBug].flatMap((x) => fs.readdirSync(x.dir).filter((n) => n.endsWith(".md") && n !== "checklist.md").map((n) => [n, S.artifactState(path.join(x.dir, n))]));
+    ok(brAll.lang === "pt-BR" && brBug.lang === "pt-BR" && brStates.length >= 12 && brStates.every(([, st]) => st === "placeholder") &&
+      /^placeholders do template sem preencher na fase atual/.test(S.specDoctor(brDir, brAll.slug).checks.find((c) => c.id === "placeholders").detail),
+      "pD1: every fresh pt-BR scaffold artifact (all tracks + a bugfix) reads 'placeholder' — the gates know pt-BR's own slots (" + JSON.stringify(brStates.filter(([, st]) => st !== "placeholder")) + ")");
+    const brTpl = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: "init", artifact: "requirements", lang: "pt-br", projectDir: brDir } }));
+    const brTplFile = path.join(brDir, ".specs", "templates", "pt-BR", "requirements.md");
+    ok(brTpl.ok !== false && fs.existsSync(brTplFile) && /## Histórias de Usuário/.test(fs.readFileSync(brTplFile, "utf8")),
+      "pD1: spec_templates init --lang pt-br copies Brazilian templates into .specs/templates/pt-BR/");
+
+    // 3. every pt-BR string (messages, brief, steering, evals README, all artifact builders — each function called with
+    // probe arguments): no European-only word, English-stable tokens identical to pt's, idempotent, same key tree as pt
+    const probes = [["ARGA", "ARGB", "ARGC", "ARGD"], [2, 3, 4, 5], [["ARGA", "ARGB"], ["ARGC"], ["ARGD"], ["ARGE"]], [true, "ARGB", "ARGC", "ARGD"], [false, false, false, false]];
+    const brPairs = [];
+    const walk = (a, b, where, depth) => {
+      if (depth > 8) return;
+      if (typeof a === "string") return void brPairs.push([where, a, b]);
+      if (Array.isArray(a)) return void a.forEach((x, k) => walk(x, Array.isArray(b) ? b[k] : undefined, where + "[" + k + "]", depth + 1));
+      if (typeof a === "function") {
+        return void probes.forEach((p, k) => { let ra; try { ra = a(...p); } catch { return; } let rb; try { rb = b(...p); } catch (e) { rb = "THROW " + e.message; } walk(ra, rb, where + "()" + k, depth + 1); });
+      }
+      if (a && typeof a === "object" && !(a instanceof RegExp)) for (const k of Object.keys(a)) walk(a[k], b ? b[k] : undefined, where + "." + k, depth + 1);
+    };
+    walk(I.msg("pt"), I.msg("pt-BR"), "MSG", 0);
+    walk(I.brief("pt"), I.brief("pt-BR"), "BRIEF", 0);
+    for (const n of I.steeringKnownFiles()) brPairs.push(["STEERING." + n, I.steeringStub(n, "pt"), I.steeringStub(n, "pt-BR")]);
+    brPairs.push(["EVALS_README", I.evalsReadme("pt"), I.evalsReadme("pt-BR")]);
+    const allTr = ["tdd", "saas", "ai", "sec", "privacy"];
+    for (const t of [[], ...allTr.map((x) => [x]), allTr]) {
+      const a = { name: "ARGN", tracks: ["core", ...t], label: ["core", ...t].join(" +"), slug: "argn", summary: "", signals: { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] } };
+      for (const b of ["classification", "requirements", "design", "tasks", "checklist"]) brPairs.push(["BUILD." + b + "/" + t.join("+"), I[b](a, "pt"), I[b](a, "pt-BR")]);
+      brPairs.push(["BUILD.testPlan/" + t.join("+"), I.testPlan("ARGN", "pt", a.tracks), I.testPlan("ARGN", "pt-BR", a.tracks)]);
+    }
+    for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) brPairs.push(["BUILD." + b, I[b]("ARGN", "pt"), I[b]("ARGN", "pt-BR")]);
+    brPairs.push(["BUILD.bugReport", I.bugReport({ name: "ARGN" }, "pt"), I.bugReport({ name: "ARGN" }, "pt-BR")], ["BUILD.bugRequirements", I.bugRequirements({ name: "ARGN" }, "pt"), I.bugRequirements({ name: "ARGN" }, "pt-BR")]);
+    const euLeft = brPairs.filter(([, , b]) => typeof b !== "string" || EU_ONLY.test(b)).map(([w, , b]) => w + ": " + (typeof b === "string" ? (b.match(EU_ONLY) || [])[0] : typeof b));
+    ok(brPairs.length > 1500 && euLeft.length === 0,
+      "pD1: lint — no pt-BR string holds a European-only word (utilizador, ficheiro, ecrã, equipa, registo, palavra-passe, telemóvel, 'a correr', tens, podes…): " + brPairs.length + " strings (" + euLeft.slice(0, 6).join(" · ") + ")");
+    const STABLE = /US-\d+\.AC-\d+|SC-\d{3}|T-\d+|EC-\d+|NFR-\d+|\[(?:SaaS|AI|SEC|PRIVACY|US\d+|P|shared)\]|\[NEEDS CLARIFICATION|> \*\*TODO\*\*|\*\*Checkpoint:\*\*|_(?:Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Supersedes|Expect|Size):|```(?:mermaid|typescript)|## System|## User Template|`[^`\n]+`|\/spec-[a-z-]+|\b(?:QUANDO|ENQUANTO|ENTÃO|O SISTEMA(?: NÃO)? DEVE)\b/g;
+    const stableLost = brPairs.filter(([, a, b]) => typeof b === "string" && (a.match(STABLE) || []).join("\n") !== (b.match(STABLE) || []).join("\n")).map(([w]) => w);
+    ok(stableLost.length === 0, "pD1: English-stable tokens survive unchanged in every pt-BR string — IDs, [SaaS]/[AI] tags, [NEEDS CLARIFICATION], > **TODO**, **Checkpoint:**, _Marker:_ tags, code spans, /spec-* commands, EARS keywords (" + stableLost.slice(0, 5).join(", ") + ")");
+    const notIdem = brPairs.filter(([, , b]) => typeof b === "string" && I.toPtBr(b) !== b).map(([w]) => w);
+    ok(notIdem.length === 0, "pD1: the pt-BR transform is idempotent — a Brazilian string passes through unchanged (" + notIdem.slice(0, 5).join(", ") + ")");
+    // (an array compares by its first element's kind: pt-BR's stop-gate pattern lists are pt's plus the Brazilian gerunds)
+    const shape = (v, d = 0) => (d > 6 ? "…" : typeof v === "function" ? "fn" : Array.isArray(v) ? "[" + (v.length ? shape(v[0], d + 1) : "") + "]" : v && typeof v === "object" && !(v instanceof RegExp) ? "{" + Object.keys(v).map((k) => k + ":" + shape(v[k], d + 1)).join(",") + "}" : typeof v);
+    ok(shape(I.msg("pt")) === shape(I.msg("pt-BR")) && shape(I.brief("pt")) === shape(I.brief("pt-BR")) &&
+      I.steeringKnownFiles().every((n) => typeof I.steeringStub(n, "pt-BR") === "string") && I.msg("pt") !== I.msg("pt-BR"),
+      "pD1: key parity — pt-BR's message and brief tables have exactly pt's key tree (same keys, same value kinds)");
+    // pt (European) is untouched: the derivation never writes back into the source tables
+    ok(/## Histórias de Utilizador/.test(I.requirements({ name: "x", tracks: ["core"], label: "core" }, "pt")) && /Fora de Âmbito/.test(I.requirements({ name: "x", tracks: ["core"], label: "core" }, "pt")) &&
+      I.msg("pt").addTrackNote("saas", "f") === "+saas adicionado. Preenche as novas secções de design e volta a correr /spec-doctor f." &&
+      I.msg("pt-BR").addTrackNote("saas", "f") === "+saas adicionado. Preencha as novas seções de design e volte a executar /spec-doctor f." &&
+      I.msg("pt").stopGate.claims.length === I.msg("pt-BR").stopGate.claims.length - 3,
+      "pD1: pt stays European Portuguese (Histórias de Utilizador, 'Preenche … volta a correr'), pt-BR is its Brazilian twin ('Preencha … volte a executar')");
+    // the caller's own strings (feature names, paths) are never transformed; a track name never masks part of a word
+    ok(I.msg("pt-BR").addTrackNote("sec", "registo-de-utilizadores") === "+sec adicionado. Preencha as novas seções de design e volte a executar /spec-doctor registo-de-utilizadores." &&
+      I.msg("pt-BR").addTrackNote("ai", "tu").endsWith("/spec-doctor tu.") &&
+      I.msg("pt-BR").spike.doctor.timeboxPassed("2026-09-01").startsWith("o timebox terminou em 2026-09-01 e não há decisão registrada — decida com a evidência que você tem") &&
+      I.toPtBr("O utilizador guarda o ficheiro `src/ficheiro.js` em .specs/utilizador/ — corre `npm test` e regista o resultado.") ===
+      "O usuário guarda o arquivo `src/ficheiro.js` em .specs/utilizador/ — execute `npm test` e registre o resultado.",
+      "pD1: arguments, code spans and paths are kept verbatim; mid-sentence 3rd person vs clause-start imperative (corre → execute, regista → registre)");
+
+    // 4. the classifier: Brazilian words still read as Portuguese ('no' = em+o, never a negator); an explicit pt-BR answers in pt-BR
+    // (only Brazilian markers here — cadastro, usuário, senha, arquivo, tela: before D1 this read as English and "no LLM" negated +ai)
+    const brGuess = S.classify("Cadastro do usuário: senha, arquivo e tela, com resumo no LLM");
+    const brExplicit = S.classify("Cadastro de usuários com senha, sem LLM", { lang: "pt-BR" });
+    ok(brGuess.lang === "pt" && brGuess.tracks.includes("tdd") && brGuess.tracks.includes("ai") && brExplicit.lang === "pt-BR" && brExplicit.tracks.includes("tdd") && !brExplicit.tracks.includes("ai") &&
+      brExplicit.notes.every((n) => !EU_ONLY.test(n)) &&
+      S.classify("Isolamento multilocatário com LGPD e relatório para a ANPD").tracks.join() === "core,saas,privacy",
+      "pD1: classify — Brazilian text guesses 'pt' (senha → +tdd), explicit lang pt-BR is kept, 'sem LLM' negated; multilocatário → +saas, LGPD / ANPD → +privacy (got " +
+      JSON.stringify([brGuess.lang, brGuess.tracks, brExplicit.lang, brExplicit.tracks]) + ")");
+    const brEars = S.earsValidate("1. **US-1.AC-1** — QUANDO o usuário envia o cadastro, O SISTEMA DEVE responder de forma confiável e performática.", "pt-BR");
+    ok(brEars.verdict === "pass" && brEars.issues.map((i) => i.code).join() === "vague,vague" &&
+      brEars.issues.every((i) => /^Termo vago '(?:confiável|performática)' — substitua-o por um valor concreto e testável\.$/.test(i.msg)),
+      "pD1: ears_validate in pt-BR — the same EARS keywords pass; Brazilian vague words (confiável, performática) are flagged in a Brazilian message");
+    // 5. the stop gate reads Brazilian claims and admissions (pt-BR adds its gerund forms to pt's patterns)
+    const sgClaim = S.stopClaims("Pronto: os testes estão passando e tudo funcionando.");
+    const sgAdmit = S.stopClaims("Implementei a tarefa 2, mas 3 testes falhando ainda.");
+    ok(sgClaim.claim === true && sgAdmit.admitted === true, "pD1: stop gate — 'os testes estão passando' is a claim, '3 testes falhando' an admission (got " + JSON.stringify([sgClaim, sgAdmit]) + ")");
+  }
 
   // --- v1.8: projectDir traversal is rejected at the MCP boundary ---
   const trav = payload(await rpc("tools/call", { name: "spec_list", arguments: { projectDir: "../../etc" } }));
@@ -852,9 +1039,10 @@ function endRun() {
   llFill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
     ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
   llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-  llFill("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+  llFill("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
   llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
-  [1, 2, 3].forEach((n) => S.completeTask(vDir, "login-loop", n));
+  [1, 2].forEach((n) => S.completeTask(vDir, "login-loop", n));
+  S.completeTask(vDir, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
   S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   const llReq = S.approvePhase(vDir, "login-loop", "requirements");
   // Phase by phase: the test plan and the tasks can't be approved before the design (bug.md) — refused, naming it.
@@ -874,6 +1062,41 @@ function endRun() {
   const prFile = fs.readFileSync(ready.paths.summary, "utf8");
   ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
     "all tasks done + evidence + approvals → readyToFinish; the merge summary (with evidence) is written to .execution/");
+  // 1.14: the bugfix scaffold's task 3 carries its _Verify:_ + _Expect: fail_ (the red run is the proof) and T-02 — a guard
+  // test, green before and after the fix — is in no task's _Makes green:_, so doctor's red-green passes on a finished bugfix
+  // (it warned "T-02 has no red run" on every one). spec_status carries kind + flow; the brief's reply line names the report.
+  {
+    const llDocDone = S.specDoctor(vDir, "login-loop");
+    const rgLl = llDocDone.checks.find((c) => c.id === "red-green");
+    const scaf = ["en", "pt", "es", "pt-BR"].map((lg) => require("./lib/i18n.js").bugTasks("X", lg));
+    const t3 = (t) => (t.match(/- \[ \] 3\.[\s\S]*?(?=\n- \[ \] 4\.)/) || [""])[0];
+    const t4 = (t) => (t.match(/- \[ \] 4\.[\s\S]*?(?=\n\*\*Checkpoint)/) || [""])[0];
+    const stBug = S.statusFeature(vDir, "login-loop");
+    const dfSt = S.createFeature(vDir, "Arch first", ["core"], "x", undefined, "en", undefined, { flow: "design-first" });
+    const stDf = S.statusFeature(vDir, dfSt.slug);
+    const brLl = S.taskBrief(vDir, "login-loop", 4, {});
+    ok(rgLl && rgLl.status === "pass" && scaf.every((t) => /_Verify: \[[^\]\n]+T-01\]_\n  - _Expect: fail_/.test(t3(t)) && !/_Makes green:/.test(t3(t)) &&
+      /_Makes green: T-01_/.test(t4(t)) && !/_Makes green:[^\n]*T-02/.test(t) && /T-02/.test(t3(t)) && /T-02/.test(t4(t))) &&
+      stBug.kind === "bugfix" && stBug.flow === "requirements-first" && stDf.kind === "feature" && stDf.flow === "design-first" &&
+      /the report path written out in full \(`\.specs\/login-loop\/\.execution\/task-4-report\.md`\)/.test(brLl.brief),
+      "bugfix: task 3 scaffolds with _Verify:_ + _Expect: fail_ and T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
+      JSON.stringify([rgLl && rgLl.status, rgLl && rgLl.detail, stBug.kind, stBug.flow, stDf.flow, (brLl.brief || "").slice(-400)]) + ")");
+  }
+  // 1.14 final review — engine: a re-finish keeps the FIRST finish (release notes don't list a shipped feature again), and a
+  // zone-less `since` timestamp is UTC (like a bare date), never the machine's local time.
+  {
+    const stPath = path.join(vDir, ".specs", "login-loop", ".state.json");
+    const t1 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished.at;
+    const until = Date.now() + 5; while (Date.now() < until) { /* the second finish gets a later stamp */ }
+    const again = S.finishFeature(vDir, "login-loop", { write: true });
+    const fin2 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished;
+    const notes = S.changelog(vDir, { since: new Date(Date.parse(t1) + 1).toISOString() });
+    const zNo = S.changelog(vDir, { since: "2026-09-20T10:00" }), zZ = S.changelog(vDir, { since: "2026-09-20T10:00Z" });
+    ok(again.readyToFinish === true && fin2.firstAt === t1 && fin2.at > t1 && notes.ok && !notes.fixed.some((x) => x.feature === "login-loop") &&
+      zNo.ok && zNo.since === "2026-09-20T10:00:00.000Z" && zNo.since === zZ.since,
+      "final review: a re-finish keeps finished.firstAt, so spec_changelog since the first finish doesn't list the feature again; a zone-less since is UTC (got " +
+      JSON.stringify([again.readyToFinish, fin2.firstAt === t1, notes.fixed.map((x) => x.feature), zNo.since, zZ.since]) + ")");
+  }
   const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
   ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
     "bugfix scaffolds are localized (PT)");
@@ -1706,7 +1929,7 @@ function endRun() {
     ok(rPhase.ok && rPhase.approved === "design" && rLang.ok && rLang.lang === "pt" && rKind.ok && rKind.kind === "bugfix" &&
       rBl.ok && rBl.backlog.some((b) => b.name === "Later thing") && rBlList.ok && rBlList.backlog.length === 1 &&
       body(rFeat).needsConfirm === true && !/one of/.test(errText(rFeat)) && !/one of/.test(errText(rImp)) &&
-      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec \(got "Kiro"\)/.test(errText(rTool)) &&
+      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad
       rBadPh.result.isError && /phase must be one of: .* \(got "Desing"\)/.test(errText(rBadPh)),
       "MCP enums are case-insensitive where the engine folds them (phase ' Design ', lang 'PT', kind 'Bugfix', backlog 'ADD'/'LIST', feature 'Remove', impact 'DESIGN'); spec_import's tool stays exact; a typo is still refused as given");
     const rNested =await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
@@ -1890,7 +2113,9 @@ function endRun() {
     const evBadDry = runEv(["Análise Avançada", "--dry-run", "--project", evp]);
     const evBadLive = spawnSync(process.execPath, ["-r", stubEv, EVALS, "Análise Avançada", "--project", evp],
       { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", FETCH_MARK: markEv, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
-    const itemLines = (out) => (out.match(/regression\.json — item [^\n]*/g) || []).join("\n");
+    // V8 before Node 20 leaves the flags out of a RegExp SyntaxError ("/(pago/: Unterminated group"; Node 20+: "/(pago/i:")
+    // — the engines floor is Node 18, so the expected line accepts both (the rest of the line stays exact).
+    const itemLines = (out) => (out.match(/regression\.json — item [^\n]*/g) || []).join("\n").replace("Invalid regular expression: /(pago/: ", "Invalid regular expression: /(pago/i: ");
     ok(evBadDry.status === 1 && itemLines(evBadDry.stdout) === ["regression.json — item r1: tipo de avaliador desconhecido 'contain' (usa contains | equals | regex | refuse | judge)",
       "regression.json — item r2: a regex não compila: Invalid regular expression: /(pago/i: Unterminated group", "regression.json — item #3: sem 'id' (texto não vazio); sem objeto 'expect'",
       "regression.json — item r4: sem 'input' (texto não vazio)", "regression.json — item #5: não é um objeto", "regression.json — item r6: 'judge' precisa de uma 'rubric'",
@@ -2320,7 +2545,7 @@ function endRun() {
     const redBug = (d, lang) => {
       const b = S.createFeature(d, "Red loop " + lang, undefined, "loop", undefined, lang, "bugfix");
       const tp = path.join(b.dir, "tasks.md");
-      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace("  - _Makes green: T-01_\n", "  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n"));
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n  - _Expect: fail_\n/, "  - _Verify: node tests/t01.test.js_\n")); // a must-pass _Verify:_ (no _Expect: fail_) on the red task
       // A written bugfix (every template slot filled), its phases approved in order — so next_action reaches `verify`.
       const bp = path.join(b.dir, "bug.md");
       fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
@@ -2341,13 +2566,14 @@ function endRun() {
     const rbPtRun = S.completeTask(w5pt, rbPt.slug, 3, { command: "node tests/t01.test.js", exitCode: 1 });
     const plain = S.completeTask(w5, rb.slug, 4, { command: "npm test", exitCode: 1 });
     ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 3 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
-      /move the command to the task that makes it green/.test(rbRun.error) && /dev-spec done red-loop-en 3 --evidence "T-01 fails: <the reason>"/.test(rbRun.error) &&
+      /Mark task 3 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
+      /dev-spec done red-loop-en 3 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
       rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 3 writes a test that must FAIL/.test(rbNote.note) &&
       rbNext.step === "verify" && /Task 3 writes a test that must FAIL/.test(rbNext.recommendation) &&
       rbPtRun.redPhaseVerify === true && /A tarefa 3 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
       plain.ok === false && !plain.redPhaseVerify && !/red phase/.test(plain.error) &&
       /Task 3 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 3 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
-      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (move the command to the fix task, or a note without a _Verify:_) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
+      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (mark it _Expect: fail_, or move the command to the fix task) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
       JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")");
 
     // Quoted evidence in bug.md is content, not a template slot: a Reproduction / Root Cause quoting `[object Object]`, a regex
@@ -3187,7 +3413,8 @@ function endRun() {
       "a CRLF tasks.md with no final newline: the last line is ended with CRLF and the file still has no final newline");
     fs.writeFileSync(crTasks, BOM7);
     const crR3 = S.appendTasks(w7, "crlf", [{ text: "first" }]);
-    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 1. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
+    // numbered 3: task 2's tick time is still on record (a removed task's number is never reused — full review C5)
+    ok(crR3.ok && fs.readFileSync(crTasks, "utf8").startsWith(BOM7 + "\n## Phase: Convergence\n- [ ] 3. first\n") && S.taskBlocks(fs.readFileSync(crTasks, "utf8"))[0].phase === "Phase: Convergence",
       "a BOM-only tasks.md: the new heading starts one line down (a BOM'd first line is not read as a heading)");
 
     // PT feature: localized default heading, checkpoint and errors; markers stay English-stable.
@@ -4405,6 +4632,17 @@ function endRun() {
       const bXc = catXc.features.find((f) => f.feature === "Billing");
       ok(bXc && bXc.acs.map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2,US-1.AC-5:" &&
         catXc.totals.superseded === 3, "catalog on a case-insensitive file system: a case-different feature folder still gets its superseded ACs; a self-reference is not one");
+    } else {
+      // A case-sensitive file system (Linux): the slug 'billing' can't reach a 'Billing/' folder — listFeatures reports it as
+      // ignored (the listFeatures case-only check) — so the catalog doesn't list it and trace_check reads the references to
+      // billing/… as unknown-feature warnings: never silently resolved, never a half-listed feature.
+      fs.renameSync(path.join(w10x, ".specs", "billing"), path.join(w10x, ".specs", "Billing"));
+      const catXs = S.catalog(w10x);
+      const trXs = S.traceCheck(w10x, "paren");
+      ok(!catXs.features.some((f) => f.feature.toLowerCase() === "billing") && catXs.totals.superseded === 0 && (S.listFeatures(w10x).ignored || []).includes("Billing") &&
+        trXs.phantomSupersedes.map((p) => p.reason + ":" + p.ref).join() === "unknown-feature:billing/US-1.AC-2,unknown-feature:billing/US-1.AC-4",
+        "catalog on a case-sensitive file system: a case-different feature folder is not reached by its slug (listFeatures ignores it) — not listed, and the _Supersedes:_ references to it are unknown-feature warnings (got " +
+        JSON.stringify([catXs.features.map((f) => f.feature), catXs.totals.superseded, trXs.phantomSupersedes.map((p) => p.reason + ":" + p.ref)]) + ")");
     }
 
     // Drift: finish {write} on a READY feature records the baseline; drift reports changed / missing / now present.
@@ -4419,12 +4657,13 @@ function endRun() {
     fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill10("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/_"]]);
+    fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/_"]]);
     fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2, 3].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    [1, 2].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    S.completeTask(w10d, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
     S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w10d, "login-loop", p));
     S.createFeature(w10d, "Draft", ["core"]);
@@ -4697,8 +4936,8 @@ function endRun() {
       "spec_init {guard: true} sets roadmap.json meta.guard (no tracks needed); again with tracks → unchanged file; without guard → reports the current state, no note");
     const gBad = await call11("spec_init", { guard: "yes", projectDir: g });
     const gOff = await call11("spec_init", { guard: false, projectDir: g });
-    ok(gBad.isError && /guard must be a boolean/.test(gBad.p.error) && gOff.p.guard === false && /Guard mode OFF/.test(gOff.p.guardNote) && S.readRoadmap(g).meta.guard === false,
-      "spec_init {guard: 'yes'} is an argument error (boolean); {guard: false} turns it off");
+    ok(gBad.isError && /guard must be one of: on, off, scope/.test(gBad.p.error) && gOff.p.guard === false && /Guard mode OFF/.test(gOff.p.guardNote) && S.readRoadmap(g).meta.guard === false,
+      "spec_init {guard: 'yes'} is an argument error (on | off | scope; the booleans read as on / off); {guard: false} turns it off");
     const gBroken = path.join(tmp, "proj-wp11-broken");
     fs.mkdirSync(path.join(gBroken, ".specs"), { recursive: true });
     fs.writeFileSync(path.join(gBroken, ".specs", "roadmap.json"), "{ nope");
@@ -5057,12 +5296,13 @@ function endRun() {
     fill12("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill12("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill12("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
+    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
     fill12("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2, 3].forEach((n) => S.completeTask(fz12, "login-loop", n));
+    [1, 2].forEach((n) => S.completeTask(fz12, "login-loop", n));
+    S.completeTask(fz12, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
     S.completeTask(fz12, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
     const fin12 = S.finishFeature(fz12, "login-loop", { write: true });
@@ -5549,8 +5789,9 @@ function endRun() {
     fs.mkdirSync(path.join(n13, "src"), { recursive: true });
     fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
     const sc13 = S.scanCodebase(n13, { cap: -3 });
-    ok(kind13.ok === false && /kind must be one of: feature, bugfix \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
-      bl13.ok === false && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
+    // (1.14 full review S7: the action list now names rm's alias remove — the spec_backlog enum.)
+    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
+      bl13.ok === false && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
       sc13.filesScanned === 1 && !sc13.truncated,
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
     const mx13 = await call("spec_next_task", { name: "billing", batch: true, max: 0, projectDir: n13 });
@@ -6316,21 +6557,26 @@ function endRun() {
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
   const agentFiles = fs.readdirSync(agentsDir).filter((x) => x.endsWith(".md"));
-  // The read-only critic is limited to Read/Grep/Glob; implementer + reviewer need a shell, so stay unrestricted.
+  // The read-only critic is limited to Read/Grep/Glob; the reviewer adds Bash (a focused test, read-only git); the
+  // implementer edits files and runs commands — neither gets the Agent tool (they never dispatch subagents).
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
   ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
-    ["spec-implementer.md", "spec-reviewer.md"].every((x) => agentTools(x).length === 0),
-    "3 plugin agents: the critic is read-only (tools: Read, Grep, Glob); implementer + reviewer keep every tool");
+    agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash" &&
+    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
+    "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 44 && ["spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 51 && ["spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "44 commands incl. /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "51 commands incl. the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
-  const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "results").map((e) => e.name);
-  ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) &&
-    fs.readdirSync(path.join(evalRoot, c, "graders")).some((g) => /input_match: '"skill":\\s\*"dev-spec-driven:\[\\w-\]\+"'/.test(fs.readFileSync(path.join(evalRoot, c, "graders", g), "utf8")))),
-    "plugin evals: every case has prompt.md + a grader with an intact regex");
+  // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
+  // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
+  const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && !["results", "fixtures"].includes(e.name)).map((e) => e.name);
+  const evalBehavior = (c) => /^\s+- behavior\s*$/m.test(fs.readFileSync(path.join(evalRoot, c, "prompt.md"), "utf8"));
+  ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) && (evalBehavior(c) ||
+    fs.readdirSync(path.join(evalRoot, c, "graders")).some((g) => /input_match: '"skill":\\s\*"dev-spec-driven:\[\\w-\]\+"'/.test(fs.readFileSync(path.join(evalRoot, c, "graders", g), "utf8"))))),
+    "plugin evals: every case has prompt.md; every triggering case a grader with an intact regex");
 
   // Owner's cost rule: the plugin never steers users toward pull requests or CI.
   // Scans every prose surface a user or agent reads (not CHANGELOG.md — that is history).
@@ -6412,6 +6658,5349 @@ function endRun() {
       "next_action never recommends re-reviewing tasks.md while the earlier test-plan gate is pending (approve would refuse it on phase-order) — it points at test-plan.md (got " + seen.join(" | ") + ")");
   }
 
+  { // 1.14 A1 — MCP prompts (one per commands/*.md) + resources (the project's spec artifacts as specs:// URIs)
+    const PR = require("./lib/prompts-resources.js");
+    const a1Stems = fs.readdirSync(path.join(root, "commands")).filter((f) => /\.md$/.test(f)).map((f) => f.slice(0, -3));
+    const a1Fm = (stem) => PR.parseFrontMatter(fs.readFileSync(path.join(root, "commands", stem + ".md"), "utf8")).data;
+    const posix = (p) => p.split(path.sep).join("/");
+    // A private server per scenario (its own SPEC_PROJECT_DIR and env); every line it writes is kept, so a reply to a
+    // notification would show up. String ids: the server must echo them as given.
+    const a1Server = (projectDir, env) => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_MCP_PROMPTS: "", ...env, SPEC_PROJECT_DIR: projectDir }, stdio: ["pipe", "pipe", "inherit"] });
+      const lines = [];
+      const waiting = new Map();
+      let b = "";
+      let n = 0;
+      kid.stdout.on("data", (d) => {
+        b += d.toString();
+        let nl;
+        while ((nl = b.indexOf("\n")) >= 0) {
+          const line = b.slice(0, nl).trim();
+          b = b.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          lines.push(m);
+          if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "a1-" + ++n;
+        const t = setTimeout(() => abort("A1: no reply to " + method + " (" + id + ") within 15s"), 15000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        kid.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      });
+      const note = (method, params) => kid.stdin.write(JSON.stringify({ jsonrpc: "2.0", method, params }) + "\n");
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { req, note, lines, stop, sent: () => n };
+    };
+
+    // A project with 2 active features (a +tdd feature and a bugfix), steering (+ a custom file), SPECS.md, an archived
+    // feature, a non-addressable folder, a non-allowlisted file in a feature and a file outside .specs/.
+    const a1p = path.join(tmp, "proj-a1");
+    S.initProject(a1p, ["tdd"], "en");
+    const a1f = S.createFeature(a1p, "Auth Login", ["tdd"], "", undefined, "en");
+    const a1b = S.createFeature(a1p, "Crash on save", ["core"], "", undefined, "en", "bugfix");
+    S.scaffoldSteeringFile(a1p, "api-rules.md", "en");
+    S.createFeature(a1p, "Old Thing", ["core"], "", undefined, "en");
+    S.manageFeature(a1p, "archive", "Old Thing");
+    S.catalog(a1p, { write: true });
+    const a1s = path.join(a1p, ".specs");
+    fs.writeFileSync(path.join(a1f.dir, "notes.md"), "private notes\n");
+    fs.mkdirSync(path.join(a1s, "My Notes"), { recursive: true });
+    fs.writeFileSync(path.join(a1s, "My Notes", "requirements.md"), "not a feature\n");
+    fs.writeFileSync(path.join(a1p, "secret.md"), "TOP SECRET\n");
+    const a1Expected = ["specs://roadmap", "specs://catalog"]
+      .concat(fs.readdirSync(path.join(a1s, "steering")).filter((f) => /\.md$/.test(f)).sort().map((f) => "specs://steering/" + f))
+      .concat([a1f, a1b].sort((x, y) => (x.slug < y.slug ? -1 : 1)).flatMap((f) => PR.RESOURCE_ARTIFACTS.filter((a) => fs.existsSync(path.join(f.dir, a))).map((a) => `specs://feature/${f.slug}/${a}`)));
+
+    const s1 = a1Server(a1p);
+    const i1 = await s1.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const caps = (i1.result && i1.result.capabilities) || {};
+    ok(JSON.stringify(caps.prompts) === '{"listChanged":false}' && JSON.stringify(caps.resources) === '{"listChanged":false,"subscribe":false}' &&
+      JSON.stringify(caps.tools) === '{"listChanged":false}' && /Prompts: one per plugin command/.test(i1.result.instructions) &&
+      /specs:\/\/feature\/\{slug\}\/\{artifact\}/.test(i1.result.instructions) && i1.id === "a1-1",
+      "initialize advertises prompts {listChanged:false} and resources {listChanged:false, subscribe:false} beside tools; the instructions mention both; a string id is echoed");
+    s1.note("notifications/initialized", {});
+
+    // prompts/list — one per commands/*.md, read at runtime; description = front matter; one optional `args` argument.
+    const pl = (await s1.req("prompts/list", {})).result.prompts;
+    const plNames = pl.map((p) => p.name);
+    ok(pl.length === a1Stems.length && a1Stems.length >= 44 && plNames.slice().sort().join() === a1Stems.slice().sort().join() &&
+      plNames.indexOf("spec") < plNames.indexOf("spec-bugfix") && pl.every((p) => p.description && p.description === a1Fm(p.name).description) &&
+      pl.every((p) => Object.keys(p).join() === "name,description,arguments" && p.arguments.length === 1 && p.arguments[0].name === "args" && p.arguments[0].required === false),
+      "prompts/list: one prompt per commands/*.md (" + pl.length + "), sorted by name, each with its front-matter description and one optional `args` argument");
+    const plArg = (n) => (pl.find((p) => p.name === n) || { arguments: [{}] }).arguments[0].description || "";
+    ok(plArg("spec-impact") === "Arguments (optional): " + a1Fm("spec-impact")["argument-hint"] && /^No arguments needed/.test(plArg("coverage")) &&
+      JSON.stringify(pl) === JSON.stringify(PR.listPrompts({ lang: "en" }).map((p) => ({ name: p.name, description: p.description, arguments: p.arguments }))),
+      "prompts/list: the `args` description comes from argument-hint (an empty hint says no arguments are needed); same list as the module the CLI uses");
+
+    // prompts/get — the body with $ARGUMENTS replaced, after one line for agents without the skill.
+    const g1 = (await s1.req("prompts/get", { name: "spec-impact", arguments: { args: "login design $& $1" } })).result;
+    const g1t = g1 && g1.messages[0].content.text;
+    const rootPosix = posix(path.resolve(root));
+    ok(g1 && g1.description === a1Fm("spec-impact").description && g1.messages.length === 1 && g1.messages[0].role === "user" && g1.messages[0].content.type === "text" &&
+      /^Note for the agent: if no dev-spec-driven skill is available/.test(g1t) && g1t.includes(rootPosix + "/AGENTS.md") && g1t.includes(rootPosix + "/skills/dev-spec-driven/references/") &&
+      g1t.includes("Args: login design $& $1\n") && !g1t.includes("$ARGUMENTS") && g1t.split("\n")[1] === "" && /spec_impact/.test(g1t),
+      "prompts/get: {description, messages:[{role:user, content:{type:text}}]} — the preamble (AGENTS.md + references/ paths), then the body with $ARGUMENTS ← args ($& / $1 kept literally)");
+    const g2 = (await s1.req("prompts/get", { name: "spec-impact" })).result;
+    const g3 = (await s1.req("prompts/get", { name: "eval", arguments: {} })).result;
+    const g3t = g3 && g3.messages[0].content.text;
+    ok(g2 && g2.messages[0].content.text.includes("Args: \n") && !g2.messages[0].content.text.includes("$ARGUMENTS") &&
+      g3t && !g3t.includes("${CLAUDE_PLUGIN_ROOT}") && g3t.includes(rootPosix + "/mcp/evals/run-evals.js"),
+      "prompts/get: no arguments → $ARGUMENTS is empty; ${CLAUDE_PLUGIN_ROOT} resolves to this clone (other clients have no such variable)");
+    const gBad = await Promise.all([
+      s1.req("prompts/get", { name: "nope" }), s1.req("prompts/get", { name: "../README" }), s1.req("prompts/get", { name: "spec-impact.md" }),
+      s1.req("prompts/get", {}), s1.req("prompts/get", { name: "spec", arguments: { args: 5 } }), s1.req("prompts/get", { name: "spec", arguments: ["x"] }),
+      s1.req("prompts/get", { name: "spec", arguments: "x" }), s1.req("prompts/get", { name: "constructor" }),
+    ]);
+    ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-impact/.test(gBad[0].error.message) &&
+      /Unknown prompt '\.\.\/README'/.test(gBad[1].error.message) && /needs the prompt `name`/.test(gBad[3].error.message) &&
+      [4, 5, 6].every((i) => /`arguments` must be an object of strings/.test(gBad[i].error.message)),
+      "prompts/get: an unknown prompt (also '../README', 'spec-impact.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
+
+    // resources/list — ROADMAP.md, SPECS.md, steering, each active feature's allowlisted artifacts; nothing else.
+    const rl = (await s1.req("resources/list", {})).result;
+    const rlUris = rl.resources.map((r) => r.uri);
+    ok(JSON.stringify(rlUris) === JSON.stringify(a1Expected) && rlUris.includes("specs://feature/auth-login/test-plan.md") &&
+      rlUris.includes("specs://feature/crash-on-save/bug.md") && rlUris.includes("specs://steering/api-rules.md") && !rl._meta &&
+      rl.resources.every((r) => r.mimeType === "text/markdown" && r.name && r.description && Object.keys(r).join() === "uri,name,description,mimeType"),
+      "resources/list: roadmap, catalog, every steering file, then each active feature's existing artifacts — uri, name, description, text/markdown (" + rlUris.length + ")");
+    ok(!rlUris.some((u) => /old-thing|notes\.md|state\.json|My Notes|my-notes|secret|_archive/.test(u)) &&
+      (rl.resources.find((r) => r.uri === "specs://feature/auth-login/requirements.md") || {}).description === "Requirements (EARS) of feature 'auth-login' (.specs/auth-login/requirements.md).",
+      "resources/list: no archived feature, non-addressable folder, non-allowlisted file or file outside .specs/; descriptions name the artifact and its path");
+    const tl = (await s1.req("resources/templates/list", {})).result;
+    ok(tl && tl.resourceTemplates.map((t) => t.uriTemplate).join() === "specs://feature/{slug}/{artifact},specs://steering/{file}" &&
+      tl.resourceTemplates.every((t) => t.name && t.description && t.mimeType === "text/markdown") && /requirements\.md, design\.md/.test(tl.resourceTemplates[0].description),
+      "resources/templates/list: specs://feature/{slug}/{artifact} (naming the allowed artifacts) and specs://steering/{file}");
+
+    // resources/read — the file's text, for every listed URI.
+    const reads = await Promise.all(a1Expected.map((u) => s1.req("resources/read", { uri: u })));
+    const fileOf = (u) => u === "specs://roadmap" ? path.join(a1s, "ROADMAP.md") : u === "specs://catalog" ? path.join(a1s, "SPECS.md")
+      : u.startsWith("specs://steering/") ? path.join(a1s, "steering", u.slice(17)) : path.join(a1s, ...u.slice(16).split("/"));
+    ok(reads.every((r, i) => r.result && r.result.contents.length === 1 && r.result.contents[0].uri === a1Expected[i] && r.result.contents[0].mimeType === "text/markdown" &&
+      r.result.contents[0].text === fs.readFileSync(fileOf(a1Expected[i]), "utf8")),
+      "resources/read: every listed URI returns {contents:[{uri, mimeType, text}]} with the file's exact text");
+
+    // Traversal / arbitrary files / unknown artifacts → -32602 (Invalid params) with data.uri; well-formed but absent → -32002.
+    const badUris = ["specs://feature/../x", "specs://feature/%2e%2e/auth-login/requirements.md", "specs://feature/auth-login/../../secret.md", "specs:///etc/passwd",
+      "specs://steering/../roadmap.json", "specs://steering/..%2Froadmap.json", "specs://steering/%2E%2E%5Csecret.md", "file:///etc/passwd", "/etc/passwd",
+      path.join(a1s, "auth-login", "requirements.md"), "C:\\Windows\\win.ini", "specs://feature/C:/requirements.md", "specs://feature/auth-login/notes.md",
+      "specs://feature/auth-login/.state.json", "specs://feature/auth-login/REQUIREMENTS.MD", "specs://feature/steering/requirements.md", "specs://feature/nul/requirements.md",
+      "specs://feature/.../requirements.md", "specs://feature/auth-login/requirements.md?x=1", "specs://roadmap/extra", "specs://feature/auth-login", "specs://steering/a.txt",
+      "specs://steering/nul.md", "specs://whatever", "specs://", "specs://feature//requirements.md", "specs://feature/auth-login/%ZZ"];
+    const badR = await Promise.all(badUris.map((u) => s1.req("resources/read", { uri: u })));
+    const wrong = badR.map((r, i) => [badUris[i], r]).filter(([u, r]) => !(r.error && r.error.code === -32602 && r.error.data && r.error.data.uri === u && !r.result));
+    ok(!wrong.length && /^Invalid resource URI 'specs:\/\/feature\/\.\.\/x'/.test(badR[0].error.message) && /^Unknown artifact 'notes\.md' — one of: classification\.md/.test(badR[12].error.message) &&
+      /reserved/i.test(badR[15].error.message) && /^Invalid steering file name 'a\.txt'/.test(badR[21].error.message) && !badR.some((r) => /TOP SECRET|\[extensions\]/.test(JSON.stringify(r))),
+      "resources/read: traversal ('..', %2e%2e, %2F, %5C), absolute paths, other schemes, drive letters, unknown / non-allowlisted artifacts, reserved names → -32602 with data.uri (wrong: " + wrong.map(([u, r]) => u + "→" + JSON.stringify(r.error || r.result).slice(0, 80)).join(" | ") + ")");
+    const missR = await Promise.all(["specs://feature/nope/requirements.md", "specs://feature/auth-login/eval-plan.md", "specs://feature/old-thing/requirements.md",
+      "specs://steering/missing.md", "specs://steering/TECH.md"].map((u) => s1.req("resources/read", { uri: u })));
+    ok(missR.every((r) => r.error && r.error.code === -32002 && /^Resource not found: specs:\/\//.test(r.error.message) && r.error.data && typeof r.error.data.uri === "string") &&
+      /not found/.test(missR[0].error.message) && /archived/.test(missR[2].error.message),
+      "resources/read: a well-formed URI naming nothing (unknown feature, absent artifact, archived feature — says so, missing / case-aliased steering file) → -32002 Resource not found");
+    const noUri = await Promise.all([s1.req("resources/read", {}), s1.req("resources/read", { uri: 42 }), s1.req("resources/read")]);
+    ok(noUri.every((r) => r.error && r.error.code === -32602 && /needs the resource `uri`/.test(r.error.message)), "resources/read without a string uri → -32602");
+
+    // A notification never gets a reply (and never runs anything); the next request is answered normally.
+    const before = s1.lines.length;
+    s1.note("prompts/list", {});
+    s1.note("prompts/get", { name: "nope" });
+    s1.note("resources/read", { uri: "specs://feature/../x" });
+    s1.note("resources/list");
+    const ping = await s1.req("ping", {});
+    ok(ping.result && s1.lines.length === before + 1 && s1.lines.length === s1.sent() && s1.lines.every((m) => typeof m.id === "string"),
+      "prompts/* and resources/* notifications get no reply — only requests are answered (" + s1.lines.length + " lines for " + s1.sent() + " requests)");
+    const unsub = await s1.req("resources/subscribe", { uri: "specs://roadmap" });
+    ok(unsub.error && unsub.error.code === -32601, "resources/subscribe (subscribe: false) → Method not found");
+    await s1.stop();
+
+    // Module-level: the cap (and saying so), the roadmap fallback, a symlink out of .specs/, CRLF/BOM front matter, PT.
+    const capped = PR.listResources(a1p, { cap: 3 });
+    ok(capped.resources.length === 3 && capped.truncated && capped.total === a1Expected.length && /capped at 3 of \d+/.test(capped.note) &&
+      PR.listResources(a1p).truncated === false && PR.RESOURCE_CAP === 500,
+      "resources/list is capped (RESOURCE_CAP 500) and says so: truncated, total, a note naming the templates (the server passes it in _meta)");
+    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 14 artifacts = 630 resources > the cap
+    for (let i = 1; i <= 45; i++) {
+      const d = path.join(a1big, ".specs", "f" + String(i).padStart(2, "0"));
+      fs.mkdirSync(d, { recursive: true });
+      for (const a of PR.RESOURCE_ARTIFACTS) fs.writeFileSync(path.join(d, a), "# " + a + "\n");
+    }
+    const s4 = a1Server(a1big);
+    await s4.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const big = (await s4.req("resources/list", {})).result;
+    const bigLast = await s4.req("resources/read", { uri: "specs://feature/f45/retro.md" });
+    await s4.stop();
+    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 630 && big._meta.cap === 500 &&
+      /capped at 500 of 630 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
+      "resources/list over the cap: 500 resources plus _meta {truncated, total, cap, note}; a resource past the cap is still readable through its URI");
+    const a1r = path.join(tmp, "proj-a1-roadmap");
+    S.initProject(a1r, ["core"], "en");
+    S.createFeature(a1r, "Only One", ["core"], "", undefined, "en");
+    fs.unlinkSync(path.join(a1r, ".specs", "ROADMAP.md"));
+    const fbList = PR.listResources(a1r).resources.find((r) => r.uri === "specs://roadmap") || {};
+    const fbRead = PR.readResource(a1r, "specs://roadmap");
+    ok(/rendered from \.specs\/roadmap\.json/.test(fbList.description || "") && fbRead.ok && /^# Roadmap — /.test(fbRead.contents[0].text) && /only-one/.test(fbRead.contents[0].text) &&
+      !fs.existsSync(path.join(a1r, ".specs", "ROADMAP.md")) && !PR.listResources(a1r).resources.some((r) => r.uri === "specs://catalog"),
+      "specs://roadmap without ROADMAP.md: rendered from roadmap.json in memory (nothing written); no SPECS.md → no catalog resource");
+    const a1e = path.join(tmp, "proj-a1-empty");
+    fs.mkdirSync(a1e, { recursive: true });
+    ok(PR.listResources(a1e).resources.length === 0 && PR.readResource(a1e, "specs://roadmap").reason === "not-found" && PR.readResource(a1e, "specs://feature/x/tasks.md").reason === "not-found",
+      "no .specs/ → an empty resource list; reads are not-found");
+    let linked = false;
+    try { fs.symlinkSync(path.join(a1p, "secret.md"), path.join(a1f.dir, "retro.md"), "file"); linked = true; } catch { /* no symlink privilege here */ }
+    ok(!linked || (!PR.listResources(a1p).resources.some((r) => /retro\.md/.test(r.uri)) && PR.readResource(a1p, "specs://feature/auth-login/retro.md").reason === "not-found"),
+      "a symlinked artifact pointing out of .specs/ is neither listed nor read" + (linked ? "" : " (symlinks not creatable here — checked by construction only)"));
+    const outFeat = path.join(a1p, "outside-feature");
+    fs.mkdirSync(outFeat, { recursive: true });
+    fs.writeFileSync(path.join(outFeat, "requirements.md"), "OUTSIDE\n");
+    let junction = false;
+    try { fs.symlinkSync(outFeat, path.join(a1s, "linked-feat"), "junction"); junction = true; } catch { /* no link support here */ }
+    ok(!junction || (!PR.listResources(a1p).resources.some((r) => /linked-feat/.test(r.uri)) && PR.readResource(a1p, "specs://feature/linked-feat/requirements.md").reason === "not-found"),
+      "a feature folder linked (junction / symlink) to a folder outside .specs/ is neither listed nor read" + (junction ? "" : " (links not creatable here — checked by construction only)"));
+    const fmDir = path.join(tmp, "proj-a1-cmds");
+    fs.mkdirSync(fmDir, { recursive: true });
+    fs.writeFileSync(path.join(fmDir, "crlf-cmd.md"), "\uFEFF---\r\ndescription: 'It''s a CRLF command'\r\nargument-hint: \"[x] [--y]\"\r\n---\r\n\r\nDo it: $ARGUMENTS\r\nThen $ARGUMENTS again.\r\n");
+    fs.writeFileSync(path.join(fmDir, "no-fm.md"), "Just a body $ARGUMENTS\n");
+    fs.writeFileSync(path.join(fmDir, "notes.txt"), "not a command\n");
+    fs.mkdirSync(path.join(fmDir, "dir.md"));
+    const fmList = PR.listPrompts({ commandsDir: fmDir, lang: "en" });
+    const fmGet = PR.getPrompt("crlf-cmd", "a b", { commandsDir: fmDir, lang: "en" });
+    ok(fmList.map((p) => p.name).join() === "crlf-cmd,no-fm" && fmList[0].description === "It's a CRLF command" && fmList[0].argumentHint === "[x] [--y]" &&
+      fmList[1].description === "" && fmGet.ok && /\n\nDo it: a b\nThen a b again\.\n$/.test(fmGet.messages[0].content.text) && !fmGet.messages[0].content.text.includes("\r"),
+      "front matter with a BOM, CRLF and quoted values is parsed; a file without front matter is still a prompt; only *.md files are prompts; the body comes back with LF");
+    const a1pt = path.join(tmp, "proj-a1-pt");
+    S.initProject(a1pt, ["core"], "pt");
+    S.createFeature(a1pt, "Pagamentos", ["core"]);
+    const s2 = a1Server(a1pt);
+    await s2.req("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
+    const ptGet = (await s2.req("prompts/get", { name: "spec" })).result;
+    const ptBad = await s2.req("resources/read", { uri: "specs://feature/../x" });
+    const ptMiss = await s2.req("resources/read", { uri: "specs://feature/pagamentos/eval-plan.md" });
+    const ptList = (await s2.req("resources/list", {})).result.resources;
+    const ptArgs = (await s2.req("prompts/list", {})).result.prompts.find((p) => p.name === "coverage").arguments[0].description;
+    await s2.stop();
+    const deepKeys = (o, pre = "") => Object.keys(o).sort().flatMap((k) => (o[k] && typeof o[k] === "object" ? deepKeys(o[k], pre + k + ".") : [pre + k]));
+    const a1Msg = ["en", "pt", "es"].map((l) => S.msg(l).promptsResources);
+    ok(/^Nota para o agente: se não houver uma skill dev-spec-driven/.test(ptGet.messages[0].content.text) && /^URI de recurso inválido/.test(ptBad.error.message) &&
+      /^Recurso não encontrado/.test(ptMiss.error.message) && ptList.some((r) => r.description === "Requisitos (EARS) da feature 'pagamentos' (.specs/pagamentos/requirements.md).") &&
+      /^Não precisa de argumentos/.test(ptArgs) && deepKeys(a1Msg[1]).join() === deepKeys(a1Msg[0]).join() && deepKeys(a1Msg[2]).join() === deepKeys(a1Msg[0]).join() &&
+      a1Msg.every((m) => Object.keys(m.res.labels).sort().join() === PR.RESOURCE_ARTIFACTS.slice().sort().join()) && /^Nota para el agente/.test(a1Msg[2].preamble("a", "b")),
+      "prompts/resources messages follow the project language (PT preamble, errors, descriptions); EN/PT/ES blocks have the same keys and a label per artifact");
+
+    // SPEC_MCP_PROMPTS=off (the Claude Code plugin's mcp/servers.json): no prompts capability — its own slash commands are these files.
+    const s3 = a1Server(a1p, { SPEC_MCP_PROMPTS: "off" });
+    const i3 = await s3.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const p3 = await s3.req("prompts/list", {});
+    const r3 = await s3.req("resources/list", {});
+    await s3.stop();
+    const servers = JSON.parse(fs.readFileSync(path.join(root, "mcp", "servers.json"), "utf8")).mcpServers["spec-driven"];
+    ok(!("prompts" in i3.result.capabilities) && i3.result.capabilities.resources && !/Prompts:/.test(i3.result.instructions) && p3.error && p3.error.code === -32601 &&
+      r3.result.resources.length === a1Expected.length && servers.env.SPEC_MCP_PROMPTS === "off",
+      "SPEC_MCP_PROMPTS=off drops the prompts capability (prompts/* → -32601), resources stay; mcp/servers.json sets it for the Claude Code plugin (no duplicate slash commands)");
+    const BOM = String.fromCharCode(0xfeff);
+    ok(!fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8").includes(BOM) && !/require\((?!["'](?:fs|path|\.\/spec\.js)["'])/.test(fs.readFileSync(path.join(__dirname, "lib", "prompts-resources.js"), "utf8")),
+      "lib/prompts-resources.js: zero dependencies (fs, path, ./spec.js) and no literal U+FEFF");
+  }
+
+  { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
+    const a2Root = path.join(tmp, "a2-tracks");
+    const a2 = (name) => path.join(a2Root, name);
+    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+
+    // --- the track list itself
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy" &&
+      S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
+      "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
+    const typo = S.createFeature(a2("typo"), "Typo", "privcy");
+    const alias = S.createFeature(a2("typo"), "Typo", ["gdpr"]);
+    ok(!typo.ok && /did you mean 'privacy'/.test(typo.error) && !alias.ok && /'gdpr' \(did you mean 'privacy'\?\)/.test(alias.error) && /sec, privacy/.test(alias.error),
+      "A2: an unknown track near sec/privacy gets a did-you-mean ('privcy', 'gdpr' → privacy) and the valid list names them (" + typo.error + ")");
+
+    // --- classify: EN / PT / ES, strong + weak, negation notes, no cross-track noise
+    const cls = (d, lang) => S.classify(d, lang ? { lang } : {});
+    const secEn = cls("Threat model the upload API against the OWASP Top 10 and fix the stored XSS");
+    const secPt = cls("Modelo de ameaças e testes de intrusão à API de carregamento de ficheiros");
+    const secEs = cls("Modelo de amenazas y pruebas de penetración de la API de subida de archivos");
+    ok([secEn, secPt, secEs].every((r) => r.tracks.includes("sec") && r.confidence.sec !== "none") && secPt.lang === "pt" && secEs.lang === "es" &&
+      secEn.signals.sec.includes("owasp") && secPt.signals.sec.includes("testes de intrusão") && secEs.signals.sec.includes("pruebas de penetración"),
+      "A2: classify turns +sec on from strong EN/PT/ES signals (threat model / OWASP / XSS · modelo de ameaças / testes de intrusão · modelo de amenazas / pruebas de penetración)");
+    ok(!secEn.signals.ai.length && !secPt.signals.ai.length && !secEs.signals.ai.length && !(secEn.possible || []).some((p) => p.track === "ai"),
+      "A2: 'model' inside 'threat model' / 'modelo de ameaças' / 'modelo de amenazas' is no +ai hint (a weak signal inside another track's strong phrase is shadowed)");
+    const privEn = cls("Add a GDPR data export and the right to erasure for user accounts");
+    const privPt = cls("Exportação dos dados pessoais e direito ao apagamento (RGPD)");
+    const privEs = cls("Exportación de datos personales y derecho de supresión (RGPD)");
+    ok([privEn, privPt, privEs].every((r) => r.tracks.includes("privacy") && !r.tracks.includes("saas")) &&
+      privPt.signals.privacy.includes("dados pessoais") && privEs.signals.privacy.includes("datos personales"),
+      "A2: classify turns +privacy on from EN/PT/ES signals (GDPR / right to erasure · dados pessoais / RGPD · datos personales) — GDPR no longer switches +saas on");
+    const weakSec = cls("Login with a password, RBAC permissions for admins");
+    const oneWeak = cls("User profile page with an avatar upload");
+    ok(weakSec.tracks.includes("sec") && weakSec.weak.includes("sec") && weakSec.tracks.includes("tdd") &&
+      !oneWeak.tracks.includes("privacy") && oneWeak.possible.some((p) => p.track === "privacy" && p.signal === "user profile"),
+      "A2: two weak +sec signals turn it on (flagged weak-only) beside +tdd; one weak +privacy signal is only 'possible'");
+    const negated = cls("Internal sales dashboard: no personal data, no authentication needed");
+    const negPt = cls("Relatório interno de vendas, sem dados pessoais");
+    const negEs = cls("Informe interno de ventas, sin datos personales ni autenticación");
+    const onAlthough = cls("OWASP review of the export API — no authentication changes");
+    ok(!negated.tracks.includes("privacy") && !negated.tracks.includes("sec") && negated.notes.some((n) => /\+privacy kept off — 'personal data'/.test(n)) &&
+      negated.notes.some((n) => /\+sec kept off — 'authentication'/.test(n)) && !negPt.tracks.includes("privacy") && negPt.notes.some((n) => /\+privacy mantido inativo/.test(n)) &&
+      negEs.lang === "es" && !negEs.tracks.includes("privacy") && negEs.negated.privacy.includes("datos personales") && negEs.notes.some((n) => /\+privacy/.test(n)) &&
+      onAlthough.tracks.includes("sec") && onAlthough.notes.some((n) => /\+sec is ON although 'authentication' appeared negated/.test(n)),
+      "A2: negation never vetoes a track, it annotates it — +privacy / +sec kept off with a note (EN, PT, ES) and '+sec is ON although …' when a strong signal wins");
+    ok(/\+sec: ON/.test(secEn.reasoning) && /\+privacy: off/.test(secEn.reasoning) && /\+privacy: ON \[high confidence\]/.test(privEn.reasoning),
+      "A2: the reasoning has a line per track, sec and privacy included");
+    const nonSec = cls("Dependency injection container for the services layer; store uploads in object storage");
+    const bruteAlgo = cls("Replace the brute-force search with an index");
+    const bruteAttack = cls("Lock accounts after repeated brute-force attacks");
+    ok(nonSec.tracks.join() === "core" && !nonSec.signals.sec.length && !nonSec.signals.privacy.length &&
+      !bruteAlgo.tracks.includes("sec") && bruteAlgo.possible.some((p) => p.track === "sec") && bruteAttack.tracks.includes("sec"),
+      "A2: no phantom +sec from 'dependency injection' or a brute-force SEARCH (weak, possible only) — a brute-force ATTACK is strong; no +privacy from 'storage'");
+    const sweep = [];
+    // (full review Pb5: a VERB stem matches only with one of its endings — probed as its infinitive)
+    const verbStem = { encript: "encriptar", cifr: "cifrar", criptograf: "criptografar" };
+    for (const tr of ["sec", "privacy"]) {
+      const sg = S.trackSignals(tr);
+      for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
+        const r = S.classify("We need " + (verbStem[kw] || kw) + " here");
+        if (!r.signals[tr].some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes(tr))) sweep.push(tr + ":" + kw);
+      }
+    }
+    ok(sweep.length === 0 && S.trackSignals("sec").strong.length > 40 && S.trackSignals("privacy").strong.length > 40,
+      "A2: self-match sweep — every +sec / +privacy keyword (EN/PT/ES) matches itself as a word, and a strong one alone turns its track on (misses: " + sweep.join(", ") + ")");
+    const mcpCls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Pseudonymize personal data and threat model the export", projectDir: a2("mcp") } }));
+    ok(mcpCls.tracks.includes("sec") && mcpCls.tracks.includes("privacy") && mcpCls.label === "core +sec +privacy",
+      "A2: spec_classify (MCP) reports +sec and +privacy (" + mcpCls.label + ")");
+
+    // --- scaffold per track, per language: fail while TODO, pass once filled; the design approval is refused meanwhile
+    const titles = { en: ["Threat Model", "Personal Data Inventory"], pt: ["Modelo de Ameaças", "Inventário de Dados Pessoais"], es: ["Modelo de Amenazas", "Inventario de Datos Personales"] };
+    for (const lang of ["en", "pt", "es"]) {
+      const p = a2("scaffold-" + lang);
+      for (const tr of ["sec", "privacy"]) {
+        const f = S.createFeature(p, tr + " " + lang, [tr], "", undefined, lang);
+        const id = tr + "-sections";
+        const other = tr === "sec" ? "privacy-sections" : "sec-sections";
+        const design = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+        const reqs = fs.readFileSync(path.join(f.dir, "requirements.md"), "utf8");
+        const tasks = fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+        const marker = tr === "sec" ? "[SEC]" : "[PRIVACY]";
+        const heads = (design.match(new RegExp("^## \\" + marker.slice(0, -1) + "\\] .*$", "gm")) || []);
+        const e = S.earsValidate(reqs, lang);
+        const trackIssues = e.issues.filter((i) => i.code !== "placeholder" && /US-1\.AC-1[0-5]/.test(i.text || ""));
+        const reqPh = S.featurePlaceholders(p, f.slug, "requirements.md").items.map((x) => x.text);
+        const before = S.specDoctor(p, f.slug);
+        S.approvePhase(p, f.slug, "classification", "t", { force: true });
+        S.approvePhase(p, f.slug, "requirements", "t", { force: true });
+        const refused = S.approvePhase(p, f.slug, "design", "t");
+        dropTodo(path.join(f.dir, "design.md"));
+        const after = S.specDoctor(p, f.slug);
+        const retry = S.approvePhase(p, f.slug, "design", "t");
+        const want = tr === "sec" ? 5 : 6;
+        ok(f.ok && f.label === "core +" + tr && heads.length === want && design.includes(titles[lang][tr === "sec" ? 0 : 1]) &&
+          (design.match(/^> \*\*TODO\*\*/gm) || []).length === want && reqs.includes("#### " + marker) && tasks.includes("US-1.AC-1" + (tr === "sec" ? "0" : "3")) &&
+          !trackIssues.length && e.issues.every((i) => i.severity !== "error") && !reqPh.some((x) => /SEC|PRIVACY/.test(x)) &&
+          chk(before, id).status === "fail" && /unfilled|por preencher|sin rellenar|sin completar/.test(chk(before, id).detail) && !chk(before, other).status &&
+          !refused.ok && refused.failing.includes(id) &&
+          chk(after, id).status === "pass" && /5|6/.test(chk(after, id).detail) && !retry.failing.includes(id),
+          `A2: ${lang} +${tr} scaffold — ${want} ${marker} sections with the TODO sentinel, ${marker} EARS criteria (no EARS issue, no placeholder), ${id} fails and the design approval is refused while TODO, passes once filled (${chk(before, id).detail} → ${chk(after, id).detail})`);
+      }
+    }
+
+    // --- a +sec +privacy feature whose templates are filled is ready: doctor passes and every gate approves without force
+    const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|SEC\]|PRIVACY\]|NEEDS)[^\]\n]*\]/g;
+    for (const lang of ["en", "pt", "es"]) {
+      const p = a2("filled-" + lang);
+      S.initProject(p, ["core", "sec", "privacy"], lang);
+      const f = S.createFeature(p, "Filled " + lang, ["sec", "privacy"], "", undefined, lang);
+      for (const file of ["classification.md", "requirements.md", "design.md", "tasks.md"]) {
+        const fp = path.join(f.dir, file);
+        let t = fs.readFileSync(fp, "utf8");
+        for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the account export"); // nested slots ("[e.g., … [N] …]") need a few passes
+        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+      }
+      const doc = S.specDoctor(p, f.slug);
+      const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
+      ok(doc.readyToAdvance && !doc.checks.some((c) => c.status === "fail") && chk(doc, "sec-sections").status === "pass" && chk(doc, "privacy-sections").status === "pass" &&
+        chk(doc, "ears").status === "pass" && chk(doc, "traceability").status === "pass" && gates.every(([ph, r]) => r.ok && r.approved === ph && !r.forced),
+        `A2: ${lang} — a filled +sec +privacy feature is ready (doctor has no fail, EARS + traceability pass) and classification → requirements → design → tasks approve without force (` +
+        gates.filter(([, r]) => !r.ok).map(([ph, r]) => ph + ":" + (r.failing || []).join(",")).join(" ") + ")");
+    }
+
+    // --- steering: security.md / privacy.md in the project language; still templates → doctor's steering warns
+    const stP = a2("steering-pt");
+    const initPt = S.initProject(stP, ["core", "sec", "privacy"], "pt");
+    const secMd = fs.readFileSync(path.join(stP, ".specs", "steering", "security.md"), "utf8");
+    const privMd = fs.readFileSync(path.join(stP, ".specs", "steering", "privacy.md"), "utf8");
+    const stF = S.createFeature(stP, "Contas", ["privacy"]);
+    ok(initPt.created.includes("security.md") && initPt.created.includes("privacy.md") && /^# Padrões de Segurança/.test(secMd) && /CNPD/.test(privMd) &&
+      /security\.md.*privacy\.md|privacy\.md.*security\.md/.test(chk(S.specDoctor(stP, stF.slug), "steering").detail) &&
+      ["en", "pt", "es"].every((l) => ["security.md", "privacy.md"].every((f) => typeof S.msg(l) === "object" && require("./lib/i18n.js").steeringStub(f, l))),
+      "A2: spec_init +sec +privacy writes steering/security.md and privacy.md (PT: Padrões de Segurança, CNPD) — flagged as templates until filled; EN/PT/ES stubs exist");
+
+    // --- add-track / remove-track for both (additive, non-destructive), then re-add
+    const at = a2("add-track");
+    S.initProject(at, ["core"], "en");
+    const plain = S.createFeature(at, "Plain", ["core"], "", undefined, "en");
+    const tasksBefore = S.statusFeature(at, plain.slug).tasks.total;
+    const add = S.addTrack(at, plain.slug, "+sec +privacy");
+    const pDesign = fs.readFileSync(path.join(plain.dir, "design.md"), "utf8");
+    const pTasks = fs.readFileSync(path.join(plain.dir, "tasks.md"), "utf8");
+    const pCls = fs.readFileSync(path.join(plain.dir, "classification.md"), "utf8");
+    const docAdd = S.specDoctor(at, plain.slug);
+    ok(add.ok && add.tracks === "core +sec +privacy" && add.addedTracks.join() === "sec,privacy" && add.added.includes("steering/security.md") && add.added.includes("steering/privacy.md") &&
+      /## \[SEC\] Threat Model/.test(pDesign) && /## \[PRIVACY\] DPIA/.test(pDesign) && /## Story US-1 — Security/.test(pTasks) && /## Story US-1 — Privacy/.test(pTasks) &&
+      /_Requirements: \[the \+sec criterion this task proves\]_/.test(pTasks) && /## Active Tracks\ncore \+sec \+privacy/.test(pCls) &&
+      chk(docAdd, "sec-sections").status === "fail" && chk(docAdd, "privacy-sections").status === "fail" && S.statusFeature(at, plain.slug).tasks.total === tasksBefore + 7,
+      "A2: add_track sec+privacy — sections, steering, template tasks (placeholder ACs: the requirements predate the track), Active Tracks, doctor checks");
+    const again = S.addTrack(at, plain.slug, "sec");
+    const rmSec = S.removeTrack(at, plain.slug, "sec");
+    const docRm = S.specDoctor(at, plain.slug);
+    const stRm = S.statusFeature(at, plain.slug);
+    ok(again.ok && !again.addedTracks.length && rmSec.ok && rmSec.tracks === "core +privacy" && rmSec.inactive.includes("design.md ([SEC] sections)") &&
+      rmSec.inactive.includes("tasks.md (Story US-1 — Security)") && !chk(docRm, "sec-sections").status && chk(docRm, "privacy-sections").status === "fail" &&
+      stRm.secSections === null && Array.isArray(stRm.privacySections) && stRm.tasks.total === tasksBefore + 3 && fs.readFileSync(path.join(plain.dir, "design.md"), "utf8").includes("[SEC] Threat Model"),
+      "A2: add_track --remove sec is non-destructive — [SEC] sections/tasks stay on disk but inactive: no sec-sections check, secSections null, its 4 tasks not counted");
+    const rmPriv = S.removeTrack(at, plain.slug, "privacy");
+    const reAdd = S.addTrack(at, plain.slug, "sec,privacy");
+    const reTasks = fs.readFileSync(path.join(plain.dir, "tasks.md"), "utf8");
+    ok(rmPriv.ok && rmPriv.tracks === "core" && rmPriv.inactive.includes("design.md ([PRIVACY] sections)") && reAdd.ok && reAdd.tracks === "core +sec +privacy" &&
+      (reTasks.match(/## Story US-1 — Security/g) || []).length === 1 && S.statusFeature(at, plain.slug).tasks.total === tasksBefore + 7 &&
+      chk(S.specDoctor(at, plain.slug), "privacy-sections").status === "fail",
+      "A2: remove privacy then re-add both — the kept sections and tasks count again, nothing duplicated");
+
+    // --- core + saas + sec + privacy (no +tdd): the three section checks side by side, the design gate names all three
+    const c3 = a2("combined-3");
+    const three = S.createFeature(c3, "Tenant Accounts", ["saas", "sec", "privacy"], "", undefined, "es");
+    const d3 = S.specDoctor(c3, three.slug);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(c3, three.slug, ph, "t", { force: true }));
+    const g3 = S.approvePhase(c3, three.slug, "design", "t");
+    const t3 = S.traceCheck(c3, three.slug);
+    ok(three.label === "core +saas +sec +privacy" && ["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(d3, id).status === "fail") &&
+      !fs.existsSync(path.join(three.dir, "test-plan.md")) && fs.existsSync(path.join(three.dir, "load-test.md")) && !g3.ok &&
+      ["saas-sections", "sec-sections", "privacy-sections"].every((id) => g3.failing.includes(id)) && !t3.uncoveredByTasks.length && !t3.phantomAcsInTasks.length &&
+      /## Historia US-1 — Seguridad[\s\S]*## Historia US-1 — Privacidad/.test(fs.readFileSync(path.join(three.dir, "tasks.md"), "utf8")),
+      "A2: core+saas+sec+privacy (ES) — saas/sec/privacy section checks all fail while TODO, the design approval names all three, every template AC is tasked");
+
+    // --- the combined feature: core + tdd + saas + sec + privacy
+    const cb = a2("combined");
+    const combo = S.createFeature(cb, "Tenant Export", ["tdd", "saas", "sec", "privacy"], "", undefined, "en");
+    const cDoc = S.specDoctor(cb, combo.slug);
+    const cTr = S.traceCheck(cb, combo.slug);
+    const cPlan = fs.readFileSync(path.join(combo.dir, "test-plan.md"), "utf8");
+    const cReq = fs.readFileSync(path.join(combo.dir, "requirements.md"), "utf8");
+    ok(combo.label === "core +tdd +saas +sec +privacy" && ["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(cDoc, id).status === "fail") && !chk(cDoc, "ai-sections").status &&
+      /\| T-08 \| integration \| example \| abuse case: an unauthenticated request gets 401/.test(cPlan) && /\| T-09 \| integration \| property \|/.test(cPlan) && /US-1\.AC-15/.test(cPlan) &&
+      cReq.indexOf("[SaaS]") < cReq.indexOf("[SEC]") && cReq.indexOf("[SEC]") < cReq.indexOf("[PRIVACY]") &&
+      !cTr.uncoveredByTasks.length && !cTr.uncoveredByTests.length && !cTr.phantomAcsInTasks.length && !cTr.phantomTestsInTasks.length && !(cTr.testsNotMappedToTasks || []).length,
+      "A2: core+tdd+saas+sec+privacy — saas/sec/privacy section checks, abuse-case + privacy test rows (T-08… after the +saas ones), every template AC planned and tasked");
+    dropTodo(path.join(combo.dir, "design.md"));
+    const cDoc2 = S.specDoctor(cb, combo.slug);
+    const cStatus = S.statusFeature(cb, combo.slug);
+    ok(["saas-sections", "sec-sections", "privacy-sections"].every((id) => chk(cDoc2, id).status === "pass") && cStatus.scaleSections.every((s) => s.filled) &&
+      cStatus.secSections.length === 5 && cStatus.secSections.every((s) => s.filled) && cStatus.privacySections.length === 6 && cStatus.privacySections.every((s) => s.filled),
+      "A2: once filled, every track section check passes; spec_status reports secSections (5) / privacySections (6) as filled");
+    const fin = S.finishFeature(cb, combo.slug);
+    ok(fin.checks.some((c) => /^\+sec: SAST/.test(c)) && fin.checks.some((c) => /^\+privacy: access\/export and erasure/.test(c)) && fin.checks.some((c) => /^\+saas:/.test(c)),
+      "A2: spec_finish lists the +sec and +privacy checks only a fresh run or a human can confirm");
+    const cTasks = S.parseTasks(fs.readFileSync(path.join(combo.dir, "tasks.md"), "utf8"));
+    const authz = S.taskBrief(cb, combo.slug, cTasks.find((x) => /object-level authorization/.test(x.text)).number);
+    const reten = S.taskBrief(cb, combo.slug, cTasks.find((x) => /^\[US1\] Retention/.test(x.text)).number);
+    ok(authz.ok && authz.designSections.includes("[SEC] Authentication & Authorization") && !authz.designSections.some((s) => /\[PRIVACY\]/.test(s)) &&
+      authz.acceptanceCriteria.some((a) => /401/.test(a.text || a)) && reten.ok && reten.designSections.includes("[PRIVACY] Retention & Deletion") &&
+      !reten.designSections.some((s) => /\[SEC\]/.test(s)),
+      "A2: spec_task_brief — a task proving a +sec / +privacy criterion carries that track's design sections (and only those)");
+    fs.writeFileSync(path.join(combo.dir, "requirements.md"), "# F\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a user asks THE SYSTEM SHALL answer\n");
+    const cq = S.clarify(cb, combo.slug).questions;
+    const M = S.msg("en").secPrivacy.clarify;
+    ok([M.secAccess, M.secSecrets, M.privacyRights, M.privacyRetention].every((q) => cq.includes(q)),
+      "A2: spec_clarify asks for the access-denied criterion, the secrets, the data subject rights and the retention periods when requirements.md is silent");
+
+    // --- legacy detection (no .state.json tracks) and spec_upgrade
+    const stp = path.join(combo.dir, ".state.json");
+    const st = JSON.parse(fs.readFileSync(stp, "utf8"));
+    delete st.tracks;
+    fs.writeFileSync(stp, JSON.stringify(st, null, 2));
+    const up = S.specUpgrade(cb, {});
+    const upF = (up.features || []).find((x) => x.name === combo.slug) || {};
+    ok(S.statusFeature(cb, combo.slug).tracks === "core +tdd +saas +sec +privacy" && upF.tracksSource === "inferred" && upF.tracks === "core +tdd +saas +sec +privacy" && upF.tracksPending === true,
+      "A2: a feature without saved tracks has +sec / +privacy inferred from its [SEC] / [PRIVACY] design headings; spec_upgrade shows them as inferred, pending apply");
+
+    // --- PT: design-save check, roadmap attention and status names are localized; the markers stay English
+    const pt = a2("pt-views");
+    S.initProject(pt, ["core"], "pt");
+    const ptF = S.createFeature(pt, "Exportar dados", ["sec", "privacy"], "", undefined, "pt");
+    const ptSave = S.designSaveCheck(pt, ptF.slug);
+    const ptMap = fs.readFileSync(path.join(pt, ".specs", "ROADMAP.md"), "utf8");
+    ok(ptSave.sections.map((s) => s.track).join() === "sec,privacy" && /secções \[SEC\]: Modelo de Ameaças:por preencher/.test(ptSave.text) && /\[PRIVACY\] AIPD \(por preencher\)/.test(ptMap) &&
+      /Fundamento de Licitude e Finalidade/.test(chk(S.specDoctor(pt, ptF.slug), "privacy-sections").detail),
+      "A2: PT — the design-save check, ROADMAP.md attention and doctor name the [SEC] / [PRIVACY] sections in Portuguese");
+
+    // --- spec_import with --tracks sec,privacy
+    const im = a2("import");
+    fs.mkdirSync(path.join(im, ".kiro", "specs", "accounts"), { recursive: true });
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "accounts", "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to delete my account.\n\n#### Acceptance Criteria\n\n1. WHEN the user confirms THEN the system SHALL delete the account\n");
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "accounts", "design.md"), "# Design\n\n## Overview\nA delete button.\n");
+    const imp = S.importSpec(im, "kiro", ".kiro/specs/accounts", { tracks: "sec,privacy" });
+    const impDesign = imp.ok ? fs.readFileSync(path.join(im, ".specs", "accounts", "design.md"), "utf8") : "";
+    const impTasks = imp.ok ? fs.readFileSync(path.join(im, ".specs", "accounts", "tasks.md"), "utf8") : "";
+    ok(imp.ok && imp.tracks.join() === "core,sec,privacy" && /A delete button/.test(impDesign) && /## \[SEC\] Threat Model/.test(impDesign) && /## \[PRIVACY\] Retention & Deletion/.test(impDesign) &&
+      !/US-1\.AC-1[0-5]/.test(impTasks) && chk(S.specDoctor(im, "accounts"), "privacy-sections").status === "fail",
+      "A2: spec_import --tracks sec,privacy appends the [SEC] / [PRIVACY] sections to the imported design; the kept track tasks cite no template AC the import lacks");
+
+    // --- placeholders, i18n parity, MCP descriptions
+    ok(!S.placeholderReport("## [SEC] Threat Model\n## [PRIVACY] DPIA\nSee [SEC] and [PRIVACY].").length,
+      "A2: [SEC] / [PRIVACY] are English-stable markers, never template placeholders");
+    const spKeys = (l) => JSON.stringify(Object.keys(S.msg(l).secPrivacy).concat(Object.keys(S.msg(l).secPrivacy.clarify), Object.keys(S.msg(l).secPrivacy.finishChecks)));
+    const names = [...S.trackSections("sec"), ...S.trackSections("privacy")].map((s) => s.name);
+    ok(spKeys("pt") === spKeys("en") && spKeys("es") === spKeys("en") && ["pt", "es"].every((l) => names.every((n) => S.msg(l).sectionNames[n] && S.msg(l).secPrivacy.sectionNames[n])) &&
+      S.trackSections("core") === undefined && S.trackSections("sec").length === 5 && S.trackSections("privacy").length === 6,
+      "A2: EN/PT/ES parity — the same secPrivacy messages in every language, PT/ES names for all 11 [SEC] / [PRIVACY] sections");
+    const desc = (n) => (list.result.tools.find((t) => t.name === n) || {}).description || "";
+    const trackItem = (n) => JSON.stringify((list.result.tools.find((t) => t.name === n) || {}).inputSchema || {});
+    ok(/sec-sections \/ privacy-sections/.test(desc("spec_doctor")) && /\+sec/.test(desc("spec_classify")) && /\+privacy/.test(desc("spec_add_track")) &&
+      /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_create")) && /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_init")) &&
+      /tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_add_track")) && !/"enum"[^\]]*"privacy"/.test(trackItem("spec_create")),
+      "A2: the MCP tool descriptions name sec / privacy (tracks keep no schema enum — unknown names get the did-you-mean)");
+  }
+
+  { // Behavioural plugin evals (evals/behavior-*, tag `behavior`): well-formed, cheap, naming only REAL MCP tools, and
+    // their scaffold fixtures still build against THIS engine — a refused approval in a fixture or a renamed tool would
+    // otherwise only show up as a mysterious 0 in a paid `claude plugin eval` run.
+    const evDir = path.join(root, "evals");
+    const readEv = (...p) => fs.readFileSync(path.join(evDir, ...p), "utf8");
+    const front = (t) => t.split(/^---\r?$/m)[1] || "";
+    const behav = fs.readdirSync(evDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && fs.existsSync(path.join(evDir, e.name, "prompt.md")) && /^\s+- behavior\s*$/m.test(readEv(e.name, "prompt.md")))
+      .map((e) => e.name);
+    const serverSrc = fs.readFileSync(path.join(root, "mcp", "server.js"), "utf8");
+    const toolNames = new Set([...serverSrc.matchAll(/^\s+name: "([a-z_]+)",\s*$/gm)].map((m) => m[1]));
+    const pluginName = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).name;
+    const serverName = Object.keys(JSON.parse(fs.readFileSync(path.join(root, "mcp", "servers.json"), "utf8")).mcpServers)[0];
+    const prefix = `mcp__plugin_${pluginName}_${serverName}__`;
+    const yamlQuoted = (fm, k) => { const m = fm.match(new RegExp("^" + k + ":\\s*'((?:[^']|'')*)'\\s*$", "m")); return m ? m[1].replace(/''/g, "'") : null; };
+    // mcp__plugin_<p>_<s>__spec_finish · …__spec_(?:classify|create) → [prefix, [tool names]]
+    const mcpRefs = (t) => [...t.matchAll(/(mcp__[\w-]+?__)([a-z_]*)(?:\(\?:([a-z_|]+)\))?/g)].map((m) => [m[1], m[3] ? m[3].split("|").map((a) => m[2] + a) : [m[2]]]);
+    const problems = [];
+    for (const c of behav) {
+      const pfm = front(readEv(c, "prompt.md"));
+      const runs = +((pfm.match(/^runs:\s*(\d+)\s*$/m) || [])[1]), turns = +((pfm.match(/^max_turns:\s*(\d+)\s*$/m) || [])[1]);
+      if (!(runs >= 2 && runs <= 3 && turns > 0 && turns <= 20)) problems.push(`${c}: runs 2-3 and max_turns <= 20 (got ${runs} / ${turns})`);
+      const cy = fs.existsSync(path.join(evDir, c, "case.yaml")) ? readEv(c, "case.yaml") : "";
+      if (!/^schema_version: "1\.1"\s*$/m.test(cy) || !/^\s+scaffold_script: fixture\.sh\s*$/m.test(cy)) problems.push(`${c}: case.yaml (schema 1.1 + scaffold_script: fixture.sh)`);
+      const fx = fs.existsSync(path.join(evDir, c, "fixture.sh")) ? readEv(c, "fixture.sh") : "";
+      if (!fx.includes('. "$(dirname "${BASH_SOURCE[0]}")/../fixtures/lib.sh"')) problems.push(`${c}: fixture.sh must source ../fixtures/lib.sh`);
+      const graders = fs.readdirSync(path.join(evDir, c, "graders")).filter((g) => g.endsWith(".md"));
+      const types = graders.map((g) => {
+        const gfm = front(readEv(c, "graders", g));
+        const type = (gfm.match(/^type:\s*(\S+)\s*$/m) || [])[1];
+        if (!["regex", "tool_used", "tool_order", "file_exists", "llm"].includes(type)) problems.push(`${c}/${g}: unknown type ${type}`);
+        const flags = (gfm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || "";
+        const refs = mcpRefs((gfm.match(/^tool:\s*(\S+)\s*$/m) || [])[1] || "");
+        for (const k of ["pattern", "input_match"]) {
+          const re = yamlQuoted(gfm, k);
+          if (re == null) continue;
+          try { new RegExp(re, flags); } catch (e) { problems.push(`${c}/${g}: ${k} does not compile (${e.message})`); }
+          refs.push(...mcpRefs(re));
+        }
+        if ((type === "regex" && yamlQuoted(gfm, "pattern") == null) || (type === "tool_used" && !/^tool:\s*\S+/m.test(gfm))) problems.push(`${c}/${g}: ${type} without its pattern / tool`);
+        for (const [pre, names] of refs) {
+          if (pre !== prefix) problems.push(`${c}/${g}: MCP prefix ${pre} is not ${prefix}`);
+          names.filter((n) => !toolNames.has(n)).forEach((n) => problems.push(`${c}/${g}: no MCP tool named ${n}`));
+        }
+        return type;
+      });
+      if (graders.length < 3 || !types.some((t) => t !== "llm")) problems.push(`${c}: at least 3 graders, one of them deterministic`);
+    }
+    const langs = ["en", "pt", "es"].filter((l) => behav.some((c) => new RegExp(`^\\s+- ${l}\\s*$`, "m").test(readEv(c, "prompt.md"))));
+    const evReadme = readEv("README.md");
+    ok(behav.length >= 5 && langs.length === 3 && !problems.length && behav.every((c) => evReadme.includes("`" + c + "`")) &&
+      /--scaffold/.test(evReadme) && /--allow-real-servers/.test(evReadme) && evReadme.includes(prefix + "*"),
+      `plugin evals: ${behav.length} behavioural cases (EN/PT/ES) — 2-3 runs, <= 20 turns, a scaffold fixture, >= 3 graders incl. a deterministic one, every regex compiles, every MCP tool they name exists (${prefix}…); the README lists each and how to run them` +
+      (problems.length ? " — " + problems.join(" · ") : ""));
+
+    // Build every fixture exactly as `claude plugin eval --scaffold` does (bash, cwd = an empty workspace) and check the
+    // premise each case relies on. Needs bash (Git Bash on Windows, like the eval harness); skipped without it.
+    const bashBin = (process.platform === "win32"
+      ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"]
+      : [process.env.DEV_SPEC_TEST_BASH, "bash"]).filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8" }).status === 0; } catch { return false; } });
+    if (!bashBin) ok(true, "plugin evals: behavioural fixtures build — skipped (no bash here; set DEV_SPEC_TEST_BASH)");
+    else {
+      const fxRoot = path.join(tmp, "a3-eval-fixtures");
+      const gitHome = path.join(tmp, "a3-eval-home");
+      fs.mkdirSync(gitHome, { recursive: true });
+      const env = { ...process.env, HOME: gitHome, USERPROFILE: gitHome, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: path.join(gitHome, "none.gitconfig") };
+      const built = {};
+      const buildErr = [];
+      for (const c of behav) {
+        const ws = path.join(fxRoot, c);
+        fs.mkdirSync(ws, { recursive: true });
+        const r = spawnSync(bashBin, [path.join(evDir, c, "fixture.sh")], { cwd: ws, env, encoding: "utf8", timeout: 120000 });
+        if (r.status === 0) built[c] = ws; else buildErr.push(`${c}: exit ${r.status} ${(r.stderr || "").trim().slice(0, 300)}`);
+      }
+      const at = (c) => built[c] || path.join(fxRoot, "__missing__");
+      const git = (c, ...a) => { const r = spawnSync("git", a, { cwd: at(c), env, encoding: "utf8" }); return r.status === 0 ? r.stdout.trim() : null; };
+      const safeA3 = (f) => { try { return f(); } catch (e) { return { error: String(e && e.message || e) }; } };
+      // Plan-first + bugfix: a plain project with no .specs/, and the coupon defect is real (PROMO10 twice → 81, not 90).
+      const discount = safeA3(() => { const m = require(path.join(at("behavior-bugfix-root-cause-pt"), "src", "discount.js")); return m.applyCoupon(m.applyCoupon(m.newCart(100), "PROMO10"), "PROMO10").total; });
+      const plain = ["behavior-plan-first-en", "behavior-bugfix-root-cause-pt"].every((c) => built[c] && !fs.existsSync(path.join(at(c), ".specs")) && git(c, "log", "--oneline") !== null);
+      // Evidence cases: every planning phase approved, task 1 verified, task 2 (with a runnable _Verify:_) is next.
+      const evidenceReady = [["behavior-evidence-recorded-es", "exportar-csv"], ["behavior-evidence-no-bare-tick-en", "csv-export"]].every(([c, f]) => {
+        const n = safeA3(() => S.nextTask(at(c), f)), d = safeA3(() => S.specDoctor(at(c), f));
+        const v = safeA3(() => S.verificationStatus(at(c), f, path.join(at(c), ".specs", f)));
+        return n.ok && n.next && n.next.number === 2 && d.ok && d.gatesOk === true && Array.isArray(v.unverified) && !v.unverified.length &&
+          /_Verify: node --test test\/cli\.test\.js_/.test(fs.readFileSync(path.join(at(c), ".specs", f, "tasks.md"), "utf8"));
+      });
+      // Finish: READY on its feature branch, main holds the app before the feature.
+      const fin = safeA3(() => S.finishFeature(at("behavior-finish-local-merge-en"), "csv-export"));
+      const finReady = fin.ok && fin.readyToFinish === true && git("behavior-finish-local-merge-en", "rev-parse", "--abbrev-ref", "HEAD") === "feat/csv-export" &&
+        git("behavior-finish-local-merge-en", "rev-parse", "--verify", "-q", "main") !== null;
+      // Gate: requirements approved, the design gate refuses on the unfilled [SaaS] sections (nothing recorded).
+      const gate = safeA3(() => S.approvePhase(at("behavior-gate-refused-es"), "limite-peticiones", "design", "a3-test"));
+      const gateState = safeA3(() => S.readState(at("behavior-gate-refused-es"), "limite-peticiones"));
+      const gateOk = gate.ok === false && (gate.failing || []).includes("saas-sections") && gateState && gateState.approvals &&
+        gateState.approvals.requirements && !gateState.approvals.design;
+      // Upgrade: an older .specs/ — no specVersion, tracks to save for both features, legacy approvals without a baseline.
+      const up = safeA3(() => S.specUpgrade(at("behavior-upgrade-audit-pt")));
+      const upOk = up.ok && up.needsUpgrade === true && up.from == null && up.plan && up.plan.tracks.length === 2 &&
+        up.plan.history.skip.some((x) => x.reason === "no-fingerprint") && up.lang === "pt";
+      ok(!buildErr.length && behav.every((c) => built[c]) && discount === 81 && plain && evidenceReady && finReady && gateOk && upOk,
+        "plugin evals: every behavioural fixture builds with the current engine (bash " + (process.platform === "win32" ? "— Git Bash" : "") + ") and holds its premise — plan/bugfix: no .specs/, the coupon bug is real; " +
+        "evidence: gates approved, task 1 verified, task 2 next with its _Verify:_; finish: ready on feat/csv-export; gate: design refused on saas-sections; upgrade: pre-1.13 audit in PT" +
+        (buildErr.length ? " — " + buildErr.join(" · ") : "") +
+        ` (got discount=${discount}, plain=${plain}, evidence=${evidenceReady}, finish=${finReady}, gate=${gateOk}${gate.failing ? " " + gate.failing.join(",") : ""}, upgrade=${upOk})`);
+    }
+  }
+
+  { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const vp = S.verifyPipeMasked;
+    const pipeYes = ["npm test | tee log", "pytest | grep passed", "npm test 2>&1 | tee out.log", "a |& tee x", "a|b", 'node x.js | tee "log file"', "(npm test | tee log)",
+      "npm test && eslint . | tee lint.log"];
+    const pipeNo = ["npm test || exit 1", "a || b", 'grep "a|b" file', "grep 'a|b' file", "echo $(ls | wc -l)", "echo `ls | wc -l`", "set -o pipefail; npm test | tee log",
+      'bash -o pipefail -c "npm test | tee log"', "a \\| b", "a >| out", "npm test", "echo a^|b", 'node -e "process.exit(0)"', 'test "$(git status | wc -l)" = 0', "", null];
+    const vpWrong = pipeYes.filter((c) => !vp(c)).map((c) => "missed: " + c).concat(pipeNo.filter((c) => vp(c)).map((c) => "flagged: " + c));
+    ok(!vpWrong.length, "verifyPipeMasked: an unquoted single | (also |&, inside a subshell) is flagged; ||, a quoted '|' / \"|\", \\| / ^|, >|, a pipe inside $(…) / `…` and a command setting pipefail are not (" + vpWrong.join(" · ") + ")");
+
+    const pp = path.join(tmp, "proj-a4-pipes");
+    S.initProject(pp, ["core"], "en");
+    const pf = S.createFeature(pp, "Pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped check\n  - _Verify: `npm test | tee test.log`_\n" +
+      "- [ ] 2. [US1] Quoted pipe\n  - _Verify: grep \"a|b\" notes.txt_\n- [ ] 3. [US1] Or-chain\n  - _Verify: npm test || exit 1_\n- [ ] 4. [US1] Plain\n  - _Verify: npm test_\n");
+    const b1 = S.taskBrief(pp, "pipes", 1), b2 = S.taskBrief(pp, "pipes", 2), b3 = S.taskBrief(pp, "pipes", 3);
+    const b1w = S.taskBrief(pp, "pipes", 1, { write: true });
+    const verifySec = (md) => (md.split("## Verification (_Verify:_)")[1] || "").split("\n## ")[0];
+    ok(JSON.stringify(b1.verifyPipes) === '["npm test | tee test.log"]' && /`npm test \| tee test\.log` pipes into another command: a pipeline's exit code is its LAST command's/.test(verifySec(b1.brief)) &&
+      /set -o pipefail/.test(verifySec(b1.brief)) && b2.verifyPipes === undefined && b3.verifyPipes === undefined && !/pipes into another command/.test(b2.brief + b3.brief) &&
+      JSON.stringify(b1w.verifyPipes) === '["npm test | tee test.log"]' && /pipes into another command/.test(fs.readFileSync(b1w.paths.brief, "utf8")),
+      "spec_task_brief: a piped _Verify:_ is noted in the brief's Verification section and listed in verifyPipes (write:true too); a quoted '|' and '||' are not (got " + JSON.stringify([b1.verifyPipes, b2.verifyPipes, b3.verifyPipes]) + ")");
+
+    const d1 = S.specDoctor(pp, "pipes");
+    const dPipe = d1.checks.find((c) => c.id === "verify-pipes");
+    const clean = S.createFeature(pp, "No pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(clean.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Plain\n  - _Verify: npm test_\n- [ ] 2. [US1] Quoted\n  - _Verify: grep 'x|y' f_\n");
+    ok(dPipe && dPipe.status === "warn" && /#1 `npm test \| tee test\.log`/.test(dPipe.detail) && !/#2|#3|#4/.test(dPipe.detail) &&
+      !S.specDoctor(pp, "no-pipes").checks.some((c) => c.id === "verify-pipes"),
+      "spec_doctor: a warn check 'verify-pipes' names the task whose _Verify:_ pipes (only #1); a feature without one has no such check (got " + JSON.stringify(dPipe) + ")");
+
+    const c1 = S.completeTask(pp, "pipes", 1, { command: "npm test | tee test.log", exitCode: 0, summary: "12 passing" });
+    const c2 = S.completeTask(pp, "pipes", 2, { command: 'grep "a|b" notes.txt', exitCode: 0 });
+    const c3 = S.completeTask(pp, "pipes", 3, { command: "set -o pipefail; npm test | tee test.log", exitCode: 0 });
+    const c4 = S.completeTask(pp, "pipes", 4, { command: "npm test | tee test.log", exitCode: 1 });
+    ok(c1.ok && c1.pipeMasked === true && c1.verified === true && /Task 1: the recorded command pipes into another one \(`npm test \| tee test\.log`\)/.test(c1.note) &&
+      c2.ok && c2.pipeMasked === undefined && !c2.note && c3.ok && c3.pipeMasked === undefined && c4.ok === false && c4.recorded && c4.pipeMasked === undefined,
+      "spec_complete_task: a passing run whose command pipes → recorded + ticked with pipeMasked: true and a note; a quoted '|', a pipefail command and a failing run are not flagged (got " +
+      JSON.stringify([c1.pipeMasked, c1.note, c2.pipeMasked, c3.pipeMasked, c4.pipeMasked]) + ")");
+
+    // MCP = engine; PT / ES wording.
+    const mb = payload(await call("spec_task_brief", { name: "pipes", number: 1, projectDir: pp }));
+    const md = payload(await call("spec_doctor", { name: "pipes", projectDir: pp }));
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Piped again\n  - _Verify: pytest | grep passed_\n");
+    const mc = payload(await call("spec_complete_task", { name: "pipes", number: 1, evidence: { command: "pytest | grep passed", exitCode: 0 }, projectDir: pp }));
+    const ptF = S.createFeature(pp, "Tubos", ["core"], "", undefined, "pt");
+    const esF = S.createFeature(pp, "Tuberias", ["core"], "", undefined, "es");
+    for (const f of [ptF, esF]) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] x\n  - _Verify: npm test | tee log_\n");
+    const ptB = S.taskBrief(pp, "tubos", 1), esB = S.taskBrief(pp, "tuberias", 1);
+    const ptD = S.specDoctor(pp, "tubos").checks.find((c) => c.id === "verify-pipes"), esD = S.specDoctor(pp, "tuberias").checks.find((c) => c.id === "verify-pipes");
+    const ptC = S.completeTask(pp, "tubos", 1, { command: "npm test | tee log", exitCode: 0 }), esC = S.completeTask(pp, "tuberias", 1, { command: "npm test | tee log", exitCode: 0 });
+    const keysOf = (l) => Object.keys(S.msg(l).verifyPipe).sort().join();
+    ok(JSON.stringify(mb.verifyPipes) === '["npm test | tee test.log"]' && md.checks.some((c) => c.id === "verify-pipes" && c.status === "warn") && mc.ok && mc.pipeMasked === true &&
+      /encaminha a saída para outro comando \(pipe\)/.test(ptB.brief) && /redirige su salida a otro comando \(pipe\)/.test(esB.brief) &&
+      /um comando _Verify:_ encaminha a saída/.test(ptD.detail) && /un comando _Verify:_ redirige su salida/.test(esD.detail) &&
+      ptC.pipeMasked && /^Tarefa 1: o comando registado encaminha/.test(ptC.note) && esC.pipeMasked && /^Tarea 1: el comando registrado redirige/.test(esC.note) &&
+      keysOf("en") === "brief,completeNote,doctor,runHint" && keysOf("pt") === keysOf("en") && keysOf("es") === keysOf("en") &&
+      S.msg("pt").verifyPipe.runHint("a | b") !== S.msg("en").verifyPipe.runHint("a | b") && /cmd\.exe/.test(S.msg("es").verifyPipe.runHint("a | b")),
+      "MCP spec_task_brief / spec_doctor / spec_complete_task carry verifyPipes / verify-pipes / pipeMasked like the engine; the brief note, doctor detail and complete note are in PT / ES; the verifyPipe messages have the same keys in EN / PT / ES");
+  }
+
+  { // A4.1 — stdin closed: the server flushes the replies it already wrote before exiting. On Linux a pipe takes writes
+    // asynchronously once its 64 KB buffer is full, and a bare process.exit() dropped the queued tail (a client that sends
+    // its requests and closes stdin got 64 KB of ~390 KB). The reader here waits before reading, so the buffer fills.
+    const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: tmp }, stdio: ["pipe", "pipe", "ignore"] });
+    const closed = new Promise((resolve) => kid.on("close", (code) => resolve(code)));
+    kid.stdout.pause();
+    kid.stdin.end([1, 2, 3, 4, 5, 6, 7, 8].map((id) => JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list", params: {} })).join("\n") + "\n");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    let raw = "";
+    kid.stdout.setEncoding("utf8");
+    kid.stdout.on("data", (d) => (raw += d));
+    kid.stdout.resume();
+    const code = await Promise.race([closed, new Promise((resolve) => setTimeout(() => { kid.kill(); resolve("timeout"); }, 15000))]);
+    let ids = [];
+    try { ids = raw.split("\n").filter(Boolean).map((l) => JSON.parse(l).id); } catch { /* a cut reply is not JSON */ }
+    ok(code === 0 && ids.join() === "1,2,3,4,5,6,7,8",
+      "the server answers every request sent before stdin closes, even to a reader that is slower than it (replies flushed before exit; got " + ids.length + " of 8 replies, " + raw.length + " chars, exit " + code + ")");
+  }
+  { // A4.1 — scripts/test-docker.js (`npm run test:docker`): zero-dependency, offline-checkable parts — no Docker needed here.
+    const dockerJs = path.join(root, "scripts", "test-docker.js");
+    const src = fs.readFileSync(dockerJs, "utf8");
+    const mods = [...src.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]);
+    const help = spawnSync(process.execPath, [dockerJs, "--help"], { encoding: "utf8" });
+    const badArg = spawnSync(process.execPath, [dockerJs, "--suite", "nope"], { encoding: "utf8" });
+    const noPathEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^path$/i.test(k)));
+    const noDocker = spawnSync(process.execPath, [dockerJs], { encoding: "utf8", env: { ...noPathEnv, PATH: path.join(tmp, "no-such-bin-dir") } });
+    ok(mods.length && mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)) && require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js" &&
+      help.status === 0 && /--network none/.test(help.stdout) && /read-only/.test(help.stdout) && /node:18-alpine/.test(help.stdout) &&
+      badArg.status === 2 && /unknown suite 'nope'/.test(badArg.stderr) &&
+      noDocker.status === 2 && /Docker is not available: the docker command was not found/.test(noDocker.stderr) && /npm test/.test(noDocker.stderr) &&
+      /"--network", "none"/.test(src) && /:\/repo:ro/.test(src) && !/\.github|workflow/i.test(src),
+      "scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
+      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")");
+  }
+
+  { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
+    const b1Root = path.join(tmp, "b1-templates");
+    const b1 = (n) => path.join(b1Root, n);
+    const tw = (p, rel, text) => { const f = path.join(p, ".specs", "templates", ...rel.split("/")); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); return f; };
+    const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    // --- an override is used for new features: variables substituted, the active tracks' blocks appended (EN)
+    const pe = b1("en");
+    const reqTpl = "# Requirements — {{name}}\n\nSlug: {{slug}} · Tracks: {{tracks}} · Lang: {{lang}} · Date: {{date}} · Owner: {{owner}} · {{ Name }}\n\n## Summary\n{{summary}}\n\n" +
+      "## Context\n[Describe the business context of {{name}} in two lines]\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [zeta trigger] THE SYSTEM SHALL [zeta behaviour]\n" +
+      "2. **US-1.AC-2** — THE SYSTEM SHALL [zeta invariant]\n\n## Success Criteria\n- **SC-001** — [zeta metric]\n";
+    tw(pe, "requirements.md", reqTpl);
+    tw(pe, "design.md", "# Design — {{name}}\n\n## Context\n[zeta design context]\n\n## Constitution Check\n- [ ] [zeta principle] — complies\n");
+    tw(pe, "tasks.md", "# Tasks — {{name}}\n\n## Phase: Build\n- [ ] 1. [US1] Write the ADR for {{name}}\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] [zeta task]\n  - _Requirements: US-1.AC-2_\n");
+    const d0 = today();
+    const fe = S.createFeature(pe, "Billing Portal", ["saas"], "Pay invoices online", undefined, "en");
+    const d1 = today();
+    const feReq = rd(fe.dir, "requirements.md"), feDesign = rd(fe.dir, "design.md"), feTasks = rd(fe.dir, "tasks.md");
+    ok(fe.ok && fe.templates && fe.templates["requirements.md"] === ".specs/templates/requirements.md" && fe.templates["design.md"] === ".specs/templates/design.md" &&
+      fe.templates["tasks.md"] === ".specs/templates/tasks.md" && !fe.templates["quickstart.md"] && /^# Quickstart: Billing Portal/.test(rd(fe.dir, "quickstart.md")) &&
+      /^# Requirements — Billing Portal$/m.test(feReq) && /Slug: billing-portal · Tracks: core \+saas · Lang: en · Date: /.test(feReq) &&
+      (feReq.includes("Date: " + d0) || feReq.includes("Date: " + d1)) && feReq.includes("Owner: {{owner}} · Billing Portal\n") &&
+      feReq.includes("## Summary\nPay invoices online\n") && feReq.includes("[Describe the business context of Billing Portal in two lines]"),
+      "B1: spec_create scaffolds from .specs/templates/<artifact>.md — {{name}} {{slug}} {{tracks}} {{lang}} {{date}} {{summary}} substituted ({{ Name }}: case and spacing ignored), an unknown {{owner}} left as is; the result names the templates used; quickstart.md (no template) stays built-in");
+    ok(/^#### \[SaaS\] Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user from tenant A/m.test(feReq) && /^6\. \*\*US-1\.AC-6\*\*/m.test(feReq) &&
+      /\n## \[SaaS\] Performance Budget\n> \*\*TODO\*\*/.test(feDesign) && /## \[SaaS\] Cost Envelope/.test(feDesign) && feDesign.indexOf("[zeta design context]") < feDesign.indexOf("[SaaS]") &&
+      /^- \[ \] 3\. \[US1\] Emit metrics, add dashboard, configure alerts\n  - _Requirements: US-1\.AC-6_/m.test(feTasks) && /Enforce tenant isolation[^\n]*\n  - _Requirements: US-1\.AC-5_/.test(feTasks) &&
+      chk(S.specDoctor(pe, fe.slug), "ac-uniqueness").status === "pass" && S.traceCheck(pe, fe.slug).verdict === "pass",
+      "B1: an overridden requirements.md / design.md / tasks.md still gets the active track's criteria, mandatory sections (> **TODO** seeded) and task block, appended at the end after the template's own tasks — trace_check passes");
+    const fe2 = S.createFeature(pe, "No Summary", ["core"], "", undefined, "en");
+    const fe2Req = rd(fe2.dir, "requirements.md");
+    ok(fe2Req.includes("## Summary\n[TBD]\n") && !/\[SaaS\]/.test(fe2Req) && !/\[SaaS\]|Testability/.test(rd(fe2.dir, "design.md")) && !/\[SaaS\]/.test(rd(fe2.dir, "tasks.md")),
+      "B1: {{summary}} of a feature created without one is the generic [TBD] slot (still a placeholder); a core feature gets no track block");
+
+    // --- the untouched custom scaffold reads 'placeholder' (doctor / approve / next_action) — its template's slots are the corpus
+    const zeta = "[Describe the business context of Billing Portal in two lines]";
+    const repFe = S.featurePlaceholders(pe, fe.slug, "requirements.md");
+    ok(repFe.state === "placeholder" && repFe.items.some((i) => i.text === zeta) && repFe.items.some((i) => i.text === "[zeta trigger]") &&
+      S.placeholderReport(zeta + " and [zeta trigger]").length === 0,
+      "B1: the project's template slots are template placeholders — a {{name}} slot matches what the name became — while the same brackets outside this project are the user's content");
+    S.approvePhase(pe, fe.slug, "classification", "t", { force: true });
+    const apFe = S.approvePhase(pe, fe.slug, "requirements", "t");
+    const docFe = S.specDoctor(pe, fe.slug);
+    const naFe = S.nextAction(pe, fe.slug);
+    ok(!apFe.ok && apFe.refused && apFe.failing.includes("placeholders") && !apFe.failing.includes("phase-order") && chk(docFe, "placeholders").status === "fail" &&
+      /\[zeta trigger\]|Describe the business context/.test(chk(docFe, "placeholders").detail) && docFe.phase === "requirements" && naFe.step === "fill" && /requirements\.md/.test(naFe.recommendation),
+      "B1: an untouched custom scaffold is refused by spec_approve (placeholders), fails doctor's placeholders check and next_action says fill requirements.md; the template's verbatim task ('Write the ADR for …') doesn't make it 'tasks-ready'");
+    fs.writeFileSync(path.join(fe.dir, "requirements.md"), feReq.replace(zeta, "Customers pay their invoices online.")
+      .replace("WHEN [zeta trigger] THE SYSTEM SHALL [zeta behaviour]", "WHEN a customer pays an invoice THE SYSTEM SHALL mark it paid within 5 seconds")
+      .replace("THE SYSTEM SHALL [zeta invariant]", "THE SYSTEM SHALL never charge one invoice twice").replace("[zeta metric]", "95% of invoices are paid within a day").replace("[N]ms", "300ms"));
+    const apFe2 = S.approvePhase(pe, fe.slug, "requirements", "t");
+    ok(S.featurePlaceholders(pe, fe.slug, "requirements.md").items.length === 0 && !(apFe2.failing || []).includes("placeholders"),
+      "B1: once the template's slots are written, requirements.md is no longer 'placeholder' for the gate (" + (apFe2.ok ? "approved" : (apFe2.failing || []).join(",")) + ")");
+    // The corpus follows the templates: an edited template no longer makes its old slot a placeholder (no stale cache).
+    const fe2Before = S.featurePlaceholders(pe, fe2.slug, "requirements.md").items.map((i) => i.text);
+    tw(pe, "requirements.md", reqTpl.replace("[zeta trigger]", "[omega trigger]"));
+    const fe2After = S.featurePlaceholders(pe, fe2.slug, "requirements.md").items.map((i) => i.text);
+    ok(fe2Before.includes("[zeta trigger]") && !fe2After.includes("[zeta trigger]") && fe2After.includes("[zeta behaviour]"),
+      "B1: the per-project corpus is invalidated when a template changes — the edited template's old slot no longer counts, the others still do");
+
+    // --- PT: the <lang>/ template wins for a PT feature, the shared one serves EN; track blocks in the feature's language
+    const pp = b1("pt");
+    S.initProject(pp, ["core"], "pt");
+    tw(pp, "requirements.md", "# EN shared — {{name}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [shared trigger] THE SYSTEM SHALL [shared behaviour]\n");
+    tw(pp, "pt/requirements.md", "# Requisitos — {{name}}\n\n## Resumo\n{{summary}}\n\n## Contexto\n[Descreve o contexto de {{name}}]\n\n## Critérios de Aceitação (EARS)\n" +
+      "1. **US-1.AC-1** — QUANDO [gatilho zeta] O SISTEMA DEVE [comportamento zeta]\n");
+    const fp = S.createFeature(pp, "Faturação", ["saas"], "", undefined, "pt");
+    const fen = S.createFeature(pp, "Invoices EN", ["core"], "", undefined, "en");
+    const fpReq = rd(fp.dir, "requirements.md");
+    const fpRep = S.featurePlaceholders(pp, fp.slug, "requirements.md").items.map((i) => i.text);
+    ok(fp.ok && fp.lang === "pt" && fp.templates["requirements.md"] === ".specs/templates/pt/requirements.md" && /^# Requisitos — Faturação$/m.test(fpReq) &&
+      fpReq.includes("## Resumo\n[a definir]\n") && /^#### \[SaaS\] Critérios de Aceitação \(EARS\)$/m.test(fpReq) && /## \[SaaS\] Orçamento de Desempenho/.test(rd(fp.dir, "design.md")) &&
+      fpRep.includes("[Descreve o contexto de Faturação]") && fpRep.includes("[gatilho zeta]") && fpRep.includes("[a definir]") &&
+      fen.templates["requirements.md"] === ".specs/templates/requirements.md" && /^# EN shared — Invoices EN/.test(rd(fen.dir, "requirements.md")),
+      "B1: PT — .specs/templates/pt/requirements.md wins for a PT feature (the shared one serves the EN feature); {{summary}} → [a definir]; the +saas criteria and design sections are appended in Portuguese; its slots read as placeholders");
+
+    // --- a template with its own US-1.AC-5/6: the track criteria are renumbered (no duplicate), tasks and test rows follow
+    const pc = b1("collide");
+    const six = [1, 2, 3, 4, 5, 6];
+    tw(pc, "requirements.md", "# Requirements — {{name}}\n\n## Acceptance Criteria (EARS)\n" + six.map((n) => `${n}. **US-1.AC-${n}** — WHEN [kappa trigger ${n}] THE SYSTEM SHALL [kappa behaviour ${n}]`).join("\n") + "\n");
+    tw(pc, "test-plan.md", "# Test Plan — {{name}}\n\n## Matrix\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      six.map((n) => `| T-0${n} | unit | example | [kappa test ${n}] | US-1.AC-${n} | \`tests/unit/...\` |`).join("\n") + "\n");
+    tw(pc, "tasks.md", "# Tasks — {{name}}\n\n## Phase: Build\n" + six.map((n) => `- [ ] ${n}. [US1] [kappa task ${n}]\n  - _Requirements: US-1.AC-${n}_`).join("\n") + "\n");
+    const fc = S.createFeature(pc, "Tenants", ["tdd", "saas"], "", undefined, "en");
+    const fcReq = rd(fc.dir, "requirements.md"), fcPlan = rd(fc.dir, "test-plan.md"), fcTasks = rd(fc.dir, "tasks.md");
+    ok(fc.templates["test-plan.md"] === ".specs/templates/test-plan.md" && /^7\. \*\*US-1\.AC-7\*\* — WHEN a user from tenant A/m.test(fcReq) && /^8\. \*\*US-1\.AC-8\*\* — THE SYSTEM SHALL respond/m.test(fcReq) &&
+      (fcReq.match(/\*\*US-1\.AC-5\*\*/g) || []).length === 1 && chk(S.specDoctor(pc, fc.slug), "ac-uniqueness").status === "pass" &&
+      /^## \[SaaS\] Traceability Matrix$/m.test(fcPlan) && /\| T-07 \| integration \| property \| tenant A never reads tenant B's records \| US-1\.AC-7 \|/.test(fcPlan) && /\| T-08 \| load \| example \|[^\n]*\| US-1\.AC-8 \|/.test(fcPlan) &&
+      /Enforce tenant isolation[^\n]*\n  - _Requirements: US-1\.AC-7_/.test(fcTasks) && /Emit metrics[^\n]*\n  - _Requirements: US-1\.AC-8_/.test(fcTasks) && S.traceCheck(pc, fc.slug).verdict === "pass",
+      "B1: a template defining its own US-1.AC-5/6 → the +saas criteria are renumbered after them (US-1.AC-7/8, no duplicate ID); the test rows appended to the test-plan template (T-07/T-08 under '## [SaaS] Traceability Matrix') and the task block cite the new IDs — trace_check passes");
+    const ckTasks = S.templates(pc, "check", { artifact: "tasks" });
+    ok(ckTasks.ok && ckTasks.checked.length === 1 && ckTasks.checked[0].file === ".specs/templates/tasks.md" && !ckTasks.problems.some((p) => /phantom/.test(p.code)) &&
+      S.templates(pc, "check").problems.every((p) => !/phantom/.test(p.code)),
+      "B1: check <artifact> judges a tasks template against the project's requirements template (not the built-in one) and reports on that file only");
+
+    // --- steering: spec_init / steering_scaffold / spec_add_track use .specs/templates/[<lang>/]steering/<file>.md
+    const ps = b1("steer");
+    tw(ps, "steering/constitution.md", "# Constitution of {{name}}\n\n1. [kappa principle]\n");
+    tw(ps, "steering/api-rules.md", "---\ninclusion: fileMatch\nfileMatchPattern: \"src/api/**\"\n---\n# API rules ({{slug}})\n\n- [kappa rule]\n");
+    tw(ps, "pt/steering/tech.md", "# Stack técnica de {{name}}\n\n- [kappa stack]\n");
+    tw(ps, "steering/tech.md", "# Shared tech {{name}}\n");
+    const is = S.initProject(ps, ["core"], "pt");
+    const ss = S.scaffoldSteeringFile(ps, "api-rules.md", "pt");
+    const stDir = path.join(ps, ".specs", "steering");
+    const sDoc = S.specDoctor(ps, S.createFeature(ps, "Uma Coisa", ["core"], "", undefined, "pt").slug);
+    ok(is.templates && is.templates["constitution.md"] === ".specs/templates/steering/constitution.md" && is.templates["tech.md"] === ".specs/templates/pt/steering/tech.md" && !is.templates["product.md"] &&
+      rd(stDir, "constitution.md") === "# Constitution of steer\n\n1. [kappa principle]\n" && rd(stDir, "tech.md").startsWith("# Stack técnica de steer") &&
+      ss.ok && ss.created && ss.template === ".specs/templates/steering/api-rules.md" && /# API rules \(steer\)/.test(rd(stDir, "api-rules.md")) &&
+      S.steeringFrontMatter(rd(stDir, "api-rules.md")).inclusion === "fileMatch" && /constitution\.md/.test(chk(sDoc, "steering").detail),
+      "B1: spec_init / steering_scaffold write the steering stubs from .specs/templates/[<lang>/]steering/<file>.md (the PT one wins in a PT project; {{name}} / {{slug}} = the project folder), a custom scoped file included; an untouched one is still a template for doctor's steering check");
+    const pa = b1("addtrack");
+    tw(pa, "test-plan.md", "# Test Plan — {{name}} ({{tracks}})\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | [lambda test] | US-1.AC-1 | `tests/unit/...` |\n");
+    tw(pa, "load-test.md", "# Load — {{name}}\n\n[lambda load scenario]\n");
+    tw(pa, "steering/scale.md", "# Scale ({{tracks}})\n\n[lambda scale]\n");
+    const fa = S.createFeature(pa, "Reports", ["core"], "", undefined, "en");
+    const at = S.addTrack(pa, "Reports", "tdd saas");
+    ok(at.ok && at.templates && at.templates["test-plan.md"] === ".specs/templates/test-plan.md" && at.templates["load-test.md"] === ".specs/templates/load-test.md" &&
+      at.templates["steering/scale.md"] === ".specs/templates/steering/scale.md" && /^# Test Plan — Reports \(core \+tdd \+saas\)$/m.test(rd(fa.dir, "test-plan.md")) &&
+      rd(path.join(pa, ".specs", "steering"), "scale.md").startsWith("# Scale (core +tdd +saas)") && /^# Load — Reports/.test(rd(fa.dir, "load-test.md")),
+      "B1: spec_add_track scaffolds the new track's artifacts and steering from the project's templates too ({{tracks}} = the tracks after the change)");
+
+    // --- spec_import scaffolds what it doesn't import from the project's templates (a test-plan template is kept as is)
+    const pim = b1("import");
+    const kiroDir = path.join(pim, ".kiro", "specs", "login");
+    fs.mkdirSync(kiroDir, { recursive: true });
+    fs.writeFileSync(path.join(kiroDir, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to log in, so that I can use the app.\n\n#### Acceptance Criteria\n\n" +
+      "1. WHEN the user submits valid credentials THEN the system SHALL create a session\n2. IF the password is wrong THEN the system SHALL show an error\n");
+    tw(pim, "quickstart.md", "# Try {{name}} by hand\n\n1. [omicron step]\n");
+    tw(pim, "test-plan.md", "# Plan — {{name}}\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | [omicron test] | US-1.AC-1 | `tests/unit/...` |\n");
+    const imp = S.importSpec(pim, "kiro", ".kiro/specs/login", { tracks: "tdd" });
+    ok(imp.ok && /^# Try login by hand/.test(rd(imp.dir, "quickstart.md")) && /^# Plan — login/.test(rd(imp.dir, "test-plan.md")) && rd(imp.dir, "test-plan.md").includes("[omicron test]") &&
+      /US-1\.AC-2/.test(rd(imp.dir, "requirements.md")) && !/\{\{/.test(rd(imp.dir, "requirements.md")),
+      "B1: spec_import scaffolds the files it doesn't import from the project's templates — a test-plan template is the team's format and is kept (not re-planned); the imported requirements stay the imported ones");
+
+    // --- bugfix: bug.md / bug-tasks.md templates; the root-cause gate holds on the template's own slot
+    const pb = b1("bug");
+    tw(pb, "bug.md", "# Bug — {{name}}\n\n## Reproduction\nSteps: [mu steps]\n\n## Root Cause\nThe cause, with evidence: [mu cause]\n");
+    tw(pb, "bug-tasks.md", "# Tasks — {{name}}\n\n## Phase: Fix\n- [ ] 1. [shared] Reproduce {{name}} and write the steps\n  - _Requirements: US-1.AC-1_\n" +
+      "- [ ] 2. [shared] Find the root cause of {{name}}\n  - _Requirements: US-1.AC-1_\n");
+    const fb = S.createFeature(pb, "Crash on save", ["core"], "", undefined, "en", "bugfix");
+    const dbug = S.specDoctor(pb, fb.slug);
+    ok(fb.ok && fb.kind === "bugfix" && fb.templates["bug.md"] === ".specs/templates/bug.md" && fb.templates["tasks.md"] === ".specs/templates/bug-tasks.md" && !fb.templates["requirements.md"] &&
+      /^# Bug — Crash on save/.test(rd(fb.dir, "bug.md")) && chk(dbug, "root-cause").status === "fail" && chk(dbug, "reproduction").status === "warn" && dbug.phase === "requirements",
+      "B1: a bugfix scaffolds from the bug.md / bug-tasks.md templates; a Root Cause holding the template's own slot beside its prose stays unfilled (the root-cause gate holds) and the template's steps don't make it 'tasks-ready'");
+
+    // --- spec_templates list / init
+    const lsPt = S.templates(pp, "list", { lang: "pt" });
+    const lsEn = S.templates(pp, "list");
+    const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
+    ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 27 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
+      S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
+      "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
+    const pi = b1("init");
+    const i1 = S.templates(pi, "init", { artifact: "requirements.md" });
+    fs.appendFileSync(path.join(pi, ".specs", "templates", "requirements.md"), "\n<!-- team edit -->\n");
+    const i2 = S.templates(pi, "init", { artifact: "Requirements" });
+    const i3 = S.templates(pi, "init", { lang: "es" });
+    const tplDir = path.join(pi, ".specs", "templates");
+    ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
+      i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
+      i3.created.length === 27 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
+      S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 27, --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+
+    // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
+    const pk = b1("check");
+    tw(pk, "design.md", "# Design — {{name}}\n\n## Constitution Check\n- [ ] [p] — complies\n\n## [SaaS] Performance Budget\n> **TODO** — fill it.\n\n## [SaaS] Scale Design\n> **TODO** — fill it.\n\n" +
+      "## [SaaS] Multi-tenancy Model\n> **TODO** — fill it.\n\n## [SaaS] Cost Envelope\n- $ per 1000 users per month\n");
+    tw(pk, "requirements.md", "# R — {{name}} {{owner}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [a] THE SYSTEM SHALL [b]\n2. **US-1.AC-1** — WHEN [c] THE SYSTEM SHALL [d]\n3. **US-1.AC-2** — WHEN [e] the page [f]\n");
+    tw(pk, "tasks.md", "# T\n\n- [ ] 1. [x]\n  - _Requirements: US-1.AC-9_\n");
+    tw(pk, "bug.md", "# Bug\n\n## Reproduction\n> **TODO** — steps.\n\n## Root Cause\nA race condition in the save handler.\n");
+    tw(pk, "eval-plan.md", "# Eval plan {{name}}\n\nGolden set of 100 items, judged by a rubric.\n");
+    tw(pk, "notes.md", "not a template\n");
+    tw(pk, "fr/requirements.md", "# FR\n");
+    tw(pk, "quickstart.md", "   \n");
+    const ck = S.templates(pk, "check");
+    const has = (code, file, sev) => ck.problems.some((p) => p.code === code && p.file === ".specs/templates/" + file && (!sev || p.severity === sev));
+    const msgOf = (code) => (ck.problems.find((p) => p.code === code) || {}).message || "";
+    ok(ck.ok && ck.verdict === "fail" && has("missing-section", "design.md", "error") && /^\[SaaS\] Observability is missing/.test(msgOf("missing-section")) &&
+      ck.problems.filter((p) => p.code === "missing-section").length === 1 && has("no-sentinel", "design.md", "warn") && /\[SaaS\] Cost Envelope/.test(msgOf("no-sentinel")) &&
+      has("ears-no-modal", "requirements.md", "error") && has("ac-duplicate", "requirements.md", "error") && ck.problems.some((p) => p.code === "unknown-variable" && p.line === 1 && /\{\{owner\}\}/.test(p.message)) &&
+      has("phantom-ac", "tasks.md", "warn") && /US-1\.AC-9/.test(msgOf("phantom-ac")) && has("builtin-phantom", "requirements.md", "warn") && /test-plan\.md/.test(msgOf("builtin-phantom")) &&
+      has("root-cause-filled", "bug.md", "error") && has("no-placeholders", "eval-plan.md", "warn") && has("unknown-file", "notes.md") && has("unknown-file", "fr/") && has("empty", "quickstart.md") &&
+      ck.errors === ck.problems.filter((p) => p.severity === "error").length && /^\d+ template file\(s\) checked — [1-9]\d* error\(s\)/.test(ck.lines[0]) && ck.lines.some((l) => /^  ✗ \.specs\/templates\/design\.md — \[SaaS\] Observability/.test(l)),
+      "B1: spec_templates check flags a design template missing a +saas mandatory section (error) and one without its > **TODO** line, EARS / AC-ID errors, unknown {{variables}}, phantom AC IDs, a Root Cause that already reads as written, a chain template with no slot, empty and unknown files");
+    // Only the test plan is the team's: the built-in tasks of a +tdd feature make green T-02…T-05 it never plans (check warns);
+    // the appended +saas rows keep the built-in T-06 / T-07 those tasks cite.
+    const ptp = b1("testplan-only");
+    tw(ptp, "test-plan.md", "# Test Plan — {{name}}\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | [xi test] | US-1.AC-1 | `tests/unit/...` |\n");
+    const ckTp = S.templates(ptp, "check");
+    const ftp = S.createFeature(ptp, "Plan Only", ["tdd", "saas"], "", undefined, "en");
+    const ftpPlan = rd(ftp.dir, "test-plan.md");
+    const ftpGaps = S.traceGapLines(S.traceCheck(ptp, ftp.slug), "en").join(" | ");
+    ok(ckTp.problems.some((p) => p.code === "builtin-phantom-test" && p.file === ".specs/templates/test-plan.md" && /T-02, T-03, T-04, T-05/.test(p.message) && /tasks\.md/.test(p.message)) &&
+      /\| T-06 \| integration \| property \| tenant A never reads tenant B's records \| US-1\.AC-5 \|/.test(ftpPlan) && /\| T-07 \| load \|/.test(ftpPlan) && !/T-0[67]/.test(ftpGaps) && /T-02/.test(ftpGaps),
+      "B1: check warns that the built-in tasks of a +tdd feature make green T-IDs a test-plan template doesn't plan; the +saas rows appended to it keep the built-in T-06 / T-07 the built-in tasks cite (" + ftpGaps + ")");
+    const fk = S.createFeature(pk, "Checked", ["saas"], "", undefined, "en");
+    ok(/Observability:missing/.test(chk(S.specDoctor(pk, fk.slug), "saas-sections").detail) && !/\[SaaS\] Observability/.test(rd(fk.dir, "design.md")) && !(fk.templates || {})["quickstart.md"],
+      "B1: the rule check enforces — a design template carrying some [SaaS] headings gets none appended, so the section it lacks is missing for doctor; an empty template is ignored (built-in used)");
+
+    // --- confinement: only allowlisted names, nothing outside .specs/templates/ is read or written
+    const pt0 = b1("trav");
+    const bad = ["../evil", "..\\evil", "steering/../../evil", "steering/NUL.md", "steering/__proto__.md", "steering/sub/x.md", "__proto__", "constructor", "requirements/../../x",
+      "/etc/passwd", "C:\\x\\requirements.md", "templates/requirements.md", "Requirements.md/.."];
+    const badRes = bad.map((a) => S.templates(pt0, "init", { artifact: a }));
+    ok(badRes.every((r) => !r.ok && /^Unknown template '/.test(r.error)) && !fs.existsSync(path.join(pt0, ".specs")) && !fs.existsSync(path.join(b1Root, "evil")) &&
+      !S.templates(pt0, "delete").ok && /Unknown templates action 'delete'/.test(S.templates(pt0, "delete").error) && !S.templates(pt0, "list", { lang: "fr" }).ok &&
+      S.templateKey("steering/api-rules") === "steering/api-rules.md" && S.templateKey("steering\\tech.md") === "steering/tech.md" && S.templateKey(" Bug-Tasks.md ") === "bug-tasks",
+      "B1: spec_templates refuses any template name outside the allowlist (traversal, absolute paths, device / prototype names, nested steering) and an unknown action / lang — nothing is written");
+    const outDir = b1("outside-tpl");
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, "requirements.md"), "# OUTSIDE {{name}}\n");
+    const pj = b1("junction");
+    fs.mkdirSync(path.join(pj, ".specs", "templates"), { recursive: true });
+    let linked = false;
+    try { fs.symlinkSync(outDir, path.join(pj, ".specs", "templates", "pt"), "junction"); linked = true; } catch { /* no link support: the lexical allowlist above still holds */ }
+    const fj = S.createFeature(pj, "Ligada", ["core"], "", undefined, "pt");
+    // …and a templates/ folder that is itself a link out of the project: nothing is read from it, init writes nothing into it.
+    const pj2 = b1("junction2");
+    fs.mkdirSync(path.join(pj2, ".specs"), { recursive: true });
+    let linked2 = false;
+    try { fs.symlinkSync(outDir, path.join(pj2, ".specs", "templates"), "junction"); linked2 = true; } catch { /* no link support */ }
+    const fj2 = S.createFeature(pj2, "Linked", ["core"], "", undefined, "en");
+    const ij2 = linked2 ? S.templates(pj2, "init") : { ok: false, error: "Refused to write" };
+    ok(!/OUTSIDE/.test(rd(fj.dir, "requirements.md")) && (!linked || S.templates(pj, "list", { lang: "pt" }).ignored.includes(".specs/templates/pt")) &&
+      !/OUTSIDE/.test(rd(fj2.dir, "requirements.md")) && !ij2.ok && /^Refused to write \.specs\/templates\/classification\.md/.test(ij2.error) &&
+      fs.readdirSync(outDir).join() === "requirements.md",
+      "B1: a linked folder under .specs/templates/ — or templates/ itself linked out of the project — is never read, and init writes nothing through it" + (linked && linked2 ? "" : " (links unavailable here)"));
+    const resv = S.createFeature(pe, "templates", ["core"], "", undefined, "en");
+    tw(pe, ".gitkeep", "");
+    ok(!resv.ok && /reserved/.test(resv.error) && !S.listFeatures(pe).features.some((x) => x.name === "templates") && !(S.listFeatures(pe).ignored || []).includes("templates") &&
+      !S.templates(pe, "list").ignored.length && !S.templates(pe, "check").problems.some((p) => /gitkeep/.test(p.file)),
+      "B1: 'templates' is a reserved folder name under .specs/ — never a new feature, never listed; a dotfile in it (.gitkeep) is not reported");
+    // A feature named "templates" created before 1.14 (its folder holds a .state.json) stays a feature — never read as templates.
+    const pl = b1("legacy");
+    const lf = S.createFeature(pl, "Old Templates", ["core"], "Email templates editor", undefined, "en");
+    fs.renameSync(lf.dir, path.join(pl, ".specs", "templates"));
+    const lfNew = S.createFeature(pl, "Fresh", ["core"], "", undefined, "en");
+    const lfList = S.templates(pl, "list"), lfInit = S.templates(pl, "init");
+    const lfSeen = S.listFeatures(pl).features.some((x) => x.name === "templates") && S.specDoctor(pl, "templates").ok;
+    const lfRen = S.manageFeature(pl, "rename", "templates", "old-templates");
+    ok(lfNew.ok && !lfNew.templates && /^# Feature: Fresh/.test(rd(lfNew.dir, "requirements.md")) && !lfList.ok && lfList.legacyFeature && /stays that feature/.test(lfList.error) &&
+      !lfInit.ok && lfInit.legacyFeature && !fs.existsSync(path.join(pl, ".specs", "old-templates", "steering")) && lfSeen && lfRen.ok && S.templates(pl, "list").ok,
+      "B1: a pre-1.14 feature folder named 'templates' (it holds .state.json) stays a listed, reachable feature — new scaffolds never read it, every spec_templates action refuses (legacyFeature) — until it is renamed away");
+
+    // --- MCP parity + the hook ignores template edits
+    const mcpL = payload(await rpc("tools/call", { name: "spec_templates", arguments: { projectDir: pp, lang: "pt" } }));
+    const mcpC = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: " CHECK ", projectDir: pk } }));
+    const mcpBad = await rpc("tools/call", { name: "spec_templates", arguments: { action: "delete", projectDir: pk } });
+    const mcpTrav = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: "init", artifact: "../x", projectDir: pt0 } }));
+    ok(mcpL.ok && JSON.stringify(mcpL) === JSON.stringify(S.templates(pp, "list", { lang: "pt" })) && mcpC.action === "check" && mcpC.verdict === "fail" &&
+      JSON.stringify(mcpC.problems) === JSON.stringify(ck.problems) && mcpBad.result.isError && /action must be one of: list, init, check/.test(payload(mcpBad).error) &&
+      !mcpTrav.ok && /Unknown template/.test(mcpTrav.error) && list.result.tools.some((t) => t.name === "spec_templates" && !/\n/.test(t.description)),
+      "B1: spec_templates (MCP) returns what the engine returns (list / check, a case-folded action), refuses an unknown action by its enum and a traversal by the allowlist");
+    S.createFeature(pk, "pt", ["core"], "", undefined, "en");
+    const hkTpl = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], {
+      input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: tw(pk, "pt/design.md", "# D\n") } }), encoding: "utf8" });
+    ok(hkTpl.status === 0 && hkTpl.stdout.trim() === "", "B1: the PostToolUse hook stays silent for .specs/templates/ files (pt/design.md is not feature 'pt''s design)");
+  }
+
+  { // 1.14 B2.1 — stakeholder export (spec_export): ONE offline, printable document of a feature or of the whole project.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const noDate = (s) => String(s).replace(/\d{4}-\d{2}-\d{2}/g, "D");
+    const xp = path.join(tmp, "proj-b2-export");
+    S.initProject(xp, ["tdd"], "en");
+    const xf = S.createFeature(xp, "Checkout", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(xf.dir, "requirements.md"), [
+      "# Feature: Checkout", "", "## Summary", "Customers pay for their cart with a card, in one step.", "",
+      "## User Stories (prioritized — each independently testable)", "", "### US-1 (P1 — MVP): Pay by card",
+      "**As a** shopper, **I want** to pay by card, **so that** I get my order.", "**Why P1:** no sale without it.", "",
+      "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN the shopper submits a valid card THE SYSTEM SHALL charge the total and show the receipt <script>alert(1)</script>",
+      "2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL keep the cart [NEEDS CLARIFICATION: which PSP codes?]",
+      "3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]", "",
+      "### US-2 (P2): Receipt email", "#### Acceptance Criteria (EARS)",
+      "1. **US-2.AC-1** — WHEN a charge succeeds THE SYSTEM SHALL email the receipt. See [docs](javascript:alert(2)) and ![logo](data:image/png;base64,AAAA).", "",
+      "## Success Criteria", "- **SC-001** — 95% of checkouts finish in under 30 seconds.", "", "## Out of Scope", "- Gift cards.", "",
+      "<!-- a template note with [NEEDS CLARIFICATION: not real] -->", ""].join("\n"));
+    fs.writeFileSync(path.join(xf.dir, "design.md"), "# Design: Checkout\n\n## Architecture\nA `CheckoutService` calls the PSP.\n\n```mermaid\ngraph LR\n  A-->B\n```\n\n## Data Model\n| Field | Type |\n|---|---|\n| total_cents | int |\n");
+    fs.writeFileSync(path.join(xf.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n- [ ] 1. [US1] Charge the card\n  - _Requirements: US-1.AC-1_\n  - _Verify: npm test_\n" +
+      "- [ ] 2. [US1] Show the decline\n  - _Requirements: US-1.AC-2_\n  - _Verify: npm run e2e_\n- [ ] 3. [US2] Send receipt | email\n  - _Requirements: US-2.AC-1_\n");
+    fs.writeFileSync(path.join(xf.dir, "decisions.md"), "# Decisions\n\n- **D-1** — Stripe as the PSP (cost, EU coverage).\n");
+    S.completeTask(xp, "checkout", 1, { command: "npm test", exitCode: 0, summary: "3 passing" });
+    S.completeTask(xp, "checkout", 2, { summary: "checked by hand" }); // a note on a runnable _Verify:_ → ticked, unverified
+    S.approvePhase(xp, "checkout", "classification", "alice", { force: true });
+    S.approvePhase(xp, "checkout", "requirements", "alice", { force: true });
+    const xs = S.createFeature(xp, "SSO", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(xs.dir, "requirements.md"), "# Feature: SSO\n\n## Summary\nSign in with the company IdP.\n\n### US-1 (P1): IdP sign-in\n" +
+      "1. **US-1.AC-1** — WHEN the shopper is declined by the IdP THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+
+    const h = S.exportSpecs(xp, { name: "checkout" });
+    const html = h.content || "";
+    ok(h.ok && h.scope === "feature" && h.feature === "checkout" && h.format === "html" && h.wrote === false && h.lang === "en" && h.file === path.join(xp, ".specs", "exports", "checkout.html") &&
+      /^<!doctype html>\n<!-- AUTO-GENERATED by dev-spec/.test(html) && /<html lang="en">/.test(html) && /#11689B/.test(html) && /prefers-color-scheme/.test(html) && /localStorage/.test(html) &&
+      !/https?:\/\//.test(html) && (html.match(/<script/g) || []).length === 1 && html.includes("show the receipt &lt;script&gt;alert(1)&lt;/script&gt;") &&
+      !/<img|javascript:|data:image/.test(html) && /See docs and logo\./.test(html),
+      "spec_export (feature, html): self-contained — marker at the top, brand palette, system light/dark + toggle; offline (no http/https URL); spec text escaped (a <script> in a criterion is text; the page's own theme script is the only one); a javascript: link keeps its text, an image its alt");
+    ok(/@media print\{[\s\S]*\.no-print\{display:none !important\}[\s\S]*section\.feature\{break-before:page;page-break-before:always\}/.test(html) &&
+      /<div class="no-print"><button class="btn" id="tg"[^>]*>◐ Theme<\/button> <button class="btn" id="pr"[^>]*>⎙ Print<\/button><\/div>/.test(html),
+      "spec_export: print rules — light on paper, the theme / print buttons hidden (.no-print), a page break before every feature section");
+    ok(/<h1>Checkout<\/h1>/.test(html) && /<dt>Progress<\/dt><dd>2\/3 tasks done · \d+%<\/dd>/.test(html) &&
+      /<p>Customers pay for their cart with a card, in one step\.<\/p>/.test(html) && /<h3>US-1 \(P1 — MVP\): Pay by card<\/h3>\n<p><strong>As a<\/strong> shopper/.test(html) &&
+      /<li><strong>US-1\.AC-1<\/strong> — WHEN the shopper submits a valid card THE SYSTEM SHALL charge/.test(html) &&
+      /<li><del><strong>US-1\.AC-2<\/strong> — IF the card is declined[^<]*<\/del> — superseded by <code>sso\/US-1\.AC-1<\/code><\/li>/.test(html) &&
+      /US-1\.AC-3<\/strong> — WHEN \[trigger\] THE SYSTEM SHALL \[behavior\] <em>\(template — not written yet\)<\/em>/.test(html) &&
+      /<h2>Success Criteria<\/h2>\n<ul><li><strong>SC-001<\/strong>/.test(html) && /<h2>Out of Scope<\/h2>/.test(html),
+      "spec_export: title, meta (progress), summary, each story with its intro and its EARS criteria by ID — superseded struck through naming the replacement, a template one flagged — then the other requirements sections");
+    ok(/<h3>Architecture<\/h3>\n<p>A <code>CheckoutService<\/code> calls the PSP\.<\/p>\n<pre class="lang-mermaid"><code>graph LR\n  A--&gt;B<\/code><\/pre>/.test(html) &&
+      /<thead><tr><th>Field<\/th><th>Type<\/th><\/tr><\/thead>/.test(html) && /<h2>Test plan<\/h2>[\s\S]*<td>T-01<\/td>/.test(html) &&
+      /<tr><td>1<\/td><td>Charge the card<\/td><td>✅ done<\/td><td>verified<\/td><\/tr>/.test(html) &&
+      /<tr><td>2<\/td><td>Show the decline<\/td><td>✅ done<\/td><td>⚠ not verified \(note only, <em>Verify:<\/em> command not run\)<\/td><\/tr>/.test(html) &&
+      /<tr><td>3<\/td><td>Send receipt \| email<\/td><td>☐ open<\/td><td>—<\/td><\/tr>/.test(html) &&
+      /<h2>Decisions<\/h2>\n<ul><li><strong>D-1<\/strong> — Stripe as the PSP/.test(html) &&
+      /<tr><td>Requirements<\/td><td>alice<\/td><td>\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC<\/td><td>approved with --force \(failing: [^<]*\)<\/td><\/tr>/.test(html) &&
+      /<tr><td>Design<\/td><td>—<\/td><td>—<\/td><td>awaiting approval<\/td><\/tr>/.test(html) &&
+      /<li><code>requirements\.md<\/code> — which PSP codes\?<\/li>/.test(html) && !/not real/.test(html),
+      "spec_export: design sections (code fences stay code), the test plan table, every task with done / verified (the doctor's reason for an unverified one; a '|' in a task stays in its cell), decisions.md, approvals (who / when / forced / still pending) and the open clarifications (never one inside an HTML comment)");
+
+    const m = S.exportSpecs(xp, { name: "checkout", format: "md" });
+    ok(m.ok && m.format === "md" && m.file.endsWith(path.join("exports", "checkout.md")) && /^# Checkout\n\n<!-- AUTO-GENERATED by dev-spec/.test(m.content) &&
+      /\n- \*\*Tracks:\*\* core \+tdd\n/.test(m.content) && /\n## Summary\n\nCustomers pay/.test(m.content) && /\n### US-1 \(P1 — MVP\): Pay by card\n/.test(m.content) &&
+      /\n- \*\*US-1\.AC-1\*\* — WHEN the shopper/.test(m.content) && /\n\| 3 \| Send receipt \\\| email \| ☐ open \| — \|\n/.test(m.content) &&
+      /\n## Design\n\n### Architecture\n/.test(m.content) && !/\n\n\n/.test(m.content.replace(/```[\s\S]*?```/g, "F")),
+      "spec_export {format: 'md'}: the same document as markdown (marker comment, meta list, stories, tasks table with the pipe escaped, design sections one level down, no runs of blank lines)");
+
+    // write: .specs/exports/<slug>.<format>, never over a hand-written file; exports/ is never a feature.
+    const w = S.exportSpecs(xp, { name: "checkout", write: true });
+    const w2 = S.exportSpecs(xp, { name: "checkout", write: true });
+    const mine = path.join(xp, ".specs", "exports", "checkout.md");
+    fs.writeFileSync(mine, "# Our checkout notes\n");
+    const g = S.exportSpecs(xp, { name: "checkout", format: "md", write: true });
+    ok(w.ok && w.wrote === true && w.content === undefined && w.bytes > 2000 && noDate(fs.readFileSync(w.file, "utf8")) === noDate(html) && w2.ok && w2.wrote &&
+      g.ok === false && g.skipped === true && /\.specs\/exports\/checkout\.md exists and was not generated by dev-spec/.test(g.error) && fs.readFileSync(mine, "utf8") === "# Our checkout notes\n" &&
+      !S.listFeatures(xp).features.some((f) => f.name === "exports") && S.createFeature(xp, "Exports", ["core"], "", undefined, "en").ok === false,
+      "spec_export {write}: .specs/exports/checkout.html (content left out of the result, rewritten next time); a hand-written export is never overwritten (error, file unchanged); 'exports' is a reserved name, never listed as a feature");
+
+    // The project document: roadmap + every active feature's digest (page break each) + the catalog once SPECS.md exists.
+    const pj0 = S.exportSpecs(xp, {});
+    S.catalog(xp, { write: true });
+    const pj = S.exportSpecs(xp, {});
+    const ph = pj.content || "";
+    ok(pj0.ok && !/id="s-catalog"/.test(pj0.content) && pj.ok && pj.scope === "project" && JSON.stringify(pj.features) === '["checkout","sso"]' && pj.file === path.join(xp, ".specs", "exports", "project.html") &&
+      /<h1>proj-b2-export — specification overview<\/h1>/.test(ph) && /<th>Feature<\/th><th>Tracks<\/th><th>Phase<\/th><th>Progress<\/th><th>Tasks<\/th><th>Depends on<\/th>/.test(ph) &&
+      /<section class="feature" id="s-f-checkout">\n<h2>Checkout<\/h2>\n<p><em>feature · core \+tdd · [^<]+<\/em><\/p>\n<p>Customers pay/.test(ph) && /<section class="feature" id="s-f-sso">/.test(ph) &&
+      /<h3>Success criteria<\/h3>/.test(ph) && /<section class="feature" id="s-catalog">\n<h2>Living catalog<\/h2>/.test(ph) && /<li><a href="#s-f-sso">SSO<\/a><\/li>/.test(ph) &&
+      !/https?:\/\//.test(ph) && (ph.match(/<script/g) || []).length === 1 && ph.includes("&lt;script&gt;alert(1)"),
+      "spec_export (project): roadmap table, one page-broken section per active feature (summary, stories + ACs, success criteria), the living catalog only once SPECS.md exists; contents list; offline and escaped");
+    const px = S.createFeature(xp, "Project", ["core"], "", undefined, "en");
+    const pfw = S.exportSpecs(xp, { name: "project", write: true });
+    const ppw = S.exportSpecs(xp, { write: true });
+    ok(px.ok && pfw.ok && pfw.file === path.join(xp, ".specs", "exports", "project.feature.html") && ppw.ok && ppw.file === path.join(xp, ".specs", "exports", "project.html") &&
+      /Feature specification/.test(fs.readFileSync(pfw.file, "utf8")) && /Project specification/.test(fs.readFileSync(ppw.file, "utf8")),
+      "spec_export: a feature slugged 'project' writes project.feature.<format> — never the project document's project.<format>");
+    const bad = S.exportSpecs(xp, { name: "checkout", format: "pdf" });
+    const nf = S.exportSpecs(xp, { name: "nope" });
+    const noSpecs = S.exportSpecs(path.join(tmp, "proj-b2-none"), {});
+    ok(bad.ok === false && /format/.test(bad.error) && /html, md/.test(bad.error) && nf.ok === false && /not found/i.test(nf.error) && noSpecs.ok === false && /No \.specs\//.test(noSpecs.error) &&
+      !fs.existsSync(path.join(tmp, "proj-b2-none")),
+      "spec_export: an unknown format, an unknown feature and a project without .specs/ are errors (nothing created)");
+    // Approvals: an artifact edited after its approval is flagged (by content); a pre-1.11 approval judged only by file date is not.
+    const chp = path.join(tmp, "proj-b2-changed");
+    S.initProject(chp, ["core"], "en");
+    const chf = S.createFeature(chp, "Changed", ["core"], "", undefined, "en");
+    S.approvePhase(chp, "changed", "classification", "tester", { force: true });
+    fs.appendFileSync(path.join(chf.dir, "classification.md"), "\nEdited after the approval.\n");
+    const chs = path.join(chf.dir, ".state.json");
+    const chState = JSON.parse(fs.readFileSync(chs, "utf8"));
+    chState.approvals.requirements = { at: "2020-01-01T00:00:00.000Z", by: "legacy" };
+    fs.writeFileSync(chs, JSON.stringify(chState, null, 2));
+    const chMd = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n\| Classification \| tester \| \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC \| approved with --force \([^)]*\); changed since this approval — to be re-reviewed \|\n/.test(chMd) &&
+      /\n\| Requirements \| legacy \| 2020-01-01 00:00 UTC \| — \|\n/.test(chMd),
+      "spec_export approvals: an artifact changed since its approval is flagged (content fingerprint); a legacy approval judged only by file date is not");
+    fs.writeFileSync(path.join(chf.dir, "requirements.md"), "# Feature: Changed\n\n## Summary\nFlat.\n\n## US-1 (P1): One\n**As a** user.\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n- z\n");
+    const flat = S.exportSpecs(chp, { name: "changed", format: "md" }).content || "";
+    ok(/\n## User stories and acceptance criteria\n\n### US-1 \(P1\): One\n\n\*\*As a\*\* user\.\n\n- \*\*US-1\.AC-1\*\* — WHEN x THE SYSTEM SHALL y\n\n## Out of Scope\n/.test(flat) && !/\n## US-1/.test(flat),
+      "spec_export: a story written as its own `## US-n` section is shown once, under the stories (never again as a requirements section)");
+    const oldEx = path.join(tmp, "proj-b2-old-exports");
+    S.initProject(oldEx, ["core"], "en");
+    fs.mkdirSync(path.join(oldEx, ".specs", "exports"), { recursive: true });
+    fs.writeFileSync(path.join(oldEx, ".specs", "exports", "requirements.md"), "# Feature: Exports\n");
+    const oldW = S.exportSpecs(oldEx, { write: true });
+    const keys = (o) => Object.keys(o).sort().map((k) => k + (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? "{" + keys(o[k]) + "}" : Array.isArray(o[k]) ? "[" + o[k].length + "]" : "")).join(",");
+    ok(oldW.ok === false && /is a feature folder from before dev-spec reserved the name 'exports'/.test(oldW.error) && !fs.existsSync(path.join(oldEx, ".specs", "exports", "project.html")) &&
+      ["stakeholderExport", "releaseNotes"].every((g) => keys(S.msg("en")[g]) === keys(S.msg("pt")[g]) && keys(S.msg("pt")[g]) === keys(S.msg("es")[g])),
+      "spec_export {write} never drops a document into a pre-1.14 feature folder named 'exports' (error, nothing written); the export / release-notes messages have the same keys in EN / PT / ES");
+
+    // Localized chrome: a PT project (feature + project documents), an ES project; a per-feature language override.
+    const xpt = path.join(tmp, "proj-b2-export-pt");
+    S.initProject(xpt, ["core"], "pt");
+    S.createFeature(xpt, "Pagamento", ["core"], "Pagar o carrinho.", undefined, "pt");
+    S.createFeature(xpt, "Billing", ["core"], "Invoices.", undefined, "en");
+    const ptF = S.exportSpecs(xpt, { name: "pagamento" }).content || "";
+    const ptP = S.exportSpecs(xpt, {}).content || "";
+    const enF = S.exportSpecs(xpt, { name: "billing", format: "md" }).content || "";
+    const xes = path.join(tmp, "proj-b2-export-es");
+    S.initProject(xes, ["core"], "es");
+    S.createFeature(xes, "Pagos", ["core"], "Pagar el carrito.", undefined, "es");
+    const esP = S.exportSpecs(xes, { format: "md" }).content || "";
+    ok(/<html lang="pt">/.test(ptF) && /Especificação da feature/.test(ptF) && /<h2>Histórias de utilizador e critérios de aceitação<\/h2>/.test(ptF) && /<h2>Resumo<\/h2>\n<p>Pagar o carrinho\.<\/p>/.test(ptF) &&
+      /⎙ Imprimir/.test(ptF) && /AUTO-GERADO por dev-spec/.test(ptF) && /<h2>Aprovações<\/h2>/.test(ptF) && /Especificação do projeto/.test(ptP) && /<th>Depende de<\/th>/.test(ptP) &&
+      /^# Billing\n\n<!-- AUTO-GENERATED by dev-spec/.test(enF) && /\n## User stories and acceptance criteria\n/.test(enF) &&
+      /<!-- AUTO-GENERADO por dev-spec/.test(esP) && /\n## Hoja de ruta\n/.test(esP) && /_Especificación del proyecto · generado el /.test(esP) && /\n#### Historias de usuario y criterios de aceptación\n|\n### Historias de usuario y criterios de aceptación\n/.test(esP),
+      "spec_export: chrome in the feature's language (PT feature, an EN feature in a PT project) and the project's (PT, ES); IDs stay English");
+
+    // The renderer: nesting, checkboxes, quotes, escaped code, tables (a '|' in code is no separator), links http(s)/mailto only.
+    const r1 = S.markdownToHtml("# T\n\n- [x] done\n  - child\n- [ ] todo\n\n3. three\n4. four\n\n> **TODO** — fill\n\n```js\nif (a < b) x();\n```\n\n| a | b |\n|---|---|\n| `x|y` | [l](https://example.org) |\n\n[j](javascript:alert(1)) [m](mailto:a@b.c) ![alt](https://example.org/i.png) <b>raw</b> ~~gone~~ _it_ **b**\n---\n");
+    ok(/^<h1>T<\/h1>/.test(r1) && /<ul><li class="task"><span class="cb">☑<\/span> done<ul><li>child<\/li><\/ul><\/li><li class="task"><span class="cb">☐<\/span> todo<\/li><\/ul>/.test(r1) &&
+      /<ol start="3"><li>three<\/li><li>four<\/li><\/ol>/.test(r1) && /<blockquote><p><strong>TODO<\/strong> — fill<\/p><\/blockquote>/.test(r1) &&
+      /<pre class="lang-js"><code>if \(a &lt; b\) x\(\);<\/code><\/pre>/.test(r1) && /<td><code>x\|y<\/code><\/td><td><a href="https:\/\/example\.org" rel="noopener noreferrer">l<\/a><\/td>/.test(r1) &&
+      /<p>j <a href="mailto:a@b\.c" rel="noopener noreferrer">m<\/a> alt &lt;b&gt;raw&lt;\/b&gt; <del>gone<\/del> <em>it<\/em> <strong>b<\/strong><\/p>\n<hr>/.test(r1) && !/<img|javascript/.test(r1),
+      "markdownToHtml: nested / task / ordered lists, block quotes, escaped fenced code, tables (a '|' inside code stays), emphasis; links keep http(s)/mailto only; images become their alt text; raw HTML is escaped");
+
+    // MCP = engine (the same call as the CLI).
+    const mx = payload(await call("spec_export", { name: "checkout", projectDir: xp }));
+    const mxBad = await call("spec_export", { name: "checkout", format: "pdf", projectDir: xp });
+    const mxw = payload(await call("spec_export", { format: "md", write: true, projectDir: xp }));
+    ok(mx.ok && noDate(mx.content) === noDate(S.exportSpecs(xp, { name: "checkout" }).content) && mxBad.result.isError === true && /format/.test(mxBad.result.content[0].text) &&
+      mxw.ok && mxw.wrote && fs.existsSync(path.join(xp, ".specs", "exports", "project.md")),
+      "MCP spec_export = the engine call (content, the format enum, write)");
+  }
+  { // 1.14 B2.2 — release notes from the specs (spec_changelog): Added / Changed / Fixed since a date or the last notes.
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const cp = path.join(tmp, "proj-b2-changelog");
+    S.initProject(cp, ["core"], "en");
+    const mk = (p, name, kind, req, state, files, lang) => {
+      const f = S.createFeature(p, name, ["core"], "", undefined, lang || "en", kind);
+      if (req) fs.writeFileSync(path.join(f.dir, "requirements.md"), req);
+      for (const [n, t] of Object.entries(files || {})) fs.writeFileSync(path.join(f.dir, n), t);
+      const sp = path.join(f.dir, ".state.json");
+      fs.writeFileSync(sp, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(sp, "utf8")), state), null, 2));
+      return f;
+    };
+    mk(cp, "Login", "feature", "# Feature: Login\n\n## Summary\nSign in with email and password.\n\n### US-1 (P1): Sign in\n" +
+      "1. **US-1.AC-1** — WHEN a user submits valid credentials THE SYSTEM SHALL sign them in\n2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL show an error and keep the email\n",
+      { finished: { at: "2026-03-01T10:00:00.000Z", files: {} }, approvals: { execution: { at: "2026-03-01T11:00:00.000Z", by: "bob" } },
+        changes: [{ at: "2026-06-10T09:00:00.000Z", phase: "requirements", snapshot: ".history/requirements@1.md", added: [], modified: ["US-1.AC-2"], removed: ["US-1.AC-3"], reopened: [2], digests: {} }] });
+    mk(cp, "SSO", "feature", "# Feature: SSO\n\n## Summary\nSign in with the company identity provider.\n\n### US-1 (P1): IdP sign-in\n" +
+      "1. **US-1.AC-1** — WHEN a user signs in with the company IdP THE SYSTEM SHALL create the session _Supersedes: login/US-1.AC-1_\n" +
+      "2. **US-1.AC-2** — IF the IdP is down THEN THE SYSTEM SHALL offer the password sign-in\n3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]\n",
+      { finished: { at: "2026-06-15T10:00:00.000Z", files: {} } });
+    mk(cp, "Crash on save", "bugfix", null, { approvals: { execution: { at: "2026-06-20T10:00:00.000Z", by: "carol" } } },
+      { "bug.md": "# Bug: Crash on save\n\n## Summary\nSaving a closed document crashes the editor.\n\n## Root Cause\nThe autosave timer fired after the document closed.\nIt then dereferenced a null buffer.\n\n## Fix\nCancel the timer on close.\n" });
+    mk(cp, "WIP", "feature", null, { changes: [{ at: "2026-06-12T09:00:00.000Z", phase: "design", added: ["Caching"], modified: [], removed: [], reopened: [] }] });
+    mk(cp, "Old fix", "bugfix", null, { finished: { at: "2026-02-01T10:00:00.000Z", files: {} } }, { "bug.md": "# Bug: Old fix\n\n## Root Cause\nOff-by-one in the pager.\n" });
+
+    const c1 = S.changelog(cp, { since: "2026-05-01" });
+    const sso = (c1.added || [])[0] || {};
+    const lg = ((c1.changed || {}).changeRequests || [])[0] || {};
+    ok(c1.ok && c1.sinceSource === "date" && c1.since === "2026-05-01T00:00:00.000Z" && c1.wrote === false && c1.added.map((a) => a.feature).join() === "sso" &&
+      sso.title === "SSO" && sso.event === "finished" && sso.summary === "Sign in with the company identity provider." && sso.acs.map((a) => a.id).join() === "US-1.AC-1,US-1.AC-2" &&
+      !/Supersedes/.test(sso.acs[0].text) && c1.changed.superseded.length === 1 && c1.changed.superseded[0].ac === "login/US-1.AC-1" && c1.changed.superseded[0].by === "sso/US-1.AC-1" &&
+      c1.changed.changeRequests.map((c) => c.feature + "#" + c.n).join() === "login#1,wip#1" && JSON.stringify([lg.modified, lg.removed, lg.reopened]) === '[["US-1.AC-2"],["US-1.AC-3"],[2]]' &&
+      lg.acs.length === 1 && lg.acs[0].id === "US-1.AC-2" && /show an error and keep the email/.test(lg.acs[0].text) &&
+      c1.fixed.map((x) => x.feature).join() === "crash-on-save" && c1.fixed[0].event === "execution-approved" && c1.fixed[0].rootCause === "The autosave timer fired after the document closed. It then dereferenced a null buffer." &&
+      JSON.stringify(c1.counts) === '{"added":1,"changed":3,"fixed":1}',
+      "spec_changelog {since}: Added = the feature finished since then (its user-story ACs, template left out); Changed = the AC it supersedes + the change requests since then (IDs, reopened tasks, current AC text); Fixed = the bugfix shipped (execution approved) with its root cause; an earlier finish (login, old-fix) is not new");
+    ok(/^# Release notes — proj-b2-changelog\n\n<!-- AUTO-GENERATED by dev-spec/.test(c1.markdown) && /_Changes since 2026-05-01 00:00 UTC · generated \d{4}-\d{2}-\d{2}_/.test(c1.markdown) &&
+      /\n## Added\n\n### SSO\n\nSign in with the company identity provider\.\n\n- \*\*US-1\.AC-1\*\* — WHEN a user signs in with the company IdP THE SYSTEM SHALL create the session\n- \*\*US-1\.AC-2\*\* — IF the IdP is down/.test(c1.markdown) &&
+      /\n## Changed\n\n- ~~`login\/US-1\.AC-1`~~ — superseded by `sso\/US-1\.AC-1`: WHEN a user signs in with the company IdP/.test(c1.markdown) &&
+      /\n- \*\*login\*\* — change request #1 \(Requirements, 2026-06-10\): modified: US-1\.AC-2; removed: US-1\.AC-3; tasks reopened: #2\n  - \*\*US-1\.AC-2\*\* — IF the password is wrong/.test(c1.markdown) &&
+      /\n- \*\*wip\*\* — change request #1 \(Design, 2026-06-12\): added: Caching\n/.test(c1.markdown) &&
+      /\n## Fixed\n\n- \*\*Crash on save\*\* — Saving a closed document crashes the editor\. — Root cause: The autosave timer fired/.test(c1.markdown) && !/US-1\.AC-3\*\* — WHEN \[trigger\]/.test(c1.markdown),
+      "spec_changelog: the markdown — marker, scope line, ## Added (title, summary, one line per AC), ## Changed (superseded + change requests with their current text), ## Fixed (root-cause one-liner)");
+    const cAll = S.changelog(cp, { since: "all" });
+    const cDef = S.changelog(cp, {});
+    const cLate = S.changelog(cp, { since: "2026-06-16T00:00:00Z" });
+    const cLast = S.changelog(cp, { since: "last" });
+    ok(cAll.ok && cAll.sinceSource === "all" && cAll.since === null && cAll.added.map((a) => a.feature).join() === "login,sso" && cAll.fixed.map((x) => x.feature).join() === "old-fix,crash-on-save" &&
+      cAll.changed.changeRequests.map((c) => c.feature).join() === "wip" && /_Every change the specs record · /.test(cAll.markdown) &&
+      cDef.ok && cDef.sinceSource === "all" && !cDef.note && cDef.counts.added === 2 && cLast.ok && /No release notes were written yet/.test(cLast.note) &&
+      cLate.ok && cLate.added.length === 0 && cLate.fixed.map((x) => x.feature).join() === "crash-on-save" && cLate.counts.changed === 0 && /\n## Added\n\n_Nothing\._\n/.test(cLate.markdown),
+      "spec_changelog: 'all' (and the default while no notes were written) lists every shipped feature — a feature new in the notes has its change requests folded in; a later since filters; 'last' without a stamp says so");
+    const badSince = ["yesterday", "2026-02-30", "2026-13-01", "2026-06-01T25:00"].map((v) => S.changelog(cp, { since: v }));
+    ok(badSince.every((r) => r.ok === false && /is not an ISO date \(YYYY-MM-DD, or a full ISO timestamp\), 'last' or 'all'/.test(r.error)),
+      "spec_changelog: a since that is not an ISO date / timestamp (or a day that doesn't exist) is an error — never rolled over");
+
+    // write: RELEASE-NOTES.md + meta.changelogAt; the next default run starts there; nothing to report → nothing written.
+    const rn = path.join(cp, ".specs", "RELEASE-NOTES.md");
+    const cw = S.changelog(cp, { since: "2026-05-01", write: true });
+    const stamp = S.readRoadmap(cp).meta.changelogAt;
+    const written = fs.readFileSync(rn, "utf8");
+    const cNext = S.changelog(cp, {});
+    const cNone = S.changelog(cp, { write: true });
+    ok(cw.ok && cw.wrote === true && cw.markdown === undefined && cw.changelogAt === stamp && cw.generatedAt === stamp && /^# Release notes — /.test(written) && /AUTO-GENERATED by dev-spec/.test(written) &&
+      cNext.ok && cNext.sinceSource === "last" && cNext.since === stamp && JSON.stringify(cNext.counts) === '{"added":0,"changed":0,"fixed":0}' && /_Changes since the last release notes \(/.test(cNext.markdown) &&
+      cNone.ok && cNone.wrote === false && /Nothing to report since then — \.specs\/RELEASE-NOTES\.md was not written and meta\.changelogAt is unchanged\./.test(cNone.note) &&
+      fs.readFileSync(rn, "utf8") === written && S.readRoadmap(cp).meta.changelogAt === stamp && S.readRoadmap(cp).meta.lang === "en",
+      "spec_changelog {write}: .specs/RELEASE-NOTES.md (AUTO-GENERATED) + meta.changelogAt (other meta kept); the default since is then the stamp; with nothing new nothing is written or re-stamped");
+    const wipState = path.join(cp, ".specs", "wip", ".state.json");
+    fs.writeFileSync(wipState, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(wipState, "utf8")), { finished: { at: new Date(Date.now() + 60000).toISOString(), files: {} } }), null, 2));
+    const cNew = S.changelog(cp, {});
+    fs.writeFileSync(rn, "# Our release notes\n");
+    const cHand = S.changelog(cp, { write: true });
+    ok(cNew.ok && cNew.added.map((a) => a.feature).join() === "wip" && cHand.ok === false && cHand.skipped === true && /RELEASE-NOTES\.md exists and was not generated by dev-spec/.test(cHand.error) &&
+      fs.readFileSync(rn, "utf8") === "# Our release notes\n" && S.readRoadmap(cp).meta.changelogAt === stamp,
+      "spec_changelog: work shipped after the stamp is the next notes; a hand-written RELEASE-NOTES.md is never overwritten (error) and the stamp stays");
+    const brk = path.join(tmp, "proj-b2-changelog-broken");
+    S.initProject(brk, ["core"], "en");
+    fs.writeFileSync(path.join(brk, ".specs", "roadmap.json"), "{ not json");
+    const bDef = S.changelog(brk, {});
+    const bAll = S.changelog(brk, { since: "all" });
+    const bW = S.changelog(brk, { since: "all", write: true });
+    ok(bDef.ok === false && /roadmap\.json/.test(bDef.error) && bAll.ok && bW.ok && bW.wrote === false && fs.readFileSync(path.join(brk, ".specs", "roadmap.json"), "utf8") === "{ not json",
+      "spec_changelog: an unreadable roadmap.json is an error for the default since (the stamp lives there), never read as 'no notes yet' — and never rewritten");
+
+    // Localized chrome (PT / ES projects); IDs stay English.
+    const lp = (lang, name, req) => { const d = path.join(tmp, "proj-b2-changelog-" + lang); S.initProject(d, ["core"], lang); mk(d, name, "feature", req, { finished: { at: "2026-06-01T00:00:00.000Z", files: {} } }, null, lang);
+      mk(d, "Bug " + lang, "bugfix", null, { finished: { at: "2026-06-02T00:00:00.000Z", files: {} } }, null, lang); return S.changelog(d, { since: "all" }); };
+    const cpt = lp("pt", "Pagamento", "# Feature: Pagamento\n\n## Resumo\nPagar o carrinho.\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE emitir o recibo\n");
+    const ces = lp("es", "Pagos", "# Función: Pagos\n\n## Resumen\nPagar el carrito.\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — CUANDO el cliente paga EL SISTEMA DEBE emitir el recibo\n");
+    ok(cpt.ok && /^# Notas de versão — /.test(cpt.markdown) && /AUTO-GERADO por dev-spec/.test(cpt.markdown) && /\n## Adicionado\n\n### Pagamento\n\nPagar o carrinho\.\n\n- \*\*US-1\.AC-1\*\* — QUANDO o cliente paga/.test(cpt.markdown) &&
+      /\n## Alterado\n\n_Nada\._\n/.test(cpt.markdown) && /\n## Corrigido\n\n- \*\*Bug pt\*\*.* — _causa raiz por escrever no bug\.md_/.test(cpt.markdown) && /_Todas as alterações registadas nas specs · geradas a /.test(cpt.markdown) &&
+      ces.ok && /^# Notas de la versión — /.test(ces.markdown) && /\n## Añadido\n\n### Pagos\n/.test(ces.markdown) && /\n## Cambiado\n/.test(ces.markdown) && /\n## Corregido\n/.test(ces.markdown) && /- \*\*US-1\.AC-1\*\* — CUANDO/.test(ces.markdown),
+      "spec_changelog: PT / ES chrome (Adicionado · Alterado · Corrigido / Añadido · Cambiado · Corregido), an unwritten root cause said so; IDs English-stable");
+
+    // MCP = engine.
+    const mc = payload(await call("spec_changelog", { since: "2026-05-01", projectDir: cp }));
+    const mcBad = await call("spec_changelog", { since: 5, projectDir: cp });
+    const pick = (r) => JSON.stringify([r.since, r.sinceSource, r.added, r.changed, r.fixed, r.counts]);
+    ok(mc.ok && pick(mc) === pick(S.changelog(cp, { since: "2026-05-01" })) && mcBad.result.isError === true,
+      "MCP spec_changelog = the engine call (since as a string only)");
+  }
+
+  { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
+    const b3Root = path.join(tmp, "b3-governance");
+    const b3 = (n) => path.join(b3Root, n);
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const read3 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const write3 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+    const state3 = (f) => JSON.parse(read3(f, ".state.json"));
+    const meta3 = (p) => (JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {});
+    // Real content for the core chain (every gate passes; the tasks trace every AC).
+    const REQ3 = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — WHILE an export runs, WHEN the admin clicks again THE SYSTEM SHALL ignore it.\n" +
+      "3. **US-1.AC-3** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n4. **US-1.AC-4** — THE SYSTEM SHALL name files invoices-YYYY-MM.csv.\n\n" +
+      "### US-2 (P2): Schedule\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN a schedule is due THE SYSTEM SHALL email the CSV.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n\n## Edge Cases & Error Handling\n- **EC-1** — WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV.\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 export time < 5 s.\n\n## Out of Scope\n- PDF export.\n";
+    const DESIGN3 = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+    const TASKS3 = "# Tasks\n\n- [ ] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Verify: [manual: open the CSV in a spreadsheet]_\n";
+    const fillAll = (f, skip = []) => {
+      if (!skip.includes("classification")) write3(f, "classification.md", read3(f, "classification.md").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+      if (!skip.includes("requirements")) write3(f, "requirements.md", REQ3);
+      if (!skip.includes("design")) write3(f, "design.md", DESIGN3);
+      if (!skip.includes("tasks")) write3(f, "tasks.md", TASKS3);
+    };
+    const ROLES3 = { requirements: ["product"], design: ["tech", "security"], tasks: ["tech"] };
+
+    // --- spec_init {approvalRoles} (MCP) — validated, stored in roadmap.json meta.approvalRoles, {} clears
+    const pR = b3("roles");
+    const i1 = payload(await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pR, tracks: ["core"], lang: "en", approvalRoles: { requirements: ["Product"], design: "tech+security", tasks: ["tech"] } } }));
+    const iBadPhase = S.initProject(pR, ["core"], undefined, { approvalRoles: { plan: ["tech"] } });
+    const iBadRole = S.initProject(pR, ["core"], undefined, { approvalRoles: { design: ["tech lead!"] } });
+    const iEmpty = S.initProject(pR, ["core"], undefined, { approvalRoles: { design: [] } });
+    const iShape = payload(await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pR, approvalRoles: ["tech"] } }));
+    ok(i1.approvalRoles && JSON.stringify(i1.approvalRoles) === JSON.stringify(ROLES3) && JSON.stringify(meta3(pR).approvalRoles) === JSON.stringify(ROLES3) &&
+      /^Approval roles: requirements=product · design=tech\+security · tasks=tech — /.test(i1.rolesNote) &&
+      iBadPhase.ok === false && /unknown phase 'plan'/.test(iBadPhase.error) && iBadRole.ok === false && /invalid role name 'tech lead!'/.test(iBadRole.error) &&
+      iEmpty.ok === false && /approvalRoles\.design: name at least one role/.test(iEmpty.error) && iShape.ok === false &&
+      JSON.stringify(meta3(pR).approvalRoles) === JSON.stringify(ROLES3) && S.initProject(pR, ["core"]).approvalRoles.design.join() === "tech,security",
+      "B3: spec_init {approvalRoles} stores roadmap.json meta.approvalRoles (roles lower-cased, 'a+b' split, PHASES order) with a rolesNote; an unknown phase / bad role / empty list / non-object is refused and nothing changes; a later init reports the current roles (got " + JSON.stringify([i1.approvalRoles, iShape.error]) + ")");
+    const pC = b3("roles-clear");
+    S.initProject(pC, ["core"], "en", { approvalRoles: { design: ["tech"] } });
+    const iClear = S.initProject(pC, ["core"], undefined, { approvalRoles: {} });
+    ok(iClear.rolesNote === "Approval roles cleared — every phase takes a single approval again." && meta3(pC).approvalRoles === undefined && JSON.stringify(iClear.approvalRoles) === "{}" &&
+      S.parseApprovalRolesText("requirements=product,design=tech+security").design.join() === "tech,security" &&
+      S.parseApprovalRolesText("design=tech,security;tasks=tech").design.join() === "tech,security" && JSON.stringify(S.parseApprovalRolesText("none")) === "{}" &&
+      !!S.parseApprovalRolesText("tech").error && JSON.stringify(S.approvalRolesOf(pC)) === "{}",
+      "B3: approvalRoles {} clears meta.approvalRoles; the CLI's --roles text parses to the same object ('design=tech,security' keeps both roles, 'none' clears, a role before any phase is an error)");
+
+    // --- a role sign-off leaves the phase PENDING until every role signed; the missing role is named everywhere
+    const fR = S.createFeature(pR, "Invoice export", ["core"]);
+    fillAll(fR);
+    S.approvePhase(pR, fR.slug, "classification", "ana"); // no roles for classification: a single approval, as before
+    const noRole = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pR, name: fR.slug, phase: "requirements" } }));
+    const wrongRole = S.approvePhase(pR, fR.slug, "requirements", "ana", { role: "qa" });
+    const prod = S.approvePhase(pR, fR.slug, "requirements", "paula", { role: "Product" });
+    ok(noRole.ok === false && noRole.roleRequired === true && noRole.roles.join() === "product" && /'requirements' is signed off per role \(product\).*--role <role>.*Nothing recorded/.test(noRole.error) &&
+      wrongRole.ok === false && wrongRole.roleNotListed === true && /'qa' is not a role that signs off 'requirements'/.test(wrongRole.error) &&
+      prod.ok && prod.approved === "requirements" && prod.complete === true && prod.role === "product" && state3(fR).approvals.requirements.roles.product.by === "paula" &&
+      state3(fR).approvals.requirements.roles.product.fingerprint === state3(fR).approvals.requirements.fingerprint && !state3(fR).signoffs,
+      "B3: a phase with roles refuses an approval without a role (roleRequired) or with a role it doesn't list (roleNotListed) — nothing recorded; its only role's sign-off approves it (approvals[phase].roles[role] = {by, at, fingerprint})");
+    const tech1 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pR, name: fR.slug, phase: "design", role: "tech", by: "tom" } }));
+    const st1 = state3(fR);
+    const lastRec1 = st1.approvalHistory[st1.approvalHistory.length - 1];
+    const d1 = S.specDoctor(pR, fR.slug);
+    const n1 = S.nextAction(pR, fR.slug);
+    const fin1 = S.finishFeature(pR, fR.slug);
+    const order1 = S.approvePhase(pR, fR.slug, "tasks", "tom", { role: "tech" });
+    ok(tech1.ok && tech1.approved === null && tech1.signedOff === "design" && tech1.pending === true && tech1.complete === false && tech1.missingRoles.join() === "security" &&
+      /'design' stays pending until every role has signed off its current content — missing role: security\./.test(tech1.note) &&
+      !st1.approvals.design && st1.signoffs.design.tech.by === "tom" && lastRec1.phase === "design" && lastRec1.role === "tech" && lastRec1.partial === true && !lastRec1.snapshot &&
+      d1.pendingGates[0] === "design" && d1.pendingRoles.design.missing.join() === "security" && d1.pendingRoles.design.signed.join() === "tech" && d1.nextGate.missingRoles.join() === "security" &&
+      /awaiting human approval: design \(missing role: security\), tasks \(missing role: tech\)/.test(chk(d1, "approval-gates").detail) && d1.gatesOk === false &&
+      n1.step === "approve" && /missing role: security \(signed: tech\): \/approve invoice-export design --role security/.test(n1.recommendation) && n1.missingRoles.join() === "security" &&
+      fin1.blockers.some((b) => b === "phases awaiting approval: design (missing role: security), tasks (missing role: tech)") && fin1.pendingRoles.design.missing.join() === "security" &&
+      order1.ok === false && order1.failing.includes("phase-order"),
+      "B3: one role's sign-off leaves the phase pending (approved: null, signoffs[phase][role], a `partial` history record without snapshot) — doctor's approval-gates, next_action ('missing role: security' + the --role to sign as), finish's blockers name the missing role; a later phase is refused on phase-order (got " +
+      JSON.stringify([tech1.note, chk(d1, "approval-gates").detail, n1.recommendation]) + ")");
+    const rm1 = fs.readFileSync(path.join(pR, ".specs", "ROADMAP.md"), "utf8");
+    ok(/awaiting role sign-off: design \(security\)/.test(rm1), "B3: ROADMAP.md 'Needs attention' lists a sign-off round under way (design waits for security)");
+
+    // content changed after tech signed → tech's sign-off no longer counts (stale), security's does; tech re-signs → approved
+    fs.appendFileSync(path.join(fR.dir, "design.md"), "\n## Data Model\nOne table: exports (id, month, status).\n");
+    const d2 = S.specDoctor(pR, fR.slug);
+    const sec2 = S.approvePhase(pR, fR.slug, "design", "sara", { role: "security" });
+    const st2 = state3(fR);
+    const tech3 = S.approvePhase(pR, fR.slug, "design", "tom", { role: "tech" });
+    const st3 = state3(fR);
+    const lastRec3 = st3.approvalHistory[st3.approvalHistory.length - 1];
+    ok(d2.pendingRoles.design.stale.join() === "tech" && d2.pendingRoles.design.missing.join() === "tech,security" &&
+      /sign-offs made before the artifact changed no longer count \(re-sign the current content\): design \(tech\)/.test(chk(d2, "approval-gates").detail) &&
+      sec2.ok && sec2.pending && sec2.missingRoles.join() === "tech" && Object.keys(st2.signoffs.design).join() === "security" && !st2.approvals.design &&
+      tech3.ok && tech3.approved === "design" && tech3.complete === true && tech3.signedRoles.sort().join() === "security,tech" &&
+      st3.approvals.design.roles.tech.fingerprint === st3.approvals.design.fingerprint && st3.approvals.design.roles.security.fingerprint === st3.approvals.design.fingerprint &&
+      !st3.signoffs && lastRec3.role === "tech" && !lastRec3.partial && lastRec3.roles.join() === "tech,security" && typeof lastRec3.snapshot === "string" &&
+      fs.existsSync(path.join(fR.dir, lastRec3.snapshot)) && !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
+      "B3: an edit after a role signed invalidates that sign-off (doctor: stale, both roles missing); the other role's sign-off of the new content waits; once every role signed the CURRENT content the phase is approved (roles recorded, snapshot, signoffs cleared)");
+    const m3 = S.metrics(pR, fR.slug);
+    ok(m3.approvalsTotal === 3 && m3.rework === 0 && m3.leadTime.design && m3.leadTime.design.at === st3.approvals.design.at && m3.batchApprovals === 0,
+      "B3: metrics count completed approvals only — a partial role sign-off is no approval (approvalsTotal 3, no rework, design's lead time = its completion) (got " + JSON.stringify([m3.approvalsTotal, m3.rework, m3.leadTime.design]) + ")");
+    const imp3 = S.impactReport(pR, fR.slug, { phase: "design" });
+    ok(imp3.ok && imp3.baseline !== "none" && imp3.baseline !== "fingerprint-only", "B3: spec_impact diffs against the completed role approval's snapshot (partial records are skipped) (got " + JSON.stringify(imp3.baseline) + ")");
+    fs.appendFileSync(path.join(fR.dir, "design.md"), "\n## Rollout\nBehind a flag for one week.\n");
+    const n4 = S.nextAction(pR, fR.slug);
+    S.approvePhase(pR, fR.slug, "design", "tom", { role: "tech" });
+    const n5 = S.nextAction(pR, fR.slug);
+    ok(n4.step === "re-review" && /Each role signs the new content again — design \(missing roles: tech, security\): \/approve invoice-export design --role tech\./.test(n4.recommendation) &&
+      n5.step === "re-review" && /design \(missing role: security\): \/approve invoice-export design --role security\./.test(n5.recommendation) &&
+      chk(S.specDoctor(pR, fR.slug), "changed-since-approval").status === "warn" && !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
+      "B3: an approved role phase edited afterwards — next_action's re-review asks every role to sign the new content again (the roles not re-signed yet, the next --role); the phase stays approved as it was meanwhile (got " + n4.recommendation + ")");
+
+    // --- forced sign-offs: the completed approval is forced when a sign-off that counts was forced
+    const pF = b3("forced");
+    S.initProject(pF, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
+    const fF = S.createFeature(pF, "Forced roles", ["core"]);
+    fillAll(fF);
+    write3(fF, "design.md", DESIGN3.replace("- [x] Principle 1 — complies\n", ""));
+    S.approvePhase(pF, fF.slug, "classification", "a"); S.approvePhase(pF, fF.slug, "requirements", "a");
+    const fT = S.approvePhase(pF, fF.slug, "design", "tom", { role: "tech" });
+    const stFT = state3(fF);
+    const fT2 = S.approvePhase(pF, fF.slug, "design", "tom", { role: "tech", force: true });
+    const stFT2 = state3(fF);
+    const fS = S.approvePhase(pF, fF.slug, "design", "sara", { role: "security", force: true });
+    const dF = S.specDoctor(pF, fF.slug);
+    ok(fT.ok === false && fT.refused && fT.failing.join() === "constitution-check" && !stFT.signoffs && !stFT.approvals.design &&
+      fT2.ok && fT2.forced && fT2.pending && /^Signed off with force — the failing checks are recorded with the sign-off: constitution-check\. 'design' stays pending/.test(fT2.note) &&
+      stFT2.signoffs.design.tech.forced === true && stFT2.signoffs.design.tech.failing.join() === "constitution-check" && state3(fF).signoffs === undefined && fS.ok && fS.approved === "design" && state3(fF).approvals.design.forced === true && state3(fF).approvals.design.failing.join() === "constitution-check" &&
+      dF.forcedGates.includes("design") && S.metrics(pF, fF.slug).forcedApprovals === 1,
+      "B3: each role sign-off runs the phase's gate (refused → nothing recorded; force records the sign-off forced); the completed approval is forced, counted once by metrics");
+
+    // --- guard hook: a tasks phase waiting for a role is not approved tasks
+    const pG = b3("guard");
+    S.initProject(pG, ["core"], "en", { guard: true, approvalRoles: { tasks: ["tech", "qa"] } });
+    const fG = S.createFeature(pG, "Guarded", ["core"]);
+    fillAll(fG);
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(pG, fG.slug, ph, "a");
+    S.approvePhase(pG, fG.slug, "tasks", "tom", { role: "tech" });
+    const gAsk = S.guardCheck(pG, "src/app.js");
+    S.approvePhase(pG, fG.slug, "tasks", "quinn", { role: "qa" });
+    const gAllow = S.guardCheck(pG, "src/app.js");
+    ok(gAsk.decision === "ask" && gAsk.pending.includes(fG.slug) && gAllow.decision === "allow" && gAllow.why === "approved" && gAllow.covering.includes(fG.slug),
+      "B3: guard mode — tasks signed by one of two roles don't cover code edits (ask, pending); once qa signed too they do (allow)");
+
+    // --- no roles configured: exactly today's behavior (a role given is only recorded)
+    const pN = b3("no-roles");
+    S.initProject(pN, ["core"], "en");
+    const fN = S.createFeature(pN, "Plain", ["core"]);
+    fillAll(fN);
+    S.approvePhase(pN, fN.slug, "classification", "a");
+    const nR = S.approvePhase(pN, fN.slug, "requirements", "a", { role: "product" });
+    const nPlain = S.approvePhase(pN, fN.slug, "design", "a");
+    const dN = S.specDoctor(pN, fN.slug);
+    ok(nR.ok && nR.approved === "requirements" && nR.complete === undefined && state3(fN).approvals.requirements.role === "product" && !state3(fN).approvals.requirements.roles &&
+      nPlain.ok && nPlain.approved === "design" && nPlain.role === undefined && nPlain.note === undefined && !("pendingRoles" in dN) && !("unsignedRoles" in dN) &&
+      chk(dN, "approval-gates").detail === "awaiting human approval: tasks — run /approve before advancing" && JSON.stringify(S.approvalRolesOf(pN)) === "{}",
+      "B3: without meta.approvalRoles an approval is single, as before — a role given is only recorded (entry.role); doctor has no role fields and the same approval-gates text (got " + chk(dN, "approval-gates").detail + ")");
+
+    // --- legacy approvals (made before the roles were configured) stay approved — by an unknown role; doctor/finish warn
+    const pL = b3("legacy");
+    S.initProject(pL, ["core"], "en");
+    const fL = S.createFeature(pL, "Legacy", ["core"]);
+    fillAll(fL);
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(pL, fL.slug, ph, "a");
+    S.initProject(pL, ["core"], undefined, { approvalRoles: { design: ["tech", "security"] } });
+    const dL = S.specDoctor(pL, fL.slug);
+    const finL = S.finishFeature(pL, fL.slug);
+    const reL = S.approvePhase(pL, fL.slug, "design", "tom", { role: "tech" });
+    const stL = state3(fL);
+    const dL2 = S.specDoctor(pL, fL.slug);
+    const reL2 = S.approvePhase(pL, fL.slug, "design", "sara", { role: "security" });
+    const dL3 = S.specDoctor(pL, fL.slug);
+    ok(!dL.pendingGates.includes("design") && dL.unsignedRoles.design.join() === "tech,security" && chk(dL, "approval-gates").status === "warn" &&
+      /approved without the role sign-offs now required \(approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign\): design \(tech, security\)/.test(chk(dL, "approval-gates").detail) &&
+      finL.warnings.some((w) => /approved without the role sign-offs now required.*design \(tech, security\)/.test(w)) && !finL.blockers.some((b) => /design/.test(b)) &&
+      reL.ok && reL.pending && stL.approvals.design && !stL.approvals.design.roles && stL.signoffs.design.tech && !dL2.pendingGates.includes("design") &&
+      /re-sign in progress \(the phase stays approved as it was until every role has signed the new content\): design \(missing role: security\)/.test(chk(dL2, "approval-gates").detail) &&
+      reL2.ok && reL2.approved === "design" && Object.keys(state3(fL).approvals.design.roles).sort().join() === "security,tech" && !("design" in dL3.unsignedRoles) &&
+      !/approved without the role sign-offs/.test(chk(dL3, "approval-gates").detail),
+      "B3: an approval made before the roles were configured stays approved (unknown role) — doctor's approval-gates warns and names the roles to re-sign, finish lists it as a warning (never a blocker); a re-sign round keeps it approved until every role signed (got " + chk(dL, "approval-gates").detail + ")");
+
+    // a single approval that named a role (no role was required then) counts as THAT role's sign-off once roles are required;
+    // sign-offs left waiting are dropped when the phase no longer needs roles; a "__proto__" phase is a refused key
+    const pL2 = b3("legacy-role");
+    S.initProject(pL2, ["core"], "en");
+    const fL2 = S.createFeature(pL2, "Legacy role", ["core"]);
+    fillAll(fL2);
+    for (const ph of ["classification", "requirements"]) S.approvePhase(pL2, fL2.slug, ph, "a");
+    S.approvePhase(pL2, fL2.slug, "design", "tom", { role: "tech" });
+    S.initProject(pL2, ["core"], undefined, { approvalRoles: { design: ["tech", "security"], tasks: ["tech", "qa"] } });
+    const dL4 = S.specDoctor(pL2, fL2.slug);
+    const reL4 = S.approvePhase(pL2, fL2.slug, "design", "sara", { role: "security" });
+    const taskSign = S.approvePhase(pL2, fL2.slug, "tasks", "tom", { role: "tech" });
+    const stL4 = state3(fL2);
+    S.initProject(pL2, ["core"], undefined, { approvalRoles: { design: ["tech", "security"] } });
+    const taskPlain = S.approvePhase(pL2, fL2.slug, "tasks", "tom");
+    const stL5 = state3(fL2);
+    const protoTxt = S.parseApprovalRolesText("__proto__=tech");
+    const protoInit = S.initProject(pL2, ["core"], undefined, { approvalRoles: protoTxt });
+    ok(dL4.unsignedRoles.design.join() === "security" && reL4.ok && reL4.approved === "design" && reL4.signedRoles.sort().join() === "security,tech" &&
+      taskSign.pending && stL4.signoffs.tasks.tech && taskPlain.ok && taskPlain.approved === "tasks" && !stL5.signoffs && !stL5.approvals.tasks.roles &&
+      Object.keys(protoTxt).join() === "__proto__" && protoInit.ok === false && /unknown phase '__proto__'/.test(protoInit.error) &&
+      JSON.stringify(S.approvalRolesOf(pL2)) === '{"design":["tech","security"]}',
+      "B3: an earlier single approval that named a role counts as that role's sign-off once roles are required (only security left to sign; its sign-off completes it); waiting sign-offs are dropped when the phase no longer needs roles; a '__proto__' phase is refused (got " + JSON.stringify([dL4.unsignedRoles, reL4.signedRoles]) + ")");
+
+    // --- fast-forward: happy path — next_action suggests it, one call approves every phase in order (batch)
+    const pFF = b3("ff");
+    S.initProject(pFF, ["core"], "en");
+    const fA = S.createFeature(pFF, "Quick spec", ["core"]);
+    fillAll(fA);
+    const nA = S.nextAction(pFF, fA.slug);
+    const ffA = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fA.slug, through: "tasks", by: "ana" } }));
+    const stA = state3(fA);
+    const mA = S.metrics(pFF, fA.slug);
+    ok(nA.step === "approve" && nA.fastForward && nA.fastForward.phases.join() === "classification,requirements,design,tasks" && nA.fastForward.through === "tasks" && nA.fastForward.role === null &&
+      /fast-forward: \/spec-ff quick-spec \(CLI: dev-spec approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation) &&
+      ffA.ok && ffA.complete === true && ffA.approved.join() === "classification,requirements,design,tasks" && ffA.batch === true && ffA.steps.every((s) => s.approved) &&
+      ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved." &&
+      ["classification", "requirements", "design", "tasks"].every((ph) => stA.approvals[ph].batch === true && stA.approvals[ph].by === "ana") &&
+      stA.approvalHistory.filter((h) => h.batch === true && typeof h.snapshot === "string").length === 4 &&
+      mA.batchApprovals === 4 && S.metricsLines(mA).includes("  batch approvals (fast-forward): 4") && S.nextAction(pFF, fA.slug).step === "implement",
+      "B3: next_action names the fast-forward (/spec-ff + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")");
+    const ffAgain = S.approvePhase(pFF, fA.slug, undefined, "ana", { through: "tasks" });
+    ok(ffAgain.ok && ffAgain.nothingToDo && ffAgain.approved.length === 0 && /^Nothing to fast-forward: every active phase of 'quick-spec' through 'tasks' is already approved\.$/.test(ffAgain.message),
+      "B3: a second fast-forward has nothing to do and says so");
+
+    // stop at a refused gate (design placeholders): the phases before it stay approved, nothing after it
+    const fB = S.createFeature(pFF, "Refused ff", ["core"]);
+    fillAll(fB, ["design"]);
+    const nB = S.nextAction(pFF, fB.slug);
+    const ffB = S.approvePhase(pFF, fB.slug, undefined, "ana", { through: "tasks" });
+    const stB = state3(fB);
+    ok(!nB.fastForward && ffB.ok === false && ffB.refused && ffB.stoppedAt === "design" && ffB.stopReason === "refused" && ffB.approved.join() === "classification,requirements" &&
+      ffB.failing.includes("placeholders") && ffB.checks.length >= 1 && stB.approvals.requirements.batch === true && !stB.approvals.design && !stB.approvals.tasks &&
+      /^Fast-forward 'refused-ff' stopped at 'design' \(approved before it: classification, requirements\) — its gate refuses it — failing checks: placeholders/.test(ffB.error) &&
+      /✗ placeholders — design\.md/.test(ffB.error) && /it resumes at 'design'/.test(ffB.error),
+      "B3: the fast-forward never skips a gate — it stops at the first refused one (design placeholders), keeps the phases approved before it and names the failing checks; next_action suggests no fast-forward while a gate would refuse");
+    const ffBF = S.approvePhase(pFF, fB.slug, undefined, "ana", { through: "tasks", force: true });
+    ok(ffBF.ok && ffBF.approved.join() === "design,tasks" && state3(fB).approvals.design.forced === true && ffBF.steps[0].forced === true && state3(fB).approvals.design.batch === true,
+      "B3: force (only when the user asked) forces each gate of the fast-forward, recorded as forced like approve --force");
+
+    // argument errors: phase + through, through execution, an inactive phase, neither phase nor through; MCP schema
+    const fE = S.createFeature(pFF, "Errors ff", ["core"]);
+    const eBoth = S.approvePhase(pFF, fE.slug, "design", "a", { through: "tasks" });
+    const eExec = S.approvePhase(pFF, fE.slug, undefined, "a", { through: "execution" });
+    const eInact = S.approvePhase(pFF, fE.slug, undefined, "a", { through: "test-plan" });
+    const eNone = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug } }));
+    const eEnum = await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug, through: "execution" } });
+    const apTool3 = list.result.tools.find((t) => t.name === "spec_approve");
+    ok(eBoth.ok === false && /either a phase or through/.test(eBoth.error) && eExec.ok === false && /covers the planning phases only/.test(eExec.error) &&
+      eInact.ok === false && eInact.notActive && /'test-plan' is not an approvable phase of 'errors-ff'/.test(eInact.error) &&
+      eNone.ok === false && /Name the phase to approve — or through: <phase>/.test(eNone.error) && JSON.stringify(eEnum).includes("execution") && !(payload(eEnum) || {}).approved &&
+      apTool3.inputSchema.required.join() === "name" && apTool3.inputSchema.properties.through.enum.join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks" &&
+      apTool3.inputSchema.properties.role.type === "string" && /APPROVALS BY ROLE/.test(apTool3.description) && /FAST-FORWARD/.test(apTool3.description) &&
+      !Object.keys(state3(fE).approvals).length,
+      "B3: phase and through together, through 'execution', an inactive phase and neither of them are refused (nothing approved); spec_approve advertises role + through (phase optional)");
+
+    // with roles: the given role signs each phase; a phase that needs another role stops it; next_action suggests it with --role
+    const pFR = b3("ff-roles");
+    S.initProject(pFR, ["core"], "en", { approvalRoles: ROLES3 });
+    const fC = S.createFeature(pFR, "Roles ff", ["core"]);
+    fillAll(fC);
+    const nC0 = S.nextAction(pFR, fC.slug);
+    const ffC1 = S.approvePhase(pFR, fC.slug, undefined, "paula", { through: "tasks", role: "product" });
+    S.approvePhase(pFR, fC.slug, "design", "sara", { role: "security" });
+    const nC1 = S.nextAction(pFR, fC.slug);
+    const ffC2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFR, name: fC.slug, through: "tasks", role: "tech", by: "tom" } }));
+    const stC = state3(fC);
+    ok(!nC0.fastForward && ffC1.ok === false && ffC1.stopReason === "role" && ffC1.stoppedAt === "design" && ffC1.approved.join() === "classification,requirements" &&
+      /'product' is not a role that signs off 'design'/.test(ffC1.error) && stC.approvals.requirements.roles.product.by === "paula" &&
+      nC1.fastForward && nC1.fastForward.role === "tech" && nC1.fastForward.phases.join() === "design,tasks" && /\/spec-ff roles-ff --role tech \(CLI: dev-spec approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation) &&
+      ffC2.ok && ffC2.complete && ffC2.approved.join() === "design,tasks" && Object.keys(stC.approvals.design.roles).sort().join() === "security,tech" &&
+      stC.approvals.design.batch === true && stC.approvals.tasks.roles.tech.batch === true,
+      "B3: fast-forward with roles — the given role signs each phase; a phase that role doesn't sign stops it (role, nothing recorded there); next_action suggests it with --role when one role is all each remaining phase waits for (got " + nC1.recommendation + ")");
+    const fD = S.createFeature(pFR, "Roles wait", ["core"]);
+    fillAll(fD);
+    S.approvePhase(pFR, fD.slug, "classification", "a"); S.approvePhase(pFR, fD.slug, "requirements", "p", { role: "product" });
+    const ffD = S.approvePhase(pFR, fD.slug, undefined, "tom", { through: "tasks", role: "tech" });
+    ok(ffD.ok === true && ffD.complete === false && ffD.stopReason === "roles" && ffD.stoppedAt === "design" && ffD.missingRoles.join() === "security" && ffD.approved.length === 0 &&
+      ffD.steps[0].signedOff === true && state3(fD).signoffs.design.tech.batch === true && !state3(fD).approvals.tasks &&
+      /stopped at 'design' \(nothing approved\) — signed off, but it waits for the other roles \(missing role: security\)/.test(ffD.message),
+      "B3: fast-forward with roles stops at a phase that, once signed, still waits for another role (ok, complete: false, missingRoles) — the later phases wait for it");
+
+    // --- PT / ES: the role and fast-forward messages follow the feature's language
+    const pPT = b3("pt");
+    S.initProject(pPT, ["core"], "pt", { approvalRoles: { design: ["tech", "security"] } });
+    const fPT = S.createFeature(pPT, "Exportar faturas", ["core"]);
+    fillAll(fPT);
+    S.approvePhase(pPT, fPT.slug, "classification", "a"); S.approvePhase(pPT, fPT.slug, "requirements", "a");
+    const ptNo = S.approvePhase(pPT, fPT.slug, "design", "a");
+    const ptSign = S.approvePhase(pPT, fPT.slug, "design", "t", { role: "tech" });
+    const ptNa = S.nextAction(pPT, fPT.slug);
+    const ptDoc = S.specDoctor(pPT, fPT.slug);
+    const ptFf = S.approvePhase(pPT, fPT.slug, undefined, "s", { through: "tasks", role: "security" });
+    const pES = b3("es");
+    S.initProject(pES, ["core"], "es");
+    const fES = S.createFeature(pES, "Exportar facturas", ["core"]);
+    fillAll(fES, ["design"]);
+    const esFf = S.approvePhase(pES, fES.slug, undefined, "a", { through: "tasks" });
+    const esInit = S.initProject(pES, ["core"], undefined, { approvalRoles: { tasks: ["qa", "tech"] } });
+    const esNo = S.approvePhase(pES, fES.slug, "design", "a", { force: true });
+    S.approvePhase(pES, fES.slug, "tasks", "q", { role: "qa", force: true });
+    const esNa = S.finishFeature(pES, fES.slug);
+    ok(/^'design' é validada por papel \(tech, security\) — indica o papel com que validas: \/approve exportar-faturas design --role <papel>/.test(ptNo.error) &&
+      /'design' continua pendente até todos os papéis validarem o seu conteúdo atual — falta o papel: security\./.test(ptSign.note) &&
+      /Revê e valida 'design' — falta o papel: security \(já validaram: tech\): \/approve exportar-faturas design --role security\./.test(ptNa.recommendation) &&
+      /a aguardar aprovação humana: design \(falta o papel: security\)/.test(chk(ptDoc, "approval-gates").detail) &&
+      /^Avanço rápido de 'exportar-faturas': design, tasks aprovadas, por ordem/.test(ptFf.message) &&
+      /^El avance rápido de 'exportar-facturas' se detuvo en 'design' \(aprobadas antes: classification, requirements\) — su gate la rechaza/.test(esFf.error) &&
+      /^Roles de aprobación: tasks=qa\+tech/.test(esInit.rolesNote) && esNo.ok &&
+      esNa.blockers.some((b) => /\(falta el rol: tech\)/.test(b)) && /^'x' no es un rol que valide 'tasks'/.test(S.approvePhase(pES, fES.slug, "tasks", "x", { role: "x" }).error),
+      "B3: PT / ES — role errors, the pending note, next_action's sign-off step, doctor's list, the fast-forward summaries and finish's blockers are localized (got " +
+      JSON.stringify([ptNa.recommendation, esNa.blockers.slice(-1)]) + ")");
+
+    const govKeys = (l) => Object.keys(S.msg(l).governance).sort().join();
+    ok(govKeys("en") === govKeys("pt") && govKeys("en") === govKeys("es") && ["en", "pt", "es"].every((l) => typeof S.msg(l).jsonShape.signoffs === "string") &&
+      S.msg("pt").governance.missing(["a", "b"]) === "faltam os papéis: a, b" && S.msg("es").governance.missing(["a"]) === "falta el rol: a",
+      "B3: EN / PT / ES parity — the same governance messages (roles, fast-forward) in every language, singular / plural role wording");
+
+    // --- .state.json signoffs of the wrong shape is refused like approvals of the wrong shape
+    const fS3 = S.createFeature(pN, "Shape", ["core"]);
+    const s3 = state3(fS3); s3.signoffs = ["tech"]; write3(fS3, ".state.json", JSON.stringify(s3));
+    const shape3 = S.approvePhase(pN, fS3.slug, "classification", "a", { force: true });
+    ok(shape3.ok === false && /'signoffs' must be an object/.test(shape3.error), "B3: a .state.json whose signoffs is not an object is refused (never 'repaired')");
+  }
+
+  { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
+    const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
+    const setStateB4 = (dir, patch) => {
+      const f = path.join(dir, ".state.json");
+      fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, "utf8")), ...patch }, null, 2));
+    };
+    const sizeBlocks = S.taskBlocks("# Tasks\n\n- [ ] 1. One\n  - _Size: XS_\n- [ ] 2. Two _Size: s_\n- [ ] 3. Three\n  - _Size: `XL`_\n- [ ] 4. Four\n  - _Size: XXL_\n" +
+      "- [ ] 5. Five\n  ```md\n  - _Size: L_\n  ```\n- [ ] 6. Six\n  - _Size: M_\n- [ ] 7. Seven\n  - _Size: L_\n");
+    const sizes = sizeBlocks.map((b) => S.taskSize(b));
+    ok(JSON.stringify(sizes) === JSON.stringify(["XS", "S", "XL", null, null, "M", "L"]) && JSON.stringify(S.SIZE_POINTS) === '{"XS":1,"S":2,"M":3,"L":5,"XL":8}',
+      "taskSize: _Size: XS|S|M|L|XL_ on the task line or a sub-line (any case, backticks) → XS=1 S=2 M=3 L=5 XL=8; XXL and a fenced example are unsized (got " + JSON.stringify(sizes) + ")");
+
+    // Ticks: when each task was ticked (state.ticks[n] = ISO).
+    const tpB4 = path.join(tmp, "proj-b4-ticks");
+    S.initProject(tpB4, ["core"], "en");
+    const tfB4 = S.createFeature(tpB4, "Ticks", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(tfB4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] One\n- [ ] 2. [US1] Two\n  - _Verify: npm test_\n- [ ] 3. [US1] Three\n");
+    const beforeB4 = Date.now();
+    const t1B4 = S.completeTask(tpB4, "ticks", 1);
+    const tick1 = (S.readState(tpB4, "ticks").ticks || {})["1"];
+    const t1againB4 = S.completeTask(tpB4, "ticks", 1);
+    const tick1again = S.readState(tpB4, "ticks").ticks["1"];
+    const failB4 = S.completeTask(tpB4, "ticks", 2, { command: "npm test", exitCode: 1 });
+    const stFailB4 = S.readState(tpB4, "ticks");
+    const passB4 = S.completeTask(tpB4, "ticks", 2, { command: "npm test", exitCode: 0 });
+    const stPassB4 = S.readState(tpB4, "ticks");
+    ok(t1B4.ok && typeof tick1 === "string" && Date.parse(tick1) >= beforeB4 - 1000 && Date.parse(tick1) <= Date.now() + 1000 && t1againB4.ok && t1againB4.alreadyDone && tick1again === tick1 &&
+      failB4.ok === false && stFailB4.ticks["2"] === undefined && stFailB4.evidence["2"].exitCode === 1 &&
+      passB4.ok && typeof stPassB4.ticks["2"] === "string" && stPassB4.evidence["2"].exitCode === 0,
+      "spec_complete_task records when a task is ticked (state.ticks[n] = ISO): a re-complete keeps the first tick, a failed run records no tick (its evidence stays), a passing run records both (got " + JSON.stringify([tick1, stFailB4.ticks, stPassB4.ticks]) + ")");
+    const stFileB4 = path.join(tfB4.dir, ".state.json");
+    setStateB4(tfB4.dir, { ticks: "hand edit" });
+    const t3B4 = S.completeTask(tpB4, "ticks", 3);
+    ok(t3B4.ok && JSON.parse(fs.readFileSync(stFileB4, "utf8")).ticks === "hand edit" && /- \[x\] 3\./.test(fs.readFileSync(path.join(tfB4.dir, "tasks.md"), "utf8")),
+      "a hand-edited `ticks` that is not an object is left as it is (never repaired) — the task still ticks");
+
+    // Velocity / ETA from dated ticks, "today" injected (a Wednesday).
+    const NOW_B4 = "2026-06-10T12:00:00Z";
+    const fpB4 = path.join(tmp, "proj-b4-forecast");
+    S.initProject(fpB4, ["core"], "en");
+    const mkB4 = (proj, name, tasks) => { const f = S.createFeature(proj, name, ["core"], "", undefined, "en"); if (tasks != null) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks); return f; };
+    const coreB4 = mkB4(fpB4, "Core API",
+      "- [x] 1. [US1] Schema\n  - _Size: L_\n- [x] 2. [US1] Endpoints\n  - _Size: L_\n- [x] 3. [US1] Auth\n  - _Size: M_\n  - _Verify: npm test_\n" +
+      "- [x] 4. [US1] Paging\n  - _Size: M_\n- [x] 5. [US1] Old work\n  - _Size: S_\n- [x] 6. [US1] Ticked by hand\n  - _Size: XS_\n" +
+      "- [ ] 7. [US1] Filters\n  - _Size: M_\n- [ ] 8. [US1] Sorting\n- [ ] 9. [US1] Bulk import\n  - _Size: XL_\n");
+    setStateB4(coreB4.dir, { ticks: { 1: "2026-06-01T09:00:00Z", 2: "2026-06-02T15:00:00Z", 4: "2026-06-05T11:00:00Z", 5: "2026-04-01T10:00:00Z" },
+      evidence: { 3: { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z",
+        history: [{ command: "npm test", exitCode: 1, at: "2026-06-03T09:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-04T10:00:00Z" }, { command: "npm test", exitCode: 0, at: "2026-06-09T10:00:00Z" }] } } });
+    mkB4(fpB4, "Reports", "- [ ] 1. [US1] Report view\n  - _Size: M_\n- [ ] 2. [US1] CSV\n  - _Size: M_\n");
+    mkB4(fpB4, "Bulk export", "- [ ] 1. [US1] Export job\n  - _Size: S_\n");
+    mkB4(fpB4, "Draft", null); // the scaffold's tasks only: not broken into tasks
+    mkB4(fpB4, "Later", "- [ ] 1. [US1] Later thing\n");
+    mkB4(fpB4, "Shipped", "- [x] 1. [US1] Done long ago\n");
+    S.setDependency(fpB4, "bulk-export", ["reports"]);
+    S.setDependency(fpB4, "later", ["draft"]);
+    const fcB4 = S.forecastData(fpB4, S.roadmap(fpB4).features, { now: NOW_B4 });
+    const FB4 = fcB4.byFeature;
+    ok(fcB4.velocity.completed === 4 && fcB4.velocity.points === 16 && fcB4.velocity.since === "2026-06-01" && fcB4.velocity.workingDays === 8 && fcB4.velocity.pointsPerDay === 2 && fcB4.velocity.enough === true,
+      "velocity = points completed per working day over the last 28 days — ticks plus a task's first passing evidence run (a later re-check is not the completion); a tick outside the window and a hand tick don't count (got " + JSON.stringify(fcB4.velocity) + ")");
+    ok(FB4["core-api"].eta === "2026-06-18" && JSON.stringify(FB4["core-api"].range) === '["2026-06-17","2026-06-22"]' && FB4["core-api"].remainingPoints === 14 &&
+      FB4["core-api"].unsizedTasks === 1 && FB4["core-api"].velocity === "feature" && FB4["core-api"].workingDays === 7 && FB4["core-api"].pointsPerDay === 2,
+      "ETA: 14 open points (M + an unsized task = the feature's median 3 + XL) ÷ 2 points/day = 7 working days from Wed 2026-06-10 → 2026-06-18, ±25% → 06-17…06-22 (got " + JSON.stringify(FB4["core-api"]) + ")");
+    ok(FB4.reports.eta === "2026-06-12" && FB4.reports.velocity === "project" && FB4["bulk-export"].eta === "2026-06-15" && JSON.stringify(FB4["bulk-export"].range) === '["2026-06-15","2026-06-17"]' &&
+      JSON.stringify(FB4["bulk-export"].after) === '["reports"]' && FB4["bulk-export"].eta > FB4.reports.eta,
+      "a feature blocked by an unfinished dependency forecasts after it (bulk-export starts the working day after reports' ETA, Fri 06-12 → Mon 06-15); without completions of its own a feature uses the project velocity (got " + JSON.stringify([FB4.reports, FB4["bulk-export"]]) + ")");
+    ok(FB4.draft.eta === null && FB4.draft.reason === "no-tasks" && FB4.later.eta === null && FB4.later.reason === "dependency" && JSON.stringify(FB4.later.after) === '["draft"]' &&
+      FB4.shipped.reason === "done",
+      "no ETA for a feature not broken into tasks (no-tasks), one waiting on a dependency that has none (dependency, after: [draft]) or a done one (got " + JSON.stringify([FB4.draft, FB4.later, FB4.shipped]) + ")");
+
+    const npB4 = path.join(tmp, "proj-b4-nodata");
+    S.initProject(npB4, ["core"], "en");
+    const soloB4 = mkB4(npB4, "Solo", "- [x] 1. [US1] A\n- [x] 2. [US1] B\n- [ ] 3. [US1] C\n");
+    setStateB4(soloB4.dir, { ticks: { 1: "2026-06-08T10:00:00Z", 2: "2026-06-09T10:00:00Z" } });
+    const ndB4 = S.roadmapData(npB4, { now: NOW_B4 });
+    const ndMdB4 = S.renderRoadmapMd(npB4, "en", ndB4);
+    ok(ndB4.rmv.velocity.enough === false && ndB4.rmv.velocity.completed === 2 && ndB4.rmv.features[0].forecast.reason === "not-enough-data" && ndB4.rmv.features[0].forecast.eta === null &&
+      /_Velocity: not enough data yet — 2 of the 3 completed tasks a forecast needs in the last 28 days_/.test(ndMdB4) && /\| #3 C \| — \|$/m.test(ndMdB4) && !/ETA = remaining points/.test(ndMdB4),
+      "fewer than 3 completed tasks in the window: not enough data — no ETA ('—' in the column), the roadmap says so and shows no ETA rule");
+
+    const fdB4 = S.roadmapData(fpB4, { now: NOW_B4 });
+    const mdB4 = S.renderRoadmapMd(fpB4, "en", fdB4);
+    const mdPtB4 = S.renderRoadmapMd(fpB4, "pt", fdB4);
+    const htmlB4 = S.renderRoadmapHtml(fpB4, "es", fdB4);
+    ok(/\| Next \| ETA \|\n\|---\|---\|---\|---\|---\|---\|---\|---\|---\|/.test(mdB4) && /\[core-api\]\(\.\/core-api\/requirements\.md\) .*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdB4) &&
+      /\[bulk-export\].*\| 2026-06-15 \(06-15…06-17\) \|$/m.test(mdB4) && /\[later\].*\| — \|$/m.test(mdB4) && /\[shipped\].*\| — \|$/m.test(mdB4) &&
+      /_Velocity: 2 point\(s\)\/working day — 4 task\(s\), 16 point\(s\) completed since 2026-06-01 \(last 28 days\)_/.test(mdB4) && /ETA = remaining points ÷ velocity, in working days \(±25%\)/.test(mdB4),
+      "ROADMAP.md: an ETA column (the date and its range, '—' without one), the project velocity line and the ETA rule");
+    ok(/\| Próxima \| Previsão \|/.test(mdPtB4) && /\[core-api\].*\| 2026-06-18 \(06-17…06-22\) \|$/m.test(mdPtB4) && /_Velocidade: 2 ponto\(s\)\/dia útil — 4 tarefa\(s\), 16 ponto\(s\) concluídos desde 2026-06-01/.test(mdPtB4) &&
+      /Previsão = pontos por fazer ÷ velocidade, em dias úteis \(±25%\)/.test(mdPtB4),
+      "ROADMAP.md in Portuguese: the Previsão column, the Velocidade line and the rule in European Portuguese");
+    ok(/<th>Previsión<\/th>/.test(htmlB4) && /<td class="eta">2026-06-18 \(06-17…06-22\)<\/td>/.test(htmlB4) && /Velocidad: 2 punto\(s\)\/día laborable/.test(htmlB4) && !/https?:\/\//.test(htmlB4),
+      "ROADMAP.html (ES): the Previsión column and the velocity line — still offline (no URL)");
+
+    const mB4 = S.metrics(fpB4, "core-api", { now: NOW_B4 });
+    const mpB4 = S.metrics(fpB4, undefined, { now: NOW_B4 });
+    ok(mB4.velocity.pointsPerDay === 2 && mB4.velocity.completed === 4 && S.metricsLines(mB4).includes("  velocity: 2 point(s)/working day (4 task(s), 16 point(s) since 2026-06-01, last 28 days)") &&
+      mpB4.velocity.pointsPerDay === 2 && mpB4.velocity.enough === true && S.metricsLines(mpB4).some((l) => /^ {2}velocity: 2 point\(s\)\/working day/.test(l)) &&
+      /velocity: no completed task in the last 28 days/.test(S.metricsLines(S.metrics(fpB4, "reports", { now: NOW_B4 })).join("\n")),
+      "spec_metrics carries velocity — the feature's own and the project's — and metricsLines prints it");
+
+    // MCP = engine (real "today": ticks recorded now by spec_complete_task over MCP).
+    const lpB4 = path.join(tmp, "proj-b4-live");
+    S.initProject(lpB4, ["core"], "pt");
+    mkB4(lpB4, "Agora", "- [ ] 1. [US1] A\n  - _Size: S_\n- [ ] 2. [US1] B\n  - _Size: S_\n- [ ] 3. [US1] C\n  - _Size: S_\n- [ ] 4. [US1] D\n  - _Size: L_\n");
+    for (const n of [1, 2, 3]) await callB4("spec_complete_task", { name: "agora", number: n, projectDir: lpB4 });
+    const mRmB4 = payload(await callB4("spec_roadmap", { projectDir: lpB4 }));
+    const eRmB4 = S.roadmapReport(lpB4);
+    const mMetB4 = payload(await callB4("spec_metrics", { projectDir: lpB4 }));
+    const pick = (r) => JSON.stringify([r.velocity, r.overlaps, r.features.map((f) => [f.name, f.forecast])]);
+    ok(mRmB4.velocity.enough === true && mRmB4.velocity.completed === 3 && typeof mRmB4.features[0].forecast.eta === "string" && pick(mRmB4) === pick(eRmB4) &&
+      JSON.stringify(mMetB4.velocity) === JSON.stringify(S.metrics(lpB4).velocity) && /Velocidade: /.test(S.renderRoadmapMd(lpB4, "pt")),
+      "MCP spec_roadmap returns the engine's velocity / forecast / overlaps (ticks recorded over MCP); spec_metrics carries the same velocity (got " + pick(mRmB4).slice(0, 300) + ")");
+    const mdStr = (fs.readFileSync(path.join(__dirname, "server.js"), "utf8").match(/name: "spec_roadmap",\s*description: "([^"\\]|\\.)*"/) || [""])[0];
+    ok(/_Size: XS\|S\|M\|L\|XL_/.test(mdStr) && /cross-feature-overlap/.test(mdStr) && /not-enough-data/.test(mdStr), "spec_roadmap's description documents _Size:_, the forecast reasons and the overlaps");
+
+    const keysB4 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" ? keysB4(v, pre + k + ".") : [pre + k])).sort().join();
+    ok(keysB4(S.msg("en").forecast) === keysB4(S.msg("pt").forecast) && keysB4(S.msg("en").forecast) === keysB4(S.msg("es").forecast),
+      "the forecast / overlap messages exist in EN, PT and ES with the same keys");
+  }
+
+  { // 1.14 B4.2 — cross-feature file overlap: roadmapData pairs, ROADMAP attention, doctor warn, SessionStart line
+    const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
+    const opB4 = path.join(tmp, "proj-b4-overlap");
+    S.initProject(opB4, ["core"], "en");
+    const mkO = (name, tasks) => { const f = S.createFeature(opB4, name, ["core"], "", undefined, "en"); fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks); return f; };
+    mkO("Billing", "- [ ] 1. [US1] Invoice model\n  - _Implements: src/billing/invoice.js:10_\n- [ ] 2. [US1] Money util\n  - _Implements: ./src/util/money.js#L5_\n- [x] 3. [US1] Done one\n  - _Implements: src/done.js_\n");
+    mkO("Refunds", "- [ ] 1. [US1] Refund flow\n  - _Implements: `src/util/`_\n- [ ] 2. [US1] Refund model\n  - _Implements: src/refunds/refund.js_\n- [ ] 3. [US1] Touch the done file\n  - _Implements: src/done.js_\n");
+    mkO("Payouts", "- [ ] 1. [US1] Payout invoice\n  - _Implements: src/billing/invoice.js#L20_\n");
+    const searchO = mkO("Search", "- [ ] 1. [US1] Index\n  - _Implements: src/search/index.js, src/search/query.js_\n- [ ] 2. [US1] Docs\n  - _Implements: docs/search/*.md_\n");
+    mkO("Notes", "- [ ] 1. [US1] Notes\n  - _Implements: src/notes/notes.js_\n");
+    const legacyO = mkO("Legacy", "- [x] 1. [US1] Old invoices\n  - _Implements: src/billing/legacy.js_\n");
+    const stL = path.join(legacyO.dir, ".state.json");
+    fs.writeFileSync(stL, JSON.stringify({ ...JSON.parse(fs.readFileSync(stL, "utf8")), finished: { at: "2026-06-01T00:00:00Z", files: { "src/billing/legacy.js": "abc", "docs/search/intro.md": null } } }, null, 2));
+    const ovB4 = S.featureOverlaps(opB4);
+    const pairB4 = (a, b) => ovB4.pairs.find((p) => p.a === a && p.b === b) || {};
+    ok(ovB4.pairs.length === 3 && JSON.stringify(ovB4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/payouts","billing/refunds","search/legacy"]' &&
+      pairB4("billing", "payouts").kind === "active" && JSON.stringify(pairB4("billing", "payouts").files) === '["src/billing/invoice.js"]' &&
+      JSON.stringify(pairB4("billing", "refunds").files) === '["src/util/money.js"]' &&
+      pairB4("search", "legacy").kind === "finished" && JSON.stringify(pairB4("search", "legacy").files) === '["docs/search/intro.md"]' && ovB4.truncated === false,
+      "featureOverlaps: the same file however spelled (:10 / #L20 anchors), a folder covering a file (src/util/ ⊃ src/util/money.js), a glob matching a finished feature's baseline file; a DONE task's file, sibling files and disjoint features never pair (got " + JSON.stringify(ovB4) + ")");
+
+    const chk = (f) => S.specDoctor(opB4, f).checks.find((c) => c.id === "cross-feature-overlap");
+    const dBill = chk("billing"), dRef = chk("refunds"), dSearch = chk("search");
+    ok(dBill && dBill.status === "warn" && /payouts \(src\/billing\/invoice\.js\); refunds \(src\/util\/money\.js\)/.test(dBill.detail) && /spec_depend/.test(dBill.detail) && /_Supersedes:/.test(dBill.detail) &&
+      dRef && dRef.status === "warn" && /billing \(src\/util\/money\.js\)/.test(dRef.detail) &&
+      dSearch && /finished feature recorded in its drift baseline — legacy \(docs\/search\/intro\.md\)/.test(dSearch.detail) && /_Supersedes: <feature>\/US-n\.AC-m_/.test(dSearch.detail) &&
+      !chk("legacy") && !chk("notes"),
+      "spec_doctor: a warn 'cross-feature-overlap' on both features of an active pair and on the active side of a finished pair (suggesting spec_depend / _Supersedes:_); none on the finished feature nor on a disjoint one (got " + JSON.stringify([dBill, dSearch]) + ")");
+
+    const omdB4 = S.renderRoadmapMd(opB4, "en");
+    const attB4 = omdB4.split("## ⚠")[1] || "";
+    ok(/- \*\*billing\*\* — plans the same files as payouts: src\/billing\/invoice\.js — order them \(spec_depend\) or declare _Supersedes:_/.test(attB4) &&
+      /- \*\*billing\*\* — plans the same files as refunds: src\/util\/money\.js/.test(attB4) &&
+      /- \*\*search\*\* — plans files in legacy's finish baseline: docs\/search\/intro\.md — declare _Supersedes: legacy\/US-n\.AC-m_/.test(attB4) &&
+      !/\*\*(refunds|payouts|notes|legacy)\*\* — plans/.test(attB4) && /planeia os mesmos ficheiros que payouts/.test(S.renderRoadmapMd(opB4, "pt")),
+      "ROADMAP.md 'needs attention' names each overlap once, on its active side (PT too)");
+
+    const hkB4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    let ctxB4 = "";
+    try { ctxB4 = JSON.parse(hkB4.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
+    ok(ctxB4.split("\n").filter((l) => /overlap/.test(l)).length === 1 && /⚠ 3 cross-feature file overlap\(s\): billing ↔ payouts, billing ↔ refunds, search → legacy — run \/spec-doctor/.test(ctxB4),
+      "SessionStart prints ONE line naming the overlapping pairs (got " + JSON.stringify(ctxB4.slice(-300)) + ")");
+
+    const mDocB4 = payload(await callB4("spec_doctor", { name: "billing", projectDir: opB4 }));
+    const mRmB4 = payload(await callB4("spec_roadmap", { projectDir: opB4 }));
+    ok(JSON.stringify(mDocB4.checks.find((c) => c.id === "cross-feature-overlap")) === JSON.stringify(dBill) && JSON.stringify(mRmB4.overlaps) === JSON.stringify(ovB4.pairs),
+      "MCP spec_doctor / spec_roadmap carry the same overlap check and pairs as the engine");
+
+    // Ordered by a dependency, or declared with _Supersedes:_ → no longer an overlap.
+    S.setDependency(opB4, "payouts", ["billing"]);
+    fs.appendFileSync(path.join(searchO.dir, "requirements.md"), "\n- **US-9.AC-1** — WHEN a search runs THE SYSTEM SHALL use the new index _Supersedes: legacy/US-1.AC-1_\n");
+    const ov2B4 = S.featureOverlaps(opB4);
+    const hk2B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    ok(JSON.stringify(ov2B4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/refunds"]' && !chk("payouts") && !chk("search") && /⚠ 1 cross-feature file overlap\(s\): billing ↔ refunds —/.test(hk2B4.stdout),
+      "no overlap once the pair is ordered by a dependency (payouts → billing) or the active feature declares _Supersedes:_ of the finished one's criteria (got " + JSON.stringify(ov2B4.pairs) + ")");
+    const globB4 = path.join(tmp, "proj-b4-globs");
+    S.initProject(globB4, ["core"], "en");
+    for (const [name, imp] of [["Api all", "src/api/**"], ["Api v2", "src/api/v2/*.js"], ["Lib css", "lib/**/*.css"], ["Lib js", "lib/a.js"], ["Styles dir", "styles/"], ["Styles glob", "styles/**/*.css"]]) {
+      const f = S.createFeature(globB4, name, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Work\n  - _Implements: " + imp + "_\n");
+    }
+    const ovG = S.featureOverlaps(globB4).pairs;
+    ok(JSON.stringify(ovG.map((p) => [p.a, p.b, p.files])) === '[["api-all","api-v2",["src/api/**"]],["styles-dir","styles-glob",["styles"]]]',
+      "globs: a glob pairs with another glob it matches (src/api/** ⊇ src/api/v2/*.js) and with a folder holding its literal part (styles/ ⊇ styles/**/*.css); lib/**/*.css never pairs with lib/a.js (got " + JSON.stringify(ovG) + ")");
+    const cleanB4 = path.join(tmp, "proj-b4-clean");
+    S.initProject(cleanB4, ["core"], "en");
+    const c1 = S.createFeature(cleanB4, "One", ["core"], "", undefined, "en");
+    const c2 = S.createFeature(cleanB4, "Two", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(c1.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Implements: src/one/a.js, src/shared-one.js_\n- [ ] 2. [US1] Later\n  - _Implements: TBD_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
+    fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] B\n  - _Implements: src/one-two/b.js, src/shared.js_\n- [ ] 2. [US1] Later\n  - _Implements: tbd_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
+    const hk3B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
+    ok(S.featureOverlaps(cleanB4).pairs.length === 0 && !S.specDoctor(cleanB4, "one").checks.some((c) => c.id === "cross-feature-overlap") && !/overlap/.test(hk3B4.stdout) &&
+      !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
+      "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");
+  }
+
+  { // 1.14 B5 — evidence: red → green (_Expect: fail_), project checks (meta.checks) + the finish suite run, git-linked evidence
+    const b5Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
+    const b5Dir = (n) => path.join(tmp, "b5-" + n);
+    const b5State = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const b5Tasks = (f, text) => fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
+    const b5Read = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const b5Tick = () => { const until = Date.now() + 15; while (Date.now() < until) { /* a later millisecond for the next timestamp */ } };
+
+    // --- B5.1 the marker: English-stable, value kept whole; only `fail` sets it; a fenced example never does.
+    const mkB5 = (line, body) => S.taskBlocks("- [ ] 1. " + line + "\n" + (body || "")).find((b) => b.number === 1);
+    ok(S.expectsFail(mkB5("t", "  - _Expect: fail_\n")) && S.expectsFail(mkB5("t _Expect: FAIL_")) && S.expectsFail(mkB5("t", "  - _Expect: `fail`_\n")) &&
+      !S.expectsFail(mkB5("t", "  - _Expect: pass_\n")) && !S.expectsFail(mkB5("t", "  ```md\n  - _Expect: fail_\n  ```\n")) && !S.expectsFail(mkB5("t")),
+      "B5 _Expect: fail_ is read from the task line or a sub-line (any case, backticks dropped); `pass`, a fenced example or no marker leave a must-pass task");
+
+    // --- B5.1 spec_complete_task: a passing run is refused (the test tests nothing), a FAILING run is the proof.
+    const d1 = b5Dir("red");
+    S.initProject(d1, ["tdd"], "en");
+    const f1 = S.createFeature(d1, "Red Green", ["tdd"], "", undefined, "en");
+    b5Tasks(f1, "# Tasks\n\n## Phase 1\n\n" +
+      "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Verify: node tests/t01.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Implement the check\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node tests/t01.test.js_\n");
+    const pass0 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 0, summary: "1 passing" } });
+    const st0 = b5State(f1).evidence["1"];
+    const red1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" } });
+    const st1 = b5State(f1).evidence["1"];
+    ok(pass0.ok === false && pass0.recorded === true && pass0.unexpectedPass === true && pass0.expected === "fail" && /the test doesn't fail yet, so it tests nothing/.test(pass0.error) &&
+      st0.exitCode === 0 && st0.expected === "fail" && red1.ok === true && red1.completed === 1 && red1.verified === true && red1.redRecorded === true && red1.expected === "fail" &&
+      !red1.unverifiedReason && st1.exitCode === 1 && st1.expected === "fail" && st1.history.length === 2 && /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
+      "B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
+      JSON.stringify([pass0.error, red1]).slice(0, 300) + ")");
+    const green2 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 2, evidence: { command: "node tests/t01.test.js", exitCode: 0 } });
+    const again1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 0, summary: "1 passing" } });
+    const st1b = b5State(f1).evidence["1"];
+    const met1 = S.metrics(d1, f1.slug).evidence;
+    ok(green2.ok && green2.verified && !green2.expected && again1.ok === true && again1.alreadyDone && again1.verified === true && again1.expected === "fail" && !again1.redRecorded &&
+      /its test passes now — expected once the fix is in; the red run recorded on \d{4}-\d{2}-\d{2} stays the proof/.test(again1.note) &&
+      st1b.exitCode === 0 && !st1b.expected && st1b.red && st1b.red.exitCode === 1 && st1b.red.command === "node tests/t01.test.js" &&
+      !S.verificationStatus(d1, f1.slug, f1.dir).unverified.length && met1.runs === 4 && met1.passing === 3,
+      "B5 after the fix: a passing re-run of the _Expect: fail_ task keeps the red run as its proof (red) — verified, with a note; metrics count the red run as a pass and the refused pass as a failure (got " +
+      JSON.stringify([again1.note, met1]) + ")");
+
+    // Edges: a command that could not run, a note, a ticked task with no red run, no runnable _Verify:_, a stale red run.
+    const d2 = b5Dir("edges");
+    S.initProject(d2, ["tdd"], "en");
+    const f2 = S.createFeature(d2, "Edge", ["tdd"], "", undefined, "en");
+    b5Tasks(f2, "- [ ] 1. [US1] Write T-01 red\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 2. [US1] Note only\n  - _Verify: node t.js_\n  - _Expect: fail_\n" +
+      "- [x] 3. [US1] Ticked before the marker\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 4. [US1] No verify\n  - _Expect: fail_\n");
+    const cant = S.completeTask(d2, f2.slug, 1, { command: "node t.js", exitCode: 127 });
+    const note2 = S.completeTask(d2, f2.slug, 2, { summary: "it fails" });
+    const tick3 = S.completeTask(d2, f2.slug, 3, { command: "node t.js", exitCode: 0 });
+    const vs2 = S.verificationStatus(d2, f2.slug, f2.dir);
+    const docV2 = S.specDoctor(d2, f2.slug).checks.find((c) => c.id === "verification");
+    const none4 = S.completeTask(d2, f2.slug, 4);
+    ok(cant.ok === false && cant.recorded && !cant.unexpectedPass && /exit 127 means the command itself could not run/.test(cant.error) && /Not marking it done/.test(cant.error) &&
+      note2.ok && note2.verified === false && note2.unverifiedReason === "manual-note-on-runnable-verify" &&
+      tick3.ok === false && tick3.unexpectedPass && /is ticked, but it expects its test to FAIL/.test(tick3.error) &&
+      vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass") && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail) &&
+      none4.ok && none4.verified && none4.nothingToVerify && none4.expected === "fail",
+      "B5 _Expect: fail_ edges: exit 127 is refused (no red test); a note never proves a runnable _Verify:_; a ticked task whose run passes with no red run before it becomes unverified (reason unexpected-pass, labelled in doctor); without a runnable _Verify:_ nothing recorded is nothingToVerify (got " +
+      JSON.stringify([cant.error, docV2.detail]).slice(0, 300) + ")");
+    const st2 = b5State(f2);
+    st2.evidence["1"] = { command: "node t.js", exitCode: 1, at: "2026-01-01T00:00:00.000Z", task: "[US1] Write T-01 red", verify: "node t.js", stale: true };
+    fs.writeFileSync(path.join(f2.dir, ".state.json"), JSON.stringify(st2));
+    const staleRun = S.completeTask(d2, f2.slug, 1, { command: "node t.js", exitCode: 0 });
+    ok(staleRun.ok === false && staleRun.unexpectedPass === true, "B5 a red run marked stale (spec_impact --reopen: the spec changed) proves nothing — a pass after it is refused, a new red run is needed");
+
+    // The red-phase guidance points at _Expect: fail_ (EN/PT/ES); with the marker the red run is the proof (no redPhaseVerify).
+    const d3 = b5Dir("hint");
+    S.initProject(d3, ["tdd"], "en");
+    const mkHint = (lang, name) => {
+      const f = S.createFeature(d3, name, ["tdd"], "", undefined, lang);
+      b5Tasks(f, "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node t.js_\n" +
+        "- [ ] 2. [US1] Write regression test T-02 and watch it fail for the right reason\n  - _Verify: node t.js_\n  - _Expect: fail_\n");
+      return f;
+    };
+    const fh = mkHint("en", "Hint En"), fhp = mkHint("pt", "Dica Pt"), fhe = mkHint("es", "Pista Es");
+    const h1 = S.completeTask(d3, fh.slug, 1, { command: "node t.js", exitCode: 1 });
+    const h2 = S.completeTask(d3, fh.slug, 2, { command: "node t.js", exitCode: 1 });
+    const hp = S.completeTask(d3, fhp.slug, 1, { command: "node t.js", exitCode: 1 });
+    const he = S.completeTask(d3, fhe.slug, 1, { command: "node t.js", exitCode: 1 });
+    const hp2 = S.completeTask(d3, fhp.slug, 2, { command: "node t.js", exitCode: 0 });
+    const he2 = S.completeTask(d3, fhe.slug, 2, { command: "node t.js", exitCode: 0 });
+    const hpNote = S.completeTask(d3, fhp.slug, 2, { command: "node t.js", exitCode: 9009 });
+    ok(h1.ok === false && h1.redPhaseVerify && /Mark task 1 with _Expect: fail_/.test(h1.error) && h2.ok && h2.redRecorded && !h2.redPhaseVerify &&
+      /Marca a tarefa 1 com _Expect: fail_ — uma execução que FALHE passa a ser a prova \(T-01 falha antes da correção\)/.test(hp.error) &&
+      /Marca la tarea 1 con _Expect: fail_ — una ejecución que FALLE es entonces su prueba \(T-01 falla antes del arreglo\)/.test(he.error) &&
+      /A tarefa 2 espera que o seu teste FALHE \(_Expect: fail_\), mas a execução passou \(exit 0\) — o teste ainda não falha, por isso não testa nada/.test(hp2.error) &&
+      /La tarea 2 espera que su prueba FALLE \(_Expect: fail_\), pero la ejecución pasó \(exit 0\) — la prueba aún no falla, así que no prueba nada/.test(he2.error) &&
+      /Tarefa 2: exit 9009 significa que o próprio comando não pôde correr/.test(hpNote.error),
+      "B5 a red-phase task without _Expect: fail_: its refusal points at _Expect: fail_ (EN/PT/ES); with the marker the red run is the proof; the unexpected-pass / could-not-run refusals are localized (PT/ES)");
+
+    // --- B5.1 doctor red-green (+tdd warn): T-IDs made green by done tasks need a recorded red run of an _Expect: fail_ task citing them.
+    const d4 = b5Dir("rg");
+    S.initProject(d4, ["tdd"], "en");
+    const f4 = S.createFeature(d4, "Rg", ["tdd"], "", undefined, "en");
+    b5Tasks(f4, "- [ ] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n- [ ] 2. [US1] Implement\n  - _Makes green: T-01, T-02_\n  - _Verify: node t.js_\n- [ ] 3. [US1] Later\n  - _Makes green: T-03_\n");
+    const rgNone = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green");
+    S.completeTask(d4, f4.slug, 1, { command: "node t.js", exitCode: 0 });
+    S.completeTask(d4, f4.slug, 2, { command: "node t.js", exitCode: 0 });
+    const rgWarn = (await b5Call("spec_doctor", { projectDir: d4, name: "rg" })).checks.find((c) => c.id === "red-green");
+    b5Tasks(f4, b5Read(f4, "tasks.md").replace("- [x] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n", "- [x] 1. [US1] Write T-01 and T-02\n  - _Verify: node t.js_\n  - _Expect: fail_\n"));
+    const rgStill = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green"); // its recorded run passed — no red run yet
+    const rgRed = S.completeTask(d4, f4.slug, 1, { command: "node t.js", exitCode: 1 });
+    const rgPass = S.specDoctor(d4, f4.slug).checks.find((c) => c.id === "red-green");
+    const fCore = S.createFeature(d4, "Plain", ["core"], "", undefined, "en");
+    b5Tasks(fCore, "- [x] 1. [US1] Implement\n  - _Makes green: T-01_\n");
+    const fPt4 = S.createFeature(d4, "Rg Pt", ["tdd"], "", undefined, "pt");
+    b5Tasks(fPt4, "- [x] 1. [US1] Implementar\n  - _Makes green: T-07_\n");
+    ok(!rgNone && rgWarn && rgWarn.status === "warn" && /T-IDs made green by done tasks without a recorded red run: T-01, T-02 — a test that never failed proves nothing/.test(rgWarn.detail) &&
+      !/T-03/.test(rgWarn.detail) && rgStill.status === "warn" && rgRed.ok && rgRed.redRecorded && rgPass.status === "pass" && /\(2\) has a recorded red run/.test(rgPass.detail) &&
+      !S.specDoctor(d4, fCore.slug).checks.some((c) => c.id === "red-green") &&
+      /T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: T-07/.test(S.specDoctor(d4, fPt4.slug).checks.find((c) => c.id === "red-green").detail),
+      "B5 doctor red-green: warns naming the T-IDs done tasks make green with no recorded red run (never an open task's), passes once an _Expect: fail_ task citing them records a red run; not on core; PT (got " +
+      JSON.stringify([rgWarn && rgWarn.detail, rgPass && rgPass.detail]).slice(0, 300) + ")");
+
+    // --- B5.1 the brief: its Verification section says the run must fail (heading too without a _Verify:_); kept with write:true.
+    const br1 = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 1 });
+    const br2 = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 2 });
+    const brW = await b5Call("spec_task_brief", { projectDir: d1, name: "red-green", number: 1, write: true });
+    const br4 = S.taskBrief(d2, f2.slug, 4);
+    const brPt = S.taskBrief(d3, fhp.slug, 2);
+    ok(br1.expect === "fail" && /## Verification \(_Verify:_\)\n- `node tests\/t01\.test\.js`\n\n\*\*Expected result: FAIL\*\* \(_Expect: fail_\) — the run must exit non-zero/.test(br1.brief) &&
+      /\n\d+\. The _Verify:_ run must FAIL \(non-zero exit\) for the right reason/.test(br1.brief) && !br2.expect && !/Expected result: FAIL/.test(br2.brief) &&
+      brW.expect === "fail" && brW.brief === undefined && /## Verification \(_Verify:_\)\n\n\*\*Expected result: FAIL\*\*/.test(br4.brief) &&
+      /\*\*Resultado esperado: FALHA\*\* \(_Expect: fail_\)/.test(brPt.brief) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
+      "B5 brief: an _Expect: fail_ task's Verification section and definition of done say the run must FAIL (expect: 'fail', kept with write:true; the heading appears without a _Verify:_; PT)");
+
+    // --- B5.1 next_action's verify step: an _Expect: fail_ task whose run passed is told its proof is a FAILING run (never "a
+    // passing run"), and no red-phase hint that would tell it to add the marker it has. A written bugfix, gated phase by phase (EN / PT).
+    const redExpect = (d, lang) => {
+      const b = S.createFeature(d, "Red expect " + lang, undefined, "loop", undefined, lang, "bugfix");
+      const tp = path.join(b.dir, "tasks.md");
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n")); // the scaffold's task 3 already carries _Expect: fail_
+      const bp = path.join(b.dir, "bug.md");
+      fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
+      const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
+      fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
+      fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
+      ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
+      S.completeTask(d, b.slug, 1); S.completeTask(d, b.slug, 2);
+      const pass3 = S.completeTask(d, b.slug, 3, { command: "node tests/t01.test.js", exitCode: 0 });
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/- \[ \] 3\./, "- [x] 3.").replace(/- \[ \] 4\./, "- [x] 4."));
+      return { b, pass3, na: S.nextAction(d, b.slug) };
+    };
+    const d10 = b5Dir("na");
+    S.initProject(d10, ["core"], "en");
+    const reEn = redExpect(d10, "en"), rePt = redExpect(d10, "pt");
+    ok(reEn.pass3.unexpectedPass === true && reEn.na.step === "verify" && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(reEn.na.recommendation) &&
+      /Task 3 is marked _Expect: fail_: its proof is a run that FAILS .*\(dev-spec done red-expect-en 3 --run while the test fails/.test(reEn.na.recommendation) &&
+      !/Mark task 3 with _Expect: fail_/.test(reEn.na.recommendation) && rePt.na.step === "verify" && /A tarefa 3 tem _Expect: fail_: a prova é uma execução que FALHA/.test(rePt.na.recommendation),
+      "B5 next_action verify: an _Expect: fail_ task whose run passed (unexpected-pass) is told its proof is a FAILING run — no 'add the marker' red-phase hint; PT (got " +
+      JSON.stringify([reEn.na.step, reEn.na.recommendation]).slice(0, 400) + ")");
+
+    // --- B5.2 spec_init {checks}: meta.checks merged (add / replace / "" removes), validated before ANY write; the result reports them.
+    const d5 = b5Dir("checks");
+    const rp5 = path.join(d5, ".specs", "roadmap.json");
+    const i1 = await b5Call("spec_init", { projectDir: d5, tracks: ["tdd"], checks: { test: "node -e \"process.exit(0)\"", lint: "npm run lint" } });
+    const i2 = await b5Call("spec_init", { projectDir: d5, checks: { lint: "", typecheck: "npx tsc --noEmit", test: "  node -e \"process.exit(0)\"  " } });
+    const i3 = await b5Call("spec_init", { projectDir: d5 });
+    const before5 = fs.readFileSync(rp5, "utf8");
+    const bad1 = await b5Call("spec_init", { projectDir: d5, lang: "pt", checks: { "bad name": "x" } });
+    const bad2 = await b5Call("spec_init", { projectDir: d5, checks: { test: "a\nb" } });
+    const bad3 = S.initProject(d5, ["core"], undefined, { checks: JSON.parse('{"__proto__": "x"}') });
+    const bad4 = await rpc("tools/call", { name: "spec_init", arguments: { projectDir: d5, checks: ["npm test"] } });
+    const many5 = {};
+    for (let i = 0; i < 20; i++) many5["c" + i] = "x";
+    const bad5 = S.initProject(d5, ["core"], undefined, { checks: many5 });
+    ok(i1.checks.test === "node -e \"process.exit(0)\"" && i1.checks.lint === "npm run lint" && JSON.stringify(i2.checks) === JSON.stringify({ test: "node -e \"process.exit(0)\"", typecheck: "npx tsc --noEmit" }) &&
+      JSON.stringify(JSON.parse(before5).meta.checks) === JSON.stringify(i2.checks) && JSON.stringify(i3.checks) === JSON.stringify(i2.checks) &&
+      bad1.ok === false && /nome de verificação inválido 'bad name'/.test(bad1.error) && bad2.ok === false && /must be one line of text/.test(bad2.error) &&
+      bad3.ok === false && /invalid check name '__proto__'/.test(bad3.error) && bad4.result.isError === true && /checks must be an object/.test(bad4.result.content[0].text) &&
+      bad5.ok === false && /at most 20 project checks/.test(bad5.error) && fs.readFileSync(rp5, "utf8") === before5 && JSON.parse(before5).meta.lang !== "pt",
+      "B5 spec_init {checks}: added / replaced / an empty command removes one, the result always reports them; a bad name (PT message), a multi-line command, '__proto__', a non-object (schema) or > 20 checks are refused before anything — the language included — is written");
+    const d6 = b5Dir("badstored");
+    S.initProject(d6, ["core"], "en");
+    const rp6 = path.join(d6, ".specs", "roadmap.json");
+    const rj6 = JSON.parse(fs.readFileSync(rp6, "utf8"));
+    rj6.meta.checks = { test: 5, lint: "npm run lint" };
+    fs.writeFileSync(rp6, JSON.stringify(rj6));
+    const bs6 = S.initProject(d6, ["core"], undefined, { checks: { e2e: "x" } });
+    const f6 = S.createFeature(d6, "Stored", ["core"], "", undefined, "en");
+    const fin6 = S.finishFeature(d6, f6.slug);
+    ok(bs6.ok === false && /meta\.checks is not an object of name → command strings — fix it by hand/.test(bs6.error) && JSON.parse(fs.readFileSync(rp6, "utf8")).meta.checks.test === 5 &&
+      fin6.warnings.some((w) => /meta\.checks: invalid entries ignored \(test\)/.test(w)) && fin6.suiteChecks.length === 1 && fin6.suiteChecks[0].name === "lint",
+      "B5 a hand-edited meta.checks with a non-string command: spec_init refuses to change it (never repaired); finish ignores the bad entry with a warning and keeps the valid ones");
+
+    // --- B5.2 finish: suite-evidence blocks (doctor warns once every task is done) until every check has a passing run since the last task activity.
+    const d7 = b5Dir("suite");
+    const okCmd = "node -e \"process.exit(0)\"";
+    S.initProject(d7, ["core"], "en", { checks: { test: okCmd, lint: "npm run lint" } });
+    const f7 = S.createFeature(d7, "Suite", ["core"], "", undefined, "en");
+    b5Tasks(f7, "- [ ] 1. [US1] Do it\n");
+    const docOpen7 = S.specDoctor(d7, f7.slug).checks.find((c) => c.id === "suite-evidence");
+    const finOpen7 = S.finishFeature(d7, f7.slug);
+    S.completeTask(d7, f7.slug, 1);
+    const docDone7 = (await b5Call("spec_doctor", { projectDir: d7, name: "suite" })).checks.find((c) => c.id === "suite-evidence");
+    const gate7 = S.approvePhase(d7, f7.slug, "execution", "t");
+    ok(!docOpen7 && finOpen7.suiteChecks.every((c) => c.status === "no-run") && finOpen7.blockers.some((b) => /project checks without a passing run since the last task activity: test \(no run recorded\), lint \(no run recorded\) — run them: dev-spec finish suite --run/.test(b)) &&
+      docDone7 && docDone7.status === "warn" && /every task is done, but project checks have no passing run/.test(docDone7.detail) &&
+      gate7.ok === false && gate7.failing.includes("suite-evidence") && typeof b5State(f7).lastTickAt === "string",
+      "B5 meta.checks set: finish blocks on suite-evidence (every check without a run named), doctor warns once every task is done (not before), the execution sign-off refuses on it; a tick stamps lastTickAt (got " +
+      JSON.stringify([finOpen7.blockers, gate7.failing]).slice(0, 300) + ")");
+    const rec7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [
+      { name: "test", command: okCmd, exitCode: 0, summary: "3 passing" },
+      { name: "lint", command: "npm run lint", exitCode: 1, summary: "2 problems", commit: "ABC1234", dirty: true }] });
+    const fc7 = b5State(f7).finishChecks;
+    ok(rec7.ok && JSON.stringify(rec7.recordedChecks) === JSON.stringify([{ name: "test", exitCode: 0 }, { name: "lint", exitCode: 1 }]) &&
+      rec7.suiteChecks.find((c) => c.name === "test").status === "pass" && rec7.suiteChecks.find((c) => c.name === "lint").status === "failed" &&
+      rec7.blockers.some((b) => /: lint \(latest run failed \(exit 1\)\)/.test(b)) && !rec7.blockers.some((b) => /test \(/.test(b)) &&
+      fc7.test.exitCode === 0 && fc7.test.check === okCmd && typeof fc7.test.at === "string" && fc7.lint.commit === "abc1234" && fc7.lint.dirty === true && fc7.lint.history.length === 1 &&
+      /## Project checks\n- test: `node -e "process\.exit\(0\)"` → exit 0 · 3 passing\n- lint: `npm run lint` → exit 1 · 2 problems · @abc1234-dirty \(latest run failed \(exit 1\)\)/.test(rec7.mergeSummary),
+      "B5 spec_finish {evidence}: records each check's run in finishChecks (stamped with its meta.checks command, commit/dirty kept) BEFORE the readiness — a failed one stays a blocker; the merge summary lists the project checks (got " +
+      JSON.stringify([rec7.blockers, rec7.suiteChecks]).slice(0, 400) + ")");
+    const badEv7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }, { name: "e2e", command: "x", exitCode: 0 }] });
+    const noExit7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "lint", command: "npm run lint" }] });
+    const noCmd7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "lint", exitCode: 0 }] });
+    const notList7 = S.finishFeature(d7, f7.slug, { evidence: { name: "lint" } });
+    const noChecks7 = await b5Call("spec_finish", { projectDir: d1, name: "red-green", evidence: [{ name: "test", command: "x", exitCode: 0 }] });
+    const plain1 = S.finishFeature(d1, f1.slug);
+    ok(badEv7.ok === false && /evidence\[1\]: 'e2e' is not a project check — one of: test, lint/.test(badEv7.error) && b5State(f7).finishChecks.lint.exitCode === 1 &&
+      noExit7.ok === false && /evidence\[0\]: its exit code/.test(noExit7.error) && noCmd7.ok === false && /the command that ran is required/.test(noCmd7.error) &&
+      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && /no project checks configured \(roadmap\.json meta\.checks\)/.test(noChecks7.error) &&
+      !plain1.suiteChecks && !plain1.blockers.some((b) => /project checks/.test(b)),
+      "B5 spec_finish {evidence} is all-or-nothing (an unknown check name, a missing exit code or command: nothing recorded); needs meta.checks; without meta.checks nothing changes");
+    const fix7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0, summary: "clean" }] });
+    const gate7b = S.approvePhase(d7, f7.slug, "execution", "t");
+    const docOk7 = S.specDoctor(d7, f7.slug).checks.find((c) => c.id === "suite-evidence");
+    b5Tick();
+    fs.appendFileSync(path.join(f7.dir, "tasks.md"), "- [ ] 2. [US1] One more\n");
+    S.completeTask(d7, f7.slug, 2);
+    const late7 = S.finishFeature(d7, f7.slug);
+    await b5Call("spec_init", { projectDir: d7, checks: { lint: "npm run lint -- --max-warnings 0" } });
+    const chg7 = S.finishFeature(d7, f7.slug);
+    ok(fix7.ok && fix7.suiteChecks.every((c) => c.status === "pass") && !fix7.blockers.some((b) => /project checks/.test(b)) && !(gate7b.failing || []).includes("suite-evidence") &&
+      docOk7.status === "pass" && late7.suiteChecks.every((c) => c.status === "before-last-tick") && late7.blockers.some((b) => /test \(ran before the last task activity\)/.test(b)) &&
+      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(its command changed since the run\)/.test(b)),
+      "B5 suite-evidence clears once every check passed since the last task activity (doctor pass, the execution gate no longer names it); a later tick makes the runs 'before-last-tick', an edited meta.checks command makes its run 'changed' (got " +
+      JSON.stringify([late7.suiteChecks, chg7.suiteChecks]).slice(0, 300) + ")");
+    const fPt7 = S.createFeature(d7, "Suite Pt", ["core"], "", undefined, "pt");
+    const fEs7 = S.createFeature(d7, "Suite Es", ["core"], "", undefined, "es");
+    const st7x = b5State(f7);
+    st7x.finishChecks = [];
+    fs.writeFileSync(path.join(f7.dir, ".state.json"), JSON.stringify(st7x));
+    const shape7 = S.finishFeature(d7, f7.slug, { evidence: [{ name: "test", command: okCmd, exitCode: 0 }] });
+    ok(S.finishFeature(d7, fPt7.slug).blockers.some((b) => /verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: test \(nenhuma execução registada\)/.test(b)) &&
+      S.finishFeature(d7, fEs7.slug).blockers.some((b) => /verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: test \(ninguna ejecución registrada\)/.test(b)) &&
+      shape7.ok === false && /'finishChecks' must be an object/.test(shape7.error),
+      "B5 the suite-evidence blocker is localized (PT/ES); a .state.json whose finishChecks is not an object is refused, never repaired");
+
+    // --- B5.2 the brief's definition of done names the project checks; none configured → no line, no field.
+    const br7 = await b5Call("spec_task_brief", { projectDir: d7, name: "suite", number: 1 });
+    ok(JSON.stringify(br7.projectChecks) === JSON.stringify([{ name: "test", command: okCmd }, { name: "lint", command: "npm run lint -- --max-warnings 0" }]) &&
+      /\n\d+\. Run the project checks and put each command, its exit code and the last lines of its output in the report — nothing that passed before this task may fail after it: `node -e "process\.exit\(0\)"` \(test\) · `npm run lint -- --max-warnings 0` \(lint\)\./.test(br7.brief) &&
+      !br2.projectChecks && !/Run the project checks/.test(br2.brief) && /Corre as verificações do projeto/.test(S.taskBrief(d7, fPt7.slug, 1).brief || ""),
+      "B5 brief: the definition of done lists meta.checks (projectChecks in the result; PT); a project without checks gets neither");
+
+    // --- B5.3 evidence carries the git commit (+ dirty) — `done --run` fills it; a malformed value is dropped, never an error.
+    const d8 = b5Dir("git");
+    S.initProject(d8, ["core"], "en");
+    const f8 = S.createFeature(d8, "Gitev", ["core"], "", undefined, "en");
+    b5Tasks(f8, "- [ ] 1. [US1] A\n  - _Verify: node a.js_\n- [ ] 2. [US1] B\n  - _Verify: node b.js_\n- [ ] 3. [US1] C\n  - _Verify: node c.js_\n");
+    await b5Call("spec_complete_task", { projectDir: d8, name: "gitev", number: 1, evidence: { command: "node a.js", exitCode: 0, commit: "ABCDEF1", dirty: true } });
+    S.completeTask(d8, f8.slug, 2, { command: "node b.js", exitCode: 0, commit: "not-a-sha", dirty: true });
+    S.completeTask(d8, f8.slug, 3, { command: "node c.js", exitCode: 0, dirty: false });
+    const ev8 = b5State(f8).evidence;
+    const sum8 = S.finishFeature(d8, f8.slug).mergeSummary;
+    ok(ev8["1"].commit === "abcdef1" && ev8["1"].dirty === true && ev8["1"].history[0].commit === "abcdef1" && !("commit" in ev8["2"]) && !("dirty" in ev8["2"]) && !("dirty" in ev8["3"]) &&
+      /1\. A — `node a\.js` → exit 0 · @abcdef1-dirty/.test(sum8) && /2\. B — `node b\.js` → exit 0\n/.test(sum8),
+      "B5 evidence keeps a well-formed commit (lowercased) and dirty (only with a commit) in the run and its history; a malformed one is dropped; the merge summary tags the task's run @sha-dirty");
+
+    // --- B5.3 parseGitLog: git's medium format (--name-only, --name-status, decorations) and --oneline.
+    const H = (c) => c.repeat(40);
+    const medium = ["commit " + H("c") + " (HEAD -> main)", "Author: T <t@t>", "Date:   2026-09-03T10:00:00+01:00", "", "    feat(login): implement", "    ", "    Part of .specs/login/ task #2.", "", "src/login.js", "M\tsrc/util.js", "R100\told.js\ttests/new.test.js", "",
+      "commit " + H("b"), "Merge: 1111111 2222222", "Author: T <t@t>", "Date:   2026-09-02T10:00:00+01:00", "", "    merge it", ""].join("\n");
+    const pg = S.parseGitLog(medium);
+    const po = S.parseGitLog("abc1234 feat(login): x — task #2\ndef5678 fix: y\n\n");
+    ok(pg.length === 2 && pg[0].short === "ccccccc" && pg[0].subject === "feat(login): implement" && /Part of \.specs\/login\/ task #2\./.test(pg[0].message) && pg[0].date === "2026-09-03T10:00:00+01:00" &&
+      JSON.stringify(pg[0].files) === JSON.stringify(["src/login.js", "src/util.js", "tests/new.test.js"]) && pg[1].subject === "merge it" && !pg[1].files.length &&
+      po.length === 2 && po[0].short === "abc1234" && po[0].subject === "feat(login): x — task #2" && !po[0].files.length && S.parseGitLog("").length === 0,
+      "B5 parseGitLog reads git log's medium format (message, date, --name-only and --name-status paths, renames, decorations, merges) and --oneline lines");
+
+    // --- B5.3 taskCommits: the conventions (feature name + task #N; T-/AC IDs unless another feature is named) and the +tdd red-first check.
+    const d9 = b5Dir("log");
+    S.initProject(d9, ["tdd"], "en");
+    const f9 = S.createFeature(d9, "Login", ["tdd"], "", undefined, "en");
+    S.createFeature(d9, "Billing", ["core"], "", undefined, "en");
+    b5Tasks(f9, "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Implement the check\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n- [ ] 3. [US1] Clean up\n- [ ] 4. [US1] Later\n  - _Makes green: T-09_\n");
+    fs.mkdirSync(path.join(d9, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(d9, "tests", "login.test.js"), "test(\"T-01 rejects an expired token\", () => {});\n");
+    const commit9 = (h, date, lines, files) => ["commit " + H(h), "Author: T <t@t>", "Date:   " + date, "", ...lines.map((l) => "    " + l), "", ...files, ""];
+    const implFirstLog = [
+      ...commit9("d", "2026-09-04", ["test(login): add T-01 regression"], ["tests/login.test.js"]),
+      ...commit9("c", "2026-09-03", ["feat(login): implement the check", "", "Part of .specs/login/ task #2.", "Makes T-01 green."], ["src/login.js"]),
+      ...commit9("b", "2026-09-02", ["docs(billing): task #2 and T-01 there"], ["docs/billing.md"]),
+      ...commit9("a", "2026-09-01", ["chore: scaffold US-1.AC-1", "fix: task 3 cleanup"], ["README.md"]),
+    ].join("\n");
+    const tc9 = S.taskCommits(d9, "login", implFirstLog);
+    const byTask = (r, n) => r.tasks.find((t) => t.number === n);
+    const rf2 = tc9.redFirst.find((r) => r.task === 2);
+    const rf4 = tc9.redFirst.find((r) => r.task === 4);
+    ok(tc9.ok && tc9.commits === 4 && tc9.citing === 3 && JSON.stringify(byTask(tc9, 1).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:T-01", "aaaaaaa:US-1.AC-1"]) &&
+      JSON.stringify(byTask(tc9, 2).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:#2+T-01", "aaaaaaa:US-1.AC-1"]) &&
+      !byTask(tc9, 3).commits.length && rf2.status === "impl-first" && rf2.taskCommit.short === "ccccccc" && rf2.testCommit.short === "ddddddd" && JSON.stringify(rf2.testFiles) === JSON.stringify(["tests/login.test.js"]) &&
+      rf4.status === "no-test-file" && tc9.warnings.length === 1 && /red-first: task 2 \(makes T-01 green\) was first committed in ccccccc, before any commit touching a test file that names T-01 \(tests\/login\.test\.js — first in ddddddd\)/.test(tc9.warnings[0]) &&
+      tc9.lines.some((l) => /\[ \] #3 Clean up — no commit cites it/.test(l)) && tc9.lines.some((l) => /▲ red-first: task 2/.test(l)),
+      "B5 taskCommits: a commit cites a task by 'task #N' with the feature name, or by the T-/AC IDs it names — never when it names another feature ('billing'), and 'task 3' without the feature name is no citation; red-first warns when the implementation was committed before its test (got " +
+      JSON.stringify([tc9.tasks.map((t) => t.commits.map((c) => c.short + ":" + c.via.join("+"))), tc9.redFirst.map((r) => r.status)]).slice(0, 400) + ")");
+    const testFirstLog = [
+      ...commit9("f", "2026-09-06", ["feat(login): implement — task #2"], ["src/login.js"]),
+      ...commit9("e", "2026-09-05", ["test(login): T-01 fails for the right reason"], ["tests/login.test.js"]),
+    ].join("\n");
+    const noTestLog = commit9("f", "2026-09-06", ["feat(login): implement — task #2"], ["src/login.js"]).join("\n");
+    const tcOk = S.taskCommits(d9, "login", testFirstLog);
+    const tcNever = S.taskCommits(d9, "login", noTestLog);
+    const tcWin = S.taskCommits(d9, "login", noTestLog, { max: 1 });
+    const tcNone = S.taskCommits(d9, "login", commit9("a", "2026-09-01", ["chore: unrelated"], ["x.txt"]).join("\n"));
+    const fPt9 = S.createFeature(d9, "Entrar", ["tdd"], "", undefined, "pt");
+    b5Tasks(fPt9, "- [ ] 1. [US1] Implementar\n  - _Makes green: T-01_\n");
+    const tcPt = S.taskCommits(d9, "entrar", "abc1234 feat(entrar): tarefa 1\n");
+    ok(tcOk.redFirst.find((r) => r.task === 2).status === "ok" && !tcOk.warnings.length && tcOk.lines.some((l) => /red-first: task 2 \(T-01\) — the test was committed first ✓/.test(l)) &&
+      tcNever.redFirst.find((r) => r.task === 2).status === "test-not-committed" && /no commit read touches a test file that names T-01 \(tests\/login\.test\.js\) — commit the test first/.test(tcNever.warnings[0]) &&
+      tcWin.truncated === true && tcWin.redFirst.find((r) => r.task === 2).status === "outside-window" && !tcWin.warnings.length && /the window is full/.test(tcWin.lines[0]) &&
+      tcNone.citing === 0 && tcNone.lines.some((l) => /No commit cites a task of 'login'\. Conventions: .*"Part of \.specs\/login\/ task #N\."/.test(l)) &&
+      tcPt.ok && tcPt.tasks[0].commits.length === 1 && tcPt.tasks[0].commits[0].via[0] === "#1" && /^Commits: entrar — 1 commit\(s\) lido\(s\), 1 citam as suas tarefas/.test(tcPt.lines[0]) &&
+      S.taskCommits(d9, "nope", "").ok === false,
+      "B5 taskCommits red-first: the test committed first is ok; no commit touching it warns; a full log window makes the order unknown (outside-window, no warning); no citing commit prints the conventions; PT lines ('tarefa N'); an unknown feature is an error");
+  }
+
+  { // 1.14 C1 — the end-of-turn evidence gate (stopCheck, hooks/stop-hook.js on Stop / SubagentStop) and the scope guard (meta.guard "scope")
+    const c1Call = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const c1Dir = (n) => path.join(tmp, "c1-" + n);
+    const c1State = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const c1SetState = (f, patch) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify({ ...c1State(f), ...patch }, null, 2));
+    const c1Tasks = (f, text) => fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
+    const hoursAgo = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+    const ageTasks = (f, h) => { const t = (Date.now() - h * 3600 * 1000) / 1000; fs.utimesSync(path.join(f.dir, "tasks.md"), t, t); };
+    const stopJs = path.join(__dirname, "..", "hooks", "stop-hook.js");
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR must never leak into the hooks.
+    const runHook = (js, input) => spawnSync(process.execPath, [js], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    const stopPayload = (cwd, message, extra) => ({ session_id: "s1", prompt_id: "550e8400-e29b-41d4-a716-446655440000", transcript_path: path.join(cwd, "no-transcript.jsonl"),
+      cwd, permission_mode: "default", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: message, effort: { level: "medium" }, ...(extra || {}) });
+    const blocked = (r) => { try { const j = JSON.parse(r.stdout); return r.status === 0 && j.decision === "block" && typeof j.reason === "string" && Object.keys(j).length === 2 ? j.reason : null; } catch { return null; } };
+    const silent = (r) => r.status === 0 && r.stdout === "";
+
+    // --- C1.1 claims: EN / PT / ES, conservative (negations, conditions, questions, code and quotes claim nothing; an admission is honest).
+    const claimYes = ["Done — all tests pass.", "Task 3 is done.", "I've implemented the parser; 14/14 passing.", "**Status:** DONE\nCommits: abc1234 feat", "Everything works now.",
+      "It's complete.", "Feito. Todos os testes passam.", "A tarefa 2 está concluída.", "Terminei a tarefa 2.", "Listo, todas las pruebas pasan.", "La tarea 2 está terminada.", "Hecho.", "Todo listo."];
+    const claimNo = ["I renamed the variable.", "The tests are not passing yet.", "Should I mark task 3 done?", "Once the tests pass, I'll mark it complete.", "Nothing is done yet.",
+      "I'll verify it next.", "```\nall tests pass\n```\nI ran it.", "> Done — all tests pass (the user's words)", "Let me know when you're done.", "Não está feito ainda.",
+      "Os testes ainda não passam.", "El hecho de que falle es raro.", "Todavía no está terminado.", "The unfinished work is in src/x.js."];
+    const cYes = claimYes.filter((m) => !(S.stopClaims(m).claim && !S.stopClaims(m).admitted));
+    const cNo = claimNo.filter((m) => S.stopClaims(m).claim);
+    const adm = ["Tests pass locally; task 3 is not verified.", "Done. 12 passing, 2 failing.", "Feito, mas a tarefa 2 está por verificar.", "Listo, pero la tarea 2 sigue sin verificar."].filter((m) => !S.stopClaims(m).admitted);
+    ok(!cYes.length && !cNo.length && !adm.length,
+      "C1 stopClaims: EN/PT/ES completion and verification claims are found; negated / conditional / question / fenced / quoted ones are not; 'not verified' / 'N failing' / 'por verificar' / 'sin verificar' are admissions (missed: " +
+      JSON.stringify(cYes) + ", false: " + JSON.stringify(cNo) + ", not admitted: " + JSON.stringify(adm) + ")");
+
+    // --- C1.1 stopCheck matrix.
+    const pEn = c1Dir("en");
+    S.initProject(pEn, ["core"], "en");
+    const fEn = S.createFeature(pEn, "Billing", ["core"], "", undefined, "en");
+    c1Tasks(fEn, "- [ ] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. [US1] Receipt\n");
+    S.completeTask(pEn, "billing", 1); // ticked with no evidence — its _Verify:_ holds a runnable command
+    S.completeTask(pEn, "billing", 3, { summary: "checked the PDF by hand" });
+    const claimMsg = "Done — all tests pass and everything is verified.";
+    const sBlock = S.stopCheck(pEn, { message: claimMsg });
+    const sNoClaim = S.stopCheck(pEn, { message: "I renamed the variable in src/billing.js." });
+    const sActive = S.stopCheck(pEn, { message: claimMsg, stopHookActive: true });
+    const sAdmit = S.stopCheck(pEn, { message: "Done, but task 1 is not verified yet." });
+    ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
+      JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
+      /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
+      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\), run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
+      /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
+      sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
+      "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
+      JSON.stringify([sBlock.why, sBlock.features, sNoClaim.why, sActive.why, sAdmit.why]) + ")");
+    // Every reason verificationStatus reports: a failed run, a note on a runnable _Verify:_, an unexpected pass (_Expect: fail_), stale evidence.
+    c1Tasks(fEn, "- [x] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [x] 3. [US1] Receipt\n" +
+      "- [ ] 4. [US1] Write T-01 red\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Export\n  - _Verify: node e.js_\n");
+    S.completeTask(pEn, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 1, summary: "1 failing" }); // a failed re-check of a ticked task
+    S.completeTask(pEn, "billing", 2, { summary: "looked fine" }); // a note on a runnable _Verify:_
+    S.completeTask(pEn, "billing", 4, { command: "node t.js", exitCode: 0 }); // refused (unexpected pass), recorded
+    c1Tasks(fEn, fs.readFileSync(path.join(fEn.dir, "tasks.md"), "utf8").replace("- [ ] 4.", "- [x] 4.")); // …then ticked by hand
+    S.completeTask(pEn, "billing", 5, { command: "node e.js", exitCode: 0 });
+    c1SetState(fEn, { evidence: { ...c1State(fEn).evidence, 5: { ...c1State(fEn).evidence["5"], stale: true } } }); // spec_impact --reopen marked it
+    const sMany = S.stopCheck(pEn, { message: "All done!" });
+    const byN = (n) => (sMany.features[0].unverified.find((d) => d.number === n) || {}).reason;
+    ok(sMany.block && byN(1) === "failed-run" && byN(2) === "manual-note-on-runnable-verify" && byN(4) === "unexpected-pass" && byN(5) === "stale-evidence" && !byN(3) &&
+      /#1 \(latest run failed\), #2 \(note only, _Verify:_ command not run\), #4 \(run passed, but _Expect: fail_ needs a red run\), #5 \(the spec changed since this evidence; spec_impact reopened the task\)/.test(sMany.reason),
+      "C1 stopCheck lists every unverified reason: failed run, note on a runnable _Verify:_, unexpected pass, stale evidence (a noted task without _Verify:_ is verified) (got " + JSON.stringify(sMany.features) + ")");
+    // Verified → allowed; old activity → allowed; a tasks.md file date is NO activity (a fresh clone stamps it "now" — the gate
+    // would fire on unrelated work in a repo someone else wrote): only what the engine recorded counts.
+    const pOk = c1Dir("ok");
+    S.initProject(pOk, ["core"], "en");
+    const fOk = S.createFeature(pOk, "Search", ["core"], "", undefined, "en");
+    c1Tasks(fOk, "- [ ] 1. [US1] Index\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Query\n");
+    S.completeTask(pOk, "search", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "3 passing" });
+    const sVer = S.stopCheck(pOk, { message: claimMsg });
+    const pOld = c1Dir("old");
+    S.initProject(pOld, ["core"], "en");
+    const fOld = S.createFeature(pOld, "Legacy", ["core"], "", undefined, "en");
+    c1Tasks(fOld, "- [x] 1. [US1] Old work\n  - _Verify: npm test_\n- [ ] 2. [US1] Next\n");
+    c1SetState(fOld, { lastTickAt: hoursAgo(10), ticks: { 1: hoursAgo(10) } });
+    ageTasks(fOld, 10);
+    const sOld = S.stopCheck(pOld, { message: claimMsg });
+    ageTasks(fOld, 0.1); // tasks.md edited a few minutes ago — a file date, not an engine stamp
+    const sHand = S.stopCheck(pOld, { message: claimMsg });
+    ok(sVer.block === false && sVer.why === "verified" && JSON.stringify(sVer.verifiedFeatures) === JSON.stringify(["search"]) &&
+      sOld.block === false && sOld.why === "no-recent" && sHand.block === false && sHand.why === "no-recent",
+      "C1 stopCheck: every ticked task verified → allowed ('verified'); activity older than the window → allowed ('no-recent'); a tasks.md edited just now is no recorded activity → still 'no-recent' (got " +
+      JSON.stringify([sVer.why, sOld.why, sHand.why]) + ")");
+    // Suite evidence: every task done, meta.checks without a passing run since the last task activity → block (read the checks, run if safe, record).
+    const pSu = c1Dir("suite");
+    S.initProject(pSu, ["core"], "en", { checks: { test: "npm test" } });
+    const fSu = S.createFeature(pSu, "Export", ["core"], "", undefined, "en");
+    c1Tasks(fSu, "- [ ] 1. [US1] Export CSV\n");
+    S.completeTask(pSu, "export", 1, { summary: "downloaded a CSV" });
+    const sSuite = S.stopCheck(pSu, { message: "Finished — the feature is complete." });
+    ok(sSuite.block && JSON.stringify(sSuite.features[0].suite) === JSON.stringify([{ name: "test", status: "no-run" }]) && !sSuite.features[0].unverified.length &&
+      /- export: project checks without a passing run since the last task activity: test \(no run recorded\)/.test(sSuite.reason) && /Project checks for export have no passing run: read them in \.specs\/roadmap\.json \(meta\.checks\)/.test(sSuite.reason) && !/--run|dev-spec done/.test(sSuite.reason),
+      "C1 stopCheck: a complete feature whose project checks (meta.checks) have no passing run since the last task activity → block naming meta.checks to read, run if safe and record — never a `--run` command (got " + JSON.stringify(sSuite.features) + ")");
+    // meta.stopCheck: spec_init {stopCheck} over MCP (the result always reports it; a note when set); off → allowed; no .specs/; a broken .state.json is skipped.
+    const i1 = await c1Call("spec_init", { projectDir: pEn });
+    const i2 = await c1Call("spec_init", { projectDir: pEn, stopCheck: false });
+    const sOff = S.stopCheck(pEn, { message: claimMsg });
+    const iBad = await c1Call("spec_init", { projectDir: pEn, stopCheck: "no" });
+    const i3 = await c1Call("spec_init", { projectDir: pEn, stopCheck: true });
+    const rmMeta = JSON.parse(fs.readFileSync(path.join(pEn, ".specs", "roadmap.json"), "utf8")).meta;
+    const pNo = c1Dir("none");
+    fs.mkdirSync(pNo, { recursive: true });
+    const pBr = c1Dir("broken");
+    S.initProject(pBr, ["core"], "en");
+    const fBr = S.createFeature(pBr, "Broken", ["core"], "", undefined, "en");
+    c1Tasks(fBr, "- [x] 1. [US1] A\n  - _Verify: npm test_\n");
+    fs.writeFileSync(path.join(fBr.dir, ".state.json"), "{ not json");
+    ok(i1.p.stopCheck === true && i1.p.stopCheckNote === undefined && i2.p.stopCheck === false && /Evidence gate OFF/.test(i2.p.stopCheckNote) && sOff.block === false && sOff.why === "off" &&
+      iBad.isError && /stopCheck must be a boolean/.test(iBad.p.error) && i3.p.stopCheck === true && /Evidence gate ON/.test(i3.p.stopCheckNote) && rmMeta.stopCheck === true &&
+      S.stopCheck(pEn, { message: claimMsg }).block === true && S.stopCheck(pNo, { message: claimMsg }).why === "no-specs" && S.stopCheck(pBr, { message: claimMsg }).block === false,
+      "C1 spec_init {stopCheck}: on by default (reported, no note), false turns the gate off (roadmap.json meta.stopCheck, allowed 'off'), a non-boolean is refused, true turns it back on; no .specs/ → 'no-specs'; an unreadable .state.json is skipped, never a block");
+    // PT / ES: the claim in the project language, the reason in the project language.
+    const pPt = c1Dir("pt");
+    S.initProject(pPt, ["core"], "pt");
+    const fPt = S.createFeature(pPt, "Pagamentos", ["core"], "", undefined, "pt");
+    c1Tasks(fPt, "- [ ] 1. [US1] Cobrar\n  - _Verify: npm test_\n");
+    S.completeTask(pPt, "pagamentos", 1);
+    const sPt = S.stopCheck(pPt, { message: "Feito. Todos os testes passam." });
+    const pEs = c1Dir("es");
+    S.initProject(pEs, ["core"], "es");
+    const fEs = S.createFeature(pEs, "Pagos", ["core"], "", undefined, "es");
+    c1Tasks(fEs, "- [ ] 1. [US1] Cobrar\n  - _Verify: npm test_\n");
+    S.completeTask(pEs, "pagos", 1, { command: "npm test", exitCode: 2, summary: "2 failing" });
+    c1Tasks(fEs, "- [x] 1. [US1] Cobrar\n  - _Verify: npm test_\n"); // ticked by hand after the failed run
+    const sEs = S.stopCheck(pEs, { message: "Listo: todas las pruebas pasan." });
+    ok(sPt.block && sPt.lang === "pt" && /^dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:\n {2}- pagamentos: #1 \(sem evidência\)/.test(sPt.reason) &&
+      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\); corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
+      sEs.block && /^dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:\n {2}- pagos: #1 \(la última ejecución falló\)/.test(sEs.reason) &&
+      /O di claramente/.test(sEs.reason) && S.stopCheck(pPt, { message: "Os testes ainda não passam; a tarefa 1 não está verificada." }).block === false,
+      "C1 stopCheck PT / ES: the claim is read in either language and the reason is in the project language (PT: no evidence; ES: failed run); an honest PT answer is allowed (got " +
+      JSON.stringify([sPt.reason, sEs.reason]).slice(0, 400) + ")");
+
+    // --- C1.1 hooks/stop-hook.js with realistic payloads.
+    const hEn = runHook(stopJs, stopPayload(pEn, claimMsg));
+    const hEnReason = blocked(hEn);
+    let hOneJson = false;
+    try { hOneJson = typeof JSON.parse(hEn.stdout) === "object" && !hEn.stdout.includes("\n"); } catch { /* not one JSON object */ }
+    const hPt = blocked(runHook(stopJs, stopPayload(pPt, "Feito — todos os testes passam.")));
+    ok(!!hEnReason && hOneJson && hEnReason === S.stopCheck(pEn, { message: claimMsg }).reason && /billing: #1 \(latest run failed\)/.test(hEnReason) &&
+      !!hPt && /gate de evidência/.test(hPt) && /pagamentos: #1 \(sem evidência\)/.test(hPt),
+      "C1 Stop hook: a claim + unverified ticked tasks → exactly one JSON object {decision: 'block', reason} — the engine's reason, localized (EN, PT)");
+    ok(silent(runHook(stopJs, stopPayload(pEn, claimMsg, { stop_hook_active: true }))) && silent(runHook(stopJs, stopPayload(pEn, "I renamed the variable."))) &&
+      silent(runHook(stopJs, stopPayload(pOk, claimMsg))) && silent(runHook(stopJs, stopPayload(pNo, claimMsg))) && silent(runHook(stopJs, "not json")) &&
+      silent(runHook(stopJs, "null")) && silent(runHook(stopJs, { ...stopPayload(pEn, claimMsg), hook_event_name: "PostToolUse" })) &&
+      silent(runHook(stopJs, stopPayload(pEn, claimMsg, { last_assistant_message: 42 }))),
+      "C1 Stop hook: stop_hook_active (never twice in a row), no claim, everything verified, no .specs/, a malformed payload, another event or no message → silent exit 0");
+    await c1Call("spec_init", { projectDir: pEn, stopCheck: false });
+    const hOff = runHook(stopJs, stopPayload(pEn, claimMsg));
+    await c1Call("spec_init", { projectDir: pEn, stopCheck: true });
+    // Older Claude Code: no last_assistant_message — the last assistant text of the transcript (JSONL tail).
+    const tr = path.join(pEn, "transcript.jsonl");
+    fs.writeFileSync(tr, [JSON.stringify({ type: "user", message: { role: "user", content: "finish billing" } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Done — all tests pass." }] } })].join("\n") + "\n");
+    const hTr = blocked(runHook(stopJs, { hook_event_name: "Stop", cwd: pEn, stop_hook_active: false, transcript_path: tr }));
+    ok(silent(hOff) && !!hTr && /billing: #1/.test(hTr) && !fs.readFileSync(stopJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "C1 Stop hook: meta.stopCheck false → silent; without last_assistant_message it reads the transcript's last assistant text; no literal BOM in stop-hook.js");
+
+    // --- C1.1 SubagentStop: the spec-implementer is checked on its REPORT (it never ticks tasks).
+    const pIm = c1Dir("impl");
+    S.initProject(pIm, ["core"], "en");
+    const fIm = S.createFeature(pIm, "Auth", ["core"], "", undefined, "en");
+    c1Tasks(fIm, "- [ ] 1. [US1] Login\n  - _Verify: node --test tests/login.test.js_\n- [ ] 2. [US1] Docs\n");
+    const exDir = path.join(fIm.dir, ".execution");
+    fs.mkdirSync(exDir, { recursive: true });
+    const rep = path.join(exDir, "task-1-report.md");
+    const subPayload = (message, agent) => ({ session_id: "s1", transcript_path: path.join(pIm, "t.jsonl"), cwd: pIm, permission_mode: "default", hook_event_name: "SubagentStop",
+      agent_id: "subagent_xyz", agent_type: agent || "dev-spec-driven:spec-implementer", stop_hook_active: false, last_assistant_message: message, agent_transcript_path: path.join(pIm, "sub.jsonl") });
+    const doneReply = "**Status:** DONE\nCommits: abc1234 feat(auth): login\n14/14 passing\nReport: .specs/auth/.execution/task-1-report.md";
+    const hNoRep = blocked(runHook(stopJs, subPayload(doneReply)));
+    fs.writeFileSync(rep, "# Task 1\nImplemented US-1.AC-1.\nTests: all green.\n");
+    const hNoRun = blocked(runHook(stopJs, subPayload(doneReply)));
+    const hNoType = blocked(runHook(stopJs, { ...subPayload(doneReply), agent_type: undefined })); // older payloads: the registered agent
+    const sNoRun = S.stopCheck(pIm, { message: doneReply, agent: "dev-spec-driven:spec-implementer" });
+    fs.writeFileSync(rep, "# Task 1\n## Verification evidence\n- `node --test tests/login.test.js` → exit code 0\n  ℹ pass 14\n  ℹ fail 0\n");
+    const hOk = runHook(stopJs, subPayload(doneReply));
+    const sOk = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer" });
+    fs.writeFileSync(rep, "# Task 1\nRan node --test tests/login.test.js on the final code: it exited with code 0 (14 passing).\n");
+    const sExited = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer" });
+    ok(!!hNoRep && /^dev-spec evidence gate: you report task 1 of 'auth' as DONE, but its report \(\.specs\/auth\/\.execution\/task-1-report\.md\) does not exist\./.test(hNoRep) &&
+      !!hNoRun && /doesn't show the _Verify:_ run — the exact command and its exit code: `node --test tests\/login\.test\.js`/.test(hNoRun) && /report BLOCKED \/ NEEDS_CONTEXT/.test(hNoRun) && hNoType === hNoRun &&
+      sNoRun.block && sNoRun.why === "implementer-evidence" && sNoRun.task === 1 && sNoRun.feature === "auth" && silent(hOk) && sOk.block === false && sOk.why === "report-ok" &&
+      sExited.why === "report-ok",
+      "C1 SubagentStop (spec-implementer): DONE with no report, or a report without the _Verify:_ command + exit code → block naming the task and the report; a report with both ('exit code 0', 'exited with code 0') → silent (got " +
+      JSON.stringify([sNoRun.why, sOk.why, sExited.why]) + ")");
+    const sBlockedIm = S.stopCheck(pIm, { message: "**Status:** BLOCKED\nThe login API is missing.", agent: "spec-implementer" });
+    const sNoPath = S.stopCheck(pIm, { message: "**Status:** DONE\n14/14 passing", agent: "spec-implementer" });
+    const sNoVerify = S.stopCheck(pIm, { message: "**Status:** DONE\nReport: .specs/auth/.execution/task-2-report.md", agent: "spec-implementer" });
+    const sActiveIm = runHook(stopJs, { ...subPayload(doneReply), stop_hook_active: true });
+    fs.rmSync(rep);
+    const sActiveIm2 = S.stopCheck(pIm, { message: doneReply, agent: "spec-implementer", stopHookActive: true });
+    ok(sBlockedIm.why === "not-done" && sNoPath.why === "no-task" && sNoVerify.why === "nothing-to-verify" && silent(sActiveIm) && sActiveIm2.block === false &&
+      [sBlockedIm, sNoPath, sNoVerify].every((r) => r.block === false),
+      "C1 SubagentStop (spec-implementer): BLOCKED / NEEDS_CONTEXT, a reply naming no task report, a task with no runnable _Verify:_ and stop_hook_active are never sent back");
+    const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const stopCfg = ((hooksCfg.Stop || [])[0] || {});
+    const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
+    const cmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"';
+    const re = new RegExp(subCfg.matcher || "^$");
+    ok(stopCfg.matcher === undefined && stopCfg.hooks[0].command === cmd && stopCfg.hooks[0].timeout === 10 && subCfg.hooks[0].command === cmd && subCfg.hooks[0].timeout === 10 &&
+      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && !re.test("dev-spec-driven:spec-reviewer") && !re.test("Explore") && !re.test("general-purpose") &&
+      hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
+      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
+
+    // --- C1.2 the scope guard (meta.guard = "scope").
+    const pSc = c1Dir("scope");
+    const gi = await c1Call("spec_init", { projectDir: pSc, guard: "Scope" });
+    const fSc = S.createFeature(pSc, "Checkout", ["core"], "", undefined, "en");
+    c1Tasks(fSc, "- [x] 1. [US1] Cart\n  - _Implements: src/cart/cart.js_\n- [ ] 2. [US1] Pay\n  - _Implements: `src/pay/pay.js:12`, src/pay/providers/_\n" +
+      "- [ ] 3. [US1] API\n  - _Implements: src/api/**/*.ts, [path/to/file]_\n");
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    const pre = (file) => ({ session_id: "s1", hook_event_name: "PreToolUse", cwd: pSc, tool_name: "Edit", tool_input: { file_path: file, old_string: "a", new_string: "b" } });
+    const asked = (r) => { try { const j = JSON.parse(r.stdout); return j.hookSpecificOutput && j.hookSpecificOutput.permissionDecision === "ask" ? j.hookSpecificOutput.permissionDecisionReason : null; } catch { return null; } };
+    const gIn = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const gFolder = S.guardCheck(pSc, path.join(pSc, "src", "pay", "providers", "stripe.js"));
+    const gGlob = S.guardCheck(pSc, "src/api/v1/users.ts", pSc);
+    const gTest = S.guardCheck(pSc, "tests/pay.test.js", pSc);
+    ok(gi.p.guard === "scope" && /Guard mode SCOPE/.test(gi.p.guardNote) && S.readRoadmap(pSc).meta.guard === "scope" && S.guardEnabled(pSc) === true &&
+      gIn.decision === "allow" && gIn.why === "in-scope" && gIn.task.number === 2 && gFolder.why === "in-scope" && gFolder.task.number === 2 && gGlob.why === "in-scope" && gGlob.task.number === 3 &&
+      gTest.decision === "allow" && gTest.why === "test-file" && silent(runHook(guardJs, pre(path.join(pSc, "src", "pay", "pay.js")))) && silent(runHook(guardJs, pre(path.join(pSc, "src", "api", "x.ts")))),
+      "C1 scope guard: spec_init {guard: 'Scope'} stores meta.guard 'scope'; a file an open task names (anchored path, a folder above it, a glob) or a test file → allowed, the hook silent (got " +
+      JSON.stringify([gi.p.guard, gIn.why, gFolder.why, gGlob.why, gTest.why]) + ")");
+    const gSame = S.guardCheck(pSc, "src/pay/refund.js", pSc);
+    const hSame = asked(runHook(guardJs, pre(path.join(pSc, "src", "pay", "refund.js"))));
+    const gDone = S.guardCheck(pSc, "src/cart/cart.js", pSc); // planned by a DONE task only
+    const gFar = S.guardCheck(pSc, "lib/util.py", pSc);
+    const gApiJs = S.guardCheck(pSc, "src/api/legacy.js", pSc);
+    ok(gSame.decision === "ask" && gSame.why === "out-of-scope" && JSON.stringify(gSame.likely) === JSON.stringify({ feature: "checkout", number: 2, via: "same-folder" }) &&
+      hSame === gSame.reason && /^dev-spec guard \(scope\): src\/pay\/refund\.js is not in the plan — no open task of checkout names it in _Implements:_\. Add it to task 2's _Implements:_ \(checkout — same folder as src\/pay\/pay\.js\) and re-approve the tasks phase, or plan the change with \/spec-converge \(spec_append_tasks\)\./.test(hSame || "") &&
+      gDone.decision === "ask" && gFar.decision === "ask" && gFar.likely.via === "next" && gFar.likely.number === 2 && /task 2 \(checkout, the next open task\)/.test(gFar.reason) &&
+      gApiJs.decision === "ask" && gApiJs.likely.number === 3 && gApiJs.likely.via === "same-folder",
+      "C1 scope guard: a code file no open task names → ask naming the likely task (same folder — a glob's literal folder too — else the next open task); a file only a done task planned asks too (got " +
+      JSON.stringify([gSame.likely, gFar.likely, gApiJs.likely]) + ")");
+    // The advertised schema is one plain string enum (portable: some MCP clients reject a list-valued `type`); true / false still work.
+    const initTool = list.result.tools.find((t) => t.name === "spec_init");
+    const gOnStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "ON" });
+    const gOffStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "off" });
+    const gBool = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: true });
+    ok(initTool.inputSchema.properties.guard.type === "string" && initTool.inputSchema.properties.guard.enum.join() === "on,off,scope" && initTool.inputSchema.properties.stopCheck.type === "boolean" &&
+      gOnStr.p.guard === true && /Guard mode ON/.test(gOnStr.p.guardNote) && gOffStr.p.guard === false && gBool.p.guard === true &&
+      list.result.tools.every((t) => Object.values(t.inputSchema.properties || {}).every((s) => !Array.isArray(s.type))),
+      "C1 spec_init advertises guard as a string enum on | off | scope (any case; the booleans true / false read as on / off) and stopCheck as a boolean; no tool property has a list-valued type");
+    // guard true keeps today's behavior; scope with nothing approved asks like true; a forced approval's note rides along; PT; the CLI's value.
+    await c1Call("spec_init", { projectDir: pSc, guard: true });
+    const gTrue = S.guardCheck(pSc, "lib/util.py", pSc);
+    const hTrue = runHook(guardJs, pre(path.join(pSc, "lib", "util.py")));
+    await c1Call("spec_init", { projectDir: pSc, guard: "scope" });
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true, failing: ["placeholders"] } } });
+    const gForcedIn = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const gForcedOut = S.guardCheck(pSc, "lib/util.py", pSc);
+    // Several approved features: the plan is all their open tasks — a forced one's included (no note while a regular approval covers).
+    const fSc2 = S.createFeature(pSc, "Invoices", ["core"], "", undefined, "en");
+    c1Tasks(fSc2, "- [ ] 1. [US1] PDF\n  - _Implements: src/invoices/pdf.js_\n");
+    c1SetState(fSc, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    c1SetState(fSc2, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true } } });
+    const gMixed = S.guardCheck(pSc, "src/invoices/pdf.js", pSc);
+    const gMixedOut = S.guardCheck(pSc, "src/other.js", pSc);
+    S.manageFeature(pSc, "archive", "invoices");
+    ok(gMixed.decision === "allow" && gMixed.why === "in-scope" && gMixed.task.feature === "invoices" && !gMixed.note &&
+      gMixedOut.decision === "ask" && /no open task of checkout, invoices names it/.test(gMixedOut.reason),
+      "C1 scope guard with several approved features: any of their open tasks puts a file in the plan (a forced approval's too); the ask names them all");
+    c1SetState(fSc, { approvals: {} });
+    const gNone = S.guardCheck(pSc, "src/pay/pay.js", pSc);
+    const pScPt = c1Dir("scope-pt");
+    S.initProject(pScPt, ["core"], "pt", { guard: "scope" });
+    const fScPt = S.createFeature(pScPt, "Carrinho", ["core"], "", undefined, "pt");
+    c1Tasks(fScPt, "- [ ] 1. [US1] Carrinho\n  - _Implements: src/carrinho.js_\n");
+    c1SetState(fScPt, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
+    ok(gTrue.decision === "allow" && gTrue.why === "approved" && silent(hTrue) && gForcedIn.decision === "allow" && /FORCED tasks approval/.test(gForcedIn.note) &&
+      gForcedOut.decision === "ask" && /FORCED tasks approval/.test(gForcedOut.reason) && gNone.decision === "ask" && gNone.why === "no-approved-tasks" &&
+      /^dev-spec guard \(scope\): src\/outro\.js não está no plano — nenhuma tarefa por concluir de carrinho o nomeia em _Implements:_\. Acrescenta-o ao _Implements:_ da tarefa 1 \(carrinho — mesma pasta que src\/carrinho\.js\)/.test(S.guardCheck(pScPt, "src/outro.js", pScPt).reason || ""),
+      "C1 guard true is unchanged (every code file allowed while tasks are approved); scope: a forced approval's note rides along (allowed or asked), nothing approved asks as before; the reason is in the project language (PT)");
+  }
+
+  { // 1.14 C2 — the decision log (decisions.md, spec_decide) and the spike kind (investigate → decide)
+    const c2Call = async (tool, args) => payload(await rpc("tools/call", { name: tool, arguments: args }));
+    const c2Dir = (n) => path.join(tmp, "c2-" + n);
+    const c2Read = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
+    const c2Tick = () => { const until = Date.now() + 15; while (Date.now() < until) { /* a later millisecond for the next timestamp */ } };
+    const c2Chk = (doc, id) => (doc.checks || []).find((c) => c.id === id);
+    const BOM = String.fromCharCode(0xfeff);
+
+    // --- C2.1 spec_decide: numbering, the file, canonical refs, the header / labels, the result.
+    const d1 = c2Dir("log");
+    S.initProject(d1, ["tdd"], "en");
+    const f1 = S.createFeature(d1, "Auth", ["tdd"], "", undefined, "en");
+    const dec1 = await c2Call("spec_decide", { projectDir: d1, name: "auth", title: "JWT sessions", decision: "Use JWT with a 15 min expiry.\nRefresh tokens rotate.",
+      context: "The API is stateless.", consequences: "A refresh endpoint is needed.", affects: ["us-1.ac-2, t-2", "data models"] });
+    const log1 = c2Read(f1, "decisions.md");
+    const dec2 = S.decide(d1, "auth", { title: "  Clock skew\n tolerated ", decision: "Tokens accept 30 s of skew.", kind: "discovery", supersedes: "D-1" });
+    const log2 = c2Read(f1, "decisions.md");
+    const parsed = S.decisionLog(log2);
+    ok(dec1.ok && dec1.id === "D-1" && dec1.n === 1 && dec1.created === true && dec1.file === ".specs/auth/decisions.md" && dec1.kind === "decision" &&
+      JSON.stringify(dec1.affects) === '["US-1.AC-2","T-2","Data Models"]' && /^Recorded D-1 \(decision\) in \.specs\/auth\/decisions\.md\.$/.test(dec1.message) &&
+      /^# Decisions: Auth\n\n<!-- Decision log — append-only/.test(log1) && /\n## D-1 — JWT sessions\n\n- _Kind: decision_\n- _Date: \d{4}-\d\d-\d\dT[\d:.]+Z_\n- _Affects: US-1\.AC-2, T-2, Data Models_\n\n\*\*Context:\*\* The API is stateless\.\n\n\*\*Decision:\*\* Use JWT with a 15 min expiry\.\nRefresh tokens rotate\.\n\n\*\*Consequences:\*\* A refresh endpoint is needed\.\n$/.test(log1) &&
+      dec2.ok && dec2.id === "D-2" && dec2.created === false && dec2.title === "Clock skew tolerated" && JSON.stringify(dec2.supersedes) === '["D-1"]' && log2.startsWith(log1) &&
+      /\n## D-2 — Clock skew tolerated\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* Tokens accept 30 s of skew\.\n$/.test(log2) &&
+      parsed.length === 2 && parsed[0].decision === "Use JWT with a 15 min expiry.\nRefresh tokens rotate." && parsed[0].context === "The API is stateless." &&
+      parsed[1].kind === "discovery" && parsed[1].at > parsed[0].at && JSON.stringify(parsed[1].supersedes) === '["D-1"]',
+      "C2 spec_decide appends D-1, D-2 to decisions.md (localized header on creation; markers _Kind/_Date/_Affects/_Supersedes; Context / Decision (Discovery) / Consequences); refs canonical (US-1.AC-2, T-2, the heading 'Data Models'); the old bytes kept; decisionLog reads it back (got " +
+      JSON.stringify([dec1.affects, dec2.title, log1.slice(0, 80)]) + ")");
+
+    // Append-only: after a hand-written D-7 → D-8; an entry in an HTML comment or a fenced block is none; CRLF + BOM kept.
+    const d2 = c2Dir("crlf");
+    S.initProject(d2, ["core"], "en");
+    const f2 = S.createFeature(d2, "Pay", ["core"], "", undefined, "en");
+    const hand = BOM + "# Decisions: Pay\r\n\r\n<!-- example: ## D-99 — not an entry -->\r\n\r\n## D-7 — Stripe first\r\n\r\n- _Kind: decision_\r\n- _Date: 2026-01-02_\r\n\r\n**Decision:** Stripe.\r\n\r\n```md\r\n## D-50 — inside a fence\r\n```\r\n";
+    fs.writeFileSync(path.join(f2.dir, "decisions.md"), hand);
+    const dec3 = S.decide(d2, "pay", { title: "Webhooks retried", decision: "Retry 5 times." });
+    const log3 = c2Read(f2, "decisions.md");
+    const noEol = "# Decisions: Pay\n\n## D-1 — X\n\n**Decision:** x";
+    const d2b = c2Dir("noeol");
+    S.initProject(d2b, ["core"], "en");
+    const f2b = S.createFeature(d2b, "Pay", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f2b.dir, "decisions.md"), noEol);
+    S.decide(d2b, "pay", { title: "Y", decision: "y" });
+    const log3b = c2Read(f2b, "decisions.md");
+    ok(dec3.ok && dec3.id === "D-8" && log3.startsWith(hand) && log3.slice(hand.length).startsWith("\r\n## D-8 — Webhooks retried\r\n") && !/[^\r]\n/.test(log3) &&
+      S.decisionLog(log3).map((e) => e.id).join() === "D-7,D-8" && S.decisionLog(log3)[0].decision === "Stripe.\n\n```md\n## D-50 — inside a fence\n```" &&
+      log3b.startsWith(noEol + "\n\n## D-2 — Y\n"),
+      "C2 spec_decide is append-only: numbered after the highest D-n (a D-99 in a comment / D-50 in a fence is no entry); a BOM + CRLF file keeps its bytes and gets a CRLF entry; a file without a final newline is only appended to");
+
+    // Validation: unknown _Affects:_ / _Supersedes:_, missing title / decision, bad kind — an error, nothing written.
+    const before1 = c2Read(f1, "decisions.md");
+    const bad1 = S.decide(d1, "auth", { title: "t", decision: "d", affects: ["US-1.AC-2", "US-9.AC-9", "T-99", "SC-042", "Nowhere Section"] });
+    const bad2 = S.decide(d1, "auth", { title: "t", decision: "d", supersedes: ["D-9", "X-1"] });
+    const bad3 = S.decide(d1, "auth", { title: " ", decision: "d" });
+    const bad4 = S.decide(d1, "auth", { title: "t" });
+    const bad5 = S.decide(d1, "auth", { title: "t", decision: "d", kind: "idea" });
+    const bad6 = await c2Call("spec_decide", { projectDir: d1, name: "auth", decision: "d" });
+    const bad7 = await rpc("tools/call", { name: "spec_decide", arguments: { projectDir: d1, name: "auth", title: "t", decision: "d", affects: "US-1.AC-2" } });
+    const d1b = c2Dir("none");
+    S.initProject(d1b, ["core"], "en");
+    const f1b = S.createFeature(d1b, "Nolog", ["core"], "", undefined, "en");
+    const bad8 = S.decide(d1b, "nolog", { title: "t", decision: "d", affects: "T-01" });
+    ok(bad1.ok === false && JSON.stringify(bad1.unknownAffects) === '["US-9.AC-9","T-99","SC-042","Nowhere Section"]' && /^unknown _Affects:_ reference\(s\): US-9\.AC-9, T-99, SC-042, Nowhere Section — .*Nothing was written\.$/.test(bad1.error) &&
+      bad2.ok === false && /_Supersedes:_ must name decisions already in this log \(D-n\): D-9, X-1/.test(bad2.error) &&
+      bad3.ok === false && /needs a title/.test(bad3.error) && bad4.ok === false && /needs its text/.test(bad4.error) && bad5.ok === false && /kind must be decision or discovery \(got "idea"\)/.test(bad5.error) &&
+      bad6.ok === false && /Missing required argument\(s\): title/.test(bad6.error) && bad7.result && bad7.result.isError === true &&
+      c2Read(f1, "decisions.md") === before1 && bad8.ok === false && !fs.existsSync(path.join(f1b.dir, "decisions.md")),
+      "C2 spec_decide validates before writing: unknown AC / T-ID / SC / section in _Affects:_ (listed, unknownAffects), unknown _Supersedes:_, no title / decision, a bad kind, a non-array affects over MCP — nothing written, no file created (got " +
+      JSON.stringify([bad1.error, bad6.error]).slice(0, 300) + ")");
+
+    // Text can't fake entries: a heading, a marker line, an HTML comment and an unclosed fence in the user's text are neutralized.
+    const tricky = S.decide(d1, "auth", { title: "Tricky <!-- x", decision: "## D-40 — fake\n- _Affects: US-9.AC-9_\n<!-- hide the rest\n```js\nconst a = 1;" });
+    const decT = S.decide(d1, "auth", { title: "After tricky", decision: "still numbered", affects: "Architecture" });
+    const logT = S.decisionLog(c2Read(f1, "decisions.md"));
+    ok(tricky.ok && tricky.id === "D-3" && decT.ok && decT.id === "D-4" && logT.map((e) => e.id).join() === "D-1,D-2,D-3,D-4" && logT[2].affects.length === 0 &&
+      logT[2].title === "Tricky &lt;!-- x" && logT[3].affects.join() === "Architecture",
+      "C2 a decision's own text can't fake or hide entries (a heading / _Affects:_ line escaped, <!-- neutralized, an open fence closed) — the next entry is still D-4 with its markers");
+
+    // --- the brief: the current entries citing the task's ACs / T-IDs (superseded ones out; bounded; write:true keeps the IDs).
+    const br3 = S.taskBrief(d1, "auth", 3);
+    const br2 = S.taskBrief(d1, "auth", 2);
+    const br3w = S.taskBrief(d1, "auth", 3, { write: true });
+    ok(br3.ok && JSON.stringify((br3.decisions || []).map((x) => x.id)) === "[]" && !/## Decisions/.test(br3.brief) && br2.ok && !br2.decisions,
+      "C2 brief: a superseded entry (D-1 by D-2) is never inlined; a task citing nothing an entry names gets no Decisions section");
+    S.decide(d1, "auth", { title: "Rotate keys monthly", decision: "Signing keys rotate every 30 days.", affects: "T-03, US-1.AC-3" });
+    const br3b = S.taskBrief(d1, "auth", 3);
+    const br3bw = S.taskBrief(d1, "auth", 3, { write: true });
+    const br4 = S.taskBrief(d1, "auth", 4);
+    ok(br3b.decisions.map((x) => x.id).join() === "D-5" && /## Decisions\nDecisions and discoveries \(decisions\.md\) that cite this task's criteria or tests — respect them:\n- \*\*D-5\*\* — Rotate keys monthly _\(decision · T-03, US-1\.AC-3\)_: Signing keys rotate every 30 days\./.test(br3b.brief) &&
+      br3bw.refs && JSON.stringify(br3bw.refs.decisions) === '["D-5"]' && !br3bw.decisions && !br4.decisions && br3w.refs && !br3w.refs.decisions,
+      "C2 brief inlines the entry citing the task's T-ID / AC (T-03 ↔ _Makes green: T-03_) with its kind and _Affects:_; write:true keeps only refs.decisions; another task's brief has none");
+    for (let i = 0; i < 6; i++) S.decide(d1, "auth", { title: "Rule " + i, decision: "Detail " + i, affects: "US-1.AC-1" });
+    const br2b = S.taskBrief(d1, "auth", 2);
+    ok(br2b.decisions.map((x) => x.id).join() === "D-7,D-8,D-9,D-10,D-11" && JSON.stringify(br2b.decisionsOmitted) === '["D-6"]' && /…and D-6 — see decisions\.md\./.test(br2b.brief),
+      "C2 brief is bounded: at most 5 entries (the most recent), the rest named (got " + JSON.stringify([br2b.decisions.map((x) => x.id), br2b.decisionsOmitted]) + ")");
+
+    // --- merge summary, export, catalog.
+    const fin1 = S.finishFeature(d1, "auth");
+    const exp1 = S.exportSpecs(d1, { name: "auth", format: "md" });
+    const cat1 = S.catalog(d1, { write: true });
+    const catF1 = cat1.features.find((x) => x.feature === "auth");
+    const specsMd = fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8");
+    ok(/\n## Decisions\n- ~~\*\*D-1\*\* — JWT sessions~~ _\(superseded: D-2\)_\n- \*\*D-2\*\* — Clock skew tolerated _\(discovery · supersedes D-1\)_: Tokens accept 30 s of skew\.\n/.test(fin1.mergeSummary) &&
+      /- `\.specs\/auth\/decisions\.md`/.test(fin1.mergeSummary) &&
+      exp1.ok && /\n## Decisions\n[\s\S]*### D-5 — Rotate keys monthly/.test(exp1.content) &&
+      catF1.kind === "feature" && catF1.decisions.count === 11 && catF1.decisions.items[0].supersededBy === "D-2" && catF1.decisions.items[4].title === "Rotate keys monthly" &&
+      /- 📝 Decisions \(11\): ~~D-1 JWT sessions~~ · D-2 Clock skew tolerated · D-3 /.test(specsMd),
+      "C2 the decision log in the merge summary (superseded struck through, the file in Spec), the export's Decisions section, the catalog (count + titles, superseded marked) and SPECS.md");
+    const specsBefore = specsMd;
+    S.decide(d1, "auth", { title: "Refresh on write", decision: "SPECS.md follows." });
+    ok(fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8") !== specsBefore && /D-12 Refresh on write/.test(fs.readFileSync(path.join(d1, ".specs", "SPECS.md"), "utf8")),
+      "C2 spec_decide refreshes SPECS.md once it exists (the catalog lists the new entry)");
+
+    // --- doctor: decision-affects-approved after an approval; gone after re-approval; trace_check phantom _Affects:_ (warnings).
+    const d3 = c2Dir("doctor");
+    S.initProject(d3, ["tdd"], "en");
+    const f3 = S.createFeature(d3, "Orders", ["tdd"], "", undefined, "en");
+    S.decide(d3, "orders", { title: "Before approval", decision: "early", affects: "US-1.AC-1" });
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(d3, "orders", ph, "t", { force: true });
+    const doc3a = S.specDoctor(d3, "orders");
+    c2Tick();
+    S.decide(d3, "orders", { title: "Cap order size", decision: "Max 50 items.", affects: "US-1.AC-2, EC-1" });
+    S.decide(d3, "orders", { title: "Async fulfilment", decision: "Queue it.", affects: "Architecture" });
+    const doc3b = S.specDoctor(d3, "orders");
+    const w3 = c2Chk(doc3b, "decision-affects-approved");
+    c2Tick();
+    S.approvePhase(d3, "orders", "requirements", "t", { force: true });
+    const doc3c = S.specDoctor(d3, "orders");
+    ok(!c2Chk(doc3a, "decision-affects-approved") && w3 && w3.status === "warn" && /D-2 \(US-1\.AC-2, EC-1\) after requirements\.md was approved \(\d{4}-\d\d-\d\d\)/.test(w3.detail) &&
+      /D-3 \(Architecture\) after design\.md was approved/.test(w3.detail) && /spec_impact orders --phase requirements \| design/.test(w3.detail) && !/D-1/.test(w3.detail) &&
+      c2Chk(doc3c, "decision-affects-approved") && !/D-2/.test(c2Chk(doc3c, "decision-affects-approved").detail) && /D-3/.test(c2Chk(doc3c, "decision-affects-approved").detail),
+      "C2 doctor warns decision-affects-approved for decisions recorded after the approval of requirements.md (their AC / EC IDs) or design.md (their sections) — not an older one; re-approving requirements clears its part (got " + JSON.stringify(w3) + ")");
+    fs.appendFileSync(path.join(f3.dir, "decisions.md"), "\n## D-4 — Hand-written\n\n- _Kind: decision_\n- _Date: 2026-01-01_\n- _Affects: US-9.AC-9, Ghost Section, T-01_\n\n**Decision:** x\n");
+    const tr3 = await c2Call("trace_check", { projectDir: d3, name: "orders" });
+    const doc3d = S.specDoctor(d3, "orders");
+    ok(tr3.ok && JSON.stringify(tr3.phantomAffects.map((p) => p.decision + ":" + p.ref)) === '["D-4:US-9.AC-9","D-4:Ghost Section"]' && !S.traceGaps(tr3).some((g) => g.kind === "phantomAffects") &&
+      c2Chk(doc3d, "decision-affects").status === "warn" && /D-4 → US-9\.AC-9, D-4 → Ghost Section/.test(c2Chk(doc3d, "decision-affects").detail) &&
+      S.affectsWarnings(tr3, "en")[0] === "D-4 _Affects:_ US-9.AC-9 — names nothing in this feature (a typo, or a criterion / test / section removed since)" &&
+      Array.isArray(S.traceCheck(d1b, "nolog").phantomAffects) && S.traceCheck(d1b, "nolog").phantomAffects.length === 0,
+      "C2 trace_check reports _Affects:_ references that name nothing (phantomAffects — a warning, never a gap); doctor warns decision-affects; a feature without a log has phantomAffects: []");
+
+    // --- PT / ES logs: localized header and labels, read back by the parser (the brief shows the text).
+    const d4 = c2Dir("pt");
+    S.initProject(d4, ["tdd"], "pt");
+    const f4 = S.createFeature(d4, "Faturas", ["tdd"], "", undefined, "pt");
+    const dec4 = S.decide(d4, "faturas", { title: "PDF no servidor", decision: "Gerar o PDF no servidor.", context: "Clientes antigos.", affects: "US-1.AC-2" });
+    const f5 = S.createFeature(d4, "Pagos", ["tdd"], "", undefined, "es");
+    S.decide(d4, "pagos", { title: "Reintentos", decision: "Tres reintentos.", kind: "discovery", affects: "T-03" });
+    const br4pt = S.taskBrief(d4, "faturas", 3);
+    ok(dec4.ok && /^# Decisões: Faturas\n/.test(c2Read(f4, "decisions.md")) && /\*\*Contexto:\*\* Clientes antigos\.\n\n\*\*Decisão:\*\* Gerar o PDF no servidor\./.test(c2Read(f4, "decisions.md")) &&
+      /^D-1 \(decisão\) registada em/.test(dec4.message) && /^# Decisiones: Pagos\n/.test(c2Read(f5, "decisions.md")) && /\*\*Descubrimiento:\*\* Tres reintentos\./.test(c2Read(f5, "decisions.md")) &&
+      /## Decisões\n.*\n- \*\*D-1\*\* — PDF no servidor _\(decisão · US-1\.AC-2\)_: Gerar o PDF no servidor\./.test(br4pt.brief) && S.decisionLog(c2Read(f5, "decisions.md"))[0].decision === "Tres reintentos.",
+      "C2 decision logs in PT / ES: localized header and labels (Contexto / Decisão, Descubrimiento), read back by the parser; the PT brief's Decisions section");
+
+    // --- C2.2 the spike kind: scaffold EN / PT / ES, question + timebox, no planning chain, core-only.
+    const d6 = c2Dir("spike");
+    S.initProject(d6, ["core"], "en");
+    const sp1 = await c2Call("spec_create", { projectDir: d6, name: "Cache spike", kind: "spike", question: "Can Redis hold the sessions under 5 ms p95?", timebox: "3d", tracks: ["saas"] });
+    const spDir = path.join(d6, ".specs", "cache-spike");
+    const spMd = fs.readFileSync(path.join(spDir, "spike.md"), "utf8");
+    const spSt = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
+    const in3 = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+    ok(sp1.ok && sp1.kind === "spike" && sp1.label === "core" && JSON.stringify(sp1.created) === '["spike.md","tasks.md"]' && sp1.timebox === in3 &&
+      /A spike is core-only — tracks ignored \(\+saas\)/.test(sp1.note) && spSt.kind === "spike" && JSON.stringify(spSt.tracks) === '["core"]' &&
+      !fs.existsSync(path.join(spDir, "requirements.md")) && !fs.existsSync(path.join(spDir, "design.md")) &&
+      /^# Spike: Cache spike\n/.test(spMd) && /\n## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Timebox\n\*\*Until:\*\* \d{4}-\d\d-\d\d \(3d\)\n\n## Options considered\n/.test(spMd) &&
+      /\n## Evidence\n/.test(spMd) && /\n## Decision\n> \*\*TODO\*\*/.test(spMd) && /_Outcome: \[go \| no-go \| pivot\]_/.test(spMd) && /\n## Follow-up\n/.test(spMd) &&
+      /## Phase: Investigate\n- \[ \] 1\. \[shared\] Sharpen the question/.test(fs.readFileSync(path.join(spDir, "tasks.md"), "utf8")),
+      "C2 spec_create {kind: 'spike'} scaffolds spike.md (Question · Timebox Until · Options · Evidence · Decision + _Outcome:_ · Follow-up) + investigation tasks — core-only (tracks ignored, noted), no requirements / design (got " +
+      JSON.stringify([sp1.created, sp1.note, sp1.timebox]) + ")");
+    const spPt = S.createFeature(d6, "Pesquisa fila", undefined, "Kafka ou RabbitMQ?", undefined, "pt", "spike");
+    const spEs = S.createFeature(d6, "Investigar colas", undefined, "", undefined, "es", "spike", { timebox: "2026-10-30" });
+    const mdPt = fs.readFileSync(path.join(spPt.dir, "spike.md"), "utf8");
+    const mdEs = fs.readFileSync(path.join(spEs.dir, "spike.md"), "utf8");
+    ok(spPt.ok && /\n## Pergunta\nKafka ou RabbitMQ\?\n\n## Timebox \(prazo\)\n> \*\*TODO\*\*/.test(mdPt) && /\n## Opções consideradas\n/.test(mdPt) && /\n## Decisão\n/.test(mdPt) &&
+      /^# Tasks: Pesquisa fila\n[\s\S]*## Fase: Investigação/.test(fs.readFileSync(path.join(spPt.dir, "tasks.md"), "utf8")) &&
+      spEs.ok && /\n## Pregunta\n> \*\*TODO\*\*/.test(mdEs) && /\n## Timebox \(plazo\)\n\*\*Hasta:\*\* 2026-10-30\n/.test(mdEs) && /\n## Evidencia\n/.test(mdEs) && /\n## Seguimiento\n/.test(mdEs) &&
+      /^# Tareas: Investigar colas/.test(fs.readFileSync(path.join(spEs.dir, "tasks.md"), "utf8")) &&
+      S.spikeInfo(spPt.dir).questionFilled === true && S.spikeInfo(spEs.dir).questionFilled === false && S.spikeInfo(spEs.dir).timebox.date === "2026-10-30",
+      "C2 spike scaffolds in PT / ES (Pergunta / Pregunta, Timebox (prazo / plazo), Decisão, Evidencia, Seguimiento; the summary becomes the question) and spikeInfo reads them");
+    const badTb = S.createFeature(d6, "Bad timebox", undefined, "", undefined, "en", "spike", { timebox: "soon" });
+    const badTb2 = S.createFeature(d6, "Bad date", undefined, "", undefined, "en", "spike", { timebox: "2026-02-30" });
+    const notSpike = S.createFeature(d6, "Plain", ["core"], "", undefined, "en", "feature", { question: "why?" });
+    const badKind = await c2Call("spec_create", { projectDir: d6, name: "x", kind: "spik" });
+    ok(badTb.ok === false && /timebox must be an end date \(YYYY-MM-DD\) or a duration from today \(e\.g\. 3d, 2w, 8h\) — got "soon"/.test(badTb.error) && badTb2.ok === false &&
+      !fs.existsSync(path.join(d6, ".specs", "bad-timebox")) && notSpike.ok === false && /question only applies to a spike/.test(notSpike.error) && !fs.existsSync(path.join(d6, ".specs", "plain")) &&
+      badKind.ok === false && /kind must be one of: feature, bugfix, spike/.test(badKind.error),
+      "C2 spike inputs are validated first: a bad timebox / an impossible date, a question on a non-spike, an unknown kind — refused, nothing created");
+
+    // Gates: none to approve (the execution sign-off apart), no tracks.
+    const apSp = S.approvePhase(d6, "cache-spike", "requirements", "t");
+    const apSpF = S.approvePhase(d6, "cache-spike", "tasks", "t", { force: true });
+    const atSp = S.addTrack(d6, "cache-spike", "tdd");
+    const docSp0 = S.specDoctor(d6, "cache-spike");
+    ok(apSp.ok === false && apSp.spike === true && /'cache-spike' is a spike: it has no requirements gate/.test(apSp.error) && apSpF.ok === false &&
+      atSp.ok === false && /is a spike — it has no tracks/.test(atSp.error) && docSp0.kind === "spike" && docSp0.gatesOk === true && docSp0.pendingGates.length === 0 &&
+      docSp0.checks.map((c) => c.id + ":" + c.status).join() === "question:pass,decision:fail,timebox:pass" && docSp0.verdict === "fail" && docSp0.phase === "tasks-ready",
+      "C2 a spike has no requirements / design / tasks gates (approve refuses, even forced) and no tracks (add_track refuses); its doctor: question pass, decision fail, timebox pass (got " +
+      JSON.stringify(docSp0.checks) + ")");
+
+    // doctor: timebox passed with no decision (warn), no end date, a decision without an outcome (warn), decided.
+    const spFile = path.join(spDir, "spike.md");
+    const setSp = (fn) => fs.writeFileSync(spFile, fn(fs.readFileSync(spFile, "utf8")));
+    setSp((t) => t.replace(/\*\*Until:\*\* \S+/, "**Until:** 2020-01-06"));
+    const docSp1 = S.specDoctor(d6, "cache-spike");
+    const na1 = S.nextAction(d6, "cache-spike");
+    setSp((t) => t.replace("**Until:** 2020-01-06", "two days of effort"));
+    const docSp2 = S.specDoctor(d6, "cache-spike");
+    setSp((t) => t.replace("two days of effort", "**Until:** 2020-01-06"));
+    ok(c2Chk(docSp1, "timebox").status === "warn" && /the timebox ended on 2020-01-06 and no decision is recorded/.test(c2Chk(docSp1, "timebox").detail) &&
+      /The timebox ended on 2020-01-06: decide with the evidence you have\./.test(na1.recommendation) &&
+      c2Chk(docSp2, "timebox").status === "warn" && /no end date/.test(c2Chk(docSp2, "timebox").detail),
+      "C2 spike doctor warns timebox once its end date passed with no decision (next_action says so too), and when the timebox has no end date");
+
+    // next_action: fill the question → investigate (tasks) → record the decision → go / no-go / pivot.
+    const spBare = S.createFeature(d6, "Queue spike", undefined, "", undefined, "en", "spike");
+    const naQ = S.nextAction(d6, "queue-spike");
+    const naT = S.nextAction(d6, "cache-spike");
+    for (const n of [1, 2, 3, 4]) S.completeTask(d6, "cache-spike", n);
+    const naD = S.nextAction(d6, "cache-spike");
+    const phD = S.detectPhase(spDir, ["core"]);
+    setSp((t) => t.replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot, and why: the evidence that decided it\./, "Redis held 2 ms p95 under a 5k rps load run."));
+    const naO = S.nextAction(d6, "cache-spike");
+    const docO = S.specDoctor(d6, "cache-spike");
+    setSp((t) => t.replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+    const naGo = await c2Call("spec_next_action", { projectDir: d6, name: "cache-spike" });
+    const docGo = S.specDoctor(d6, "cache-spike");
+    ok(spBare.ok && naQ.step === "fill" && naQ.file === "spike.md" && /Write the question this spike answers/.test(naQ.recommendation) && S.detectPhase(spBare.dir, ["core"]) === "requirements" &&
+      naT.step === "implement" && /^Investigate — task #1: Sharpen the question/.test(naT.recommendation) &&
+      naD.step === "decide" && naD.phase === "executing" && phD === "executing" && /Record the decision in spike\.md → Decision/.test(naD.recommendation) && /\/spec-decide cache-spike/.test(naD.recommendation) &&
+      naO.step === "decide" && /State the outcome/.test(naO.recommendation) && c2Chk(docO, "decision").status === "warn" &&
+      naGo.step === "promote" && naGo.outcome === "go" && naGo.phase === "complete" && naGo.seed.name === "cache" &&
+      naGo.seed.summary === "Can Redis hold the sessions under 5 ms p95? — Redis held 2 ms p95 under a 5k rps load run." &&
+      /^Decision: go\. Spec the real feature — spec_create \{name: "cache", summary: "Can Redis/.test(naGo.recommendation) && /then archive the spike: \/feature archive cache-spike\.$/.test(naGo.recommendation) &&
+      docGo.verdict === "pass" && c2Chk(docGo, "timebox").status === "pass" && c2Chk(docGo, "decision").detail === "decision recorded (_Outcome: go_)",
+      "C2 spike next_action: fill the question → investigate #1 → (all ticked) record the decision → state the outcome → go: spec the real feature (seed name 'cache', summary = question — decision) and archive the spike; doctor passes once decided (got " +
+      JSON.stringify([naQ.step, naT.step, naD.step, naO.step, naGo.step, naGo.seed]) + ")");
+    // no-go / pivot, and a spike whose name has no "spike" word (archive first — it frees the name).
+    const spNo = S.createFeature(d6, "Redis eval", undefined, "Is Redis worth it?", undefined, "en", "spike");
+    const noFile = path.join(spNo.dir, "spike.md");
+    const decideSp = (file, rationale, outcome) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot[^\n]*/, rationale)
+      .replace(/^_Outcome: [^\n]*_$/m, "_Outcome: " + outcome + "_"));
+    for (const n of [1, 2, 3, 4]) S.completeTask(d6, "redis-eval", n);
+    decideSp(noFile, "Too costly for the gain.", "no-go");
+    const naNo = S.nextAction(d6, "redis-eval");
+    decideSp(noFile, "Too costly for the gain.", "pivot");
+    const naPv = S.nextAction(d6, "redis-eval");
+    decideSp(noFile, "Worth it.", "go");
+    const naGo2 = S.nextAction(d6, "redis-eval");
+    ok(naNo.step === "archive" && naNo.outcome === "no-go" && naNo.recommendation === "Decision: no-go — Too costly for the gain. Archive the spike with its reason (it stays in spike.md → Decision): /feature archive redis-eval." &&
+      naPv.step === "pivot" && /^Decision: pivot — Too costly for the gain\. Start a new spike/.test(naPv.recommendation) &&
+      naGo2.step === "promote" && naGo2.seed.name === "redis-eval" && /^Decision: go\. Archive the spike first — \/feature archive redis-eval \(it frees the name\)/.test(naGo2.recommendation),
+      "C2 spike next_action: no-go → archive with the reason; pivot → a new spike; a go on a spike named without 'spike' archives it first (the seed keeps its name) (got " +
+      JSON.stringify([naNo.recommendation, naGo2.recommendation]).slice(0, 300) + ")");
+
+    // The outcome read from the decision's first line when the _Outcome:_ line is still the template's.
+    const spH = S.createFeature(d6, "Heuristic spike", undefined, "Does the cache pay off?", undefined, "en", "spike");
+    const hFile = path.join(spH.dir, "spike.md");
+    fs.writeFileSync(hFile, fs.readFileSync(hFile, "utf8").replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot[^\n]*/, "**Go** — the numbers hold."));
+    const hInfo = S.spikeInfo(spH.dir);
+    fs.writeFileSync(hFile, fs.readFileSync(hFile, "utf8").replace("**Go** — the numbers hold.", "Going with it would cost too much."));
+    ok(hInfo.decisionFilled === true && hInfo.outcome === "go" && S.spikeInfo(spH.dir).outcome === null,
+      "C2 a spike's outcome is read from the decision's first line (**Go** — …) while the _Outcome:_ line is still the template's — 'Going …' is no outcome");
+
+    // finish: blocked until the decision is written and every task ticked; ready → merge summary + the finish baseline.
+    const finQ = S.finishFeature(d6, "queue-spike");
+    const finGo = await c2Call("spec_finish", { projectDir: d6, name: "cache-spike", write: true, includeBody: true });
+    const stGo = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
+    const apEx = S.approvePhase(d6, "cache-spike", "execution", "t");
+    const apExQ = S.approvePhase(d6, "queue-spike", "execution", "t");
+    ok(finQ.ok && finQ.readyToFinish === false && finQ.kind === "spike" && finQ.blockers.some((b) => /Decision is not written yet/.test(b)) && finQ.blockers.some((b) => /^open tasks: #1, #2, #3, #4$/.test(b)) &&
+      finGo.readyToFinish === true && finGo.outcome === "go" && finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms p95?" &&
+      /^## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Decision — go\nRedis held 2 ms p95 under a 5k rps load run\.\n\n## Tasks\n- \[x\] 1\. /.test(finGo.mergeSummary) &&
+      /## Checks before merge\n- \[ \] The decision is shared with the people it affects\./.test(finGo.mergeSummary) && !/## Acceptance criteria|## Tests/.test(finGo.mergeSummary) &&
+      finGo.suiteChecks === undefined && finGo.baseline && finGo.baseline.recorded === true && stGo.finished && typeof stGo.finished.at === "string" &&
+      fs.existsSync(path.join(spDir, ".execution", "merge-summary.md")) && apEx.ok === true && apExQ.ok === false && apExQ.refused === true,
+      "C2 spike finish: blocked while the decision is unwritten / tasks open; ready once decided — merge summary from spike.md (question, decision, checks), the finish baseline recorded, the execution sign-off follows the same gate (got " +
+      JSON.stringify([finQ.blockers, finGo.mergeTitle]).slice(0, 300) + ")");
+    // spec_decide on a spike: its sections are the affectable ones.
+    const decSp = S.decide(d6, "cache-spike", { title: "Go with Redis", decision: "Redis 7 cluster.", affects: "Evidence, decision" });
+    const decSpBad = S.decide(d6, "cache-spike", { title: "x", decision: "y", affects: "US-1.AC-1" });
+    ok(decSp.ok && decSp.id === "D-1" && decSp.affects.join() === "Evidence,Decision" && /^# Decisions: Cache spike\n/.test(fs.readFileSync(path.join(spDir, "decisions.md"), "utf8")) &&
+      decSpBad.ok === false && JSON.stringify(decSpBad.unknownAffects) === '["US-1.AC-1"]',
+      "C2 spec_decide works on a spike: its spike.md sections are what _Affects:_ may name (an AC ID is unknown there)");
+
+    // Roadmap / catalog / export / changelog show the spike apart.
+    S.roadmapReport(d6, { write: true });
+    const rmMd = fs.readFileSync(path.join(d6, ".specs", "ROADMAP.md"), "utf8");
+    const rmHtml = S.renderRoadmapHtml(d6, "en");
+    const catSp = S.catalog(d6);
+    const cSp = catSp.features.find((x) => x.feature === "cache-spike");
+    const expSp = S.exportSpecs(d6, { name: "cache-spike", format: "md" });
+    const chSp = S.changelog(d6, { since: "all" });
+    const expProj = S.exportSpecs(d6, { format: "md" });
+    ok(/\| \[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike \| core \|/.test(rmMd) && /\[queue-spike\]\(\.\/queue-spike\/spike\.md\) 🔬 spike/.test(rmMd) &&
+      /<a href="\.\/cache-spike\/spike\.md">cache-spike<\/a> <span class="tracks">🔬 spike<\/span>/.test(rmHtml) &&
+      cSp.kind === "spike" && cSp.status === "finished" && cSp.spike.outcome === "go" && cSp.spike.question === "Can Redis hold the sessions under 5 ms p95?" &&
+      /## ✅ cache-spike — finished · 🔬 spike\n\n_core · finished \d{4}-\d\d-\d\d_\n\n- Question: Can Redis hold the sessions under 5 ms p95\?\n- Decision: go\n- 📝 Decisions \(1\): D-1 Go with Redis\n/.test(catSp.markdown) &&
+      !/cache-spike — finished · 🔬 spike[\s\S]{0,300}No acceptance criteria yet/.test(catSp.markdown) &&
+      expSp.ok && /_Spike \(investigation\) · /.test(expSp.content) && /- \*\*Kind:\*\* spike/.test(expSp.content) && /\n## Spike\n\n### Question\n/.test(expSp.content) && !/## User stories/.test(expSp.content) &&
+      chSp.ok && !chSp.added.some((a) => a.feature === "cache-spike") &&
+      expProj.ok && /\n## cache-spike\n\n_spike · core · [^\n]*_\n\nCan Redis hold the sessions under 5 ms p95\?\n\n## /.test(expProj.content),
+      "C2 spikes read apart: ROADMAP.md / .html (🔬 spike, linked to spike.md), the catalog (kind, question + decision, no 'no ACs' line), the export (Spike kicker + spike.md body), never in the release notes");
+    // Roadmap attention: a spike past its timebox with no decision.
+    const spLate = S.createFeature(d6, "Late spike", undefined, "Which ORM?", undefined, "en", "spike", { timebox: "2020-03-01" });
+    const rmLate = S.roadmapReport(d6, { write: true });
+    ok(spLate.ok && /- \*\*late-spike\*\* — spike: the timebox ended on 2020-03-01 with no decision/.test(fs.readFileSync(path.join(d6, ".specs", "ROADMAP.md"), "utf8")) && rmLate.ok !== false,
+      "C2 ROADMAP.md's needs-attention names a spike past its timebox with no decision");
+
+    // Project templates (B1) apply to a new spike: spike / spike-tasks are template keys ({{summary}} = the question).
+    const d7 = c2Dir("tpl");
+    S.initProject(d7, ["core"], "en");
+    fs.mkdirSync(path.join(d7, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(d7, ".specs", "templates", "spike.md"), "# Spike: {{name}}\n\n## Question\n{{summary}}\n\n## Timebox\n> **TODO** — end date\n\n## Decision\n> **TODO** — team rule: go / no-go\n");
+    const spT = S.createFeature(d7, "Tpl spike", undefined, "", undefined, "en", "spike", { question: "Which queue?" });
+    const lsT = S.templates(d7, "list");
+    const inT = S.templates(d7, "init", { artifact: "spike-tasks" });
+    ok(spT.ok && spT.templates && spT.templates["spike.md"] === ".specs/templates/spike.md" && /## Question\nWhich queue\?\n/.test(fs.readFileSync(path.join(spT.dir, "spike.md"), "utf8")) &&
+      S.spikeInfo(spT.dir).questionFilled === true && S.specDoctor(d7, "tpl-spike").checks.find((c) => c.id === "decision").status === "fail" &&
+      lsT.templates.some((e) => e.artifact === "spike" && e.source === "override") && lsT.templates.some((e) => e.artifact === "spike-tasks" && e.file === "tasks.md") &&
+      inT.ok && inT.created.join() === ".specs/templates/spike-tasks.md" && S.templates(d7, "check").problems.length === 0,
+      "C2 project templates apply to a new spike (spike.md from .specs/templates/, {{summary}} = the question); spec_templates lists / inits / checks spike and spike-tasks");
+
+    // i18n: every C2 message block has the same keys in EN / PT / ES.
+    const c2Keys = (o, pre = "") => Object.keys(o).sort().flatMap((k) => (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? c2Keys(o[k], pre + k + ".") : [pre + k]));
+    ok(["decisions", "spike"].every((ns) => ["pt", "es"].every((l) => c2Keys(S.msg(l)[ns]).join() === c2Keys(S.msg("en")[ns]).join())),
+      "C2 the decisions / spike message blocks have the same keys in EN, PT and ES");
+  }
+
+  { // 1.14 C3 — spec_import plan · execplan · bmad, and the design-first flow
+    const c3Call = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
+    const c3Put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const c3Read = (root, ...p) => fs.readFileSync(path.join(root, ...p), "utf8");
+    const c3State = (dir) => JSON.parse(fs.readFileSync(path.join(dir, ".state.json"), "utf8"));
+    const c3Safe = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
+
+    // --- C3.1 plan: a Claude Code plan-mode plan (copied into the project), and a Cursor plan with front matter todos
+    const ip = path.join(tmp, "c3-import-plan");
+    S.initProject(ip, ["core"], "en");
+    const claudePlan = ["# Plan: Add dark mode toggle", "", "## Context", "The app only ships a light theme. Users asked for a dark theme that follows the OS setting.", "",
+      "## Goals", "- When the user clicks the theme toggle, the app switches between light and dark themes", "- The chosen theme persists across reloads",
+      "- The system SHALL respect `prefers-color-scheme` on first visit", "", "## Implementation Steps",
+      "1. Create the theme context in `src/theme/ThemeContext.tsx` with a `useTheme` hook", "   - store the choice in localStorage",
+      "2. Add the toggle button to `src/components/Header.tsx` (see src/components/Header.test.tsx:12)", "3. Update the tokens (see [tokens](src/styles/tokens.css)) — not in https://example.com/a.css nor /etc/x.conf, and/or ../up.js",
+      "", "## Files to modify", "- `src/App.tsx` — wrap the tree in `ThemeProvider`", "", "## Verification", "- Run `npm test`", "- Toggling twice returns to the original theme", ""].join("\n");
+    c3Put(ip, ".claude/plans/dark-mode.md", claudePlan);
+    const pl = await c3Call("spec_import", { tool: "plan", path: ".claude/plans/dark-mode.md", projectDir: ip });
+    const plb = pl.body;
+    const plReq = plb.ok ? c3Read(ip, ".specs", plb.feature, "requirements.md") : "";
+    const plTasks = plb.ok ? c3Read(ip, ".specs", plb.feature, "tasks.md") : "";
+    const plDesign = plb.ok ? c3Read(ip, ".specs", plb.feature, "design.md") : "";
+    ok(!pl.isError && plb.feature === "add-dark-mode-toggle" && plb.source === ".claude/plans/dark-mode.md" && plb.toolName === "plan" &&
+      plb.mapping["Add dark mode toggle"] === "US-1" && plb.mapping["Goals 1"] === "US-1.AC-1" && plb.mapping["Verification 1"] === "US-1.AC-4" && plb.mapping["step 3"] === "task 3" &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN the user clicks the theme toggle, THE SYSTEM SHALL ensure that the app switches between light and dark themes/.test(plReq) &&
+      /3\. \*\*US-1\.AC-3\*\* — The system SHALL respect `prefers-color-scheme` on first visit\n/.test(plReq) &&
+      /2\. \*\*US-1\.AC-2\*\* — The chosen theme persists across reloads \[NEEDS CLARIFICATION/.test(plReq) && plb.warnings.some((w) => /US-1\.AC-2, US-1\.AC-4/.test(w)) &&
+      /^## Summary\nThe app only ships a light theme\./m.test(plReq) && /^> Imported from plan `\.claude\/plans\/dark-mode\.md` on \d{4}-\d{2}-\d{2}\.$/m.test(plTasks),
+      "C3 spec_import plan (Claude Code plan mode): goals + verification bullets → US-1.AC-n (EARS when they read like one — a WHEN clause rewritten, a SHALL kept — else [NEEDS CLARIFICATION] + warning), Context → summary, the note names the plan file (got " + JSON.stringify(plb).slice(0, 300) + ")");
+    ok(/- \[ \] 1\. Create the theme context in `src\/theme\/ThemeContext\.tsx` with a `useTheme` hook\n  - _Implements: src\/theme\/ThemeContext\.tsx_\n  - store the choice in localStorage/.test(plTasks) &&
+      /- \[ \] 2\. Add the toggle button[^\n]*\n  - _Implements: src\/components\/Header\.tsx, src\/components\/Header\.test\.tsx_\n/.test(plTasks) &&
+      /- \[ \] 3\. Update the tokens[^\n]*\n  - _Implements: src\/styles\/tokens\.css_\n/.test(plTasks) && !/_Implements:[^\n]*(?:example\.com|etc\/x|and\/or|up\.js)/.test(plTasks) && !/- \[ \] 4\./.test(plTasks) &&
+      /## Files to modify\n- `src\/App\.tsx` — wrap the tree/.test(plDesign) && /## Verification\n- Run `npm test`/.test(plDesign) && !/Implementation Steps|## Goals/.test(plDesign),
+      "C3 plan: numbered steps → tasks with the file paths they name as _Implements:_ (backticks, bare paths with a folder, link targets; :line dropped; never a URL, an absolute path, and/or or '..'); Files to modify and the command-only Verification bullet stay in design.md, the used sections don't");
+    ok(c3Read(ip, ".claude", "plans", "dark-mode.md") === claudePlan && plb.warnings.some((w) => /no _Requirements:_ references/.test(w)),
+      "C3 plan: the source plan is never modified; tasks without _Requirements:_ are reported");
+    const cursorPlan = ["---", "name: Checkout coupons", "overview: \"Let shoppers apply a coupon code at checkout and see the discounted total.\"", "todos:",
+      "  - id: coupon-model", "    content: Add the Coupon model in `app/models/coupon.rb`", "    status: completed",
+      "  - id: apply-endpoint", "    content: \"Create POST /api/coupons/apply in app/controllers/coupons_controller.rb\"", "    status: in_progress",
+      "  - id: old-idea", "    content: Try a coupon microservice", "    status: cancelled", "---", "", "# Checkout coupons", "", "## Overview", "Coupons reduce the order total before tax.", "",
+      "## Acceptance criteria", "- If the code is expired, the system rejects it with the expiry date", "- A valid code reduces the total", "", "## Architecture", "The discount is computed server-side.", ""].join("\n");
+    c3Put(ip, ".cursor/plans/checkout-coupons_1a2b3c4d.plan.md", cursorPlan);
+    const cp = await c3Call("spec_import", { tool: "plan", path: ".cursor/plans", tracks: ["core"], projectDir: ip });
+    const cpb = cp.body;
+    const cpReq = cpb.ok ? c3Read(ip, ".specs", "checkout-coupons", "requirements.md") : "";
+    const cpTasks = cpb.ok ? c3Read(ip, ".specs", "checkout-coupons", "tasks.md") : "";
+    ok(!cp.isError && cpb.feature === "checkout-coupons" && cpb.source === ".cursor/plans/checkout-coupons_1a2b3c4d.plan.md" && /^## Summary\nLet shoppers apply a coupon code/m.test(cpReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — IF the code is expired, THEN THE SYSTEM SHALL reject it with the expiry date/.test(cpReq) &&
+      /- \[x\] 1\. Add the Coupon model in `app\/models\/coupon\.rb`\n  - _Implements: app\/models\/coupon\.rb_/.test(cpTasks) &&
+      /- \[ \] 2\. Create POST \/api\/coupons\/apply in app\/controllers\/coupons_controller\.rb\n  - _Implements: app\/controllers\/coupons_controller\.rb_\n/.test(cpTasks) &&
+      /- \[ \] 3\. Try a coupon microservice/.test(cpTasks) && cpb.mapping["todo coupon-model"] === "task 1" && cpb.warnings.some((w) => /cancelled to-dos[^\n]*Try a coupon microservice/.test(w)) &&
+      /## Overview\nCoupons reduce[^\n]*\n\n## Architecture/.test(c3Read(ip, ".specs", "checkout-coupons", "design.md")),
+      "C3 plan (Cursor .cursor/plans/*.plan.md): front matter overview → summary, todos → tasks (completed → [x], in_progress open, cancelled open + warned), an IF clause → EARS IF…THEN, the plan's folder resolves to its one plan (got " + JSON.stringify(cpb).slice(0, 300) + ")");
+    // Refusals: ~ (plan mode's default folder), ../, a folder of several plans, an existing feature.
+    c3Put(ip, "plans/a.md", "# A\n- [ ] one\n");
+    c3Put(ip, "plans/b.md", "# B\n- [ ] two\n");
+    const home = await c3Call("spec_import", { tool: "plan", path: "~/.claude/plans/dark-mode.md", projectDir: ip });
+    const up = c3Safe(() => S.importSpec(ip, "plan", "../x.md"));
+    const several = await c3Call("spec_import", { tool: "plan", path: "plans", projectDir: ip });
+    const again = await c3Call("spec_import", { tool: "plan", path: ".claude/plans/dark-mode.md", projectDir: ip });
+    const upKiro = c3Safe(() => S.importSpec(ip, "kiro", "../x"));
+    ok(home.isError && /outside the project[^\n]*plansDirectory \(default ~\/\.claude\/plans — outside the project\): copy the plan into the project first/.test(home.body.error) &&
+      !up.ok && /plansDirectory/.test(up.error) && !upKiro.ok && !/plansDirectory/.test(upKiro.error) && /outside the project/.test(upKiro.error) &&
+      several.isError && /'plans' holds several documents \(a\.md, b\.md\) — pass the one to import/.test(several.body.error) && !fs.existsSync(path.join(ip, ".specs", "a")) &&
+      again.isError && /already exists/.test(again.body.error),
+      "C3 plan refusals: ~/.claude/plans (outside — says to copy the plan in or point plansDirectory inside the project; only for plans), ../, a folder with several plans (named), an existing feature");
+    // Sub-heading steps, criteria checklists, a plan in PT.
+    c3Put(ip, "docs/plans/cache.md", ["# Implementation Plan: Response cache", "", "Cache GET responses for five minutes.", "", "## Acceptance Criteria", "- [ ] Given a cached entry, when it is older than 5 minutes, then it is refetched",
+      "", "## Implementation", "### Step 1: Add the cache store", "Create `src/cache/store.ts`.", "#### Notes", "LRU, 500 entries.", "```ts", "// see src/fake/path.ts", "```",
+      "### Step 2: Wire the middleware", "Edit `src/server.ts`.", ""].join("\n"));
+    const sh = c3Safe(() => S.importSpec(ip, "plan", "docs/plans/cache.md"));
+    const shTasks = sh.ok ? c3Read(ip, ".specs", sh.feature, "tasks.md") : "";
+    const shReq = sh.ok ? c3Read(ip, ".specs", sh.feature, "requirements.md") : "";
+    ok(sh.ok && sh.feature === "response-cache" && /1\. \*\*US-1\.AC-1\*\* — WHILE a cached entry, WHEN it is older than 5 minutes, THE SYSTEM SHALL ensure that it is refetched/.test(shReq) &&
+      /- \[ \] 1\. Add the cache store\n  - _Implements: src\/cache\/store\.ts_\n  Create `src\/cache\/store\.ts`\.\n  \*\*Notes\*\*\n  LRU, 500 entries\.\n  ```ts\n  \/\/ see src\/fake\/path\.ts\n  ```/.test(shTasks) &&
+      /- \[ \] 2\. Wire the middleware\n  - _Implements: src\/server\.ts_/.test(shTasks) && !/- \[ \] \d+\. Given a cached/.test(shTasks),
+      "C3 plan: no checklist outside the criteria → the 'Step N:' sub-headings of the Implementation section are the tasks (their notes kept, a sub-heading as a bold line, a code block's paths never _Implements:_); a criteria checklist is a criterion (Given/When/Then → EARS), not a task (got " + JSON.stringify(sh).slice(0, 200) + ")");
+    const ipPt = path.join(tmp, "c3-import-plan-pt");
+    S.initProject(ipPt, ["core"], "pt");
+    c3Put(ipPt, "plano.md", ["# Plano: Exportar CSV", "", "## Objetivos", "- Quando o utilizador clica em Exportar, o sistema gera um ficheiro CSV", "", "## Passos", "- [ ] Criar `src/export/csv.ts`", "- [x] Adicionar o botão", ""].join("\n"));
+    const pt = c3Safe(() => S.importSpec(ipPt, "plan", "plano.md"));
+    const ptReq = pt.ok ? c3Read(ipPt, ".specs", pt.feature, "requirements.md") : "";
+    ok(pt.ok && pt.lang === "pt" && /^> Importado de plan `plano\.md` em /m.test(ptReq) && /US-1\.AC-1\*\* — QUANDO o utilizador clica em Exportar, O SISTEMA DEVE garantir que o sistema gera um ficheiro CSV/.test(ptReq) &&
+      /- \[ \] 1\. Criar `src\/export\/csv\.ts`\n  - _Implements: src\/export\/csv\.ts_\n- \[x\] 2\. Adicionar o botão/.test(c3Read(ipPt, ".specs", pt.feature, "tasks.md")) &&
+      (S.earsFeature(ipPt, pt.feature).issues || []).every((i) => i.severity !== "error"),
+      "C3 plan in PT: a QUANDO clause becomes a PT EARS criterion that passes ears, a checklist keeps its state, the note is localized (got " + JSON.stringify(pt).slice(0, 200) + ")");
+    ok(JSON.stringify(S.planPaths("`package.json` `Node.js` `src/a.ts:12` [x](docs/a.md) see lib/b.js, `@/alias/x.ts` `src/**/*.ts` `C:/abs.ts` `~/.zshrc` client/server `src/utils/`")) ===
+      JSON.stringify(["package.json", "src/a.ts", "src/utils/", "docs/a.md", "lib/b.js"]),
+      "C3 planPaths: backticked files / folders and paths (a :line dropped), link targets, bare paths with a folder and an extension — never a framework name, an alias, a glob, an absolute or home path, or a/b prose (got " + JSON.stringify(S.planPaths("`package.json` `Node.js` `src/a.ts:12` [x](docs/a.md) see lib/b.js, `@/alias/x.ts` `src/**/*.ts` `C:/abs.ts` `~/.zshrc` client/server `src/utils/`")) + ")");
+
+    // --- C3.1 execplan: a Codex ExecPlan (PLANS.md format)
+    const ie = path.join(tmp, "c3-import-exec");
+    S.initProject(ie, ["core"], "en");
+    const execPlan = ["# Add a /health endpoint to the API", "", "This ExecPlan is a living document.", "", "## Purpose / Big Picture", "",
+      "After this change an operator can call GET /health and learn whether the API and its database are up.", "", "It unblocks the load balancer's health checks.", "",
+      "## Progress", "", "- [x] (2025-10-01 13:00Z) Add the route skeleton in `src/routes/health.ts`.", "- [ ] Wire the database ping (`src/db/ping.ts`) and run `npm test` to confirm.",
+      "- [ ] Install the driver with `npm install pg`.", "", "## Surprises & Discoveries", "", "- Observation: the DB driver has no ping.", "  Evidence: `pg` exposes only query().", "",
+      "## Decision Log", "", "- Decision: Use SELECT 1 as the ping.", "  Rationale: No driver API for ping; SELECT 1 is cheap.", "  Date/Author: 2025-10-01 / codex", "",
+      "## Outcomes & Retrospective", "", "(none yet)", "", "## Context and Orientation", "", "The API is an Express app in `src/app.ts`.", "",
+      "## Concrete Steps", "", "1. Wire the database ping (`src/db/ping.ts`) and run `npm test` to confirm.", "2. Run the integration suite from the repository root:", "",
+      "       npm run test:integration", "", "   Expect 3 passing.", "", "## Validation and Acceptance", "",
+      "- When GET /health is called with the database up, the API returns 200 with body {\"status\":\"ok\"}", "- If the database is down, the endpoint returns 503", "- Run `npm test`", "",
+      "## Idempotence and Recovery", "", "The steps can be repeated safely.", ""].join("\n");
+    c3Put(ie, ".agent/execplans/health.md", execPlan);
+    c3Put(ie, ".agent/execplans/PLANS.md", "# ExecPlans\n\nHow to write one: ## Progress, ## Decision Log …\n");
+    const ex = await c3Call("spec_import", { tool: "execplan", path: ".agent/execplans", projectDir: ie });
+    const exb = ex.body;
+    const exReq = exb.ok ? c3Read(ie, ".specs", exb.feature, "requirements.md") : "";
+    const exTasks = exb.ok ? c3Read(ie, ".specs", exb.feature, "tasks.md") : "";
+    const exDesign = exb.ok ? c3Read(ie, ".specs", exb.feature, "design.md") : "";
+    ok(!ex.isError && exb.feature === "add-a-health-endpoint-to-the-api" && exb.source === ".agent/execplans/health.md" && exb.toolName === "ExecPlan" &&
+      /^## Summary\nAfter this change an operator can call GET \/health/m.test(exReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN GET \/health is called with the database up, THE SYSTEM SHALL ensure that the API returns 200/.test(exReq) &&
+      /2\. \*\*US-1\.AC-2\*\* — IF the database is down, THEN THE SYSTEM SHALL ensure that the endpoint returns 503/.test(exReq) && !/US-1\.AC-3/.test(exReq) &&
+      (S.earsFeature(ie, exb.feature).issues || []).every((i) => i.severity !== "error"),
+      "C3 spec_import execplan: Purpose → summary, Validation and Acceptance → EARS criteria (the command-only bullet is no criterion), PLANS.md in the folder is the guide, not the plan (got " + JSON.stringify(exb).slice(0, 300) + ")");
+    ok(/## Progress\n- \[x\] 1\. \(2025-10-01 13:00Z\) Add the route skeleton in `src\/routes\/health\.ts`\.\n  - _Implements: src\/routes\/health\.ts_\n/.test(exTasks) &&
+      /- \[ \] 2\. Wire the database ping[^\n]*\n  - _Implements: src\/db\/ping\.ts_\n  - _Verify: npm test_\n/.test(exTasks) &&
+      /- \[ \] 3\. Install the driver with `npm install pg`\.\n(?!  - _Verify)/.test(exTasks) &&
+      /## Concrete Steps\n- \[ \] 4\. Run the integration suite from the repository root:\n  - _Verify: npm run test:integration_\n\n      npm run test:integration\n\n  Expect 3 passing\./.test(exTasks) &&
+      !/- \[ \] 5\./.test(exTasks) && exb.mapping["Progress 2"] === "task 2" && exb.mapping["Concrete Steps 1"] === "task 2" && exb.mapping["Concrete Steps 2"] === "task 4",
+      "C3 execplan: Progress → tasks (state + timestamp kept), Concrete Steps → tasks (a step Progress already lists maps to that task, never a duplicate); a check command a step names → _Verify:_ (backticked, or its indented block), `npm install` is no check");
+    ok(/## Decisions\n\n- \*\*D-1\*\* — Use SELECT 1 as the ping\.\n  Rationale: No driver API for ping; SELECT 1 is cheap\.\n  Date\/Author: 2025-10-01 \/ codex/.test(exDesign) && exb.mapping["Decision Log 1"] === "D-1" &&
+      /## Surprises & Discoveries\n\n- Observation: the DB driver has no ping\./.test(exDesign) && /## Purpose \/ Big Picture\n\nIt unblocks the load balancer's health checks\./.test(exDesign) &&
+      /## Validation and Acceptance\n\n- Run `npm test`/.test(exDesign) && /## Idempotence and Recovery/.test(exDesign) && !/## Progress|## Decision Log/.test(exDesign) &&
+      c3Read(ie, ".agent", "execplans", "health.md") === execPlan,
+      "C3 execplan: Decision Log → design.md '## Decisions' (D-1 + its Rationale / Date lines), the living sections kept verbatim in design.md, the source untouched");
+    c3Put(ie, "wrapped.md", "```md\n# Rate limit the login\n\n## Progress\n\n- [ ] Add a limiter to `src/login.ts`\n\n## Validation and Acceptance\n\nWhen six attempts arrive within a minute, the API returns 429.\n```\n");
+    c3Put(ip, "notes/no-title.md", "Some intro.\n\n## Steps\n- [ ] Write `src/a.ts`\n\n# Appendix\nMore.\n");
+    const nt = c3Safe(() => S.importSpec(ip, "plan", "notes/no-title.md"));
+    ok(nt.ok && nt.feature === "no-title" && /- \[ \] 1\. Write `src\/a\.ts`/.test(c3Read(ip, ".specs", "no-title", "tasks.md")) && /\n## Appendix\nMore\./.test(c3Read(ip, ".specs", "no-title", "design.md")),
+      "C3 plan: only a FIRST level-1 heading is the title — a later '# Appendix' is a section (kept in design.md as '## Appendix'), the name falls back to the file name (got " + JSON.stringify(nt).slice(0, 200) + ")");
+    const wr = c3Safe(() => S.importSpec(ie, "execplan", "wrapped.md"));
+    const notExec = c3Safe(() => S.importSpec(ie, "execplan", "plans-not.md"));
+    c3Put(ie, "plain.md", "# Just notes\n\n- [ ] do a thing\n");
+    const plain = c3Safe(() => S.importSpec(ie, "execplan", "plain.md"));
+    ok(wr.ok && wr.feature === "rate-limit-the-login" && /US-1\.AC-1\*\* — WHEN six attempts arrive within a minute, THE SYSTEM SHALL ensure that the API returns 429/.test(c3Read(ie, ".specs", wr.feature, "requirements.md")) &&
+      !notExec.ok && /not found/.test(notExec.error) && plain.ok && plain.warnings.some((w) => /no ExecPlan sections found/.test(w)),
+      "C3 execplan: an ExecPlan wrapped whole in a ```md fence is read inside it (a Validation paragraph → a criterion); a document with no ExecPlan section is imported with a warning");
+
+    // --- C3.1 bmad: v4 docs (PRD with FR/NFR + epic stories, a story file, architecture.md)
+    const ib = path.join(tmp, "c3-import-bmad");
+    S.initProject(ib, ["core"], "en");
+    c3Put(ib, "docs/prd.md", ["# TaskFlow Product Requirements Document (PRD)", "", "## Goals and Background Context", "", "### Goals", "- Ship a usable todo MVP", "", "### Background Context",
+      "TaskFlow helps small teams track work without heavy tooling.", "", "### Change Log", "| Date | Version | Description | Author |", "|---|---|---|---|", "| 2025-01-01 | 1.0 | First | PM |", "",
+      "## Requirements", "", "### Functional", "- FR1: Users can create a todo with a title.", "- FR2: Users can mark a todo done.", "", "### Non Functional", "- NFR1: Pages load in under 2 seconds on 3G.", "",
+      "## Technical Assumptions", "Monorepo, Node + React.", "", "## Epic List", "- Epic 1: Foundation & Todos", "", "## Epic 1 Foundation & Todos", "Stand up the app and the core todo loop.", "",
+      "### Story 1.2 Complete todos", "As a user,", "I want to complete todos,", "so that I see progress.", "", "#### Acceptance Criteria", "1: When the user ticks a todo, it is marked done.", "",
+      "### Story 1.1 Create todos (PRD copy)", "As a user, I want todos.", "", "#### Acceptance Criteria", "1: an outdated criterion", ""].join("\n"));
+    const storyFile = ["# Story 1.1: Create todos", "", "## Status", "", "Approved", "", "## Story", "", "**As a** user,", "**I want** to create todos,", "**so that** I remember work.", "",
+      "## Acceptance Criteria", "", "1. WHEN a user submits a title THEN the system SHALL create a todo.", "2. The todo list shows the new todo at the top.", "",
+      "## Tasks / Subtasks", "", "- [x] Task 1: Todo model (AC: 1)", "  - [x] Subtask 1.1: add `src/models/todo.ts`", "- [ ] Task 2: List ordering (AC: 2, 7)", "  - [ ] Subtask 2.1: sort newest first in `src/list.ts`",
+      "- [ ] Task 3: End-to-end check (ACs: 1-2)", "",
+      "## Dev Notes", "", "Use the repository pattern.", "", "### Testing", "", "Jest, tests next to the source.", "", "## Change Log", "", "| Date | Version | Description | Author |", "|---|---|---|---|", "| 2025-01-02 | 0.1 | Draft | SM |", "",
+      "## Dev Agent Record", "", "### File List", "- src/models/todo.ts", ""].join("\n");
+    c3Put(ib, "docs/stories/1.1.create-todos.md", storyFile);
+    c3Put(ib, "docs/architecture.md", "# TaskFlow Architecture\n\n## Tech Stack\nNode 20, React 18, SQLite.\n");
+    const bm = await c3Call("spec_import", { tool: "bmad", path: "docs", projectDir: ib });
+    const bmb = bm.body;
+    const bmReq = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "requirements.md") : "";
+    const bmTasks = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "tasks.md") : "";
+    const bmDesign = bmb.ok ? c3Read(ib, ".specs", bmb.feature, "design.md") : "";
+    ok(!bm.isError && bmb.feature === "taskflow" && bmb.toolName === "BMAD" && bmb.source === "docs" && bmb.mapping["Story 1.1"] === "US-1" && bmb.mapping["Story 1.2"] === "US-2" &&
+      bmb.mapping["Story 1.1 / AC 2"] === "US-1.AC-2" && bmb.mapping["Story 1.2 / AC 1"] === "US-2.AC-1" && bmb.mapping.FR1 === "FR-1" && bmb.mapping.NFR1 === "NFR-1" &&
+      /### US-1: Create todos\nAs a user,\nI want to create todos,\nso that I remember work\./.test(bmReq) && !/outdated criterion|PRD copy/.test(bmReq) &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN a user submits a title THEN the system SHALL create a todo\./.test(bmReq) &&
+      /1\. \*\*US-2\.AC-1\*\* — WHEN the user ticks a todo, THE SYSTEM SHALL ensure that it is marked done/.test(bmReq) &&
+      /## Functional Requirements\n- \*\*FR-1\*\* — Users can create a todo with a title\.\n- \*\*FR-2\*\* — Users can mark a todo done\./.test(bmReq) &&
+      /## Non-Functional Requirements\n- \*\*NFR-1\*\* — Pages load in under 2 seconds on 3G\./.test(bmReq) && /^## Summary\nTaskFlow helps small teams/m.test(bmReq) && !/### Functional|### Non Functional/.test(bmReq),
+      "C3 spec_import bmad: stories in story order (the story file wins over the PRD's copy) → US-n, their ACs ('1:' and '1.') → US-n.AC-m (EARS when they read like one), FR1/NFR1 → FR-1/NFR-1 lines, Background → summary, the name from the PRD title (got " + JSON.stringify(bmb).slice(0, 300) + ")");
+    ok(/## US-1: Create todos\n- \[x\] 1\. \[US1\] Task 1: Todo model\n  - _Requirements: US-1\.AC-1_\n- \[x\] 2\. \[US1\] Subtask 1\.1: add `src\/models\/todo\.ts`\n  - _Implements: src\/models\/todo\.ts_\n/.test(bmTasks) &&
+      /- \[ \] 3\. \[US1\] Task 2: List ordering \(AC: 2, 7\)\n  - _Requirements: US-1\.AC-2_\n/.test(bmTasks) && /- \[ \] 4\. \[US1\] Subtask 2\.1/.test(bmTasks) &&
+      /- \[ \] 5\. \[US1\] Task 3: End-to-end check\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_/.test(bmTasks) &&
+      bmb.mapping["Story 1.1 / Task 2"] === "task 3" && bmb.warnings.some((w) => /Story 1\.1, 'Task 2: List ordering \(AC: 2, 7\)': AC reference\(s\) 7 match no criterion/.test(w)) &&
+      bmb.warnings.some((w) => /BMAD workflow records not imported \(left in place\): Change Log \(PRD, 1\.1\), Status \(1\.1\)/.test(w)) &&
+      bmb.warnings.some((w) => /carried over verbatim[^\n]*Goals and Background Context[^\n]*Epic List/.test(w)),
+      "C3 bmad: Tasks / Subtasks → tasks tagged [USn] (a subtask is a task of its own), '(AC: 1)' / '(ACs: 1-2)' → _Requirements:_ (an unknown AC number keeps the text + a warning), Status / Change Log named as not imported, the PRD's other sections carried");
+    ok(/## Tech Stack\nNode 20, React 18, SQLite\./.test(bmDesign) && /## Technical Assumptions\nMonorepo, Node \+ React\./.test(bmDesign) &&
+      /## US-1: Create todos\n\n### Dev Notes\nUse the repository pattern\.\n\n#### Testing/.test(bmDesign) && /### Dev Agent Record\n#### File List/.test(bmDesign) && !/Change Log/.test(bmDesign) &&
+      c3Read(ib, "docs", "stories", "1.1.create-todos.md") === storyFile,
+      "C3 bmad: architecture.md + the PRD's Technical Assumptions + each story's Dev Notes / Dev Agent Record → design.md; the story file is never modified");
+    const one = c3Safe(() => S.importSpec(ib, "bmad", "docs/stories/1.1.create-todos.md"));
+    ok(one.ok && one.feature === "create-todos" && one.source === "docs/stories/1.1.create-todos.md" && one.mapping["Story 1.1"] === "US-1" && !/FR-1/.test(c3Read(ib, ".specs", "create-todos", "requirements.md")),
+      "C3 bmad: one story file imports that story alone, named after it (got " + JSON.stringify(one).slice(0, 200) + ")");
+    // v6: _bmad-output/planning-artifacts/{prd.md, epics.md} — '#### FR-1:' headings, BDD acceptance criteria.
+    const ib6 = path.join(tmp, "c3-import-bmad6");
+    S.initProject(ib6, ["core"], "en");
+    c3Put(ib6, "_bmad-output/planning-artifacts/prd.md", ["---", "title: Budget", "---", "", "# PRD: Budget", "", "## 1. Vision", "Track grocery spend against a weekly cap.", "",
+      "## 4. Features", "### 4.1 Receipts", "#### FR-1: Scan a receipt", "", "A shopper can scan a receipt to add its total.", "", "**Consequences (testable):**", "- The total is OCR'd.", ""].join("\n"));
+    c3Put(ib6, "_bmad-output/planning-artifacts/epics.md", ["# Epics", "", "## Epic 1: Receipts", "", "### Story 1.1: Scan a receipt", "", "As a shopper, I want to scan receipts, so that my spend is tracked.", "",
+      "**Acceptance Criteria:**", "", "1. **Valid receipt adds its total**", "   **Given** a weekly cap", "   **When** the shopper scans a receipt", "   **Then** the total is added to this week", ""].join("\n"));
+    const b6 = c3Safe(() => S.importSpec(ib6, "bmad", "."));
+    const b6Req = b6.ok ? c3Read(ib6, ".specs", b6.feature, "requirements.md") : "";
+    ok(b6.ok && b6.feature === "budget" && /- \*\*FR-1\*\* — Scan a receipt — A shopper can scan a receipt to add its total\./.test(b6Req) && b6.mapping["FR-1"] === "FR-1" &&
+      /1\. \*\*US-1\.AC-1\*\* — WHILE a weekly cap, WHEN the shopper scans a receipt, THE SYSTEM SHALL ensure that the total is added to this week/.test(b6Req) && /^## Summary\nTrack grocery spend/m.test(b6Req),
+      "C3 bmad v6 (_bmad-output/planning-artifacts): '#### FR-1: name' + its paragraph → FR-1, epics.md stories with bold Given/When/Then criteria → EARS (got " + JSON.stringify(b6).slice(0, 300) + ")");
+    const noBmad = c3Safe(() => S.importSpec(ie, "bmad", ".agent"));
+    const badTool = await c3Call("spec_import", { tool: "Plan", path: "x.md", projectDir: ib });
+    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Plan"\)/.test(badTool.body.error),
+      "C3 spec_import: a folder with no BMAD docs is refused; the tool enum lists the six formats and stays exact ('Plan' refused)");
+
+    // --- C3.2 design-first flow
+    const df = path.join(tmp, "c3-design-first");
+    S.initProject(df, ["core"], "en");
+    const dfc = await c3Call("spec_create", { name: "Port engine", tracks: ["core"], flow: "design-first", projectDir: df });
+    const dfDir = path.join(df, ".specs", "port-engine");
+    ok(!dfc.isError && dfc.body.flow === "design-first" && /design-first flow — phase order: classification → design → requirements → tasks/.test(dfc.body.note) && c3State(dfDir).flow === "design-first",
+      "C3 spec_create {flow: 'design-first'}: stored in .state.json flow, named in the result (flow + the phase order note)");
+    let dfd = S.specDoctor(df, "port-engine");
+    const dfPh = dfd.checks.find((c) => c.id === "placeholders");
+    const dfRm = S.roadmap(df).features.find((f) => f.name === "port-engine");
+    ok(dfd.phase === "design" && dfd.flow === "design-first" && JSON.stringify(dfd.pendingGates) === JSON.stringify(["classification", "design", "requirements", "tasks"]) &&
+      dfPh.status === "fail" && /design\.md \(\d+\)/.test(dfPh.detail) && !/requirements\.md \(\d+\):/.test(dfPh.detail) &&
+      dfRm.percent === 8 && S.listFeatures(df).features[0].flow === "design-first",
+      "C3 design-first scaffold: phase 'design' (its first artifact), pending gates in the flow's order, the placeholder gate blocks on design.md only (requirements.md is a later phase), roadmap 8% (got " + JSON.stringify([dfd.phase, dfd.pendingGates, dfPh.detail, dfRm.percent]).slice(0, 400) + ")");
+    // A test plan written early (+tdd) while requirements.md is still a later phase's template: the AC checks wait for the requirements.
+    const tpEarly = "# Test Plan\n\n| ID | Covers | Test |\n|---|---|---|\n| T-01 | US-7.AC-1 | exports the data |\n";
+    const dft = S.createFeature(df, "Port tdd", ["tdd"], "", undefined, "en", undefined, { flow: "design-first" });
+    const clt = S.createFeature(df, "Classic tdd", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(dft.dir, "test-plan.md"), tpEarly);
+    fs.writeFileSync(path.join(clt.dir, "test-plan.md"), tpEarly);
+    for (const x of [dft, clt]) fs.appendFileSync(path.join(x.dir, "requirements.md"), "\n- Which OS first? [NEEDS CLARIFICATION: Linux only?]\n");
+    const dftDoc = S.specDoctor(df, dft.slug), cltDoc = S.specDoctor(df, clt.slug);
+    const dftTr = dftDoc.checks.find((c) => c.id === "traceability"), cltTr = cltDoc.checks.find((c) => c.id === "traceability");
+    const dftCl = dftDoc.checks.find((c) => c.id === "clarifications"), cltCl = cltDoc.checks.find((c) => c.id === "clarifications");
+    ok(dftTr.status === "warn" && /not traced yet — still a later phase's template: requirements\.md/.test(dftTr.detail) && cltTr.status === "fail" && /US-7\.AC-1/.test(cltTr.detail) &&
+      dftCl.status === "warn" && /^requirements\.md is a later phase \(design-first\) — 1 unresolved \[NEEDS CLARIFICATION\]/.test(dftCl.detail) && cltCl.status === "fail",
+      "C3 design-first doctor: while requirements.md is a later phase's template (the design is being written) the AC traceability waits and its open questions warn (named) — the same files fail both in the default flow (got " + JSON.stringify([dftTr, dftCl, cltTr.status, cltCl.status]).slice(0, 400) + ")");
+    S.approvePhase(df, "port-engine", "classification", "t", { force: true });
+    let dfna = S.nextAction(df, "port-engine");
+    const reqEarly = S.approvePhase(df, "port-engine", "requirements", "t");
+    ok(dfna.step === "fill" && dfna.file === "design.md" && dfna.flow === "design-first" && /\(design-first flow: classification → design → requirements → tasks\)/.test(dfna.recommendation) &&
+      reqEarly.ok === false && reqEarly.failing.includes("phase-order") && /earlier phases are not approved yet: design/.test(reqEarly.error),
+      "C3 design-first: next_action asks for the design after the classification (naming the flow), approving requirements before the design is refused on phase-order");
+    // A real design (Constitution Check filled) while requirements.md is still a template WITH an open question: the design gate passes.
+    fs.writeFileSync(path.join(dfDir, "design.md"), "# Design: Port engine\n\n## Architecture\nThe engine is ported module by module behind an adapter.\n\n```mermaid\nflowchart LR\n  A[old] --> B[adapter] --> C[new]\n```\n\n## Constitution Check\n- Simplicity: one adapter, no framework.\n");
+    fs.appendFileSync(path.join(dfDir, "requirements.md"), "\n- Which platforms first? [NEEDS CLARIFICATION: Linux only?]\n");
+    const dsgOk = S.approvePhase(df, "port-engine", "design", "t");
+    dfd = S.specDoctor(df, "port-engine");
+    dfna = S.nextAction(df, "port-engine");
+    const dfRm2 = S.roadmap(df).features.find((f) => f.name === "port-engine");
+    ok(dsgOk.ok === true && !dsgOk.forced && dfd.phase === "requirements" && dfna.step === "fill" && dfna.file === "requirements.md" && dfRm2.percent === 16 &&
+      dfd.checks.find((c) => c.id === "placeholders").status === "fail" && /requirements\.md/.test(dfd.checks.find((c) => c.id === "placeholders").detail),
+      "C3 design-first: the design is approved before the requirements exist (their open [NEEDS CLARIFICATION] doesn't block the design gate, no AC is asked for); then the requirements are the current phase (placeholders block there, next_action fills requirements.md, roadmap 16%) (got " + JSON.stringify([dsgOk.error || dsgOk.ok, dfd.phase, dfna.step, dfna.file, dfRm2.percent]) + ")");
+    // The same design gate in the default flow is refused on the requirements' open question.
+    const rf = S.createFeature(df, "Classic", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(rf.dir, "design.md"), fs.readFileSync(path.join(dfDir, "design.md"), "utf8"));
+    fs.appendFileSync(path.join(rf.dir, "requirements.md"), "\n- Which platforms first? [NEEDS CLARIFICATION: Linux only?]\n");
+    S.approvePhase(df, rf.slug, "classification", "t", { force: true });
+    const rfDesign = S.approvePhase(df, rf.slug, "design", "t");
+    S.approvePhase(df, rf.slug, "requirements", "t", { force: true });
+    const rfDesign2 = S.approvePhase(df, rf.slug, "design", "t");
+    const rfState = c3State(rf.dir);
+    ok(rf.flow === undefined && rfState.flow === undefined && !("flow" in S.specDoctor(df, rf.slug)) && !("flow" in S.nextAction(df, rf.slug)) && S.listFeatures(df).features.find((f) => f.name === rf.slug).flow === undefined &&
+      rfDesign.ok === false && rfDesign.failing.includes("phase-order") && /earlier phases are not approved yet: requirements/.test(rfDesign.error) &&
+      rfDesign2.ok === false && rfDesign2.failing.includes("clarifications"),
+      "C3 default flow unchanged: no flow key anywhere, design before requirements refused on phase-order, and its design gate still counts the requirements' open questions");
+    const rfPct = S.featurePercent("design", 0, 0), dfPct = S.featurePercent("design", 0, 0, "design-first");
+    ok(rfPct === 16 && dfPct === 8 && S.featurePercent("requirements", 0, 0, "design-first") === 16 && S.featurePercent("requirements", 0, 0) === 8 && S.featurePercent("tasks-ready", 1, 2, "design-first") === S.featurePercent("tasks-ready", 1, 2),
+      "C3 roadmap percent: design-first walks design 8% → requirements 16% (the default the other way round); the task-driven span is the same");
+    // Fast-forward in the flow's order: --through design approves classification + design, never requirements.
+    const ff = S.createFeature(df, "Fast one", ["core"], "", undefined, "en", undefined, { flow: "design-first" });
+    const ffr = S.approvePhase(df, ff.slug, null, "t", { through: "design", force: true });
+    ok(ffr.ok && JSON.stringify(ffr.approved) === JSON.stringify(["classification", "design"]) && !c3State(ff.dir).approvals.requirements,
+      "C3 design-first fast-forward: approve --through design walks classification → design (requirements come after) (got " + JSON.stringify(ffr.approved) + ")");
+    // spec_feature {action: "flow"}: set / same / back; a bugfix refused; bad or missing flow refused (MCP enum = engine).
+    const setF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "design-first", projectDir: df });
+    const sameF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "design-first", projectDir: df });
+    const bug = S.createFeature(df, "Crash on save", ["core"], "", undefined, "en", "bugfix", { flow: "design-first" });
+    const bugF = await c3Call("spec_feature", { action: "flow", name: bug.slug, flow: "design-first", projectDir: df });
+    const badF = await c3Call("spec_feature", { action: "flow", name: rf.slug, flow: "sideways", projectDir: df });
+    const badEngine = S.manageFeature(df, "flow", rf.slug, "sideways");
+    const noneF = S.manageFeature(df, "flow", rf.slug);
+    const back = S.manageFeature(df, "flow", rf.slug, "requirements-first");
+    ok(!setF.isError && setF.body.changed === true && setF.body.previous === "requirements-first" && setF.body.order === "classification → design → requirements → tasks" &&
+      /Phases already approved stay approved: requirements/.test(setF.body.note) && JSON.stringify(setF.body.pendingGates) === JSON.stringify(["design", "tasks"]) &&
+      !sameF.isError && sameF.body.changed === false && /already follows the design-first flow/.test(sameF.body.note) &&
+      bug.ok && bug.flow === undefined && /flow ignored: a bugfix follows its own fixed phase order/.test(bug.note) && c3State(bug.dir).flow === undefined &&
+      bugF.isError && bugF.body.kindIgnored === true && /is a bugfix: it follows its own fixed phase order/.test(bugF.body.error) &&
+      badF.isError && /flow must be one of: requirements-first, design-first \(got "sideways"\)/.test(badF.body.error) && !badEngine.ok && /flow must be one of: requirements-first, design-first \(got "sideways"\)/.test(badEngine.error) &&
+      !noneF.ok && /flow required — one of: requirements-first, design-first/.test(noneF.error) && back.ok && back.changed && c3State(rf.dir).flow === undefined,
+      "C3 spec_feature {action: 'flow'}: sets the flow (approved phases stay, named; pending gates re-ordered), idempotent, back to the default drops the key; a bugfix is refused (and ignores spec_create's flow, with a note); a bad / missing flow is refused alike on MCP and the engine");
+    const keep = S.createFeature(df, "Port engine", undefined, "", undefined, "en", undefined, { flow: "requirements-first" });
+    const badCreate = await c3Call("spec_create", { name: "Nope", flow: "sideways", projectDir: df });
+    ok(keep.ok && keep.flow === "design-first" && /flow kept: 'port-engine' follows design-first \(asked: requirements-first\)/.test(keep.note) && c3State(dfDir).flow === "design-first" &&
+      badCreate.isError && !fs.existsSync(path.join(df, ".specs", "nope")),
+      "C3 spec_create on an existing feature keeps its flow (a note names spec_feature flow); an unknown flow is refused before anything is created");
+    // PT: the flow's notes in the feature's language; spec_upgrade reads a fresh design-first feature as not started.
+    const dfPt = path.join(tmp, "c3-design-first-pt");
+    S.initProject(dfPt, ["core"], "pt");
+    const ptc = S.createFeature(dfPt, "Motor", ["core"], "", undefined, undefined, undefined, { flow: "design-first" });
+    const ptna = S.nextAction(dfPt, ptc.slug);
+    const up16 = S.specUpgrade(dfPt);
+    S.approvePhase(dfPt, ptc.slug, "classification", "t", { force: true });
+    ok(/fluxo design-first — ordem das fases: classification → design → requirements → tasks/.test(ptc.note) && ptna.flow === "design-first" &&
+      /\(fluxo design-first: /.test(S.nextAction(dfPt, ptc.slug).recommendation) && up16.ok && up16.features.find((x) => x.name === "motor").status === "not-started",
+      "C3 design-first in PT: the notes are localized (fluxo design-first …), next_action names the flow; spec_upgrade reads a fresh design-first feature (phase 'design') as not started (got " +
+      JSON.stringify(up16.ok && up16.features.map((x) => [x.name, x.status])) + ")");
+  }
+
+  { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
+    const c4Root = path.join(tmp, "proj-c4");
+    const c4 = (n) => path.join(c4Root, n);
+    const cls = (d, lang) => S.classify(d, lang ? { lang } : {});
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+
+    // C4.1 — /spec-tour: a thin command, EN description + PT/ES, every gate named, never auto-approves, keep/archive/remove.
+    const PRc4 = require("./lib/prompts-resources.js");
+    const tourMd = fs.readFileSync(path.join(root, "commands", "spec-tour.md"), "utf8");
+    const tourFm = PRc4.parseFrontMatter(tourMd).data;
+    const tourGet = PRc4.getPrompt("spec-tour", "add a length check to the signup name", { lang: "en" });
+    ok(/10-minute tour/.test(tourFm.description) && / PT - visita guiada/.test(tourFm.description) && / ES - visita guiada/.test(tourFm.description) && tourFm["argument-hint"] &&
+      ["spec_scan", "spec_classify", "spec_init", "spec_create", "ears_validate", "spec_doctor", "spec_approve", "spec_complete_task", "spec_next_action", "spec_finish", "spec_feature"].every((t) => tourMd.includes("`" + t)) &&
+      /1–2 EARS criteria/.test(tourMd) && /exactly \*\*2 tasks\*\*/.test(tourMd) && /real\*\*\s+`_Verify: <command>_`/.test(tourMd) && /each only after the user says yes\*\*; never approve on their behalf/.test(tourMd) &&
+      /evidence: \{command, exitCode, summary\}/.test(tourMd) && /confirm: true` only after the user\s+confirms/.test(tourMd) && /action: "archive"/.test(tourMd) &&
+      /in the user's language/.test(tourMd) && !/\b(?:PRs?|pull requests?|CI)\b/.test(tourMd) &&
+      tourGet.ok && /Change to take through the tour \(optional\): add a length check to the signup name/.test(tourGet.messages[0].content.text),
+      "C4.1 /spec-tour: EN + PT/ES description, scan → classify → 1–2 EARS → design → 2 tasks with real _Verify:_ → approvals only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt");
+
+    // C4.2.1 — '-compliant' (and -compliance / -certified / -grade) compounds keep the keyword a signal; '-aware' does not.
+    const gdprC = cls("A GDPR-compliant signup form"), hipaaC = cls("HIPAA-compliant storage"), socC = cls("SOC2-certified audit export"), gradeC = cls("enterprise-grade SSO");
+    ok(gdprC.tracks.includes("privacy") && gdprC.signals.privacy.includes("gdpr") && hipaaC.tracks.includes("privacy") && socC.tracks.includes("saas") && gradeC.tracks.includes("saas") &&
+      cls("Ship the .claude-plugin manifest").tracks.join() === "core" && !cls("Fix the author-name field").signals.tdd.length &&
+      cls("Session-aware routing for the load balancer").signals.tdd.length === 0 && cls("PCI-compliance report").tracks.includes("saas"),
+      "C4.2.1 classify: 'GDPR-compliant' / 'HIPAA-compliant' turn +privacy on, 'SOC2-certified' / 'enterprise-grade' +saas (they were core only); '-<letter>' identifiers (claude-plugin, author-name) stay rejected (" +
+      [gdprC, hipaaC, socC, gradeC].map((r) => r.label).join(" · ") + ")");
+
+    // C4.2.2 — EN / PT / ES aligned: consent-family words, encryption in transit, security testing.
+    const consEs = cls("Registrar el consentimiento del usuario para el boletín"), consPt = cls("Registar o consentimento do utilizador para a newsletter"), consEn = cls("Record the user's consent for the newsletter");
+    const trEs = cls("Cifrado en tránsito para la API de pagos"), trPt = cls("Cifragem em trânsito na API de pagamentos"), trEn = cls("Encryption in transit for the payments API");
+    const stEs = cls("Pruebas de seguridad de la API de subida"), stPt = cls("Testes de segurança da API de carregamento"), stEn = cls("Security testing of the upload API");
+    ok([consEs, consPt, consEn].every((r) => !r.tracks.includes("privacy") && r.possible.some((p) => p.track === "privacy")) &&
+      consEs.signals.privacy.includes("consentimiento") && consPt.signals.privacy.includes("consentimento") && consEn.signals.privacy.includes("consent") &&
+      [trEs, trPt, trEn, stEs, stPt, stEn].every((r) => r.tracks.includes("sec") && !r.weak.includes("sec")) &&
+      trEs.signals.sec.includes("cifrado en tránsito") && trPt.signals.sec.includes("cifragem em trânsito") && stEs.signals.sec.includes("prueba de seguridad") && stPt.signals.sec.includes("teste de segurança") &&
+      cls("Consentimiento explícito y datos personales").tracks.includes("privacy"),
+      "C4.2.2 classify: consent / consentimento / consentimiento are the same (weak) signal in EN / PT / ES; cifrado en tránsito / cifragem em trânsito and pruebas de seguridad / testes de segurança are strong like their EN twins (" +
+      [consEs, trEs, trPt, stEs, stPt].map((r) => r.label).join(" · ") + ")");
+
+    // C4.2.3 — no +privacy / +sec (and its mandatory sections) from one generic word.
+    const soft = cls("Soft-delete with a 30-day retention period for trashed files"), oauthC = cls("Google sign-in with an OAuth consent screen"), arch = cls("Admin can set a retention period for archived projects");
+    const stride = cls("array stride"), perm = cls("file permission bits"), both = cls("array stride and file permission bits");
+    const strideTm = cls("STRIDE threat model for the upload API"), strideAlone = cls("Run STRIDE on the upload flow"), rbacPerm = cls("Login with a password, RBAC permissions for admins");
+    const negPerm = cls("No permission checks are needed here"), corroborated = cls("Retention period and consent records for account deletion");
+    ok([soft, oauthC, arch].every((r) => !r.tracks.includes("privacy") && r.possible.some((p) => p.track === "privacy" && /retention period|consent/.test(p.signal))) &&
+      oauthC.tracks.includes("tdd") && corroborated.tracks.includes("privacy") && corroborated.weak.includes("privacy"),
+      "C4.2.3 classify: 'retention period' / 'consent' alone → only a 'possible +privacy' note (was core +privacy with 6 mandatory sections); two privacy signals together still turn it on (" + [soft, oauthC, arch, corroborated].map((r) => r.label).join(" · ") + ")");
+    ok([stride, perm, both].every((r) => !r.tracks.includes("sec") && !r.signals.sec.length && !r.possible.some((p) => p.track === "sec") && !r.notes.some((n) => /\+sec/.test(n))) &&
+      strideTm.tracks.includes("sec") && strideTm.signals.sec.includes("STRIDE") && strideTm.signals.sec.includes("threat model") && strideAlone.possible.some((p) => p.track === "sec" && p.signal === "STRIDE") &&
+      rbacPerm.tracks.includes("sec") && rbacPerm.signals.sec.includes("permission") && !negPerm.notes.some((n) => /\+sec/.test(n)) &&
+      S.trackSignals("sec").context.includes("permission") && !S.trackSignals("sec").weak.includes("permission") && !S.trackSignals("sec").weak.includes("stride"),
+      "C4.2.3 classify: 'array stride' / 'file permission bits' (alone or together) give no +sec signal or note; upper-case STRIDE is the methodology (weak; strong with 'threat model'); 'permission' corroborates another +sec signal (RBAC permissions) but is no evidence alone, negated or not (" +
+      [both, strideTm, strideAlone, rbacPerm].map((r) => r.label).join(" · ") + ")");
+    const mcpC4 = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "A GDPR-compliant signup form with an array stride", projectDir: c4("mcp") } }));
+    ok(mcpC4.label === "core +privacy" && !mcpC4.signals.sec.length, "C4.2.1/3 spec_classify (MCP) = the engine (" + mcpC4.label + ")");
+
+    // C4.2.4 — track markers are case-sensitive: `### Timeout [sec]` is no [SEC] section.
+    const legacy = S.createFeature(c4("markers"), "Timeouts", ["core"], "", undefined, "en");
+    fs.appendFileSync(path.join(legacy.dir, "design.md"), "\n### Timeout [sec]\n30\n\n### Budget [saas]\n5\n");
+    fs.appendFileSync(path.join(legacy.dir, "requirements.md"), "\n### Limits [privacy]\n- [TBD]\n");
+    const lst = JSON.parse(fs.readFileSync(path.join(legacy.dir, ".state.json"), "utf8"));
+    delete lst.tracks; // a pre-1.13 feature: the tracks are inferred from its files
+    fs.writeFileSync(path.join(legacy.dir, ".state.json"), JSON.stringify(lst, null, 2));
+    const upper = S.createFeature(c4("markers"), "Upper", ["core"], "", undefined, "en");
+    fs.appendFileSync(path.join(upper.dir, "design.md"), "\n## [SEC] Threat Model\nSTRIDE per element.\n");
+    const ust = JSON.parse(fs.readFileSync(path.join(upper.dir, ".state.json"), "utf8"));
+    delete ust.tracks;
+    fs.writeFileSync(path.join(upper.dir, ".state.json"), JSON.stringify(ust, null, 2));
+    const reqPh = S.featurePlaceholders(c4("markers"), legacy.slug, "requirements.md").items.map((x) => x.text);
+    ok(S.detectTracks(legacy.dir).join() === "core" && S.detectTracks(upper.dir).join() === "core,sec" && reqPh.some((x) => /TBD/.test(x)) &&
+      S.extractSection("## Threat Model [sec]\nx\n## [SEC] Threat Model\ny\n", ["threat model"], "[SEC]").trim() === "y",
+      "C4.2.4 markers are case-sensitive: a legacy feature with '### Timeout [sec]' / '### Budget [saas]' stays core (was +sec +saas), '## [SEC] …' still infers +sec, a '[privacy]'-suffixed requirements section is no longer hidden while +privacy is off (its [TBD] is reported), the exact marker wins in extractSection (got " +
+      S.detectTracks(legacy.dir).join() + " / " + JSON.stringify(reqPh) + ")");
+
+    // C4.2.5 — a deleted [PRIVACY] heading is not satisfied by an unrelated core heading.
+    const pv = S.createFeature(c4("sections"), "Accounts", ["privacy"], "", undefined, "en");
+    const pvDesign = path.join(pv.dir, "design.md");
+    const filledDesign = fs.readFileSync(pvDesign, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n")
+      .replace(/\[([^\]\n]*)\]/g, (m, x) => (/^(?:PRIVACY|SEC|SaaS|AI|x| )$/.test(x) ? m : "filled"));
+    fs.writeFileSync(pvDesign, filledDesign);
+    const pvFilled = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    fs.writeFileSync(pvDesign, filledDesign.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "") + "\n## Processors and queues\nBullMQ workers.\n");
+    const pvDeleted = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    fs.writeFileSync(pvDesign, filledDesign.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "## [PRIVACY] Processing\n\n### Processors\nStripe (US, SCCs).\n"));
+    const pvNested = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");
+    const RET = { syn: ["retention & deletion", "retention", "conservação", "conservação e eliminação"], loose: ["retention", "conservação"] };
+    ok(pvFilled.status === "pass" && pvDeleted.status === "fail" && /Processors & International Transfers:missing/.test(pvDeleted.detail) && pvNested.status === "pass" &&
+      S.extractSection("## Retention\nx\n", RET.syn, "[PRIVACY]", RET.loose) === null && S.extractSection("## Conservação de ficheiros\nx\n", RET.syn, "[PRIVACY]", RET.loose) === null &&
+      S.extractSection("## Retention & Deletion\nx\n", RET.syn, "[PRIVACY]", RET.loose).trim() === "x" && S.extractSection("## [PRIVACY] Retention\nx\n", RET.syn, "[PRIVACY]", RET.loose).trim() === "x" &&
+      S.extractSection("## Observability\nm\n", ["observability"], "[SaaS]").trim() === "m",
+      "C4.2.5 extractSection: a generic synonym ('Processors', 'Retention', 'Conservação …') on an unmarked core heading no longer satisfies a [PRIVACY] section (doctor fails 'Processors & International Transfers:missing' — it passed); under a [PRIVACY] heading or spelled unambiguously it still does; unmarked SaaS headings unchanged (" +
+      pvDeleted.detail + ")");
+
+    // C4.2.6 — the _Verify:_ pipe check: pipefail must really be set BEFORE the pipe; scripts handed to a shell; a Windows path's trailing "\".
+    const vpC4 = S.verifyPipeMasked;
+    const pipeYes = ["set +o pipefail; npm test | tee log", "npm test | tee pipefail.log", "npm test | tee log # pipefail later", "npm test | tee log; set -o pipefail",
+      'bash -c "npm test | tee log"', "sh -c 'pytest | tee out'", 'pwsh -Command "npm test | Tee-Object log"', 'powershell -NoProfile -c "a | b"', 'cmd /c "npm test | more"',
+      '"C:\\Program Files\\" | more', 'dir "C:\\" | more', '/usr/bin/env bash -lc "a | b"', 'C:\\Windows\\System32\\cmd.exe /s /c "a | b"',
+      'set -o pipefail; bash -c "npm test | tee log"', "(set -o pipefail); npm test | tee log"];
+    const pipeNo = ["set -euo pipefail; npm test | tee log", "set -eo pipefail && pytest | tee out", "set -e -o pipefail; a | b", 'bash -c "set -o pipefail; npm test | tee log"',
+      "bash -lc 'set -euo pipefail; npm test | tee log'", 'bash -eo pipefail -c "a | b"', 'node -e "console.log(1|2)"', 'echo "say \\"hi\\" | x"', 'test "$(echo "a|b")" = x',
+      'dir "C:\\Program Files\\" && echo ok', 'grep "a|b" file', "echo a^|b", "a \\| b"];
+    const vpWrongC4 = pipeYes.filter((c) => !vpC4(c)).map((c) => "missed: " + c).concat(pipeNo.filter((c) => vpC4(c)).map((c) => "flagged: " + c));
+    const pp4 = c4("pipes");
+    S.initProject(pp4, ["core"], "en");
+    const pf4 = S.createFeature(pp4, "Shell pipes", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(pf4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Wrapped pipe\n  - _Verify: bash -c \"npm test | tee test.log\"_\n- [ ] 2. [US1] Real pipefail\n  - _Verify: set -o pipefail; npm test | tee test.log_\n");
+    const c4d = chk(S.specDoctor(pp4, pf4.slug), "verify-pipes");
+    const c4done = S.completeTask(pp4, pf4.slug, 1, { command: 'bash -c "npm test | tee test.log"', exitCode: 0 });
+    ok(!vpWrongC4.length && c4d.status === "warn" && /#1 /.test(c4d.detail) && !/#2 /.test(c4d.detail) && c4done.ok && c4done.pipeMasked === true,
+      "C4.2.6 verifyPipeMasked: only a `set -o pipefail` run BEFORE the pipe (or the shell's -o pipefail) silences it — not the word (set +o pipefail, tee pipefail.log, a comment); a pipe inside bash -c / sh -c / pwsh -Command / cmd /c is flagged; a Windows path ending in \\ before the closing quote no longer hides the pipe; doctor + spec_complete_task follow (" +
+      vpWrongC4.join(" · ") + ")");
+
+    // C4.2.7 — the server survives a client that closes its read end first: EPIPE → quiet exit 0; another stdout error → one stderr line, exit 1.
+    const runServer = (stdio, drive) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: c4("epipe") }, stdio });
+      let err = "";
+      kid.stderr.on("data", (d) => (err += d));
+      if (kid.stdin) kid.stdin.on("error", () => {});
+      const timer = setTimeout(() => { kid.kill(); resolve({ code: "timeout", err }); }, 10000);
+      kid.on("close", (code) => { clearTimeout(timer); resolve({ code, err }); });
+      drive(kid);
+    });
+    const req = (id) => JSON.stringify({ jsonrpc: "2.0", id, method: "tools/list", params: {} }) + "\n";
+    const epipe = await runServer(["pipe", "pipe", "pipe"], (kid) => {
+      kid.stdout.once("data", () => {
+        kid.stdout.destroy(); // the client closes its read end, then keeps talking
+        let n = 0;
+        const t = setInterval(() => {
+          if (++n > 15 || kid.exitCode !== null) { clearInterval(t); try { kid.stdin.end(); } catch {} return; }
+          try { kid.stdin.write(req(100 + n)); } catch {}
+        }, 20);
+      });
+      kid.stdin.write(req(1));
+    });
+    const roFile = path.join(tmp, "c4-readonly-stdout.txt");
+    fs.writeFileSync(roFile, "");
+    const roFd = fs.openSync(roFile, "r");
+    const badFd = await runServer(["pipe", roFd, "pipe"], (kid) => { kid.stdin.write(req(1)); setTimeout(() => { try { kid.stdin.end(); } catch {} }, 1500); });
+    fs.closeSync(roFd);
+    ok(epipe.code === 0 && !/Unhandled|EPIPE|at /.test(epipe.err) && badFd.code === 1 && /^dev-spec MCP server: stdout error: /.test(badFd.err) && !/Unhandled 'error' event|\n\s+at /.test(badFd.err),
+      "C4.2.7 mcp/server.js: a client closing its read end first → quiet exit 0 (was an unhandled EPIPE stack trace, exit 1); a non-EPIPE stdout error (read-only fd) → one stderr line and exit 1 (got " +
+      JSON.stringify([epipe.code, epipe.err.slice(0, 120), badFd.code, badFd.err.slice(0, 120)]) + ")");
+  }
+
+  // 1.14 final review — one regression per confirmed finding (engine, security, pt-BR).
+  {
+    const fr = path.join(tmp, "proj-final-review");
+    S.initProject(fr, ["core"], "en");
+    const mkF = (name, tasks) => { const c = S.createFeature(fr, name, ["core"], "x", undefined, "en"); fs.writeFileSync(path.join(c.dir, "tasks.md"), tasks); return c; };
+    // E1: a could-not-run exit on an _Expect: fail_ task keeps the red run on record — the pass after the fix still verifies it.
+    mkF("Red keep", "# Tasks\n\n- [ ] 1. [US1] Write T-01 red\n  - _Verify: npm test_\n  - _Expect: fail_\n- [ ] 2. [US1] Implement\n  - _Verify: npm test_\n");
+    const r1 = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 1 });
+    S.completeTask(fr, "red-keep", 2, { command: "npm test", exitCode: 0 });
+    const r127 = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 127 });
+    const v127 = S.statusFeature(fr, "red-keep").tasks.list.find((t) => t.number === 1).verified;
+    const rPass = S.completeTask(fr, "red-keep", 1, { command: "npm test", exitCode: 0 });
+    ok(r1.ok && r1.verified && r127.ok === false && v127 === false && rPass.ok === true && rPass.verified === true,
+      "final review E1: an exit 127 re-run of an _Expect: fail_ task is a failed re-check but keeps the red proof — the next (fixed, passing) run verifies it again, never unexpected-pass forever (got " +
+      JSON.stringify([r1.verified, r127.ok, v127, rPass.ok, rPass.verified, rPass.unverifiedReason, rPass.error && rPass.error.slice(0, 80)]) + ")");
+    // E4: an empty plan is nothing to import (no feature created).
+    fs.mkdirSync(path.join(fr, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(fr, "docs", "empty.md"), "  \n\n");
+    const imp = S.importSpec(fr, "plan", "docs/empty.md");
+    ok(imp.ok === false && !fs.existsSync(path.join(fr, ".specs", "empty")), "final review E4: importing a blank plan answers 'nothing found' and creates no feature (got " + JSON.stringify([imp.ok, imp.error]) + ")");
+    // S1: the Stop gate counts only activity the engine recorded — a fresh tasks.md (a clone) or a future stamp never makes it
+    // fire, and its reason never hands the agent a `--run` command.
+    const sg = mkF("Stop clone", "# Tasks\n\n- [x] 1. [US1] Ship\n  - _Verify: node evil.js_\n");
+    const claim = "I fixed the typo in README. All done.";
+    const sClone = S.stopCheck(fr, { message: claim });
+    const sgState = path.join(sg.dir, ".state.json");
+    const sgSt = JSON.parse(fs.readFileSync(sgState, "utf8"));
+    fs.writeFileSync(sgState, JSON.stringify({ ...sgSt, lastTickAt: "2099-01-01T00:00:00.000Z" }, null, 2));
+    const sFuture = S.stopCheck(fr, { message: claim });
+    fs.writeFileSync(sgState, JSON.stringify({ ...sgSt, lastTickAt: new Date().toISOString() }, null, 2));
+    const sNow = S.stopCheck(fr, { message: claim });
+    const reasons = ["en", "pt", "es", "pt-BR"].map((l) => { const G = S.msg(l).stopGate; return G.todoTasks("f", 1) + G.todoSuite("f"); });
+    ok(sClone.block === false && sFuture.block === false && sNow.block === true && !/--run/.test(sNow.reason) && reasons.every((t) => !/--run/.test(t)),
+      "final review S1: stop gate — a hand-fresh tasks.md or a future lastTickAt is no recent activity; a real recent tick still blocks, and no reason (EN/PT/ES/pt-BR) suggests `--run` (got " +
+      JSON.stringify([sClone.why, sFuture.why, sNow.block]) + ")");
+    // S2: a planted private-use sentinel never makes the pt-BR transform expand (it used to double the string per pass).
+    const tS2 = Date.now();
+    const planted = S.msg("pt-BR").stopGate.taskLine("a00", "x");
+    ok(typeof planted === "string" && planted.length < 200 && Date.now() - tS2 < 1000, "final review S2: pt-BR text holding the transform's sentinels is left as it is, in bounded time (got " + JSON.stringify([planted && planted.length, Date.now() - tS2]) + ")");
+    // S3: decisions.md / an exported artifact that is a symlink out of the project is never followed.
+    const outside = path.join(tmp, "final-review-secret.txt");
+    fs.writeFileSync(outside, "TOP-SECRET-KEY");
+    const lk = mkF("Linked", "# Tasks\n\n- [ ] 1. [US1] a\n");
+    let linked = true;
+    try {
+      fs.symlinkSync(outside, path.join(lk.dir, "decisions.md"), "file");
+      fs.renameSync(path.join(lk.dir, "requirements.md"), path.join(lk.dir, "requirements.orig.md"));
+      fs.symlinkSync(outside, path.join(lk.dir, "requirements.md"), "file");
+    } catch { linked = false; }
+    if (linked) {
+      const dz = S.decide(fr, "linked", { title: "t", decision: "d" });
+      const ex = S.exportSpecs(fr, { name: "linked", format: "md" });
+      const exText = JSON.stringify(ex);
+      ok(dz.ok === false && /regular file inside \.specs/.test(dz.error) && fs.readFileSync(outside, "utf8") === "TOP-SECRET-KEY" && fs.lstatSync(path.join(lk.dir, "decisions.md")).isSymbolicLink() &&
+        !/TOP-SECRET-KEY/.test(exText), "final review S3: spec_decide refuses a decisions.md symlink (nothing written through it); spec_export never copies a linked artifact's content (got " +
+        JSON.stringify([dz.ok, dz.error && dz.error.slice(0, 80), /TOP-SECRET-KEY/.test(exText)]) + ")");
+    } else ok(true, "final review S3: symlinks unavailable here (Windows without the privilege) — skipped");
+    // S4: long _Implements:_ references never stall the overlap check (SessionStart runs it).
+    const longSeg = "a".repeat(120);
+    mkF("Long globs", "# Tasks\n\n" + Array.from({ length: 150 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/**/${longSeg}${i}*/x*.js_\n`).join(""));
+    mkF("Long paths", "# Tasks\n\n" + Array.from({ length: 100 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/${longSeg}/${longSeg}${i}/x.js_\n`).join(""));
+    mkF("Too long", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Implements: src/" + "b".repeat(600) + ".js_\n");
+    const tS4 = Date.now();
+    const ov = S.featureOverlaps(fr);
+    ok(Date.now() - tS4 < 3000 && ov.truncated === true, "final review S4: the overlap check is budgeted by work (pattern × path) and a reference over 512 chars is skipped — bounded time, marked truncated (got " + JSON.stringify([Date.now() - tS4, ov.truncated]) + ")");
+    // S5 + S6: a long _Verify:_ with many \" and a huge unclosed-emphasis paragraph stay linear.
+    const longVerify = "echo \"" + "%\\\"".repeat(20000) + "\"";
+    mkF("Long verify", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Verify: " + longVerify + "_\n");
+    const tS5 = Date.now();
+    S.specDoctor(fr, "long-verify");
+    const dS5 = Date.now() - tS5;
+    const big = mkF("Big para", "# Tasks\n\n- [ ] 1. [US1] t\n");
+    fs.writeFileSync(path.join(big.dir, "requirements.md"), "# Big\n\n## Summary\n" + "a *b _c ~~d **e ".repeat(15000) + "\n");
+    const tS6 = Date.now();
+    const bigEx = S.exportSpecs(fr, { name: "big-para", format: "html" });
+    const dS6 = Date.now() - tS6;
+    ok(dS5 < 5000 && bigEx.ok && dS6 < 5000, "final review S5/S6: a 60 KB _Verify:_ full of \\\" and a 240 KB paragraph of unclosed * _ ~~ ** render in bounded time (got " + JSON.stringify([dS5, dS6]) + ")");
+    // pt-BR: descriptive 3rd-person verbs stay descriptive; "gerado/arquivado a <date>" → "em".
+    const BR = S.msg("pt-BR");
+    const brTexts = [BR.gitLog.implFirst(3, "T-01", "abc", "def", "t.js"), BR.gitLog.testNotCommitted(3, "T-01", "abc", "t.js"), BR.flow.kindRefused("erro", "bugfix"), BR.spike.noGate("design", "x")];
+    const brDate = require("./lib/i18n.js").toPtBr("_Notas geradas a 2026-09-26_ · arquivada a 2026-09-26");
+    ok(!/faça T-01|siga a sua|— siga/.test(brTexts.join(" ")) && /que faz T-01 passar/.test(brTexts[0]) && /que faz T-01 passar/.test(brTexts[1]) && /geradas em 2026-09-26/.test(brDate) && /arquivada em 2026-09-26/.test(brDate),
+      "final review pt-BR: 'põe … a verde' / 'segue' stay descriptive (no 'faça' / 'siga'); 'geradas / arquivada a <date>' → 'em' (got " + JSON.stringify(brTexts.map((t) => t.slice(0, 70)).concat(brDate)) + ")");
+  }
+
+  // 1.14 full review (C) — change management: one regression per confirmed finding.
+  {
+    const cr = path.join(tmp, "proj-full-review-c");
+    S.initProject(cr, ["core"], "en");
+    const mk = (name) => S.createFeature(cr, name, ["core"], "x", undefined, "en");
+    const stOf = (c) => path.join(c.dir, ".state.json");
+    // C1: a role's PARTIAL execution sign-off before `since` doesn't hide the feature from Added once the last role signs.
+    const c1 = mk("Partial ship");
+    const tA = "2026-09-20T10:00:00.000Z", tB = "2026-09-22T10:00:00.000Z";
+    const s1 = JSON.parse(fs.readFileSync(stOf(c1), "utf8"));
+    s1.approvals = { execution: { at: tB, by: "pat", roles: { qa: { by: "quinn", at: tA }, product: { by: "pat", at: tB } } } };
+    s1.approvalHistory = [{ phase: "execution", at: tA, by: "quinn", role: "qa", partial: true }, { phase: "execution", at: tB, by: "pat", role: "product", roles: ["qa", "product"] }];
+    fs.writeFileSync(stOf(c1), JSON.stringify(s1, null, 2));
+    const cl1 = S.changelog(cr, { since: "2026-09-21" });
+    ok(cl1.ok && cl1.added.some((x) => x.feature === "partial-ship"),
+      "full review C1: a partial (one role) execution sign-off before `since` is no shipment — the feature is Added once the last role signs (got " + JSON.stringify([cl1.ok, cl1.counts]) + ")");
+    // C2: decisions.md ending inside an unclosed fence: the new entry is readable and numbers are never reused.
+    const c2 = mk("Fenced log");
+    S.decide(cr, "fenced-log", { title: "First", decision: "x" });
+    fs.appendFileSync(path.join(c2.dir, "decisions.md"), "\n```js\nconst x = 1;\n");
+    const d2 = S.decide(cr, "fenced-log", { title: "Second", decision: "y" });
+    const d3 = S.decide(cr, "fenced-log", { title: "Third", decision: "z" });
+    const log2 = S.decisionLog(fs.readFileSync(path.join(c2.dir, "decisions.md"), "utf8")).map((e) => e.id);
+    ok(d2.id === "D-2" && d3.id === "D-3" && JSON.stringify(log2) === '["D-1","D-2","D-3"]' && /const x = 1;\n```\n/.test(fs.readFileSync(path.join(c2.dir, "decisions.md"), "utf8")),
+      "full review C2: spec_decide closes a code fence left open at the end of decisions.md (appended) — the entries stay readable, D-n never reused (got " + JSON.stringify([d2.id, d3.id, log2]) + ")");
+    // C3: a dependency on a feature that is archived too comes back, whichever of the two is restored first.
+    for (const order of [["dep-b", "dep-a"], ["dep-a", "dep-b"]]) {
+      mk("Dep A"); mk("Dep B");
+      S.setDependency(cr, "dep-b", ["dep-a"]);
+      S.manageFeature(cr, "archive", "dep-b"); S.manageFeature(cr, "archive", "dep-a");
+      const first = S.restoreFeature(cr, order[0]);
+      S.restoreFeature(cr, order[1]);
+      const deps = JSON.parse(fs.readFileSync(path.join(cr, ".specs", "roadmap.json"), "utf8")).features["dep-b"];
+      ok(deps && JSON.stringify(deps.dependsOn) === '["dep-a"]' && (order[0] !== "dep-b" || first.skipped.some((s) => s.reason === "archived")),
+        "full review C3: restoring " + order.join(" then ") + " (both archived) keeps dep-b → dep-a — the edge is handed to the archived feature's record, never dropped as 'gone' (got " + JSON.stringify([deps, first.skipped]) + ")");
+      S.manageFeature(cr, "remove", "dep-a", undefined, { confirm: true }); S.manageFeature(cr, "remove", "dep-b", undefined, { confirm: true });
+    }
+    // C5: a task number held only by a leftover tick time is not reused by append.
+    const c5 = mk("Tick gap");
+    fs.writeFileSync(path.join(c5.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] one\n- [ ] 2. [US1] two\n");
+    const s5 = JSON.parse(fs.readFileSync(stOf(c5), "utf8"));
+    s5.ticks = { 3: "2026-09-01T10:00:00.000Z" };
+    fs.writeFileSync(stOf(c5), JSON.stringify(s5, null, 2));
+    const ap5 = S.appendTasks(cr, "tick-gap", [{ text: "New" }]);
+    ok(ap5.ok && ap5.appended[0].number === 4,
+      "full review C5: append_tasks numbers after a removed task's leftover tick time (never inherits its completion time) (got " + JSON.stringify(ap5.appended || ap5.error) + ")");
+    // C6: a line break in a backlog note never becomes markdown structure in ROADMAP.md.
+    S.backlog(cr, "add", "search\nlater", "soon\n\n## ⚠ Needs attention\n\nx");
+    const rmMd = S.roadmapReport(cr, { write: true }) && fs.readFileSync(path.join(cr, ".specs", "ROADMAP.md"), "utf8");
+    ok((rmMd.match(/^## ⚠/gm) || []).length === 1 && /\*\*search later\*\* — soon ## ⚠ Needs attention x/.test(rmMd),
+      "full review C6: backlog name / note are one line (folded on add and when rendered) — no heading injected into ROADMAP.md (got " + JSON.stringify((rmMd.match(/^.*search.*$/m) || [])[0]) + ")");
+    // C7: the export shows a stored entity reference as its character (decisions.md keeps "<!--" as "&lt;!--"), never a
+    // literal "&lt;"; a link loses its brackets only in the <…> form (a trailing '>' belongs to the URL).
+    const c7 = mk("Esc view");
+    S.decide(cr, "esc-view", { title: "Comments", decision: "keep <!-- as text" });
+    const rq7 = path.join(c7.dir, "requirements.md");
+    fs.writeFileSync(rq7, fs.readFileSync(rq7, "utf8").replace(/(## Summary\s*\n)/, "$1See [a](https://a.b/c>) and [b](<https://a.b/d>).\n\n"));
+    const ex7 = S.exportSpecs(cr, { name: "esc-view" }).content || "";
+    ok(/keep &lt;!-- as text/.test(ex7) && !/&amp;lt;!--/.test(ex7) && ex7.includes('href="https://a.b/c&gt;"') && ex7.includes('href="https://a.b/d"'),
+      "full review C7: export renders decisions.md's '&lt;!--' as '<!--' (no double escape); only a <…> link target loses its brackets (got " +
+      JSON.stringify([(ex7.match(/keep [^<]{0,30}/) || [])[0], (ex7.match(/href="https:\/\/a\.b\/[^"]*"/g) || [])]) + ")");
+  }
+
+  // 1.14 full review (Ga) — evidence, project checks, CLI runs.
+  {
+    const ga = (n) => path.join(tmp, "full-review-ga-" + n);
+    const gaW = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+    const gaState = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const gaSetState = (f, st) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify(st, null, 2));
+    const gaTasks = (f) => fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+    const suiteOf = (r) => (r.suiteChecks || []).map((c) => c.status).join();
+    const PASS = 'node -e "process.exit(0)"';
+    // A written core feature the gates accept (approved through tasks) — the chain next_action walks to its finish step.
+    const GA_CLASS = "# Classification: x\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n";
+    const GA_REQ = "# Feature: x\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n" +
+      "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+      "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n";
+    const GA_DESIGN = "# Design: x\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n" +
+      "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+      "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n";
+    const gaFilled = (dir, name, tasks) => {
+      const f = S.createFeature(dir, name, ["core"], "", undefined, "en");
+      gaW(f.dir, "classification.md", GA_CLASS); gaW(f.dir, "requirements.md", GA_REQ); gaW(f.dir, "design.md", GA_DESIGN); gaW(f.dir, "tasks.md", tasks);
+      S.approvePhase(dir, f.slug, null, "u", { through: "tasks" });
+      return f;
+    };
+
+    // Ga2: a failing run whose output shows the test never ran (node --test on a missing file, a missing module / script, no
+    // test collected) is no red run — spec_complete_task refuses it (recorded, couldNotRun: "output"); an assertion failure
+    // stays the red proof; a record made before (a ticked task) no longer counts as one.
+    const cnr = (s) => (S.couldNotRunOutput(s) || {}).kind || null;
+    const cnrPos = ["Could not find '/app/test/uppercase.test.js'", "Error: Cannot find module '../src/upper'", "python3: can't open file '/app/t.py': [Errno 2] No such file or directory",
+      "ModuleNotFoundError: No module named 'upper'", "ERROR: file or directory not found: tests/test_x.py", "============ no tests ran in 0.01s ============",
+      "No tests found, exiting with code 1", "No test files found, exiting with code 1", 'npm error Missing script: "test"', "make: *** No rule to make target 'test'.  Stop.", "npm ERR! code ENOENT"];
+    const cnrNeg = ["AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n'a' !== 'A'", "✖ T-01 fails: 302 back to /login", "FAILED tests/test_x.py::test_upper - assert 'a' == 'A'", "Tests: 1 failed, 3 passed", ""];
+    const wslOut = "<3>WSL (10 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed: No such file or directory";
+    ok(cnrPos.every((s) => cnr(s) === "test") && cnrNeg.every((s) => cnr(s) === null) && cnr(wslOut) === "wsl" && cnr(wslOut.split("").join(String.fromCharCode(0))) === "wsl" &&
+      cnr("spawnSync no-such-shell-xyz ENOENT") === "spawn",
+      "full review Ga2: couldNotRunOutput recognises a run that never exercised its test (missing file / module / script, nothing collected; the WSL relay, also as UTF-16; a spawn error) and never an assertion failure (got " +
+      JSON.stringify([cnrPos.filter((s) => cnr(s) !== "test"), cnrNeg.filter((s) => cnr(s) !== null)]) + ")");
+    const p2 = ga("red");
+    S.initProject(p2, ["core"], "en");
+    const f2 = S.createFeature(p2, "Red missing", ["core"], "", undefined, "en");
+    gaW(f2.dir, "tasks.md", "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: node --test test/uppercase.test.js_\n  - _Expect: fail_\n");
+    const RED_CMD = "node --test test/uppercase.test.js";
+    const miss2 = S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 1, summary: "Could not find 'test/uppercase.test.js'" });
+    const open2 = /- \[ \] 1\./.test(gaTasks(f2));
+    const red2 = S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 1, summary: "✖ uppercases (1.2ms)\nAssertionError [ERR_ASSERTION]: 'a' !== 'A'\nℹ fail 1" });
+    const f2b = S.createFeature(p2, "Red legacy", ["core"], "", undefined, "en");
+    gaW(f2b.dir, "tasks.md", "- [x] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Expect: fail_\n");
+    const st2b = gaState(f2b);
+    st2b.evidence = { 1: { command: 'node -e "process.exit(0)"', exitCode: 1, summary: "spawnSync no-such-shell-xyz ENOENT", expected: "fail", at: new Date().toISOString() } }; // what `done --run --shell <missing>` used to record
+    gaSetState(f2b, st2b);
+    const vs2b = S.verificationStatus(p2, f2b.slug, f2b.dir);
+    const fPt2 = S.createFeature(p2, "Vermelho", ["core"], "", undefined, "pt");
+    gaW(fPt2.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const pt2 = S.completeTask(p2, fPt2.slug, 1, { command: "npm test", exitCode: 1, summary: 'npm error Missing script: "test"' });
+    ok(miss2.ok === false && miss2.recorded === true && miss2.couldNotRun === "output" && miss2.expected === "fail" && open2 &&
+      /the run exited 1, but its output shows the test never ran \(Could not find 'test\/uppercase\.test\.js'\) — that is no red test/.test(miss2.error) &&
+      red2.ok === true && red2.redRecorded === true && red2.verified === true && /- \[x\] 1\./.test(gaTasks(f2)) &&
+      vs2b.unverifiedDetail.some((d) => d.number === 1 && d.reason === "failed-run") &&
+      pt2.ok === false && pt2.couldNotRun === "output" && /o output mostra que o teste nunca foi executado \(Missing script: "test"\)/.test(pt2.error),
+      "full review Ga2: an _Expect: fail_ run whose summary shows the test never ran is refused (recorded, couldNotRun: output, task open; PT); an assertion failure is the red proof; an old 'spawnSync … ENOENT' record proves nothing (got " +
+      JSON.stringify([miss2.couldNotRun, miss2.error && miss2.error.slice(0, 120), red2.redRecorded, vs2b.unverifiedDetail, pt2.error && pt2.error.slice(0, 80)]) + ")");
+
+    // Ga3: a project check run is stamped with the code it tested (a hash of the implementing files): code edited after the
+    // run → suiteChecks status `code-changed` — a finish blocker, doctor's suite-evidence warn and the stop gate's suite line —
+    // never "ready" on an old run. A run recorded without the stamp keeps the older rule.
+    const p3 = ga("code");
+    S.initProject(p3, ["core"], "en", { checks: { test: PASS } });
+    const f3 = S.createFeature(p3, "Limiter", ["core"], "", undefined, "en");
+    gaW(p3, "src/limiter.js", "module.exports = 1;\n");
+    gaW(f3.dir, "tasks.md", "- [ ] 1. [US1] Limit\n  - _Implements: src/limiter.js_\n");
+    S.completeTask(p3, f3.slug, 1);
+    const fin3a = S.finishFeature(p3, f3.slug, { evidence: [{ name: "test", command: PASS, exitCode: 0 }] });
+    const stamp3 = gaState(f3).finishChecks.test.code;
+    gaW(p3, "src/limiter.js", "module.exports = 2; // edited after the check ran\n");
+    const fin3b = S.finishFeature(p3, f3.slug, {});
+    const doc3 = S.specDoctor(p3, f3.slug).checks.find((c) => c.id === "suite-evidence");
+    const stop3 = S.stopCheck(p3, { message: "All done." });
+    const st3 = gaState(f3);
+    delete st3.finishChecks.test.code; // a run recorded before 1.14's full review
+    gaSetState(f3, st3);
+    const fin3c = S.finishFeature(p3, f3.slug, {});
+    ok(/^[0-9a-f]{40}$/.test(stamp3 || "") && suiteOf(fin3a) === "pass" && suiteOf(fin3b) === "code-changed" &&
+      fin3b.blockers.some((b) => /test \(the implementing files changed since the run\)/.test(b)) && doc3 && doc3.status === "warn" && /implementing files changed since the run/.test(doc3.detail) &&
+      stop3.block === true && stop3.features.some((x) => x.suite.some((s) => s.status === "code-changed")) && suiteOf(fin3c) === "pass",
+      "full review Ga3: a check run stamped with the implementing files' hash turns code-changed once src/limiter.js is edited (finish blocker, doctor warn, stop gate); an unstamped run keeps the older rule (got " +
+      JSON.stringify([stamp3, suiteOf(fin3a), suiteOf(fin3b), doc3 && doc3.status, stop3.why, suiteOf(fin3c)]) + ")");
+
+    // Ga4: a task-activity stamp in the future (a .state.json committed from a machine with a fast clock) is ignored, as the
+    // stop gate ignores it — a fresh check run is not "before the last task activity".
+    const p4 = ga("future");
+    S.initProject(p4, ["core"], "en", { checks: { test: PASS } });
+    const f4 = S.createFeature(p4, "Clock", ["core"], "", undefined, "en");
+    gaW(f4.dir, "tasks.md", "- [x] 1. [US1] Done\n");
+    const st4 = gaState(f4);
+    st4.lastTickAt = "2099-01-01T00:00:00.000Z";
+    gaSetState(f4, st4);
+    const fin4 = S.finishFeature(p4, f4.slug, { evidence: [{ name: "test", command: PASS, exitCode: 0 }] });
+    ok(suiteOf(fin4) === "pass" && !fin4.blockers.some((b) => /ran before the last task activity/.test(b)),
+      "full review Ga4: a lastTickAt in the future is ignored — a check run recorded now passes (got " + JSON.stringify([suiteOf(fin4), fin4.blockers]) + ")");
+
+    // Ga5: the spec-implementer gate reads the exit code its report shows: a must-pass _Verify:_ needs an exit 0 (a red then
+    // green report passes), an _Expect: fail_ one a non-zero exit.
+    const p5 = ga("impl");
+    S.initProject(p5, ["core"], "en");
+    const f5 = S.createFeature(p5, "Impl", ["core"], "", undefined, "en");
+    gaW(f5.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: npm test_\n- [ ] 2. [US1] Write T-01 red\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const rep5 = (n, body) => gaW(f5.dir, ".execution/task-" + n + "-report.md", body);
+    const stop5 = (n) => S.stopCheck(p5, { message: "Status: DONE — implemented. Report: .specs/" + f5.slug + "/.execution/task-" + n + "-report.md", agent: "dev-spec-driven:spec-implementer" });
+    rep5(1, "# Task 1\n\n$ npm test\nexit code: 1\n1 failing\n");
+    const i1 = stop5(1);
+    rep5(1, "# Task 1\n\nRED: `npm test` → exit code: 1\nGREEN: `npm test` → exit 0\n");
+    const i1b = stop5(1);
+    rep5(2, "# Task 2\n\n`npm test` → exit 0\n");
+    const i2 = stop5(2);
+    rep5(2, "# Task 2\n\n`npm test` → exit code: 1 (AssertionError: expected 'A')\n");
+    const i2b = stop5(2);
+    ok(i1.block === true && i1.why === "implementer-evidence" && /shows no passing run \(exit 0\) of `npm test`/.test(i1.reason) && i1b.block === false && i1b.why === "report-ok" &&
+      i2.block === true && /shows no failing run \(a non-zero exit code\) of `npm test` — the task is marked _Expect: fail_/.test(i2.reason) && i2b.block === false && i2b.why === "report-ok",
+      "full review Ga5: a DONE report of a must-pass task showing only 'exit code: 1' is sent back (red + green passes); an _Expect: fail_ task's report needs its non-zero exit (got " +
+      JSON.stringify([i1.why, i1b.why, i2.why, i2b.why]) + ")");
+
+    // Ga6: spec_append_tasks takes makesGreen (planned T-IDs, stored as test-plan.md spells them), expectFail and size —
+    // validated all-or-nothing like the AC IDs; the MCP schema advertises them.
+    const p6 = ga("append");
+    S.initProject(p6, ["tdd"], "en");
+    const f6 = S.createFeature(p6, "Converge", ["tdd"], "", undefined, "en");
+    const apTool6 = list.result.tools.find((t) => t.name === "spec_append_tasks");
+    const props6 = apTool6.inputSchema.properties.tasks.items.properties;
+    const call6 = async (args) => { const r = await rpc("tools/call", { name: "spec_append_tasks", arguments: { projectDir: p6, name: f6.slug, ...args } }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    const before6 = gaTasks(f6);
+    const bad6a = await call6({ tasks: [{ text: "ok", makesGreen: ["T-01"] }, { text: "phantom", makesGreen: ["T-99"] }] });
+    const bad6b = await call6({ tasks: [{ text: "big", size: "XXL" }] });
+    const bad6c = await call6({ tasks: [{ text: "x", expectFail: "yes" }] });
+    const bad6d = await call6({ tasks: [{ text: "x", makesGreen: ["test one"] }] });
+    const same6 = gaTasks(f6) === before6;
+    const ap6 = await call6({ tasks: [{ text: "Write the regression test", requirements: ["US-1.AC-1"], makesGreen: ["t-1"], expectFail: true, size: "s", verify: "npm test" }] });
+    const blk6 = S.taskBlocks(gaTasks(f6)).find((b) => ap6.p.appended && b.number === ap6.p.appended[0].number);
+    const noPlan = S.appendTasks(p2, f2.slug, [{ text: "x", makesGreen: ["T-01"] }]);
+    ok(props6.makesGreen && props6.makesGreen.type === "array" && props6.expectFail && props6.expectFail.type === "boolean" && props6.size && props6.size.type === "string" &&
+      bad6a.p.ok === false && /Unknown tests \(not planned in test-plan\.md\): T-99/.test(bad6a.p.error) && bad6b.p.ok === false && /size must be one of XS, S, M, L, XL \(got 'XXL'\)/.test(bad6b.p.error) &&
+      bad6c.isError && bad6d.p.ok === false && /makesGreen takes planned test IDs/.test(bad6d.p.error) && same6 &&
+      ap6.p.ok === true && JSON.stringify(ap6.p.appended[0].makesGreen) === '["T-01"]' && ap6.p.appended[0].expectFail === true && ap6.p.appended[0].size === "S" &&
+      blk6 && JSON.stringify(blk6.body.map((l) => l.replace(/^- /, ""))) === JSON.stringify(["_Requirements: US-1.AC-1_", "_Makes green: T-01_", "_Verify: npm test_", "_Expect: fail_", "_Size: S_"]) &&
+      S.expectsFail(blk6) && S.traceCheck(p6, f6.slug).phantomTestsInTasks.length === 0 &&
+      noPlan.ok === false && /makesGreen needs a test plan/.test(noPlan.error),
+      "full review Ga6: spec_append_tasks writes _Makes green:_ (as the test plan spells the T-ID) / _Expect: fail_ / _Size:_; an unplanned T-ID, a bad size or T-ID, a non-boolean expectFail or no test plan writes nothing (got " +
+      JSON.stringify([ap6.p.appended || ap6.p.error, blk6 && blk6.body, bad6a.p.error, bad6b.p.error]).slice(0, 500) + ")");
+
+    // Ga7: the brief of an _Expect: fail_ task is a red task's — its tests section and definition of done say write the test and
+    // watch it FAIL (no production code), never "make the target tests green" / "nothing that passed before may fail".
+    const p7 = ga("brief");
+    S.initProject(p7, ["tdd"], "en", { checks: { test: "npm test" } });
+    const f7 = S.createFeature(p7, "Brief red", ["tdd"], "", undefined, "en");
+    gaW(f7.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 red\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: npm test_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Make T-01 green\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: npm test_\n");
+    const br7 = S.taskBrief(p7, f7.slug, 1).brief;
+    const br7g = S.taskBrief(p7, f7.slug, 2).brief;
+    const f7pt = S.createFeature(p7, "Brief vermelho", ["tdd"], "", undefined, "pt");
+    gaW(f7pt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Makes green: T-01_\n  - _Verify: npm test_\n  - _Expect: fail_\n");
+    const br7pt = S.taskBrief(p7, f7pt.slug, 1).brief;
+    ok(/## Tests this task writes — they must FAIL first \(red\)/.test(br7) && !/## Tests to make green/.test(br7) && /\n1\. This is a RED task: write \(or keep\) the planned test\(s\)/.test(br7) &&
+      !/turns the target tests green/.test(br7) && !/nothing that passed before this task may fail/.test(br7) && /the only failures allowed are this task's new red test\(s\)/.test(br7) &&
+      /## Tests to make green/.test(br7g) && /turns the target tests green/.test(br7g) && /nothing that passed before this task may fail/.test(br7g) &&
+      /## Testes que esta tarefa escreve — têm de FALHAR primeiro \(vermelho\)/.test(br7pt) && /\n1\. Esta é uma tarefa VERMELHA/.test(br7pt),
+      "full review Ga7: an _Expect: fail_ task's brief: 'Tests this task writes — they must FAIL first', a red definition of done, the project checks allow its red test (PT too); a green task's brief is unchanged (got " +
+      JSON.stringify(br7.split("\n").filter((l) => /^## |^\d+\. /.test(l)).slice(-8)).slice(0, 400) + ")");
+
+    // Ga8: with meta.checks set, next_action's finish step says how to run and record them; the merge summary labels an
+    // _Expect: fail_ task's red run as the expected one (and, after the fix passes, the red run it keeps).
+    const p8 = ga("finish");
+    S.initProject(p8, ["core"], "en", { checks: { test: PASS } });
+    const f8 = gaFilled(p8, "Login", "# Tasks\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + PASS + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + PASS + "_\n**Checkpoint:** US-1 works.\n");
+    S.completeTask(p8, f8.slug, 1, { command: PASS, exitCode: 0 });
+    S.completeTask(p8, f8.slug, 2, { command: PASS, exitCode: 0 });
+    const na8 = S.nextAction(p8, f8.slug);
+    const sum8a = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
+    S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 0, summary: "ℹ pass 1" }); // the fix is in: the test passes now
+    const sum8b = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
+    ok(na8.step === "finish" && new RegExp("dev-spec finish " + f8.slug + " --run runs and records them").test(na8.recommendation) && /spec_finish \{evidence: \[/.test(na8.recommendation) &&
+      /1\. Write test T-01 and watch it fail — `node --test test\/uppercase\.test\.js` → exit 1 \(the expected red run \(_Expect: fail_\)\)/.test(sum8a) &&
+      /`node --test test\/uppercase\.test\.js` → exit 0 \(red run before the fix: exit 1 on \d{4}-\d{2}-\d{2}\)/.test(sum8b),
+      "full review Ga8: next_action's finish step names dev-spec finish --run / spec_finish {evidence} when project checks are configured; the merge summary marks the expected red run (and the red run kept after the fix) (got " +
+      JSON.stringify([na8.step, na8.recommendation.slice(-260), (sum8a.match(/.*uppercase.*/) || [""])[0], (sum8b.match(/.*uppercase.*/) || [""])[0]]) + ")");
+
+    // Ga9: the shell done --run / finish --run use — a bare bash on Windows is Git Bash (git --exec-path, %ProgramFiles%, a
+    // non-WSL bash on PATH), never WSL's System32 / WindowsApps launcher (refused, also as an explicit path); cmd is cmd.exe.
+    const BS = String.fromCharCode(92);
+    const wp = (...p) => p.join(BS);
+    const sys32 = wp("C:", "Windows", "System32"), apps = wp("C:", "Users", "u", "AppData", "Local", "Microsoft", "WindowsApps"), msys = wp("C:", "msys64", "usr", "bin");
+    const gitBash = wp("C:", "Program Files", "Git", "bin", "bash.exe");
+    const have = (...files) => (p) => files.includes(p);
+    const envW = (dirs, extra) => ({ PATH: dirs.join(";"), ...(extra || {}) });
+    const r9 = {
+      git: S.resolveRunShell("bash", { platform: "win32", env: envW([sys32, apps]), gitExecPath: "C:/Program Files/Git/mingw64/libexec/git-core\n", exists: have(gitBash, wp(sys32, "bash.exe")) }),
+      wslOnly: S.resolveRunShell("bash", { platform: "win32", env: envW([sys32, apps]), exists: have(wp(sys32, "bash.exe"), wp(apps, "bash.exe")) }),
+      msys: S.resolveRunShell("BASH.EXE", { platform: "win32", env: envW([sys32, msys]), exists: have(wp(sys32, "bash.exe"), wp(msys, "bash.exe")) }),
+      progFiles: S.resolveRunShell("bash", { platform: "win32", env: { ProgramFiles: wp("C:", "Program Files"), Path: sys32 }, exists: have(gitBash, wp(sys32, "bash.exe")) }),
+      sys32Path: S.resolveRunShell(wp(sys32, "bash.exe"), { platform: "win32", env: {} }),
+      appsPath: S.resolveRunShell("C:/Users/u/AppData/Local/Microsoft/WindowsApps/bash.exe", { platform: "win32", env: {} }),
+      wslExe: S.resolveRunShell(wp(sys32, "wsl.exe"), { platform: "win32", env: {} }),
+      def: S.resolveRunShell("", { platform: "win32" }), cmd: S.resolveRunShell("cmd", { platform: "win32" }), comspec: S.resolveRunShell(wp(sys32, "cmd.exe"), { platform: "win32" }),
+      pwsh: S.resolveRunShell("pwsh", { platform: "win32" }), linuxBash: S.resolveRunShell("bash", { platform: "linux" }), linuxDef: S.resolveRunShell("", { platform: "linux" }),
+    };
+    ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
+      r9.sys32Path.error === "wsl-bash" && r9.appsPath.error === "wsl-bash" && r9.wslExe.error === "wsl-bash" &&
+      r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
+      r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
+      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), WSL's System32 / WindowsApps launcher is refused (no-git-bash / wsl-bash), cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
+      JSON.stringify(r9).slice(0, 500) + ")");
+  }
+
+  // 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
+  {
+    const gbDir = (n) => path.join(tmp, "gb-" + n);
+    const gbW = (dir, rel, txt) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), txt); };
+    const gbR = (dir, rel) => fs.readFileSync(path.join(dir, rel), "utf8");
+    const gbRun = 'node -e "process.exit(0)"';
+    const gbTasks = (verify) => "# Tasks: login\n\n## Global Constraints\n- Node >= 18\n\n## Story US-1 (P1 — MVP)\n" +
+      "- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + verify + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + verify + "_\n**Checkpoint:** US-1 works.\n";
+    // A core feature whose whole planning chain is filled (the fast-forward through tasks passes every gate).
+    const gbFeature = (p, name, tasks) => {
+      const r = S.createFeature(p, name, ["core"], "", null, "en");
+      gbW(r.dir, "classification.md", `# Classification: ${name}\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n`);
+      gbW(r.dir, "requirements.md", `# Feature: ${name}\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n` +
+        "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+        "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+        "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+        "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+      gbW(r.dir, "design.md", `# Design: ${name}\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n` +
+        "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+        "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+      gbW(r.dir, "tasks.md", tasks || gbTasks(gbRun));
+      return r;
+    };
+
+    // Gb1: a re-review whose approve gate would refuse (a [NEEDS CLARIFICATION] added after the approval) names the failing checks.
+    const p1 = gbDir("rereview");
+    S.initProject(p1, ["core"], "en");
+    const f1 = gbFeature(p1, "login");
+    const ff1 = S.approvePhase(p1, "login", null, "u", { through: "tasks" });
+    gbW(f1.dir, "requirements.md", gbR(f1.dir, "requirements.md").replace("- Social login", "- Social login [NEEDS CLARIFICATION: which providers?]"));
+    const na1 = S.nextAction(p1, "login");
+    const ap1 = S.approvePhase(p1, "login", "requirements", "u");
+    ok(ff1.ok && na1.step === "re-review" && na1.refusedGate && na1.refusedGate.phase === "requirements" && na1.refusedGate.failing.includes("clarifications") &&
+      /fix what the approve gate would refuse: clarifications/.test(na1.recommendation) && ap1.ok === false && ap1.failing.includes("clarifications"),
+      "full review Gb1: re-review of a phase whose approve gate refuses names the failing checks (refusedGate + ids) — never a bare 're-approve' that loops (got " + JSON.stringify([na1.step, na1.refusedGate, na1.recommendation]) + ")");
+
+    // Gb2: the execution sign-off with roles (meta.approvalRoles.execution): next_action names the role, doctor lists the pending sign-off.
+    const p2 = gbDir("exec-roles");
+    S.initProject(p2, ["core"], "en", { approvalRoles: { execution: ["qa", "product"] } });
+    gbFeature(p2, "login");
+    S.approvePhase(p2, "login", null, "u", { through: "tasks" });
+    S.completeTask(p2, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p2, "login", 2, { command: gbRun, exitCode: 0 });
+    const fin2 = S.finishFeature(p2, "login", { write: true });
+    const na2a = S.nextAction(p2, "login");
+    const doc2a = S.specDoctor(p2, "login");
+    const qa2 = S.approvePhase(p2, "login", "execution", "u", { role: "qa" });
+    const na2b = S.nextAction(p2, "login");
+    const doc2b = S.specDoctor(p2, "login");
+    const fin2b = S.finishFeature(p2, "login", {});
+    const po2 = S.approvePhase(p2, "login", "execution", "u", { role: "product" });
+    const na2c = S.nextAction(p2, "login");
+    const gates2 = (d) => d.checks.find((c) => c.id === "approval-gates");
+    ok(fin2.readyToFinish && na2a.step === "finished" && /Sign it off — missing roles: qa, product: \/approve login execution --role qa\./.test(na2a.recommendation) && JSON.stringify(na2a.missingRoles) === '["qa","product"]' &&
+      doc2a.pendingRoles.execution && JSON.stringify(doc2a.pendingRoles.execution.missing) === '["qa","product"]' && gates2(doc2a).status === "warn" &&
+      qa2.ok && qa2.complete === false && /--role product\./.test(na2b.recommendation) && /\(signed: qa\)/.test(na2b.recommendation) && JSON.stringify(na2b.missingRoles) === '["product"]' &&
+      /awaiting human approval: execution \(missing role: product\)/.test(gates2(doc2b).detail) && fin2b.readyToFinish === true && doc2b.gatesOk === true &&
+      po2.ok && po2.complete === true && na2c.step === "finished" && /Nothing left to do here/.test(na2c.recommendation) && na2c.missingRoles === undefined,
+      "full review Gb2: with execution roles, next_action names the role to sign as (--role qa, then --role product), doctor lists the pending execution sign-off (pendingRoles, approval-gates) once a finish is recorded — never a blocker of the finish itself (got " +
+      JSON.stringify([na2a.recommendation, na2b.recommendation, gates2(doc2b).detail, na2c.step]) + ")");
+
+    // Gb3: finished, then a task re-run after the project checks' run → next_action asks for the checks (verify), not "nothing left to do".
+    const p3 = gbDir("finished-suite");
+    S.initProject(p3, ["core"], "en", { checks: { test: "npm test" } });
+    gbFeature(p3, "login");
+    S.approvePhase(p3, "login", null, "u", { through: "tasks" });
+    S.completeTask(p3, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p3, "login", 2, { command: gbRun, exitCode: 0 });
+    const fin3 = S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }], write: true });
+    S.approvePhase(p3, "login", "execution", "u");
+    const na3a = S.nextAction(p3, "login");
+    S.completeTask(p3, "login", 1, { command: gbRun, exitCode: 0 }); // a re-check after the finish: the checks ran before it
+    const na3b = S.nextAction(p3, "login");
+    const fin3b = S.finishFeature(p3, "login", {});
+    S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }] });
+    const na3c = S.nextAction(p3, "login");
+    ok(fin3.readyToFinish && na3a.step === "finished" && na3b.step === "verify" && JSON.stringify(na3b.suite) === '[{"name":"test","status":"before-last-tick"}]' &&
+      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /dev-spec finish login --run/.test(na3b.recommendation) &&
+      !/Nothing left to do/.test(na3b.recommendation) && fin3b.readyToFinish === false && na3c.step === "finished" && na3c.suite === undefined,
+      "full review Gb3: a finished feature whose project checks have no passing run since the last task activity → step verify naming the checks (suite: [{name, status}]) — never 'finished, nothing left to do' while spec_finish refuses (got " +
+      JSON.stringify([na3a.step, na3b.step, na3b.suite, na3c.step]) + ")");
+
+    // Gb4: the stop gate never applies project checks to a spike; a checks-only reason has its own head (EN / PT / ES).
+    const p4 = gbDir("spike-stop");
+    S.initProject(p4, ["core"], "en", { checks: { test: gbRun } });
+    const sp4 = S.createFeature(p4, "cache spike", null, "", null, null, "spike", { question: "Should we use Redis for the session cache?", timebox: "3d" });
+    gbW(sp4.dir, "spike.md", gbR(sp4.dir, "spike.md").replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Go: Redis cut p95 latency by 40% in the prototype.").replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+    for (const n of [1, 2, 3, 4]) S.completeTask(p4, "cache-spike", n);
+    const fin4 = S.finishFeature(p4, "cache-spike", {});
+    const st4 = S.stopCheck(p4, { message: "The spike is done: the decision is go." });
+    const p4b = gbDir("suite-head");
+    S.initProject(p4b, ["core"], "en", { checks: { test: "npm test" } });
+    const f4b = S.createFeature(p4b, "Export", ["core"], "", undefined, "en");
+    gbW(f4b.dir, "tasks.md", "- [ ] 1. [US1] Export CSV\n");
+    S.completeTask(p4b, "export", 1, { summary: "downloaded a CSV" });
+    const st4b = S.stopCheck(p4b, { message: "Finished — the feature is complete." });
+    ok(fin4.readyToFinish && st4.block === false && !st4.features.length && st4b.block === true && st4b.features[0].suite.length === 1 &&
+      /^dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:\n {2}- export: /.test(st4b.reason) &&
+      !/tasks are ticked without verification evidence/.test(st4b.reason) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
+      "full review Gb4: a decided spike with every task ticked is never sent back over project checks (it has none); a checks-only reason heads with the checks, not 'tasks are ticked without verification evidence' (got " +
+      JSON.stringify([st4.block, st4.why, st4.features, st4b.reason.split("\n")[0]]) + ")");
+
+    // Gb5: stop claims read "no" / "se" by language — PT "no" (em + o) and ES reflexive "se" never cancel a real claim; real negations still do.
+    const claimed = (m) => { const r = S.stopClaims(m); return r.claim && !r.admitted; };
+    const gb5Yes = ["A correção no módulo está concluída.", "O login no servidor foi implementado.", "La tarea 3 se ha completado.", "Se han implementado todos los cambios.", "Todo se ha verificado."];
+    const gb5No = ["Todavía no está terminado.", "Aún no está terminado.", "No está hecho.", "La tarea no se ha completado.", "No todo está hecho.", "Não está feito ainda.", "Se os testes passarem, fica feito?"];
+    const p5 = gbDir("stop-lang");
+    S.initProject(p5, ["core"], "en");
+    const f5 = S.createFeature(p5, "Login", ["core"], "", undefined, "en");
+    gbW(f5.dir, "tasks.md", "- [ ] 1. [US1] Handler\n  - _Verify: " + gbRun + "_\n- [ ] 2. [US1] Error\n");
+    S.completeTask(p5, "login", 1);
+    const st5 = ["A correção no módulo está concluída.", "La tarea 1 se ha completado."].map((m) => S.stopCheck(p5, { message: m }));
+    ok(gb5Yes.every(claimed) && !gb5No.some(claimed) && st5.every((r) => r.block === true && r.why === "unverified"),
+      "full review Gb5: PT 'no' (em + o) and ES reflexive 'se' no longer cancel a claim (the claim is sent back while a task is unverified); 'no está', 'no se ha', 'não está', PT 'se' (if) still negate (missed: " +
+      JSON.stringify(gb5Yes.filter((m) => !claimed(m))) + ", false: " + JSON.stringify(gb5No.filter(claimed)) + ", stop: " + JSON.stringify(st5.map((r) => r.why)) + ")");
+
+    // Gb6: a failure already fixed is no admission; "2 are failing" is one; the claims the gate missed.
+    const gb6Fixed = ["Done! I fixed the 2 failing tests and everything works now.", "Implemented and verified. Previously 4 tests failed; now all 12 pass.",
+      "All tasks are complete. The 3 failures from yesterday are fixed.", "Feito. Corrigi os 2 testes a falhar.", "Listo. Corregí las 2 pruebas fallando."];
+    const gb6Admit = ["The tests passed before my change; after it, 2 are failing.", "I haven't fixed the 2 failing tests, but task 1 is done.", "Task 1 is done, but 2 failing tests are not fixed yet.",
+      "Done. 12 passing, 2 failing.", "Tests pass locally; task 3 is not verified."];
+    const gb6Claims = ["All tasks done.", "All tasks done ✓", "All 5 tasks done.", "All green.", "✅ Done", "Done ✅", "Tasks 1-3 done.", "Feature complete.", "No problem — task 2 is done.",
+      "Todas as tarefas feitas.", "Todas las tareas hechas.", "Tarefas 1-3 feitas.", "Tareas 1 a 3 hechas.", "✅ Feito", "✅ Hecho"];
+    const st6 = S.stopCheck(p5, { message: gb6Fixed[0] });
+    ok(gb6Fixed.every(claimed) && gb6Admit.every((m) => S.stopClaims(m).admitted) && gb6Claims.every(claimed) && st6.block === true && st6.why === "unverified" &&
+      !claimed("Should I mark tasks 1-3 done?") && !claimed("Not done yet: the feature is incomplete."),
+      "full review Gb6: 'I fixed the 2 failing tests' / 'Previously 4 tests failed' / 'failures … are fixed' are no admission (the false done is sent back); '2 are failing' / 'haven't fixed' / 'not fixed yet' still are; 'All tasks done', 'All green', '✅ Done', 'Tasks 1-3 done', 'Feature complete', 'No problem — task 2 is done', PT/ES 'Todas as/las tarefas/tareas feitas/hechas' are claims (fixed-not-claimed: " +
+      JSON.stringify(gb6Fixed.filter((m) => !claimed(m))) + ", not admitted: " + JSON.stringify(gb6Admit.filter((m) => !S.stopClaims(m).admitted)) + ", missed: " + JSON.stringify(gb6Claims.filter((m) => !claimed(m))) + ")");
+
+    // Gb7: two tasks share a number → the verify step asks to renumber (a re-run can never reach the second one); renumbered, it ends.
+    const p7 = gbDir("dup-number");
+    S.initProject(p7, ["core"], "en");
+    const f7 = gbFeature(p7, "login", gbTasks(gbRun).replace("- [ ] 2. [US1] Show", "- [ ] 1. [US1] Show"));
+    S.approvePhase(p7, "login", null, "u", { through: "tasks" });
+    S.completeTask(p7, "login", 1, { command: gbRun, exitCode: 0 });
+    S.completeTask(p7, "login", 1);
+    const na7a = S.nextAction(p7, "login");
+    const rerun7 = S.completeTask(p7, "login", 1, { command: gbRun, exitCode: 0 });
+    const na7b = S.nextAction(p7, "login");
+    gbW(f7.dir, "tasks.md", gbR(f7.dir, "tasks.md").replace("- [x] 1. [US1] Show", "- [x] 2. [US1] Show"));
+    S.approvePhase(p7, "login", "tasks", "u");
+    S.completeTask(p7, "login", 2, { command: gbRun, exitCode: 0 });
+    const na7c = S.nextAction(p7, "login");
+    ok(na7a.step === "verify" && /two tasks are numbered 1/.test(na7a.recommendation) && /Renumber the tasks in \.specs\/login\/tasks\.md/.test(na7a.recommendation) && /duplicate-tasks/.test(na7a.recommendation) &&
+      !/--run/.test(na7a.recommendation) && rerun7.alreadyDone === true && na7b.recommendation === na7a.recommendation && na7c.step === "finish",
+      "full review Gb7: an unverified task whose number another task shares → the verify step asks to renumber (duplicate-tasks), never 're-run task N --run' (which answers alreadyDone forever); once renumbered and run, the feature moves on to finish (got " +
+      JSON.stringify([na7a.recommendation, rerun7.alreadyDone, na7c.step]) + ")");
+
+    // Gb8: guard on / scope during Phase 4 (+tdd, test plan approved, tasks not yet approvable) — test files are covered, code still asks.
+    for (const level of ["on", "scope"]) {
+      const p8 = gbDir("guard-tests-" + level);
+      S.initProject(p8, ["tdd"], "en", { guard: level });
+      const f8 = S.createFeature(p8, "Shortener", ["tdd"], "", undefined, "en");
+      const s8 = JSON.parse(gbR(f8.dir, ".state.json"));
+      s8.approvals = { classification: { at: "2026-09-01T00:00:00.000Z", by: "u" }, requirements: { at: "2026-09-01T00:00:00.000Z", by: "u" }, design: { at: "2026-09-01T00:00:00.000Z", by: "u" }, "test-plan": { at: "2026-09-01T00:00:00.000Z", by: "u" } };
+      gbW(f8.dir, ".state.json", JSON.stringify(s8, null, 2));
+      const t8 = S.guardCheck(p8, "test/shortener.test.js");
+      const c8 = S.guardCheck(p8, "src/shortener.js");
+      ok(t8.decision === "allow" && t8.why === "tests-phase" && JSON.stringify(t8.covering) === '["shortener"]' && c8.decision === "ask" && c8.why === "no-approved-tasks",
+        "full review Gb8 (" + level + "): with an approved test plan and unfinished tasks (Phase 4), a test file is allowed ('tests-phase') — the failing tests come before the tasks gate; a code file still asks (got " +
+        JSON.stringify([t8.decision, t8.why, c8.decision, c8.why]) + ")");
+    }
+
+    // Gb9: guard during a spike — its prototype edits are covered (no tasks gate to approve), never "awaiting approval"; a decided, done spike covers nothing.
+    for (const level of ["on", "scope"]) {
+      const p9 = gbDir("guard-spike-" + level);
+      S.initProject(p9, ["core"], "en", { guard: level });
+      const sp9 = S.createFeature(p9, "cache spike", null, "", null, "en", "spike", { question: "Should we use Redis?", timebox: "3d" });
+      const g9a = S.guardCheck(p9, "proto/redis.js");
+      gbW(sp9.dir, "spike.md", gbR(sp9.dir, "spike.md").replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Go: Redis cut p95 latency by 40%.").replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+      for (const n of [1, 2, 3, 4]) S.completeTask(p9, "cache-spike", n);
+      const g9b = S.guardCheck(p9, "proto/redis.js");
+      ok(g9a.decision === "allow" && g9a.why === "spike" && JSON.stringify(g9a.spikes) === '["cache-spike"]' &&
+        g9b.decision === "ask" && !g9b.pending.includes("cache-spike") && !/cache-spike/.test(g9b.reason),
+        "full review Gb9 (" + level + "): an active spike (undecided or with open tasks) covers prototype code edits ('spike'); a decided spike with every task done covers nothing — and a spike is never listed as awaiting a tasks approval it can't have (got " +
+        JSON.stringify([g9a.decision, g9a.why, g9b.decision, g9b.pending, g9b.reason]) + ")");
+    }
+
+    // Gb10: a dependency (either way) exempts a pair with a FINISHED feature from the overlap warning, like an active pair.
+    const p10 = gbDir("overlap");
+    S.initProject(p10, ["core"], "en");
+    const a10 = S.createFeature(p10, "Url shortener", ["core"], "", undefined, "en");
+    gbW(a10.dir, "tasks.md", "- [x] 1. [US1] Shorten\n  - _Implements: src/shortener.js_\n");
+    const sa10 = JSON.parse(gbR(a10.dir, ".state.json"));
+    sa10.finished = { at: "2026-09-20T10:00:00.000Z", files: { "src/shortener.js": null } };
+    gbW(a10.dir, ".state.json", JSON.stringify(sa10, null, 2));
+    S.createFeature(p10, "Custom aliases", ["core"], "", undefined, "en");
+    gbW(path.join(p10, ".specs", "custom-aliases"), "tasks.md", "- [ ] 1. [US1] Aliases\n  - _Implements: src/shortener.js_\n");
+    const ov10a = S.featureOverlaps(p10).pairs;
+    S.setDependency(p10, "custom-aliases", undefined, undefined, { add: "url-shortener" });
+    const ov10b = S.featureOverlaps(p10).pairs;
+    const doc10 = S.specDoctor(p10, "custom-aliases").checks.find((c) => c.id === "cross-feature-overlap");
+    S.setDependency(p10, "custom-aliases", []);
+    S.setDependency(p10, "url-shortener", ["custom-aliases"]);
+    const ov10c = S.featureOverlaps(p10).pairs;
+    ok(ov10a.length === 1 && ov10a[0].kind === "finished" && /spec_depend/.test(S.msg("en").forecast.overlap.doctorFinished("x", "y")) && ov10b.length === 0 && doc10 === undefined && ov10c.length === 0,
+      "full review Gb10: an active feature planning a finished feature's baseline files is no overlap once either depends on the other (the advice /depend works); undepended it is (got " +
+      JSON.stringify([ov10a.map((x) => x.kind), ov10b.length, doc10 && doc10.status, ov10c.length]) + ")");
+
+    // Gb11: impact names the role to re-approve as (meta.approvalRoles), in the result (missingRoles) and the printed lines / notes.
+    const p11 = gbDir("impact-roles");
+    S.initProject(p11, ["core"], "en", { approvalRoles: { requirements: ["product"] } });
+    const f11 = gbFeature(p11, "login");
+    const ff11 = S.approvePhase(p11, "login", null, "u", { through: "tasks", role: "product" });
+    S.completeTask(p11, "login", 1, { command: gbRun, exitCode: 0 });
+    gbW(f11.dir, "requirements.md", gbR(f11.dir, "requirements.md").replace("THE SYSTEM SHALL open a session", "THE SYSTEM SHALL open a session within 2 seconds"));
+    const im11 = S.impactReport(p11, "login", { phase: "requirements" });
+    const lines11 = S.impactLines(im11).join("\n");
+    const re11 = S.impactReport(p11, "login", { phase: "requirements", reopen: true });
+    ok(ff11.ok && im11.changed === true && JSON.stringify(im11.missingRoles) === '["product"]' && /→ review the change, then re-approve: \/approve login requirements --role product/.test(lines11) &&
+      re11.ok && re11.reopened.includes(1) && /\/approve login requirements --role product\./.test(re11.note),
+      "full review Gb11: spec_impact on a phase signed off per role names the role (missingRoles; '→ … /approve <f> <phase> --role <role>'; the --reopen note too) — the role-less command is refused (got " +
+      JSON.stringify([im11.missingRoles, lines11.split("\n").pop(), re11.note]) + ")");
+
+    // Gb12: a fast-forward stopped by a role error after approving earlier phases says what was recorded — never "Nothing recorded."
+    const p12 = gbDir("ff-roles");
+    S.initProject(p12, ["core"], "en", { approvalRoles: { requirements: ["product"], design: ["tech"] } });
+    gbFeature(p12, "login");
+    const ff12a = S.approvePhase(p12, "login", null, "u", { through: "tasks" });
+    const ff12b = S.approvePhase(p12, "login", null, "u", { through: "tasks", role: "product" });
+    ok(ff12a.ok === false && ff12a.stopReason === "role" && ff12a.stoppedAt === "requirements" && JSON.stringify(ff12a.approved) === '["classification"]' &&
+      !/Nothing recorded/.test(ff12a.error) && /\(approved before it: classification\)/.test(ff12a.error) && /nothing was recorded for 'requirements'/.test(ff12a.error) && /--through tasks --role <role>/.test(ff12a.error) &&
+      ff12b.ok === false && ff12b.stoppedAt === "design" && /'product' is not a role that signs off 'design' \(roles: tech\) — nothing was recorded for 'design'/.test(ff12b.error) && !/Nothing recorded/.test(ff12b.error),
+      "full review Gb12: a fast-forward stopped by a role refusal names what it approved before and that nothing was recorded for the stopping phase — the approve refusal's 'Nothing recorded.' contradicted it (got " +
+      JSON.stringify([ff12a.error, ff12b.error]) + ")");
+  }
+
+  // 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
+
+  {
+    const pa = path.join(tmp, "proj-full-review-pa");
+    S.initProject(pa, ["core"], "en");
+    const paDir = (slug) => path.join(pa, ".specs", slug);
+    const paPut = (rel, text) => { const p = path.join(pa, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
+    const paReq = (body) => "# Feature: X\n\n## Summary\nPay for the cart.\n\n## User Stories\n\n### US-1 (P1 — MVP): Pay\n**As a** buyer, **I want** to pay, **so that** I get my order.\n\n#### Acceptance Criteria (EARS)\n\n" + body + "\n\n## Success Criteria\n- **SC-001** — 95% of payments complete in under 3 s.\n";
+    const earsGood = "1. **US-1.AC-1** — WHEN the buyer pays THE SYSTEM SHALL charge the card.\n2. **US-1.AC-2** — WHEN the charge succeeds THE SYSTEM SHALL email a receipt.";
+
+    // Pa1: a marker followed by punctuation — or written in *italics* — is a marker (the evidence gate reads its _Verify:_).
+    S.createFeature(pa, "Markers", ["core"], "x", undefined, "en");
+    paPut(".specs/markers/requirements.md", paReq(earsGood));
+    paPut(".specs/markers/tasks.md", "# Tasks\n\n- [ ] 1. Route (_Implements: src/routes.ts_; _Verify: npm test_)\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n" +
+      "- [ ] 2. Wire the handler — _Verify: `node -e \"process.exit(1)\"`_.\n- [x] 3. Old module (see _Implements: src/old.ts_).\n" +
+      "- [ ] 4. Italic *Verify: npm run lint* and *Implements: src/__init__.py*\n- [ ] 5. Inner _Implements: src/keys_util.js, src/a_b.ts_\n");
+    const b1 = S.taskBrief(pa, "markers", 1, {}), b2 = S.taskBrief(pa, "markers", 2, {}), b4 = S.taskBrief(pa, "markers", 4, {});
+    ok(JSON.stringify(b1.verify) === '["npm test"]' && JSON.stringify(b2.verify) === '["node -e \\"process.exit(1)\\""]' && JSON.stringify(b4.verify) === '["npm run lint"]',
+      "full review Pa1: _Verify:_ followed by ')' or '.', and *Verify: …* in italics, are markers — the brief names the command (got " + JSON.stringify([b1.verify, b2.verify, b4.verify]) + ")");
+    const c2 = S.completeTask(pa, "markers", 2, {});
+    ok(c2.ok && c2.verified === false && c2.unverifiedReason === "no-evidence" && !c2.nothingToVerify,
+      "full review Pa1: completing a task whose _Verify:_ ends in '_.' without a run is unverified (no-evidence), never 'nothing to verify' (got " + JSON.stringify([c2.ok, c2.verified, c2.unverifiedReason, c2.nothingToVerify]) + ")");
+    const tr1 = S.traceCheck(pa, "markers");
+    ok(tr1.implementsFiles.includes("src/routes.ts") && tr1.implementsFiles.includes("src/__init__.py") && tr1.implementsFiles.includes("src/keys_util.js") && tr1.implementsFiles.includes("src/a_b.ts") &&
+      tr1.missingImplFiles.includes("src/old.ts") && tr1.verdict === "gaps-found",
+      "full review Pa1: trace_check reads '_Implements: x_;', '(see _Implements: x_).', *Implements: …* and inner underscores — a done task's missing file is a gap (got " + JSON.stringify([tr1.implementsFiles, tr1.missingImplFiles, tr1.verdict]) + ")");
+    paPut(".specs/markers/tasks.md", "# Tasks\n\n- [ ] 1. Route _Verify: npm test_\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n- [ ] 2. Odd — **Verify:** npm test\n  - Implements: src/x.ts\n  - the `Verify:` label in code is no marker\n");
+    const mm = (S.specDoctor(pa, "markers").checks || []).find((c) => c.id === "malformed-markers");
+    ok(mm && mm.status === "warn" && /#2 \(Verify:, Implements:\)/.test(mm.detail) && !/#1/.test(mm.detail),
+      "full review Pa1: doctor warns malformed-markers for marker-shaped text that yields no marker (**Verify:** …, a bare Implements:) — never for a real marker or a code span (got " + JSON.stringify(mm) + ")");
+
+    // Pa2: an AC written as a table row, a bold line, a heading or a checkbox item is EARS-checked; AC IDs nobody lints fail.
+    S.createFeature(pa, "Ears units", ["core"], "x", undefined, "en");
+    const earsOf = (body) => { paPut(".specs/ears-units/requirements.md", paReq(body)); return S.earsFeature(pa, "ears-units"); };
+    const table = earsOf("| ID | Criterion |\n|----|-----------|\n| US-1.AC-1 | Checkout should be fast and user-friendly |\n| US-1.AC-2 | Payment works |");
+    const bold = earsOf("**US-1.AC-1** — Payment works.\n**US-1.AC-2** — WHEN paid THE SYSTEM SHALL email a receipt.");
+    const heading = earsOf("##### US-1.AC-1 — Payment works\n\n##### US-1.AC-2\n\nWHEN paid THE SYSTEM SHALL email a receipt.");
+    const checkbox = earsOf("- [ ] **US-1.AC-1** — Payment works.\n- [x] **US-1.AC-2** — WHEN paid THE SYSTEM SHALL email a receipt.");
+    const noModal = (e) => e.issues.filter((i) => i.code === "no-modal").map((i) => i.line);
+    ok(table.verdict === "fail" && table.summary.criteriaDetected === 2 && noModal(table).length === 2 && table.issues.some((i) => i.code === "vague"),
+      "full review Pa2: ACs in a table row under the Acceptance Criteria heading are linted — no modal verb is an error, vague terms warn (got " + JSON.stringify([table.verdict, table.summary, table.issues.map((i) => i.code)]) + ")");
+    ok([bold, heading, checkbox].every((e) => e.verdict === "fail" && e.summary.criteriaDetected === 2 && JSON.stringify(noModal(e)) === "[13]"),
+      "full review Pa2: a bold line, a heading and a checkbox item that start with an AC ID are each their own criterion (two in a row never merge) (got " + JSON.stringify([bold, heading, checkbox].map((e) => [e.verdict, e.summary.criteriaDetected, noModal(e)])) + ")");
+    earsOf("- Payment works (see US-1.AC-1).");
+    const dEars = (S.specDoctor(pa, "ears-units").checks || []).find((c) => c.id === "ears");
+    approveBefore(pa, "ears-units", "requirements");
+    const apEars = S.approvePhase(pa, "ears-units", "requirements", "t");
+    ok(dEars && dEars.status === "fail" && /US-1\.AC-1/.test(dEars.detail) && !apEars.ok && (apEars.failing || []).includes("ears"),
+      "full review Pa2: requirements.md citing AC IDs that no criterion lints — doctor's ears check fails and the requirements approval is refused (got " + JSON.stringify([dEars, apEars.ok, apEars.failing]) + ")");
+    const summaryTable = earsOf(earsGood + "\n\n## Priorities\n\n| AC | Priority |\n|----|----------|\n| US-1.AC-1 | P1 |");
+    ok(summaryTable.verdict === "pass" && summaryTable.summary.criteriaDetected === 2,
+      "full review Pa2: a summary table of AC IDs outside the acceptance criteria (no modal verb) is not a criterion (got " + JSON.stringify([summaryTable.verdict, summaryTable.summary]) + ")");
+
+    // Pa3: "<!--" / "-->" inside an inline code span (or a fence) open no comment — EARS, trace_check and the placeholders see every line.
+    S.createFeature(pa, "Comment sanitizer", ["core"], "x", undefined, "en");
+    paPut(".specs/comment-sanitizer/requirements.md", paReq("1. **US-1.AC-1** — IF a comment body contains `<!--`, THEN THE SYSTEM SHALL escape it as text.\n" +
+      "2. **US-1.AC-2** — WHEN a comment holds a script tag THE SYSTEM SHALL strip it.\n3. **US-1.AC-3** — IF a comment body contains `-->`, THEN THE SYSTEM SHALL escape it as text.\n" +
+      "4. **US-1.AC-4** — WHEN a comment is posted THE SYSTEM SHALL render it within 200 ms."));
+    paPut(".specs/comment-sanitizer/tasks.md", "# Tasks\n\n- [ ] 1. Escape comment markers\n  - _Requirements: US-1.AC-1_\n");
+    const tr3 = S.traceCheck(pa, "comment-sanitizer");
+    const e3 = S.earsFeature(pa, "comment-sanitizer");
+    ok(tr3.totalAcs === 4 && JSON.stringify(tr3.uncoveredByTasks) === '["US-1.AC-2","US-1.AC-3","US-1.AC-4"]' && e3.summary.criteriaDetected === 4,
+      "full review Pa3: a `<!--` in an inline code span opens no comment — trace_check sees all 4 ACs (3 uncovered) and EARS lints 4 criteria (got " + JSON.stringify([tr3.totalAcs, tr3.uncoveredByTasks, e3.summary.criteriaDetected]) + ")");
+    const strip = S.stripHtmlComments("a `<!--` b\n```html\n<!-- in a fence\n```\nc <!-- real\ncomment --> d\ne `-->` f");
+    const ph3 = S.placeholderReport("Say `<!--` here.\n\n- [TBD]\n\nand `-->` there\n<!-- [TBD] hidden -->");
+    ok(strip === "a `<!--` b\n```html\n<!-- in a fence\n```\nc  d\ne `-->` f" && ph3.length === 1 && ph3[0].line === 3,
+      "full review Pa3: stripHtmlComments and the placeholder scan keep a code span's / a fence's `<!--` as text; a real comment is still stripped (got " + JSON.stringify([strip, ph3]) + ")");
+
+    // Pa4: requirements.md written with NO AC ID (an OpenSpec change of proposal.md + tasks.md) — the +tdd plan has no template AC rows.
+    paPut("openspec/changes/add-reset/proposal.md", "# Change: Add password reset\n\n## Why\nUsers who forget their password cannot recover their accounts.\n\n## What Changes\n- Add password reset via an emailed link\n");
+    paPut("openspec/changes/add-reset/tasks.md", "## 1. Implementation\n- [ ] 1.1 Create the reset token table\n- [ ] 1.2 Implement the reset endpoint\n");
+    const im4 = S.importSpec(pa, "openspec", "openspec/changes/add-reset", { tracks: "tdd" });
+    const plan4 = im4.ok ? fs.readFileSync(path.join(paDir(im4.feature), "test-plan.md"), "utf8") : "";
+    const tr4 = im4.ok ? S.traceCheck(pa, im4.feature) : {};
+    const d4 = im4.ok ? (S.specDoctor(pa, im4.feature).checks || []).find((c) => c.id === "traceability") : null;
+    ok(im4.ok && !/US-\d+\.AC-\d+/.test(plan4) && /\| T-01 \|/.test(plan4) && !(tr4.phantomAcsInTests || []).length && d4 && d4.status !== "fail" &&
+      (im4.warnings || []).some((w) => /no acceptance criteria/.test(w)),
+      "full review Pa4: importing a source with no criteria (+tdd) plans one generic row, no template AC phantoms, and warns that requirements.md defines no AC (got " + JSON.stringify([im4.ok, im4.error, plan4.split("\n").filter((l) => /^\| T-/.test(l)), tr4.phantomAcsInTests, d4 && d4.status, im4.warnings]) + ")");
+    S.createFeature(pa, "No ids", ["core"], "x", undefined, "en");
+    paPut(".specs/no-ids/requirements.md", "# Feature: No ids\n\n## Summary\nThings.\n\n## User Stories\n\n### US-1 (P1): Do\n- the system shall work\n");
+    const at4 = S.addTrack(pa, "no-ids", "tdd");
+    const plan4b = fs.readFileSync(path.join(paDir("no-ids"), "test-plan.md"), "utf8");
+    ok(at4.ok && !/US-\d+\.AC-\d+/.test(plan4b) && S.featurePlaceholders(pa, "no-ids", "test-plan.md").state === "placeholder",
+      "full review Pa4: spec_add_track tdd on requirements without AC IDs scaffolds a plan with no template AC rows (still a template to fill) (got " + JSON.stringify([at4.ok, plan4b.split("\n").filter((l) => /^\| T-/.test(l))]) + ")");
+
+    // Pa5: T-IDs restart per feature — a test file another feature's plan names never counts for this feature's T-IDs.
+    const plan5 = (rows) => "# Test Plan\n\n## Traceability Matrix\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" + rows + "\n";
+    for (const n of ["Shortener", "QR codes"]) { S.createFeature(pa, n, ["tdd"], "x", undefined, "en"); }
+    for (const sl of ["shortener", "qr-codes"]) paPut(".specs/" + sl + "/requirements.md", paReq(earsGood));
+    paPut(".specs/shortener/test-plan.md", plan5("| T-01 | unit | example | shortens | US-1.AC-1 | `test/shortener.test.js` |\n| T-02 | unit | example | expands | US-1.AC-2 | `test/shortener.test.js` |"));
+    paPut(".specs/qr-codes/test-plan.md", plan5("| T-01 | unit | example | encodes | US-1.AC-1 | `test/` |\n| T-02 | unit | example | decodes | US-1.AC-2 | `test/` |"));
+    paPut("test/shortener.test.js", 'test("T-01 shortens", () => {});\ntest("T-02 expands", () => {});\n');
+    const trA = S.traceCheck(pa, "shortener", { code: true }), trB = S.traceCheck(pa, "qr-codes", { code: true });
+    approveBefore(pa, "qr-codes", "tests");
+    const ap5 = S.approvePhase(pa, "qr-codes", "tests", "t");
+    ok(JSON.stringify(trA.code.plannedNotInCode) === "[]" && JSON.stringify(trB.code.plannedNotInCode) === '["T-01","T-02"]' && !Object.keys(trB.code.testsInCode).length &&
+      !ap5.ok && (ap5.failing || []).includes("tests-in-code"),
+      "full review Pa5: another feature's test file (named in ITS plan) never proves this feature's T-01/T-02 — trace --code and the Phase 4 gate see no qr test (got " + JSON.stringify([trA.code.plannedNotInCode, trB.code.plannedNotInCode, trB.code.testsInCode, ap5.ok, ap5.failing]) + ")");
+    paPut("test/qr.test.js", 'test("T-01 encodes", () => {});\ntest("T-02 decodes", () => {});\n');
+    const trB2 = S.traceCheck(pa, "qr-codes", { code: true });
+    ok(JSON.stringify(trB2.code.testsInCode) === '{"T-01":["test/qr.test.js"],"T-02":["test/qr.test.js"]}' && !trB2.code.plannedNotInCode.length,
+      "full review Pa5: the feature's own test file under its folder scope counts (got " + JSON.stringify(trB2.code) + ")");
+
+    // Pa6: a test planned outside test code whose artifact is still a template — doctor warns, spec_finish warns (never blocks).
+    S.createFeature(pa, "Load", ["tdd", "saas"], "x", undefined, "en");
+    paPut(".specs/load/test-plan.md", plan5("| T-01 | load | example | P95 within budget | US-1.AC-1 | `load-test.md` |\n| T-02 | unit | example | charges | US-1.AC-2 | `tests/unit/charge.test.js` |"));
+    paPut(".specs/load/tasks.md", "# Tasks\n\n- [x] 1. Run the load test\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n- [ ] 2. Charge\n  - _Requirements: US-1.AC-2_\n  - _Makes green: T-02_\n");
+    const oc6 = (S.specDoctor(pa, "load").checks || []).find((c) => c.id === "outside-code-artifacts");
+    const fin6 = S.finishFeature(pa, "load");
+    ok(oc6 && oc6.status === "warn" && /T-01 → load-test\.md/.test(oc6.detail) && (fin6.warnings || []).includes(oc6.detail) && !(fin6.blockers || []).some((b) => /load-test/.test(b)),
+      "full review Pa6: a done task's load test whose load-test.md is still the template — doctor outside-code-artifacts warn, and a spec_finish warning, never a blocker (got " + JSON.stringify([oc6, fin6.warnings, fin6.blockers]) + ")");
+    paPut(".specs/load/load-test.md", "# Load test\n\nk6 run at 200 rps for 10 minutes: p95 412 ms, error rate 0.02% — within the 800 ms budget.\n");
+    const oc6b = (S.specDoctor(pa, "load").checks || []).find((c) => c.id === "outside-code-artifacts");
+    ok(!oc6b, "full review Pa6: once load-test.md holds the real run, no outside-code-artifacts warn (got " + JSON.stringify(oc6b) + ")");
+  }
+
+  // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
+  {
+    const I = require("./lib/i18n.js");
+    const put = (root, rel, text) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
+    const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
+    const secStatus = (pd, slug, id) => (S.specDoctor(pd, slug).checks.find((c) => c.id === id) || {}).status;
+    const fillTodo = (text) => text.replace(/^> \*\*TODO\*\*.*$/gm, "Written by the team.");
+    // Pb1: a Kiro spec written in Portuguese / Spanish — "### Requisito N", "## Introdução" / "## Introducción" and the
+    // QUANDO … ENTÃO / CUANDO … ENTONCES criteria are read like the English ones.
+    const kiro = {
+      pt: ["# Documento de Requisitos\n\n## Introdução\n\nEsta funcionalidade permite repor a palavra-passe por email.\n\n## Requisitos\n\n### Requisito 1\n\n" +
+        "**História de Utilizador:** Como utilizador registado, quero repor a minha palavra-passe, para que possa voltar a aceder à conta.\n\n#### Critérios de Aceitação\n\n" +
+        "1. QUANDO o utilizador pede a reposição ENTÃO o sistema DEVE enviar um email com uma ligação única\n2. SE a ligação tiver mais de 30 minutos ENTÃO o sistema DEVE rejeitá-la\n" +
+        "3. QUANDO o token expira ENTÃO o sistema rejeita o pedido\n", /## Resumo\nEsta funcionalidade permite repor a palavra-passe por email\./,
+      /\*\*US-1\.AC-3\*\* — QUANDO o token expira, O SISTEMA DEVE garantir que o sistema rejeita o pedido/, "Repor a minha palavra-passe"],
+      es: ["# Documento de Requisitos\n\n## Introducción\n\nPermite restablecer la contraseña por correo.\n\n## Requisitos\n\n### Requisito 1\n\n" +
+        "**Historia de Usuario:** Como usuario, quiero restablecer mi contraseña, para poder acceder de nuevo.\n\n#### Criterios de Aceptación\n\n" +
+        "1. CUANDO el usuario solicita el restablecimiento ENTONCES el sistema DEBE enviar un correo con un enlace único\n2. SI el enlace tiene más de 30 minutos ENTONCES el sistema DEBE rechazarlo\n" +
+        "3. CUANDO el token caduca ENTONCES el sistema rechaza la solicitud\n", /## Resumen\nPermite restablecer la contraseña por correo\./,
+      /\*\*US-1\.AC-3\*\* — CUANDO el token caduca, EL SISTEMA DEBE garantizar que el sistema rechaza la solicitud/, "Restablecer mi contraseña"],
+    };
+    for (const [lng, [req, summaryRe, rewrittenRe, title]] of Object.entries(kiro)) {
+      const kp = path.join(tmp, "proj-full-review-pb1-" + lng);
+      S.initProject(kp, ["core"], lng);
+      put(kp, ".kiro/specs/reset/requirements.md", req);
+      put(kp, ".kiro/specs/reset/tasks.md", "# Plano\n\n- [ ] 1. Criar o modelo de token\n  - _Requirements: 1.1, 1.2, 1.3_\n");
+      const k = S.importSpec(kp, "kiro", ".kiro/specs/reset", {});
+      const kReq = k.ok ? rd(k.dir, "requirements.md") : "", kTasks = k.ok ? rd(k.dir, "tasks.md") : "";
+      const kEars = S.earsValidate(kReq, lng);
+      ok(k.ok && k.mapping["Requisito 1"] === "US-1" && k.mapping["1.3"] === "US-1.AC-3" && k.warnings.length === 1 && summaryRe.test(kReq) &&
+        kReq.includes("### US-1: " + title) && rewrittenRe.test(kReq) && /_Requirements: US-1\.AC-1, US-1\.AC-2, US-1\.AC-3_/.test(kTasks) && kEars.verdict === "pass",
+        "full review Pb1: a " + lng.toUpperCase() + " Kiro spec imports its story (Requisito 1 → US-1, its 3 criteria), the introduction as the summary, a QUANDO/CUANDO … ENTÃO/ENTONCES " +
+        "criterion without a modal rewritten in its language, tasks' _Requirements: 1.x_ resolved (got " + JSON.stringify([k.error, k.mapping, k.warnings, kEars.verdict]) + ")");
+    }
+
+    // Pb2: spec_create / spec_import classify a new feature in the project's configured language — "no checkout" is PT em+o.
+    const p2 = path.join(tmp, "proj-full-review-pb2");
+    S.initProject(p2, ["core"], "pt");
+    const c2 = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "IVA", summary: "Corrigir o cálculo do IVA no checkout", projectDir: p2 } }));
+    const c2b = S.createFeature(p2, "IVA B", undefined, "Corrigir o cálculo do IVA no checkout");
+    put(p2, "plans/iva.md", "# Corrigir o cálculo do IVA no checkout\n\n## Passos\n\n1. Corrigir `src/iva.js`\n");
+    const i2 = S.importSpec(p2, "plan", "plans/iva.md", {});
+    // an English source in the PT project is still read as English: "no LLM" is a negation there
+    put(p2, "plans/export.md", "# Export the report\n\nThe export has no LLM and it writes the report to the file for the user.\n\n## Steps\n\n1. Write the export in `src/export.js`\n");
+    const i2en = S.importSpec(p2, "plan", "plans/export.md", {});
+    ok(c2.ok && c2.tracks.join() === "core,tdd" && c2b.tracks.join() === "core,tdd" && i2.ok && i2.tracks.includes("tdd") && i2en.ok && !i2en.tracks.includes("ai"),
+      "full review Pb2: in a meta.lang pt project spec_create (MCP and engine) and spec_import read 'no checkout' as em+o (+tdd on); an English plan imported there keeps 'no LLM' negated (got " +
+      JSON.stringify([c2.tracks, c2b.tracks, i2.tracks, i2en.tracks]) + ")");
+
+    // Pb3: a plan's "## Approach" beside a "## Steps" section is design prose — its "### Files to modify" is no task list.
+    const p3 = path.join(tmp, "proj-full-review-pb3");
+    S.initProject(p3, ["core"], "en");
+    put(p3, "plans/rate-limit.md", "# Add rate limiting to the public API\n\n## Context\n\nOne client took the API down last week.\n\n## Approach\n\n" +
+      "Use a token bucket in Redis, keyed by API key.\n\n### Files to modify\n\n- `src/middleware/rateLimit.ts` — new middleware\n- `src/server.ts` — register it\n\n" +
+      "## Steps\n\n1. **Create the middleware** in `src/middleware/rateLimit.ts`\n2. **Register** it in `src/server.ts`\n3. **Add tests** in `test/rateLimit.test.ts`\n");
+    const i3 = S.importSpec(p3, "plan", "plans/rate-limit.md", {});
+    const t3 = i3.ok ? S.parseTasks(rd(i3.dir, "tasks.md")) : [];
+    put(p3, "plans/only-approach.md", "# Dark mode\n\n## Approach\n\n1. Add a theme store in `src/theme.ts`\n2. Wire the toggle in `src/header.tsx`\n");
+    const i3b = S.importSpec(p3, "plan", "plans/only-approach.md", {});
+    ok(i3.ok && t3.length === 3 && /### Files to modify\n\n- `src\/middleware\/rateLimit\.ts` — new middleware/.test(rd(i3.dir, "design.md")) &&
+      i3b.ok && S.parseTasks(rd(i3b.dir, "tasks.md")).length === 2,
+      "full review Pb3: an Approach section beside Steps stays in design.md (3 tasks from the 3 steps, not 5); a plan with only an Approach still takes its items as tasks (got " +
+      JSON.stringify([t3.map((t) => t.text), i3b.ok && S.parseTasks(rd(i3b.dir, "tasks.md")).length]) + ")");
+
+    // Pb4: track-section headings — an inflected name, an emoji before / after the marker, the pt-BR vocabulary.
+    const p4 = path.join(tmp, "proj-full-review-pb4");
+    S.initProject(p4, ["core"], "en");
+    const f4 = S.createFeature(p4, "Vault", ["sec"], "x", undefined, "en");
+    const d4 = fillTodo(rd(f4.dir, "design.md"));
+    const heads4 = ["## [SEC] Threat Modeling", "## [SEC] Threat Models", "## 🔐 [SEC] Threat Model", "## [SEC] 🛡️ Threat Modelling"].map((h) => {
+      fs.writeFileSync(path.join(f4.dir, "design.md"), d4.replace(/^## \[SEC\] Threat Model.*$/m, h));
+      return [h, secStatus(p4, f4.slug, "sec-sections")];
+    });
+    const b4 = path.join(tmp, "proj-full-review-pb4-br");
+    S.initProject(b4, ["core"], "pt-BR");
+    const g4 = S.createFeature(b4, "Cobranca", ["saas", "sec", "privacy"], "Cobrança por locatário");
+    const gd = fillTodo(rd(g4.dir, "design.md"))
+      .replace(/^## \[SaaS\] Modelo Multi.*$/m, "## [SaaS] Modelo Multilocatário").replace(/^## \[SEC\] Gest.*Segredos.*$/m, "## [SEC] Gerenciamento de Segredos e Chaves")
+      .replace(/^## \[PRIVACY\] (?:Subcontratantes|Operadores).*$/m, "## [PRIVACY] Operadores e Transferências Internacionais")
+      .replace(/^## \[PRIVACY\] (?:AIPD|RIPD).*$/m, "## [PRIVACY] RIPD — Relatório de Impacto à Proteção de Dados");
+    fs.writeFileSync(path.join(g4.dir, "design.md"), gd);
+    const br4 = ["saas-sections", "sec-sections", "privacy-sections"].map((id) => secStatus(b4, g4.slug, id));
+    // "operadores" alone is an ordinary word: a core "## Operadores de fila" never stands in for a deleted [PRIVACY] section
+    fs.writeFileSync(path.join(g4.dir, "design.md"), gd.replace(/^## \[PRIVACY\] Operadores e Transferências Internacionais$/m, "## Operadores de fila"));
+    const loose4 = secStatus(b4, g4.slug, "privacy-sections");
+    ok(heads4.every(([, st]) => st === "pass") && br4.every((st) => st === "pass") && loose4 !== "pass",
+      "full review Pb4: '[SEC] Threat Modeling / Models / Modelling' and an emoji beside the marker name the Threat Model; pt-BR Multilocatário, Gerenciamento de Segredos, " +
+      "Operadores e Transferências Internacionais, RIPD pass doctor; a core 'Operadores de fila' heading does not (got " + JSON.stringify([heads4, br4, loose4]) + ")");
+
+    // Pb5: the encryption verbs in PT / ES and at rest / in transit (corroborating only).
+    const sig = (t) => { const c = S.classify(t); return [c.tracks.includes("sec"), c.signals.sec]; };
+    const on5 = ["Encriptar os dados dos cartões em repouso", "Encrypt customer PII at rest and in transit", "Os dados são criptografados em repouso e em trânsito", "Los datos se cifran en reposo"].map(sig);
+    // one verb is one signal, whatever its forms (as encrypt / encryption): a lone verb is only "possible"
+    const weak5 = ["Criptografar os backups", "Cifrar las contraseñas", "O sistema encripta os backups", "Encriptar os dados e guardar os dados encriptados"].map(sig);
+    const none5 = ["As cifras do trimestre sobem", "O paciente fica em repouso", "Packages in transit are tracked"].map(sig);
+    ok(on5.every(([on]) => on) && weak5.every(([on, s]) => !on && s.length === 1) && none5.every(([on, s]) => !on && !s.length),
+      "full review Pb5: encriptar / criptografar / cifrar are +sec signals, 'at rest' / 'in transit' (EN/PT/ES) corroborate them; 'cifras' (figures), a patient at rest, parcels in transit are none (got " +
+      JSON.stringify([on5, weak5, none5]) + ")");
+
+    // Pb6: linear scans — a long run of '[' / ')' / word characters (the old patterns took seconds at 80 000 characters).
+    const timed = (f) => { const t0 = Date.now(); f(); return Date.now() - t0; };
+    const n6 = 80000;
+    const t6 = [timed(() => S.planPaths("[".repeat(n6))), timed(() => S.planPaths(")".repeat(n6) + "a/b.ts")), timed(() => S.planPaths("[](a".repeat(n6 / 4))),
+      timed(() => S.markdownToHtml("[".repeat(n6))), timed(() => S.markdownToHtml("![".repeat(n6 / 2))), timed(() => I.toPtBr("a".repeat(n6))), timed(() => I.toPtBr("ab.".repeat(n6 / 3)))];
+    ok(t6.every((ms) => ms < 1000) && JSON.stringify(S.planPaths("see [the store](src/theme.ts) and [[x](lib/y.js)")) === '["src/theme.ts","lib/y.js"]' &&
+      I.toPtBr("O utilizador guarda o ficheiro tasks.md e src/a.test.js.") === "O usuário guarda o arquivo tasks.md e src/a.test.js." &&
+      S.markdownToHtml("[[see](https://x.io)") === '<p>[<a href="https://x.io" rel="noopener noreferrer">see</a></p>',
+      "full review Pb6: planPaths / markdownToHtml / toPtBr stay linear on 80 000 '[' / ')' / letters (each < 1 s), links and file names still read (got " + JSON.stringify(t6) + " ms)");
+
+    // Pb7: pt-BR — ter que, proclisis, acessá-lo, the LGPD headings (still matched by the section synonyms); pt unchanged.
+    const brM = I.msg("pt-BR"), all5 = { name: "X", tracks: ["core", "tdd", "saas", "ai", "sec", "privacy"], label: "x", summary: "" };
+    const brDesign = I.design(all5, "pt-BR"), ptDesign = I.design(all5, "pt");
+    const txt7 = [brM.evidence.badExit("x"), brM.appendTasks.badPath(1, "x"), brM.appendTasks.placeholderVerify(1, "x"), I.brief("pt-BR").evalsRule, brDesign].join("\n");
+    ok(/tem que ser um inteiro/.test(txt7) && /têm que ser relativos/.test(txt7) && /'x' é lido como um marcador/.test(txt7) && /o golden se mantém ou melhora, o adversarial se mantém/.test(txt7) &&
+      /quem pode acessá-lo\./.test(brDesign) && /## \[SaaS\] Modelo Multilocatário/.test(brDesign) && /## \[PRIVACY\] Retenção e Eliminação/.test(brDesign) &&
+      /## \[PRIVACY\] Operadores e Transferências Internacionais/.test(brDesign) && /## \[PRIVACY\] RIPD \(quando obrigatório — LGPD art\. 38\)/.test(brDesign) &&
+      !/tem de|têm de|lê-se|mantém-se|lhe pode|Subcontratantes|AIPD|Multi-inquilino|Conservação e Eliminação/.test(txt7) &&
+      /## \[SaaS\] Modelo Multi-inquilino/.test(ptDesign) && /## \[PRIVACY\] AIPD \(quando obrigatória — art\. 35\.º\)/.test(ptDesign) &&
+      /`feat\(módulo\): … — tarefa #N`/.test(I.brief("pt-BR").loopRules.core[2]) &&
+      /`feat\(módulo\): … — tarefa #N`/.test(I.brief("pt").loopRules.core[2]),
+      "full review Pb7: pt-BR says 'tem que ser', 'é lido como', 'se mantém', 'quem pode acessá-lo', Modelo Multilocatário, Retenção e Eliminação, Operadores, RIPD (LGPD art. 38); " +
+      "pt keeps Multi-inquilino / AIPD; the commit example `feat(módulo)` is the same code span in both (got " + JSON.stringify(txt7.match(/.{0,30}(?:tem de|têm de|lê-se|mantém-se|lhe pode|Subcontratantes|AIPD|Multi-inquilino).{0,30}/g)) + ")");
+    const b7 = S.createFeature(b4, "Tudo BR", ["saas", "sec", "privacy"], "x");
+    fs.writeFileSync(path.join(b7.dir, "design.md"), fillTodo(rd(b7.dir, "design.md")));
+    const br7 = ["saas-sections", "sec-sections", "privacy-sections"].map((id) => secStatus(b4, b7.slug, id));
+    ok(br7.every((st) => st === "pass"), "full review Pb7: a filled pt-BR scaffold with the Brazilian headings passes doctor's section checks (got " + JSON.stringify(br7) + ")");
+
+    // Pb8: a pt-BR feature falls back to .specs/templates/pt/ (then templates/, then the built-in); pt-BR/ wins over pt/.
+    const p8 = path.join(tmp, "proj-full-review-pb8");
+    S.initProject(p8, ["core"], "pt-BR");
+    put(p8, ".specs/templates/pt/quickstart.md", "# Arranque rápido PT: {{name}}\n\n[passos]\n");
+    put(p8, ".specs/templates/quickstart.md", "# Root quickstart: {{name}}\n\n[steps]\n");
+    put(p8, ".specs/templates/pt/checklist.md", "# Checklist PT: {{name}}\n\n- [ ] [item]\n");
+    put(p8, ".specs/templates/pt-BR/checklist.md", "# Checklist BR: {{name}}\n\n- [ ] [item]\n");
+    const f8 = S.createFeature(p8, "Alfa", ["core"], "x");
+    const l8 = S.templates(p8, "list", { artifact: "quickstart" });
+    const e8 = S.createFeature(p8, "Beta", ["core"], "x", undefined, "en");
+    ok(f8.lang === "pt-BR" && /^# Arranque rápido PT: Alfa/.test(rd(f8.dir, "quickstart.md")) && /^# Checklist BR: Alfa/.test(rd(f8.dir, "checklist.md")) &&
+      f8.templates && f8.templates["quickstart.md"] === ".specs/templates/pt/quickstart.md" && l8.templates[0].override === ".specs/templates/pt/quickstart.md" &&
+      /^# Root quickstart: Beta/.test(rd(e8.dir, "quickstart.md")),
+      "full review Pb8: a pt-BR feature reads templates/pt-BR/ → templates/pt/ → templates/ (an English one skips pt/); spec_templates list names the same file (got " +
+      JSON.stringify([f8.templates, l8.templates && l8.templates[0].override, e8.templates]) + ")");
+  }
+
+  // 1.14 full review (S) — surfaces: MCP server, CLI, hooks.
+  {
+    // A private server fed RAW bytes; every reply line is kept as text (the raw form matters for S1) and parsed.
+    const frsProj = path.join(tmp, "proj-frs");
+    S.initProject(frsProj, ["core"], "en");
+    const frsPt = path.join(tmp, "proj-frs-pt");
+    S.initProject(frsPt, ["core"], "pt");
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const frsServer = () => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...process.env, SPEC_PROJECT_DIR: frsProj }, stdio: ["pipe", "pipe", "inherit"] });
+      const raw = [];
+      let b = Buffer.alloc(0);
+      kid.stdout.on("data", (d) => {
+        b = Buffer.concat([b, d]);
+        let nl;
+        while ((nl = b.indexOf(0x0a)) >= 0) { raw.push(b.slice(0, nl).toString("utf8")); b = b.slice(nl + 1); }
+      });
+      const done = new Promise((resolve) => kid.on("exit", resolve));
+      const timer = setTimeout(() => { try { kid.kill(); } catch {} }, 15000); // a hung server fails the assertions, never the suite
+      const end = async () => { kid.stdin.end(); await done; clearTimeout(timer); return raw.map((l) => { try { return JSON.parse(l); } catch { return { unparsable: l }; } }); };
+      return { write: (x) => kid.stdin.write(x), raw, end };
+    };
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+    const byId = (msgs, id) => msgs.find((m) => m && m.id === id);
+
+    // S1 — framing on "\n" only: U+2028 / U+2029 raw inside a JSON string no longer cut a request in two.
+    const s1 = frsServer();
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-a", method: "tools/call", params: { name: "spec_classify", arguments: { description: "Stripe" + LS + "billing" + PS + "webhook" } } }) + "\n");
+    s1.write(JSON.stringify([{ jsonrpc: "2.0", id: "s1-b1", method: "ping" }, { jsonrpc: "2.0", id: "s1-b2", method: "prompts/get", params: { name: "no" + LS + "such" } }]) + "\n");
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-u", method: "resources/read", params: { uri: "specs://feature/x" + LS + "y/requirements.md" } }) + "\n");
+    // a multibyte character split across two chunks stays whole; a CRLF line; a last line without its newline
+    const mb = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: "s1-m", method: "tools/call", params: { name: "spec_classify", arguments: { description: "faturação multi-inquilino" } } }) + "\n", "utf8");
+    const cut = mb.indexOf(0xc3) + 1;
+    s1.write(mb.slice(0, cut));
+    await sleep(60);
+    s1.write(mb.slice(cut));
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-crlf", method: "ping" }) + "\r\n");
+    s1.write(JSON.stringify({ jsonrpc: "2.0", id: "s1-last", method: "ping" }));
+    const r1 = await s1.end();
+    const cls1 = byId(r1, "s1-a");
+    const batch1 = r1.find((m) => Array.isArray(m));
+    const uri1 = byId(r1, "s1-u");
+    const uriLine = s1.raw.find((l) => /"s1-u"/.test(l)) || "";
+    const esc = String.fromCharCode(92) + "u2028"; // the 6-character JSON escape
+    ok(cls1 && cls1.result && !cls1.result.isError && JSON.parse(cls1.result.content[0].text).tracks.includes("saas") &&
+      !r1.some((m) => m && m.error && m.error.code === -32700) && batch1 && batch1.map((m) => m.id).join() === "s1-b1,s1-b2" &&
+      byId(r1, "s1-m") && byId(r1, "s1-m").result && JSON.parse(byId(r1, "s1-m").result.content[0].text).lang === "pt" &&
+      byId(r1, "s1-crlf") && byId(r1, "s1-last") && byId(r1, "s1-last").result,
+      "full review S1: a request carrying raw U+2028 / U+2029 inside a JSON string is ONE message (answered, no -32700 pair); batches, a UTF-8 character split across chunks, CRLF and a last unterminated line still work (got " +
+      JSON.stringify(r1.map((m) => (m && (m.id !== undefined ? m.id + ":" + (m.error ? m.error.code : "ok") : Array.isArray(m) ? "batch" : m.unparsable)))) + ")");
+    ok(uri1 && uri1.error && uri1.error.data && uri1.error.data.uri === "specs://feature/x" + LS + "y/requirements.md" && uriLine.includes(esc) &&
+      !s1.raw.some((l) => l.includes(LS) || l.includes(PS)),
+      "full review S1: replies never carry a raw U+2028 / U+2029 (written as their JSON escapes — readline-framed clients survive them), the value is unchanged (got " + JSON.stringify(uriLine.slice(0, 160)) + ")");
+
+    // S2 — JSON-RPC / MCP conformance: ids, method, unknown tools.
+    const s2 = frsServer();
+    [
+      { jsonrpc: "2.0", id: null, method: "ping" },
+      { jsonrpc: "2.0", id: { a: 1 }, method: "ping" },
+      { jsonrpc: "2.0", id: [1], method: "ping" },
+      { jsonrpc: "2.0", id: true, method: "ping" },
+      { jsonrpc: "2.0", id: 1.5, method: "ping" },
+      { jsonrpc: "2.0", id: "s2-nomethod" },
+      { jsonrpc: "2.0", id: "s2-response", result: {} }, // a response: never answered
+      { jsonrpc: "2.0", method: "notifications/initialized" }, // a notification: never answered
+      { jsonrpc: "2.0", id: "s2-unknown", method: "tools/call", params: { name: "nope", arguments: {} } },
+      { jsonrpc: "2.0", id: "s2-noparams", method: "tools/call" },
+      { jsonrpc: "2.0", id: "s2-pt", method: "tools/call", params: { name: "nope", arguments: { projectDir: frsPt } } },
+      { jsonrpc: "2.0", id: 0, method: "ping" },
+      { jsonrpc: "2.0", id: -7, method: "ping" },
+      { jsonrpc: "2.0", id: "s2-ok", method: "tools/call", params: { name: "spec_list", arguments: {} } },
+    ].forEach((m) => s2.write(JSON.stringify(m) + "\n"));
+    const r2 = await s2.end();
+    const nullIds = r2.filter((m) => m && m.id === null);
+    const e2 = (id) => (byId(r2, id) || {}).error || {};
+    ok(nullIds.length === 5 && nullIds.every((m) => m.error && m.error.code === -32600) && e2("s2-nomethod").code === -32600 && !byId(r2, "s2-response") &&
+      r2.length === 12 && byId(r2, 0) && byId(r2, 0).result && byId(r2, -7) && byId(r2, -7).result && byId(r2, "s2-ok").result && !byId(r2, "s2-ok").result.isError,
+      "full review S2: id null / object / array / boolean / fractional → -32600 (id null, never echoed); an id without a string method → -32600; a response or a notification gets no reply; ids 0 / -7 / strings are answered (got " +
+      JSON.stringify(r2.map((m) => (m ? m.id + ":" + (m.error ? m.error.code : "ok") : m))) + ")");
+    ok(e2("s2-unknown").code === -32602 && /Unknown tool: nope/.test(e2("s2-unknown").message) && e2("s2-noparams").code === -32602 && /params\.name/.test(e2("s2-noparams").message) &&
+      e2("s2-pt").code === -32602 && /Ferramenta desconhecida: nope/.test(e2("s2-pt").message) && !byId(r2, "s2-unknown").result,
+      "full review S2: tools/call of an unknown tool (or without params / a name) is a JSON-RPC error -32602 Invalid params, localized in the project language — never a successful isError result (got " +
+      JSON.stringify([e2("s2-unknown"), e2("s2-noparams").code, e2("s2-pt").message]) + ")");
+
+    // S3 — the guard sees an alias of the project (a junction / symlink; an 8.3 short name) as the project, not "outside".
+    const g3 = path.join(tmp, "proj-frs-guard");
+    S.initProject(g3, ["core"], "en", { guard: true });
+    const g3link = path.join(tmp, "frs-guard-link");
+    let linked = false;
+    try { fs.symlinkSync(g3, g3link, "junction"); linked = true; } catch { /* no links here: the link assertions are skipped */ }
+    if (linked) {
+      const viaLink = S.guardCheck(g3, path.join(g3link, "src", "a.ts"));
+      const fromLink = S.guardCheck(g3link, path.join(g3, "src", "a.ts"));
+      const specsViaLink = S.guardCheck(g3, path.join(g3link, ".specs", "x.ts"));
+      const outside = S.guardCheck(g3, path.join(tmp, "frs-elsewhere", "a.ts"));
+      ok(viaLink.decision === "ask" && viaLink.why === "no-approved-tasks" && fromLink.decision === "ask" && specsViaLink.why === "specs" && outside.why === "outside",
+        "full review S3: guard on, no approved tasks — a code file reached through a junction / symlink of the project (either side) asks like the real path; .specs/ through the link is the spec folder; a real outside file stays allowed (got " +
+        JSON.stringify([viaLink.why, fromLink.why, specsViaLink.why, outside.why]) + ")");
+      // scope: an absolute _Implements:_ spelled through the link plans the real file.
+      const f3 = S.createFeature(g3, "Scoped", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Implements: " + path.join(g3link, "src", "a.ts").split(path.sep).join("/") + "_\n");
+      approveBefore(g3, f3.slug, "tasks");
+      S.approvePhase(g3, f3.slug, "tasks", "t", { force: true });
+      S.initProject(g3, [], "en", { guard: "scope" });
+      const sc3 = S.guardCheck(g3, path.join(g3, "src", "a.ts"));
+      ok(sc3.decision === "allow" && sc3.why === "in-scope" && sc3.task && sc3.task.number === 1,
+        "full review S3: scope guard — an absolute _Implements:_ path written through the project's link plans the real file (in-scope, task 1) (got " + JSON.stringify([sc3.decision, sc3.why]) + ")");
+    }
+    let realTmp = tmp;
+    try { realTmp = fs.realpathSync.native(tmp); } catch { /* keep */ }
+    if (realTmp !== tmp) { // this machine's temp folder has another spelling (an 8.3 short name, /tmp → /private/tmp)
+      const g3b = path.join(tmp, "proj-frs-guard83");
+      S.initProject(g3b, ["core"], "en", { guard: true });
+      const other = S.guardCheck(path.join(realTmp, "proj-frs-guard83"), path.join(g3b, "src", "b.ts"));
+      ok(other.decision === "ask", "full review S3: the project given in one spelling, the file in the other (" + tmp + " vs " + realTmp + ") — the guard asks (got " + other.why + ")");
+    }
+
+    // S6 — backlog add of a name that already has an active feature folder is refused (it was listed twice in ROADMAP.md).
+    const p6 = path.join(tmp, "proj-frs-backlog");
+    S.initProject(p6, ["core"], "en");
+    S.createFeature(p6, "Pay", ["core"], "", undefined, "en");
+    const b6 = S.backlog(p6, "add", "pay", "later");
+    const b6mcp = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "add", name: "PAY", projectDir: p6 } });
+    S.manageFeature(p6, "archive", "pay");
+    const b6arch = S.backlog(p6, "add", "Pay", "again");
+    ok(b6.ok === false && b6.feature === "pay" && /already has a spec \(\.specs\/pay\/\)/.test(b6.error) && b6mcp.result.isError === true &&
+      /already has a spec/.test(payload(b6mcp).error) && b6arch.ok === true && b6arch.backlog.map((x) => x.name).join() === "Pay",
+      "full review S6: spec_backlog add refuses a name an active feature already has (engine + MCP, nothing stored); once archived it can be planned again (got " + JSON.stringify([b6.error, b6arch.backlog]) + ")");
+
+    // S7 — backlog 'remove' is rm's alias on every surface (the enum lists it); the templates description names pt-BR.
+    const tl7 = (await rpc("tools/list", {})).result.tools;
+    const bl7 = tl7.find((t) => t.name === "spec_backlog");
+    const tp7 = tl7.find((t) => t.name === "spec_templates");
+    const rm7 = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "REMOVE", name: "pay", projectDir: p6 } });
+    ok(bl7.inputSchema.properties.action.enum.join() === "add,rm,remove,list" && !rm7.result.isError && payload(rm7).backlog.length === 0 &&
+      S.backlog(p6, "add", "X").ok && S.backlog(p6, "remove", "x").ok && /\(en \| pt \| pt-BR \| es\)/.test(tp7.description),
+      "full review S7: spec_backlog's action enum lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
+      JSON.stringify([bl7.inputSchema.properties.action.enum, rm7.result.isError]) + ")");
+  }
+
+  // 1.14 full review (D) — docs and prose.
+  {
+    const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const dRef = (f) => dRead("skills", "dev-spec-driven", "references", f);
+    const dWs = (t) => t.replace(/\s+/g, " ");
+    // D1: red-green counts only _Makes green:_ IDs — a bugfix's guard test T-02 shows up only on a pre-1.14 bugfix
+    // (its task 4 still lists it); the docs said it "is expected here" / "is named there too" on every bugfix.
+    const d1Docs = [dRead("commands", "spec-doctor.md"), dRef("verification.md"), dRef("test-patterns.md")].map(dWs);
+    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)),
+      "full review D1: spec-doctor / verification / test-patterns — T-02 in red-green only on a pre-1.14 bugfix; the fix is removing it from task 4's _Makes green:_");
+    // D2: the canonical _Expect: fail_ example keeps _Makes green:_ off the red task (the fix task makes it green).
+    const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";
+    ok(/_Expect: fail_/.test(d2Ex) && !/_Makes green:/.test(d2Ex), "full review D2: verification.md's _Expect: fail_ example has no _Makes green:_ on the red task");
+    // D3: design section examples use the template's heading ("Data Models"); decide refuses "Data Model" on a fresh scaffold.
+    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-decide.md"), dRef("change-management.md")];
+    const d3p = path.join(tmp, "fr-d3");
+    S.initProject(d3p, ["core"], "en");
+    S.createFeature(d3p, "Keys", ["core"]);
+    const d3bad = S.decide(d3p, "keys", { title: "t", decision: "d", affects: ["Data Model"] });
+    const d3ok = S.decide(d3p, "keys", { title: "t", decision: "d", affects: ["Data Models"] });
+    ok(d3Surfaces.every((t) => !/["'`]Data Model["'`]|Data Model_/.test(t)) && d3Surfaces.every((t) => /Data Models/.test(t)) && d3bad.ok === false && d3ok.ok === true,
+      "full review D3: no \"Data Model\" example (the design template's heading is Data Models) — decide refuses the singular, accepts the heading (got " + JSON.stringify([d3bad.ok, d3ok.ok]) + ")");
+    // D4: every command / agent / SKILL.md front matter is strict `key: value` YAML — a plain scalar never holds ": " or
+    // " #" nor starts with an indicator; quoted values are valid; block scalars are indented. The prompts reader agrees.
+    const d4Files = [...fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md")).map((x) => ["commands", x]),
+      ...fs.readdirSync(path.join(root, "agents")).filter((x) => x.endsWith(".md")).map((x) => ["agents", x]), ["skills", "dev-spec-driven", "SKILL.md"]];
+    const d4Bad = [];
+    for (const f of d4Files) {
+      const lines = dRead(...f).split("\n");
+      const end = lines.indexOf("---", 1);
+      if (lines[0] !== "---" || end < 0) { d4Bad.push(f.join("/") + ": no front matter"); continue; }
+      for (let i = 1; i < end; i++) {
+        const m = /^([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?$/.exec(lines[i]);
+        if (!m) { d4Bad.push(f.join("/") + ":" + (i + 1)); continue; }
+        const v = (m[2] || "").trim();
+        if (v === "") continue;
+        if (/^[|>][+-]?$/.test(v)) { while (i + 1 < end && /^(?:\s+\S.*)?$/.test(lines[i + 1])) i++; continue; }
+        if (v[0] === "\"") { try { JSON.parse(v); } catch { d4Bad.push(f.join("/") + ":" + (i + 1) + " bad quoted"); } continue; }
+        if (v[0] === "'") { if (!/^'(?:[^']|'')*'$/.test(v)) d4Bad.push(f.join("/") + ":" + (i + 1) + " bad quoted"); continue; }
+        if (/^[[\]{}#&*!|>%@`,]/.test(v) || /^[-?:](?:\s|$)/.test(v) || /: |:$/.test(v) || /\s#/.test(v)) d4Bad.push(f.join("/") + ":" + (i + 1) + " plain scalar");
+      }
+    }
+    const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
+    ok(d4Files.length === 55 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 51 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
+    const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
+    const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
+    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope" &&
+      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t)),
+      "full review D5: /spec-guard, /spec-init and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
+    // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
+    const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
+    ok(!/\n/.test(d6Desc) && /spec_finish's blockers:[^)]*\bsuite-evidence\b/.test(d6Desc) && /a spike: spike, decision/.test(d6Desc),
+      "full review D6: spec_approve's description names the execution gate's suite-evidence and a spike's spike / decision checks");
+    // D7: the demo is in the 1.14 shape (stamp, stored tracks, the .gitignore init writes) — no upgrade notice — and its
+    // +tdd feature records the Phase 4 red run, so executing it as written leaves no red-green warning.
+    const d7Src = path.join(root, "examples", "demo-project");
+    const d7 = path.join(tmp, "fr-d7", "demo-project");
+    fs.cpSync(d7Src, d7, { recursive: true });
+    const d7Init = path.join(tmp, "fr-d7-init");
+    S.initProject(d7Init, ["core"], "en");
+    const d7States = ["api-keys", "usage-metering"].map((f) => JSON.parse(fs.readFileSync(path.join(d7, ".specs", f, ".state.json"), "utf8")));
+    const d7Tasks = fs.readFileSync(path.join(d7, ".specs", "api-keys", "tasks.md"), "utf8");
+    const d7Verify = (d7Tasks.match(/^ {2}- _Verify: (.*)_$/m) || [])[1];
+    const d7Red = S.completeTask(d7, "api-keys", 1, { command: d7Verify, exitCode: 1, summary: "7 failed" });
+    for (let n = 2; n <= 9; n++) S.completeTask(d7, "api-keys", n, { summary: "done" });
+    const d7Doc = S.specDoctor(d7, "api-keys");
+    const d7Rg = d7Doc.checks.find((c) => c.id === "red-green");
+    const d7Readme = dRead("examples", "README.md");
+    ok(S.specVersionStatus(d7).behind === false && d7States.every((st) => Array.isArray(st.tracks) && st.tracks.includes("core")) &&
+      fs.readFileSync(path.join(d7, ".specs", ".gitignore"), "utf8") === fs.readFileSync(path.join(d7Init, ".specs", ".gitignore"), "utf8") &&
+      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && /^# Example — a fully worked spec \(1\.14 shape\)/.test(d7Readme) && /0\/9 tasks done/.test(d7Readme),
+      "full review D7: the demo is 1.14-shaped (no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
+      JSON.stringify([S.specVersionStatus(d7), d7Red.ok, d7Rg && d7Rg.status]) + ")");
+    // The +tdd reference example: an _Expect: fail_ task names every T-ID the other tasks make green; the combined example
+    // no longer claims "all four tracks" (there are six).
+    const d7ExTasks = (dRef("example-spec.md").split("## tasks.md")[1] || "").split(/\n(?=- \[ \] )/);
+    const d7ExRed = d7ExTasks.find((b) => /_Expect: fail_/.test(b)) || "";
+    const d7Greened = d7ExTasks.flatMap((b) => ((b.match(/_Makes green: ([^_]*)_/) || [])[1] || "").split(/,\s*/).filter(Boolean));
+    ok(d7ExRed && d7Greened.length >= 13 && d7Greened.every((id) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(d7ExRed.split("\n")[0])) &&
+      !/all four tracks|every track at once/.test(dRef("example-spec-combined.md")),
+      "full review D7: example-spec.md's red-run task (_Expect: fail_) names every T-ID made green; example-spec-combined is no longer titled 'all four tracks'");
+    // D8: the tour fills classification.md before it approves it; the bugfix flow ticks tasks 1 and 2 before task 3.
+    const d8Tour = dWs(dRead("commands", "spec-tour.md")), d8Bug = dWs(dRead("commands", "spec-bugfix.md"));
+    ok(/3\. \*\*Classify\*\*.*classification\.md.*7\. \*\*Approve\*\*/.test(d8Tour) &&
+      /done <feature> 1 --evidence/.test(d8Bug) && /done <feature> 2 --evidence/.test(d8Bug) && d8Bug.indexOf("done <feature> 2") < d8Bug.indexOf("done <feature> 3"),
+      "full review D8: /spec-tour records the decision in classification.md (step 3) before approving it (step 7); /spec-bugfix ticks tasks 1 and 2 before task 3's red run");
+    // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
+    const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
+    ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&
+      !/\b(?:Write|Edit)\b/.test(d9Tools("spec-reviewer.md")) && /\bBash\b/.test(d9Tools("spec-reviewer.md")) && /\bWrite\b.*\bEdit\b/.test(d9Tools("spec-implementer.md")),
+      "full review D9: spec-implementer (Read/Write/Edit/Glob/Grep/Bash) and spec-reviewer (read-only + Bash) declare tools — neither can dispatch subagents");
+    // D10: spec_scan takes no path — /scan says to pass the folder as projectDir.
+    const d10 = dRead("commands", "scan.md");
+    ok(!list.result.tools.find((t) => t.name === "spec_scan").inputSchema.properties.path && !/\[optional path\]/.test(d10) && /as `projectDir`/.test(d10),
+      "full review D10: /scan no longer hints at a path argument spec_scan doesn't have; it passes the folder as projectDir");
+    // D11: the evidence rule sits in the initialize instructions, but not first — the CHANGELOG said they "open with it".
+    ok(/Evidence before claims/.test(init.result.instructions) && !/^Evidence/.test(init.result.instructions) && !/instructions open with it/.test(dWs(dRead("CHANGELOG.md"))),
+      "full review D11: the CHANGELOG no longer says the initialize instructions open with the evidence rule");
+    // D12: INSTALL.md (and CONTRIBUTING.md) call the CLAUDE.md warning of `claude plugin validate` expected.
+    ok([dWs(dRead("INSTALL.md")), dWs(dRead("CONTRIBUTING.md"))].every((t) => /CLAUDE\.md at the plugin root is not loaded as project context/.test(t) && /expected/.test(t)),
+      "full review D12: INSTALL / CONTRIBUTING say the CLAUDE.md warning of plugin validate is expected");
+    // D13: exit 126 / 127 / 9009 on an _Expect: fail_ task is refused AND recorded (a red run already there is kept).
+    const d13p = path.join(tmp, "fr-d13");
+    S.initProject(d13p, ["core"], "en");
+    S.createFeature(d13p, "Red", ["core"]);
+    fs.writeFileSync(path.join(d13p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node t.js_\n  - _Expect: fail_\n");
+    const d13a = S.completeTask(d13p, "red", 1, { command: "node t.js", exitCode: 127 });
+    const d13Rec = (JSON.parse(fs.readFileSync(path.join(d13p, ".specs", "red", ".state.json"), "utf8")).evidence || {})["1"] || {};
+    ok(d13a.ok === false && d13a.recorded === true && d13Rec.exitCode === 127 && !/`done --run` records nothing for it/.test(dRead("CLAUDE.md")),
+      "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — CLAUDE.md no longer says done --run records nothing for it");
+  }
+
+  // 1.14 full review (R) — regressions the independent review of the merged fixes found: one assertion each.
+  {
+    // R1: an auxiliary ("was", "había", "havia") never turns an honest failure into history; "not fixed" stays an admission;
+    // the noun + done claim must end its clause.
+    const adm = (m) => S.stopClaims(m).admitted;
+    const honest = ["Task 1 is done. 2 tests failed and I was unable to fix them.", "Task 3 is done, but the build was slow and 2 tests failed.",
+      "The 3 failing tests were not fixed.", "La tarea 3 está hecha. Había 2 pruebas fallando.", "A tarefa 3 está feita. Havia 2 testes a falhar."];
+    const noClaim = ["The implementation done so far covers task 1.", "Here is the task done list for today."];
+    ok(honest.every(adm) && !adm("Done! I fixed the 2 failing tests and everything works now.") && noClaim.every((m) => !S.stopClaims(m).claim) &&
+      S.stopClaims("Feature complete.").claim,
+      "full review R1: 'was' / 'havia' / 'había' near a failure keep it an admission, a negator anywhere keeps it too; 'the implementation done so far' is no claim (got " +
+      JSON.stringify([honest.map(adm), noClaim.map((m) => S.stopClaims(m).claim)]) + ")");
+    // R10: the admission / claim scans are linear (bounded look-back and tail).
+    const tR10 = Date.now();
+    S.stopClaims("was 2 failing. ".repeat(1400));
+    S.stopClaims("all done ".repeat(2300));
+    const dR10 = Date.now() - tR10;
+    ok(dR10 < 1500, "full review R10: 20 KB of admissions or claims scans in bounded time (got " + dR10 + " ms)");
+    // R2: another plan's File cell owns only its EXACT path — a monorepo package's same-named test file stays this feature's.
+    const r2 = path.join(tmp, "proj-review-r2");
+    S.initProject(r2, ["tdd"], "en");
+    for (const [n, file] of [["Alpha", "tests/test_api.py"], ["Beta", "services/beta/tests/"]]) {
+      const c = S.createFeature(r2, n, ["core", "tdd"], "x", undefined, "en");
+      fs.writeFileSync(path.join(c.dir, "test-plan.md"), "# Test plan\n\n| ID | Covers | Kind | File |\n|---|---|---|---|\n| T-01 | US-1.AC-1 | example | `" + file + "` |\n");
+    }
+    fs.mkdirSync(path.join(r2, "services", "beta", "tests"), { recursive: true });
+    fs.writeFileSync(path.join(r2, "services", "beta", "tests", "test_api.py"), "def test_T01_beta():\n    assert True\n");
+    const tr2 = S.traceCheck(r2, "beta", { code: true }).code;
+    ok(tr2 && (tr2.testsInCode["T-01"] || []).some((f) => /services\/beta\/tests\/test_api\.py$/.test(f)) && !tr2.plannedNotInCode.includes("T-01"),
+      "full review R2: alpha's File `tests/test_api.py` doesn't own services/beta/tests/test_api.py — beta's own T-01 is found (got " + JSON.stringify(tr2 && [tr2.testsInCode, tr2.plannedNotInCode]) + ")");
+    // R3: a spike whose timebox passed undecided covers nothing; at the scope level a spike never overrides approved plans.
+    const r3 = path.join(tmp, "proj-review-r3");
+    S.initProject(r3, ["core"], "en", { guard: "on" });
+    S.createFeature(r3, "Old spike", undefined, "", undefined, "en", "spike", { question: "Q?", timebox: "2020-01-01" });
+    const g3old = S.guardCheck(r3, "src/app.js", r3);
+    S.createFeature(r3, "New spike", undefined, "", undefined, "en", "spike", { question: "Q?", timebox: "3d" });
+    const g3new = S.guardCheck(r3, "src/app.js", r3);
+    S.initProject(r3, ["core"], "en", { guard: "scope" });
+    const b3 = S.createFeature(r3, "Billing", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(b3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Bill\n  - _Implements: src/billing.js_\n");
+    S.approvePhase(r3, "billing", "tasks", "t", { force: true });
+    const g3scope = S.guardCheck(r3, "src/app.js", r3);
+    ok(g3old.decision === "ask" && g3new.decision === "allow" && g3new.why === "spike" && g3scope.decision === "ask",
+      "full review R3: a spike past its timebox covers nothing, an active one covers prototype edits, and at scope level it never overrides an approved plan (got " +
+      JSON.stringify([g3old.decision, g3new.why, g3scope.decision + ":" + g3scope.why]) + ")");
+    // R4: create classifies like spec_classify — the text's own language first, meta.lang only when it is inconclusive.
+    const r4en = path.join(tmp, "proj-review-r4en"), r4pt = path.join(tmp, "proj-review-r4pt");
+    S.initProject(r4en, [], "en");
+    S.initProject(r4pt, [], "pt");
+    const c4en = S.createFeature(r4en, "desconto", undefined, "Aplicar o desconto no checkout com testes de regressão");
+    const k4pt = S.classify("Corrigir o cálculo do IVA no checkout", { projectDir: r4pt });
+    const c4pt = S.createFeature(r4pt, "IVA", undefined, "Corrigir o cálculo do IVA no checkout");
+    ok(c4en.tracks.includes("tdd") && k4pt.tracks.includes("tdd") && JSON.stringify(k4pt.tracks) === JSON.stringify(c4pt.tracks),
+      "full review R4: a PT summary in an EN project is read as PT ('no' = em+o), and create agrees with classify in a PT project (got " +
+      JSON.stringify([c4en.tracks, k4pt.tracks, c4pt.tracks]) + ")");
+    // R5: an AC ID a list item defines is a reference elsewhere (Notes, a coverage table) — never a criterion to lint.
+    const req5 = "# F\n\n## User Stories\n\n### US-1 (P1): Login\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user logs in THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL show an error\n";
+    const e5a = S.earsValidate(req5 + "\n## Notes\nUS-1.AC-2 depends on the identity provider's error codes.\n", "en");
+    const e5b = S.earsValidate(req5 + "\n| AC | Priority |\n|---|---|\n| US-1.AC-1 | P1 |\n", "en");
+    const e5c = S.earsValidate("# F\n\n### Acceptance Criteria\n| ID | Criterion |\n|---|---|\n| US-1.AC-1 | Checkout is quick |\n", "en");
+    ok(e5a.summary.criteriaDetected === 2 && !e5a.issues.some((i) => i.severity === "error") && e5b.summary.criteriaDetected === 2 && !e5b.issues.some((i) => i.severity === "error") &&
+      e5c.issues.some((i) => i.code === "no-modal"),
+      "full review R5: a Notes line or a coverage table naming a defined AC is a reference, not a criterion; a table that IS the definition is still linted (got " +
+      JSON.stringify([e5a.summary.criteriaDetected, e5a.issues.map((i) => i.code), e5b.summary.criteriaDetected, e5c.issues.map((i) => i.code)]) + ")");
+    // R6: a genuine red run whose assertion quotes a runner phrase is not "could not run".
+    ok(S.couldNotRunOutput("not ok 1 - T-01 loads plugins\n  AssertionError: expected: Cannot find module 'foo-plugin' actual: undefined") === null &&
+      S.couldNotRunOutput("Error: Cannot find module '/x/test/a.js'\nRequire stack:\n- /x") !== null,
+      "full review R6: an assertion failure quoting 'Cannot find module' is a red run; the runner's own missing-module error still reads could-not-run");
+    // R7: a punctuation closer never cuts a value that closes plainly later on the line.
+    const v7 = (line) => S.taskMarkers({ text: line, body: [] }).verify[0];
+    ok(v7('x _Verify: python -c "import a_; print(1)"_') === 'python -c "import a_; print(1)"' && v7("x _Verify: npm test -- --grep='route_: 200'_") === "npm test -- --grep='route_: 200'" &&
+      v7("Wire (_Verify: npm test_).") === "npm test" && S.taskMarkers({ text: "(_Verify: npm test_), _Implements: a.js_", body: [] }).implements[0] === "a.js",
+      "full review R7: `_` + punctuation closes a marker only when no plain closer follows before the next marker (got " +
+      JSON.stringify([v7('x _Verify: python -c "import a_; print(1)"_'), v7("x _Verify: npm test -- --grep='route_: 200'_"), v7("Wire (_Verify: npm test_).")]) + ")");
+    // R9: a client's JSON-RPC response with id null is never answered (the next reply is the malformed line's -32700).
+    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "client could not parse" } }) + "\n");
+    const r9 = await rawOnce("{not json");
+    ok(r9 && r9.error && r9.error.code === -32700, "full review R9: a JSON-RPC response with id null gets no reply (got " + JSON.stringify(r9 && r9.error) + ")");
+  }
+
+  // 1.14 feature (F1) — harness-observed evidence.
+  {
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const obsCall = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    // The runner may itself run inside Claude Code: the hook gets the project it is told about, nothing else.
+    const obsHook = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
+    const bash = (cwd, command, extra) => ({ session_id: "s-obs", transcript_path: path.join(cwd, "t.jsonl"), cwd, permission_mode: "default", hook_event_name: "PostToolUse",
+      tool_name: "Bash", tool_input: { command, description: "Run it", timeout: 120000, run_in_background: false }, tool_use_id: "toolu_01", ...extra });
+    const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const obsState = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const quiet = (r) => r.status === 0 && r.stdout === "" && r.stderr === "";
+    const pO = path.join(tmp, "ffobs-proj");
+    const CHECK = 'node -e "process.exit(0)"';
+    S.initProject(pO, ["core"], "en", { checks: { test: CHECK } });
+    const fO = S.createFeature(pO, "Auth", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fO.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Verify: `node t1.js`_\n- [ ] 2. [US1] Logout\n  - _Verify: node t2.js_\n" +
+      "- [ ] 3. [US1] Both\n  - _Verify: node a.js_\n  - _Verify: node b.js_\n- [ ] 4. [US1] Docs\n\n```\n- [ ] 9. fenced\n  - _Verify: node fenced.js_\n```\n");
+
+    // hooks.json: PostToolUse (matcher Bash) and PostToolUseFailure (matcher Bash) run hooks/observe-hook.js, beside spec-hook's entry.
+    const hc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const obsCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"';
+    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10); // + PowerShell (review R5)
+    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(e.hooks[0].command)) &&
+      !fs.readFileSync(obsJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher ^(Bash|PowerShell)$, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
+
+    // Both payload shapes: PostToolUse with exit_code (or none → 0), PostToolUseFailure with `error` ("exit code 3", else 1).
+    const h1 = obsHook(pO, bash(pO, "node t1.js", { tool_response: { stdout: "ok", stderr: "", interrupted: false, exit_code: 0 } }));
+    const h2 = obsHook(pO, bash(pO, "node  t2.js", { tool_response: { stdout: "", stderr: "", interrupted: false } })); // no exit code: the success event → 0
+    const h3 = obsHook(pO, { ...bash(pO, "node t2.js"), hook_event_name: "PostToolUseFailure", error: "Command failed with exit code 3", is_interrupt: false });
+    const h4 = obsHook(pO, { ...bash(pO, "node t1.js"), hook_event_name: "PostToolUseFailure", error: "Command failed", is_interrupt: false });
+    const h5 = obsHook(pO, bash(pO, "node t1.js", { tool_response: { exit_code: "2" } }));
+    const log1 = logOf(fO.dir);
+    ok([h1, h2, h3, h4, h5].every(quiet) && JSON.stringify(log1.map((e) => [e.command, e.exitCode, e.event])) === JSON.stringify([["node t1.js", 0, "PostToolUse"], ["node t2.js", 0, "PostToolUse"],
+      ["node t2.js", 3, "PostToolUseFailure"], ["node t1.js", 1, "PostToolUseFailure"], ["node t1.js", 2, "PostToolUse"]]) && log1.every((e) => e.session === "s-obs" && Number.isFinite(Date.parse(e.at))) &&
+      fs.readFileSync(path.join(fO.dir, ".execution", ".gitignore"), "utf8") === "*\n",
+      "feature F1: the hook logs a _Verify:_ run from both payload shapes — PostToolUse exit_code (none → 0, \"2\" → 2), PostToolUseFailure's error (exit code 3; none → 1) — one JSON line {command, exitCode, at, event, session} in the self-ignoring .execution/; silent, exit 0 (got " +
+      JSON.stringify(log1.map((e) => [e.command, e.exitCode, e.event])) + ")");
+
+    // cd <project root> && <cmd> is the command; another folder, another command, a fenced example, an interrupted or
+    // backgrounded run, another tool → nothing. A project check goes to .specs/.execution/observed.jsonl.
+    const before = logOf(fO.dir).length;
+    const skipped = [
+      obsHook(pO, bash(pO, "cd sub && node t1.js", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "npm run build", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "node fenced.js", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "node t1.js", { tool_response: { exit_code: 0, interrupted: true } })),
+      obsHook(pO, { ...bash(pO, "node t1.js"), hook_event_name: "PostToolUseFailure", error: "Interrupted", is_interrupt: true }),
+      obsHook(pO, bash(pO, "node t1.js", { tool_input: { command: "node t1.js", run_in_background: true }, tool_response: { backgroundTaskId: "b1" } })),
+      obsHook(pO, bash(pO, "node t1.js", { tool_response: { stdout: "", stderr: "", returnCodeInterpretation: "No matches found" } })), // a non-zero code the tool read as no error: unknown
+      obsHook(pO, { ...bash(pO, "node t1.js", { tool_response: { exit_code: 0 } }), tool_name: "Write" }),
+      obsHook(pO, { ...bash(pO, "node t1.js", { tool_response: { exit_code: 0 } }), hook_event_name: "PreToolUse" }),
+    ];
+    const hCd = obsHook(pO, bash(pO, 'cd "' + pO + '" && node t1.js', { tool_response: { exit_code: 0 } }));
+    const hCheck = obsHook(pO, bash(pO, CHECK, { tool_response: { exit_code: 0 } }));
+    const projLog = logOf(path.join(pO, ".specs"));
+    ok(skipped.every(quiet) && quiet(hCd) && quiet(hCheck) && logOf(fO.dir).length === before + 1 && logOf(fO.dir).slice(-1)[0].command === "node t1.js" &&
+      projLog.length === 1 && projLog[0].command === CHECK && projLog[0].exitCode === 0 && fs.readFileSync(path.join(pO, ".specs", ".execution", ".gitignore"), "utf8") === "*\n" &&
+      !S.listFeatures(pO).features.some((f) => f.name.startsWith(".")) && !(S.listFeatures(pO).ignored || []).length,
+      "feature F1: `cd <root> && cmd` counts as cmd; another folder, an unplanned command, a fenced example, an interrupted / backgrounded run, a code the tool read as no error (returnCodeInterpretation), another tool or event log nothing; a project check goes to .specs/.execution/observed.jsonl (self-ignoring, never a feature) (got " +
+      JSON.stringify([logOf(fO.dir).length - before, projLog.map((e) => e.command)]) + ")");
+
+    // Malformed / empty / huge stdin: exit 0, silent, nothing written. A .specs/ that is not dev-spec's: nothing written.
+    const n0 = logOf(fO.dir).length;
+    const bad = ["", "not json", "null", "[]", "42", JSON.stringify({ tool_name: "Bash" }), JSON.stringify({ tool_name: "Bash", tool_input: { command: 42 } }),
+      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHook(pO, s));
+    const huge = obsHook(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
+    const other = path.join(tmp, "ffobs-other");
+    fs.mkdirSync(path.join(other, ".specs", "notes"), { recursive: true });
+    fs.writeFileSync(path.join(other, ".specs", "notes", "tasks.md"), "- [ ] 1. x\n  - _Verify: node t1.js_\n");
+    const hOther = obsHook(other, bash(other, "node t1.js", { tool_response: { exit_code: 0 } }));
+    ok(bad.every(quiet) && quiet(huge) && logOf(fO.dir).length === n0 && quiet(hOther) && !fs.existsSync(path.join(other, ".specs", "notes", ".execution")) &&
+      !fs.existsSync(path.join(other, ".specs", ".execution")),
+      "feature F1: malformed, empty, truncated or oversized (5 MB) stdin → exit 0, silent, nothing logged; a project whose .specs/ is not dev-spec's → nothing written");
+
+    // The log stays bounded (newest lines kept).
+    const pB = path.join(tmp, "ffobs-bounded");
+    S.initProject(pB, ["core"], "en");
+    const fB = S.createFeature(pB, "Big", ["core"], "", undefined, "en");
+    const longCmd = "node t.js --reporter spec --grep " + "x".repeat(200);
+    fs.writeFileSync(path.join(fB.dir, "tasks.md"), "- [ ] 1. [US1] Big\n  - _Verify: " + longCmd + "_\n");
+    for (let i = 0; i < 600; i++) S.observeRun(pB, { command: longCmd, exitCode: i % 7, event: "PostToolUse", session: "s" + i });
+    const bSize = fs.statSync(path.join(fB.dir, ".execution", "observed.jsonl")).size;
+    const bLog = logOf(fB.dir);
+    ok(bSize <= S.OBSERVED_MAX_BYTES && bLog.length > 50 && bLog.slice(-1)[0].session === "s599" && bLog.every((e) => e.command === longCmd),
+      "feature F1: the observed log stays bounded (≤ " + S.OBSERVED_MAX_BYTES + " bytes after 600 runs, the newest kept) (got " + bSize + " bytes, " + bLog.length + " lines)");
+
+    // observedRun: the LATEST observed run of the same command decides; `a && b` = both parts passed; other commands / codes: not observed.
+    S.observeRun(pO, { command: "node t1.js", exitCode: 2 }); // t1: passed (the cd run above), then failed — the failure is the latest
+    S.observeRun(pO, { command: "node a.js", exitCode: 0 });
+    S.observeRun(pO, { command: "node b.js", exitCode: 0 });
+    const lk = [S.observedRun(pO, fO.slug, "node t1.js", 2).observed, S.observedRun(pO, fO.slug, "node t1.js", 0).observed, S.observedRun(pO, fO.slug, "`node   t1.js`", 2).observed,
+      S.observedRun(pO, fO.slug, "node t2.js", 3).observed, S.observedRun(pO, fO.slug, "node t2.js", 0).observed, S.observedRun(pO, fO.slug, "node a.js && node b.js", 0).observed,
+      S.observedRun(pO, fO.slug, "node zzz.js", 0).observed, S.observedRun(pO, null, CHECK, 0).observed, S.observedRun(pO, null, CHECK, 1).observed,
+      S.observedRun(pO, fO.slug, "node t1.js", 2, { now: Date.now() + 25 * 3600 * 1000 }).observed];
+    ok(JSON.stringify(lk) === JSON.stringify([true, false, true, true, false, true, false, true, false, false]),
+      "feature F1: observedRun — the latest observed run of the same (flattened) command with the same exit code; an earlier pass doesn't cover a later failure; `a && b` counts when both passed; older than 24 h → not observed (got " + JSON.stringify(lk) + ")");
+
+    // Default mode (reported): exactly today's verdict — every run is stamped (observed true | false) and the result says so.
+    const c1 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 2, summary: "1 failing" } });
+    S.observeRun(pO, { command: "node t1.js", exitCode: 0 });
+    const c1b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 0 } });
+    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } }); // a caller can't claim "cli"
+    const c4 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 4 });
+    const st1 = obsState(fO);
+    const docR = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
+    ok(c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
+      !c2.p.unverifiedReason && c4.p.ok && c4.p.observed === undefined && st1.evidence["1"].observed === true && st1.evidence["1"].history[0].observed === true &&
+      st1.evidence["2"].observed === false && S.evidenceMode(pO) === "reported" && docR.status === "pass",
+      "feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +
+      JSON.stringify([c1.p.observed, c1b.p.observed, c2.p.observed, c2.p.verified, st1.evidence["2"].observed, docR.status]) + ")");
+
+    // spec_init {evidence}: folded, reported back; a bad value is refused by the schema.
+    const i1 = await obsCall("spec_init", { projectDir: pO, evidence: "OBSERVED" });
+    const i2 = await obsCall("spec_init", { projectDir: pO });
+    const i3 = await obsCall("spec_init", { projectDir: pO, evidence: "maybe" });
+    const rmO = JSON.parse(fs.readFileSync(path.join(pO, ".specs", "roadmap.json"), "utf8"));
+    ok(i1.p.evidence === "observed" && /Evidence mode OBSERVED/.test(i1.p.evidenceNote || "") && /MCP-only client has no such hook/.test(i1.p.evidenceNote || "") &&
+      i2.p.evidence === "observed" && i2.p.evidenceNote === undefined && i3.isError && rmO.meta.evidence === "observed",
+      "feature F1: spec_init {evidence} sets roadmap.json meta.evidence (case-folded), the result always reports it (+ a note naming the MCP-only limit when set); a value outside reported | observed is refused (got " +
+      JSON.stringify([i1.p.evidence, i2.p.evidence, i3.isError]) + ")");
+
+    // meta.evidence "observed": the ONE verdict — status, doctor, finish, next_action, the stop gate — says `unobserved` for task 2.
+    const s2 = S.statusFeature(pO, fO.slug).tasks.list.find((t) => t.number === 2);
+    const docO = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
+    fs.writeFileSync(path.join(fO.dir, "tasks.md"), fs.readFileSync(path.join(fO.dir, "tasks.md"), "utf8").replace("- [ ] 3.", "- [x] 3.").replace("- [ ] 4.", "- [x] 4."));
+    const fin = S.finishFeature(pO, fO.slug);
+    const stop = S.stopCheck(pO, { message: "Done — all tasks are complete and verified." });
+    S.writeRoadmapMd(pO);
+    const road = fs.readFileSync(path.join(pO, ".specs", "ROADMAP.md"), "utf8");
+    ok(s2 && s2.verified === false && docO.status === "warn" && /#2 \(run not observed by the harness\)/.test(docO.detail) &&
+      fin.blockers.some((b) => /#2 \(run not observed by the harness\)/.test(b)) && stop.block === true && /#2 \(run not observed by the harness\)/.test(stop.reason) &&
+      /#2 \(run not observed by the harness\)/.test(road),
+      "feature F1: meta.evidence observed — a reported run the harness never saw is `unobserved` everywhere (status, doctor, the finish blocker, the stop gate, ROADMAP.md) (got " +
+      JSON.stringify([s2 && s2.verified, docO.detail, stop.why]).slice(0, 400) + ")");
+    // next_action's verify step names it and says how to get an observed run (a written bugfix, gated phase by phase).
+    const pNa = path.join(tmp, "ffobs-na");
+    S.initProject(pNa, ["core"], "en", { evidence: "observed" });
+    const bNa = S.createFeature(pNa, "Obs loop", undefined, "loop", undefined, "en", "bugfix");
+    const naFill = (rel, re, by) => { const f = path.join(bNa.dir, rel); fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(re, by)); };
+    naFill("tasks.md", /  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n");
+    naFill("bug.md", /> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).");
+    naFill("bug.md", /\[[^\]\n]+\]/g, "the dashboard opens");
+    naFill("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
+    naFill("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+    naFill("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
+    ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(pNa, bNa.slug, ph));
+    S.completeTask(pNa, bNa.slug, 1); S.completeTask(pNa, bNa.slug, 2);
+    const red3 = S.completeTask(pNa, bNa.slug, 3, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    naFill("tasks.md", /- \[ \] 4\./, "- [x] 4.");
+    const naObs = S.nextAction(pNa, bNa.slug);
+    ok(red3.ok && red3.unverifiedReason === "unobserved" && naObs.step === "verify" && /#3 \(run not observed by the harness\)/.test(naObs.recommendation) &&
+      /only runs the harness saw \(roadmap\.json meta\.evidence: observed\)/.test(naObs.recommendation),
+      "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red3.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
+
+    // A new report of task 2: unobserved (reason + note; nothing ever observed in a project → the MCP-only line); after the hook saw it → verified.
+    const c2b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
+    const pN = path.join(tmp, "ffobs-never");
+    S.initProject(pN, ["core"], "en", { evidence: "observed" });
+    const fN = S.createFeature(pN, "Solo", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fN.dir, "tasks.md"), "- [ ] 1. [US1] Solo\n  - _Verify: node s.js_\n");
+    const cN = await obsCall("spec_complete_task", { projectDir: pN, name: "solo", number: 1, evidence: { command: "node s.js", exitCode: 0 } });
+    obsHook(pO, bash(pO, "node t2.js", { tool_response: { exit_code: 0 } }));
+    const c2c = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
+    const cCli = S.completeTask(pN, "solo", 1, { command: "node s.js", exitCode: 0 }, { ranBy: "cli" });
+    ok(c2b.p.ok && c2b.p.verified === false && c2b.p.unverifiedReason === "unobserved" && c2b.p.observed === false && /dev-spec done auth 2 --run/.test(c2b.p.note) &&
+      !/No run was ever observed/.test(c2b.p.note) && cN.p.unverifiedReason === "unobserved" && /No run was ever observed in this project/.test(cN.p.note) &&
+      /MCP-only client has no hook/.test(cN.p.note) && c2c.p.verified === true && c2c.p.observed === true && !c2c.p.unverifiedReason &&
+      cCli.verified === true && cCli.observed === "cli" && obsState(fN).evidence["1"].observed === "cli",
+      "feature F1: meta.evidence observed — an unobserved report ticks but stays unverified (unverifiedReason unobserved + a note naming --run; the MCP-only line when nothing was ever observed there); once the hook saw the run it verifies; a CLI run (observed: \"cli\") verifies (got " +
+      JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")");
+
+    // _Expect: fail_: the red run is the proof — it must be the observed one.
+    const fR = S.createFeature(pO, "Red", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fR.dir, "tasks.md"), "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node red.js_\n  - _Expect: fail_\n");
+    const r1 = S.completeTask(pO, "red", 1, { command: "node red.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    obsHook(pO, { ...bash(pO, "node red.js"), hook_event_name: "PostToolUseFailure", error: "Command failed with exit code 1" });
+    const r2 = S.completeTask(pO, "red", 1, { command: "node red.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    ok(r1.ok && r1.redRecorded && r1.verified === false && r1.unverifiedReason === "unobserved" && r2.ok && r2.verified === true && r2.observed === true,
+      "feature F1: an _Expect: fail_ task's red run counts only once observed (the hook's PostToolUseFailure) (got " + JSON.stringify([r1.unverifiedReason, r2.verified]) + ")");
+
+    // Project checks: an unobserved passing run is status `unobserved` (a blocker); the hook-observed one passes; finish --run's "cli" too.
+    const fS = S.createFeature(pO, "Suite obs", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fS.dir, "tasks.md"), "- [ ] 1. [US1] Do it\n");
+    S.completeTask(pO, "suite-obs", 1);
+    const pPlain = path.join(tmp, "ffobs-plain");
+    S.initProject(pPlain, ["core"], "en", { checks: { lint: "npm run lint" }, evidence: "observed" });
+    const fP = S.createFeature(pPlain, "Plain", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fP.dir, "tasks.md"), "- [x] 1. [US1] Do it\n");
+    const u1 = await obsCall("spec_finish", { projectDir: pPlain, name: "plain", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }] });
+    obsHook(pPlain, bash(pPlain, "npm run lint", { tool_response: { exit_code: 0 } }));
+    const u2 = await obsCall("spec_finish", { projectDir: pPlain, name: "plain", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }] });
+    const u3 = S.finishFeature(pO, "suite-obs", { evidence: [{ name: "test", command: CHECK, exitCode: 0 }], ranBy: "cli" });
+    const lintU1 = u1.p.suiteChecks.find((c) => c.name === "lint"), lintU2 = u2.p.suiteChecks.find((c) => c.name === "lint");
+    ok(lintU1.status === "unobserved" && lintU1.observed === false && u1.p.blockers.some((b) => /lint \(the run was not observed by the harness\)/.test(b)) &&
+      JSON.stringify(u1.p.recordedChecks) === JSON.stringify([{ name: "lint", exitCode: 0 }]) && lintU2.status === "pass" && lintU2.observed === true &&
+      u3.suiteChecks.find((c) => c.name === "test").observed === "cli" && u3.suiteChecks.find((c) => c.name === "test").status === "pass",
+      "feature F1: project checks — spec_finish {evidence} stamps each run observed; with meta.evidence observed an unobserved pass is status `unobserved` (a blocker), the hook-observed one and finish --run's (\"cli\") pass (got " +
+      JSON.stringify([lintU1.status, lintU2.status, u3.suiteChecks.map((c) => c.status)]) + ")");
+
+    // Localized labels (PT, ES, pt-BR) and back to reported: the same records verify again.
+    ok(S.msg("pt").evidenceGate.reason.unobserved === "execução não observada pelo harness" && S.msg("es").evidenceGate.reason.unobserved === "ejecución no observada por el harness" &&
+      /Execute o comando/.test(S.msg("pt-BR").observed.unobservedNote(2, "auth")) && S.msg("es").observed.badValue("x") === "--evidence admite reported u observed (recibido 'x')." &&
+      S.msg("pt").projectChecks.status({ status: "unobserved" }) === "a execução não foi observada pelo harness",
+      "feature F1: the unobserved labels and notes are localized (PT, ES; pt-BR derived from PT)");
+    S.initProject(pN, ["core"], "en", { evidence: "reported" });
+    ok(S.statusFeature(pN, "solo").tasks.list[0].verified === true && S.evidenceMode(pN) === "reported" && S.initProject(pN, [], undefined, { evidence: "sometimes" }).ok === false,
+      "feature F1: back to meta.evidence reported, the same records verify as before; the engine refuses an unknown mode");
+  }
+
+  // 1.14 feature (F2) — human approval guard.
+
+  {
+    const CLI_PATH = "/clone/cli/dev-spec.js";
+    const D = (tool, input, level, lang) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input }, level, { lang, cli: CLI_PATH });
+    const kinds = (r) => (r.actions || []).map((a) => [a.kind, a.feature, a.phase || a.through || a.to, a.force ? "force" : ""].join(":")).join(",");
+    // The helper: spec_approve under every MCP server prefix (Claude Code's plugin form, a project server, any name) or bare.
+    const names = ["mcp__plugin_dev-spec-driven_spec-driven__spec_approve", "mcp__spec-driven__spec_approve", "mcp__spec_driven__spec_approve",
+      "mcp__my-spec-driven-copy__spec_approve", "mcp__dev-spec__spec_approve", "spec_approve"];
+    const notNames = ["mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "mcp__spec-driven__xspec_approve", "mcp____spec_approve_", "Write", "Edit", "Task"];
+    const inp = { name: "checkout", phase: "design" };
+    ok(names.every((n) => D(n, inp, "ask").decision === "ask" && D(n, inp, "deny").decision === "deny" && D(n, inp, "off").decision === "allow") &&
+      notNames.every((n) => D(n, inp, "deny").decision === "allow") && D(names[0], inp, "deny").why === "approval" && D(names[0], inp, "off").why === "off" &&
+      D(names[0], inp, "maybe").why === "off" && D("Write", { file_path: "x.js" }, "deny").why === "not-an-approval",
+      "feature F2: spec_approve is caught under every MCP server prefix (mcp__plugin_<plugin>_<server>__, mcp__spec-driven__, any name) and bare; other tools, look-alike names and level off pass (got " +
+      JSON.stringify(names.map((n) => D(n, inp, "ask").decision).concat(notNames.map((n) => D(n, inp, "deny").decision))) + ")");
+    // ask names the feature, phase, role, approver and — loudly — force; deny tells the agent to stop and gives the human's command.
+    const aF = D(names[0], { name: "checkout", phase: "design", role: "tech", by: "Ana", force: true }, "ask");
+    const dF = D(names[1], { name: "checkout", phase: "design", role: "tech", force: true }, "deny");
+    const dT = D(names[1], { name: "my feature", through: "tasks" }, "deny");
+    ok(/the agent wants to approve the design phase of 'checkout' as tech in the name of 'Ana' — FORCED \(--force\)/.test(aF.reason) && /⚠ FORCE: /.test(aF.reason) && aF.force === true && aF.userNote === undefined &&
+      /refused — approvals are the human's/.test(dF.reason) && /Stop and ask the user to run it themselves/.test(dF.reason) && /Do not retry it by another route/.test(dF.reason) &&
+      dF.command === '! node "/clone/cli/dev-spec.js" approve checkout design --role tech --force' && dF.reason.includes(dF.command) && dF.userNote.includes(dF.command) &&
+      /approve every phase of 'my feature' through tasks/.test(dT.reason) && dT.command === '! node "/clone/cli/dev-spec.js" approve "my feature" --through tasks' &&
+      !/FORCE/.test(D(names[1], inp, "ask").reason),
+      "feature F2: ask names feature, phase, role, approver and FORCE loudly; deny sends the agent back with the human's `! node <clone>/cli/dev-spec.js approve …` command (also in userNote); --through for a fast-forward (got " +
+      JSON.stringify([aF.reason.slice(0, 160), dF.command, dT.command]) + ")");
+    // spec_feature remove (confirm: true — a preview deletes nothing) and LOWERING the guard (spec_init) are approvals too.
+    ok(D("mcp__spec-driven__spec_feature", { action: "remove", name: "checkout", confirm: true }, "ask").decision === "ask" &&
+      D("mcp__spec-driven__spec_feature", { action: "Remove", name: "checkout", confirm: true }, "deny").command === '! node "/clone/cli/dev-spec.js" feature remove checkout --yes' &&
+      D("mcp__spec-driven__spec_feature", { action: "remove", name: "checkout" }, "deny").decision === "allow" &&
+      D("mcp__spec-driven__spec_feature", { action: "archive", name: "checkout" }, "deny").decision === "allow" &&
+      kinds(D("mcp__spec-driven__spec_init", { approvalGuard: "OFF" }, "deny")) === "guard-down::off:" && D("mcp__spec-driven__spec_init", { approvalGuard: "ask" }, "deny").decision === "deny" &&
+      D("mcp__spec-driven__spec_init", { approvalGuard: "deny" }, "ask").decision === "allow" && D("mcp__spec-driven__spec_init", { approvalGuard: "ask" }, "ask").decision === "allow" &&
+      D("mcp__spec-driven__spec_init", { tracks: ["tdd"] }, "deny").decision === "allow" && /lower the approval guard from deny to off/.test(D("mcp__spec-driven__spec_init", { approvalGuard: "off" }, "deny").reason),
+      "feature F2: spec_feature remove with confirm is guarded (a preview, archive are not); spec_init lowering the guard is guarded, raising it or leaving it is not");
+    // Bash / PowerShell: the CLI's approve in every shape — and never the word "approve" in unrelated text.
+    const bashYes = {
+      "dev-spec approve checkout requirements": "approve:checkout:requirements:",
+      "node cli/dev-spec.js approve checkout design": "approve:checkout:design:",
+      'node "C:/Users/x/CLAUDE SKILLS/dev-spec-driven/cli/dev-spec.js" approve checkout tasks --force': "approve:checkout:tasks:force",
+      "cd /repo && node ./cli/dev-spec.js --json approve 'my feature' requirements": "approve:my feature:requirements:",
+      [String.raw`npm test; node cli\dev-spec.js approve checkout requirements`]: "approve:checkout:requirements:",
+      'bash -c "node cli/dev-spec.js approve checkout requirements"': "approve:checkout:requirements:",
+      [String.raw`cmd /c "node C:\x\cli\dev-spec.js approve checkout design --force=yes"`]: "approve:checkout:design:force",
+      'pwsh -Command "& node cli/dev-spec.js approve a b"': "approve:a:b:",
+      "node cli/dev-spec.js --project /p approve checkout --through tasks": "approve:checkout:tasks:",
+      "echo ok && node cli/dev-spec.js approve checkout requirements --role=product": "approve:checkout:requirements:",
+      "SPEC_PROJECT_DIR=/p timeout 30 node cli/dev-spec.js approve checkout requirements": "approve:checkout:requirements:",
+      "x=$(node cli/dev-spec.js approve a b --force=false)": "approve:a:b:",
+      '! node "/clone/cli/dev-spec.js" approve checkout design --force': "approve:checkout:design:force",
+      "node cli/dev-spec.js feature remove checkout --yes": "remove:checkout::",
+      "node cli/dev-spec.js approve a b\nnode cli/dev-spec.js approve a c --force": "approve:a:b:,approve:a:c:force",
+    };
+    const bashNo = ['git commit -m "dev-spec approve the design"', 'echo "dev-spec approve checkout requirements"', "echo dev-spec approve x y",
+      'grep -rn "dev-spec approve" .', "node cli/dev-spec.js help approve", "node cli/dev-spec.js approve checkout design --help",
+      "node cli/dev-spec.js create approve", "node cli/dev-spec.js status checkout", "node cli/dev-spec.js feature remove checkout",
+      "node cli/dev-spec.js init --approval-guard deny", "npm run approve", "ls dev-spec-approve/"];
+    const yesGot = Object.keys(bashYes).map((c) => [D("Bash", { command: c }, "ask").decision, kinds(D("Bash", { command: c }, "ask"))]);
+    const noGot = bashNo.map((c) => D("Bash", { command: c }, "deny").decision);
+    ok(Object.values(bashYes).every((k, i) => yesGot[i][0] === "ask" && yesGot[i][1] === k) && noGot.every((d) => d === "allow") &&
+      D("PowerShell", { command: String.raw`& node "C:\x\cli\dev-spec.js" approve checkout requirements` }, "deny").decision === "deny" &&
+      kinds(D("Bash", { command: "node cli/dev-spec.js init --approval-guard=off" }, "deny")) === "guard-down::off:",
+      "feature F2: Bash / PowerShell running the CLI's approve (quotes, && / ; / newline chains, bash -c, cmd /c, pwsh -Command, $( ), env / timeout / ! prefixes, --force[=yes|false]) is caught; the word in a commit message, echo, grep, help, a preview is not (got " +
+      JSON.stringify([yesGot.filter((g, i) => g[0] !== "ask" || g[1] !== Object.values(bashYes)[i]), noGot]) + ")");
+    // Localized (the project's language) — EN / PT / pt-BR / ES; values from the agent's call never reach the command unquoted.
+    const loc = (lang, lvl) => D(names[1], { name: "checkout", phase: "design", force: true }, lvl, lang).reason;
+    const inj = D(names[1], { name: 'x"; rm -rf ~', phase: "$(evil)", role: "a`b`", projectDir: String.raw`C:\My Proj\p` }, "deny");
+    ok(/the agent wants to approve the design phase of 'checkout'/.test(loc("en", "ask")) && /o agente quer aprovar a fase design de 'checkout' — FORÇADA/.test(loc("pt", "ask")) &&
+      /confirma só se aprovares/.test(loc("pt", "ask")) && /confirme só se você aprovar/.test(loc("pt-BR", "ask")) && /Peça ao usuário/.test(loc("pt-BR", "deny")) &&
+      /el agente quiere aprobar la fase design de 'checkout' — FORZADA/.test(loc("es", "ask")) && /rechazado — las aprobaciones son de la persona/.test(loc("es", "deny")) &&
+      /recusado — as aprovações são da pessoa/.test(loc("pt", "deny")) &&
+      inj.command === '! node "/clone/cli/dev-spec.js" approve <feature> <phase> --role <role> --project "C:/My Proj/p"',
+      "feature F2: the reasons are localized (EN / PT / pt-BR / ES); an unsafe value from the call becomes a <placeholder> in the suggested command (got " + JSON.stringify(inj.command) + ")");
+
+    // The hook process (hooks/approval-hook.js): silent unless the project's meta.approvalGuard is ask / deny.
+    const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
+    const runHook = (input, env) => spawnSync(process.execPath, [hookJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 15000 });
+    const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+    const decided = (r) => { try { const h = JSON.parse(r.stdout).hookSpecificOutput; return h.hookEventName === "PreToolUse" && r.status === 0 ? h.permissionDecision + "|" + h.permissionDecisionReason : null; } catch { return null; } };
+    const silent = (r) => r.status === 0 && r.stdout === "" && !r.error;
+    const pAsk = path.join(tmp, "proj-f2-ask"), pDenyPt = path.join(tmp, "proj-f2-deny-pt"), pDenyEs = path.join(tmp, "proj-f2-deny-es"), pOff = path.join(tmp, "proj-f2-off"), pNone = path.join(tmp, "proj-f2-none");
+    const iAsk = S.initProject(pAsk, ["core"], "en", { approvalGuard: "ask" });
+    S.initProject(pDenyPt, ["core"], "pt", { approvalGuard: "deny" });
+    S.initProject(pDenyEs, ["core"], "es", { approvalGuard: "DENY" });
+    const iOff = S.initProject(pOff, ["core"], "en");
+    fs.mkdirSync(pNone, { recursive: true });
+    const approveCall = (cwd, input) => pre(cwd, "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", input || { name: "checkout", phase: "requirements", force: true });
+    const hAsk = runHook(approveCall(pAsk));
+    const hPt = runHook(approveCall(pDenyPt));
+    const hEs = runHook(pre(pDenyEs, "Bash", { command: "node cli/dev-spec.js approve pagos design" }));
+    let ptJson = {};
+    try { ptJson = JSON.parse(hPt.stdout); } catch { /* checked below */ }
+    ok(iAsk.approvalGuard === "ask" && iOff.approvalGuard === "off" && /^ask\|dev-spec approval guard: the agent wants to approve the requirements phase of 'checkout' — FORCED/.test(decided(hAsk) || "") &&
+      /^deny\|dev-spec approval guard: recusado — as aprovações são da pessoa/.test(decided(hPt) || "") && /cli\/dev-spec\.js" approve checkout requirements --force/.test(decided(hPt) || "") &&
+      /recusou o pedido de um agente/.test(ptJson.systemMessage || "") && /^deny\|dev-spec approval guard: rechazado/.test(decided(hEs) || "") &&
+      silent(runHook(approveCall(pOff))) && silent(runHook(approveCall(pNone))),
+      "feature F2: the hook answers ask (EN) / deny (PT, + a systemMessage with the command for the user) / deny (ES, a Bash `dev-spec approve`) as valid JSON; a project with the guard off or no .specs/ gets nothing (got " +
+      JSON.stringify([decided(hAsk), (decided(hPt) || "").slice(0, 60), (decided(hEs) || "").slice(0, 60), hAsk.stderr]) + ")");
+    // Which project: the one the call names (MCP projectDir / CLI --project), the session cwd, CLAUDE_PROJECT_DIR — the strictest wins.
+    const hNamed = runHook(pre(pOff, "mcp__spec-driven__spec_approve", { name: "x", phase: "design", projectDir: pDenyPt }));
+    const hFlag = runHook(pre(pOff, "Bash", { command: 'node cli/dev-spec.js approve x design --project "' + pAsk + '"' }));
+    const hEnv = runHook({ hook_event_name: "PreToolUse", tool_name: "spec_approve", tool_input: { name: "x", phase: "design" } }, { CLAUDE_PROJECT_DIR: pAsk });
+    const t0 = Date.now();
+    const hNet = runHook(pre(pOff, "mcp__spec-driven__spec_approve", { name: "x", phase: "design", projectDir: "//unreachable-host-f2.invalid/share/p" }));
+    ok(/^deny\|/.test(decided(hNamed) || "") && /^ask\|/.test(decided(hFlag) || "") && /^ask\|/.test(decided(hEnv) || "") && silent(hNet) && Date.now() - t0 < 10000,
+      "feature F2: the hook checks the project the call names (projectDir, --project) and the session's (cwd, CLAUDE_PROJECT_DIR) — the strictest level wins; a network projectDir is never read (got " +
+      JSON.stringify([decided(hNamed), decided(hFlag), decided(hEnv), hNet.stdout]) + ")");
+    // Never blocks on its own trouble: malformed / empty / huge stdin, a wrong shape, another event, a broken roadmap.json that names
+    // no guard level → exit 0, silent. (A broken one that still names "approvalGuard": "deny" fails CLOSED — review R1 below.)
+    const pBroken = path.join(tmp, "proj-f2-broken");
+    fs.mkdirSync(path.join(pBroken, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pBroken, ".specs", "roadmap.json"), '{"meta": {"lang": "en"');
+    const odd = ["{not json", "", "[1,2]", "null", "42", JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: "node cli/dev-spec.js approve a b", cwd: pAsk }),
+      JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "spec_approve", tool_input: { name: "a", phase: "design" }, cwd: pAsk }),
+      JSON.stringify(pre(pAsk, "Bash", { command: "npm test && git status" })), JSON.stringify(pre(pAsk, "Bash", { command: 12 })),
+      JSON.stringify(approveCall(pBroken)), "x".repeat(3 * 1024 * 1024), JSON.stringify(pre(pAsk, "Bash", { command: "echo dev-spec " + "a ".repeat(400000) }))];
+    const oddGot = odd.map((s) => runHook(s));
+    ok(oddGot.every(silent) && !fs.readFileSync(hookJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "feature F2: malformed / empty / 3 MB stdin, a non-object payload or tool_input, another event, a command that runs no approval and a broken roadmap.json → exit 0, no output (got " +
+      JSON.stringify(oddGot.map((r) => [r.status, r.stdout.slice(0, 40)])) + ")");
+    // hooks.json: the guard stays first; the approval hook is a PreToolUse entry whose matcher (an anchored regex) covers the shell
+    // tools and the approve-shaped MCP tools only; every hook command names a script that exists.
+    const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const apCfg = (hooksCfg.PreToolUse || []).find((e) => e.hooks && e.hooks.some((h) => /approval-hook\.js/.test(h.command))) || {};
+    let mre = null;
+    try { mre = new RegExp(apCfg.matcher); } catch { /* checked below */ }
+    const scripts = Object.values(hooksCfg).flat().flatMap((e) => e.hooks.map((h) => (/\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[\w.-]+\.js)/.exec(h.command) || [])[1]));
+    ok(mre && hooksCfg.PreToolUse[0].hooks[0].command.includes("guard-hook.js") && apCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js"' && apCfg.hooks[0].timeout === 10 &&
+      names.concat(["Bash", "PowerShell", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init"]).every((n) => mre.test(n)) &&
+      ["Write", "Edit", "BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash"].every((n) => !mre.test(n)) &&
+      scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
+      "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
+      JSON.stringify([apCfg.matcher, scripts]) + ")");
+
+    // spec_init over MCP: approvalGuard is a plain string enum (folded), always reported, refused when it is anything else.
+    const pMcp = path.join(tmp, "proj-f2-mcp");
+    const initSchema = ((await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_init") || {}).inputSchema || {};
+    const ag = (initSchema.properties || {}).approvalGuard || {};
+    const m1 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "DENY", projectDir: pMcp } });
+    const rmAfter1 = JSON.parse(fs.readFileSync(path.join(pMcp, ".specs", "roadmap.json"), "utf8")).meta.approvalGuard;
+    const m2 = await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pMcp } });
+    const m3 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "maybe", projectDir: pMcp } });
+    const m4 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: true, projectDir: pMcp } });
+    const m5 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "off", projectDir: pMcp, lang: "es" } });
+    const r1 = payload(m1), r2 = payload(m2), r5 = payload(m5);
+    ok(ag.type === "string" && JSON.stringify(ag.enum) === '["off","ask","deny"]' && r1.approvalGuard === "deny" && /^Approval guard DENY/.test(r1.approvalGuardNote) &&
+      rmAfter1 === "deny" && r2.approvalGuard === "deny" && r2.approvalGuardNote === undefined &&
+      m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote),
+      "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused (got " +
+      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote]) + ")");
+  }
+
+  // 1.14 feature (F2) — review fixes: the shell lexer reads the tool's shell (R3), heredoc bodies are data (R9), guard-down actions
+  // (R10), fail closed on a broken roadmap.json and on a shell write of it (R1).
+  {
+    const CLI_PATH = "/clone/cli/dev-spec.js";
+    const D = (tool, input, level, opts) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input }, level || "deny", Object.assign({ cli: CLI_PATH }, opts));
+    const sh = (command, tool, opts) => D(tool || "Bash", { command }, "deny", opts);
+    const kinds = (r) => (r.actions || []).map((a) => [a.kind, a.setting || "", a.feature || "", a.phase || a.through || (typeof a.to === "string" ? a.to : a.to === null ? "-" : ""), a.force ? "force" : ""].join(":")).join(",");
+    const BS = "\\", NL = "\n", CRLF = "\r\n";
+    const OK_APPROVE = "approve::login:requirements:";
+
+    // R3: Bash escapes / line continuations / ANSI-C quoting, PowerShell's backtick, cmd's caret; launchers with value options and
+    // bin runners; a substitution or a redirection before the program.
+    const r3Yes = {
+      Bash: ["node cli/dev-spec.js " + BS + NL + "  approve login requirements", "node cli/dev-spec.js " + BS + CRLF + "  approve login requirements",
+        "node cli/dev-spec.js a" + BS + "pprove login requirements", "node cli/dev-spec.js $'approve' login requirements",
+        "node cli/dev-spec.js $'" + BS + "x61pprove' login requirements", "node cli/dev" + BS + "-spec.js approve login requirements",
+        "node cli/d'e'v-spec.js approve login requirements", "sudo -u bob node cli/dev-spec.js approve login requirements",
+        "sudo --user=bob -- node cli/dev-spec.js approve login requirements", "doas -u bob node cli/dev-spec.js approve login requirements",
+        "exec -a x node cli/dev-spec.js approve login requirements", "node -r ./x.js cli/dev-spec.js approve login requirements",
+        "node --require ./x.js cli/dev-spec.js approve login requirements", "timeout -s KILL 30 node cli/dev-spec.js approve login requirements",
+        "npm exec -- dev-spec approve login requirements", "npm x dev-spec approve login requirements", "pnpm dlx dev-spec approve login requirements",
+        "yarn dlx dev-spec approve login requirements", "bunx dev-spec approve login requirements", "bun x dev-spec approve login requirements",
+        "deno run -A cli/dev-spec.js approve login requirements", "env -S 'node cli/dev-spec.js approve login requirements'",
+        "npx -c 'dev-spec approve login requirements'", 'echo "$(node cli/dev-spec.js approve login requirements)"',
+        "$(command -v node) cli/dev-spec.js approve login requirements", "$NODE cli/dev-spec.js approve login requirements",
+        ">log.txt node cli/dev-spec.js approve login requirements", 'cmd /c "node cli' + BS + 'dev-spec.js ap^prove login requirements"',
+        "node C:" + BS + "repo" + BS + "cli" + BS + "dev-spec.js approve login requirements", "n=${#x}; node cli/dev-spec.js approve login requirements"],
+      PowerShell: ["node cli/dev-spec.js ap`prove login requirements", "node cli/dev-spec.js `" + NL + "  approve login requirements",
+        "node cli/dev-spec.js `" + CRLF + "  approve login requirements", '& node "C:' + BS + "repo" + BS + "cli" + BS + 'dev-spec.js" approve login requirements',
+        '$m = @"' + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + '"@', "Start-Process node -ArgumentList 'cli/dev-spec.js approve login requirements'"],
+    };
+    const r3No = {
+      Bash: ["npm install dev-spec", "npm run approve", "yarn add dev-spec", "pnpm add dev-spec", "echo $'dev-spec approve login requirements'",
+        "# node cli/dev-spec.js approve login requirements" + NL + "echo hi", "echo x # ; node cli/dev-spec.js approve login requirements",
+        "git commit -m 'feat: `dev-spec approve x y` now asks'", "printf '%s" + BS + "n' 'dev-spec approve x y'", "sudo -u bob echo dev-spec approve x y"],
+      PowerShell: ["<# node cli/dev-spec.js approve login requirements #> echo hi", 'echo `"dev-spec approve x y`"', "git commit -m 'dev-spec approve x y'",
+        "# node cli/dev-spec.js approve login requirements", "git commit -m @'" + NL + "fix: it's `dev-spec approve x y` now" + NL + "'@"],
+    };
+    const r3Bad = Object.entries(r3Yes).flatMap(([tool, list]) => list.map((c) => [tool, c, kinds(sh(c, tool))])).filter(([, , k]) => k !== OK_APPROVE);
+    const r3NoBad = Object.entries(r3No).flatMap(([tool, list]) => list.filter((c) => sh(c, tool).decision !== "allow").map((c) => [tool, c]));
+    ok(r3Bad.length === 0 && r3NoBad.length === 0,
+      "feature F2 review R3: the lexer reads the tool's shell — Bash \\⏎ continuation, \\x escapes, $'…' (ANSI-C), PowerShell's backtick (escape and `⏎), cmd's ^; launchers with value options (sudo -u, doas -u, exec -a, node -r / --require, timeout -s) and bin runners (npm exec / x, pnpm dlx, yarn dlx, bunx, bun x, deno run, env -S, npx -c), \"$( )\", a substitution / variable / redirection before the program → caught; npm install / run, yarn add, echo $'…', # and <# #> comments, a quoted commit message, a PowerShell here-string → not (got " +
+      JSON.stringify([r3Bad, r3NoBad]) + ")");
+    const n64 = 64 * 1024;
+    const r3Times = ["$(".repeat(n64 / 2), BS.repeat(n64), "`".repeat(n64), "<<EOF" + NL.repeat(n64 / 2), "$'" + BS.repeat(n64), '"$('.repeat(n64 / 3), "${".repeat(n64 / 2),
+      "${$(".repeat(n64 / 4), "a<<b ".repeat(n64 / 5) + NL + "x", '@"' + NL + "$(".repeat(n64 / 2), "`$(".repeat(n64 / 3), ("x" + NL).repeat(n64 / 2)]
+      .map((c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; });
+    ok(r3Times.every((t) => t < 2000), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each < 2 s, got " + JSON.stringify(r3Times) + " ms)");
+
+    // R9: a heredoc body is data — skipped (<<'EOF', <<"EOF", <<\EOF, <<-EOF), read only for $( ) / `…` when unquoted, or as the
+    // script when fed to a shell (bash <<EOF, sh <<<); what follows the terminator is a command again.
+    const r9No = ["cat > docs.md <<'EOF'" + NL + "Run:" + NL + "dev-spec approve login requirements" + NL + "EOF",
+      "cat > docs.md <<'EOF'" + NL + "Run `dev-spec approve login requirements` to approve." + NL + "EOF",
+      "git commit -F - <<'EOF'" + NL + "feat: gate the approval" + NL + NL + "`dev-spec approve login requirements` asks" + NL + "EOF",
+      'git commit -F - <<"EOF"' + NL + "`dev-spec approve login requirements` asks" + NL + "EOF",
+      "cat <<" + BS + "EOF" + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + "EOF",
+      "cat <<-'EOF' > x.md" + NL + "\tnode cli/dev-spec.js approve login requirements" + NL + "\tEOF",
+      "cat <<'EOF' > x.md" + CRLF + "node cli/dev-spec.js approve login requirements" + CRLF + "EOF" + CRLF,
+      'git commit -m "$(cat <<\'EOF\'' + NL + "feat: dev-spec approve x y now asks" + NL + "`dev-spec approve login requirements`" + NL + "EOF" + NL + ')"',
+      "cat <<EOF > notes.md" + NL + "dev-spec approve login requirements" + NL + "EOF"];
+    const r9Yes = ["cat > docs.md <<'EOF'" + NL + "dev-spec approve a b" + NL + "EOF" + NL + "node cli/dev-spec.js approve login requirements",
+      "cat <<'A' <<'B'" + NL + "x" + NL + "A" + NL + "dev-spec approve a b" + NL + "B" + NL + "node cli/dev-spec.js approve login requirements",
+      "cat <<EOF" + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + "EOF",
+      "cat <<EOF" + NL + "`node cli/dev-spec.js approve login requirements`" + NL + "EOF",
+      "bash <<'EOF'" + NL + "node cli/dev-spec.js approve login requirements" + NL + "EOF",
+      "sudo sh <<'EOF'" + NL + "cd /repo" + NL + "node cli/dev-spec.js approve login requirements" + NL + "EOF",
+      "sh <<< 'node cli/dev-spec.js approve login requirements'",
+      "((x = 1 << 2))" + NL + "node cli/dev-spec.js approve login requirements", "echo $((1 << 2))" + NL + "node cli/dev-spec.js approve login requirements",
+      'git commit -m "feat: `node cli/dev-spec.js approve login requirements`"'];
+    const r9NoBad = r9No.filter((c) => sh(c).decision !== "allow");
+    const r9Bad = r9Yes.map((c) => [c, kinds(sh(c))]).filter(([, k]) => k !== OK_APPROVE);
+    ok(r9NoBad.length === 0 && r9Bad.length === 0,
+      "feature F2 review R9: heredoc bodies are data (cat > docs.md <<'EOF', git commit -F - <<'EOF' with `dev-spec approve …` in backticks, <<\"EOF\", <<\\EOF, <<-EOF, CRLF, the -m \"$(cat <<'EOF' … EOF)\" form); an unquoted body's $( ) / `…`, a body fed to a shell (bash / sudo sh <<EOF, sh <<<), the command after the terminator and `…` inside \"…\" still run (got " +
+      JSON.stringify([r9NoBad, r9Bad]) + ")");
+
+    // R10: guard-down actions — weakening what the guard stands for, through spec_init and `dev-spec init` alike, compared with the
+    // project's meta (opts.meta — the hook passes roadmap.json's); raising or adding stays allowed; unknown meta → fail closed.
+    const meta = { evidence: "observed", approvalRoles: { design: ["tech", "security"], requirements: ["product"] }, checks: { test: "npm test" }, stopCheck: true, guard: "scope" };
+    const init = (input, m, lang) => D("mcp__plugin_dev-spec-driven_spec-driven__spec_init", input, "deny", { meta: m === undefined ? meta : m, lang });
+    const cliInit = (args, m, lang) => sh("node cli/dev-spec.js init " + args, "Bash", { meta: m === undefined ? meta : m, lang });
+    const r10Yes = [[init({ evidence: "reported" }), "guard-down:evidence::reported:"], [init({ evidence: " REPORTED " }), "guard-down:evidence::reported:"],
+      [init({ approvalRoles: {} }), "guard-down:roles:::"], [init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }), "guard-down:roles:::"],
+      [init({ checks: { test: "" } }), "guard-down:check::-:"], [init({ checks: { test: null } }), "guard-down:check::-:"], [init({ checks: { test: "exit 0" } }), "guard-down:check::exit 0:"],
+      [init({ stopCheck: false }), "guard-down:stopCheck::off:"], [init({ guard: "off" }), "guard-down:guard::off:"], [init({ guard: true }), "guard-down:guard::on:"],
+      [init({ guard: false }), "guard-down:guard::off:"], [init({ evidence: "reported" }, null), "guard-down:evidence::reported:"],
+      [cliInit("--evidence reported"), "guard-down:evidence::reported:"], [cliInit("--evidence=reported"), "guard-down:evidence::reported:"],
+      [cliInit("--roles none"), "guard-down:roles:::"], [cliInit("--roles requirements=product"), "guard-down:roles:::"],
+      [cliInit("--check test="), "guard-down:check::-:"], [cliInit("--check=test="), "guard-down:check::-:"], [cliInit("--check 'test=exit 0'"), "guard-down:check::exit 0:"],
+      [cliInit("--stop-check off"), "guard-down:stopCheck::off:"], [cliInit("--guard off"), "guard-down:guard::off:"], [cliInit("--stop-check=no", null), "guard-down:stopCheck::off:"],
+      [cliInit("--approval-guard ask --evidence reported"), "guard-down:approvalGuard::ask:,guard-down:evidence::reported:"]];
+    const r10No = [init({ evidence: "observed" }), init({ evidence: "reported" }, {}), init({ approvalRoles: { design: ["tech", "security", "legal"], requirements: ["product"], tasks: ["lead"] } }),
+      init({ checks: { lint: "eslint ." } }), init({ checks: { test: "npm test" } }), init({ checks: { lint: "" } }), init({ stopCheck: true }), init({ stopCheck: false }, { stopCheck: false }),
+      init({ guard: "scope" }), init({ tracks: ["tdd"] }), init({ approvalRoles: { bogus: ["x"] } }), init({ checks: { "bad name": "" } }),
+      cliInit("--evidence observed"), cliInit("--check lint=eslint"), cliInit("--stop-check on"), cliInit("--guard scope"), cliInit("--check test"),
+      cliInit('--roles "design=tech+security+legal,requirements=product"'), cliInit("--roles none", {}), cliInit("--evidence reported --help")];
+    const r10Bad = r10Yes.map(([r, want], i) => [i, kinds(r), want]).filter(([, got, want]) => got !== want);
+    const r10NoBad = r10No.map((r, i) => [i, r.decision, kinds(r)]).filter(([, d]) => d !== "allow");
+    ok(r10Bad.length === 0 && r10NoBad.length === 0,
+      "feature F2 review R10: guard-down actions (MCP spec_init and CLI init alike) — evidence observed → reported, roles cleared or a required role dropped, a project check removed or its command changed, the stop gate off, the edit guard lowered; unknown meta fails closed; raising / adding / a no-op / a refused value / --help → allowed (got " +
+      JSON.stringify([r10Bad, r10NoBad]) + ")");
+    const dEv = init({ evidence: "reported" });
+    const dRoles = init({ approvalRoles: { design: ["tech"], requirements: ["product"] } });
+    const dClear = cliInit("--roles none");
+    const dCheck = init({ checks: { test: "" } });
+    const dCheckCmd = init({ checks: { test: "rm -rf $HOME" } });
+    const dMulti = cliInit("--approval-guard off --evidence reported --stop-check off");
+    ok(dEv.command === '! node "/clone/cli/dev-spec.js" init --evidence reported' && /may not switch the evidence mode \(meta\.evidence\) back to reported/.test(dEv.reason) &&
+      /drop required approval roles \(design=security\) from meta\.approvalRoles/.test(dRoles.reason) && dRoles.command === '! node "/clone/cli/dev-spec.js" init --roles "requirements=product,design=tech"' &&
+      /clear the approval roles/.test(dClear.reason) && dClear.command === '! node "/clone/cli/dev-spec.js" init --roles none' &&
+      /remove the project check 'test' \(meta\.checks\)/.test(dCheck.reason) && dCheck.command === '! node "/clone/cli/dev-spec.js" init --check "test="' &&
+      /change the command of the project check 'test'/.test(dCheckCmd.reason) && dCheckCmd.command === '! node "/clone/cli/dev-spec.js" init --check "test=<command>"' &&
+      dMulti.command === '! node "/clone/cli/dev-spec.js" init --approval-guard off && node "/clone/cli/dev-spec.js" init --evidence reported && node "/clone/cli/dev-spec.js" init --stop-check off' &&
+      /lower the approval guard from deny to off; switch the evidence mode .*; turn off the end-of-turn evidence gate/.test(dMulti.reason) &&
+      /voltar a pôr o modo de evidência \(meta\.evidence\) em reported/.test(init({ evidence: "reported" }, meta, "pt").reason) &&
+      /retirar papéis de aprovação exigidos \(design=security\)/.test(init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }, meta, "pt-BR").reason) &&
+      /Peça ao usuário/.test(init({ stopCheck: false }, meta, "pt-BR").reason) && /volver a poner el modo de evidencia/.test(init({ evidence: "reported" }, meta, "es").reason) &&
+      /eliminar la verificación del proyecto 'test'/.test(cliInit("--check test=", meta, "es").reason) && /desligar o gate de evidência/.test(cliInit("--stop-check off", meta, "pt").reason),
+      "feature F2 review R10: a guard-down reason names what weakens (EN / PT / pt-BR / ES) and the human's command is the same init change (an unsafe check command → <command>); several at once are listed and chained (got " +
+      JSON.stringify([dEv.command, dRoles.command, dCheckCmd.command, dMulti.command]) + ")");
+
+    // R1: fail closed — a roadmap.json that exists but doesn't parse keeps the strictest level its text names; a shell command that
+    // writes, moves or deletes .specs/roadmap.json (or .specs/ itself) is a guard-down action (no command to hand over).
+    const r1Yes = [["Bash", "echo x >> .specs/roadmap.json"], ["Bash", "echo '{}' > ./.specs/roadmap.json"], ["Bash", "echo x > .specs" + BS + "roadmap.json"],
+      ["Bash", "echo x 1>>.specs/roadmap.json"], ["Bash", "echo x &> .specs/roadmap.json"], ["Bash", "sed -i 's/deny/off/' .specs/roadmap.json"],
+      ["Bash", "perl -pi -e 's/deny/off/' .specs/roadmap.json"], ["Bash", "echo '{}' | tee .specs/roadmap.json"],
+      ["Bash", "jq '.meta.approvalGuard=\"off\"' .specs/roadmap.json > t && mv t .specs/roadmap.json"], ["Bash", "cp /tmp/r.json .specs/roadmap.json"],
+      ["Bash", "cp /tmp/roadmap.json .specs/"], ["Bash", "rm .specs/roadmap.json"], ["Bash", "rm -rf .specs"], ["Bash", "mv .specs .specs-old"],
+      ["Bash", "truncate -s 0 .specs/roadmap.json"], ["Bash", "dd if=/dev/null of=.specs/roadmap.json"], ["Bash", 'cmd /c "echo x > .specs' + BS + 'roadmap.json"'],
+      ["Bash", "bash -c 'echo {} > .specs/roadmap.json'"], ["PowerShell", "Set-Content .specs/roadmap.json '{}'"],
+      ["PowerShell", "'{}' | Out-File -FilePath .specs" + BS + "roadmap.json"], ["PowerShell", "Add-Content -Path .specs/roadmap.json -Value x"],
+      ["PowerShell", "Copy-Item -Path x.json -Destination .specs/roadmap.json"], ["PowerShell", "Remove-Item -Recurse .specs"], ["PowerShell", "echo x > .specs/roadmap.json"]];
+    const r1No = [["Bash", "cat .specs/roadmap.json"], ["Bash", "jq . .specs/roadmap.json > /tmp/x"], ["Bash", "cp .specs/roadmap.json /tmp/backup.json"],
+      ["Bash", "git add .specs/roadmap.json"], ["Bash", "sed 's/a/b/' .specs/roadmap.json"], ["Bash", "mv notes.md .specs/"], ["Bash", "rm -rf .specs/checkout/.execution"],
+      ["Bash", "node cli/dev-spec.js status > .specs/status.txt"], ["Bash", "ls .specs"], ["Bash", "grep -n approvalGuard .specs/roadmap.json"],
+      ["PowerShell", "Get-Content .specs/roadmap.json"], ["PowerShell", "Copy-Item .specs/roadmap.json backup.json"]];
+    const r1Bad = r1Yes.map(([t, c]) => [t, c, kinds(sh(c, t))]).filter(([, , k]) => k !== "guard-down:roadmap:::");
+    const r1NoBad = r1No.filter(([t, c]) => sh(c, t).decision !== "allow");
+    const dW = sh("echo x >> .specs/roadmap.json"), dWpt = sh("rm .specs/roadmap.json", "Bash", { lang: "pt" }), aW = D("Bash", { command: "rm -rf .specs" }, "ask");
+    ok(r1Bad.length === 0 && r1NoBad.length === 0 && dW.command === null && /may not change \.specs\/roadmap\.json from the shell — write, move or delete it/.test(dW.reason) &&
+      /Stop and ask the user to make that change themselves/.test(dW.reason) && !/null/.test(dW.reason + dW.userNote) && /Make that change yourself/.test(dW.userNote) &&
+      /alterar \.specs\/roadmap\.json a partir da shell/.test(dWpt.reason) && /faça ele próprio essa alteração/.test(dWpt.reason) && aW.decision === "ask" && aW.command === null,
+      "feature F2 review R1: a shell write of .specs/roadmap.json (> >> &> 1>>, tee, sed / perl -i, cp / mv / Copy-Item onto it, rm / truncate / dd / Set-Content / Add-Content / Out-File, deleting or moving .specs/ away, inside cmd /c or bash -c) is a guard-down action with no command to hand over (the user makes the change); reading it (cat, jq, grep, cp FROM it, git add) is not (got " +
+      JSON.stringify([r1Bad, r1NoBad, dW.reason.slice(0, 120)]) + ")");
+    // The level: engine and hook read a broken roadmap.json's raw text (the strictest level it names); no level named → off.
+    const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
+    const runHook = (input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 15000 });
+    const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+    const decision = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.status === 0 && r.stdout === "" ? "silent" : "?"; } };
+    const pB = path.join(tmp, "proj-f2-r1-broken"), pB2 = path.join(tmp, "proj-f2-r1-noguard"), pB3 = path.join(tmp, "proj-f2-r1-two"), pOffW = path.join(tmp, "proj-f2-r1-off");
+    S.initProject(pB, ["core"], "en", { approvalGuard: "deny" });
+    fs.appendFileSync(path.join(pB, ".specs", "roadmap.json"), "x"); // what `echo x >> .specs/roadmap.json` does
+    fs.mkdirSync(path.join(pB2, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pB2, ".specs", "roadmap.json"), '{"meta": {"lang": "en"}');
+    fs.mkdirSync(path.join(pB3, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pB3, ".specs", "roadmap.json"), '{"meta": {"approvalGuard": "ask"}}\n{"meta": {"approvalGuard" : " DENY "}}');
+    S.initProject(pOffW, ["core"], "en");
+    const hB = runHook(pre(pB, "mcp__spec-driven__spec_approve", { name: "x", phase: "design" }));
+    const hBinit = runHook(pre(pB, "mcp__spec-driven__spec_init", { evidence: "reported" })); // broken → meta unknown → fail closed
+    const hB2 = runHook(pre(pB2, "mcp__spec-driven__spec_approve", { name: "x", phase: "design" }));
+    const hB3 = runHook(pre(pB3, "Bash", { command: "node cli/dev-spec.js approve x design" }));
+    const hOffW = runHook(pre(pOffW, "Bash", { command: "echo x >> .specs/roadmap.json" }));
+    ok(S.approvalGuardLevel(pB) === "deny" && S.approvalGuardLevel(pB2) === "off" && S.approvalGuardLevel(pB3) === "deny" &&
+      decision(hB) === "deny" && decision(hBinit) === "deny" && decision(hB2) === "silent" && decision(hB3) === "deny" && decision(hOffW) === "silent",
+      "feature F2 review R1: fail closed — a roadmap.json broken by an appended byte keeps its approvalGuard deny (engine approvalGuardLevel and the hook; a spec_init there is judged with unknown meta); the strictest level a broken file names wins; a broken file naming none, or a guard-off project, stays silent (got " +
+      JSON.stringify([S.approvalGuardLevel(pB), S.approvalGuardLevel(pB2), S.approvalGuardLevel(pB3), decision(hB), decision(hBinit), decision(hB2), decision(hB3), decision(hOffW)]) + ")");
+    // The hook end to end: the project's meta decides a spec_init / init change (lowering → deny, raising → silent); a shell write of
+    // roadmap.json is denied with the user's line naming no command.
+    const pM = path.join(tmp, "proj-f2-r10-hook");
+    S.initProject(pM, ["core"], "en", { approvalGuard: "deny", evidence: "observed", checks: { test: "npm test" }, approvalRoles: { design: ["tech"] } });
+    const hM = [runHook(pre(pM, "mcp__spec-driven__spec_init", { evidence: "reported" })), runHook(pre(pM, "mcp__spec-driven__spec_init", { evidence: "observed" })),
+      runHook(pre(pM, "Bash", { command: 'node cli/dev-spec.js init --check "test="' })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js init --check lint=eslint" })),
+      runHook(pre(pM, "PowerShell", { command: "node cli/dev-spec.js init --roles none" })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js init --roles design=tech+security" })),
+      runHook(pre(pM, "Bash", { command: "echo x >> .specs/roadmap.json" })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js " + BS + NL + " approve x design" }))];
+    let wOut = {};
+    try { wOut = JSON.parse(hM[6].stdout); } catch { /* checked below */ }
+    ok(JSON.stringify(hM.map(decision)) === '["deny","silent","deny","silent","deny","silent","deny","deny"]' && /refused an agent's request to change \.specs\/roadmap\.json/.test(wOut.systemMessage || "") &&
+      !/To approve it yourself/.test(wOut.systemMessage || ""),
+      "feature F2 review R10/R1: the hook passes the project's meta — spec_init {evidence: reported}, init --check test=, init --roles none are denied where they lower it, their raising twins pass; a Bash write of roadmap.json and a \\⏎-continued approve are denied (got " +
+      JSON.stringify([hM.map(decision), wOut.systemMessage]) + ")");
+  }
+
+  // 1.14 feature (F3) — task dependencies and waves.
+  {
+    const fdRoot = path.join(tmp, "proj-ff-deps");
+    const mkF = (name, lang = "en", kind) => {
+      const p = path.join(fdRoot, name);
+      S.initProject(p, ["core"], lang);
+      const f = S.createFeature(p, "Deps " + name, ["core"], "", undefined, lang, kind);
+      return { p, slug: f.slug, dir: f.dir };
+    };
+    const put = (x, file, text) => fs.writeFileSync(path.join(x.dir, file), text);
+    const get = (x, file) => fs.readFileSync(path.join(x.dir, file), "utf8");
+    const tl = (...lines) => "# Tasks\n\n" + lines.join("\n") + "\n";
+    const callP = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
+    const js = (v) => JSON.stringify(v);
+
+    // Regression guard: a tasks.md without any _Depends:_ answers exactly as before.
+    const a = mkF("plain");
+    put(a, "tasks.md", tl("## Story US-1 (P1)", "- [x] 1. [US1] Core", "  - _Implements: src/core.js_", "- [ ] 2. [US1][P] Parser", "  - _Implements: src/parser.js_",
+      "- [ ] 3. [US1][P] Printer", "  - _Implements: src/printer.js_", "- [ ] 4. [US1][P] Printer tweak", "  - _Implements: src/printer.js_",
+      "- [ ] 5. [US1] Wire", "  - _Implements: src/index.js_", "**Checkpoint:** US1 works"));
+    const aNext = await callP("spec_next_task", { name: a.slug, batch: true, projectDir: a.p });
+    const aWaves = await callP("spec_next_task", { name: a.slug, waves: true, projectDir: a.p });
+    const aDoc = S.specDoctor(a.p, a.slug);
+    const aDone = S.completeTask(a.p, a.slug, 2);
+    const aBrief = S.taskBrief(a.p, a.slug);
+    ok(Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch" && aNext.next.number === 2 && aNext.remaining === 4 && aNext.total === 5 &&
+      aNext.batch.map((b) => b.number).join() === "2,3" && js(aWaves.waves) === "[[2,3],[4],[5]]" && js(aWaves.cycles) === "[]" && js(aWaves.blocked) === "[]" &&
+      !aDoc.checks.some((c) => c.id === "task-deps") && aDone.ok && !("waitsOn" in aDone) && !("blocked" in aDone) && aDone.next.number === 3 &&
+      aBrief.task.number === 3 && !("dependsOn" in aBrief) && !/## Depends on/.test(aBrief.brief) && S.statusFeature(a.p, a.slug).tasks.next.number === 3,
+      "feature F3: a tasks.md without any _Depends:_ answers exactly as before — next = the first open task, the same result keys (no skipped / blocked), the [P] batch unchanged, no task-deps check, complete_task / brief / status unchanged; its waves follow tasks.md order (a [P] run together, split on a shared file, the task after the run behind all of it) (got " +
+      js([aNext, aWaves.waves]) + ")");
+
+    // next skips a task whose dependencies are open; complete_task on such a task warns, never refuses.
+    const b = mkF("skip");
+    put(b, "tasks.md", tl("- [ ] 1. Schema", "  - _Depends: 3_", "- [ ] 2. API", "  - _Depends: #1_", "- [ ] 3. Config"));
+    const bN1 = await callP("spec_next_task", { name: b.slug, projectDir: b.p });
+    const bEarly = await callP("spec_complete_task", { name: b.slug, number: 2, projectDir: b.p });
+    const bDone3 = S.completeTask(b.p, b.slug, 3);
+    const bN2 = S.nextTask(b.p, b.slug);
+    ok(bN1.next.number === 3 && js(bN1.skipped) === '[{"number":1,"waitsOn":[3]},{"number":2,"waitsOn":[1]}]' && !("blocked" in bN1) &&
+      bEarly.ok && bEarly.completed === 2 && js(bEarly.waitsOn) === "[1]" && /Task 2 was ticked while its dependencies #1 are still open/.test(bEarly.note) &&
+      /^- \[x\] 2\./m.test(get(b, "tasks.md")) && bDone3.ok && !("waitsOn" in bDone3) && bDone3.next.number === 1 && bN2.next.number === 1 && !("skipped" in bN2),
+      "feature F3: spec_next_task passes over a task whose _Depends:_ are open (#3 before #1 and #2 — `skipped` says what each waits on); complete_task on a task with an open dependency ticks it with waitsOn + a note (never refused); once #3 is done, #1 is next (got " +
+      js([bN1, bEarly.waitsOn, bEarly.note]) + ")");
+
+    // No open task can start: blocked (a cycle, a dependency naming no task, a task waiting on one of those) — never "all done".
+    const c = mkF("blocked");
+    put(c, "tasks.md", tl("- [x] 1. Base", "- [ ] 2. Left", "  - _Depends: 3_", "- [ ] 3. Right", "  - _Depends: 2_", "- [ ] 4. Later", "  - _Depends: 9_", "- [ ] 5. After", "  - _Depends: 4_"));
+    const cN = await callP("spec_next_task", { name: c.slug, waves: true, projectDir: c.p });
+    const cBrief = S.taskBrief(c.p, c.slug);
+    const cBrief4 = S.taskBrief(c.p, c.slug, 4);
+    ok(cN.next === null && cN.remaining === 4 && /^No open task can start — .*#2 waits on #3; #3 waits on #2; #4 waits on #9; #5 waits on #4\. .*task-deps/.test(cN.note) &&
+      js(cN.blocked) === '[{"number":2,"waitsOn":[3]},{"number":3,"waitsOn":[2]},{"number":4,"waitsOn":[9]},{"number":5,"waitsOn":[4]}]' &&
+      js(cN.waves) === "[]" && js(cN.cycles) === "[[2,3]]" && cBrief.ok && cBrief.task === null && cBrief.blocked.length === 4 && /No open task can start/.test(cBrief.note) &&
+      S.statusFeature(c.p, c.slug).tasks.next === null && js(cBrief4.dependsOn) === '[{"number":9,"status":"missing"}]' && /- #9 ✗ no such task/.test(cBrief4.brief),
+      "feature F3: when every open task waits on a dependency that can't finish (a cycle, a _Depends:_ naming no task, a task waiting on one of those) → next null + `blocked` [{number, waitsOn}] + a localized note — never 'all done'; waves [] with the cycle; the brief's default task is none (same list); status has no next (got " +
+      js([cN.note, cN.blocked, cN.cycles]) + ")");
+
+    // Waves: dependencies done or in earlier waves, no shared _Implements:_ file (anchor / ./ spellings, a folder and its files), a task
+    // without _Implements:_ alone; the [P] batch never takes a task whose dependency is open or in the batch.
+    const d = mkF("waves");
+    put(d, "tasks.md", tl("## Build", "- [ ] 1. Core", "  - _Implements: src/a.js_", "- [ ] 2. B one", "  - _Depends: 1_", "  - _Implements: src/b.js_",
+      "- [ ] 3. B two", "  - _Depends: #1_", "  - _Implements: ./src/b.js:12_", "- [ ] 4. Lib", "  - _Depends: 1_", "  - _Implements: lib/_",
+      "- [ ] 5. Lib util", "  - _Depends: 1_", "  - _Implements: lib/util.js_", "- [ ] 6. Join", "  - _Depends: 2, 3, 4, 5_", "  - _Implements: src/c.js_",
+      "- [ ] 7. Docs", "  - _Depends: 1_"));
+    const dW = await callP("spec_next_task", { name: d.slug, waves: true, projectDir: d.p });
+    const e = mkF("batch");
+    put(e, "tasks.md", tl("## S", "- [ ] 1. [P] One", "  - _Implements: a.js_", "- [ ] 2. [P] Two", "  - _Implements: b.js_", "- [ ] 3. [P] Three", "  - _Depends: 1_", "  - _Implements: c.js_",
+      "- [ ] 4. [P] Four", "  - _Implements: d.js_"));
+    const eB = S.nextTask(e.p, e.slug, { batch: true, max: 8, waves: true });
+    S.completeTask(e.p, e.slug, 1);
+    const eB2 = S.nextTask(e.p, e.slug, { batch: true, max: 8 });
+    ok(js(dW.waves) === "[[1],[2,4],[3,5],[6],[7]]" && js(dW.cycles) === "[]" && js(dW.blocked) === "[]" && dW.next.number === 1 &&
+      eB.batch.map((x) => x.number).join() === "1,2" && js(eB.waves) === "[[1,2,4],[3]]" && eB2.batch.map((x) => x.number).join() === "2,3,4",
+      "feature F3: waves — a wave's tasks have their dependencies done or in earlier waves and share no _Implements:_ file (src/b.js = ./src/b.js:12; lib/ overlaps lib/util.js), a task without _Implements:_ is a wave of its own; the [P] batch stops at a task waiting on an open dependency (one of the batch) and takes it once that is done (got " +
+      js([dW.waves, eB.batch.map((x) => x.number), eB.waves, eB2.batch.map((x) => x.number)]) + ")");
+
+    // Doctor task-deps (fail) and the tasks approval refused on it; once fixed, the approval passes and next_action implements the scheduled task.
+    const REQ = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n\n## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n";
+    const DESIGN = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+    const g = mkF("gate");
+    put(g, "classification.md", get(g, "classification.md").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+    put(g, "requirements.md", REQ);
+    put(g, "design.md", DESIGN);
+    put(g, "tasks.md", tl("- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "  - _Depends: 2_", "- [ ] 2. [US1] Reader", "  - _Requirements: US-1.AC-1_", "  - _Depends: 1_",
+      "- [ ] 3. [US1] Export", "  - _Requirements: US-1.AC-1_", "  - _Depends: 9, 3, soon_"));
+    const gPre = ["classification", "requirements", "design"].map((ph) => S.approvePhase(g.p, g.slug, ph, "t"));
+    const gDeps = S.specDoctor(g.p, g.slug).checks.find((c) => c.id === "task-deps");
+    const gRefused = await callP("spec_approve", { name: g.slug, phase: "tasks", by: "t", projectDir: g.p });
+    put(g, "tasks.md", tl("- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "  - _Depends: 2_", "- [ ] 2. [US1] Reader", "  - _Requirements: US-1.AC-1_",
+      "- [ ] 3. [US1] Export", "  - _Requirements: US-1.AC-1_", "  - _Depends: 1, 2_"));
+    const gOk = S.approvePhase(g.p, g.slug, "tasks", "t");
+    const gDeps2 = S.specDoctor(g.p, g.slug).checks.find((c) => c.id === "task-deps");
+    const gNa = S.nextAction(g.p, g.slug);
+    ok(gPre.every((r) => r.ok) && gDeps && gDeps.status === "fail" &&
+      gDeps.detail === "task 3: _Depends:_ 'soon' is not a task number; task 3 depends on #9, which no active task carries; task 3 depends on itself; tasks waiting on each other (a cycle): #1, #2 — fix the _Depends:_ markers in tasks.md (numbers of tasks in the same tasks.md: `_Depends: 3, 5_`)" &&
+      gRefused.ok === false && gRefused.refused === true && gRefused.failing.includes("task-deps") && gOk.ok && gDeps2.status === "pass" &&
+      gDeps2.detail === "2 task(s) declare _Depends:_ — each names an active task, no cycle" && gNa.step === "implement" && /^Implement task #2: Reader/.test(gNa.recommendation),
+      "feature F3: doctor task-deps fails on a _Depends:_ value that is not a task number, a number no task carries, a self-dependency and a cycle — and the tasks approval is refused on it; fixed, it passes and next_action implements the next task by the dependency rule (#2, not #1) (got " +
+      js([gDeps && gDeps.detail, gRefused.failing, gOk.ok, gNa.step, gNa.recommendation]) + ")");
+
+    // The brief lists the task's dependencies and their status (PT too), kept with write:true.
+    const h = mkF("brief", "pt");
+    put(h, "tasks.md", tl("- [x] 1. Base", "- [ ] 2. Meio", "- [ ] 3. Topo", "  - _Depends: 1, 2_"));
+    const hB = S.taskBrief(h.p, h.slug, 3);
+    const hW = S.taskBrief(h.p, h.slug, 3, { write: true });
+    const dB = S.taskBrief(d.p, d.slug, 6);
+    ok(js(hB.dependsOn) === '[{"number":1,"status":"done"},{"number":2,"status":"open"}]' && /## Depende de\n- #1 ✓ feita — Base\n- #2 ○ por fazer — Meio\n\n⚠ Algumas ainda não estão concluídas/.test(hB.brief) &&
+      js(hW.dependsOn) === js(hB.dependsOn) && !("brief" in hW) && /## Depends on\n- #2 ○ open — B one\n- #3 ○ open — B two\n- #4 ○ open — Lib\n- #5 ○ open — Lib util\n\n⚠ Some of them are still open/.test(dB.brief),
+      "feature F3: the brief lists the task's _Depends:_ with each one's status (done / open / missing) and a warning while one is open — PT too; `dependsOn` is kept with write:true (got " + js([hB.dependsOn, hW.dependsOn]) + ")");
+
+    // spec_append_tasks {depends}: existing tasks or tasks of the same call; a phantom, a self-dependency, a cycle, a non-number → nothing written.
+    const ap = mkF("append");
+    put(ap, "requirements.md", REQ);
+    put(ap, "tasks.md", tl("## Build", "- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "**Checkpoint:** built"));
+    const ap1 = await callP("spec_append_tasks", { name: ap.slug, tasks: [{ text: "Reader", depends: [1] }, { text: "Glue", depends: [1, 2] }], projectDir: ap.p });
+    const apText = get(ap, "tasks.md");
+    const apBad = await callP("spec_append_tasks", { name: ap.slug, tasks: [{ text: "X", depends: [9] }], projectDir: ap.p });
+    const apSelf = S.appendTasks(ap.p, ap.slug, [{ text: "Y", depends: "#4" }]);
+    const apCycle = S.appendTasks(ap.p, ap.slug, [{ text: "P", depends: [5] }, { text: "Q", depends: ["4"] }]);
+    const apType = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: ap.slug, tasks: [{ text: "Z", depends: ["x"] }], projectDir: ap.p } });
+    const apTok = S.appendTasks(ap.p, ap.slug, [{ text: "Z", depends: "soon" }]);
+    const apTyped = S.appendTasks(ap.p, ap.slug, [{ text: "Sneaky _Depends: 1_ in the text" }]);
+    ok(ap1.ok && ap1.appended.map((t) => t.number + ":" + t.depends.join("+")).join() === "2:1,3:1+2" && /- \[ \] 2\. Reader\n {2}- _Depends: 1_\n- \[ \] 3\. Glue\n {2}- _Depends: 1, 2_\n/.test(apText) &&
+      js(S.nextTask(ap.p, ap.slug, { waves: true }).waves) === "[[1],[2],[3]]" &&
+      apBad.ok === false && /Task 1: depends names no task: #9 — give the number of an active task, or of a task of this call \(numbered 4 here\)\. Nothing was written\./.test(apBad.error) && js(apBad.phantomDepends) === "[9]" &&
+      apSelf.ok === false && /Task 1 is numbered 4 here and would depend on itself/.test(apSelf.error) &&
+      apCycle.ok === false && /The dependencies would form a cycle: #4, #5\. Nothing was written\./.test(apCycle.error) && js(apCycle.cycles) === "[[4,5]]" &&
+      apType.result.isError === true && apTok.ok === false && /depends takes task numbers \(3 or #3\) \(got 'soon'\)/.test(apTok.error) &&
+      apTyped.ok === false && /_Depends:_ would not read back/.test(apTyped.error) && get(ap, "tasks.md") === apText,
+      "feature F3: spec_append_tasks {depends} writes _Depends:_ (an existing task, or a task of the same call by the number it gets) and the waves read it; a number naming no task (the error names the numbers the call takes), a self-dependency, a cycle, a non-number (schema or engine) or a _Depends:_ typed in the text writes nothing (got " +
+      js([ap1.appended, apBad.error, apSelf.error, apCycle.error, apTok.error, apTyped.error]) + ")");
+
+    // The bugfix gate keeps its precedence over the dependency warning (a refusal, nothing recorded).
+    const bg = mkF("bug", "en", "bugfix");
+    put(bg, "tasks.md", tl("- [ ] 1. Reproduce the bug", "- [ ] 2. Find the root cause and write it in bug.md → Root Cause", "- [ ] 3. Fix it", "  - _Depends: 2_"));
+    const bgR = S.completeTask(bg.p, bg.slug, 3);
+    ok(bgR.ok === false && bgR.gated === "root-cause" && !("waitsOn" in bgR) && /^- \[ \] 3\./m.test(get(bg, "tasks.md")),
+      "feature F3: the bugfix root-cause gate still refuses a later task — before any dependency warning (got " + js(bgR) + ")");
+
+    // The other readers of "the next task": the scope guard's likely task, a spike's next step (and its doctor).
+    S.initProject(g.p, ["core"], undefined, { guard: "scope" });
+    const gGuard = S.guardCheck(g.p, "src/new.js", g.p);
+    const sp = path.join(fdRoot, "spike");
+    S.initProject(sp, ["core"], "en");
+    const spF = S.createFeature(sp, "Deps probe", undefined, "Can the queue keep up?", undefined, "en", "spike");
+    fs.writeFileSync(path.join(spF.dir, "tasks.md"), tl("- [ ] 1. Measure", "  - _Depends: 2_", "- [ ] 2. Compare", "  - _Depends: 1_"));
+    const spNa = S.nextAction(sp, spF.slug);
+    const spDeps = S.specDoctor(sp, spF.slug).checks.find((x) => x.id === "task-deps");
+    ok(gGuard.decision === "ask" && gGuard.likely && gGuard.likely.number === 2 && gGuard.likely.via === "next" &&
+      spNa.step === "fix" && js(spNa.blocked) === '[{"number":1,"waitsOn":[2]},{"number":2,"waitsOn":[1]}]' && /^No open task can start/.test(spNa.recommendation) &&
+      spDeps && spDeps.status === "fail",
+      "feature F3: the scope guard names the next task by the dependency rule (#2, not #1); a spike whose tasks wait on each other gets next_action step 'fix' with `blocked` (never 'decide') and doctor task-deps (got " +
+      js([gGuard.likely, spNa.step, spNa.recommendation]) + ")");
+
+    // _Depends:_ in fenced code or an HTML comment is never the task's; `**Depends:** 2` yields no marker (malformed-markers warns).
+    const fz = mkF("fenced");
+    put(fz, "tasks.md", tl("- [ ] 1. Example task", "  ```md", "  - _Depends: 2_", "  ```", "  <!-- _Depends: 2_ -->", "- [ ] 2. Second", "  - **Depends:** 1"));
+    const fzBlocks = S.taskBlocks(get(fz, "tasks.md"));
+    const fzDoc = S.specDoctor(fz.p, fz.slug);
+    const fzN = S.nextTask(fz.p, fz.slug, { waves: true });
+    ok(fzBlocks.every((x) => !S.taskDependsSpec(x).declared) && fzN.next.number === 1 && js(fzN.waves) === "[[1],[2]]" && !fzDoc.checks.some((x) => x.id === "task-deps") &&
+      /#2 \(Depends:\)/.test((fzDoc.checks.find((x) => x.id === "malformed-markers") || {}).detail || ""),
+      "feature F3: a _Depends:_ inside fenced code or an HTML comment under a task is not the task's (next, waves, doctor ignore it); `**Depends:** 1` yields no marker and doctor's malformed-markers names it (got " +
+      js([fzN.waves, (fzDoc.checks.find((x) => x.id === "malformed-markers") || {}).detail]) + ")");
+
+    // Linear on adversarial input: a 60 000-number _Depends:_, 4 000 chained tasks closing one long cycle (iterative walks — no stack
+    // overflow), 4 000 open tasks in one [P] run sharing a file, a 120 000-character token run.
+    const t0 = Date.now();
+    const longSpec = S.taskDependsSpec({ text: "Big _Depends: " + Array.from({ length: 60000 }, (_, i) => i + 1).join(", ") + "_", body: [] });
+    const badSpec = S.taskDependsSpec({ text: "Bad _Depends: " + "x, ".repeat(60000) + "#_", body: [] });
+    const N = 4000;
+    const ring = [];
+    for (let i = 1; i <= N; i++) ring.push(`- [ ] ${i}. T${i}`, `  - _Depends: ${i === 1 ? N : i - 1}_`, `  - _Implements: src/f${i}.js_`);
+    const ringBlocks = S.taskBlocks(ring.join("\n"));
+    const ringW = S.taskWaves(ringBlocks, []);
+    const ringS = S.taskSchedule(ringBlocks);
+    const chainBlocks = S.taskBlocks(ring.join("\n").replace(`_Depends: ${N}_`, "_Depends: [none]_"));
+    const chainW = S.taskWaves(chainBlocks, []);
+    const same = [];
+    for (let i = 1; i <= N; i++) same.push(`- [ ] ${i}. [P] S${i}`, "  - _Implements: src/one.js_");
+    const sameW = S.taskWaves(S.taskBlocks(same.join("\n")), []);
+    const tokW = S.taskDependsSpec({ text: "_Depends: " + "9".repeat(120000) + "_", body: [] });
+    const elapsed = Date.now() - t0;
+    ok(longSpec.numbers.length === 60000 && js(badSpec.invalid) === '["x","#"]' && ringW.waves.length === 0 && ringW.cycles.length === 1 && ringW.cycles[0].length === N &&
+      ringW.blocked.length === N && ringS.next === null && chainW.waves.length === N && chainW.waves.every((w, k) => w.length === 1 && w[0] === k + 1) &&
+      sameW.waves.length === N && tokW.invalid.length === 1 && elapsed < 15000,
+      "feature F3: linear on adversarial input — a 60 000-number _Depends:_, a 4 000-task cycle and chain (iterative walks, no stack overflow), 4 000 [P] tasks sharing one file, a 120 000-digit token (" + elapsed + " ms)");
+  }
+
+  // 1.14 feature (F5) — traceability matrix.
+  {
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const rp = path.join(tmp, "proj-f5-rtm");
+    S.initProject(rp, ["tdd"], "en");
+    const rf = S.createFeature(rp, "Checkout", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(rf.dir, "requirements.md"), [
+      "# Feature: Checkout", "", "## Summary", "Pay by card.", "", "### US-1 (P1): Pay", "#### Acceptance Criteria (EARS)",
+      '1. **US-1.AC-1** — WHEN the shopper pays THE SYSTEM SHALL charge "the total", in cents <script>alert(1)</script>',
+      "2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL keep the cart",
+      "   and show the reason to the shopper",
+      "3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]",
+      '4. **US-1.AC-4** — =HYPERLINK("evil") THE SYSTEM SHALL log the attempt', "",
+      "### US-2 (P2): Receipt", "#### Acceptance Criteria (EARS)",
+      "1. **US-2.AC-1** — WHEN the page shows <!-- as text THE SYSTEM SHALL keep it", "",
+      "## Success Criteria", "- **SC-001** — 95% of checkouts finish in 30 s.", "- **SC-002** — refunds settle within a day.", "",
+      "## Edge Cases", "- **EC-1** — WHEN the PSP times out THE SYSTEM SHALL retry once.", "",
+      "## Non-Functional Requirements", "- **NFR-1** — p95 latency under 300 ms.", ""].join("\n"));
+    fs.writeFileSync(path.join(rf.dir, "test-plan.md"), "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | charge | US-1.AC-1 | `test/charge.test.js` |\n| T-02 | unit | example | decline | US-1.AC-2, EC-1 | `test/decline.test.js` |\n" +
+      "| T-03 | load | example | checkout load | SC-001 | `load-test.md` |\n| T-04 | unit | example | receipt | US-2.AC-1 | `test/receipt.test.js` |\n");
+    fs.writeFileSync(path.join(rf.dir, "design.md"), "# Design: Checkout\n\n## Architecture\nCheckoutService implements US-1.AC-1.\n\n## Ops --> alerts\nNFR-1 is watched; US-1.AC-20 is another feature's.\n");
+    fs.writeFileSync(path.join(rf.dir, "tasks.md"), "# Tasks\n\n## Story US-1\n" +
+      '- [ ] 1. [US1] Charge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node -e "process.exit(0)"_\n' +
+      "- [ ] 2. [US1] Decline\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Verify: npm run e2e_\n" +
+      "- [ ] 3. [US1] Log\n  - _Requirements: US-1.AC-4_\n  ```md\n  - _Requirements: US-1.AC-3_\n  ```\n" +
+      "- [ ] 4. [shared] Load\n  - _Makes green: T-03_\n- [ ] 5. [US2] Receipt\n  - _Requirements: US-2.AC-1_\n  - _Makes green: T-04_\n");
+    fs.mkdirSync(path.join(rp, "test"), { recursive: true });
+    fs.writeFileSync(path.join(rp, "test", "charge.test.js"), "test('T-01 charges the total', () => {});\n");
+    S.completeTask(rp, "checkout", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "1 passing" });
+    S.completeTask(rp, "checkout", 2, { summary: "checked by hand" }); // a note on a runnable _Verify:_: ticked, not verified
+    S.completeTask(rp, "checkout", 5); // no _Verify:_ and nothing recorded: nothing to verify
+    const rsf = path.join(rf.dir, ".state.json");
+    const rst = JSON.parse(fs.readFileSync(rsf, "utf8"));
+    Object.assign(rst.evidence["1"], { commit: "abcdef1234567", dirty: false }); // what `done --run` records in a git checkout
+    fs.writeFileSync(rsf, JSON.stringify(rst, null, 2));
+    S.decide(rp, "checkout", { title: "Stripe, as the PSP", decision: "Use Stripe.", affects: ["US-1.AC-1", "EC-1"] });
+    S.decide(rp, "checkout", { title: "Keep the cart", decision: "Keep it.", affects: ["US-1.AC-2"] });
+    S.decide(rp, "checkout", { title: "Keep the cart 24 h", decision: "Keep it a day.", affects: ["US-1.AC-2"], supersedes: ["D-2"] });
+    S.approvePhase(rp, "checkout", "classification", "alice", { force: true });
+    S.approvePhase(rp, "checkout", "requirements", "alice", { force: true });
+    fs.appendFileSync(path.join(rf.dir, "requirements.md"), "- **NFR-2** — THE SYSTEM SHALL log every charge.\n"); // after the approval
+    const sso = S.createFeature(rp, "SSO", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(sso.dir, "requirements.md"), "# Feature: SSO\n\n### US-1 (P1): IdP\n1. **US-1.AC-1** — WHEN the IdP declines THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+
+    const mx = S.traceMatrix(rp, "checkout", { code: true });
+    const row = (id) => mx.rows.find((r) => r.id === id) || {};
+    const st = (id) => row(id).status + (row(id).gaps.length ? ":" + row(id).gaps.join("+") : "");
+    ok(mx.ok && mx.feature === "checkout" && mx.lang === "en" && mx.kind === "feature" && mx.tracks === "core +tdd" &&
+      JSON.stringify(mx.rows.map((r) => r.id)) === JSON.stringify(["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1", "EC-1", "NFR-1", "NFR-2", "SC-001", "SC-002"]) &&
+      JSON.stringify(mx.rows.map((r) => r.kind)) === JSON.stringify(["ac", "ac", "ac", "ac", "ac", "ec", "nfr", "nfr", "sc", "sc"]) &&
+      row("US-1.AC-2").text === "IF the card is declined THEN THE SYSTEM SHALL keep the cart and show the reason to the shopper" &&
+      row("EC-1").text === "WHEN the PSP times out THE SYSTEM SHALL retry once." && row("US-1.AC-3").template === true && row("US-1.AC-1").template === false,
+      "feature F5: traceMatrix — one row per requirement ID, the ACs in document order then EC / NFR / SC, each with its kind and its one-line text (a wrapped criterion folded, the ID dropped); a template criterion flagged (got " + JSON.stringify(mx.rows.map((r) => r.id)) + ")");
+    ok(st("US-1.AC-1") === "verified" && st("US-1.AC-2") === "implemented" && st("US-1.AC-3") === "untraced:no-task+no-test" && st("US-1.AC-4") === "untraced:no-test" &&
+      st("US-2.AC-1") === "verified" && st("EC-1") === "implemented" && st("NFR-1") === "untraced:no-coverage" && st("NFR-2") === "untraced:no-coverage" &&
+      st("SC-001") === "planned" && st("SC-002") === "untraced:no-coverage" &&
+      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1 }) &&
+      JSON.stringify(S.RTM_STATUSES) === JSON.stringify(["verified", "implemented", "planned", "untraced"]),
+      "feature F5: statuses — verified (every linked task done + verified; a task with no _Verify:_ counts), implemented (a note on a runnable _Verify:_), untraced with the trace gap (no-task / no-test / no-coverage — a fenced example citing US-1.AC-3 is no task), planned (SC-001 via T-03, its task open) (got " + mx.rows.map((r) => r.id + "=" + st(r.id)).join(" ") + ")");
+    const t1 = row("US-1.AC-1").tasks[0] || {};
+    const t2 = row("US-1.AC-2").tasks[0] || {};
+    const t5 = row("US-2.AC-1").tasks[0] || {};
+    ok(t1.number === 1 && t1.done && t1.verified && t1.reason === null && JSON.stringify(t1.cites) === '["US-1.AC-1","T-01"]' &&
+      t1.evidence && t1.evidence.command === 'node -e "process.exit(0)"' && t1.evidence.exitCode === 0 && typeof t1.evidence.at === "string" && t1.evidence.commit === "abcdef1234567" && t1.evidence.dirty === false &&
+      t2.number === 2 && t2.done && !t2.verified && t2.reason === "manual-note-on-runnable-verify" && t2.evidence && t2.evidence.note === "checked by hand" && t2.evidence.exitCode === undefined &&
+      t5.verified && t5.nothingToVerify === true && JSON.stringify(row("SC-001").tasks.map((t) => [t.number, t.done, t.cites])) === '[[4,false,["T-03"]]]' &&
+      JSON.stringify(row("US-1.AC-4").tasks.map((t) => t.number)) === "[3]" && row("US-1.AC-3").tasks.length === 0,
+      "feature F5: the linked tasks — citing the ID or one of its planned T-IDs (cites), done / verified with the ONE verdict's stable reason, and the latest evidence (command, exitCode, at, commit / dirty; a note as note) (got " + JSON.stringify([t1, t2.reason, t5.nothingToVerify]) + ")");
+    ok(JSON.stringify(row("US-1.AC-1").tests) === '[{"id":"T-01","files":["test/charge.test.js"]}]' && JSON.stringify(row("US-1.AC-2").tests) === '[{"id":"T-02","files":[]}]' &&
+      JSON.stringify(row("SC-001").tests) === '[{"id":"T-03","outsideCode":true}]' && JSON.stringify(row("EC-1").tests.map((t) => t.id)) === '["T-02"]' &&
+      JSON.stringify(mx.code) === JSON.stringify({ scanned: 1, truncated: false }) && JSON.stringify(S.traceMatrix(rp, "checkout").rows[0].tests) === '[{"id":"T-01"}]' &&
+      JSON.stringify(row("US-1.AC-1").design) === '["Architecture"]' && JSON.stringify(row("NFR-1").design) === '["Ops --> alerts"]' && row("US-1.AC-2").design.length === 0,
+      "feature F5: tests planned for each ID (EC / SC rows too), with code: true the test files naming each T-ID (a load-test row is outsideCode); design = the sections naming the exact ID (US-1.AC-20 is not US-1.AC-2)");
+    ok(JSON.stringify(row("US-1.AC-1").decisions) === '[{"id":"D-1","title":"Stripe, as the PSP","kind":"decision"}]' && JSON.stringify(row("US-1.AC-2").decisions.map((d) => d.id)) === '["D-3"]' &&
+      JSON.stringify(row("EC-1").decisions.map((d) => d.id)) === '["D-1"]' && JSON.stringify(row("US-1.AC-2").supersededBy) === '["sso/US-1.AC-1"]' && row("US-1.AC-1").supersededBy.length === 0 &&
+      JSON.stringify(S.traceMatrix(rp, "sso").rows[0].supersedes) === '["checkout/US-1.AC-2"]',
+      "feature F5: decisions = the CURRENT decisions.md entries whose _Affects:_ name the ID (D-2, superseded by D-3, is left out); supersededBy / supersedes from the _Supersedes:_ markers");
+    ok(mx.approval && mx.approval.by === "alice" && mx.approval.forced === true && mx.approval.baseline === "snapshot" && mx.approval.changed === true &&
+      row("NFR-2").approval.changed === true && row("US-1.AC-1").approval.changed === false && row("US-1.AC-1").approval.by === "alice" && row("US-1.AC-1").approval.forced === true &&
+      S.traceMatrix(rp, "sso").approval === null && S.traceMatrix(rp, "sso").rows[0].approval === null,
+      "feature F5: the requirements approval (at / by / forced, snapshot baseline) and per row whether ITS text changed since (NFR-2 was added after the approval); never approved → null");
+
+    // trace_check {matrix}: the same matrix (MCP = engine), never part of the verdict; without it, no matrix key.
+    const plain = S.traceCheck(rp, "checkout");
+    const withM = S.traceCheck(rp, "checkout", { matrix: true, code: true });
+    const mcpM = payload(await call("trace_check", { name: "checkout", matrix: true, projectDir: rp }));
+    ok(plain.matrix === undefined && withM.verdict === plain.verdict && withM.matrix && withM.matrix.ok === undefined && withM.matrix.feature === "checkout" &&
+      JSON.stringify(withM.matrix.rows) === JSON.stringify(mx.rows) && JSON.stringify(mcpM.matrix.rows) === JSON.stringify(S.traceMatrix(rp, "checkout").rows) && mcpM.matrix.code === undefined &&
+      withM.code && withM.code.testsInCode["T-01"] && S.traceMatrix(rp, "nope").ok === false,
+      "feature F5: trace_check {matrix: true} (MCP = engine) returns the matrix under `matrix` — code: true shares its walk; the verdict is unchanged; an unknown feature is an error");
+
+    // CSV (RFC 4180): quoting, CRLF, formula-injection guard; the document form (BOM + the marker record) for spec_export.
+    const parseCsv = (t) => {
+      const recs = [];
+      let rec = [], fld = "", q = false;
+      for (let i = 0; i < t.length; i++) {
+        const c = t[i];
+        if (q) { if (c === '"') { if (t[i + 1] === '"') { fld += '"'; i++; } else q = false; } else fld += c; }
+        else if (c === '"') q = true;
+        else if (c === ",") { rec.push(fld); fld = ""; }
+        else if (c === "\r" && t[i + 1] === "\n") { rec.push(fld); recs.push(rec); rec = []; fld = ""; i++; }
+        else fld += c;
+      }
+      if (fld || rec.length) { rec.push(fld); recs.push(rec); }
+      return recs;
+    };
+    const csv = S.matrixCsv([mx], "en");
+    const recs = parseCsv(csv);
+    const hdr = recs[0] || [];
+    const col = (name) => hdr.indexOf(name);
+    const rec = (id) => recs.find((r) => r[1] === id) || [];
+    ok(csv.charCodeAt(0) !== 0xfeff && csv.endsWith("\r\n") && !/[^\r]\n/.test(csv) && recs.length === 11 && recs.every((r) => r.length === hdr.length) &&
+      hdr.join(",") === "Feature,ID,Kind,Requirement,Status,Gaps,Template,Design sections,Tasks,Tests,Test files,Latest evidence,Decisions,Supersedes,Superseded by,Requirements approved,Approved by,Changed since approval" &&
+      csv.includes('"WHEN the shopper pays THE SYSTEM SHALL charge ""the total"", in cents <script>alert(1)</script>"') && rec("US-1.AC-1")[col("Requirement")] === row("US-1.AC-1").text &&
+      rec("US-1.AC-4")[col("Requirement")] === "'" + row("US-1.AC-4").text && csv.includes('"\'=HYPERLINK(""evil"") THE SYSTEM SHALL log the attempt"') &&
+      rec("US-1.AC-2")[col("Tasks")] === "#2 done, not verified (note only, _Verify:_ command not run)" && rec("US-2.AC-1")[col("Tasks")] === "#5 done (nothing to verify)" &&
+      /^#1: node -e "process\.exit\(0\)" → exit 0 @abcdef123456 · \d{4}-/.test(rec("US-1.AC-1")[col("Latest evidence")]) && rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP" &&
+      rec("SC-001")[col("Test files")] === "T-03: run outside test code" && rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file" &&
+      rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it" && rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it" &&
+      rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1" && rec("NFR-2")[col("Changed since approval")] === "yes" && rec("US-1.AC-1")[col("Changed since approval")] === "no" &&
+      rec("US-1.AC-1")[col("Approved by")] === "alice (forced)" && rec("US-1.AC-3")[col("Template")] === "yes" && rec("EC-1")[col("Kind")] === "EC",
+      "feature F5: matrixCsv — RFC 4180 (CRLF records, every record as wide as the header, a field with a comma / quote quoted and its quotes doubled), a criterion starting with '=' neutralized with an apostrophe; tasks, evidence, gaps, supersession, approval in words (got " + JSON.stringify(recs.slice(0, 2)) + ")");
+    ok(S.csvCell("plain") === "plain" && S.csvCell(null) === "" && S.csvCell('a,"b"') === '"a,""b"""' && S.csvCell("a\nb") === '"a\nb"' && S.csvCell("a\r\nb") === '"a\r\nb"' &&
+      S.csvCell("=1+1") === "'=1+1" && S.csvCell("+1") === "'+1" && S.csvCell("-1") === "'-1" && S.csvCell("@SUM(A1)") === "'@SUM(A1)" && S.csvCell("\tx") === "'\tx" &&
+      S.csvCell("\rx") === "\"'\rx\"" && S.csvCell(" =x") === " =x" && S.csvCell("x=1") === "x=1" && S.csvCell(-3) === "'-3",
+      "feature F5: csvCell — quoted only when it must be (comma, quote, CR, LF — quotes doubled); a leading = + - @ tab or CR gets an apostrophe (OWASP CSV injection)");
+
+    // spec_export {format: "csv"}: .specs/exports/<slug>.rtm.csv — BOM, the marker as the LAST record; never over a hand-written file.
+    const ex = S.exportSpecs(rp, { name: "checkout", format: "csv" });
+    const exRecs = parseCsv((ex.content || "").slice(1));
+    const last = exRecs[exRecs.length - 1] || [];
+    const noCode = S.matrixCsv([S.traceMatrix(rp, "checkout")], "en"); // the export reads the specs only: no Test files column
+    ok(ex.ok && ex.format === "csv" && ex.scope === "feature" && ex.feature === "checkout" && ex.file === path.join(rp, ".specs", "exports", "checkout.rtm.csv") &&
+      ex.content.charCodeAt(0) === 0xfeff && ex.content.slice(1, 1 + noCode.length) === noCode && !/Test files/.test(noCode) && exRecs.length === 12 && exRecs.every((r) => r.length === hdr.length - 1) &&
+      /^# AUTO-GENERATED by dev-spec — do not edit by hand\./.test(last[0]) && last.slice(1).every((c) => c === "") && ex.content.endsWith("\r\n"),
+      "feature F5: spec_export {format: 'csv'} — the same records with a UTF-8 BOM first (Excel reads the accents) and the AUTO-GENERATED marker as the LAST record (first cell, the rest empty — the header stays the first row)");
+    const exW = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    const exW2 = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    const pw = S.exportSpecs(rp, { format: "csv", write: true });
+    const pRecs = parseCsv(fs.readFileSync(path.join(rp, ".specs", "exports", "project.rtm.csv"), "utf8").slice(1));
+    const handCsv = path.join(rp, ".specs", "exports", "checkout.rtm.csv");
+    fs.writeFileSync(handCsv, "ID,Owner\r\nUS-1.AC-1,alice\r\n");
+    const exH = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    ok(exW.ok && exW.wrote === true && exW.content === undefined && exW.bytes > 500 && exW2.ok && exW2.wrote && pw.ok && pw.file === path.join(rp, ".specs", "exports", "project.rtm.csv") &&
+      JSON.stringify(pw.features) === '["checkout","sso"]' && pRecs.filter((r) => r[0] === "checkout").length === 10 && pRecs.some((r) => r[0] === "sso" && r[1] === "US-1.AC-1") &&
+      exH.ok === false && exH.skipped === true && /\.specs\/exports\/checkout\.rtm\.csv exists and was not generated by dev-spec/.test(exH.error) &&
+      fs.readFileSync(handCsv, "utf8") === "ID,Owner\r\nUS-1.AC-1,alice\r\n" && !S.listFeatures(rp).features.some((f) => f.name === "exports"),
+      "feature F5: spec_export csv {write} — .specs/exports/checkout.rtm.csv, rewritten next time (its marker record); the project: project.rtm.csv with every active feature's rows; a hand-written .rtm.csv is never overwritten (error, file unchanged)");
+
+    // The HTML / md feature document gains the matrix; every cell escaped; the project document gets the counts.
+    const html = S.exportSpecs(rp, { name: "checkout" }).content || "";
+    const sec = html.slice(html.indexOf('<section id="s-rtm">'), html.indexOf("</section>", html.indexOf('<section id="s-rtm">')));
+    ok(/<section id="s-rtm">\n<h2>Traceability matrix<\/h2>/.test(html) && /<li><a href="#s-rtm">Traceability matrix<\/a><\/li>/.test(html) &&
+      sec.includes("<td>US-1.AC-1</td><td>WHEN the shopper pays THE SYSTEM SHALL charge &quot;the total&quot;, in cents &lt;script&gt;alert(1)&lt;/script&gt;</td><td>✅ verified</td><td>Architecture</td><td>#1 ✅</td><td>T-01</td><td>D-1</td>") &&
+      (html.match(/<script/g) || []).length === 1 && !/https?:\/\//.test(html) && /<td><del>US-1\.AC-2<\/del><\/td><td>IF the card is declined[^<]*<em>\(superseded by <code>sso\/US-1\.AC-1<\/code>\)<\/em><\/td><td>⚠ implemented<\/td>/.test(sec) &&
+      sec.includes("<td>US-2.AC-1</td><td>WHEN the page shows &lt;!-- as text THE SYSTEM SHALL keep it</td>") && sec.includes("<td>NFR-1</td>") && sec.includes("<td>Ops --&gt; alerts</td>") &&
+      /<td>✗ untraced — no task cites it; no test-plan row covers it<\/td>/.test(sec) && /\(template — not written yet\)/.test(sec) && /changed since the requirements approval/.test(sec) &&
+      /Requirements approved \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC by alice \(with --force\)\./.test(sec),
+      "feature F5: the HTML export's Traceability matrix section — every cell escaped (a <script> in a criterion is text, the page's own script the only one), an HTML comment opener in one row never swallows the rows up to a later '-->', superseded struck through, gaps, template and changed-since noted");
+    const md = S.exportSpecs(rp, { name: "checkout", format: "md" }).content || "";
+    const pmd = S.exportSpecs(rp, { format: "md" }).content || "";
+    const spk = S.createFeature(rp, "Cache spike", ["core"], "", undefined, "en", "spike");
+    const spkMd = spk.ok ? S.exportSpecs(rp, { name: "cache-spike", format: "md" }).content || "" : "";
+    ok(/\n## Traceability matrix\n\n_One row per requirement ID\./.test(md) && /\n\| ID \| Requirement \| Status \| Design sections \| Tasks \| Tests \| Decisions \|\n\|---\|---\|---\|---\|---\|---\|---\|\n\| US-1\.AC-1 \| /.test(md) &&
+      md.includes("| US-2.AC-1 | WHEN the page shows &lt;!-- as text THE SYSTEM SHALL keep it |") && !/\n\n\n/.test(md.replace(/```[\s\S]*?```/g, "F")) &&
+      /\n## Traceability\n\n_Requirement IDs \(AC \/ EC \/ NFR \/ SC\) per feature/.test(pmd) && pmd.includes("| checkout | 10 | 2 | 2 | 1 | 5 |") && pmd.includes("| sso | 1 | 0 | 0 | 1 | 0 |") &&
+      spk.ok && !/Traceability matrix/.test(spkMd) && S.traceMatrix(rp, "cache-spike").rows.length === 0,
+      "feature F5: the md export carries the same matrix (a '<!--' shown as its entity), the project document each feature's counts by status; a spike has no matrix section");
+
+    // MCP spec_export csv = the engine; the format enum lists csv.
+    const mcpCsv = payload(await call("spec_export", { name: "checkout", format: "csv", projectDir: rp }));
+    const mcpBad = await call("spec_export", { name: "checkout", format: "xlsx", projectDir: rp });
+    ok(mcpCsv.ok && mcpCsv.content === S.exportSpecs(rp, { name: "checkout", format: "csv" }).content && mcpBad.result.isError === true && /html, md, csv/.test(mcpBad.result.content[0].text),
+      "feature F5: MCP spec_export {format: 'csv'} = the engine call; the format enum is html | md | csv");
+
+    // Localized headers and labels (PT / ES / pt-BR); the IDs and the kind column stay English; the message keys agree.
+    const xpt = path.join(tmp, "proj-f5-rtm-pt");
+    S.initProject(xpt, ["core"], "pt");
+    const pf = S.createFeature(xpt, "Pagamento", ["core"], "Pagar.", undefined, "pt");
+    fs.writeFileSync(path.join(pf.dir, "requirements.md"), "# Feature: Pagamento\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE cobrar o total\n");
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Cobrar\n");
+    const xes = path.join(tmp, "proj-f5-rtm-es");
+    S.initProject(xes, ["core"], "es");
+    const ef = S.createFeature(xes, "Pagos", ["core"], "Pagar.", undefined, "es");
+    fs.writeFileSync(path.join(ef.dir, "requirements.md"), "# Feature: Pagos\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — CUANDO el cliente paga EL SISTEMA DEBE cobrar el total\n");
+    fs.writeFileSync(path.join(ef.dir, "tasks.md"), "# Tareas\n\n- [ ] 1. [US1] Cobrar\n");
+    const ptCsv = S.matrixCsv([S.traceMatrix(xpt, "pagamento")], "pt");
+    const esCsv = S.matrixCsv([S.traceMatrix(xes, "pagos")], "es");
+    const ptMd = S.exportSpecs(xpt, { name: "pagamento", format: "md" }).content || "";
+    const esMd = S.exportSpecs(xes, { name: "pagos", format: "md" }).content || "";
+    const ptDoc = S.exportSpecs(xpt, { name: "pagamento", format: "csv" }).content || "";
+    const keys = (o) => Object.keys(o).sort().map((k) => k + (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? "{" + keys(o[k]) + "}" : Array.isArray(o[k]) ? "[" + o[k].length + "]" : "")).join(",");
+    ok(ptCsv.startsWith("Feature,ID,Tipo,Requisito,Estado,Lacunas,Template,Secções do design,Tasks,Testes,Última evidência,") && /\r\npagamento,US-1\.AC-1,AC,QUANDO o cliente paga O SISTEMA DEVE cobrar o total,sem rastreio,nenhuma task o cita,/.test(ptCsv) &&
+      esCsv.startsWith("Función,ID,Tipo,Requisito,Estado,Lagunas,Plantilla,Secciones del diseño,Tareas,Pruebas,Última evidencia,") && /,sin trazar,ninguna tarea lo cita,/.test(esCsv) &&
+      /\n## Matriz de rastreabilidade\n/.test(ptMd) && /\| ID \| Requisito \| Estado \| Secções do design \| Tasks \| Testes \| Decisões \|/.test(ptMd) && /Requisitos ainda não aprovados\./.test(ptMd) &&
+      /\n## Matriz de trazabilidad\n/.test(esMd) && /✗ sin trazar — ninguna tarea lo cita/.test(esMd) && /\r\n# AUTO-GERADO por dev-spec — não editar à mão\./.test(ptDoc) &&
+      S.msg("pt-BR").rtm.cols.testFiles === "Arquivos de teste" && S.msg("pt-BR").rtm.status.planned === "planejado" &&
+      keys(S.msg("en").rtm) === keys(S.msg("pt").rtm) && keys(S.msg("pt").rtm) === keys(S.msg("es").rtm),
+      "feature F5: headers and labels in the feature's language (PT / ES CSV, md export, the PT marker record), pt-BR derived from PT; IDs, AC and the kind stay English; the rtm messages have the same keys in EN / PT / ES");
+  }
+
+  // 1.14 features — integration across the branches: the matrix (F5) gives the ONE verdict in the project's evidence mode (F1).
+  {
+    const fi = path.join(tmp, "proj-features-integration");
+    S.initProject(fi, ["core"], "en", { evidence: "observed" });
+    const c = S.createFeature(fi, "Matrix mode", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    S.completeTask(fi, "matrix-mode", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0 }); // reported, never observed
+    const row = (S.traceMatrix(fi, "matrix-mode").rows || []).find((r) => r.id === "US-1.AC-1");
+    const t1 = row && row.tasks.find((t) => t.number === 1);
+    ok(t1 && t1.verified === false && t1.reason === "unobserved" && t1.evidence && t1.evidence.observed === false && row.status !== "verified",
+      "features F1 × F5: under meta.evidence 'observed' the matrix reads a reported-only run as unobserved (the gates' verdict) and shows the observed stamp (got " + JSON.stringify(t1) + ")");
+  }
+
+  // 1.14 feature review (F1 / F3 / F5) — one regression per finding of the independent review of the merged features.
+  {
+    const hookJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const runHook = (projectEnv, input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: projectEnv, SPEC_PROJECT_DIR: "" } });
+    const post = (cwd, tool, command, resp, event) => ({ session_id: "s-rv", cwd, hook_event_name: event || "PostToolUse", tool_name: tool,
+      tool_input: { command }, tool_response: resp });
+    const logLines = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    // R1: an unparseable roadmap.json keeps meta.evidence "observed" (fail closed).
+    const r1 = path.join(tmp, "proj-frv-r1");
+    S.initProject(r1, ["core"], "en", { evidence: "observed" });
+    fs.appendFileSync(path.join(r1, ".specs", "roadmap.json"), "x");
+    ok(S.evidenceMode(r1) === "observed", "feature review R1: a roadmap.json that no longer parses keeps evidence mode 'observed' (got " + S.evidenceMode(r1) + ")");
+    // R2: a red proof recorded before the switch to "observed" is grandfathered once the fix's passing run is observed / CLI-made.
+    const r2 = path.join(tmp, "proj-frv-r2");
+    S.initProject(r2, ["core"], "en");
+    const c2 = S.createFeature(r2, "Red", ["core"], "x", undefined, "en");
+    const V2 = 'node -e "process.exit(0)"';
+    fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Write T-01 red\n  - _Verify: " + V2 + "_\n  - _Expect: fail_\n");
+    S.completeTask(r2, "red", 1, { command: V2, exitCode: 1 }); // the red run, reported (not observed), BEFORE the switch
+    const until2 = Date.now() + 5; while (Date.now() < until2) { /* the switch is later than the red run */ }
+    S.initProject(r2, ["core"], "en", { evidence: "observed" });
+    const before2 = S.completeTask(r2, "red", 1, { command: V2, exitCode: 0 }); // the fix's green run — reported only
+    const after2 = S.completeTask(r2, "red", 1, { command: V2, exitCode: 0 }, { ranBy: "cli" }); // as done --run makes it
+    ok(before2.verified === false && before2.unverifiedReason === "unobserved" && /RED run/.test(before2.note || "") && after2.verified === true,
+      "feature review R2: in observed mode an _Expect: fail_ red proof recorded before the switch counts once the green run is observed (CLI) — and the unobserved note asks for an observed RED run, never the green --run loop (got " +
+      JSON.stringify([before2.unverifiedReason, (before2.note || "").slice(0, 80), after2.verified, after2.unverifiedReason]) + ")");
+    // R4 / R5 / R6: the observe hook logs a worktree subagent's run in the main project too; a PowerShell run only with an explicit
+    // exit code; the " && " join of a task's commands passes the pre-filter.
+    const main4 = path.join(tmp, "proj-frv-r4main"), wt4 = path.join(tmp, "proj-frv-r4wt");
+    for (const d of [main4, wt4]) {
+      S.initProject(d, ["core"], "en");
+      const c = S.createFeature(d, "Obs", ["core"], "x", undefined, "en");
+      fs.writeFileSync(path.join(c.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Two checks\n  - _Verify: node a.js_\n  - _Verify: node b.js_\n- [ ] 2. [US1] One\n  - _Verify: node c.js_\n");
+    }
+    runHook(main4, post(wt4, "Bash", "node c.js", { stdout: "", stderr: "", exit_code: 0 }));
+    const mainDir = path.join(main4, ".specs", "obs"), wtDir = path.join(wt4, ".specs", "obs");
+    const r4 = [logLines(mainDir).some((e) => e.command === "node c.js"), logLines(wtDir).some((e) => e.command === "node c.js")];
+    runHook(main4, post(main4, "PowerShell", "node a.js && node b.js", { output: "ok" })); // no explicit exit code: never logged
+    const r5a = logLines(mainDir).some((e) => e.command === "node a.js && node b.js");
+    runHook(main4, post(main4, "PowerShell", "node a.js && node b.js", { stdout: "", exit_code: 0 })); // explicit: logged (R5 + R6)
+    const r56 = logLines(mainDir).filter((e) => e.command === "node a.js && node b.js");
+    ok(r4[0] && r4[1] && !r5a && r56.length === 1 && r56[0].exitCode === 0,
+      "feature review R4/R5/R6: a run in a worktree copy is logged in the main project too; a PowerShell run is logged only with an explicit exit code; the && join of a task's commands passes the pre-filter (got " +
+      JSON.stringify([r4, r5a, r56.length]) + ")");
+    // R7: ROADMAP.md shows a feature whose open tasks can't start (a _Depends:_ cycle) as blocked, with an attention line.
+    const r7 = path.join(tmp, "proj-frv-r7");
+    S.initProject(r7, ["core"], "en");
+    const c7 = S.createFeature(r7, "Cyc", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c7.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Depends: 2_\n- [ ] 2. [US1] B\n  - _Depends: 1_\n");
+    S.roadmapReport(r7, { write: true });
+    const md7 = fs.readFileSync(path.join(r7, ".specs", "ROADMAP.md"), "utf8");
+    ok(/\| \[cyc\][^\n]*\| blocked \|/.test(md7) && /no open task can start \(task dependencies\): #1 waits on #2; #2 waits on #1/.test(md7) && !/cyc\*\* \(core\) — ready/.test(md7),
+      "feature review R7: a tasks.md whose open tasks wait on each other reads blocked in ROADMAP.md, never ready (got " + JSON.stringify((md7.match(/^.*cyc.*$/gm) || []).slice(0, 3)) + ")");
+    // R8: prose "(depends: the schema from task 1)" is no malformed marker; a bold "**Depends:** 1" still is.
+    const r8 = path.join(tmp, "proj-frv-r8");
+    S.initProject(r8, ["core"], "en");
+    const c8 = S.createFeature(r8, "Prose", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c8.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Schema\n- [ ] 2. [US1] Wire the API (depends: the schema from task 1)\n- [ ] 3. [US1] Other **Depends:** 1\n");
+    const mm8 = S.specDoctor(r8, "prose").checks.find((x) => x.id === "malformed-markers");
+    ok(mm8 && mm8.status === "warn" && /#3 \(Depends:\)/.test(mm8.detail) && !/#2/.test(mm8.detail) && /_Depends: 3_/.test(mm8.detail),
+      "feature review R8: 'depends:' in prose is no marker look-alike; '**Depends:** 1' is, and the hint shows _Depends: 3_ (got " + JSON.stringify(mm8 && mm8.detail) + ")");
+    // R11: a scaffold's untouched EC / NFR / SC rows are no matrix gap (trace_check warns about none).
+    const r11 = path.join(tmp, "proj-frv-r11");
+    S.initProject(r11, ["core"], "en");
+    S.createFeature(r11, "Tpl", ["core"], "x", undefined, "en");
+    const sec11 = S.traceMatrix(r11, "tpl").rows.filter((r) => r.kind !== "ac");
+    ok(sec11.length > 0 && sec11.every((r) => r.template === true && r.gaps.length === 0 && r.status !== "untraced") && S.traceCheck(r11, "tpl").warnings.length === 0,
+      "feature review R11: template EC/NFR/SC rows carry no gap and are not untraced, as trace_check says nothing about them (got " + JSON.stringify(sec11.map((r) => r.id + ":" + r.status)) + ")");
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;
@@ -6419,9 +12008,5 @@ function endRun() {
   const vMkt = JSON.parse(fs.readFileSync(path.join(vRoot, ".claude-plugin", "marketplace.json"), "utf8")).plugins[0].version;
   ok(vPkg === vPlugin && vPlugin === vMkt, `package.json / plugin.json / marketplace.json versions agree (${vPkg} / ${vPlugin} / ${vMkt})`);
 
-  finished = true;
-  child.stdin.end();
-  console.log(`\n${pass} passed, ${fail} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  process.exit(fail ? 1 : 0);
+  endRun();
 })();

@@ -1,6 +1,6 @@
 ---
 description: Track planned-but-unspecced features shown in ROADMAP.md. PT - backlog de funcionalidades. ES - backlog de funciones.
-argument-hint: "[add|rm <name> [note]]"
+argument-hint: "[add|rm|remove <name> [note]]"
 ---
 
 Use the **dev-spec-driven** skill backlog.

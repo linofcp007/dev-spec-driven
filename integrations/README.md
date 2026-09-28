@@ -42,9 +42,11 @@ machine when this repo is the open project — no editing needed.
   To pin a project explicitly, add `"env": { "SPEC_PROJECT_DIR": "/path/to/your/project" }` to the
   server entry.
 - After editing a config, restart the tool (or restart the MCP server from its UI). Verify the
-  `spec-driven` tools appear (30 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
-- Every tool works the same in any MCP client. The plugin's hooks — the save checks, the SessionStart
-  status and the opt-in guard mode — are Claude Code only.
+  `spec-driven` tools appear (34 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+- Every tool works the same in any MCP client. The server also offers prompts (the plugin's commands) and read-only
+  `specs://` resources, which clients that support them show; add `"env": { "SPEC_MCP_PROMPTS": "off" }` to hide the
+  prompts. The plugin's hooks — the save checks, the SessionStart status, the end-of-turn evidence gate and the opt-in
+  guard mode — are Claude Code only (elsewhere: `dev-spec doctor`, `dev-spec stop-check`).
 - The workflow rules for your own project are generated the same way:
   `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints that tool's rule file with
   this clone's absolute paths (the copies in this repo use clone-relative paths).

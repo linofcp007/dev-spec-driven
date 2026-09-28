@@ -1,14 +1,17 @@
 ---
 description: Brownfield — inventory an existing codebase (stack, modules, routes, tests, entrypoints, env names, migrations) before reverse-engineering specs. PT - analisa código existente. ES - analiza código existente.
-argument-hint: "[optional path]"
+argument-hint: "[folder to scan — blank for the project root] [--cap N]"
 ---
 
 Use the **dev-spec-driven** skill brownfield scan.
 
-Path: $ARGUMENTS
+Folder: $ARGUMENTS
 
-Run the `spec_scan` MCP tool (defaults to the project root; `cap` bounds the files walked — CLI
-`dev-spec scan [path] [--cap N]`) for a local, read-only, zero-cost inventory:
+Run the `spec_scan` MCP tool for a local, read-only, zero-cost inventory. It takes no path argument: it scans
+`projectDir` — omit it to scan the project root; to scan another local folder (a sub-module, a sibling service),
+pass that folder as `projectDir`, written as an absolute path (a relative one resolves against the server's working
+directory, not the project). `cap` bounds the files walked (default 5000). CLI: `dev-spec scan [path] [--cap N]`.
+It reports:
 - **stack** and web **frameworks** (from manifests; FastAPI/Flask/Django also from imports), top-level modules,
   file mix by extension;
 - **HTTP routes** with method + path + `file:line` (`routes`; `candidateEndpoints` counts every route found,

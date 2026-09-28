@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: behavior-evidence-no-bare-tick-en
+context:
+  scaffold_script: fixture.sh

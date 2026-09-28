@@ -3,6 +3,288 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.14.0] — 2026-09-28
+
+Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project
+templates, a stakeholder export and release notes, a requirements traceability matrix, approvals by role and a
+fast-forward, an opt-in human approval guard, roadmap forecasts, task dependencies and execution waves, red → green
+evidence and project checks, harness-observed evidence, an end-of-turn evidence gate, a decision log and spikes, import
+from plans / ExecPlans / BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian Portuguese and a
+local Linux test runner.
+34 MCP tools (was 30), 51 commands (was 44), six tracks (was four).
+
+### Added
+- **`+sec` and `+privacy` tracks** — composable like the others and wired through the same data-driven registries:
+  `[SEC]` / `[PRIVACY]` EARS criteria, mandatory design sections with the `> **TODO**` sentinel (+sec: Threat Model,
+  Security Requirements, Authentication & Authorization, Secrets & Key Management, Security Testing; +privacy: Personal
+  Data Inventory, Lawful Basis & Purpose, Retention & Deletion, Data Subject Rights, Processors & International
+  Transfers, DPIA), task blocks, test rows, checklist items and the steering stubs `security.md` / `privacy.md`
+  (EN/PT/ES). Doctor checks `sec-sections` / `privacy-sections`, the design gate refuses them unfilled, `spec_finish`
+  lists their fresh checks, and a task proving one of their criteria gets those design sections in its brief. The
+  classifier has EN/PT/ES strong and weak signals for both (+sec also a corroborating-only tier). New references: `security-track.md` (STRIDE,
+  ASVS, OWASP Top 10, abuse cases, local security testing) and `privacy-track.md` (GDPR, CNPD, Lei 58/2019 — not legal
+  advice).
+- **MCP prompts and resources.** The server was tools-only; it now also serves one prompt per plugin command
+  (`commands/*.md`, read at runtime — `$ARGUMENTS` from the `args` argument, a one-line preamble for agents without the
+  skill) and the project's specs as read-only resources: `specs://roadmap` (ROADMAP.md, else rendered from
+  roadmap.json), `specs://catalog`, `specs://steering/{file}` and `specs://feature/{slug}/{artifact}` for 14 allowlisted
+  artifacts, capped at 500 entries (`_meta.truncated`). URIs are parsed segment by segment, features resolved like every
+  tool, no symlink out of `.specs/`; an invalid URI or prompt is `-32602`, a missing resource `-32002`.
+  `SPEC_MCP_PROMPTS=off` drops the prompts (the Claude Code plugin sets it — its commands are already slash commands).
+  CLI parity: `dev-spec prompts [name] [--args "…"]`.
+- **Project templates** (`spec_templates`, `dev-spec templates [list|init|check]`, `/spec-templates`) —
+  `.specs/templates/<artifact>.md` (and `<lang>/<artifact>.md`, which wins) replaces the built-in template of any
+  chain artifact, the bugfix and spike variants, or a steering stub (`steering/<file>.md`), with `{{name}}` `{{slug}}`
+  `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` substituted. Active tracks still get their blocks appended unless the
+  template carries them; the templates' own slots count as placeholders, so an untouched custom scaffold is still a
+  template to doctor, approve and next_action. `init` copies the built-in ones (never overwrites), `check` validates them
+  (CLI exit 1 on an error).
+- **Stakeholder export** (`spec_export`, `dev-spec export [feature] [--md] [--write]`, `/spec-export`) — one
+  self-contained, offline, printable document for people who don't read markdown folders: a feature (stories + EARS ACs,
+  design or bug.md, test plan, tasks with their verification, decisions, approvals, open clarifications) or the whole
+  project (roadmap, backlog, a page per feature, the catalog). HTML with the roadmap palette, light/dark and print rules,
+  every text escaped and no external URL — or markdown. `write` → `.specs/exports/`, never over a hand-written file.
+- **Release notes** (`spec_changelog`, `dev-spec changelog [--since <ISO date|last|all>] [--write]`, `/spec-changelog`) —
+  Added (features shipped since then + their ACs), Changed (superseded ACs, change requests with the current AC text),
+  Fixed (bugfixes + their root cause), from the spec data only. `write` → `.specs/RELEASE-NOTES.md` and stamps
+  `meta.changelogAt` (the default `since`); nothing to report writes nothing.
+- **Requirements traceability matrix** (`trace_check {matrix: true}`, `dev-spec trace <f> --matrix | --csv`,
+  `spec_export {format: "csv"}` / `dev-spec export [f] --csv [--write]`) — one row per requirement ID (the US-n.AC-m
+  criteria, then EC / NFR / SC) with its linked tasks (done, verified + the stable reason, the latest evidence), planned
+  tests (+ the test files naming them with `--code`), design sections, current decisions, `_Supersedes:_` both ways and
+  whether the row changed since the requirements approval. Stable status codes `verified` · `implemented` · `planned` ·
+  `untraced` and gap codes `no-task` · `no-test` · `no-coverage`, computed by the same readers as trace_check and the
+  evidence gate (no second verdict). The CSV is RFC 4180 and formula-safe (a cell starting with `=` `+` `-` `@` gets an
+  apostrophe); the exported file (`.specs/exports/<feature>.rtm.csv`, `project.rtm.csv`) adds a UTF-8 BOM for Excel and
+  the AUTO-GENERATED marker as its last record. The HTML / md feature export gains a Traceability matrix section, the
+  project export each feature's counts by status. Informational only — trace_check's verdict doesn't change.
+- **Approvals by role** — `roadmap.json` `meta.approvalRoles` (`spec_init {approvalRoles}`, `init --roles
+  requirements=product,design=tech+security`, `--roles none` clears): a listed phase is approved once every role has
+  signed off its current content (`spec_approve {role}`, `approve --role`); until then the sign-offs wait in
+  `.state.json` `signoffs` and doctor, next_action, finish, ROADMAP.md and the guard hook see the phase as pending,
+  naming the missing roles. Approvals made before the roles stay approved (doctor and finish warn).
+- **Fast-forward approval** (`spec_approve {through}`, `approve --through <phase>`, `/spec-ff`) — approves the filled
+  phases in order, each through its own gate (snapshot + history, flagged `batch`), and stops at the first refusal;
+  next_action suggests it when every planning artifact passes its gate.
+- **Human approval guard** (opt-in; `roadmap.json` `meta.approvalGuard` `off | ask | deny` — `spec_init {approvalGuard}`,
+  `dev-spec init --approval-guard`; default `off`, nothing changes) — a new PreToolUse hook (`hooks/approval-hook.js`)
+  catches an agent's approval: `spec_approve` under any MCP server prefix, `spec_feature` remove with `confirm`,
+  `dev-spec approve` / `feature remove --yes` run through the Bash or PowerShell tool (quotes, chains and nested
+  `bash -c` / `cmd /c` / `pwsh -Command` scripts, heredocs and each shell's escapes read by a linear lexer), lowering the
+  guard itself, and weakening what it protects (evidence observed → reported, approval roles cleared, a project check
+  removed or changed, the stop gate or the edit guard off, a shell write of `.specs/roadmap.json`); a `roadmap.json` that
+  no longer parses keeps the guard on (fail closed). `ask` shows a
+  permission prompt naming the feature, phase, role and — loudly — `--force` (Claude Code's auto / bypass modes may skip
+  it); `deny` refuses it in every mode, tells the agent to stop and ask, and shows the user the
+  `! node <clone>/cli/dev-spec.js …` command to run themselves. Silent unless on (a shell command not naming dev-spec is
+  never read further), never blocks on its own errors; a guardrail on the approve paths, not a sandbox.
+- **Roadmap forecasts** — `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points; unsized = the feature's median, else M);
+  `spec_complete_task` records when each task is ticked (`.state.json` `ticks`); velocity = points per working day over
+  the last 28 days (project-wide, and per feature with 3+ completions); each feature gets an ETA with a ±25% range,
+  chained after unfinished dependencies, or a reason (`not-enough-data`, `no-tasks`, `dependency`, `cycle`, `done`).
+  ROADMAP.md / .html gain an ETA column and the velocity line; `spec_metrics` carries `velocity`.
+- **Cross-feature overlap** — two active features whose open tasks plan the same files (or an active one planning files
+  a finished feature's drift baseline holds), unless ordered by a dependency or declared with `_Supersedes:_`: listed
+  under ROADMAP.md "Needs attention", doctor warn `cross-feature-overlap`, one SessionStart line.
+- **Task dependencies and execution waves** — `_Depends: 3, 5_` on a task (English-stable; `#3` = 3) names tasks of the
+  same tasks.md that must be done first. The next task (`spec_next_task`, next_action, the brief's default task,
+  `next --batch`, `spec_status`, the roadmap, `spec_complete_task`'s `next`, the spike's steps, the scope guard's hint)
+  is now the first open task whose dependencies are all done — with `skipped` / `blocked` `[{number, waitsOn}]`, and
+  next_action's step `fix` when no open task can start. `spec_next_task {waves: true}` / `dev-spec next <f> --waves`
+  returns the execution waves of every open task (dependencies done or in earlier waves, no two tasks sharing an
+  `_Implements:_` file, a task without `_Implements:_` or a prompt task alone; undeclared tasks keep tasks.md order, a
+  `[P]` run together) plus `cycles` and `blocked`. Ticking a task early is allowed (`waitsOn` + a note); doctor fails
+  `task-deps` (unknown numbers, self-dependency, cycles) and the tasks approval refuses on it; the brief lists the
+  task's dependencies; `spec_append_tasks {depends}` / `append-tasks --depends 3,5`. A tasks.md without `_Depends:_`
+  behaves exactly as before.
+- **Red → green evidence** — `_Expect: fail_` on a task that writes a test before its fix: a failing run
+  `{command, exitCode ≠ 0}` is its proof (`expected: "fail"`, `redRecorded`); a passing run is refused and recorded
+  (`unexpectedPass`, reason code `unexpected-pass`) unless the red run is already on record; exit 126 / 127 / 9009 is no
+  red test. `done --run` honours it; doctor warns `red-green` (+tdd) for T-IDs made green without a recorded red run.
+- **Project checks** — `meta.checks` (`spec_init {checks}`, `init --check test="npm test"`, repeatable, `name=`
+  removes one): every brief lists them in its definition of done, and `spec_finish` (and the execution gate) block on
+  `suite-evidence` until each has a passing recorded run since the feature's last task activity —
+  `spec_finish {evidence}` records runs the agent made, `dev-spec finish <f> --run` runs them.
+- **Git-linked evidence** — `done --run` / `finish --run` record `{commit, dirty}` (read-only git, skipped without it);
+  the merge summary tags runs `@sha`; `dev-spec log <feature>` lists the commits citing each task ("task #N" with the
+  feature name, its T-/AC IDs) plus a +tdd red-first check.
+- **Pipe warning** — a `_Verify:_` whose command pipes (`npm test | tee log`) exits with the last command's code, so a
+  failing check can read as passing: the brief (`verifyPipes`), `done --run` (a hint before running), doctor
+  (`verify-pipes`, warn) and `spec_complete_task` (`pipeMasked: true` + a note) say so.
+- **End-of-turn evidence gate** — `hooks/stop-hook.js` on Stop and SubagentStop: when the closing message claims the
+  work is done or verified (EN/PT/ES; negations, questions, code and quotes claim nothing, an honest "not verified" is
+  never sent back) while a feature active in the last 4 hours has ticked tasks without passing evidence — or a complete
+  feature lacks a passing project-check run — the turn is sent back once with a localized reason. A
+  `spec-implementer`'s DONE needs its task's `_Verify:_` command(s) and an exit code in its report. CLI:
+  `dev-spec stop-check [--message "…"|-] [--agent <type>]` (exit 1 = sent back).
+- **Harness-observed evidence** — a new hook (`hooks/observe-hook.js`, PostToolUse + PostToolUseFailure on the Bash
+  tool) logs each Bash run of a task's `_Verify:_` command or a project check to a git-ignored, size-bounded
+  `.execution/observed.jsonl`. Every run `spec_complete_task` / `done` and `spec_finish {evidence}` record is stamped
+  `observed: true | false` (the same command, the same exit code, logged in the last 24 h); `done --run` /
+  `finish --run` stamp `"cli"`. Opt-in `meta.evidence: "observed"` (`spec_init {evidence}`, `dev-spec init --evidence
+  observed`) makes it the rule: a runnable `_Verify:_` is verified only by an observed (or CLI) run — new reason code
+  `unobserved`, and project checks likewise (suiteChecks status `unobserved`). The default `reported` keeps the verdict
+  unchanged (the stamp is information only). Claude Code only (an MCP-only client has no hook — use `done --run`); not
+  a security boundary.
+- **Scope guard** — `guard: "scope"` (`init --guard scope`, `/spec-guard scope`): once tasks are approved, a code file
+  no open task names in `_Implements:_` (test files excepted) asks, naming the likely task or `/spec-converge`.
+- **Decision log** (`spec_decide`, `dev-spec decide`, `/spec-decide`) — `.specs/<feature>/decisions.md`, committed with
+  the spec: `D-1`, `D-2`… with `_Kind:_` `_Date:_` `_Affects:_` `_Supersedes:_` and localized Context / Decision /
+  Consequences; append-only under the feature lock, `_Affects:_` validated against the feature. Briefs inline the entries
+  citing the task, the merge summary and the export show them, the catalog lists them, trace_check reports
+  `phantomAffects` and doctor warns `decision-affects` / `decision-affects-approved`.
+- **Spike kind** (`spec_create {kind: "spike", question, timebox}`, `dev-spec spike`, `/spec-spike`) — a timeboxed
+  investigation that ends in a decision: `spike.md` (Question · Timebox · Options considered · Evidence · Decision with
+  `_Outcome: go | no-go | pivot_` · Follow-up) and investigation tasks; core-only, no requirements / design / tasks gates.
+  Doctor fails until the decision is written (warns once the timebox is past), next_action goes question → investigate →
+  decide → go (spec the real feature) / no-go (archive) / pivot, finish is ready once decided. The roadmap, catalog and
+  export show spikes apart; release notes never list one.
+- **Import from plans** — `spec_import` / `dev-spec import` take `plan` (a Claude Code plan-mode file copied into the
+  project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD, epics and
+  story files, v4 and v6 layouts), with the existing guarantees (a new feature, the source only read and inside the
+  project, mapping + warnings).
+- **Design-first flow** — `.state.json` `flow: "design-first"` (`spec_create {flow}`, `create --flow design-first`,
+  changed later with `spec_feature {action: "flow"}` / `feature flow`): classification → design → requirements → … for
+  every reader of the phase order. A bugfix or spike keeps its own order.
+- **`/spec-tour`** — a guided 10-minute tour on the user's own repo: scan it, then take one tiny real change through
+  every gate (approvals only on the user's yes), and keep, archive or remove it at the end.
+- **Brazilian Portuguese** — `pt-BR` joins EN / PT (pt-PT) / ES as a generated language (`lang: "pt-BR"`), a locale
+  derived from the pt-PT texts.
+- **Linux test runner** — `npm run test:docker` (`scripts/test-docker.js`, zero dependencies) runs both suites in
+  `node:18-alpine`, `node:22-bookworm-slim` and `node:24-alpine` on your own Docker: the repo mounted read-only,
+  `--network none`, an unprivileged user; only the first run needs network (pull + a cached image with git). Exit 0 all
+  passed · 1 a failure · 2 no Docker. Local only.
+- **Behavioural plugin evals** — seven `claude plugin eval` cases (tag `behavior`, EN/PT/ES) grade what the agent does
+  once the skill fires, against fixture projects and the real MCP server: plan first, bugfix root cause, evidence
+  recorded, no bare tick, local merge only, a refused gate never forced, upgrade audit before apply. See
+  `evals/README.md`.
+
+### Fixed
+- **What Linux exposed** (found by the Docker runner): the MCP server exited on stdin close before its queued replies
+  were flushed — a slow reader got 0 of 8 replies; it now flushes first. Both test harnesses called `process.exit()`
+  right after writing, and on a Linux pipe the tail (FAIL lines and the total) was dropped; they exit once stdout has
+  flushed. A CLI test's `_Verify: node -e process.exit(0)_` was a `/bin/sh` syntax error (cmd.exe accepted it). Node 18
+  prints a RegExp syntax error without its flags (the eval-harness assertion accepts both). The case-folding catalog
+  check ran only on Windows/macOS; Linux asserts its counterpart.
+- **MCP server stdout errors**: a client that closed its read end (`… | head -1`) made the next write fail with EPIPE —
+  a stack trace and exit 1. It now exits quietly 0; any other stdout error prints one stderr line and exits 1.
+- **Classifier**: "GDPR-compliant", "HIPAA-compliant", "SOC2-certified", "enterprise-grade" were no signal (a rejected
+  `-<letter>` compound); `-compliant` / `-compliance` / `-certified` / `-grade` are accepted suffixes now.
+- Review of the 1.14 packages before release (each with a regression test): the ES and PT signals match their EN twins
+  (`consentimiento`; encryption in transit and security testing strong in all three); `consent` and retention period /
+  policy are weak (one generic word no longer turns +privacy on), lower-case `stride` is no signal (upper-case STRIDE is
+  matched case-sensitively), `permission` counts only beside another +sec signal, and "brute force" alone is weak (the
+  attack phrase is strong); track markers match case-sensitively (`### Timeout [sec]` inferred +sec and hid a section);
+  the generic `[PRIVACY]` synonyms (Processors, Retention, Data inventory, Avaliação de impacto…) count only on or under
+  a marked heading (`## Processors and queues` satisfied a deleted section); the pipe check runs over a small shell
+  lexer (only `set -o pipefail` before the pipe silences it, pipes inside `bash -c` / `sh -c` / `pwsh -Command` /
+  `cmd /c` are flagged, a Windows path ending in `\` before the closing quote no longer hides the pipe); the export's
+  approvals table flags a change by content only and shows a `## US-n` story once; classify is back to its 1.13 cost
+  (a literal precheck before compiling ~300 keyword regexes).
+- Final adversarial review (each with a regression test): the **Stop gate** counts only activity the engine recorded
+  (a fresh clone's tasks.md date or a future stamp in a committed `.state.json` made it fire on unrelated work) and its
+  reason never hands the agent a `--run` command — it names the `_Verify:_` / `meta.checks` to read, run only if safe,
+  and record; `spec_decide` refuses a `decisions.md` that is a symlink, and export / changelog / catalog never copy a
+  linked artifact out of `.specs/`; the pt-BR transform leaves a text holding its private-use sentinels as it is (a
+  planted one grew the string until the heap ran out); the overlap check, the `_Verify:_` lexer and the export's inline
+  markdown are bounded (they were quadratic); an exit-127 re-run of an `_Expect: fail_` task keeps its red proof; a
+  re-finish keeps `finished.firstAt` (release notes no longer list a shipped feature again) and a zone-less `since` is
+  UTC; a blank plan imports nothing; CLI `decide` keeps repeated `--affects` / `--supersedes` and honours `--kind`,
+  `spike` passes `--flow`, `approve --through` labels a forced step in the feature's language; pt-BR keeps descriptive
+  verbs descriptive ("que faz T-01 passar", "segue") and says "gerado em <data>".
+
+### Fixed — full review before release (seven parallel reviewers, a dogfood run; every fix has a regression test)
+- **Evidence that never ran is no evidence.** `done --run` / `finish --run` turned a shell that could not start, a
+  signal, output over 64 MB or (new) a `--timeout` into "exit 1" — a bogus red proof for an `_Expect: fail_` task, a
+  failed run for any other. They now refuse and record nothing (stable `couldNotRun` code); a check that crashes (SIGSEGV…) is still a
+  failed run. On Windows `--shell bash`
+  reached the WSL launcher (`System32\bash.exe`) before Git Bash — every command "failed"; a bare `bash` now resolves to
+  Git Bash and the WSL launcher is refused. A red run whose output shows the test never ran (missing test file or
+  module, nothing collected) is refused on `_Expect: fail_` tasks — a bugfix shipped with no regression test that way.
+- **Markers followed by punctuation were invisible.** `(_Verify: npm test_)`, `_Verify: …_.` and `*Verify: …*` yielded no
+  marker, so the task was "verified" with nothing run; `_Implements: x_;` was never traced. One marker reader now ends a
+  value before closing punctuation and reads `*…*` italics; doctor warns `malformed-markers` for look-alikes.
+- **EARS linted only list items.** ACs written as table rows, headings or bold paragraphs were never checked while
+  trace_check counted them; the linter now lints every AC-defining unit, and doctor's `ears` fails (the requirements
+  approval is refused) when AC IDs exist but no criterion was linted. A `<!--` inside a code span no longer opens a
+  comment that hid the criteria after it.
+- **T-IDs are scoped per feature in the code scan**: a new feature's Phase 4 gate passed on ANOTHER feature's
+  `test('T-01 …')`. A test file another feature's plan names is no longer this feature's.
+- **Project checks are tied to the code**: each recorded run carries a hash of the implementing files; after an edit
+  the run reads `code-changed` (finish refuses a re-baseline on an old run). A future timestamp no longer blocks finish.
+- **next_action never dead-ends**: re-review names the checks a re-approval would fail; execution roles are named
+  (`--role qa`, then `--role product`) and doctor lists the pending sign-off; a finished feature with stale project
+  checks asks for `finish --run` instead of "nothing left to do"; duplicate task numbers ask for a renumber instead of a
+  re-run that can't help; `impact` names the role a re-approval needs.
+- **Stop gate**: PT "no" (em+o) and "se" no longer cancel real PT/ES claims; "All tasks done", "All green", "Tasks 1-3
+  done", "Feature complete" and ✅ are claims; "I fixed the 2 failing tests" is not an admission; a spike is never held
+  to project checks; the spec-implementer's report needs exit 0 on a must-pass task.
+- **Guard**: test files are allowed while a feature's approved test plan is being written (Phase 4), prototype edits
+  while a spike is active within its timebox (it has no tasks gate to approve; never over an approved plan at `scope`), and an 8.3 short name, junction or symlink of the project
+  is inside it.
+- **MCP server**: framing splits on `\n` only — `readline` also split on U+2028 / U+2029 (legal inside JSON strings,
+  common in pasted text), so the request was never answered; replies escape them. `id: null` / non-scalar ids get
+  -32600, an unknown tool -32602.
+- **CLI**: unknown `--flags` are refused with a did-you-mean (`done 2 --rnu` ticked the task with no evidence); `--`
+  ends the options; `--include-body=false` is honoured.
+- **Change management**: a partial role sign-off no longer hides a feature from the release notes; restore re-links a
+  dependency on a feature that is archived too; `spec_decide` closes a code fence left open at the end of
+  decisions.md (the entry was unreadable and its D-n reused); append never reuses a removed task's tick time; backlog
+  names and notes are one line and can't name an existing feature; `backlog remove` = `rm`.
+- **Import and classification**: Kiro specs in PT/ES import their stories; classification reads a summary in its own
+  language, the project's only as a fallback, the same on every surface (a PT summary read "no checkout" as a negation); a plan's "Approach" section no longer duplicates its steps;
+  an ID-less import no longer gets the template's test rows; PT/ES encryption verbs are +sec signals; section headings
+  accept pt-BR (LGPD) names, emoji and "Threat Modeling".
+- **Quality**: pt-BR wording (tem que, se mantém, RIPD, Operadores…) and pt-BR templates fall back to `templates/pt/`;
+  three quadratic regexes made linear; the SessionStart status is capped at 20 features.
+- **Docs**: the red-task and red-green guidance matches the 1.14 bugfix scaffold, `--affects "Data Models"`, `guard:
+  "on"`, strict-YAML command front matter, the implementer and reviewer subagents declare their tools, and the demo in
+  `examples/` is in the 1.14 shape with a red task.
+### Changed (heads-up)
+- **GDPR / RGPD / HIPAA now point to `+privacy`**, not `+saas` (classifier and classification matrix). Stored tracks
+  don't change: add it with `dev-spec add-track <f> privacy` (MCP `spec_add_track`) where a feature processes personal
+  data.
+- **The Stop hook is on by default.** A closing message that claims done / verified while recent ticks lack passing
+  evidence is sent back once. Opt out per project: `spec_init {stopCheck: false}` / `dev-spec init --stop-check off`.
+- **`spec_init {guard}` is a string enum `on | off | scope`** (true / false still accepted as on / off); the result
+  reports `true | false | "scope"`.
+- **`templates` and `exports` are reserved folder names under `.specs/`** — no new feature can take them. A feature of
+  that name created before 1.14 (its folder holds a `.state.json`) stays a feature and is never read as templates.
+- **`spec_approve`'s `phase` is optional** — give `phase`, or `through` for the fast-forward.
+- `spec_complete_task` can answer the new reason code `unexpected-pass`, and the red-phase hint now suggests
+  `_Expect: fail_`.
+- **The bugfix scaffold's task 3 carries `_Verify: [command that runs T-01]_` + `_Expect: fail_`** (its red run is
+  the proof), and guard test T-02 — green before and after the fix — is no longer in task 4's `_Makes green:_`, so
+  doctor's `red-green` stops warning about it on every bugfix. Existing bugfixes keep their tasks.md.
+- **The evidence rule now reaches agents that never load the skill**: `spec_complete_task`'s description states it
+  right after its first sentence, and the MCP server's `initialize` instructions right after the workflow overview —
+  no run of a runnable `_Verify:_` → don't call the tool (not bare, not with a note); name the command and ask for its
+  output. The behavioural eval caught agents going straight to the tool and ticking with a "no shell, not run"
+  note. The skill's description names bug reports (EN/PT/ES triggers) and the +sec / +privacy tracks.
+- `spec_status` returns the feature's `kind` (feature · bugfix · spike) and `flow` (requirements-first ·
+  design-first; `spec_list` rows name `flow` only when design-first); the task brief's reply line asks the implementer for the report path
+  (the SubagentStop gate finds its evidence through it).
+- `initialize` advertises `prompts` and `resources` besides `tools`; `spec_import`'s `tool` gains `plan` · `execplan` ·
+  `bmad`, `spec_create`'s `kind` gains `spike`, `spec_feature`'s `action` gains `flow`.
+
+- **Unknown CLI `--flags` are refused** (exit 1, with a did-you-mean) — a script with a mistyped flag now fails loudly
+  instead of running without it; `evals` still forwards its own flags.
+- **Doctor's `ears` check can now fail on criteria it never saw**: ACs written as table rows, headings or bold
+  paragraphs are linted (and so reported by the save and pre-commit hooks).
+- **MCP: an unknown tool is a JSON-RPC error `-32602`** (it was a result with `isError`), and so is `tools/call`
+  without a name.
+- New stable codes: `suiteChecks` status `code-changed`; `spec_complete_task` / `done --run` `couldNotRun`; doctor
+  warnings `malformed-markers` and `outside-code-artifacts`. `done --run` / `finish --run` take `--timeout <seconds>`;
+  `spec_append_tasks` takes `makesGreen`, `expectFail`, `size` and `depends` (CLI `--makes-green`, `--expect-fail`,
+  `--size`, `--depends`); `spec_backlog` takes `remove` (= `rm`). The four opt-ins above add: reason code and suiteChecks
+  status `unobserved` (only with `meta.evidence: "observed"`), an `observed` field on `spec_complete_task` results and
+  suiteChecks items, `evidence` and `approvalGuard` on every `spec_init` result, `skipped` / `blocked` / `waitsOn` on the
+  next-task surfaces once a task declares `_Depends:_`, doctor check `task-deps`, and `spec_export`'s `format: "csv"`.
+### Tests
+- `node mcp/test.js` 1221 assertions (was 766), `node cli/test-cli.js` 395 (was 257); the README tool tables are
+  checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
+  (`npm run test:docker`).
+
 ## [1.13.0] — 2026-09-26
 
 A full audit of the engine, then gates you can trust and the change-management layer that comes after

@@ -27,11 +27,40 @@ function run(args) {
 // below are independent — each works in its own project folder under its own temp dir — so the suite runs each one in
 // a child process of this file (CLI_TEST_SECTION=<name>), all at once, and prints their output in section order with
 // one total. `CLI_TEST_SECTION=wp4 node cli/test-cli.js` runs one section alone.
-const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17"];
+const SECTIONS = ["main", "wp1", "wp2", "wp3", "wp4", "wp5", "wp6", "wp7", "wp8", "wp9", "wp10", "wp11", "wp12", "wp13", "wp14", "wp15", "wp16", "wp17", "pa1", "pa2", "pa4", "pb1", "pb2", "pb3", "pb4", "pb5", "pc1", "pc2", "pc3", "pc4", "pd1", "pfr"];
+SECTIONS.push("frs"); // 1.14 full review (S) — CLI surfaces and hooks
+SECTIONS.push("frgb"); // 1.14 full review (Gb) — next_action, doctor, stop gate, guard
+SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR
+SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
+SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
+// Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
+// asynchronously once its 64 KB buffer is full, and process.exit() drops whatever is still queued — the tail of the
+// output, FAIL lines and the total line included (Windows makes stdio pipes blocking, so it never showed there).
+function exitFlushed(code) {
+  process.stdout.write("", () => process.exit(code));
+}
+// Temp dirs: a crashed, killed or timed-out section — or, on Windows, a file a just-exited command or a virus scanner still
+// held (rmSync threw EBUSY / EPERM; `force` only silences ENOENT) — left its cli-test-XXXXXX folder behind, run after run.
+// Every removal retries (maxRetries), and the parent sweeps this runner's OWN leftovers first: exactly the mkdtemp shape,
+// a real directory, untouched for 2 h.
+function rmTmpDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 100 }); } catch {}
+}
+function sweepStaleTmp() {
+  let names = [];
+  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  const cutoff = Date.now() - 2 * 3600 * 1000;
+  for (const n of names) {
+    if (!/^cli-test-[A-Za-z0-9]{6}$/.test(n)) continue;
+    const p = path.join(os.tmpdir(), n);
+    try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
+  }
+}
 if (!SECTION) {
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} // the children make their own
+  rmTmpDir(tmp); // the children make their own
+  sweepStaleTmp();
   const { spawn } = require("child_process");
   const runSection = (name) => new Promise((resolve) => {
     let out = "";
@@ -55,12 +84,12 @@ if (!SECTION) {
       if (!m || (r.code !== 0 && +m[2] === 0)) { failed++; console.log(`  FAIL - section '${r.name}' exited with code ${r.code} without a clean total`); }
     }
     console.log(`\n${passed} passed, ${failed} failed`);
-    process.exit(failed ? 1 : 0);
+    exitFlushed(failed ? 1 : 0);
   });
   return; // CommonJS module scope: the parent only dispatches
 }
 if (!SECTIONS.includes(SECTION)) {
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  rmTmpDir(tmp);
   console.log(`unknown CLI_TEST_SECTION '${SECTION}' (known: ${SECTIONS.join(", ")})\n\n0 passed, 1 failed`);
   process.exit(1);
 }
@@ -97,7 +126,7 @@ const badCreate = run(["create", "Zed", "--lang=portugues", "--project", esSub])
 const badRoad = run(["roadmap", "--write", "--lang", "spanish", "--project", esSub]);
 const badSteer = run(["steering", "product2.md", "--lang", "br", "--project", esSub]);
 const upCreate = run(["create", "Yak", "--lang", "PT", "--project", esSub]);
-ok(badInit.code === 1 && /Argumento\(s\) no válido\(s\): --lang debe ser uno de: en, pt, es \(recibido: "fr"\)/.test(badInit.out) && esRm().meta.lang === "es" &&
+ok(badInit.code === 1 && /Argumento\(s\) no válido\(s\): --lang debe ser uno de: en, pt, es, pt-BR \(recibido: "fr"\)/.test(badInit.out) && esRm().meta.lang === "es" &&
   badCreate.code === 1 && !fs.existsSync(path.join(esSub, ".specs", "zed")) && badRoad.code === 1 && !esRm().meta.roadmapLang &&
   badSteer.code === 1 && !fs.existsSync(path.join(esSub, ".specs", "steering", "product2.md")) &&
   upCreate.code === 0 && JSON.parse(fs.readFileSync(path.join(esSub, ".specs", "yak", ".state.json"), "utf8")).lang === "pt",
@@ -253,8 +282,8 @@ ok(!/--shell bash/.test(w1Dup.out) && w1No.code === 1 && (process.platform === "
 run(["create", "Red", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node -e \"process.exit(1)\"_\n");
 const w1Red = run(["done", "red", "1", "--run", "--project", w1p]);
-ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /dev-spec done red 1 --evidence "T-01 fails: <the reason>"/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
-  "done --run on a red-phase task: the refusal says to move the _Verify:_ to the fix task or record the red run as a note (no shell hint)");
+ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /Mark task 1 with _Expect: fail_/.test(w1Red.out) && /dev-spec done red 1 --run\. Or move the command/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
+  "done --run on a red-phase task: the refusal says to mark it _Expect: fail_ (or move the _Verify:_ to the fix task) (no shell hint)");
 run(["create", "Pad", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");
 const w1P1 = run(["done", "pad", "01", "--run", "--project", w1p]);
@@ -513,15 +542,15 @@ let frmJ = null;
 try { frmJ = JSON.parse(run(["feature", "remove", "doomed", "--json", "--project", w4]).out); } catch { /* invalid JSON */ }
 ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requirements\.md/.test(frm.out) && /--yes/.test(frm.out) &&
   frmJ && frmJ.needsConfirm === true && fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove without --yes deletes nothing, lists what it would delete, exits 1");
-// No hidden aliases: `feature delete` and `backlog remove` are refused like the MCP enums (spec_feature / spec_backlog)
-// refuse them — exit 1, nothing deleted.
+// No hidden aliases: `feature delete` is refused like the MCP enum (spec_feature) refuses it — exit 1, nothing deleted.
+// CHANGED in the 1.14 full review (S7): `backlog remove` is now a DOCUMENTED alias of rm on both surfaces (the engine and
+// the spec_backlog enum accept it, as CLAUDE.md says) — it removes, exit 0; an unknown action (delete) is still refused.
 run(["backlog", "add", "Zeta", "--project", w4]);
 const fdel = run(["feature", "delete", "doomed", "--yes", "--project", w4]);
 const brem = run(["backlog", "remove", "Zeta", "--project", w4]);
 ok(fdel.code === 1 && /remove \| archive \| rename \| restore/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
-  brem.code === 1 && /add, rm, list/.test(brem.out) && /Zeta/.test(run(["backlog", "--project", w4]).out),
-  "feature delete / backlog remove are not aliases: exit 1 and change nothing, as over MCP (got " + JSON.stringify([fdel.code, brem.code]) + ")");
-run(["backlog", "rm", "Zeta", "--project", w4]);
+  brem.code === 0 && /removed from the backlog/.test(brem.out) && !/Zeta/.test(run(["backlog", "--project", w4]).out),
+  "feature delete is not an alias (exit 1, nothing deleted, as over MCP); backlog remove is rm's alias on both surfaces (got " + JSON.stringify([fdel.code, brem.code]) + ")");
 const fry = run(["feature", "remove", "doomed", "--yes", "--project", w4]);
 ok(fry.code === 0 && /Removed 'doomed'/.test(fry.out) && !fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove --yes deletes it");
 // A broken roadmap.json: the preview reports the roadmap error instead of promising a delete --yes can't do.
@@ -752,7 +781,7 @@ if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_
   const help6 = run(["help"]).out;
   const lines6 = help6.split("\n");
   const covAt = lines6.findIndex((l) => /^\s+coverage\s/.test(l));
-  ok(/^\s+import <kiro\|spec-kit\|openspec> <path>/.test(lines6[covAt + 1] || "") && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
+  ok(/^\s+import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(lines6[covAt + 1] || "") /* 1.14 C3: + plan · execplan · bmad */ && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
 
   // Review round: --tracks is a value flag everywhere, so every command that takes tracks honours it (never dropped).
   const tk = path.join(tmp, "wp6-tracks");
@@ -1158,12 +1187,13 @@ const fill10 = (rel, pairs) => { const fp = path.join(bf10.dir, rel); let t = fs
 fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
   ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
 fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-fill10("tasks.md", [["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js_"]]);
+fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js_"]]);
 fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
   ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
   ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
   ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-[1, 2, 3].forEach((n) => S10.completeTask(w10f, "login-loop", n));
+[1, 2].forEach((n) => S10.completeTask(w10f, "login-loop", n));
+S10.completeTask(w10f, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
 S10.completeTask(w10f, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
 ["requirements", "design", "test-plan", "tasks"].forEach((p) => S10.approvePhase(w10f, "login-loop", p));
 const fin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
@@ -1196,7 +1226,9 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
   "next-action on a finished feature: 'drift' with the changed file (--json = spec_next_action); finish --write names the drift it accepts; then 'finished' + the execution sign-off");
 // Work added after the finish (append-tasks with a new _Implements:_ file, tasks re-approved, done --run): next-action says
 // finish it again (never "nothing left to do"), drift exits 1 naming why the baseline is stale — audit.js was never hashed.
-run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", "node -e process.exit(0)", "--project", w10f]);
+// The _Verify:_ is quoted: `done --run` runs it in /bin/sh on Linux, where unquoted `process.exit(0)` is a syntax error
+// ("(" unexpected) — cmd.exe accepted it, so the task stayed open only on Linux and the next four checks failed there.
+run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
 const apT10 = run(["approve", "login-loop", "tasks", "--project", w10f]);
 const done5 = run(["done", "login-loop", "5", "--run", "--project", w10f]);
@@ -1288,7 +1320,7 @@ if (inSection("wp11")) {
     "init without --guard leaves the guard as it is; --guard off turns it off");
   const bad = run(["init", "--guard", "maybe", "--project", g11]);
   const none = run(["init", "--guard", "--project", g11]);
-  ok(bad.code === 1 && /--guard takes on or off \(got 'maybe'\)/.test(bad.out) && none.code === 1 && /missing value for --guard/.test(none.out) && meta().guard === false,
+  ok(bad.code === 1 && /--guard takes on, off or scope \(got 'maybe'\)/.test(bad.out) && none.code === 1 && /missing value for --guard/.test(none.out) && meta().guard === false,
     "init --guard with a bad or missing value exits 1 and changes nothing");
   const gPt = path.join(tmp, "wp11-guard-pt");
   ok(/Modo guarda LIGADO/.test(run(["init", "--guard", "on", "--lang", "pt", "--project", gPt]).out) && S11.guardEnabled(gPt), "init --guard on (PT) is localized");
@@ -1381,10 +1413,11 @@ if (inSection("wp13")) { // 1.13 batch 4 — boolean switches read strictly, CLI
   const kindOk13 = run(["create", "Zed", "--kind", "Bugfix", "--project", b13]);
   let zedKind = null;
   try { zedKind = JSON.parse(fs.readFileSync(path.join(b13, ".specs", "zed", ".state.json"), "utf8")).kind; } catch { /* missing */ }
-  ok(kind13.code === 1 && /kind must be one of: feature, bugfix \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
+  ok(kind13.code === 1 && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
     "create --kind bugfx exits 1 and scaffolds nothing (a typo can no longer fix the kind for good); --kind Bugfix works");
   const bl13 = run(["backlog", "delete", "Pay", "--project", b13]);
-  ok(bl13.code === 1 && /action must be one of: add, rm, list \(got "delete"\)/.test(bl13.out) && run(["backlog", "--project", b13]).code === 0 && run(["backlog", "list", "--project", b13]).code === 0,
+  // (1.14 full review S7: the list now names rm's alias remove — the spec_backlog enum.)
+  ok(bl13.code === 1 && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.out) && run(["backlog", "--project", b13]).code === 0 && run(["backlog", "list", "--project", b13]).code === 0,
     "backlog delete (an unknown action) exits 1 like spec_backlog; a bare backlog / backlog list still list");
   // --json on a refusal: the engine result on stdout (= the MCP tool's), exit 1.
   const runJ = (args) => {
@@ -1724,9 +1757,1628 @@ if (inSection("wp17")) { // 1.13 batch 8 — `dev-spec upgrade [--apply]` (= spe
     "help and the header docblock list upgrade [--apply]");
 }
 
+if (inSection("pa1")) { // 1.14 package A1 (CLI tests)
+  // `dev-spec prompts [name] [--args "…"]` = MCP prompts/list · prompts/get (the same module, mcp/lib/prompts-resources.js).
+  const PRa1 = require(path.join(__dirname, "..", "mcp", "lib", "prompts-resources.js"));
+  const stemsA1 = fs.readdirSync(path.join(__dirname, "..", "commands")).filter((f) => /\.md$/.test(f)).map((f) => f.slice(0, -3));
+  const jsonA1 = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+
+  const listA1 = run(["prompts", "--json"]);
+  const listA1j = jsonA1(listA1);
+  ok(listA1.code === 0 && listA1j && listA1j.ok === true && listA1j.prompts.length === stemsA1.length && stemsA1.length >= 44 &&
+    listA1j.prompts.map((p) => p.name).sort().join() === stemsA1.slice().sort().join() && listA1j.prompts.every((p) => p.description && p.arguments[0].name === "args") &&
+    JSON.stringify(listA1j.prompts) === JSON.stringify(PRa1.listPrompts({ lang: "en" })),
+    "prompts --json: one prompt per commands/*.md with its description and `args` argument — the list MCP prompts/list sends (+ argumentHint)");
+  const humanA1 = run(["prompts"]);
+  ok(humanA1.code === 0 && new RegExp("^" + stemsA1.length + " prompt\\(s\\) — one per plugin command").test(humanA1.out) &&
+    /^ {2}spec-impact \[feature name\] \[requirements\|design\|test-plan\|eval-plan\|tasks\] \[--reopen\]$/m.test(humanA1.out) && /^ {2}coverage$/m.test(humanA1.out),
+    "prompts: a header, then each prompt with its argument hint and description");
+
+  const getA1 = run(["prompts", "spec-impact", "--args", "login design"]);
+  const posA1 = run(["prompts", "spec-impact", "login", "design"]);
+  const getA1j = jsonA1(run(["prompts", "spec-impact", "--args", "login design", "--json"]));
+  const mcpA1 = PRa1.getPrompt("spec-impact", "login design", { lang: "en" });
+  ok(getA1.code === 0 && /^Note for the agent: if no dev-spec-driven skill is available/.test(getA1.out) && /\nArgs: login design\n/.test(getA1.out) && !/\$ARGUMENTS/.test(getA1.out) &&
+    posA1.code === 0 && posA1.out === getA1.out && getA1.out === mcpA1.messages[0].content.text && getA1j && JSON.stringify(getA1j) === JSON.stringify(mcpA1),
+    "prompts <name> --args \"…\" prints the prompt prompts/get returns ($ARGUMENTS ← args); the words after the name do the same; --json is the MCP-shaped result");
+  const noArgA1 = run(["prompts", "spec-impact"]);
+  ok(noArgA1.code === 0 && /\nArgs: \n/.test(noArgA1.out), "prompts <name> without arguments: $ARGUMENTS is empty");
+
+  const unkA1 = run(["prompts", "nope"]);
+  const unkA1j = run(["prompts", "nope", "--json"]);
+  const bothA1 = run(["prompts", "spec", "x", "--args", "y"]);
+  const missA1 = run(["prompts", "spec", "--args"]);
+  ok(unkA1.code === 1 && /^dev-spec: Unknown prompt 'nope' — one of: .*spec-impact/.test(unkA1.out) && unkA1j.code === 1 && (jsonA1(unkA1j) || {}).ok === false &&
+    bothA1.code === 1 && /usage: dev-spec prompts \[name\] \[--args "…"\]/.test(bothA1.out) && missA1.code === 1 && /--args/.test(missA1.out),
+    "prompts: an unknown name exits 1 (--json: {ok:false} on stdout); --args plus extra words is a usage error; --args needs a value");
+
+  const ptA1 = path.join(tmp, "pa1-pt");
+  run(["init", "--lang", "pt", "--project", ptA1]);
+  const ptListA1 = run(["prompts", "--project", ptA1]);
+  const ptGetA1 = run(["prompts", "coverage", "--project", ptA1]);
+  ok(/^\d+ prompt\(s\) — um por comando do plugin/.test(ptListA1.out) && /^Nota para o agente: se não houver uma skill dev-spec-driven/.test(ptGetA1.out) &&
+    /Prompt desconhecido 'x'/.test(run(["prompts", "x", "--project", ptA1]).out),
+    "prompts in a PT project: header, preamble and errors in European Portuguese");
+
+  const helpA1 = run(["help"]).out;
+  const docA1 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(/prompts \[name\] \[--args "…"\]/.test(helpA1) && /--args "…" \(prompts\)/.test(helpA1) && /prompts \[name\] \[--args "…"\]/.test(docA1) && /prompts: --args "…"/.test(docA1),
+    "help and the header docblock list prompts [name] [--args \"…\"] and the --args flag");
+}
+
+if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy tracks on the CLI, EN / PT / ES
+  const a2 = path.join(tmp, "pa2-proj");
+  const cls = run(["classify", "Threat model the export and pseudonymize personal data", "--project", a2]);
+  const clsEs = run(["classify", "Modelo de amenazas y cifrado en reposo de los datos personales", "--project", a2]);
+  ok(cls.code === 0 && /Tracks: core \+sec \+privacy/.test(cls.out) && /sec=medium, privacy=high/.test(cls.out) && /\+sec: ON/.test(cls.out) && /\+privacy: ON/.test(cls.out) &&
+    /core \+sec \+privacy/.test(clsEs.out) && /sec=alta, privacy=media/.test(clsEs.out) && /\+sec: ACTIVO \[confianza alta\] — señales encontradas: modelo de amenazas, cifrado en reposo/.test(clsEs.out),
+    "classify prints the +sec / +privacy confidence and reasoning (EN and ES)");
+  const ini = run(["init", "sec", "privacy", "--lang", "es", "--project", a2]);
+  ok(ini.code === 0 && /security\.md, privacy\.md/.test(ini.out) && /^# Estándares de Seguridad/.test(fs.readFileSync(path.join(a2, ".specs", "steering", "security.md"), "utf8")),
+    "init sec privacy --lang es writes the ES security.md / privacy.md steering stubs");
+  const cr = run(["create", "Exportar", "--tracks", "sec,privacy", "--lang", "pt", "--project", a2]);
+  const st = run(["status", "exportar", "--project", a2]).out;
+  ok(cr.code === 0 && /\[core \+sec \+privacy\] \(pt\)/.test(cr.out) && /Secções de segurança: ◐ Modelo de Ameaças \(por preencher\)/.test(st) &&
+    /Secções de privacidade: ◐ Inventário de Dados Pessoais \(por preencher\)[^\n]*◐ AIPD \(por preencher\)/.test(st),
+    "create --tracks sec,privacy (PT) → status shows the security and privacy sections ◐ unfilled, in Portuguese");
+  const doc = run(["doctor", "exportar", "--project", a2]);
+  const appr = run(["approve", "exportar", "design", "--project", a2]);
+  ok(doc.code === 1 && /✗ sec-sections — Modelo de Ameaças:por preencher/.test(doc.out) && /✗ privacy-sections — /.test(doc.out) &&
+    appr.code === 1 && /sec-sections, privacy-sections/.test(appr.out),
+    "doctor exits 1 with sec-sections / privacy-sections failing; approve design is refused naming them");
+  const des = path.join(a2, ".specs", "exportar", "design.md");
+  fs.writeFileSync(des, fs.readFileSync(des, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  const doc2 = run(["doctor", "exportar", "--project", a2]).out;
+  const js = JSON.parse(run(["status", "exportar", "--json", "--project", a2]).out);
+  ok(/✓ sec-sections — as 5 preenchidas/.test(doc2) && /✓ privacy-sections — as 6 preenchidas/.test(doc2) && /✓ Modelo de Ameaças · ✓ Requisitos de Segurança/.test(run(["status", "exportar", "--project", a2]).out) &&
+    js.secSections.length === 5 && js.secSections.every((s) => s.filled) && js.privacySections.length === 6 && js.scaleSections === null,
+    "once the TODO lines are gone doctor passes both section checks and status marks them ✓ (--json: secSections / privacySections)");
+  run(["create", "Plain", "core", "--lang", "en", "--project", a2]);
+  const typo = run(["add-track", "plain", "secc", "--project", a2]);
+  const add = run(["add-track", "plain", "sec", "privacy", "--project", a2]);
+  const rm = run(["add-track", "plain", "privacy", "--remove", "--project", a2]);
+  const stPlain = run(["status", "plain", "--project", a2]).out;
+  ok(typo.code === 1 && /did you mean 'sec'/.test(typo.out) && add.code === 0 && /core \+sec \+privacy/.test(add.out) &&
+    rm.code === 0 && /design\.md \(\[PRIVACY\] sections\)/.test(rm.out) && /Security sections: ◐ Threat Model \(unfilled\)/.test(stPlain) && !/Privacy sections/.test(stPlain),
+    "add-track: 'secc' gets a did-you-mean, sec+privacy are added, --remove privacy lists its inactive [PRIVACY] sections and status stops showing them");
+  const stSec = run(["steering", "security.md", "--lang", "pt", "--project", path.join(tmp, "pa2-steer")]);
+  const kiro = path.join(a2, ".kiro", "specs", "accounts");
+  fs.mkdirSync(kiro, { recursive: true });
+  fs.writeFileSync(path.join(kiro, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to delete my account.\n\n#### Acceptance Criteria\n\n1. WHEN the user confirms THEN the system SHALL delete the account\n");
+  const imp = run(["import", "kiro", ".kiro/specs/accounts", "--tracks", "sec,privacy", "--lang", "en", "--project", a2]); // the project default is ES (init above)
+  const impDesign = fs.existsSync(path.join(a2, ".specs", "accounts", "design.md")) ? fs.readFileSync(path.join(a2, ".specs", "accounts", "design.md"), "utf8") : "";
+  ok(stSec.code === 0 && /^# Padrões de Segurança/.test(fs.readFileSync(path.join(tmp, "pa2-steer", ".specs", "steering", "security.md"), "utf8")) &&
+    imp.code === 0 && /## \[SEC\] Threat Model/.test(impDesign) && /## \[PRIVACY\] Data Subject Rights/.test(impDesign),
+    "steering security.md (PT template, not a custom file) and import --tracks sec,privacy (the [SEC] / [PRIVACY] design sections)");
+  const help = run(["help"]).out;
+  const usage = run(["add-track", "--project", a2]).out;
+  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy>/.test(usage),
+    "help and the add-track usage name the +sec / +privacy tracks");
+}
+
+if (inSection("pa4")) { // 1.14 package A4 (CLI tests)
+// A4.2 — a _Verify:_ that pipes reports the pipeline's LAST exit code. `done --run` prints ONE localized hint before running
+// (it still runs — here the failing first command is masked, so the task ticks: exactly the problem), then the engine's
+// pipeMasked note. A quoted '|' and '||' get no hint. Brief and doctor name the piped tasks. Commands run in cmd.exe and sh alike.
+const Sa4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const pa4 = path.join(tmp, "pa4-proj");
+Sa4.initProject(pa4, ["core"], "en");
+const fa4 = Sa4.createFeature(pa4, "Pipes", ["core"], "", undefined, "en");
+const tasksA4 = path.join(fa4.dir, "tasks.md");
+fs.writeFileSync(tasksA4, "# Tasks\n\n" +
+  "- [ ] 1. [US1] Masked failure\n  - _Verify: node -e \"process.exit(3)\" | node -e \"process.exit(0)\"_\n" +
+  "- [ ] 2. [US1] Quoted pipe\n  - _Verify: node -e \"console.log('a|b')\"_\n" +
+  "- [ ] 3. [US1] Or-chain\n  - _Verify: node -e \"process.exit(0)\" || node -e \"process.exit(1)\"_\n" +
+  "- [ ] 4. [US1] JSON run\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\"_\n");
+const ra4 = (args) => run([...args, "--project", pa4]);
+const hintRe = /pipes into another command: the shell reports only the LAST command's exit code/;
+const brA4 = ra4(["brief", "pipes", "4"]);
+const brQA4 = ra4(["brief", "pipes", "2"]);
+const docA4 = ra4(["doctor", "pipes"]);
+ok(brA4.code === 0 && /## Verification \(_Verify:_\)[\s\S]*pipes into another command: a pipeline's exit code is its LAST command's/.test(brA4.out) && brQA4.code === 0 && !/pipes into another/.test(brQA4.out) &&
+  /▲ verify-pipes — a _Verify:_ command pipes into another one .*: #1 `node -e "process\.exit\(3\)" \| node -e "process\.exit\(0\)"`; #4 /.test(docA4.out) && !/#2 |#3 /.test((docA4.out.match(/verify-pipes.*/) || [""])[0]),
+  "brief notes a piped _Verify:_ (not a quoted '|'); doctor prints the verify-pipes warn naming #1 and #4 only (got " + JSON.stringify((docA4.out.match(/.*verify-pipes.*/) || [""])[0].slice(0, 300)) + ")");
+const d1A4 = ra4(["done", "pipes", "1", "--run"]);
+const hintAt = d1A4.out.search(hintRe), runAt = d1A4.out.indexOf("$ node -e");
+ok(d1A4.code === 0 && hintAt >= 0 && runAt > hintAt && d1A4.out.split("\n").filter((l) => hintRe.test(l)).length === 1 && /Task 1 done \(verified\)/.test(d1A4.out) &&
+  /⚠ Task 1: the recorded command pipes into another one/.test(d1A4.out) && /- \[x\] 1\. \[US1\] Masked failure/.test(fs.readFileSync(tasksA4, "utf8")),
+  "done --run on a piped _Verify:_: one hint line BEFORE the run (it still runs — the masked failure ticks the task), then the pipeMasked note (got " + JSON.stringify(d1A4.out.slice(0, 400)) + ")");
+const d2A4 = ra4(["done", "pipes", "2", "--run"]);
+const d3A4 = ra4(["done", "pipes", "3", "--run"]);
+ok(d2A4.code === 0 && d3A4.code === 0 && !/pipes into another/.test(d2A4.out + d3A4.out) && /a\|b/.test(d2A4.out),
+  "done --run: a '|' inside quotes and '||' print no pipe hint and no pipeMasked note (got " + JSON.stringify([d2A4.out.slice(0, 200), d3A4.out.slice(0, 200)]) + ")");
+const jA4 = spawnSync(process.execPath, [CLI, "done", "pipes", "4", "--run", "--json", "--project", pa4], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+let jA4r = null;
+try { jA4r = JSON.parse(jA4.stdout); } catch { /* invalid JSON */ }
+ok(jA4.status === 0 && jA4r && jA4r.pipeMasked === true && jA4r.completed === 4 && hintRe.test(jA4.stderr) && !hintRe.test(jA4.stdout),
+  "done --run --json: stdout stays one JSON document carrying pipeMasked: true; the hint goes to stderr");
+// PT feature: the hint and the note in Portuguese.
+const ptA4 = Sa4.createFeature(pa4, "Tubos", ["core"], "", undefined, "pt");
+fs.writeFileSync(path.join(ptA4.dir, "tasks.md"), "# Tarefas\n\n- [ ] 1. [US1] Pipe\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\"_\n");
+const dPtA4 = ra4(["done", "tubos", "1", "--run"]);
+ok(dPtA4.code === 0 && /⚠ `node -e "process\.exit\(0\)" \| node -e "process\.exit\(0\)"` encaminha a saída para outro comando \(pipe\): a shell só reporta o exit code do ÚLTIMO comando/.test(dPtA4.out) &&
+  /⚠ Tarefa 1: o comando registado encaminha a saída para outro/.test(dPtA4.out),
+  "done --run on a PT feature: the pipe hint and the pipeMasked note are in Portuguese (got " + JSON.stringify(dPtA4.out.slice(0, 300)) + ")");
+}
+
+if (inSection("pb1")) { // 1.14 package B1 (CLI tests) — `dev-spec templates [list|init|check] [artifact] [--lang]` = spec_templates
+  const SB1 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const b1 = path.join(tmp, "pb1-proj");
+  const tpl = (...p) => path.join(b1, ".specs", "templates", ...p);
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const lsEmpty = run(["templates", "--project", b1]);
+  const lsEmptyJ = jsonOf(run(["templates", "list", "--json", "--project", b1]));
+  ok(lsEmpty.code === 0 && /^Templates for 'en' features — 0 project override\(s\) in \.specs\/templates\//.test(lsEmpty.out) && /· requirements\s+built-in/.test(lsEmpty.out) &&
+    lsEmptyJ && JSON.stringify(lsEmptyJ) === JSON.stringify(SB1.templates(b1, "list")),
+    "templates (no action) lists every template as built-in; --json is spec_templates' result");
+  const in1 = run(["templates", "init", "requirements", "--project", b1]);
+  const in2 = run(["templates", "init", "requirements.md", "--project", b1]);
+  const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
+  ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
+    fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
+    inPt.code === 0 && /27 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    fs.existsSync(tpl("pt", "steering", "tech.md")),
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 27 into .specs/templates/pt/, reported in Portuguese");
+  const ckClean = run(["templates", "check", "--project", b1]);
+  ok(ckClean.code === 0 && /^28 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
+  fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
+  const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);
+  const crJ = jsonOf(cr);
+  const crReq = crJ && crJ.ok ? fs.readFileSync(path.join(crJ.dir, "requirements.md"), "utf8") : "";
+  ok(cr.code === 0 && crJ.templates["requirements.md"] === ".specs/templates/requirements.md" && crReq.startsWith("# Req — Team Report (team-report, core +saas)\n\n## Summary\nWeekly numbers\n") &&
+    /#### \[SaaS\] Acceptance Criteria \(EARS\)/.test(crReq) && run(["doctor", "team-report", "--project", b1]).code === 1,
+    "create uses the project's requirements template ({{name}}, {{slug}}, {{tracks}}, {{summary}} substituted, the +saas criteria appended); doctor still fails the untouched scaffold");
+  fs.writeFileSync(tpl("design.md"), "# D — {{name}}\n\n## Constitution Check\n- [ ] [p]\n\n## [SaaS] Performance Budget\n> **TODO** — fill.\n");
+  const ckBad = run(["templates", "check", "design", "--project", b1]);
+  const ckBadJ = jsonOf(run(["templates", "check", "design", "--json", "--project", b1]));
+  ok(ckBad.code === 1 && /✗ \.specs\/templates\/design\.md — \[SaaS\] Scale Design is missing/.test(ckBad.out) && /✗ \.specs\/templates\/design\.md — \[SaaS\] Observability is missing/.test(ckBad.out) &&
+    ckBadJ && JSON.stringify(ckBadJ.problems) === JSON.stringify(SB1.templates(b1, "check", { artifact: "design" }).problems) && ckBadJ.verdict === "fail",
+    "templates check <artifact> exits 1 on an error (a design template with one [SaaS] heading lacks the other mandatory sections); --json = spec_templates check");
+  const ckPt = run(["templates", "check", "--lang", "pt", "--project", b1]);
+  ok(ckPt.code === 1 && /ficheiro\(s\) de template verificado\(s\)/.test(ckPt.out) && /falta \[SaaS\] Observabilidade|falta \[SaaS\] Observability/.test(ckPt.out),
+    "templates check --lang pt: the shared templates plus pt/, reported in Portuguese");
+  const badAct = run(["templates", "delete", "--project", b1]);
+  const trav = run(["templates", "init", "../../evil", "--project", b1]);
+  const travJ = jsonOf(run(["templates", "init", "steering/../../x", "--json", "--project", b1]));
+  const badLang = run(["templates", "list", "--lang", "fr", "--project", b1]);
+  const extra = run(["templates", "list", "a", "b", "--project", b1]);
+  ok(badAct.code === 1 && /Unknown templates action 'delete'/.test(badAct.out) && trav.code === 1 && /Unknown template '\.\.\/\.\.\/evil'/.test(trav.out) &&
+    travJ && travJ.ok === false && /Unknown template/.test(travJ.error) && !fs.existsSync(path.join(tmp, "evil")) && !fs.existsSync(path.join(b1, ".specs", "evil")) &&
+    badLang.code === 1 && /--lang must be one of: en, pt, es/.test(badLang.out) && extra.code === 1 && /dev-spec templates \[list\|init\|check\]/.test(extra.out),
+    "templates refuses an unknown action, a name outside the allowlist (traversal — --json prints the refusal), an unknown --lang and extra arguments (exit 1)");
+  const help = run(["help"]);
+  ok(/templates \[list\|init\|check\] \[artifact\] \[--lang\]/.test(help.out), "help lists the templates command");
+}
+
+if (inSection("pb2")) { // 1.14 package B2 (CLI tests)
+// B2.1 `dev-spec export [feature] [--md] [--write]` = spec_export; B2.2 `dev-spec changelog [--since …] [--write]` = spec_changelog.
+const Sb2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const pb2 = path.join(tmp, "pb2-proj");
+Sb2.initProject(pb2, ["core"], "en");
+const fb2 = Sb2.createFeature(pb2, "Checkout", ["core"], "", undefined, "en");
+fs.writeFileSync(path.join(fb2.dir, "requirements.md"), "# Feature: Checkout\n\n## Summary\nPay for the cart in one step.\n\n### US-1 (P1): Pay\n" +
+  "1. **US-1.AC-1** — WHEN the shopper pays THE SYSTEM SHALL show the receipt <script>alert(1)</script>\n");
+fs.writeFileSync(path.join(fb2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Charge the card\n  - _Requirements: US-1.AC-1_\n");
+const rb2 = (args) => run([...args, "--project", pb2]);
+const jb2 = (args) => { const r = spawnSync(process.execPath, [CLI, ...args, "--json", "--project", pb2], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); let j = null; try { j = JSON.parse(r.stdout); } catch { /* not JSON */ } return { code: r.status, j, err: r.stderr }; };
+const noDateB2 = (s) => String(s).replace(/\d{4}-\d{2}-\d{2}/g, "D");
+const eHtml = rb2(["export", "checkout"]);
+const eJ = jb2(["export", "checkout"]);
+ok(eHtml.code === 0 && /^<!doctype html>\n<!-- AUTO-GENERATED by dev-spec/.test(eHtml.out) && !/https?:\/\//.test(eHtml.out) && /&lt;script&gt;alert\(1\)&lt;\/script&gt;/.test(eHtml.out) &&
+  (eHtml.out.match(/<script/g) || []).length === 1 && eJ.code === 0 && eJ.j && eJ.j.ok && eJ.j.scope === "feature" &&
+  noDateB2(eJ.j.content) === noDateB2(Sb2.exportSpecs(pb2, { name: "checkout" }).content) && noDateB2(eHtml.out) === noDateB2(eJ.j.content),
+  "export <feature>: the offline HTML document on stdout (escaped, one script); --json = spec_export's result, the same content as the engine");
+const eMdW = rb2(["export", "checkout", "--md", "--write"]);
+const ePrW = rb2(["export", "--write"]);
+const mdFile = path.join(pb2, ".specs", "exports", "checkout.md");
+ok(eMdW.code === 0 && /^✎ wrote .*checkout\.md\s*$/.test(eMdW.out) && /^# Checkout\n\n<!-- AUTO-GENERATED by dev-spec/.test(fs.readFileSync(mdFile, "utf8")) &&
+  ePrW.code === 0 && /project\.html/.test(ePrW.out) && /<section class="feature" id="s-f-checkout">/.test(fs.readFileSync(path.join(pb2, ".specs", "exports", "project.html"), "utf8")),
+  "export --md --write → .specs/exports/checkout.md; export --write (no feature) → .specs/exports/project.html");
+fs.writeFileSync(mdFile, "# mine\n");
+const eHand = rb2(["export", "checkout", "--md", "--write"]);
+const eHandJ = jb2(["export", "checkout", "--md", "--write"]);
+const eBad = rb2(["export", "checkout", "--md", "--html"]);
+const eNf = rb2(["export", "nope"]);
+ok(eHand.code === 1 && /\.specs\/exports\/checkout\.md exists and was not generated by dev-spec/.test(eHand.out) && fs.readFileSync(mdFile, "utf8") === "# mine\n" &&
+  eHandJ.code === 1 && eHandJ.j && eHandJ.j.ok === false && eHandJ.j.skipped === true && eBad.code === 1 && /usage/i.test(eBad.out) && eNf.code === 1 && /not found/i.test(eNf.out),
+  "export: a hand-written export is never overwritten (exit 1; --json prints the refusal); --md with --html is a usage error; an unknown feature exits 1");
+
+// changelog: a finished feature, a shipped bugfix, a change request on a feature shipped earlier.
+const setState = (dir, extra) => { const sp = path.join(dir, ".state.json"); fs.writeFileSync(sp, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(sp, "utf8")), extra), null, 2)); };
+setState(fb2.dir, { finished: { at: "2026-06-15T10:00:00.000Z", files: {} } });
+const bb2 = Sb2.createFeature(pb2, "Crash on save", ["core"], "", undefined, "en", "bugfix");
+fs.writeFileSync(path.join(bb2.dir, "bug.md"), "# Bug: Crash on save\n\n## Summary\nSaving crashes.\n\n## Root Cause\nA null buffer after close.\n");
+setState(bb2.dir, { approvals: { execution: { at: "2026-06-20T10:00:00.000Z", by: "carol" } } });
+const ob2 = Sb2.createFeature(pb2, "Login", ["core"], "", undefined, "en");
+fs.writeFileSync(path.join(ob2.dir, "requirements.md"), "# Feature: Login\n\n### US-1 (P1): Sign in\n1. **US-1.AC-1** — IF the password is wrong THEN THE SYSTEM SHALL show an error\n");
+setState(ob2.dir, { finished: { at: "2026-01-10T10:00:00.000Z", files: {} }, changes: [{ at: "2026-06-11T10:00:00.000Z", phase: "requirements", added: [], modified: ["US-1.AC-1"], removed: [], reopened: [] }] });
+const cMd = rb2(["changelog", "--since", "2026-05-01"]);
+const cJ = jb2(["changelog", "--since", "2026-05-01"]);
+const pickB2 = (r) => JSON.stringify([r.since, r.sinceSource, r.added, r.changed, r.fixed, r.counts]);
+ok(cMd.code === 0 && /^# Release notes — pb2-proj\n/.test(cMd.out) && /\n## Added\n\n### Checkout\n\nPay for the cart in one step\.\n\n- \*\*US-1\.AC-1\*\* — WHEN the shopper pays/.test(cMd.out) &&
+  /\n## Changed\n\n- \*\*login\*\* — change request #1 \(Requirements, 2026-06-11\): modified: US-1\.AC-1\n  - \*\*US-1\.AC-1\*\* — IF the password is wrong/.test(cMd.out) &&
+  /\n## Fixed\n\n- \*\*Crash on save\*\* — Saving crashes\. — Root cause: A null buffer after close\./.test(cMd.out) &&
+  cJ.code === 0 && cJ.j && pickB2(cJ.j) === pickB2(Sb2.changelog(pb2, { since: "2026-05-01" })) && JSON.stringify(cJ.j.counts) === '{"added":1,"changed":1,"fixed":1}',
+  "changelog --since <date>: the release notes on stdout (Added · Changed · Fixed); --json = spec_changelog's result");
+const cBad = rb2(["changelog", "--since", "soon"]);
+const cNoVal = rb2(["changelog", "--since"]);
+const cLast = run(["changelog", "--since", "last", "--project", pb2]);
+ok(cBad.code === 1 && /since: 'soon' is not an ISO date/.test(cBad.out) && cNoVal.code === 1 && /since/.test(cNoVal.out) &&
+  cLast.code === 0 && /No release notes were written yet/.test(cLast.out) && /^# Release notes/m.test(cLast.out),
+  "changelog: a bad --since exits 1 (localized), --since without a value is refused; --since last without a stamp notes it on stderr and lists everything");
+const cW = rb2(["changelog", "--write"]);
+const stampB2 = Sb2.readRoadmap(pb2).meta.changelogAt;
+const cW2 = rb2(["changelog", "--write"]);
+// No stamp yet → everything: login (finished in January) is new in these notes, so its change request folds into it.
+ok(cW.code === 0 && /^✎ wrote .*RELEASE-NOTES\.md — 2 added · 0 changed · 1 fixed\s*$/.test(cW.out) && typeof stampB2 === "string" &&
+  /AUTO-GENERATED by dev-spec/.test(fs.readFileSync(path.join(pb2, ".specs", "RELEASE-NOTES.md"), "utf8")) &&
+  cW2.code === 0 && /Nothing to report since then/.test(cW2.out) && Sb2.readRoadmap(pb2).meta.changelogAt === stampB2,
+  "changelog --write → .specs/RELEASE-NOTES.md + meta.changelogAt; run again: nothing to report, nothing written or re-stamped (exit 0)");
+fs.writeFileSync(path.join(pb2, ".specs", "RELEASE-NOTES.md"), "# ours\n");
+const cHand = rb2(["changelog", "--since", "all", "--write"]);
+ok(cHand.code === 1 && /RELEASE-NOTES\.md exists and was not generated by dev-spec/.test(cHand.out) && fs.readFileSync(path.join(pb2, ".specs", "RELEASE-NOTES.md"), "utf8") === "# ours\n",
+  "changelog --write never overwrites a hand-written RELEASE-NOTES.md (exit 1)");
+
+// PT project: the chrome of both documents in European Portuguese.
+const pt2 = path.join(tmp, "pb2-pt");
+Sb2.initProject(pt2, ["core"], "pt");
+const fpt2 = Sb2.createFeature(pt2, "Pagamento", ["core"], "Pagar o carrinho.", undefined, "pt");
+setState(fpt2.dir, { finished: { at: "2026-06-01T00:00:00.000Z", files: {} } });
+const ptE = run(["export", "pagamento", "--md", "--project", pt2]);
+const ptC = run(["changelog", "--project", pt2]);
+const ptW = run(["export", "pagamento", "--write", "--project", pt2]);
+ok(ptE.code === 0 && /_Especificação da feature · gerado a /.test(ptE.out) && /\n## Resumo\n\nPagar o carrinho\.\n/.test(ptE.out) && /\n## Histórias de utilizador e critérios de aceitação\n/.test(ptE.out) &&
+  ptC.code === 0 && /^# Notas de versão — pb2-pt\n/.test(ptC.out) && /\n## Adicionado\n/.test(ptC.out) && /\n## Corrigido\n\n_Nada\._/.test(ptC.out) &&
+  ptW.code === 0 && /^✎ gerado .*pagamento\.html/.test(ptW.out),
+  "export / changelog on a PT project: European Portuguese chrome (Resumo, Histórias de utilizador…, Notas de versão, Adicionado / Corrigido, ✎ gerado)");
+}
+
+if (inSection("pb3")) { // 1.14 package B3 (CLI tests) — approvals by role (init --roles, approve --role) and the fast-forward (approve --through), EN / PT
+  const Sb3 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonB3 = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const REQb3 = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — WHILE an export runs, WHEN the admin clicks again THE SYSTEM SHALL ignore it.\n" +
+    "3. **US-1.AC-3** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n4. **US-1.AC-4** — THE SYSTEM SHALL name files invoices-YYYY-MM.csv.\n\n" +
+    "### US-2 (P2): Schedule\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN a schedule is due THE SYSTEM SHALL email the CSV.\n\n" +
+    "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n\n## Out of Scope\n- PDF export.\n";
+  const DESIGNb3 = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+  const TASKSb3 = "# Tasks\n\n- [ ] 1. [US1] Build the CSV writer\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Verify: [manual: open the CSV in a spreadsheet]_\n";
+  const fillB3 = (proj, slug, skip = []) => {
+    const dir = path.join(proj, ".specs", slug);
+    const w = (rel, text) => fs.writeFileSync(path.join(dir, rel), text);
+    w("classification.md", fs.readFileSync(path.join(dir, "classification.md"), "utf8").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+    if (!skip.includes("requirements")) w("requirements.md", REQb3);
+    if (!skip.includes("design")) w("design.md", DESIGNb3);
+    if (!skip.includes("tasks")) w("tasks.md", TASKSb3);
+  };
+  const metaB3 = (proj) => (JSON.parse(fs.readFileSync(path.join(proj, ".specs", "roadmap.json"), "utf8")).meta || {});
+
+  // init --roles = spec_init {approvalRoles}: stored, refused when malformed, --roles none clears
+  const pr = path.join(tmp, "pb3-roles");
+  const init = run(["init", "--roles", "requirements=product,design=tech+security", "--project", pr]);
+  const bad = run(["init", "--roles", "tech", "--project", pr]);
+  const badPhase = run(["init", "--roles", "plan=tech", "--project", pr]);
+  const badJ = jsonB3(run(["init", "--roles", "design=tech lead!", "--json", "--project", pr]));
+  ok(init.code === 0 && /Approval roles: requirements=product · design=tech\+security — /.test(init.out) &&
+    JSON.stringify(metaB3(pr).approvalRoles) === '{"requirements":["product"],"design":["tech","security"]}' &&
+    bad.code === 1 && /approvalRoles must map phases to role lists/.test(bad.out) && badPhase.code === 1 && /unknown phase 'plan'/.test(badPhase.out) &&
+    badJ && badJ.ok === false && /invalid role name/.test(badJ.error) && JSON.stringify(metaB3(pr).approvalRoles) === '{"requirements":["product"],"design":["tech","security"]}',
+    "init --roles stores roadmap.json meta.approvalRoles and prints the roles; a role before any phase, an unknown phase or a bad role name exits 1 and changes nothing");
+
+  // approve --role: required on a listed phase, a sign-off leaves it pending until every role signed; doctor / next-action / finish name the missing role
+  run(["create", "Invoice export", "core", "--project", pr]);
+  fillB3(pr, "invoice-export");
+  run(["approve", "invoice-export", "classification", "--project", pr]);
+  const noRole = run(["approve", "invoice-export", "requirements", "--project", pr]);
+  const noRoleJ = jsonB3(run(["approve", "invoice-export", "requirements", "--json", "--project", pr]));
+  const prod = run(["approve", "invoice-export", "requirements", "--role", "product", "--project", pr]);
+  const tech = run(["approve", "invoice-export", "design", "--role", "tech", "--by", "tom", "--project", pr]);
+  ok(noRole.code === 1 && /'requirements' is signed off per role \(product\) — say which role you sign for: \/approve invoice-export requirements --role <role>/.test(noRole.out) &&
+    noRoleJ && noRoleJ.ok === false && noRoleJ.roleRequired === true && noRoleJ.roles.join() === "product" &&
+    prod.code === 0 && /^Approved 'requirements' for invoice-export ✓\n {2}'requirements' is approved — every role signed off the current content: product\./.test(prod.out) &&
+    tech.code === 0 && /^Signed off 'design' for invoice-export as tech ✓\n {2}⚠ 'design' stays pending until every role has signed off its current content — missing role: security\./.test(tech.out),
+    "approve --role: a listed phase refuses an approval without a role (exit 1; --json roleRequired); its only role approves it; one of two roles leaves it pending (the missing role named)");
+  const doc = run(["doctor", "invoice-export", "--project", pr]);
+  const na = run(["next-action", "invoice-export", "--project", pr]);
+  const fin = run(["finish", "invoice-export", "--project", pr]);
+  ok(/▲ approval-gates — awaiting human approval: design \(missing role: security\), tasks/.test(doc.out) &&
+    /→ Review & sign off 'design' — missing role: security \(signed: tech\): \/approve invoice-export design --role security\./.test(na.out) &&
+    fin.code === 1 && /phases awaiting approval: design \(missing role: security\), tasks/.test(fin.out),
+    "doctor, next-action and finish name the role a pending phase still waits for (the same engine view as MCP)");
+
+  // approve --through (the fast-forward) with a role: security completes design, then tasks (no roles there: the role is recorded)
+  const ff = run(["approve", "invoice-export", "--through", "tasks", "--role", "security", "--project", pr]);
+  const st = JSON.parse(fs.readFileSync(path.join(pr, ".specs", "invoice-export", ".state.json"), "utf8"));
+  ok(ff.code === 0 && /^Fast-forward 'invoice-export': approved design, tasks, in order, each through its own gate/.test(ff.out) && /\n {2}✓ design \[security\]\n {2}✓ tasks \[security\]/.test(ff.out) &&
+    Object.keys(st.approvals.design.roles).sort().join() === "security,tech" && st.approvals.design.batch === true && st.approvals.tasks.role === "security",
+    "approve --through tasks --role security: the fast-forward signs each phase as that role — design completes (tech + security), tasks is approved; one line per phase");
+
+  // the fast-forward without roles: next-action names it; a refused gate stops it (exit 1) with what was approved before
+  const pf = path.join(tmp, "pb3-ff");
+  run(["init", "--project", pf]);
+  run(["create", "Quick spec", "core", "--project", pf]);
+  fillB3(pf, "quick-spec");
+  const na2 = run(["next-action", "quick-spec", "--project", pf]);
+  const ff2 = run(["approve", "quick-spec", "--through", "tasks", "--project", pf]);
+  const met2 = run(["metrics", "quick-spec", "--project", pf]);
+  ok(/fast-forward: \/spec-ff quick-spec \(CLI: dev-spec approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order/.test(na2.out) &&
+    ff2.code === 0 && /approved classification, requirements, design, tasks/.test(ff2.out) && /batch approvals \(fast-forward\): 4/.test(met2.out) &&
+    /→ Implement task #1/.test(run(["next-action", "quick-spec", "--project", pf]).out),
+    "next-action names the fast-forward (/spec-ff + approve --through tasks); approve --through approves every phase; metrics counts the batch approvals");
+  run(["create", "Refused ff", "core", "--project", pf]);
+  fillB3(pf, "refused-ff", ["design"]);
+  const ffR = run(["approve", "refused-ff", "--through", "tasks", "--project", pf]);
+  const ffRj = jsonB3(run(["approve", "refused-ff", "--through", "tasks", "--json", "--project", pf]));
+  ok(ffR.code === 1 && /^dev-spec: Fast-forward 'refused-ff' stopped at 'design' \(approved before it: classification, requirements\) — its gate refuses it — failing checks: placeholders/.test(ffR.out) &&
+    ffRj && ffRj.ok === false && ffRj.refused === true && ffRj.stoppedAt === "design" && ffRj.approved.length === 0 && ffRj.failing.includes("placeholders") &&
+    /stopped at 'design' \(nothing approved\)/.test(ffRj.error),
+    "approve --through stops at the first refused gate: exit 1 naming the phases approved before it and the failing checks; --json → {ok:false, refused, stoppedAt, approved} (a rerun resumes there)");
+
+  // CLI = MCP: the same engine call gives the same fast-forward on a twin project; usage and argument errors
+  const tw = path.join(tmp, "pb3-twin");
+  Sb3.initProject(tw, ["core"], "en");
+  Sb3.createFeature(tw, "Quick spec", ["core"]);
+  fillB3(tw, "quick-spec");
+  const eng = Sb3.approvePhase(tw, "quick-spec", undefined, "x", { through: "tasks" });
+  const pf2 = path.join(tmp, "pb3-twin-cli");
+  run(["init", "--project", pf2]); run(["create", "Quick spec", "core", "--project", pf2]); fillB3(pf2, "quick-spec");
+  const cliJ = jsonB3(run(["approve", "quick-spec", "--through", "tasks", "--by", "x", "--json", "--project", pf2]));
+  const usageB3 = run(["approve", "quick-spec", "--project", pf2]);
+  const bothB3 = run(["approve", "quick-spec", "design", "--through", "tasks", "--project", pf2]);
+  const execB3 = run(["approve", "quick-spec", "--through", "execution", "--project", pf2]);
+  ok(cliJ && JSON.stringify([cliJ.ok, cliJ.complete, cliJ.approved, cliJ.steps, cliJ.message]) === JSON.stringify([eng.ok, eng.complete, eng.approved, eng.steps, eng.message]) &&
+    usageB3.code === 1 && /approve <feature> --through <phase>/.test(usageB3.out) && bothB3.code === 1 && /either a phase or through/.test(bothB3.out) &&
+    execB3.code === 1 && /covers the planning phases only/.test(execB3.out),
+    "approve --through --json = spec_approve {through} (same approved / steps / message); approve without a phase or --through is a usage error; a phase plus --through and --through execution are refused");
+
+  // PT: role sign-off and fast-forward messages in European Portuguese; --roles none clears
+  const pp = path.join(tmp, "pb3-pt");
+  run(["init", "--lang", "pt", "--roles", "design=tech+security", "--project", pp]);
+  run(["create", "Exportar faturas", "core", "--project", pp]);
+  fillB3(pp, "exportar-faturas");
+  run(["approve", "exportar-faturas", "classification", "--project", pp]);
+  run(["approve", "exportar-faturas", "requirements", "--project", pp]);
+  const ptSign = run(["approve", "exportar-faturas", "design", "--role", "tech", "--project", pp]);
+  const ptFf = run(["approve", "exportar-faturas", "--through", "tasks", "--role", "security", "--project", pp]);
+  const ptClear = run(["init", "--roles", "none", "--project", pp]);
+  ok(/^'design' de exportar-faturas validada como tech ✓\n {2}⚠ 'design' continua pendente até todos os papéis validarem o seu conteúdo atual — falta o papel: security\./.test(ptSign.out) &&
+    /^Avanço rápido de 'exportar-faturas': design, tasks aprovadas, por ordem/.test(ptFf.out) &&
+    /Papéis de aprovação removidos — cada fase volta a precisar de uma única aprovação\./.test(ptClear.out) && metaB3(pp).approvalRoles === undefined,
+    "PT: the role sign-off, the fast-forward summary and --roles none (cleared) print in European Portuguese");
+
+  const helpB3 = run(["help"]).out;
+  const docB3 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(/--roles requirements=product,design=tech\+security/.test(helpB3) && /approve <feature> --through <phase> {2}Fast-forward \(\/spec-ff\)/.test(helpB3) &&
+    /--role ROLE \/ --through PHASE \(approve\)/.test(helpB3) && /--roles requirements=product,design=tech\+security/.test(docB3) && /approve <feature> --through <phase>/.test(docB3) &&
+    /--role ROLE = the role you sign off for/.test(docB3),
+    "help and the header docblock document init --roles, approve --role and approve --through");
+}
+
+if (inSection("pb4")) { // 1.14 package B4 (CLI tests)
+  // Forecasts (done records ticks → velocity → ETA) and cross-feature overlaps on the CLI = the engine (spec_roadmap / spec_metrics
+  // / spec_doctor), EN and PT; a project with no completed task prints nothing new.
+  const Sb4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonB4 = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const pb4 = path.join(tmp, "pb4-proj");
+  const rb4 = (args) => run([...args, "--project", pb4]);
+  run(["init", "--lang", "en", "--project", pb4]);
+  const apiB4 = Sb4.createFeature(pb4, "Api", ["core"], "", undefined, "en");
+  const webB4 = Sb4.createFeature(pb4, "Web", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(apiB4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Routes\n  - _Size: S_\n  - _Implements: src/api/routes.js_\n- [ ] 2. [US1] Auth\n  - _Size: S_\n" +
+    "- [ ] 3. [US1] Paging\n  - _Size: S_\n- [ ] 4. [US1] Shared client\n  - _Size: M_\n  - _Implements: src/shared/client.js_\n");
+  fs.writeFileSync(path.join(webB4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Web shell\n  - _Implements: src/shared/_\n");
+  const noDataB4 = rb4(["roadmap"]);
+  ok(noDataB4.code === 0 && !/Velocity|ETA/.test(noDataB4.out) && /⚠ 1 cross-feature file overlap\(s\):\n {2}api ↔ web: src\/shared\/client\.js/.test(noDataB4.out),
+    "roadmap before any completed task: no velocity / ETA line (nothing new), but the overlap is listed (got " + JSON.stringify(noDataB4.out) + ")");
+  const doneB4 = [1, 2, 3].map((n) => rb4(["done", "api", String(n)]));
+  const ticksB4 = (JSON.parse(fs.readFileSync(path.join(apiB4.dir, ".state.json"), "utf8")).ticks) || {};
+  ok(doneB4.every((r) => r.code === 0) && ["1", "2", "3"].every((k) => typeof ticksB4[k] === "string" && Math.abs(Date.parse(ticksB4[k]) - Date.now()) < 120000),
+    "done records when each task was ticked (.state.json ticks[n])");
+  const rmB4 = rb4(["roadmap"]);
+  const engB4 = Sb4.roadmapReport(pb4);
+  const fApi = engB4.features.find((f) => f.name === "api");
+  const etaApi = Sb4.etaText(fApi.forecast, "en", true);
+  ok(rmB4.code === 0 && typeof fApi.forecast.eta === "string" && etaApi && new RegExp("^ {5}api +\\d+% .*  · " + etaApi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "m").test(rmB4.out) &&
+    /^Velocity: \d+(\.\d+)? point\(s\)\/working day — 3 task\(s\), 6 point\(s\) completed since \d{4}-\d{2}-\d{2} \(last 28 days\)$/m.test(rmB4.out) &&
+    /^ETA = remaining points ÷ velocity, in working days \(±25%\)/m.test(rmB4.out) && /^ {2}api ↔ web: src\/shared\/client\.js$/m.test(rmB4.out),
+    "roadmap prints each feature's ETA, the velocity, the ETA rule and the overlaps (got " + JSON.stringify(rmB4.out) + ")");
+  const rjB4 = jsonB4(rb4(["roadmap", "--json"]));
+  const pickB4 = (r) => JSON.stringify(r && [r.velocity, r.overlaps, r.features.map((f) => [f.name, f.forecast])]);
+  ok(rjB4 && pickB4(rjB4) === pickB4(engB4) && rjB4.velocity.enough === true, "roadmap --json = spec_roadmap: the same velocity, forecasts and overlaps");
+  const docB4 = rb4(["doctor", "web"]);
+  ok(/▲ cross-feature-overlap — open tasks plan the same files as another active feature — api \(src\/shared\/client\.js\)/.test(docB4.out) &&
+    /verdict=/.test(docB4.out) && !/✗ cross-feature-overlap/.test(docB4.out),
+    "doctor prints the cross-feature-overlap line as a warn (▲, never ✗) (got " + JSON.stringify((docB4.out.match(/.*cross-feature.*/) || [""])[0].slice(0, 200)) + ")");
+  const metB4 = rb4(["metrics", "api"]);
+  const metJB4 = jsonB4(rb4(["metrics", "--json"]));
+  ok(/^ {2}velocity: \d+(\.\d+)? point\(s\)\/working day \(3 task\(s\), 6 point\(s\) since \d{4}-\d{2}-\d{2}, last 28 days\)$/m.test(metB4.out) &&
+    metJB4 && JSON.stringify(metJB4.velocity) === JSON.stringify(Sb4.metrics(pb4).velocity),
+    "metrics prints the feature's velocity; metrics --json carries the project's (= spec_metrics)");
+  const wrB4 = rb4(["roadmap", "--write"]);
+  const rmMdB4 = fs.readFileSync(path.join(pb4, ".specs", "ROADMAP.md"), "utf8");
+  ok(wrB4.code === 0 && /\| Next \| ETA \|/.test(rmMdB4) && rmMdB4.includes("| " + Sb4.etaText(fApi.forecast, "en") + " |") && /- \*\*api\*\* — plans the same files as web: src\/shared\/client\.js/.test(rmMdB4),
+    "roadmap --write: ROADMAP.md carries the ETA column and the overlap under Needs attention");
+
+  const ptB4 = path.join(tmp, "pb4-pt");
+  run(["init", "--lang", "pt", "--project", ptB4]);
+  const agoraB4 = Sb4.createFeature(ptB4, "Agora", ["core"], "", undefined, "pt");
+  const depoisB4 = Sb4.createFeature(ptB4, "Depois", ["core"], "", undefined, "pt");
+  fs.writeFileSync(path.join(agoraB4.dir, "tasks.md"), "# Tarefas\n\n- [ ] 1. [US1] A\n- [ ] 2. [US1] B\n- [ ] 3. [US1] C\n- [ ] 4. [US1] D\n  - _Implements: src/x.js_\n");
+  fs.writeFileSync(path.join(depoisB4.dir, "tasks.md"), "# Tarefas\n\n- [ ] 1. [US1] E\n  - _Implements: src/x.js:3_\n");
+  [1, 2, 3].forEach((n) => run(["done", "agora", String(n), "--project", ptB4]));
+  const ptRmB4 = run(["roadmap", "--project", ptB4]);
+  const ptMetB4 = run(["metrics", "agora", "--project", ptB4]);
+  const ptDocB4 = run(["doctor", "depois", "--project", ptB4]);
+  ok(/^ {5}agora .*  · previsão \d{4}-\d{2}-\d{2}/m.test(ptRmB4.out) && /^Velocidade: .* ponto\(s\)\/dia útil — 3 tarefa\(s\)/m.test(ptRmB4.out) &&
+    /^⚠ 1 sobreposição\(ões\) de ficheiros entre features:\n {2}agora ↔ depois: src\/x\.js$/m.test(ptRmB4.out) && /^ {2}velocidade: .* ponto\(s\)\/dia útil/m.test(ptMetB4.out) &&
+    /▲ cross-feature-overlap — há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — agora \(src\/x\.js\)/.test(ptDocB4.out),
+    "PT project: roadmap's previsão / Velocidade / sobreposição lines, metrics' velocidade and doctor's overlap detail in European Portuguese (got " + JSON.stringify(ptRmB4.out.slice(0, 500)) + ")");
+  const helpB4 = run(["help"]).out;
+  const docblockB4 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(/roadmap \[--write\]\[--html\]\[--lang\] +Roadmap: .*ETA per feature \(velocity from ticked tasks, _Size: XS\|S\|M\|L\|XL_\), cross-feature file overlaps/.test(helpB4) &&
+    /metrics \[feature\] \[--write\] +Lead times.*velocity/.test(helpB4) && /Multi-feature roadmap: ETA forecasts, cross-feature overlaps/.test(docblockB4),
+    "help and the header docblock mention the roadmap's ETA / overlaps and metrics' velocity");
+}
+
+if (inSection("pb5")) { // 1.14 package B5 (CLI tests)
+// B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
+// Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
+const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const b5cfg = path.join(tmp, "b5-gitconfig");
+fs.writeFileSync(b5cfg, "");
+const b5Env = { ...process.env, SPEC_PROJECT_DIR: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: b5cfg, HOME: tmp, XDG_CONFIG_HOME: tmp,
+  GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+const rb5 = (args, input) => {
+  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input });
+  return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", stderr: r.stderr || "", code: r.status };
+};
+const gitB5 = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: b5Env });
+const hasGitB5 = (() => { const g = gitB5(tmp, "--version"); return !g.error && g.status === 0; })();
+const stB5 = (dir, slug) => JSON.parse(fs.readFileSync(path.join(dir, ".specs", slug, ".state.json"), "utf8"));
+const jsonB5 = (s) => { try { return JSON.parse(s); } catch { return null; } };
+
+// done --run: an _Expect: fail_ task's passing command is refused; a failing one is its red proof (a line says so; --json keeps one document).
+const pb = path.join(tmp, "b5-cli");
+Sb5.initProject(pb, ["tdd"], "en");
+const fb = Sb5.createFeature(pb, "Redcli", ["tdd"], "", undefined, "en");
+fs.writeFileSync(path.join(fb.dir, "tasks.md"), "- [ ] 1. [US1] Write T-01 red\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Expect: fail_\n" +
+  "- [ ] 2. [US1] Write T-02 red\n  - _Verify: node -e \"process.exit(3)\"_\n  - _Expect: fail_\n- [ ] 3. [US1] Must pass\n  - _Verify: node -e \"process.exit(0)\"_\n");
+const dPass = rb5(["done", "redcli", "1", "--run", "--project", pb]);
+const dRed = rb5(["done", "redcli", "2", "--run", "--project", pb]);
+const dRedJ = rb5(["done", "redcli", "2", "--run", "--json", "--project", pb]);
+const dRedJr = jsonB5(dRedJ.stdout);
+const tasksB5 = fs.readFileSync(path.join(fb.dir, "tasks.md"), "utf8");
+const ev2B5 = stB5(pb, "redcli").evidence["2"];
+ok(dPass.code === 1 && /Task 1 expects its test to FAIL \(_Expect: fail_\), but the run passed \(exit 0\)/.test(dPass.out) && /- \[ \] 1\./.test(tasksB5) &&
+  dRed.code === 0 && /Task 2 done \(verified\)/.test(dRed.out) && /✓ red run recorded for task 2 \(exit 3\) — the test fails before its fix/.test(dRed.out) && /- \[x\] 2\./.test(tasksB5) &&
+  dRedJ.code === 0 && dRedJr && dRedJr.redRecorded === true && dRedJr.expected === "fail" && dRedJr.alreadyDone === true && !/red run recorded/.test(dRedJ.stdout) &&
+  ev2B5.expected === "fail" && ev2B5.exitCode === 3 && (!("commit" in ev2B5) || gitB5(pb, "rev-parse", "HEAD").status === 0),
+  "done --run on an _Expect: fail_ task: a passing _Verify:_ is refused (task stays open), a failing one ticks it as the red proof with a line saying so; --json keeps stdout one document (redRecorded, expected: 'fail'); no git repository → no commit recorded (got " +
+  JSON.stringify([dPass.out.slice(0, 160), dRed.out.slice(0, 240)]) + ")");
+
+// done --run records the commit it ran on and whether the tree was dirty (changes under .specs/ don't count) — git read-only.
+if (hasGitB5) {
+  const pg = path.join(tmp, "b5-git");
+  fs.mkdirSync(pg, { recursive: true });
+  gitB5(pg, "init", "-q");
+  fs.writeFileSync(path.join(pg, "app.js"), "module.exports = 1;\n");
+  gitB5(pg, "add", "app.js");
+  gitB5(pg, "commit", "-q", "-m", "init");
+  const headB5 = (gitB5(pg, "rev-parse", "--short", "HEAD").stdout || "").trim().toLowerCase();
+  Sb5.initProject(pg, ["core"], "en");
+  const fg = Sb5.createFeature(pg, "Gitrun", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(fg.dir, "tasks.md"), "- [ ] 1. [US1] A\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] B\n  - _Verify: node -e \"process.exit(0)\"_\n");
+  const g1 = rb5(["done", "gitrun", "1", "--run", "--project", pg]);
+  fs.appendFileSync(path.join(pg, "app.js"), "// edited\n");
+  const g2 = rb5(["done", "gitrun", "2", "--run", "--project", pg]);
+  const evg = stB5(pg, "gitrun").evidence;
+  ok(g1.code === 0 && g2.code === 0 && /^[0-9a-f]{4,40}$/.test(headB5) && evg["1"].commit === headB5 && evg["1"].dirty === false && evg["2"].commit === headB5 && evg["2"].dirty === true &&
+    evg["1"].history[0].commit === headB5,
+    "done --run records the commit it ran on (git rev-parse --short HEAD) and whether the tree was dirty — the spec's own files under .specs/ don't count (got " + JSON.stringify([headB5, evg["1"], evg["2"].dirty]).slice(0, 300) + ")");
+} else ok(true, "done --run git evidence — skipped (git is not available)");
+
+// init --check: repeatable, name= removes one, a bad value is refused (localized); the result line lists the checks.
+const pc = path.join(tmp, "b5-checks");
+const rmPcB5 = () => JSON.parse(fs.readFileSync(path.join(pc, ".specs", "roadmap.json"), "utf8")).meta.checks;
+const ic1 = rb5(["init", "--check", "test=npm test", "--check", "lint=npm run lint", "--project", pc]);
+const m1B5 = rmPcB5();
+const ic2 = rb5(["init", "--check", "lint=", "--project", pc]);
+const m2B5 = rmPcB5();
+const icBad = rb5(["init", "--check", "oops", "--project", pc]);
+const icBadName = rb5(["init", "--check", "bad name=x", "--project", pc]);
+const m3B5 = rmPcB5();
+const icJ = rb5(["init", "--json", "--check=e2e=node e2e.js", "--project", pc]);
+const icJr = jsonB5(icJ.stdout);
+const icPt = rb5(["init", "--lang", "pt", "--check", "e2e=node e2e.js", "--project", path.join(tmp, "b5-checks-pt")]);
+const icEs = rb5(["init", "--lang", "es", "--check", "oops", "--project", path.join(tmp, "b5-checks-es")]);
+ok(ic1.code === 0 && /Project checks \(meta\.checks\): test → npm test · lint → npm run lint/.test(ic1.out) && JSON.stringify(m1B5) === JSON.stringify({ test: "npm test", lint: "npm run lint" }) &&
+  ic2.code === 0 && JSON.stringify(m2B5) === JSON.stringify({ test: "npm test" }) && icBad.code === 1 && /--check expects name=command \(got 'oops'\)/.test(icBad.out) &&
+  icBadName.code === 1 && /invalid check name 'bad name'/.test(icBadName.out) && JSON.stringify(m3B5) === JSON.stringify(m2B5) &&
+  icJ.code === 0 && icJr && JSON.stringify(icJr.checks) === JSON.stringify({ test: "npm test", e2e: "node e2e.js" }) &&
+  icPt.code === 0 && /Verificações do projeto \(meta\.checks\): e2e → node e2e\.js/.test(icPt.out) && icEs.code === 1 && /--check espera nombre=comando \(recibido 'oops'\)/.test(icEs.out),
+  "init --check name=cmd (repeatable, --check=… too) sets roadmap.json meta.checks, name= removes one, a value without '=' or a bad name is refused writing nothing; --json reports the checks; PT line, ES error (got " +
+  JSON.stringify([ic1.out.slice(-120), icBad.out.slice(0, 120)]) + ")");
+
+// finish --run: runs every project check (from the project root), records each (a failure too — it stays a blocker); --json; PT.
+const pf = path.join(tmp, "b5-finish");
+rb5(["init", "--check", "test=node -e \"process.exit(0)\"", "--check", "lint=node -e \"process.exit(2)\"", "--project", pf]);
+const ffB5 = Sb5.createFeature(pf, "Fin", ["core"], "", undefined, "en");
+fs.writeFileSync(path.join(ffB5.dir, "tasks.md"), "- [x] 1. [US1] Done\n");
+const fr = rb5(["finish", "fin", "--run", "--project", pf]);
+const fcB5 = stB5(pf, "fin").finishChecks;
+const frJ = rb5(["finish", "fin", "--run", "--json", "--project", pf]);
+const frJr = jsonB5(frJ.stdout);
+const fPtB5 = Sb5.createFeature(pf, "Fim", ["core"], "", undefined, "pt");
+fs.writeFileSync(path.join(fPtB5.dir, "tasks.md"), "- [x] 1. [US1] Feito\n");
+const frPt = rb5(["finish", "fim", "--run", "--project", pf]);
+const frNone = rb5(["finish", "redcli", "--run", "--project", pb]);
+ok(fr.code === 1 && /\$ node -e "process\.exit\(0\)" {3}\(test\)/.test(fr.out) && /\$ node -e "process\.exit\(2\)" {3}\(lint\)/.test(fr.out) && /Recorded 2 project check run\(s\) in \.state\.json → finishChecks\./.test(fr.out) &&
+  /✗ project checks without a passing run since the last task activity: lint \(latest run failed \(exit 2\)\)/.test(fr.out) && !/test \(no run/.test(fr.out) && fcB5.test.exitCode === 0 && fcB5.lint.exitCode === 2 &&
+  frJ.code === 1 && frJr && frJr.recordedChecks.length === 2 && frJr.suiteChecks.find((c) => c.name === "test").status === "pass" && /\$ node -e/.test(frJ.stderr) && !/\$ node -e/.test(frJ.stdout) &&
+  /Registada\(s\) 2 execução\(ões\) de verificações do projeto/.test(frPt.out) && /verificações do projeto sem uma execução bem-sucedida .*: lint \(a última execução falhou \(exit 2\)\)/.test(frPt.out) &&
+  frNone.code === 1 && /no project checks to run \(roadmap\.json meta\.checks\) — set them: dev-spec init --check test="npm test"/.test(frNone.out),
+  "finish --run runs each meta.checks command and records it (a failure stays the suite-evidence blocker); --json keeps stdout one document; PT; without meta.checks it runs nothing and exits 1 (got " +
+  JSON.stringify([fr.out.slice(0, 300), frNone.out.slice(0, 120)]) + ")");
+const pp = path.join(tmp, "b5-finish-pipe");
+rb5(["init", "--check", "piped=node -e \"process.exit(0)\" | node -e \"process.exit(0)\"", "--project", pp]);
+Sb5.createFeature(pp, "Pipe", ["core"], "", undefined, "en");
+const fpipe = rb5(["finish", "pipe", "--run", "--project", pp]);
+let posixOk = true;
+if (process.platform === "win32") {
+  const px = path.join(tmp, "b5-finish-posix");
+  rb5(["init", "--check", "sq=node -e 'process.exit(0)'", "--project", px]);
+  Sb5.createFeature(px, "Posix", ["core"], "", undefined, "en");
+  const fpx = rb5(["finish", "posix", "--run", "--project", px]);
+  posixOk = fpx.code === 1 && /the project check 'sq' \(`node -e 'process\.exit\(0\)'`\) uses POSIX shell syntax \(single quotes/.test(fpx.out) && !stB5(px, "posix").finishChecks;
+}
+ok(/pipes into another command: the shell reports only the LAST command's exit code/.test(fpipe.out) && stB5(pp, "pipe").finishChecks.piped.exitCode === 0 && posixOk,
+  "finish --run prints the pipe hint for a piped check (it still runs and is recorded); on Windows a check in POSIX syntax is refused before anything runs under cmd.exe");
+
+// dev-spec log: per task the commits citing it + the +tdd red-first check, from git log (read-only) or a log on stdin; localized.
+const lgIn = rb5(["log", "redcli", "-", "--project", pb], "abc1234 feat(redcli): task #3 done\ndef5678 chore: other\n");
+const fRegB5 = Sb5.createFeature(pb, "Registo", ["core"], "", undefined, "pt");
+fs.writeFileSync(path.join(fRegB5.dir, "tasks.md"), "- [ ] 1. [US1] Algo\n");
+const fEsB5 = Sb5.createFeature(pb, "Registro", ["core"], "", undefined, "es");
+fs.writeFileSync(path.join(fEsB5.dir, "tasks.md"), "- [ ] 1. [US1] Algo\n");
+const lgPt = rb5(["log", "registo", "-", "--project", pb], "abc1234 x\n");
+const lgEs = rb5(["log", "registro", "-", "--project", pb], "abc1234 x\n");
+const lgUnknown = rb5(["log", "nope", "-", "--project", pb], "");
+ok(lgIn.code === 0 && /^Commits: redcli — 2 commit\(s\) read, 1 cite its tasks/m.test(lgIn.out) && /\[ \] #3 Must pass — abc1234 feat\(redcli\): task #3 done \(#3\)/.test(lgIn.out) &&
+  /^Commits: registo — 1 commit\(s\) lido\(s\), 0 citam as suas tarefas/m.test(lgPt.out) && /Nenhum commit cita uma tarefa de 'registo'/.test(lgPt.out) &&
+  /^Commits: registro — 1 commit\(s\) leído\(s\), 0 citan sus tareas/m.test(lgEs.out) && /Ningún commit cita una tarea de 'registro'/.test(lgEs.out) && lgUnknown.code === 1,
+  "dev-spec log <feature> - reads a log from stdin (no git needed): 'task #N' with the feature name cites task N; PT / ES output; an unknown feature exits 1 (got " + JSON.stringify(lgIn.out.slice(0, 200)) + ")");
+const noRepoB5 = !hasGitB5 || gitB5(pb, "rev-parse", "--git-dir").status !== 0;
+const lgNo = rb5(["log", "redcli", "--project", pb]);
+ok(!noRepoB5 || (lgNo.code === 1 && /git is not available here, or this is not a git repository with commits/.test(lgNo.out)),
+  "dev-spec log outside a git repository (or without git) exits 1 with a localized hint to pipe a log in");
+if (hasGitB5) {
+  const pl = path.join(tmp, "b5-log");
+  fs.mkdirSync(path.join(pl, "src"), { recursive: true });
+  gitB5(pl, "init", "-q");
+  Sb5.initProject(pl, ["tdd"], "en");
+  const fl = Sb5.createFeature(pl, "Clog", ["tdd"], "", undefined, "en");
+  fs.writeFileSync(path.join(fl.dir, "tasks.md"), "- [ ] 1. [US1] Write T-01 red\n  - _Expect: fail_\n- [ ] 2. [US1] Implement\n  - _Makes green: T-01_\n- [ ] 3. [US1] Docs\n");
+  fs.writeFileSync(path.join(pl, "src", "a.js"), "module.exports = 1;\n");
+  gitB5(pl, "add", "src/a.js");
+  gitB5(pl, "commit", "-q", "-m", "feat(clog): implement\n\nPart of .specs/clog/ task #2.\nMakes T-01 green.");
+  fs.mkdirSync(path.join(pl, "tests"));
+  fs.writeFileSync(path.join(pl, "tests", "clog.test.js"), "test(\"T-01 works\", () => {});\n");
+  gitB5(pl, "add", "tests/clog.test.js");
+  gitB5(pl, "commit", "-q", "-m", "test(clog): T-01");
+  const lg = rb5(["log", "clog", "--project", pl]);
+  const lgJ = rb5(["log", "clog", "--json", "--project", pl]);
+  const lgJr = jsonB5(lgJ.stdout);
+  const lgMax = rb5(["log", "clog", "--max", "1", "--project", pl]);
+  ok(lg.code === 0 && /^Commits: clog — 2 commit\(s\) read, 2 cite its tasks/m.test(lg.out) && /\[ \] #2 Implement — [0-9a-f]{7} test\(clog\): T-01 \(T-01\); [0-9a-f]{7} feat\(clog\): implement \(#2, T-01\)/.test(lg.out) &&
+    /▲ red-first: task 2 \(makes T-01 green\) was first committed in [0-9a-f]{7}, before any commit touching a test file that names T-01 \(tests\/clog\.test\.js — first in [0-9a-f]{7}\)/.test(lg.out) &&
+    /\[ \] #3 Docs — no commit cites it/.test(lg.out) && lgJr && lgJr.commits === 2 && lgJr.redFirst.find((r) => r.task === 2).status === "impl-first" &&
+    lgMax.code === 0 && /1 commit\(s\) read \(the window is full/.test(lgMax.out) && /red-first: task 2 \(T-01\) — can't tell: the log window is full/.test(lgMax.out),
+    "dev-spec log reads git log (read-only): per task the commits citing it ('task #N' + the feature name, T-IDs), the red-first warning when the implementation was committed before its test; --json; --max bounds the window (got " +
+    JSON.stringify(lg.out.slice(0, 500)) + ")");
+} else ok(true, "dev-spec log over a real git repository — skipped (git is not available)");
+
+// help and the header docblock document the new command and flags.
+const hB5 = rb5(["help"]).out;
+const docB5 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+ok(["log <feature> [--max N] [-]", "--check name=\"cmd\"", "finish <feature> [--write] [--include-body] [--run]", "_Expect: fail_"].every((w) => hB5.includes(w) && docB5.includes(w)),
+  "help and the header docblock document log, init --check, finish --run and _Expect: fail_");
+}
+
+if (inSection("pc1")) { // 1.14 package C1 (CLI tests) — `init --guard scope` / `--stop-check on|off`, `dev-spec stop-check` (= spec.stopCheck, the Stop hook's decision)
+  const Sc1 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const rc1 = (args, input) => {
+    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp, CLAUDE_PROJECT_DIR: "" }, input });
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  const jc1 = (s) => { try { return JSON.parse(s); } catch { return null; } };
+  const metaC1 = (p) => JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {};
+
+  // init --guard scope · --stop-check on|off (= spec_init {guard: "scope"}, {stopCheck}); bad values refused, localized.
+  const p1 = path.join(tmp, "c1-init");
+  const gs = rc1(["init", "--guard", "Scope", "--project", p1]);
+  const gsJ = jc1(rc1(["init", "--json", "--project", p1]).stdout);
+  const so = rc1(["init", "--stop-check", "off", "--project", p1]);
+  const soOff = metaC1(p1).stopCheck;
+  const sOn = rc1(["init", "--stop-check=on", "--json", "--project", p1]);
+  const sOnJ = jc1(sOn.stdout);
+  const sBad = rc1(["init", "--stop-check", "maybe", "--project", p1]);
+  const gBad = rc1(["init", "--guard", "strict", "--project", p1]);
+  const sPt = rc1(["init", "--lang", "pt", "--stop-check", "off", "--guard", "scope", "--project", path.join(tmp, "c1-init-pt")]);
+  const sEs = rc1(["init", "--lang", "es", "--stop-check", "quizá", "--project", path.join(tmp, "c1-init-es")]);
+  ok(gs.code === 0 && /Guard mode SCOPE/.test(gs.out) && metaC1(p1).guard === "scope" && gsJ && gsJ.guard === "scope" && gsJ.stopCheck === true && gsJ.guardNote === undefined &&
+    so.code === 0 && /Evidence gate OFF/.test(so.out) && soOff === false && sOn.code === 0 && sOnJ && sOnJ.stopCheck === true && /Evidence gate ON/.test(sOnJ.stopCheckNote) && metaC1(p1).stopCheck === true &&
+    sBad.code === 1 && /--stop-check takes on or off \(got 'maybe'\)/.test(sBad.out) && gBad.code === 1 && /--guard takes on, off or scope \(got 'strict'\)/.test(gBad.out) &&
+    sPt.code === 0 && /Gate de evidência DESLIGADO/.test(sPt.out) && /Modo guarda SCOPE \(âmbito\)/.test(sPt.out) && sEs.code === 1 && /--stop-check admite on u off \(recibido 'quizá'\)/.test(sEs.out),
+    "init --guard scope (any case) → meta.guard 'scope'; --stop-check off|on → meta.stopCheck (the result reports both; a note when set); bad values exit 1, localized (PT lines, ES error) (got " +
+    JSON.stringify([gs.out.slice(-160), so.out.slice(-120), sBad.out.slice(0, 120)]) + ")");
+
+  // stop-check = spec.stopCheck: the same result (--json), the reason and exit 1 when the turn would be sent back, a localized line and exit 0 otherwise.
+  const p2 = path.join(tmp, "c1-stop");
+  Sc1.initProject(p2, ["core"], "en");
+  const f2 = Sc1.createFeature(p2, "Billing", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(f2.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n");
+  Sc1.completeTask(p2, "billing", 1);
+  const claim = "Done — all tests pass.";
+  const sc = rc1(["stop-check", "--message", claim, "--project", p2]);
+  const scJ = jc1(rc1(["stop-check", "--message", claim, "--json", "--project", p2]).stdout);
+  const eng = Sc1.stopCheck(p2, { message: claim });
+  const scIn = rc1(["stop-check", "-", "--project", p2], claim + "\n");
+  const scInFlag = rc1(["stop-check", "--message", "-", "--project", p2], "Feito, todos os testes passam.");
+  const scPos = rc1(["stop-check", "All", "done!", "--project", p2]);
+  const scNo = rc1(["stop-check", "--message", "I renamed the variable.", "--project", p2]);
+  const scAdm = rc1(["stop-check", "--message", "Done, but task 1 is not verified.", "--project", p2]);
+  ok(sc.code === 1 && sc.stdout.trim() === eng.reason && /billing: #1 \(no evidence\)/.test(sc.out) && /read each listed task's _Verify:_ command/.test(sc.out) && !/--run/.test(sc.out) &&
+    scJ && JSON.stringify(scJ) === JSON.stringify(eng) && scIn.code === 1 && scIn.stdout.trim() === eng.reason && scInFlag.code === 1 && scPos.code === 1 &&
+    scNo.code === 0 && /^evidence gate: the message claims no completion or verification — allowed\./.test(scNo.stdout) &&
+    scAdm.code === 0 && /says plainly what is not verified/.test(scAdm.stdout),
+    "stop-check prints spec.stopCheck's reason and exits 1 when the turn would be sent back (--message, stdin via - or --message -, or the words after it); --json = the engine result; no claim / an admission → a line, exit 0 (got " +
+    JSON.stringify([sc.code, sc.out.slice(0, 200), scNo.out.slice(0, 120)]) + ")");
+  // Allow lines: verified, no recent activity, off, no .specs/; --agent spec-implementer checks the report; PT / ES lines.
+  Sc1.completeTask(p2, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "1 passing" });
+  const scVer = rc1(["stop-check", "--message", claim, "--project", p2]);
+  const p3 = path.join(tmp, "c1-quiet");
+  Sc1.initProject(p3, ["core"], "en");
+  const f3 = Sc1.createFeature(p3, "Quiet", ["core"], "", undefined, "en");
+  const old = (Date.now() - 9 * 3600 * 1000) / 1000;
+  fs.utimesSync(path.join(f3.dir, "tasks.md"), old, old);
+  const scOld = rc1(["stop-check", "--message", claim, "--project", p3]);
+  rc1(["init", "--stop-check", "off", "--project", p3]);
+  const scOff = rc1(["stop-check", "--message", claim, "--project", p3]);
+  fs.mkdirSync(path.join(tmp, "c1-empty"), { recursive: true });
+  const scNone = rc1(["stop-check", "--message", claim, "--project", path.join(tmp, "c1-empty")]);
+  const ex = path.join(f2.dir, ".execution");
+  fs.mkdirSync(ex, { recursive: true });
+  fs.writeFileSync(path.join(f2.dir, "tasks.md"), "- [x] 1. [US1] Charge\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: npm test -- refund_\n");
+  fs.writeFileSync(path.join(ex, "task-2-report.md"), "# Task 2\nAll good.\n");
+  const reply = "**Status:** DONE\nReport: .specs/billing/.execution/task-2-report.md";
+  const scImp = rc1(["stop-check", "--message", reply, "--agent", "dev-spec-driven:spec-implementer", "--project", p2]);
+  const scImpJ = jc1(rc1(["stop-check", "--message", reply, "--agent", "spec-implementer", "--json", "--project", p2]).stdout);
+  fs.writeFileSync(path.join(ex, "task-2-report.md"), "# Task 2\n$ npm test -- refund\nexit 0 — 4 passing\n");
+  const scImpOk = rc1(["stop-check", "--message", reply, "--agent", "spec-implementer", "--project", p2]);
+  const p4 = path.join(tmp, "c1-pt");
+  Sc1.initProject(p4, ["core"], "pt");
+  Sc1.createFeature(p4, "Pagamentos", ["core"], "", undefined, "pt");
+  const scPt = rc1(["stop-check", "--message", "Renomeei a variável.", "--project", p4]);
+  const p5 = path.join(tmp, "c1-es");
+  Sc1.initProject(p5, ["core"], "es");
+  const scEs = rc1(["stop-check", "--message", "Listo.", "--project", p5]);
+  ok(scVer.code === 0 && /every ticked task of the recently active features has passing evidence \(billing\) — allowed/.test(scVer.stdout) &&
+    scOld.code === 0 && /no feature was active in the last 4 h/.test(scOld.stdout) && scOff.code === 0 && /evidence gate: off \(roadmap\.json meta\.stopCheck: false\)/.test(scOff.stdout) &&
+    scNone.code === 0 && /no dev-spec \.specs\/ here/.test(scNone.stdout) &&
+    scImp.code === 1 && /you report task 2 of 'billing' as DONE, but its report \(\.specs\/billing\/\.execution\/task-2-report\.md\) doesn't show the _Verify:_ run/.test(scImp.out) &&
+    scImpJ && scImpJ.why === "implementer-evidence" && scImpJ.task === 2 && scImpOk.code === 0 && /the report of task 2 of 'billing' shows its _Verify:_ run — allowed/.test(scImpOk.stdout) &&
+    scPt.code === 0 && /gate de evidência: a mensagem não afirma conclusão nem verificação — permitido/.test(scPt.stdout) &&
+    scEs.code === 0 && /gate de evidencia: ninguna función tuvo actividad en las últimas 4 h/.test(scEs.stdout),
+    "stop-check allow lines (verified, no recent activity, off, no .specs/), --agent spec-implementer checks the task report (exit 1 without the run, 0 with it), PT / ES lines (got " +
+    JSON.stringify([scVer.out.slice(0, 140), scOld.out.slice(0, 120), scImp.out.slice(0, 160), scEs.out.slice(0, 120)]) + ")");
+
+  // help and the header docblock document stop-check, --stop-check and --guard scope.
+  const hC1 = rc1(["help"]).out;
+  const docC1 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(["stop-check [--message \"<text>\"|-] [--agent <type>]", "--stop-check on|off", "--guard on|off|scope"].every((w) => hC1.includes(w) && docC1.includes(w)),
+    "help and the header docblock document stop-check, init --stop-check and init --guard scope");
+}
+
+if (inSection("pc2")) { // 1.14 package C2 (CLI tests)
+// C2 — `dev-spec decide` (= spec_decide) and `dev-spec spike` / `create --kind spike` (= spec_create {kind: "spike"}), EN / PT.
+const Sc2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const jsonC2 = (s) => { try { return JSON.parse(s); } catch { return null; } };
+const rc2 = (args) => {
+  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+  return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+};
+
+// decide: an entry appended (✎ line, _Affects:_ canonical), --json = the MCP result, --discovery / --supersedes, unknown refs refused.
+const pd = path.join(tmp, "c2-decide");
+Sc2.initProject(pd, ["tdd"], "en");
+const fd = Sc2.createFeature(pd, "Auth", ["tdd"], "", undefined, "en");
+const dc1 = rc2(["decide", "auth", "--title", "JWT sessions", "--decision", "Use JWT.", "--context", "Stateless API", "--affects", "us-1.ac-2,T-02,architecture", "--project", pd]);
+const dc2 = rc2(["decide", "auth", "--title", "Skew", "--decision", "30 s of skew.", "--discovery", "--supersedes", "D-1", "--json", "--project", pd]);
+const dc2j = jsonC2(dc2.stdout);
+const before = fs.readFileSync(path.join(fd.dir, "decisions.md"), "utf8");
+const dcBad = rc2(["decide", "auth", "--title", "x", "--decision", "y", "--affects", "US-9.AC-9,Ghost", "--project", pd]);
+const dcBadJ = rc2(["decide", "auth", "--title", "x", "--decision", "y", "--affects", "T-99", "--json", "--project", pd]);
+const dcNoTitle = rc2(["decide", "auth", "--decision", "y", "--project", pd]);
+const dcUsage = rc2(["decide", "--project", pd]);
+ok(dc1.code === 0 && /^✎ D-1 — JWT sessions  \(\.specs\/auth\/decisions\.md\)\n  _Affects: US-1\.AC-2, T-02, Architecture_\n$/.test(dc1.out) &&
+  dc2.code === 0 && dc2j && dc2j.ok === true && dc2j.id === "D-2" && dc2j.kind === "discovery" && JSON.stringify(dc2j.supersedes) === '["D-1"]' &&
+  /\n## D-2 — Skew\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* 30 s of skew\.\n$/.test(before) &&
+  dcBad.code === 1 && /unknown _Affects:_ reference\(s\): US-9\.AC-9, Ghost — /.test(dcBad.out) && dcBadJ.code === 1 && jsonC2(dcBadJ.stdout) && jsonC2(dcBadJ.stdout).unknownAffects[0] === "T-99" &&
+  dcNoTitle.code === 1 && /needs a title/.test(dcNoTitle.out) && dcUsage.code === 1 && /dev-spec decide <feature>/.test(dcUsage.out) &&
+  fs.readFileSync(path.join(fd.dir, "decisions.md"), "utf8") === before,
+  "decide = spec_decide: appends D-1 (✎ line, canonical _Affects:_), --discovery + --supersedes, --json = the MCP result; unknown _Affects:_ / no --title → exit 1, nothing written (got " +
+  JSON.stringify([dc1.out, dcBad.out.slice(0, 120)]) + ")");
+
+// trace prints the phantom _Affects:_ warnings (exit code unchanged); brief shows the decisions citing the task.
+fs.appendFileSync(path.join(fd.dir, "decisions.md"), "\n## D-3 — Old\n\n- _Kind: decision_\n- _Date: 2026-01-01_\n- _Affects: US-7.AC-7_\n\n**Decision:** x\n");
+const trc = rc2(["trace", "auth", "--project", pd]);
+const trcJ = jsonC2(rc2(["trace", "auth", "--json", "--project", pd]).stdout);
+const brc = rc2(["brief", "auth", "3", "--project", pd]);
+ok(/  ⚠ D-3 _Affects:_ US-7\.AC-7 — names nothing in this feature/.test(trc.out) && trcJ && trcJ.phantomAffects.length === 1 && trcJ.phantomAffects[0].decision === "D-3" &&
+  brc.code === 0 && /^# /.test(brc.out) && !/## Decisions/.test(brc.out),
+  "trace lists _Affects:_ references that name nothing (⚠, a warning — --json phantomAffects); a superseded entry (D-1) is not in the brief of the task citing it");
+
+// spike: the shortcut and create --kind spike; question / timebox printed; doctor exit 1 until decided; next-action; finish.
+const ps = path.join(tmp, "c2-spike");
+Sc2.initProject(ps, ["core"], "en");
+const sk = rc2(["spike", "Cache spike", "--question", "Can Redis hold sessions?", "--timebox", "2099-01-31", "--project", ps]);
+const sk2 = rc2(["create", "Queue spike", "--kind", "spike", "--summary", "Kafka or RabbitMQ?", "--json", "--project", ps]);
+const sk2j = jsonC2(sk2.stdout);
+const skBad = rc2(["spike", "Late", "--timebox", "tomorrow", "--project", ps]);
+const skQ = rc2(["create", "Plain", "core", "--question", "why", "--project", ps]);
+ok(sk.code === 0 && /^Feature 'cache-spike' \[core\] \(en\)\n  spike\.md, tasks\.md\n  question: Can Redis hold sessions\?\n  timebox: until 2099-01-31\n$/.test(sk.out) &&
+  sk2.code === 0 && sk2j && sk2j.kind === "spike" && JSON.stringify(sk2j.created) === '["spike.md","tasks.md"]' &&
+  /## Question\nKafka or RabbitMQ\?\n/.test(fs.readFileSync(path.join(ps, ".specs", "queue-spike", "spike.md"), "utf8")) &&
+  skBad.code === 1 && /timebox must be an end date/.test(skBad.out) && !fs.existsSync(path.join(ps, ".specs", "late")) &&
+  skQ.code === 1 && /question only applies to a spike/.test(skQ.out),
+  "spike \"<name>\" --question --timebox = spec_create {kind: 'spike'} (question + timebox printed); create --kind spike --summary seeds the question; a bad timebox or a question on a feature → exit 1 (got " +
+  JSON.stringify([sk.out, skBad.out.slice(0, 100)]) + ")");
+const docS = rc2(["doctor", "cache-spike", "--project", ps]);
+const apS = rc2(["approve", "cache-spike", "design", "--project", ps]);
+const atS = rc2(["add-track", "cache-spike", "tdd", "--project", ps]);
+for (const n of ["1", "2", "3", "4"]) rc2(["done", "cache-spike", n, "--project", ps]);
+const naS = rc2(["na", "cache-spike", "--project", ps]);
+const spf = path.join(ps, ".specs", "cache-spike", "spike.md");
+fs.writeFileSync(spf, fs.readFileSync(spf, "utf8").replace(/> \*\*TODO\*\* — go \/ no-go \/ pivot[^\n]*/, "Latency 2 ms p95 — measured.").replace(/^_Outcome: [^\n]*_$/m, "_Outcome: no-go_"));
+const docS2 = rc2(["doctor", "cache-spike", "--project", ps]);
+const naS2 = rc2(["next-action", "cache-spike", "--json", "--project", ps]);
+const finS = rc2(["finish", "cache-spike", "--write", "--project", ps]);
+const rmS = rc2(["roadmap", "--write", "--project", ps]);
+ok(docS.code === 1 && /✗ decision — spike\.md → Decision is not written yet/.test(docS.out) && /✓ timebox — timebox until 2099-01-31/.test(docS.out) &&
+  apS.code === 1 && /is a spike: it has no design gate/.test(apS.out) && atS.code === 1 && /is a spike — it has no tracks/.test(atS.out) &&
+  /Record the decision in spike\.md → Decision/.test(naS.out) &&
+  docS2.code === 0 && /✓ decision — decision recorded \(_Outcome: no-go_\)/.test(docS2.out) &&
+  jsonC2(naS2.stdout) && jsonC2(naS2.stdout).step === "archive" && jsonC2(naS2.stdout).outcome === "no-go" &&
+  finS.code === 0 && /spike 'cache-spike' is ready to finish/.test(finS.out) && fs.existsSync(path.join(ps, ".specs", "cache-spike", ".execution", "merge-summary.md")) &&
+  rmS.code === 0 && /\[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike/.test(fs.readFileSync(path.join(ps, ".specs", "ROADMAP.md"), "utf8")),
+  "spike on the CLI: doctor exits 1 until the decision is written; approve / add-track refuse a spike; next-action goes decide → archive (no-go); finish is ready once decided; ROADMAP.md labels it (got " +
+  JSON.stringify([docS.out.slice(0, 200), naS.out.slice(0, 160)]) + ")");
+
+// PT: the spike and the decision log in the feature's language.
+const pp = path.join(tmp, "c2-pt");
+Sc2.initProject(pp, ["core"], "pt");
+const skPt = rc2(["spike", "Pesquisa cache", "--question", "Redis ou Memcached?", "--timebox", "3d", "--project", pp]);
+const dcPt = rc2(["decide", "pesquisa-cache", "--title", "Redis", "--decision", "Usar Redis.", "--affects", "Evidência", "--project", pp]);
+const docPt = rc2(["doctor", "pesquisa-cache", "--project", pp]);
+ok(skPt.code === 0 && /  pergunta: Redis ou Memcached\?\n  timebox: até \d{4}-\d\d-\d\d\n$/.test(skPt.out) &&
+  /## Pergunta\nRedis ou Memcached\?/.test(fs.readFileSync(path.join(pp, ".specs", "pesquisa-cache", "spike.md"), "utf8")) &&
+  dcPt.code === 0 && /^✎ D-1 — Redis/.test(dcPt.out) && /^# Decisões: Pesquisa cache\n/.test(fs.readFileSync(path.join(pp, ".specs", "pesquisa-cache", "decisions.md"), "utf8")) &&
+  docPt.code === 1 && /✗ decision — spike\.md → Decisão ainda não está escrita/.test(docPt.out),
+  "PT: spike prints pergunta / timebox até; decide writes '# Decisões:' (a spike section as _Affects:_); doctor speaks Portuguese (got " + JSON.stringify([skPt.out, docPt.out.slice(0, 200)]) + ")");
+
+// help and the header docblock document spike and decide.
+const hC2 = rc2(["help"]).out;
+const docC2 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+ok(['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"', "--kind feature|bugfix|spike"].every((w) => hC2.includes(w)) &&
+  ['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"'].every((w) => docC2.includes(w)),
+  "help and the header docblock document spike, decide and --kind spike");
+}
+
+if (inSection("pc3")) { // 1.14 package C3 (CLI tests) — import plan / execplan / bmad, the design-first flow (create --flow, feature flow)
+  const c3 = path.join(tmp, "pc3-proj");
+  const put = (rel, s) => { const p = path.join(c3, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  const read = (...p) => fs.readFileSync(path.join(c3, ...p), "utf8");
+  const json = (args) => { try { return JSON.parse(run(args).out); } catch { return null; } };
+  run(["init", "core", "--project", c3]);
+  const planText = "# Plan: Dark mode\n\n## Goals\n- When the user clicks the toggle, the theme switches\n\n## Steps\n- [x] Add `src/theme.ts`\n- [ ] Wire the toggle in `src/Header.tsx`\n";
+  put(".claude/plans/dark.md", planText);
+  const pi = run(["import", "plan", ".claude/plans/dark.md", "--project", c3]);
+  const piTasks = fs.existsSync(path.join(c3, ".specs", "dark-mode", "tasks.md")) ? read(".specs", "dark-mode", "tasks.md") : "";
+  ok(pi.code === 0 && /Imported plan \.claude\/plans\/dark\.md → feature 'dark-mode' \[core\] \(en\)/.test(pi.out) && /mapping: \d+ ID\(s\) — Dark mode → US-1, Goals 1 → US-1\.AC-1/.test(pi.out) &&
+    /- \[x\] 1\. Add `src\/theme\.ts`\n  - _Implements: src\/theme\.ts_\n- \[ \] 2\. Wire the toggle in `src\/Header\.tsx`\n  - _Implements: src\/Header\.tsx_/.test(piTasks) &&
+    /US-1\.AC-1\*\* — WHEN the user clicks the toggle, THE SYSTEM SHALL ensure that the theme switches/.test(read(".specs", "dark-mode", "requirements.md")) &&
+    read(".claude", "plans", "dark.md") === planText && run(["ears", "dark-mode", "--project", c3]).code === 0,
+    "import plan <file>: a NEW feature named after the plan, checklist state kept, file paths → _Implements:_, criteria in EARS (ears passes), the source untouched");
+  const home = run(["import", "plan", "~/.claude/plans/dark.md", "--project", c3]);
+  put("plans/a.md", "# A\n- [ ] x\n");
+  put("plans/b.md", "# B\n- [ ] y\n");
+  const sev = run(["import", "plan", "plans", "--json", "--project", c3]);
+  let sevJ = null;
+  try { sevJ = JSON.parse(sev.out); } catch { /* not JSON */ }
+  const again = run(["import", "plan", ".claude/plans/dark.md", "--project", c3]);
+  const bad = run(["import", "notion", "x", "--project", c3]);
+  ok(home.code === 1 && /outside the project[^\n]*plansDirectory \(default ~\/\.claude\/plans/.test(home.out) && sev.code === 1 && sevJ && sevJ.ok === false && /several documents \(a\.md, b\.md\)/.test(sevJ.error) &&
+    again.code === 1 && /already exists/.test(again.out) && bad.code === 1 && /Known: kiro, spec-kit, openspec, plan, execplan, bmad\./.test(bad.out),
+    "import plan refusals exit 1: ~/.claude/plans (outside — says how to bring the plan in), a folder of several plans (--json: the refusal on stdout), an existing feature; an unknown format lists the six");
+  put("exec/health.md", "# Health endpoint\n\n## Purpose / Big Picture\n\nOperators can check the API.\n\n## Progress\n\n- [x] (2025-10-01 13:00Z) Add `src/health.ts`\n- [ ] Ping the database and run `npm test`\n\n" +
+    "## Decision Log\n\n- Decision: SELECT 1 as the ping.\n  Rationale: cheap.\n\n## Validation and Acceptance\n\n- If the database is down, the endpoint returns 503\n");
+  const exJ = json(["import", "execplan", "exec/health.md", "--json", "--project", c3]);
+  const exEngine = (() => { const d2 = path.join(tmp, "pc3-engine"); fs.mkdirSync(path.join(d2, "exec"), { recursive: true }); fs.copyFileSync(path.join(c3, "exec", "health.md"), path.join(d2, "exec", "health.md"));
+    return require(path.join(__dirname, "..", "mcp", "lib", "spec.js")).importSpec(d2, "execplan", "exec/health.md"); })();
+  ok(exJ && exJ.ok && exJ.feature === "health-endpoint" && exJ.toolName === "ExecPlan" && exJ.mapping["Decision Log 1"] === "D-1" && exJ.mapping["Progress 2"] === "task 2" &&
+    JSON.stringify(exJ.mapping) === JSON.stringify(exEngine.mapping) && JSON.stringify(exJ.warnings) === JSON.stringify(exEngine.warnings) &&
+    /- \[ \] 2\. Ping the database and run `npm test`\n  - _Verify: npm test_/.test(read(".specs", "health-endpoint", "tasks.md")) &&
+    /## Decisions\n\n- \*\*D-1\*\* — SELECT 1 as the ping\.\n  Rationale: cheap\./.test(read(".specs", "health-endpoint", "design.md")),
+    "import execplan --json: the engine's result (same mapping and warnings as spec_import), Progress → tasks with _Verify:_, Decision Log → design.md ## Decisions");
+  put("docs/prd.md", "# Notes App Product Requirements Document (PRD)\n\n## Requirements\n\n### Functional\n- FR1: Users can write notes.\n\n### Non Functional\n- NFR1: Saves in under 1 s.\n");
+  put("docs/stories/1.1.write.md", "# Story 1.1: Write notes\n\n## Story\n\nAs a user, I want to write notes, so that I remember.\n\n## Acceptance Criteria\n\n1. WHEN a user saves a note THEN the system SHALL store it.\n\n" +
+    "## Tasks / Subtasks\n\n- [ ] Task 1: Note store (AC: 1)\n");
+  const bm = run(["import", "bmad", "docs", "--lang", "pt", "--project", c3]);
+  const bmReq = fs.existsSync(path.join(c3, ".specs", "notes-app", "requirements.md")) ? read(".specs", "notes-app", "requirements.md") : "";
+  ok(bm.code === 0 && /Importado de BMAD docs → feature 'notes-app'/.test(bm.out) && /## Requisitos Não-Funcionais\n- \*\*NFR-1\*\* — Saves in under 1 s\./.test(bmReq) &&
+    /- \[ \] 1\. \[US1\] Task 1: Note store\n  - _Requirements: US-1\.AC-1_/.test(read(".specs", "notes-app", "tasks.md")) && /^> Importado de BMAD `docs` em /m.test(bmReq),
+    "import bmad --lang pt: FR/NFR → FR-1 / NFR-1 under the localized heading, story tasks tagged [US1] with (AC: 1) → _Requirements:_, PT output and note");
+
+  // design-first: create --flow, next-action order, approve order, feature flow, roadmap
+  const df = path.join(tmp, "pc3-flow");
+  run(["init", "core", "--project", df]);
+  const cr = run(["create", "Port engine", "core", "--flow", "design-first", "--project", df]);
+  const crJ = json(["create", "Other", "core", "--flow", "design-first", "--json", "--project", df]);
+  const crBad = run(["create", "Bad one", "core", "--flow", "sideways", "--project", df]);
+  ok(cr.code === 0 && /design-first flow — phase order: classification → design → requirements → tasks/.test(cr.out) && crJ && crJ.flow === "design-first" &&
+    JSON.parse(fs.readFileSync(path.join(df, ".specs", "port-engine", ".state.json"), "utf8")).flow === "design-first" &&
+    crBad.code === 1 && /flow must be one of: requirements-first, design-first \(got "sideways"\)/.test(crBad.out) && !fs.existsSync(path.join(df, ".specs", "bad-one")),
+    "create --flow design-first (= spec_create {flow}): stored, the phase order printed, --json carries flow; an unknown flow exits 1 with the MCP enum's message, nothing created");
+  run(["approve", "port-engine", "classification", "--force", "--project", df]);
+  const na = run(["next-action", "port-engine", "--project", df]);
+  const apReq = run(["approve", "port-engine", "requirements", "--project", df]);
+  ok(/design\.md/.test(na.out) && /\(design-first flow: classification → design → requirements → tasks\)/.test(na.out) && apReq.code === 1 && /earlier phases are not approved yet: design/.test(apReq.out),
+    "next-action on a design-first feature asks for design.md (naming the flow); approve requirements before the design exits 1 on phase-order");
+  const rmOut = run(["roadmap", "--project", df]).out;
+  run(["create", "Classic", "core", "--project", df]);
+  const fl = run(["feature", "flow", "classic", "design-first", "--project", df]);
+  const flSame = run(["feature", "flow", "classic", "--flow", "design-first", "--project", df]);
+  const flBad = run(["feature", "flow", "classic", "sideways", "--project", df]);
+  run(["bugfix", "Crash", "--project", df]);
+  const flBug = run(["feature", "flow", "crash", "design-first", "--project", df]);
+  const flNone = run(["feature", "flow", "classic", "--project", df]);
+  ok(/port-engine[^\n]*8%/.test(rmOut) && fl.code === 0 && /'classic' now follows the design-first flow \(was requirements-first\) — phase order: classification → design → requirements → tasks\./.test(fl.out) &&
+    flSame.code === 0 && /already follows the design-first flow/.test(flSame.out) && flBad.code === 1 && /flow must be one of/.test(flBad.out) &&
+    flBug.code === 1 && /is a bugfix: it follows its own fixed phase order/.test(flBug.out) && flNone.code === 1 && /flow required/.test(flNone.out),
+    "roadmap shows a fresh design-first feature at 8%; feature flow <name> <flow> / --flow sets it (idempotent), a bad or missing flow and a bugfix exit 1 (got " + JSON.stringify([rmOut.split("\n").filter((l) => /port-engine/.test(l)), fl.out, flNone.out]).slice(0, 400) + ")");
+  const help = run(["help"]).out;
+  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(/import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(help) && /import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(doc) &&
+    /feature flow <name> <requirements-first\|design-first>/.test(help) && /--flow design-first/.test(help) && /--flow design-first/.test(doc),
+    "help and the header docblock document import plan|execplan|bmad, create --flow design-first and feature flow");
+}
+
+if (inSection("pc4")) { // 1.14 package C4 (CLI tests)
+  const Sc4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  // C4.1 — /spec-tour is served as a prompt like every command.
+  const tourC4 = run(["prompts", "spec-tour", "--args", "a length check on the signup name"]);
+  ok(tourC4.code === 0 && /as a \*\*guided tour\*\*/.test(tourC4.out) && /Change to take through the tour \(optional\): a length check on the signup name/.test(tourC4.out) &&
+    /^ {2}spec-tour \[a small change you want to make \(optional\)\]$/m.test(run(["prompts"]).out),
+    "prompts spec-tour: the guided tour (args in place), listed with its argument hint");
+
+  // C4.2.1–3 — classify on the CLI = the engine.
+  const gdC4 = run(["classify", "A GDPR-compliant signup form"]);
+  const stC4 = run(["classify", "array stride and file permission bits"]);
+  const esC4 = run(["classify", "Cifrado en tránsito para la API de pagos"]);
+  const csC4 = run(["classify", "Google sign-in with an OAuth consent screen"]);
+  ok(gdC4.code === 0 && /^Tracks: core \+privacy {3}/m.test(gdC4.out) && /^Tracks: core {3}/m.test(stC4.out) && !/\+sec: ON|Possible \+sec/.test(stC4.out) &&
+    /^Tracks: core \+tdd \+sec {3}/m.test(esC4.out) && /señales encontradas: cifrado en tránsito/.test(esC4.out) &&
+    /^Tracks: core \+tdd {3}/m.test(csC4.out) && /Possible \+privacy — weak signal 'consent'/.test(csC4.out),
+    "classify: GDPR-compliant → +privacy; array stride + file permission bits → core with no +sec note; cifrado en tránsito → +sec (strong, ES); an OAuth consent screen → only a possible +privacy");
+
+  // C4.2.5 + C4.2.6 on the CLI: doctor names the missing [PRIVACY] section and the pipe wrapped in bash -c; `done --run` hints a pipe
+  // whose line merely mentions pipefail.
+  const pc4 = path.join(tmp, "pc4-proj");
+  Sc4.initProject(pc4, ["core"], "en");
+  const fPv = Sc4.createFeature(pc4, "Accounts", ["privacy"], "", undefined, "en");
+  const dPv = path.join(fPv.dir, "design.md");
+  const filledPv = fs.readFileSync(dPv, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n")
+    .replace(/\[([^\]\n]*)\]/g, (m, x) => (/^(?:PRIVACY|SEC|SaaS|AI|x| )$/.test(x) ? m : "filled"));
+  fs.writeFileSync(dPv, filledPv.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "") + "\n## Processors and queues\nBullMQ workers.\n");
+  const docPv = run(["doctor", fPv.slug, "--project", pc4]);
+  const fPp = Sc4.createFeature(pc4, "Pipes", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(fPp.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Masked, mentions pipefail\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\" # pipefail later_\n" +
+    "- [ ] 2. [US1] Wrapped\n  - _Verify: bash -c \"npm test | tee test.log\"_\n- [ ] 3. [US1] Real pipefail\n  - _Verify: set -o pipefail; npm test | tee test.log_\n");
+  const docPp = run(["doctor", fPp.slug, "--project", pc4]);
+  const donePp = run(["done", fPp.slug, "1", "--run", "--project", pc4]);
+  const vpLine = (docPp.out.match(/.*verify-pipes.*/) || [""])[0];
+  ok(docPv.code === 1 && /privacy-sections.*Processors & International Transfers:missing/.test(docPv.out) &&
+    /#1 .*#2 `bash -c "npm test \| tee test\.log"`/.test(vpLine) && !/#3 /.test(vpLine) &&
+    /pipes into another command: the shell reports only the LAST command's exit code/.test(donePp.out),
+    "doctor: a deleted [PRIVACY] heading is missing even beside '## Processors and queues'; verify-pipes names the pipe that mentions pipefail and the one inside bash -c, not a real set -o pipefail; done --run hints it (got " +
+    JSON.stringify([docPv.code, vpLine.slice(0, 200)]) + ")");
+}
+
+if (inSection("pd1")) { // 1.14 package D1 (CLI tests) — Brazilian Portuguese (pt-BR), a fourth locale derived from pt
+  const SD1 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const d1 = path.join(tmp, "pd1-proj");
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|planead[oa]s?|artefactos?|tens|podes)(?![\p{L}])|(?<![\p{L}])a correr(?![\p{L}])|por defeito|por omissão/iu;
+  const rmD1 = (p) => JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8"));
+  const initBr = run(["init", "tdd", "--lang", "pt_BR", "--project", d1]);
+  const aliasBr = run(["init", "--lang", "PTBR", "--project", path.join(tmp, "pd1-alias")]);
+  const aliasEu = run(["init", "--lang", "pt-PT", "--project", path.join(tmp, "pd1-eu")]);
+  ok(initBr.code === 0 && /^Criado em .*\[pt-BR\]:/m.test(initBr.out) && rmD1(d1).meta.lang === "pt-BR" && aliasBr.code === 0 && rmD1(path.join(tmp, "pd1-alias")).meta.lang === "pt-BR" &&
+    aliasEu.code === 0 && rmD1(path.join(tmp, "pd1-eu")).meta.lang === "pt",
+    "init --lang pt_BR / PTBR → project language pt-BR (reported in pt-BR); --lang pt-PT stays European pt (got " + initBr.out.trim().split("\n")[0] + ")");
+  const bad = run(["create", "Zed", "--lang", "pt-XX", "--project", d1]);
+  // (full review Pb7: pt-BR says "tem que ser" — "tem de ser" is the European form)
+  ok(bad.code === 1 && /--lang tem que ser um de: en, pt, es, pt-BR \(recebido: "pt-XX"\)/.test(bad.out) && !fs.existsSync(path.join(d1, ".specs", "zed")),
+    "--lang pt-XX is refused (the message lists pt-BR, in the project's pt-BR) and nothing is written");
+  const cr = run(["create", "Cadastro", "tdd", "--summary", "Cadastro com senha", "--project", d1]);
+  const req = fs.readFileSync(path.join(d1, ".specs", "cadastro", "requirements.md"), "utf8");
+  ok(cr.code === 0 && /^Feature 'cadastro' \[core \+tdd\] \(pt-BR\)/m.test(cr.out) && /## Histórias de Usuário/.test(req) && /## Fora do Escopo/.test(req) && !EU_ONLY.test(req),
+    "create inherits pt-BR: Brazilian requirements (Histórias de Usuário, Fora do Escopo, no European-only word)");
+  const doc = run(["doctor", "cadastro", "--project", d1]);
+  const docJ = jsonOf(run(["doctor", "cadastro", "--json", "--project", d1]));
+  ok(doc.code === 1 && /^Diagnóstico: cadastro {2}\[core \+tdd\] {2}veredicto=FALHA/m.test(doc.out) && /placeholders do template sem preencher na fase atual/.test(doc.out) && !EU_ONLY.test(doc.out) &&
+    docJ && JSON.stringify(docJ) === JSON.stringify(SD1.specDoctor(d1, "cadastro")),
+    "doctor speaks pt-BR ('Diagnóstico … veredicto=FALHA', 'sem preencher'); --json is spec_doctor's result (CLI = MCP)");
+  const st = run(["status", "cadastro", "--project", d1]);
+  const na = jsonOf(run(["next-action", "cadastro", "--json", "--project", d1]));
+  ok(st.code === 0 && /^Feature: cadastro {2}\[core \+tdd\] {2}fase: requisitos/m.test(st.out) && /^Tarefas: 0\/\d+/m.test(st.out) && na && na.step === "fill" && !EU_ONLY.test(na.recommendation),
+    "status / next-action in pt-BR (fase: requisitos, Tarefas); the recommendation carries no European-only word (got " + (na && na.recommendation) + ")");
+  const eu = jsonOf(run(["create", "Faturas", "--lang", "pt-PT", "--json", "--project", d1]));
+  const br = jsonOf(run(["create", "Relatorios", "core", "--lang", "Pt-Br", "--json", "--project", d1]));
+  ok(eu && eu.lang === "pt" && /## Histórias de Utilizador/.test(fs.readFileSync(path.join(d1, ".specs", "faturas", "requirements.md"), "utf8")) && br && br.lang === "pt-BR",
+    "a per-feature --lang pt-PT keeps European Portuguese inside a pt-BR project; --lang Pt-Br folds to pt-BR");
+  const road = run(["roadmap", "--write", "--project", d1]);
+  const md = fs.readFileSync(path.join(d1, ".specs", "ROADMAP.md"), "utf8");
+  ok(road.code === 0 && /Legenda: ✅ feito · 🟡 em andamento · ⛔ bloqueada · 📋 planejada · ⬜ não iniciada/.test(md) && !/em curso|planeada|por começar/.test(md),
+    "roadmap --write renders ROADMAP.md in pt-BR (em andamento · planejada · não iniciada)");
+  const tpl = run(["templates", "init", "requirements", "--lang", "pt-br", "--project", d1]);
+  const tplFile = path.join(d1, ".specs", "templates", "pt-BR", "requirements.md");
+  ok(tpl.code === 0 && fs.existsSync(tplFile) && /## Histórias de Usuário/.test(fs.readFileSync(tplFile, "utf8")) && /1 template\(s\) de base copiado\(s\)/.test(tpl.out),
+    "templates init requirements --lang pt-br → .specs/templates/pt-BR/requirements.md (Brazilian), reported in pt-BR (got " + tpl.out.trim().split("\n")[0] + ")");
+  const clsBr = jsonOf(run(["classify", "Cadastro de usuários com senha, sem LLM", "--lang", "pt-BR", "--json"]));
+  const clsGuess = jsonOf(run(["classify", "Cadastro do usuário: senha, arquivo e tela, com resumo no LLM", "--json"]));
+  ok(clsBr && clsBr.lang === "pt-BR" && clsBr.tracks.join() === "core,tdd" && JSON.stringify(clsBr) === JSON.stringify(SD1.classify("Cadastro de usuários com senha, sem LLM", { lang: "pt-BR" })) &&
+    clsGuess && clsGuess.lang === "pt" && clsGuess.tracks.join() === "core,tdd,ai",
+    "classify --lang pt-BR answers in pt-BR (= spec_classify); Brazilian words alone guess 'pt' — 'no LLM' is em+o, +ai on");
+}
+
+if (inSection("pfr")) { // 1.14 final review — CLI parity findings
+  const fr = path.join(tmp, "pfr-proj");
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  run(["init", "tdd", "--lang", "pt", "--project", fr]);
+  run(["create", "Alfa", "core", "tdd", "--project", fr]);
+  // decide: a repeated --affects / --supersedes adds to the list (= spec_decide's arrays); --kind is honoured.
+  const d1 = jsonOf(run(["decide", "alfa", "--title", "t1", "--decision", "d1", "--affects", "US-1.AC-1", "--affects", "T-01", "--json", "--project", fr]));
+  const d2 = jsonOf(run(["decide", "alfa", "--title", "t2", "--decision", "d2", "--kind", "discovery", "--json", "--project", fr]));
+  const d3 = jsonOf(run(["decide", "alfa", "--title", "t3", "--decision", "d3", "--supersedes", "D-1", "--supersedes", "D-2", "--json", "--project", fr]));
+  ok(d1 && d1.affects.join() === "US-1.AC-1,T-01" && d2 && d2.kind === "discovery" && d3 && d3.supersedes.join() === "D-1,D-2",
+    "decide: repeated --affects / --supersedes are all kept (the parser kept only the last), --kind discovery is honoured (got " + JSON.stringify([d1 && d1.affects, d2 && d2.kind, d3 && d3.supersedes]) + ")");
+  // approve --through: a forced step is labelled in the feature's language.
+  const ff = run(["approve", "alfa", "--through", "requirements", "--force", "--project", fr]);
+  ok(ff.code === 0 && /\(forçada: /.test(ff.out) && !/\(forced: /.test(ff.out), "approve --through --force labels a forced step in PT ('forçada'), never the English '(forced: …)' (got " + ff.out.trim().split("\n").slice(-2).join(" | ") + ")");
+  // spike: the shortcut passes --flow through like create --kind spike (its note says the flow is ignored).
+  const sp = jsonOf(run(["spike", "Cache", "--flow", "design-first", "--json", "--project", fr]));
+  ok(sp && sp.ok && sp.kind === "spike" && typeof sp.note === "string" && /fluxo ignorado/.test(sp.note), "spike --flow design-first gets create's 'flow ignored' note (got " + JSON.stringify(sp && [sp.kind, sp.note]) + ")");
+}
+
+// 1.14 full review (Ga) — evidence, project checks, CLI runs.
+if (inSection("frga")) {
+  const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
+  const rga = (proj, args, env) => {
+    const r = spawnSync(process.execPath, [CLI, ...args, "--project", proj], { encoding: "utf8", env: { ...process.env, ...(env || {}) } });
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  const stGa = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+  const tasksGa = (f) => fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+  const wGa = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+  const PASS = 'node -e "process.exit(0)"';
+  const gp = path.join(tmp, "frga-proj");
+  Sga.initProject(gp, ["core"], "en");
+
+  // Ga1: a shell that can't start (--shell / DEV_SPEC_SHELL) is no exit 1 — done --run refuses and records nothing (an
+  // _Expect: fail_ task was ticked on a "red run" that never happened); finish --run records no check run.
+  const f1 = Sga.createFeature(gp, "Shellless", ["core"], "", undefined, "en");
+  wGa(f1.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 red\n  - _Verify: " + PASS + "_\n  - _Expect: fail_\n");
+  const g1 = rga(gp, ["done", f1.slug, "1", "--run", "--shell", "no-such-shell-dsd", "--json"]);
+  const g1j = jsonGa(g1.stdout);
+  const g1env = rga(gp, ["done", f1.slug, "1", "--run"], { DEV_SPEC_SHELL: "no-such-shell-dsd" });
+  const gpc = path.join(tmp, "frga-checks");
+  Sga.initProject(gpc, ["core"], "en", { checks: { test: PASS } });
+  const fc = Sga.createFeature(gpc, "Fin", ["core"], "", undefined, "en");
+  wGa(fc.dir, "tasks.md", "- [x] 1. [US1] Done\n");
+  const g1f = rga(gpc, ["finish", fc.slug, "--run", "--shell", "no-such-shell-dsd", "--json"]);
+  const g1fj = jsonGa(g1f.stdout);
+  ok(g1.code === 1 && g1j && g1j.couldNotRun === "shell-not-started" && /could not run \(the shell 'no-such-shell-dsd' could not be started: ENOENT\) — nothing was recorded; the task stays open/.test(g1j.error) &&
+    g1env.code === 1 && /nothing was recorded; the task stays open/.test(g1env.out) && !(stGa(f1).evidence || {})["1"] && /- \[ \] 1\./.test(tasksGa(f1)) &&
+    g1f.code === 1 && g1fj && g1fj.couldNotRun === "shell-not-started" && g1fj.check === "test" && /the project check 'test' .* could not run/.test(g1fj.error) && !stGa(fc).finishChecks,
+    "full review Ga1: done --run / finish --run with a shell that can't start refuse and record nothing (no 'red run', no failed check run; --shell and DEV_SPEC_SHELL) (got " +
+    JSON.stringify([g1.code, g1j, g1env.out.slice(-160), g1f.code, g1fj && g1fj.error]).slice(0, 600) + ")");
+
+  // Ga2: an _Expect: fail_ run that fails because the test never ran (here: the runner's own "Could not find '…'") is no red
+  // run — refused, nothing recorded; the same task failing on an assertion is the red proof.
+  const f2 = Sga.createFeature(gp, "Missing test", ["core"], "", undefined, "en");
+  wGa(f2.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node t/red.js_\n  - _Expect: fail_\n");
+  wGa(gp, "t/red.js", "console.error(\"Could not find 't/uppercase.test.js'\");\nprocess.exit(1);\n");
+  const g2 = rga(gp, ["done", f2.slug, "1", "--run", "--json"]);
+  const g2j = jsonGa(g2.stdout);
+  const g2rec = (stGa(f2).evidence || {})["1"];
+  wGa(gp, "t/red.js", "require(\"assert\").strictEqual(\"a\".toUpperCase(), \"B\");\n");
+  const g2b = rga(gp, ["done", f2.slug, "1", "--run"]);
+  ok(g2.code === 1 && g2j && g2j.couldNotRun === "output" && g2j.expected === "fail" && /its output shows the test never ran \(Could not find 't\/uppercase\.test\.js'\) — that is no red test/.test(g2j.error) &&
+    !g2rec && g2b.code === 0 && /✓ red run recorded for task 1 \(exit 1\)/.test(g2b.out) && /- \[x\] 1\./.test(tasksGa(f2)),
+    "full review Ga2: done --run on an _Expect: fail_ task whose test never ran (missing test file) is refused, nothing recorded; an assertion failure is then the red proof (got " +
+    JSON.stringify([g2.code, g2j && g2j.error, g2b.out.slice(0, 200)]).slice(0, 500) + ")");
+
+  // Ga3: finish --run --write, then the implementing file changes, then finish --write (no --run) → not ready: the check run is
+  // for other code (code-changed) — it used to answer "ready … Replaced the baseline" on the old run.
+  const g3p = path.join(tmp, "frga-drift");
+  Sga.initProject(g3p, ["core"], "en", { checks: { test: PASS } });
+  const f3 = Sga.createFeature(g3p, "Limiter", ["core"], "", undefined, "en");
+  wGa(f3.dir, "classification.md", "# Classification: x\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n");
+  wGa(f3.dir, "requirements.md", "# Feature: x\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n" +
+    "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+    "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+    "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+    "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+  wGa(f3.dir, "design.md", "# Design: x\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n" +
+    "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+    "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+  wGa(f3.dir, "tasks.md", "# Tasks\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/limiter.js_\n  - _Verify: " + PASS + "_\n" +
+    "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + PASS + "_\n**Checkpoint:** US-1 works.\n");
+  wGa(g3p, "src/limiter.js", "module.exports = 1;\n");
+  Sga.approvePhase(g3p, f3.slug, null, "u", { through: "tasks" });
+  rga(g3p, ["done", f3.slug, "1", "--run"]);
+  rga(g3p, ["done", f3.slug, "2", "--run"]);
+  const g3a = rga(g3p, ["finish", f3.slug, "--run", "--write"]);
+  const fin3At = (stGa(f3).finished || {}).at;
+  wGa(g3p, "src/limiter.js", "module.exports = 2; // changed after the checks ran\n");
+  const g3b = rga(g3p, ["finish", f3.slug, "--write"]);
+  const fin3Same = (stGa(f3).finished || {}).at === fin3At;
+  const na3 = jsonGa(rga(g3p, ["next-action", f3.slug, "--json"]).stdout); // drift → "harmless → re-finish" names the check run it needs
+  const g3c = rga(g3p, ["finish", f3.slug, "--run", "--write"]);
+  ok(g3a.code === 0 && /is ready to finish/.test(g3a.out) && !!fin3At && g3b.code === 1 && /test \(the implementing files changed since the run\)/.test(g3b.out) && !/Replaced the baseline/.test(g3b.out) && fin3Same &&
+    na3 && na3.step === "drift" && /dev-spec finish limiter --run runs and records them/.test(na3.recommendation) &&
+    g3c.code === 0 && /Replaced the baseline/.test(g3c.out),
+    "full review Ga3: finish --write after the implementing file changed is refused on the old check run (code-changed, baseline kept); next-action's drift step names finish --run; finish --run --write runs the checks again and re-baselines (got " +
+    JSON.stringify([g3a.code, g3a.out.slice(0, 160), g3b.code, g3b.out.slice(0, 300), g3c.code]).slice(0, 700) + ")");
+
+  // Ga6: append-tasks --makes-green / --expect-fail / --size (= spec_append_tasks {makesGreen, expectFail, size}).
+  const g6p = path.join(tmp, "frga-append");
+  Sga.initProject(g6p, ["tdd"], "en");
+  const f6 = Sga.createFeature(g6p, "Conv", ["tdd"], "", undefined, "en");
+  const before6 = tasksGa(f6);
+  const a6bad = rga(g6p, ["append-tasks", f6.slug, "--task", "x", "--size", "huge"]);
+  const a6ph = rga(g6p, ["append-tasks", f6.slug, "--task", "x", "--makes-green", "T-42"]);
+  const a6bool = rga(g6p, ["append-tasks", f6.slug, "--task", "x", "--expect-fail=maybe"]);
+  const a6two = rga(g6p, ["append-tasks", f6.slug, "--task", "x", "--size", "S", "--size", "M"]);
+  const same6 = tasksGa(f6) === before6;
+  const a6 = rga(g6p, ["append-tasks", f6.slug, "--task", "Write the regression test", "--req", "US-1.AC-1", "--makes-green", "T-1", "--makes-green", "T-02", "--expect-fail", "--size", "m", "--verify", "npm test", "--json"]);
+  const a6j = jsonGa(a6.stdout);
+  ok(a6bad.code === 1 && /size must be one of XS, S, M, L, XL \(got 'huge'\)/.test(a6bad.out) && a6ph.code === 1 && /Unknown tests \(not planned in test-plan\.md\): T-42/.test(a6ph.out) &&
+    a6bool.code === 1 && /--expect-fail/.test(a6bool.out) && a6two.code === 1 && /--size once per call/.test(a6two.out) && same6 &&
+    a6.code === 0 && a6j && a6j.appended[0].expectFail === true && a6j.appended[0].size === "M" && JSON.stringify(a6j.appended[0].makesGreen) === '["T-01","T-02"]' &&
+    /  - _Makes green: T-01, T-02_\n  - _Verify: npm test_\n  - _Expect: fail_\n  - _Size: M_\n/.test(tasksGa(f6)),
+    "full review Ga6: append-tasks --makes-green (repeatable, as the plan spells the T-IDs) / --expect-fail / --size write the markers; a bad size, an unplanned T-ID, a non-boolean --expect-fail or a second --size writes nothing (got " +
+    JSON.stringify([a6bad.out.slice(0, 120), a6ph.out.slice(0, 120), a6.out.slice(0, 200)]).slice(0, 500) + ")");
+
+  // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher — an explicit System32 bash.exe is refused, nothing run or recorded.
+  if (process.platform === "win32") {
+    const f9 = Sga.createFeature(gp, "Wsl", ["core"], "", undefined, "en");
+    wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: " + PASS + "_\n");
+    const sysBash = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "bash.exe");
+    const g9 = rga(gp, ["done", f9.slug, "1", "--run", "--shell", sysBash, "--json"]);
+    const g9j = jsonGa(g9.stdout);
+    const g9none = !(stGa(f9).evidence || {})["1"]; // before the Git Bash run below records its pass
+    const gitExec = spawnSync("git", ["--exec-path"], { encoding: "utf8" });
+    const gitBash = Sga.resolveRunShell("bash", { gitExecPath: gitExec.status === 0 ? gitExec.stdout : null });
+    const g9b = gitBash.shell ? rga(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"]) : null;
+    const g9bj = g9b && jsonGa(g9b.stdout);
+    ok(g9.code === 1 && g9j && g9j.couldNotRun === "wsl-bash" && /is WSL's bash\.exe launcher/.test(g9j.error) && !/^\$ /m.test(g9.out) && g9none &&
+      (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
+      "full review Ga9 (Windows): --shell <System32 bash.exe> is refused before anything runs (couldNotRun wsl-bash); --shell bash runs under Git Bash when installed (got " +
+      JSON.stringify([g9.code, g9j, gitBash, g9b && g9b.out.slice(0, 200)]).slice(0, 600) + ")");
+  } else ok(true, "full review Ga9: --shell <System32 bash.exe> refusal — Windows only (resolveRunShell is unit-tested in mcp/test.js)");
+
+  // Ga10: --timeout, output over the buffer and a cmd.exe failure under --shell cmd are could-not-run too — nothing recorded.
+  const f10 = Sga.createFeature(gp, "Limits", ["core"], "", undefined, "en");
+  wGa(f10.dir, "tasks.md", "- [ ] 1. [US1] Slow\n  - _Verify: node -e \"setTimeout(function () {}, 2500)\"_\n" +
+    "- [ ] 2. [US1] Loud\n  - _Verify: node -e \"process.stdout.write(Buffer.alloc(70 * 1024 * 1024, 120).toString())\"_\n  - _Expect: fail_\n" +
+    "- [ ] 3. [US1] Write T-03 red\n  - _Verify: cd no-such-dir-dsd_\n  - _Expect: fail_\n");
+  const g10t = rga(gp, ["done", f10.slug, "1", "--run", "--timeout", "1", "--json"]);
+  const g10tj = jsonGa(g10t.stdout);
+  const g10z = rga(gp, ["done", f10.slug, "1", "--run", "--timeout", "0"]);
+  const g10b = rga(gp, ["done", f10.slug, "2", "--run", "--json"]);
+  const g10bj = jsonGa(g10b.stdout);
+  let g10cmdOk = true, g10c = null;
+  if (process.platform === "win32") {
+    g10c = jsonGa(rga(gp, ["done", f10.slug, "3", "--run", "--shell", "cmd", "--json"]).stdout);
+    g10cmdOk = !!g10c && g10c.ok === false && g10c.couldNotRun === "cmd" && /cmd\.exe\) could not run `cd no-such-dir-dsd`/.test(g10c.error);
+  }
+  const gpb = path.join(tmp, "frga-checks-big");
+  Sga.initProject(gpb, ["core"], "en", { checks: { big: "node -e \"process.stdout.write(Buffer.alloc(70 * 1024 * 1024, 120).toString())\"" } });
+  const fb = Sga.createFeature(gpb, "Big", ["core"], "", undefined, "en");
+  wGa(fb.dir, "tasks.md", "- [x] 1. [US1] Done\n");
+  const g10f = jsonGa(rga(gpb, ["finish", fb.slug, "--run", "--json"]).stdout);
+  ok(g10tj && g10tj.couldNotRun === "timeout" && /did not finish within --timeout 1 s/.test(g10tj.error) && g10z.code === 1 && /--timeout must be an integer ≥ 1/.test(g10z.out) && !/^\$ /m.test(g10z.out) &&
+    g10bj && g10bj.couldNotRun === "output-too-large" && /its output exceeded 64 MB/.test(g10bj.error) && g10cmdOk && !stGa(f10).evidence && /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\./.test(tasksGa(f10)) &&
+    g10f && g10f.couldNotRun === "output-too-large" && g10f.check === "big" && !stGa(fb).finishChecks,
+    "full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
+    JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")");
+}
+
+// 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
+if (inSection("frgb")) { // 1.14 full review (Gb) — the CLI surfaces of next-action / impact / approve --through / stop-check, and the guard hook
+  const gbP = (n) => path.join(tmp, "frgb-" + n);
+  const gbW = (dir, rel, txt) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), txt); };
+  const gbR = (dir, rel) => fs.readFileSync(path.join(dir, rel), "utf8");
+  const gbRun = 'node -e "process.exit(0)"';
+  // A core feature 'login' whose planning chain is filled (the fast-forward through tasks passes every gate).
+  const gbFill = (p) => {
+    const dir = path.join(p, ".specs", "login");
+    gbW(dir, "classification.md", "# Classification: login\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n");
+    gbW(dir, "requirements.md", "# Feature: login\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n" +
+      "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+      "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+    gbW(dir, "design.md", "# Design: login\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n" +
+      "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+      "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+    gbW(dir, "tasks.md", "# Tasks: login\n\n## Global Constraints\n- Node >= 18\n\n## Story US-1 (P1 — MVP)\n" +
+      "- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + gbRun + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + gbRun + "_\n**Checkpoint:** US-1 works.\n");
+    return dir;
+  };
+  const guardHook = (cwd, file) => spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "guard-hook.js")], { encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "PreToolUse", cwd, tool_name: "Write", tool_input: { file_path: path.join(cwd, file), content: "x" } }),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+
+  // Gb2: next-action names the execution role to sign as (roadmap.json meta.approvalRoles.execution).
+  const p2 = gbP("roles");
+  run(["init", "core", "--roles", "execution=qa+product", "--project", p2]);
+  run(["create", "login", "core", "--project", p2]);
+  gbFill(p2);
+  const ff2 = run(["approve", "login", "--through", "tasks", "--project", p2]);
+  run(["done", "login", "1", "--run", "--project", p2]);
+  run(["done", "login", "2", "--run", "--project", p2]);
+  const fin2 = run(["finish", "login", "--write", "--project", p2]);
+  const na2 = run(["next-action", "login", "--project", p2]);
+  run(["approve", "login", "execution", "--role", "qa", "--project", p2]);
+  const na2b = run(["next-action", "login", "--project", p2]);
+  ok(ff2.code === 0 && fin2.code === 0 && /\/approve login execution --role qa\./.test(na2.out) && /missing roles: qa, product/.test(na2.out) && /\/approve login execution --role product\./.test(na2b.out),
+    "full review Gb2: next-action names the role for the execution sign-off (--role qa, then --role product) — a role-less /approve is refused (got " + JSON.stringify([na2.out.trim().split("\n").pop(), na2b.out.trim().split("\n").pop()]) + ")");
+
+  // Gb11 + Gb12: impact prints the role to re-approve as; a fast-forward stopped by a role says what it approved.
+  const p11 = gbP("impact");
+  run(["init", "core", "--roles", "requirements=product", "--project", p11]);
+  run(["create", "login", "core", "--project", p11]);
+  const d11 = gbFill(p11);
+  const ff12 = run(["approve", "login", "--through", "tasks", "--project", p11]);
+  run(["approve", "login", "--through", "tasks", "--role", "product", "--project", p11]);
+  gbW(d11, "requirements.md", gbR(d11, "requirements.md").replace("THE SYSTEM SHALL open a session", "THE SYSTEM SHALL open a session within 2 seconds"));
+  const im11 = run(["impact", "login", "--project", p11]);
+  ok(im11.code === 0 && /→ review the change, then re-approve: \/approve login requirements --role product/.test(im11.out),
+    "full review Gb11: `impact` prints the re-approve command with the role still to sign (--role product) (got " + JSON.stringify(im11.out.trim().split("\n").pop()) + ")");
+  ok(ff12.code === 1 && /stopped at 'requirements' \(approved before it: classification\)/.test(ff12.out) && /nothing was recorded for 'requirements'/.test(ff12.out) && !/Nothing recorded/.test(ff12.out),
+    "full review Gb12: approve --through stopped by a role refusal says what it approved and that nothing was recorded for the stopping phase — not 'Nothing recorded.' (got " + JSON.stringify(ff12.out.trim()) + ")");
+
+  // Gb4: stop-check never sends a decided spike back over project checks (a spike has none).
+  const p4 = gbP("spike");
+  run(["init", "core", "--check", "test=" + gbRun, "--project", p4]);
+  run(["spike", "cache spike", "--question", "Should we use Redis for the session cache?", "--timebox", "3d", "--project", p4]);
+  const sd4 = path.join(p4, ".specs", "cache-spike");
+  gbW(sd4, "spike.md", gbR(sd4, "spike.md").replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Go: Redis cut p95 latency by 40% in the prototype.").replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
+  for (const n of ["1", "2", "3", "4"]) run(["done", "cache-spike", n, "--project", p4]);
+  const sc4 = run(["stop-check", "--message", "The spike is done: the decision is go.", "--project", p4]);
+  ok(sc4.code === 0 && !/project checks/.test(sc4.out),
+    "full review Gb4: stop-check allows a decided spike's 'done' — project checks are not a spike's gate (got " + JSON.stringify([sc4.code, sc4.out.trim()]) + ")");
+
+  // Gb8 + Gb9 through the guard hook: Phase 4 test files and an active spike's prototype are not asked for; other code still is.
+  const p8 = gbP("guard");
+  run(["init", "tdd", "--guard", "on", "--project", p8]);
+  run(["create", "Shortener", "tdd", "--project", p8]);
+  const st8 = path.join(p8, ".specs", "shortener", ".state.json");
+  const s8 = JSON.parse(fs.readFileSync(st8, "utf8"));
+  s8.approvals = { "test-plan": { at: "2026-09-01T00:00:00.000Z", by: "u" } };
+  fs.writeFileSync(st8, JSON.stringify(s8, null, 2));
+  const h8t = guardHook(p8, "test/shortener.test.js");
+  const h8c = guardHook(p8, "src/shortener.js");
+  run(["spike", "cache spike", "--question", "Should we use Redis?", "--project", p8]);
+  const h9 = guardHook(p8, "proto/redis.js");
+  let h8cJ = null;
+  try { h8cJ = JSON.parse(h8c.stdout); } catch { /* not JSON */ }
+  ok(h8t.status === 0 && h8t.stdout === "" && h8cJ && h8cJ.hookSpecificOutput.permissionDecision === "ask" && h9.status === 0 && h9.stdout === "",
+    "full review Gb8/Gb9: the guard hook stays silent for a test file while a test plan is approved (Phase 4) and for a prototype file while a spike is under way; a code file with no approved tasks still asks (got " +
+    JSON.stringify([h8t.stdout, h8cJ && h8cJ.hookSpecificOutput.permissionDecision, h9.stdout]) + ")");
+}
+
+// 1.14 full review (Pa) — markers, EARS, comments, traceability, T-ID scan.
+
+// 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR.
+if (inSection("frpb")) {
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  // Pb2: `create` classifies a new feature in the project's configured language (= spec_create) — "no checkout" is PT em+o.
+  const pb = path.join(tmp, "frpb-proj");
+  run(["init", "--lang", "pt", "--project", pb]);
+  const c2 = jsonOf(run(["create", "IVA", "--summary", "Corrigir o cálculo do IVA no checkout", "--json", "--project", pb]));
+  const c2en = jsonOf(run(["create", "IVA EN", "--summary", "Corrigir o cálculo do IVA no checkout", "--lang", "en", "--json", "--project", pb]));
+  ok(c2 && c2.ok && c2.tracks.join() === "core,tdd" && c2en && c2en.ok && c2en.tracks.join() === "core",
+    "full review Pb2: create in a meta.lang pt project reads the summary in PT ('no checkout' = em+o → +tdd); an explicit --lang en still reads 'no' as a negator (got " +
+    JSON.stringify([c2 && c2.tracks, c2en && c2en.tracks]) + ")");
+}
+
+// 1.14 full review (S) — CLI surfaces and hooks.
+if (inSection("frs")) {
+  const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const pf = path.join(tmp, "frs-proj");
+  run(["init", "core", "--project", pf]);
+  run(["create", "Big", "core", "--project", pf]);
+  fs.writeFileSync(path.join(pf, ".specs", "big", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] one\n- [ ] 2. [US1] two\n");
+  const tasksOf = () => fs.readFileSync(path.join(pf, ".specs", "big", "tasks.md"), "utf8");
+
+  // S4 — an explicit --include-body=false / --include-brief=false reaches the engine (= spec_finish / spec_task_brief {…: false}).
+  const fin0 = jsonOf(run(["finish", "big", "--include-body=false", "--json", "--project", pf]));
+  const fin1 = jsonOf(run(["finish", "big", "--json", "--project", pf]));
+  const fin2 = jsonOf(run(["finish", "big", "--include-body", "--write", "--json", "--project", pf]));
+  const br0 = jsonOf(run(["brief", "big", "1", "--include-brief=false", "--json", "--project", pf]));
+  const br1 = jsonOf(run(["brief", "big", "1", "--json", "--project", pf]));
+  ok(fin0 && !("mergeSummary" in fin0) && fin1 && typeof fin1.mergeSummary === "string" && fin2 && typeof fin2.mergeSummary === "string" &&
+    br0 && br0.ok && !("brief" in br0) && br1 && typeof br1.brief === "string",
+    "full review S4: finish --include-body=false omits mergeSummary and brief --include-brief=false omits the brief, as the MCP tools do with false; absent keeps the default (got " +
+    JSON.stringify([fin0 && "mergeSummary" in fin0, fin1 && typeof fin1.mergeSummary, br0 && "brief" in br0]) + ")");
+
+  // S5 — an unknown --flag is a usage error before anything runs (with a did-you-mean); `--` ends the options.
+  const typo = run(["done", "big", "1", "--rnu", "--project", pf]);
+  const typoEq = run(["done", "big", "1", "--evidnce=ok", "--project", pf]);
+  ok(typo.code === 1 && /unknown option --rnu — did you mean --run\?/.test(typo.out) && typoEq.code === 1 && /unknown option --evidnce — did you mean --evidence\?/.test(typoEq.out) &&
+    /^- \[ \] 1\./m.test(tasksOf()),
+    "full review S5: done big 1 --rnu (and --evidnce=…) exits 1 with a did-you-mean and ticks nothing — an unknown flag was a silent switch (got " + JSON.stringify([typo.code, typo.out.trim().slice(0, 90)]) + ")");
+  run(["init", "core", "--lang", "pt", "--project", path.join(tmp, "frs-pt")]);
+  const ptTypo2 = run(["list", "--jsno", "--project", path.join(tmp, "frs-pt")]);
+  ok(ptTypo2.code === 1 && /opção desconhecida --jsno — será --json\?/.test(ptTypo2.out),
+    "full review S5: the unknown-option error is localized in the project language (PT) (got " + ptTypo2.out.trim() + ")");
+  const dd = run(["backlog", "add", "--project", pf, "--", "--later", "plan"]);
+  const bl5 = SF.backlog(pf).backlog.map((b) => b.name + "|" + b.note).join();
+  ok(dd.code === 0 && bl5 === "--later|plan",
+    "full review S5: `--` ends the options — the tokens after it are positional (backlog add -- --later plan) (got " + JSON.stringify([dd.code, bl5, dd.out.trim().slice(0, 80)]) + ")");
+  // Every flag the help documents is known (the evals harness's and git log's own flags excepted); --help anywhere prints help.
+  const helpFlags = [...new Set((run(["help"]).out.match(/--[a-z][a-z-]*/g) || []).map((f) => f.slice(2)))]
+    .filter((f) => !["flag", "dry-run", "name-only", "relative"].includes(f));
+  const allFlags = run(["help", ...helpFlags.map((f) => (f === "lang" ? "--lang=en" : f === "project" ? "--project=" + pf : "--" + f + "=1"))]);
+  const helpAnywhere = run(["done", "big", "2", "--help", "--project", pf]);
+  ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /universal spec-driven CLI/.test(helpAnywhere.out) &&
+    /^- \[ \] 2\./m.test(tasksOf()),
+    "full review S5: every --flag the help documents (" + helpFlags.length + ") is accepted; done … --help prints the help and ticks nothing (got " + JSON.stringify([allFlags.code, allFlags.out.trim().split("\n")[0].slice(0, 100)]) + ")");
+
+  // S7 — backlog remove (rm's alias) prints the removal like rm.
+  run(["backlog", "add", "Zeta Seven", "--project", pf]);
+  const rm7 = run(["backlog", "remove", "zeta seven", "--project", pf]);
+  ok(rm7.code === 0 && /'zeta seven' removed from the backlog/.test(rm7.out) && !/Zeta Seven/.test(run(["backlog", "--project", pf]).out),
+    "full review S7: backlog remove is rm's alias on the CLI too (removed, same message) (got " + rm7.out.trim().split(/\r?\n/)[0] + ")");
+
+  // S8 — SessionStart lists at most 20 features (the most relevant), then ONE '+N more' line.
+  const p8 = path.join(tmp, "frs-many");
+  SF.initProject(p8, ["core"], "en");
+  for (let i = 1; i <= 22; i++) SF.createFeature(p8, "Feat " + String(i).padStart(2, "0"), ["core"], "", undefined, "en");
+  const zz = SF.createFeature(p8, "Zz Active", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(zz.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] one\n- [ ] 2. [US1] two\n");
+  const hk = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: p8 }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: p8, SPEC_PROJECT_DIR: p8 } });
+  let ctx = "";
+  try { ctx = JSON.parse(hk.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
+  const bullets = ctx.split("\n").filter((l) => /^ {2}• /.test(l));
+  ok(hk.status === 0 && bullets.length === 20 && /• zz-active \[core\] — executing \(1\/2 tasks\)/.test(ctx) && /\+3 more feature\(s\) — \/spec-status/.test(ctx),
+    "full review S8: SessionStart with 23 features prints 20 feature lines — the executing one included, though last by name — and '+3 more … /spec-status' (got " + bullets.length + " lines, " + JSON.stringify(ctx.split("\n").slice(-2)) + ")");
+}
+
+// 1.14 full review (D) — CLI help and docs.
+
+// 1.14 feature (F1) — harness-observed evidence: if (inSection("ffobs")) { … }
+if (inSection("ffobs")) {
+  const Sob = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const HOOK = path.join(__dirname, "..", "hooks", "observe-hook.js");
+  const jsonOb = (s) => { try { return JSON.parse(s); } catch { return null; } };
+  const rob = (proj, args) => {
+    const r = spawnSync(process.execPath, [CLI, ...args, "--project", proj], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  const stOb = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+  const metaOb = (p) => JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {};
+  const PASS = 'node -e "process.exit(0)"';
+  const po = path.join(tmp, "ffobs-cli");
+  Sob.initProject(po, ["core"], "en", { checks: { test: PASS } });
+  const fo = Sob.createFeature(po, "Obs", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(fo.dir, "tasks.md"), "- [ ] 1. [US1] One\n  - _Verify: " + PASS + "_\n- [ ] 2. [US1] Two\n  - _Verify: node two.js_\n- [ ] 3. [US1] Three\n  - _Verify: node three.js_\n");
+
+  // init --evidence reported|observed (= spec_init {evidence}); a bad value exits 1, localized.
+  const i1 = rob(po, ["init", "--evidence", "observed"]);
+  const m1 = metaOb(po).evidence;
+  const i2 = rob(po, ["init", "--evidence=REPORTED", "--json"]);
+  const i3 = rob(po, ["init", "--evidence", "maybe"]);
+  const i4 = rob(path.join(tmp, "ffobs-cli-pt"), ["init", "--lang", "pt", "--evidence", "talvez"]);
+  const i5 = rob(po, ["init", "--json"]);
+  ok(i1.code === 0 && /Evidence mode OBSERVED/.test(i1.out) && m1 === "observed" && i2.code === 0 && (jsonOb(i2.stdout) || {}).evidence === "reported" && metaOb(po).evidence === "reported" &&
+    i3.code === 1 && /--evidence takes reported or observed \(got 'maybe'\)/.test(i3.out) && i4.code === 1 && /--evidence aceita reported ou observed \(recebido 'talvez'\)/.test(i4.out) &&
+    (jsonOb(i5.stdout) || {}).evidence === "reported" && !/Evidence mode/.test(i5.out),
+    "feature F1: init --evidence observed|reported sets roadmap.json meta.evidence (case-folded; --json reports it, a note when set); a bad value exits 1, localized (PT) (got " +
+    JSON.stringify([i1.code, m1, i3.out.trim().slice(0, 120), i4.out.trim().slice(0, 120)]) + ")");
+
+  // meta.evidence observed: done --run is observed by the CLI itself ("cli"); a reported run nobody saw ticks but stays unverified
+  // (unobserved + the note); once the hook saw the command run, the same report verifies.
+  rob(po, ["init", "--evidence", "observed"]);
+  const d1 = rob(po, ["done", fo.slug, "1", "--run", "--json"]);
+  const d1j = jsonOb(d1.stdout) || {};
+  const d2 = rob(po, ["done", fo.slug, "2", "--cmd", "node two.js", "--exit", "0"]);
+  const d2j = jsonOb(rob(po, ["done", fo.slug, "2", "--cmd", "node two.js", "--exit", "0", "--json"]).stdout) || {};
+  const hk = spawnSync(process.execPath, [HOOK], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: po, SPEC_PROJECT_DIR: "" },
+    input: JSON.stringify({ session_id: "c1", cwd: po, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "node three.js" }, tool_response: { stdout: "ok", stderr: "", exit_code: 0 } }) });
+  const d3j = jsonOb(rob(po, ["done", fo.slug, "3", "--cmd", "node three.js", "--exit", "0", "--json"]).stdout) || {};
+  ok(d1.code === 0 && d1j.verified === true && d1j.observed === "cli" && stOb(fo).evidence["1"].observed === "cli" &&
+    d2.code === 0 && /^Task 2 done\. /m.test(d2.out) && !/\(verified\)/.test(d2.out) && /⚠ Task 2: the run was recorded, but the harness never saw it .*dev-spec done obs 2 --run/.test(d2.out) &&
+    d2j.unverifiedReason === "unobserved" && d2j.observed === false && hk.status === 0 && hk.stdout === "" && d3j.verified === true && d3j.observed === true,
+    "feature F1: with meta.evidence observed, done --run records observed: \"cli\" (verified); done --cmd/--exit of a run nobody saw ticks it unverified (unobserved, the note names --run); after the hook logged the run, the same report verifies (got " +
+    JSON.stringify([d1j.observed, d2.out.trim().slice(0, 200), d2j.unverifiedReason, d3j.observed]) + ")");
+
+  // The one verdict: doctor and stop-check name the unobserved task; finish --run records its checks as observed "cli".
+  const doc = rob(po, ["doctor", fo.slug]);
+  const stop = rob(po, ["stop-check", "--message", "Done — all tasks are complete and verified."]);
+  const fin = rob(po, ["finish", fo.slug, "--run", "--json"]);
+  const finj = jsonOb(fin.stdout) || {};
+  const tst = (finj.suiteChecks || []).find((c) => c.name === "test") || {};
+  ok(/#2 \(run not observed by the harness\)/.test(doc.out) && stop.code === 1 && /#2 \(run not observed by the harness\)/.test(stop.out) &&
+    tst.status === "pass" && tst.observed === "cli" && stOb(fo).finishChecks.test.observed === "cli" && (finj.blockers || []).some((b) => /#2 \(run not observed by the harness\)/.test(b)),
+    "feature F1: doctor and stop-check list the unobserved task; finish --run stamps its project-check runs observed: \"cli\" (pass) while the unobserved task still blocks (got " +
+    JSON.stringify([stop.code, tst, finj.blockers]).slice(0, 400) + ")");
+
+  // Back to reported: the same records verify (today's rule); help and the header docblock document --evidence.
+  rob(po, ["init", "--evidence", "reported"]);
+  const docR = rob(po, ["doctor", fo.slug]);
+  const help = run(["--help"]).out;
+  const docblock = fs.readFileSync(CLI, "utf8").slice(0, 12000);
+  ok(!/not observed by the harness/.test(docR.out) && help.includes("--evidence reported|observed") && docblock.includes("--evidence reported|observed"),
+    "feature F1: back to meta.evidence reported the unobserved run verifies again; --help and the header docblock document init --evidence reported|observed");
+}
+
+// 1.14 feature (F2) — human approval guard: if (inSection("ffgate")) { … }
+if (inSection("ffgate")) {
+  const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
+  const meta = (p) => { try { return JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {}; } catch { return {}; } };
+  const pg = path.join(tmp, "ffgate-en");
+  // init --approval-guard off|ask|deny = spec_init {approvalGuard}: stored, noted, always reported; anything else refused.
+  const i1 = run(["init", "core", "--approval-guard", "deny", "--project", pg]);
+  const i2 = jsonOf(run(["init", "--json", "--project", pg]));
+  const i3 = run(["init", "--approval-guard", "maybe", "--project", pg]);
+  const i4 = run(["init", "--approval-guard", "--json", "--project", pg]);
+  const i5 = jsonOf(run(["init", "--approval-guard=ASK", "--json", "--project", pg]));
+  ok(i1.code === 0 && /Approval guard DENY — an agent's approval/.test(i1.out) && meta(pg).approvalGuard === "ask" && i2 && i2.approvalGuard === "deny" && i2.approvalGuardNote === undefined &&
+    i3.code === 1 && /--approval-guard takes off, ask or deny \(got 'maybe'\)/.test(i3.out) && i4.code === 1 &&
+    i5 && i5.approvalGuard === "ask" && /^Approval guard ASK/.test(i5.approvalGuardNote) && /--approval-guard off\|ask\|deny/.test(run(["help"]).out),
+    "feature F2: init --approval-guard deny / =ASK stores meta.approvalGuard with a note; init --json always reports it; 'maybe' or a missing value is refused (exit 1); help documents it (got " +
+    JSON.stringify([i1.code, i2 && i2.approvalGuard, i3.out.trim(), i4.code, i5 && i5.approvalGuard, meta(pg).approvalGuard]) + ")");
+  const pp = path.join(tmp, "ffgate-pt");
+  const p1 = run(["init", "--lang", "pt", "--approval-guard", "deny", "--project", pp]);
+  const p2 = run(["init", "--approval-guard", "talvez", "--project", pp]);
+  ok(p1.code === 0 && /O guarda de aprovações está em DENY/.test(p1.out) && p2.code === 1 && /--approval-guard aceita off, ask ou deny \(recebido 'talvez'\)/.test(p2.out),
+    "feature F2: the init note and the bad-value error are in the project language (PT) (got " + JSON.stringify([p1.out.trim().split(/\r?\n/).pop(), p2.out.trim()]) + ")");
+
+  // End to end: an agent's Bash `dev-spec approve … --force` in a deny project is refused by the hook; the command the reason
+  // gives the human runs as is (the CLI itself is never gated — the human's own run records the approval).
+  const pd = path.join(tmp, "ffgate-deny");
+  run(["init", "core", "--approval-guard", "deny", "--project", pd]);
+  run(["create", "Checkout", "core", "--project", pd]);
+  const hook = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "approval-hook.js")], { encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: pd, tool_name: "Bash", tool_input: { command: 'node "' + CLI + '" approve checkout requirements --force' } }),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+  let h = {};
+  try { h = JSON.parse(hook.stdout); } catch { /* checked below */ }
+  const reason = (h.hookSpecificOutput || {}).permissionDecisionReason || "";
+  const suggested = ((h.systemMessage || "").match(/: (! node .*)$/) || [])[1] || "";
+  const human = spawnSync(suggested.replace(/^! node /, JSON.stringify(process.execPath) + " "), { shell: true, encoding: "utf8", cwd: pd, env: { ...process.env, SPEC_PROJECT_DIR: pd, CLAUDE_PROJECT_DIR: "" } });
+  const st = JSON.parse(fs.readFileSync(path.join(pd, ".specs", "checkout", ".state.json"), "utf8"));
+  ok(hook.status === 0 && (h.hookSpecificOutput || {}).permissionDecision === "deny" && /approve the requirements phase of 'checkout' — FORCED/.test(reason) &&
+    /cli\/dev-spec\.js" approve checkout requirements --force$/.test(suggested) && human.status === 0 && st.approvals && st.approvals.requirements && st.approvals.requirements.forced === true,
+    "feature F2: the hook denies an agent's `dev-spec approve … --force` in a deny project, and the `! node <clone>/cli/dev-spec.js approve …` line it gives the user runs as is and records the (forced) approval (got " +
+    JSON.stringify([hook.status, reason.slice(0, 90), suggested, human.status, (human.stdout + human.stderr).trim().slice(0, 160)]) + ")");
+  ok(SF.approvalGuardLevel(pd) === "deny" && SF.approvalGuardLevel(pp) === "deny" && SF.approvalGuardLevel(path.join(tmp, "ffgate-none")) === "off",
+    "feature F2: approvalGuardLevel reads meta.approvalGuard (no roadmap.json → off)");
+
+  // Review fixes (R10 / R1 / R3 / R9), end to end through the hook and the CLI.
+  const hookRun = (cwd, tool, command) => {
+    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "approval-hook.js")], { encoding: "utf8",
+      input: JSON.stringify({ hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: { command } }), env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    let j = {};
+    try { j = JSON.parse(r.stdout); } catch { /* silent */ }
+    return { status: r.status, decision: (j.hookSpecificOutput || {}).permissionDecision || (r.stdout === "" ? "silent" : "?"), note: j.systemMessage || "" };
+  };
+  const q = JSON.stringify(CLI);
+  const pr = path.join(tmp, "ffgate-r10");
+  const r0 = run(["init", "core", "--approval-guard", "deny", "--evidence", "observed", "--check", 'test=node -e "process.exit(0)"', "--roles", "design=tech", "--stop-check", "on", "--project", pr]);
+  const hEv = hookRun(pr, "Bash", "node " + q + " init --evidence reported");
+  const hChk = hookRun(pr, "Bash", "node " + q + " init --check test=");
+  const hRoles = hookRun(pr, "PowerShell", "node " + q + " init --roles none");
+  const hStop = hookRun(pr, "Bash", "node " + q + " init --stop-check off");
+  const hUp = hookRun(pr, "Bash", "node " + q + " init --check lint=eslint --evidence observed --stop-check on");
+  const userLine = ((hEv.note.match(/: (! node .*)$/) || [])[1] || "");
+  const humanEv = spawnSync(userLine.replace(/^! node /, JSON.stringify(process.execPath) + " "), { shell: true, encoding: "utf8", cwd: pr, env: { ...process.env, SPEC_PROJECT_DIR: pr, CLAUDE_PROJECT_DIR: "" } });
+  ok(r0.code === 0 && hEv.decision === "deny" && /switch the evidence mode \(meta\.evidence\) back to reported/.test(hEv.note) && hChk.decision === "deny" &&
+    hRoles.decision === "deny" && hStop.decision === "deny" && hUp.decision === "silent" &&
+    /init --evidence reported$/.test(userLine) && humanEv.status === 0 && SF.evidenceMode(pr) === "reported",
+    "feature F2 review R10: in a deny project the hook refuses an agent's init --evidence reported / --check test= / --roles none / --stop-check off (raising or adding passes); the line it gives the user runs as is and lowers meta.evidence (got " +
+    JSON.stringify([r0.code, hEv.decision, hChk.decision, hRoles.decision, hStop.decision, hUp.decision, userLine, humanEv.status, meta(pr).evidence]) + ")");
+  // R3 / R9: a line-continued approve is refused; a heredoc that only WRITES the approve line into a doc is not.
+  const hCont = hookRun(pr, "Bash", "node " + q + " \\\n  approve checkout requirements");
+  const hDoc = hookRun(pr, "Bash", "cat > docs/approve.md <<'EOF'\nRun `node " + q + " approve checkout requirements` yourself.\nEOF");
+  const hPsCont = hookRun(pr, "PowerShell", "node " + q + " `\n  ap`prove checkout requirements");
+  ok(hCont.decision === "deny" && hDoc.decision === "silent" && hPsCont.decision === "deny",
+    "feature F2 review R3/R9: the hook refuses a Bash \\⏎-continued and a PowerShell `-escaped approve; a quoted heredoc writing the approve line into a doc passes (got " +
+    JSON.stringify([hCont.decision, hDoc.decision, hPsCont.decision]) + ")");
+  // R1: `echo x >> .specs/roadmap.json` is refused while the guard is on — and a roadmap.json broken that way keeps the guard
+  // (fail closed): the hook still refuses an approve; the CLI refuses to write over the broken file (the human repairs it).
+  const hW = hookRun(pr, "Bash", "echo x >> .specs/roadmap.json");
+  fs.appendFileSync(path.join(pr, ".specs", "roadmap.json"), "x");
+  const hAfter = hookRun(pr, "Bash", "node " + q + " approve checkout requirements");
+  const offTry = run(["init", "--approval-guard", "off", "--project", pr]);
+  ok(hW.decision === "deny" && /Make that change yourself/.test(hW.note) && SF.approvalGuardLevel(pr) === "deny" && hAfter.decision === "deny" && hAfter.status === 0 && offTry.code === 1,
+    "feature F2 review R1: a Bash write of .specs/roadmap.json is refused; after `echo x >> .specs/roadmap.json` the guard still reads deny (engine and hook) and init --approval-guard off can't write over the broken file (got " +
+    JSON.stringify([hW.decision, SF.approvalGuardLevel(pr), hAfter.decision, offTry.code, offTry.out.trim().slice(0, 120)]) + ")");
+}
+
+// 1.14 feature (F3) — task dependencies and waves: if (inSection("ffdeps")) { … }
+if (inSection("ffdeps")) {
+  const SD = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const mk = (n, lang = "en") => {
+    const p = path.join(tmp, "ffdeps-" + n);
+    SD.initProject(p, ["core"], lang);
+    const f = SD.createFeature(p, "Deps " + n, ["core"], "", undefined, lang);
+    return { p, slug: f.slug, dir: f.dir };
+  };
+  const put = (x, txt) => fs.writeFileSync(path.join(x.dir, "tasks.md"), txt);
+  const tasksOf = (x) => fs.readFileSync(path.join(x.dir, "tasks.md"), "utf8");
+
+  // next --waves: the next task, then the waves; --json is spec_next_task {waves}'s result; --waves=false prints none.
+  const w = mk("waves");
+  put(w, "# Tasks\n\n- [ ] 1. Schema\n  - _Implements: db/schema.sql_\n- [ ] 2. API\n  - _Depends: 1_\n  - _Implements: src/api.js_\n" +
+    "- [ ] 3. UI\n  - _Depends: 1_\n  - _Implements: src/ui.js_\n- [ ] 4. E2E\n  - _Depends: 2, 3_\n  - _Implements: test/e2e.js_\n");
+  const n1 = run(["next", w.slug, "--waves", "--project", w.p]);
+  const nj = run(["next", w.slug, "--waves", "--json", "--project", w.p]);
+  let njr = null;
+  try { njr = JSON.parse(nj.out); } catch { /* not JSON */ }
+  const nOff = run(["next", w.slug, "--waves=false", "--project", w.p]);
+  ok(n1.code === 0 && n1.out === "Next → #1 Schema  (4/4 left)\nWaves (3):\n  1. #1\n  2. #2 #3\n  3. #4\n" && njr && JSON.stringify(njr) === JSON.stringify(SD.nextTask(w.p, w.slug, { waves: true })) &&
+    JSON.stringify(njr.waves) === "[[1],[2,3],[4]]" && nOff.code === 0 && !/Waves/.test(nOff.out),
+    "feature F3: next --waves prints the next task and the waves (#1 · #2 #3 · #4); --json is spec_next_task {waves}'s result; --waves=false prints no waves (got " + JSON.stringify([n1.out, nOff.out]) + ")");
+
+  // done on a task whose dependencies are open: ticked (exit 0) with the warning; a task that waits is passed over by next.
+  const dn = run(["done", w.slug, "4", "--project", w.p]);
+  const s = mk("skip");
+  put(s, "# Tasks\n\n- [ ] 1. Late\n  - _Depends: 2_\n- [ ] 2. Early\n");
+  const sn = run(["next", s.slug, "--project", s.p]);
+  ok(dn.code === 0 && /^Task 4 done\. 1\/4 {2}next → #1 Schema\n {2}⚠ Task 4 was ticked while its dependencies #2, #3 are still open/.test(dn.out) && /^- \[x\] 4\./m.test(tasksOf(w)) &&
+    sn.code === 0 && sn.out === "Next → #2 Early  (2/2 left)\n  waiting: #1 waits on #2\n",
+    "feature F3: done on a task whose _Depends:_ are open ticks it and warns (never refused); next passes over a waiting task and names what it waits on (got " + JSON.stringify([dn.out, sn.out]) + ")");
+
+  // No open task can start: next / brief / done say so (never 'all done'); doctor fails task-deps (exit 1).
+  const b = mk("blocked");
+  put(b, "# Tasks\n\n- [ ] 1. A\n  - _Depends: 2_\n- [ ] 2. B\n  - _Depends: 1_\n");
+  const bn = run(["next", b.slug, "--waves", "--project", b.p]);
+  const bb = run(["brief", b.slug, "--project", b.p]);
+  const bd = run(["doctor", b.slug, "--project", b.p]);
+  const lb = mk("leftblocked");
+  put(lb, "# Tasks\n\n- [ ] 1. A\n- [ ] 2. B\n  - _Depends: 3_\n- [ ] 3. C\n  - _Depends: 2_\n");
+  const ld = run(["done", lb.slug, "1", "--project", lb.p]);
+  ok(bn.code === 0 && /^No open task can start — each waits on a dependency that is not done: #1 waits on #2; #2 waits on #1\./.test(bn.out) && !/All tasks done/.test(bn.out) &&
+    /\nWaves \(0\):\n {2}\(no open task can start\)\n {2}⚠ cycle: #1, #2\n$/.test(bn.out) && bb.code === 0 && /^No open task can start/.test(bb.out) &&
+    bd.code === 1 && /✗ task-deps — tasks waiting on each other \(a cycle\): #1, #2/.test(bd.out) &&
+    ld.code === 0 && /^Task 1 done\. 1\/3\n/.test(ld.out) && !/all done/.test(ld.out) && /⚠ No open task can start — each waits on a dependency that is not done: #2 waits on #3; #3 waits on #2\./.test(ld.out),
+    "feature F3: when no open task can start (a cycle), next / brief / done say so and name what each waits on — never 'all done'; next --waves shows no wave and the cycle; doctor fails task-deps (exit 1) (got " +
+    JSON.stringify([bn.out, bd.out.split("\n").find((l) => /task-deps/.test(l)), ld.out]) + ")");
+
+  // append-tasks --depends (repeatable, #n accepted); a number naming no task is refused (exit 1, nothing written); --depends needs a value.
+  const ap = mk("append");
+  put(ap, "# Tasks\n\n## Build\n- [ ] 1. Writer\n**Checkpoint:** built\n");
+  const a1 = run(["append-tasks", ap.slug, "--task", "Reader", "--depends", "#1", "--project", ap.p]);
+  const a2 = run(["append-tasks", ap.slug, "--task", "Glue", "--depends", "1", "--depends", "2", "--project", ap.p]);
+  const aBad = run(["append-tasks", ap.slug, "--task", "Nope", "--depends", "7", "--project", ap.p]);
+  const aMiss = run(["append-tasks", ap.slug, "--task", "Nope", "--depends", "--project", ap.p]);
+  ok(a1.code === 0 && a2.code === 0 && /- \[ \] 2\. Reader\n {2}- _Depends: 1_\n- \[ \] 3\. Glue\n {2}- _Depends: 1, 2_\n/.test(tasksOf(ap)) &&
+    aBad.code === 1 && /Task 1: depends names no task: #7 — .*\(numbered 4 here\)\. Nothing was written\./.test(aBad.out) &&
+    aMiss.code === 1 && /missing value for --depends/.test(aMiss.out) && !/Nope/.test(tasksOf(ap)),
+    "feature F3: append-tasks --depends writes _Depends:_ (repeatable, #1 = 1); a number naming no task is refused with the number the task would get (exit 1, nothing written); --depends needs a value (got " +
+    JSON.stringify([a1.out, a2.out, aBad.out, aMiss.out]) + ")");
+
+  // Localized: the waves, the cycle and the blocked task in PT.
+  const pt = mk("pt", "pt");
+  put(pt, "# Tarefas\n\n- [ ] 1. Base\n- [ ] 2. Topo\n  - _Depends: 1_\n- [ ] 3. Laço\n  - _Depends: 3_\n");
+  const pn = run(["next", pt.slug, "--waves", "--project", pt.p]);
+  ok(pn.code === 0 && /^Próxima → #1 Base {2}\(faltam 3\/3\)\nOndas \(2\):\n {2}1\. #1\n {2}2\. #2\n {2}⚠ ciclo: #3\n {2}⚠ bloqueadas: #3 espera por #3\n$/.test(pn.out),
+    "feature F3: next --waves in a PT feature — 'Ondas', the cycle and the blocked task in Portuguese (got " + JSON.stringify(pn.out) + ")");
+}
+
+// 1.14 feature (F5) — traceability matrix: if (inSection("ffrtm")) { … }
+if (inSection("ffrtm")) {
+  const SF5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const f5 = path.join(tmp, "ffrtm-proj");
+  // stdout alone (run() joins stderr): the CSV must be exactly the engine's text.
+  const runOut = (args) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: f5 } }); return { stdout: r.stdout || "", stderr: r.stderr || "", code: r.status }; };
+  SF5.initProject(f5, ["tdd"], "en");
+  const cf = SF5.createFeature(f5, "Checkout", ["tdd"], "", undefined, "en");
+  fs.writeFileSync(path.join(cf.dir, "requirements.md"), "# Feature: Checkout\n\n### US-1 (P1): Pay\n#### Acceptance Criteria (EARS)\n" +
+    '1. **US-1.AC-1** — WHEN the shopper pays THE SYSTEM SHALL charge "the total", in cents\n2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL keep the cart\n' +
+    "3. **US-1.AC-3** — =cmd|' /C calc'!A0 THE SYSTEM SHALL log it\n");
+  fs.writeFileSync(path.join(cf.dir, "test-plan.md"), "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+    "| T-01 | unit | example | charge | US-1.AC-1 | `test/charge.test.js` |\n| T-02 | unit | example | decline | US-1.AC-2 | `test/decline.test.js` |\n| T-03 | unit | example | log | US-1.AC-3 | `test/log.test.js` |\n");
+  fs.writeFileSync(path.join(cf.dir, "tasks.md"), '# Tasks\n\n- [ ] 1. [US1] Charge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node -e "process.exit(0)"_\n' +
+    "- [ ] 2. [US1] Decline\n  - _Requirements: US-1.AC-2_\n");
+  fs.mkdirSync(path.join(f5, "test"), { recursive: true });
+  fs.writeFileSync(path.join(f5, "test", "charge.test.js"), "test('T-01 charges', () => {});\n");
+  SF5.completeTask(f5, "checkout", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "1 passing" });
+  SF5.decide(f5, "checkout", { title: "Stripe", decision: "Use Stripe.", affects: ["US-1.AC-1"] });
+
+  const tm = run(["trace", "checkout", "--matrix", "--project", f5]);
+  ok(tm.code === 1 && /^Traceability matrix — checkout \(core \+tdd\): 3 requirement\(s\) · 1 verified · 0 implemented · 1 planned · 1 untraced\n {2}requirements not approved yet\n/.test(tm.out) &&
+    /\n {2}ID +Status +Tasks +Tests +Decisions +Requirement\n/.test(tm.out) && /\n {2}US-1\.AC-1 +verified +#1✓ +T-01 +D-1 +WHEN the shopper pays THE SYSTEM SHALL charge "the total", in cents\n/.test(tm.out) &&
+    /\n {2}US-1\.AC-2 +planned +#2○ +T-02 +— +IF the card is declined/.test(tm.out) && /\n {2}US-1\.AC-3 +untraced +— +T-03 +— +\[no task cites it\] =cmd/.test(tm.out) &&
+    /\n {2}tasks: ✓ verified · ▲ done, not verified · ○ open\nTrace: checkout {2}verdict=gaps-found/.test(tm.out),
+    "feature F5: trace --matrix prints the matrix (localized headers, one row per requirement: status, tasks ✓/▲/○, tests, decisions, gaps before the text), then the usual trace lines; the exit code stays the trace verdict's (got " + JSON.stringify(tm.out.slice(0, 700)) + ")");
+  const tc = runOut(["trace", "checkout", "--csv", "--project", f5]);
+  const engineCsv = SF5.matrixCsv([SF5.traceMatrix(f5, "checkout")], "en");
+  ok(tc.code === 1 && tc.stdout === engineCsv && tc.stdout.charCodeAt(0) !== 0xfeff && /^Feature,ID,Kind,Requirement,Status,/.test(tc.stdout) && !/AUTO-GENERATED/.test(tc.stdout) &&
+    tc.stdout.includes("\r\ncheckout,US-1.AC-1,AC,\"WHEN the shopper pays THE SYSTEM SHALL charge \"\"the total\"\", in cents\",verified,") &&
+    tc.stdout.includes("\r\ncheckout,US-1.AC-3,AC,'=cmd|' /C calc'!A0 THE SYSTEM SHALL log it,untraced,no task cites it,"),
+    "feature F5: trace --csv prints the engine's CSV on stdout alone — RFC 4180, CRLF, a quoted field's quotes doubled, a leading '=' neutralized ('=cmd|… stays text); no BOM and no marker record (data for scripts); exit code = the trace verdict (got " + JSON.stringify(tc.stdout.slice(0, 300)) + ")");
+  const tcc = runOut(["trace", "checkout", "--csv", "--code", "--project", f5]);
+  let tj = null;
+  try { tj = JSON.parse(run(["trace", "checkout", "--matrix", "--json", "--project", f5]).out); } catch { /* invalid JSON */ }
+  const tcsvJson = run(["trace", "checkout", "--csv", "--json", "--project", f5]);
+  ok(/,Test files,/.test(tcc.stdout.split("\r\n")[0]) && tcc.stdout.includes(",T-01,T-01: test/charge.test.js,") && tcc.stdout.includes(",T-02,T-02: in no test file,") &&
+    tj && tj.matrix && JSON.stringify(tj.matrix.rows) === JSON.stringify(SF5.traceCheck(f5, "checkout", { matrix: true }).matrix.rows) && tj.matrix.counts.untraced === 1 &&
+    /"matrix": \{/.test(tcsvJson.out) && !/^Feature,/.test(tcsvJson.out),
+    "feature F5: trace --csv --code adds the Test files column; --json prints trace_check {matrix: true}'s result (= MCP), --json wins over --csv");
+  const off = run(["trace", "checkout", "--matrix=false", "--csv=false", "--project", f5]);
+  const typo = run(["trace", "checkout", "--matrx", "--project", f5]);
+  ok(off.code === 1 && /^Trace: checkout/.test(off.out) && !/Traceability matrix/.test(off.out) && typo.code === 1 && /--matrx/.test(typo.out) && /--matrix/.test(typo.out) &&
+    /usage: dev-spec trace <feature> \[--code\] \[--matrix\] \[--csv\]/.test(run(["trace", "--project", f5]).out),
+    "feature F5: --matrix / --csv are boolean switches (=false turns them off), an unknown --matrx is refused with a did-you-mean, the usage names both");
+
+  // export --csv: the document (BOM + the marker record); --write → .specs/exports/<slug>.rtm.csv, never over a hand-written file.
+  const ec = runOut(["export", "checkout", "--csv", "--project", f5]);
+  const ew = run(["export", "checkout", "--csv", "--write", "--project", f5]);
+  const ewFile = path.join(f5, ".specs", "exports", "checkout.rtm.csv");
+  const ewText = fs.existsSync(ewFile) ? fs.readFileSync(ewFile, "utf8") : "";
+  const ep = run(["export", "--csv", "--write", "--project", f5]);
+  ok(ec.code === 0 && ec.stdout === SF5.exportSpecs(f5, { name: "checkout", format: "csv" }).content && ec.stdout.charCodeAt(0) === 0xfeff && ec.stdout.slice(1).startsWith(engineCsv) &&
+    /\r\n# AUTO-GENERATED by dev-spec — do not edit by hand\. Regenerate: dev-spec export --csv \(spec_export format csv\)\.,{16}\r\n$/.test(ec.stdout) &&
+    ew.code === 0 && ew.out.includes("✎ wrote " + ewFile) && ewText === ec.stdout && ep.code === 0 && fs.existsSync(path.join(f5, ".specs", "exports", "project.rtm.csv")),
+    "feature F5: export <f> --csv prints the CSV document (UTF-8 BOM, the AUTO-GENERATED marker as the last record); --write → .specs/exports/checkout.rtm.csv; no feature → project.rtm.csv (got " + JSON.stringify(ec.stdout.slice(-200)) + ")");
+  fs.writeFileSync(ewFile, "ID,Owner\r\n");
+  const eh = run(["export", "checkout", "--csv", "--write", "--project", f5]);
+  const both = run(["export", "checkout", "--csv", "--md", "--project", f5]);
+  ok(eh.code === 1 && /\.specs\/exports\/checkout\.rtm\.csv exists and was not generated by dev-spec/.test(eh.out) && fs.readFileSync(ewFile, "utf8") === "ID,Owner\r\n" &&
+    both.code === 1 && /usage: dev-spec export \[feature\] \[--md\|--csv\] \[--write\]/.test(both.out),
+    "feature F5: export --csv --write never overwrites a hand-written .rtm.csv (exit 1, file unchanged); --csv with --md is a usage error");
+
+  // Localized (PT feature), and the docs.
+  const pf5 = SF5.createFeature(f5, "Pagamento", ["core"], "Pagar.", undefined, "pt");
+  fs.writeFileSync(path.join(pf5.dir, "requirements.md"), "# Feature: Pagamento\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE cobrar o total\n");
+  fs.writeFileSync(path.join(pf5.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Cobrar\n  - _Requirements: US-1.AC-1_\n");
+  const ptm = run(["trace", "pagamento", "--matrix", "--project", f5]);
+  const ptc = runOut(["trace", "pagamento", "--csv", "--project", f5]);
+  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const help = run(["help"]).out;
+  ok(/^Matriz de rastreabilidade — pagamento \(core\): 1 requisito\(s\) · 0 verificado\(s\) · 0 implementado\(s\) · 1 planeado\(s\) · 0 sem rastreio\n {2}requisitos ainda não aprovados\n/.test(ptm.out) &&
+    /\n {2}ID +Estado +Tasks +Testes +Decisões +Requisito\n {2}US-1\.AC-1 +planeado +#1○ /.test(ptm.out) && /tasks: ✓ verificada · ▲ feita, não verificada · ○ por fazer/.test(ptm.out) &&
+    /^Feature,ID,Tipo,Requisito,Estado,Lacunas,/.test(ptc.stdout) && ptc.stdout.includes("\r\npagamento,US-1.AC-1,AC,QUANDO o cliente paga O SISTEMA DEVE cobrar o total,planeado,,,,#1 por fazer,") &&
+    /trace <feature> \[--code\]/.test(doc) && /\[--matrix\]/.test(doc) && /\[--csv\] the traceability matrix as CSV/.test(doc) && /--matrix: \+ the requirements traceability matrix/.test(help) &&
+    /--csv: the matrix as RFC 4180 CSV on stdout/.test(help) && /\.rtm\.csv/.test(help),
+    "feature F5: a PT feature's matrix and CSV speak Portuguese (headers, statuses, task words; IDs English); the docblock and help document --matrix / --csv and the .rtm.csv export");
+}
+
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
 
 console.log(`\n${pass} passed, ${fail} failed`);
-try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-process.exit(fail ? 1 : 0);
+rmTmpDir(tmp);
+exitFlushed(fail ? 1 : 0);

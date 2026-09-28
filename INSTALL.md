@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its 30 tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 34 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 44 commands, the 3 agents, the
-hooks and the `spec-driven` MCP server (30 tools) load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 51 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (34 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell
@@ -78,6 +78,14 @@ To watch the raw protocol, you can pipe a request in by hand:
 '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node "$plugin\mcp\server.js"
 ```
 
+Besides `tools/list`, the server answers `prompts/list` / `prompts/get` (one prompt per plugin command) and
+`resources/list` / `resources/read` (the project's specs as `specs://` URIs) — see INTEGRATIONS.md.
+
+**On Linux too (optional, needs Docker):** `npm run test:docker` (from the clone) runs both suites in Linux containers
+— Node 18, 22 and 24 — with the plugin mounted read-only and no network; only the first run needs network, to pull the
+images. It exits 0 when every suite passed, 1 on a failure and 2 when Docker isn't available. Nothing is installed on
+your machine and nothing runs remotely.
+
 ---
 
 ## How the MCP finds your project
@@ -106,6 +114,10 @@ claude plugin details dev-spec-driven
 On the repo root, `validate` checks only the marketplace file (it is present), not the plugin itself —
 validate the plugin through its `plugin.json`.
 
+The plugin check ends with `Validation passed with warnings` and one warning — `CLAUDE.md at the plugin root is not
+loaded as project context`. That is expected: `CLAUDE.md` holds the maintainers' notes for working on the plugin
+itself, not context for your projects (the workflow ships as the skill). Any other warning or error is worth a look.
+
 ---
 
 ## Local automation (optional, all free)
@@ -114,9 +126,20 @@ validate the plugin through its `plugin.json`.
 NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): saving a
 `requirements.md` lints EARS (and reports template placeholders), saving a `tasks.md` checks
 traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
-prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (and one
-line while `.specs/` comes from an older dev-spec — see *Updating*). To
+prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (one line while
+`.specs/` comes from an older dev-spec — see *Updating* — and one when two features' open tasks plan the same files). To
 turn them off, disable the plugin (or empty `hooks/hooks.json`).
+
+**Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
+`spec-implementer` agent) sends Claude back to work — once — when its closing message says a task or feature is done or
+verified while a feature active in the last hours has ticked tasks without passing evidence. It is silent otherwise and
+never blocks on its own errors. To turn it off for a project:
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --stop-check off   # or spec_init {stopCheck: false}; --stop-check on to re-enable
+```
+
+Other tools don't run the hook; `dev-spec stop-check --message "<text>"` gives the same verdict on demand.
 
 **Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
 it on for a project, asks for confirmation before Claude writes or edits a code file outside `.specs/`
@@ -124,11 +147,33 @@ while no feature has approved, unfinished tasks. It stays silent when the guard 
 on its own errors:
 
 ```powershell
-node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-guard, or spec_init {guard: true}; --guard off to disable
+node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-guard, or spec_init {guard: "on"}; --guard off to disable
+node "$plugin\cli\dev-spec.js" init --guard scope # stricter: once tasks are approved, also a code file no open task names
 ```
 
 The setting lives in `.specs/roadmap.json` (`meta.guard`). Only Claude Code runs the hook; other tools
 store the setting but don't enforce it.
+
+**Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, the Bash tool — and PowerShell when it reports an exit code)
+silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
+so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
+harness saw (or that `dev-spec done --run` made):
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back
+```
+
+**Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
+human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, or tries
+to lower the guard, you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with
+Claude Code's `!` prefix):
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to disable (only you can lower it)
+```
+
+`ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
+Both are guardrails, not a sandbox, and only Claude Code runs these hooks.
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the

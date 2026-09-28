@@ -15,7 +15,10 @@ existing codebase pass `brownfield: true` (CLI `--brownfield`) to also scaffold 
 `requirements.md` in EARS syntax with stable AC IDs (US-1.AC-1 …), prioritized stories (P1 = MVP),
 success criteria `SC-001…`, and edge cases / NFRs with their own IDs (`EC-1`, `NFR-1`).
 Add the track-specific ACs the feature's classification calls for (tenant isolation / rate limits
-for +saas; quality, latency, cost, refusal, injection-resistance for +ai). Replace every template
+for +saas; quality, latency, cost, refusal, injection-resistance for +ai; 401 / 403 + audit event / no secret in
+responses or logs for +sec; export, erasure in every store, retention expiry for +privacy — the scaffold seeds
+`US-1.AC-10…15` for the last two: make them concrete). On a design-first feature (`flow: "design-first"`) this phase
+comes after the design approval: the criteria must match the approved design. Replace every template
 placeholder — the requirements gate refuses an approval while any remains. Run the `ears_validate`
 MCP tool to catch missing SHALL, missing IDs, vague words and leftover placeholders (issue `code`s: `no-modal`,
 `no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`), fix what it flags, run `/clarify`

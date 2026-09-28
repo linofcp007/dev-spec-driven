@@ -10,9 +10,11 @@
  *     is saved, run its mandatory checks for the active tracks. Any spec edit also refreshes ROADMAP.md
  *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
  *     moment, with zero CI and zero cost.
- *   - SessionStart: print a one-line status of all features in the project, plus one line per finished
+ *   - SessionStart: print a one-line status of the project's features (at most SESSION_MAX_FEATURES — the most
+ *     relevant — then one "+N more" line), plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES), and one
- *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade.
+ *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade — and one
+ *     line when features' open tasks plan the same files (cross-feature overlap; text reads only).
  *
  * It NEVER blocks: any error or irrelevant event exits 0 silently. Output is emitted as
  * `hookSpecificOutput.additionalContext` so Claude sees it as context, not as a user message.
@@ -31,6 +33,7 @@ try {
 let emitted = false;
 let ran = false;
 const DRIFT_MAX_FILES = 200; // SessionStart hashes at most this many recorded _Implements:_ files, else skips the drift check
+const SESSION_MAX_FEATURES = 20; // SessionStart lists at most this many features (the most relevant), then "+N more — /spec-status"
 // Emits exactly one JSON object and exits only after the write is flushed (Windows pipes truncate
 // otherwise). Callers `return emit(...)` — nothing may call process.exit() after it.
 function emit(eventName, text) {
@@ -100,7 +103,19 @@ function handle(raw) {
       const m = spec.msg(spec.projectLang(pdir));
       const h = m.hook;
       const phase = (p) => (m.phaseNames && m.phaseNames[p]) || p; // 'executing' → 'em execução' / 'en ejecución'
-      const lines = list.features.map((f) => h.sessionLine(f.name, f.tracks, phase(f.phase), f.tasksDone, f.tasks));
+      // At most SESSION_MAX_FEATURES lines (150 features were ~8 KB of context in every session): the most relevant ones —
+      // executing, then tasks-ready, then planning, complete last; ties by the latest spec activity (.state.json /
+      // tasks.md mtime — ordering only, never a verdict) — printed in the usual order, then ONE "+N more" line.
+      let shown = list.features;
+      if (shown.length > SESSION_MAX_FEATURES) {
+        const rank = (p) => (p === "executing" ? 0 : p === "tasks-ready" ? 1 : p === "complete" ? 3 : 2);
+        const mtime = (f) => Math.max(...[".state.json", "tasks.md"].map((x) => { try { return fs.statSync(path.join(list.specsDir, f.name, x)).mtimeMs; } catch { return 0; } }));
+        const keep = new Set(list.features.map((f) => ({ f, r: rank(f.phase), t: mtime(f) }))
+          .sort((a, b) => a.r - b.r || b.t - a.t || (a.f.name < b.f.name ? -1 : 1)).slice(0, SESSION_MAX_FEATURES).map((x) => x.f));
+        shown = list.features.filter((f) => keep.has(f));
+      }
+      const lines = shown.map((f) => h.sessionLine(f.name, f.tracks, phase(f.phase), f.tasksDone, f.tasks));
+      if (shown.length < list.features.length && h.sessionMore) lines.push(h.sessionMore(list.features.length - shown.length));
       // Drift since finish (finished features only — a reopened one is not; archived ones are left to `dev-spec drift`,
       // like the feature lines above, so a set-aside feature can't nag every session). Bounded: over DRIFT_MAX_FILES
       // recorded files (or ~8 MB of them) nothing is hashed — `dev-spec drift` still checks on demand. Never blocks or
@@ -115,6 +130,15 @@ function handle(raw) {
       try {
         const v = spec.specVersionStatus(pdir);
         if (v && v.behind && m.upgrade) lines.push(m.upgrade.hookLine(v.from));
+      } catch { /* best-effort */ }
+      // 1.14 B4 — cross-feature file overlap: ONE line when two active features' open tasks plan the same files (or an active
+      // feature plans files a finished one recorded in its drift baseline). Text reads only — nothing hashed; never throws.
+      try {
+        const ov = spec.featureOverlaps(pdir);
+        if (ov && ov.pairs.length && m.forecast) {
+          const names = ov.pairs.slice(0, 3).map((p) => p.a + (p.kind === "finished" ? " → " : " ↔ ") + p.b).join(", ") + (ov.pairs.length > 3 ? ", …" : "");
+          lines.push(m.forecast.overlap.hookLine(ov.pairs.length, names));
+        }
       } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
@@ -131,6 +155,11 @@ function handle(raw) {
     if (fwd.includes("/.execution/")) process.exit(0);
     // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
     if (fwd.includes("/.specs/.removing-")) process.exit(0);
+    // Project templates (.specs/templates/[<lang>/]requirements.md …) are no feature's spec: never linted as one (a
+    // .specs/templates/pt/design.md is not feature 'pt''s design) and no roadmap churn — `dev-spec templates check` checks them.
+    // (A FEATURE named templates created before 1.14 — its folder holds a .state.json — is still a feature.)
+    const tplAt = fwd.match(/^(.*\/\.specs)\/templates\//i);
+    if (tplAt && !fs.existsSync(path.join(tplAt[1], "templates", ".state.json"))) process.exit(0);
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
     if (!isDevSpecProject(pdir)) process.exit(0);

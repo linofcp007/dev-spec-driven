@@ -8,6 +8,10 @@
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
  * `dev-spec init --guard on`). When on, a code edit outside `.specs/` while no feature has approved, unfinished
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
+ * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
+ * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
+ * naming the task to add it to. At both levels a test file is allowed while a feature has an approved test plan and is
+ * unfinished (Phase 4), and any code file while a spike is under way (its prototype) — spec.guardCheck decides.
  *
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
@@ -31,7 +35,7 @@ function finish(obj) {
 function guardOn(dir) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
-    return !!j && typeof j === "object" && !Array.isArray(j) && !!j.meta && typeof j.meta === "object" && j.meta.guard === true;
+    return !!j && typeof j === "object" && !Array.isArray(j) && !!j.meta && typeof j.meta === "object" && (j.meta.guard === true || j.meta.guard === "scope");
   } catch {
     return false; // missing, unreadable or broken → the guard stays out of the way
   }

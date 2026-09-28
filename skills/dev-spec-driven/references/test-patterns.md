@@ -82,7 +82,9 @@ Bad:
 
 Put the test plan's T-ID at the start of each test's name. `trace_check {code: true}` (CLI:
 `dev-spec trace <feature> --code`) then links every planned test to the files that implement it, and
-`spec_doctor` warns (`tests-in-code`) when a done task's `_Makes green:_` test exists in no test file.
+`spec_doctor` warns (`tests-in-code`) when a done task's `_Makes green:_` test exists in no test file. The same
+T-IDs tie the evidence together: the task that writes a test cites it with its red run (`_Expect: fail_`, below), the
+task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits that say "Makes T-01 green".
 
 | Language / framework | Convention |
 |---|---|
@@ -113,12 +115,16 @@ Put the test plan's T-ID at the start of each test's name. `trace_check {code: t
   path segments, so `tests/beta.test.js` never matches `tests/alpha.test.js`. While the cell is still a
   template slot (`[path]`, `tests/unit/...`) or names a code file outside a test folder (`load/invoice.k6.js`),
   the match is by number across the project, so another feature's `T-01` test would pass this one. A test
-  under **another** feature's `.specs/<feature>/tests/` never counts for this one.
+  under **another** feature's `.specs/<feature>/tests/` never counts for this one, and neither does a test file
+  **another feature's plan** (active or archived) names in its File column while this plan doesn't — that file is the
+  other feature's. A folder in the cell (`test/`) scopes this plan's rows but claims no file for it.
 - A row whose File column names **only non-code artifacts** — `load-test.md`, `evals/golden.json`, a Gherkin
   `.feature`, a JMeter `.jmx` — is a check run outside test code (a load run, the eval harness, a manual pass):
   its T-ID is listed in `plannedOutsideCode`, never in `plannedNotInCode`, so neither doctor, `finish` nor the
   Phase 4 gate expects it in a test file (the scaffold's own load and eval rows are such rows). Its evidence is
-  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead.
+  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead. While
+  that artifact is still the scaffold (`load-test.md` with its template text, the sample eval set) once the test is
+  due, doctor warns `outside-code-artifacts` and `/spec-finish` repeats it.
 - `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
   (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
 
@@ -325,6 +331,37 @@ FAIL tests/integration/register.test.ts
 ```
 
 The first is a specification. The second is broken infrastructure.
+
+### Recording the red run — `_Expect: fail_`
+
+A test that never failed proves nothing, so the engine lets a task record its red run as evidence. Mark the task
+that writes a test before its code — a bugfix's regression test, a red phase — with `_Expect: fail_` next to the
+`_Verify:_` command that runs that test, and name the T-IDs it writes in the task (its text or `_Makes green:_`):
+
+```markdown
+- [ ] 3. [US1] Write T-04 and T-05 (expired and revoked keys) and watch them fail for the right reason
+  - _Requirements: US-1.AC-3, US-1.AC-4_
+  - _Verify: npm test -- tests/unit/verify.test.ts_
+  - _Expect: fail_
+- [ ] 4. [US1] Reject expired and revoked keys in verify()
+  - _Requirements: US-1.AC-3, US-1.AC-4_
+  - _Makes green: T-04, T-05_
+  - _Verify: npm test -- tests/unit/verify.test.ts_
+```
+
+- `dev-spec done <feature> 3 --run` while the tests fail records the **red run** as task 3's proof (exit ≠ 0,
+  `expected: "fail"`); a passing run is refused (`unexpected-pass` — the test doesn't fail yet). Exit 126 / 127 / 9009
+  (the command could not run) is no red run.
+- Task 4 then turns them green with a normal must-pass `_Verify:_`.
+- `spec_doctor` warns **`red-green`** (+tdd) for every T-ID a done task makes green with no recorded red run of an
+  `_Expect: fail_` task citing it. When Phase 4 wrote all the failing tests up front, one Setup task "confirm the
+  failing tests T-01, T-02, T-03, T-04, T-05, T-06, T-07 are red" marked `_Expect: fail_`, ticked before any
+  implementation task, records that red run for all of them — it must name each T-ID (a range such as "T-01…T-07"
+  names only its two ends). A guard test that passes before the change by design (a bugfix's T-02) goes in no
+  `_Makes green:_`, so the check never asks for its red run; a bugfix scaffolded before 1.14 still lists T-02 in task
+  4's `_Makes green:_` — remove it from there rather than making the test fail artificially.
+
+Details: `verification.md` (Red → green).
 
 ---
 

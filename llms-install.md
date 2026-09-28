@@ -39,14 +39,20 @@ no API key.
    ready-to-paste snippet with the absolute path already filled in for your machine:
 
    ```bash
-   node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config generic
+   node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js mcp-config cursor
    # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
-4. **Reload the MCP client.** The server advertises **30 tools** over stdio — `spec_init`,
+4. **Reload the MCP client.** The server advertises **34 tools** over stdio — `spec_init`,
    `spec_classify`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`, `spec_roadmap`,
    and more — for spec-driven development (EARS requirements → design → traceable tasks →
-   approval-gated execution).
+   approval-gated execution). It also offers MCP **prompts** (one per plugin command, for clients that show them as
+   slash commands) and read-only **resources** (`specs://roadmap`, `specs://feature/{slug}/{artifact}`, …). To hide
+   the prompts, add `"env": { "SPEC_MCP_PROMPTS": "off" }` to the server entry.
+
+5. **(Optional) Give the agent the workflow.** `node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js rules agents`
+   prints `AGENTS.md` with absolute paths — paste it into the client's rules or custom instructions. Tools without
+   Claude Code hooks should run `dev-spec stop-check --message "…"` before claiming a task is done (it is in there).
 
 ## Notes
 

@@ -71,7 +71,9 @@ Checkpoint US1: presented → approved
 Read `tasks.md` once. Write a table to the ledger with one row per **pair of tasks that share a file**
 (`_Implements:_`) or an interface — what one produces vs. what the other consumes — and one row per task
 whose own text disagrees with itself (its tests vs. its code, its files vs. later tasks). Check that
-every `[P]` claim is true (different files, no dependency). Rule on each conflict **within the design**
+every `[P]` claim is true (different files, no dependency) and that every `_Depends: 3, 5_` marker is right: a task
+that consumes what another produces must name it (`spec_doctor` fails `task-deps` on a dependency naming no task, a
+task depending on itself or a cycle). Rule on each conflict **within the design**
 and ledger the ruling. A conflict that can only be resolved by changing an AC, the design or a planned
 test is not yours to rule on — see "Where autonomy stops".
 
@@ -80,8 +82,10 @@ test is not yours to rule on — see "Where autonomy stops".
 ### 1. Brief
 
 `spec_task_brief {name, number: N, write: true}` → the paths plus the task's identifiers (number and
-text, `loop`, `inlineOnly`, its `_Verify:_` command, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
-bugfix `gated`), never the spec text the brief quotes: the brief never enters your context.
+text, `loop`, `inlineOnly`, its `_Verify:_` command — with `verifyPipes` when one pipes and `expect: "fail"` on an
+`_Expect: fail_` task — the project checks `projectChecks`, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
+bugfix `gated`), never the spec text the brief quotes: the brief never enters your context. The brief itself also
+carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs.
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 
@@ -94,7 +98,7 @@ The dispatch contains only:
 3. interfaces/decisions from earlier tasks the brief cannot know, and pointers to ledger rulings or
    parked findings that touch this task's files;
 4. your resolution of any ambiguity you noticed;
-5. the report path (`paths.report`).
+5. the report path (`paths.report`) — the implementer names it in its reply.
 
 Never paste prior-task history or the whole spec into a dispatch. Never dispatch two implementers on
 the same working tree — they conflict. Concurrency is only for the parallel mode below (one worktree
@@ -102,6 +106,16 @@ each). **Batch** several small same-shape `[P]` tasks (the same one-line change 
 dispatch and review them as one unit. Record the implementer's agent ID (fix rounds 1–3 resume it).
 
 ### 3. Handle the status
+
+**The SubagentStop gate (Claude Code).** When a `spec-implementer` stops claiming DONE (or DONE_WITH_CONCERNS) for a
+task whose `_Verify:_` holds a runnable command, the plugin's SubagentStop hook opens the report named in its reply
+(`.specs/<feature>/.execution/task-N-report.md`) and sends the stop back unless the report carries **each
+`_Verify:_` command, verbatim, and the exit code the task needs** ("exit 0", "exit code: 1", "código de saída 0"…): an
+exit 0 for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task (a report showing the red run and then
+the green one passes). BLOCKED / NEEDS_CONTEXT and tasks without a runnable `_Verify:_` pass. So an implementer's DONE
+reaches you only with its evidence written down — still read it: the gate reads the report's text, it never ran the
+command (`spec_complete_task` records the run you pass it, and refuses a failed one).
+`dev-spec stop-check --agent spec-implementer --message "<its reply>"` shows the gate's decision; `spec_init {stopCheck: false}` turns the Stop and SubagentStop gates off for the project.
 
 - **DONE** → build the review package, dispatch the reviewer.
 - **DONE_WITH_CONCERNS** → read the concerns; correctness/scope concerns get resolved before review,
@@ -162,10 +176,11 @@ When a story has several independent `[P]` tasks, they can run concurrently — 
 own git worktree, so they never share a working tree. Adapted from superpowers' *using-git-worktrees* and
 *dispatching-parallel-agents*.
 
-1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next open task
-   plus the following open `[P]` tasks **of the same section** whose `_Implements:_` files are declared
-   and disjoint (max 3 by default). No `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js`
-   are one file; a folder shares every file under it), a non-`[P]` task or a section
+1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next task (the first
+   open one whose `_Depends:_` tasks are all done) plus the following open `[P]` tasks **of the same section** whose
+   `_Implements:_` files are declared and disjoint and whose own `_Depends:_` are done (max 3 by default). No
+   `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js` are one file; a folder shares every
+   file under it), a task waiting on an open dependency, a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
 2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
    worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own
@@ -178,6 +193,29 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
 
 Worth it only when the tasks are genuinely independent and big enough to amortise the merges; for small
 tasks the sequential loop is faster end to end.
+
+### Dispatch by waves (tasks that declare `_Depends:_`)
+
+When tasks.md states its dependencies (`_Depends: 3, 5_` on a task: the numbers of the tasks that must be done
+first), plan the whole run as **waves**: `spec_next_task {name, waves: true}` (CLI `dev-spec next <feature> --waves`)
+returns `waves` — `[[1], [2, 3], [4]]` — plus `cycles` and `blocked`. The rules, which the engine applies (never guess
+them):
+
+- a task **with** `_Depends:_` waits for exactly those tasks; a task **without** one keeps tasks.md order among the
+  tasks that declare none — it waits for the open ones before it, a run of consecutive `[P]` tasks of one section
+  waits together, and the task after the run waits for the whole run (the batch's `[P]` rule, unchanged);
+- a wave holds tasks whose dependencies are done or in earlier waves, never two tasks sharing an `_Implements:_` file
+  (a folder shares its files), and a task without `_Implements:_` (its files can't be proven disjoint) or an +ai
+  prompt task (inline only) is a wave of its own;
+- `blocked` tasks can never start as things stand (a cycle, a `_Depends:_` naming no task, or waiting on one of
+  those) and `cycles` lists the loops: stop — `spec_doctor` fails `task-deps`; fixing tasks.md changes the approved
+  plan (re-approve the tasks phase).
+
+Per wave: write each task's brief, dispatch a wave of one sequentially as usual, and a wider wave as in the parallel
+mode above (one worktree per implementer, merge one at a time, full suite after each merge, review each diff,
+complete each with its own evidence). Ask for the waves again after each wave — a merge conflict re-run sequentially
+or a task that turned out to need another changes them. Only a task's own `_Depends:_` can take it ahead of an
+earlier section's checkpoint: still stop at every `**Checkpoint:**` once that section's tasks are done.
 
 ## Where autonomy stops
 
@@ -201,7 +239,18 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 
 - **+tdd:** the implementer shows RED-for-the-right-reason output before implementing and GREEN after,
   with the full suite (targets green, prior green still green, later tasks' tests still red). The
-  reviewer checks that evidence and that no planned test's expectation changed.
+  reviewer checks that evidence and that no planned test's expectation changed. An `_Expect: fail_` task (it writes
+  a test before its code) is DONE when its `_Verify:_` run **fails** for the right reason — the implementer reports
+  that failing run (command, non-zero exit, the failure) and you record it as the red run; a passing run is refused
+  (`unexpected-pass`), and so is a failing run whose output shows the test never ran — a missing test file, module or
+  script, nothing collected (`couldNotRun: "output"`). Its brief is a red task's: the tests it writes must fail first,
+  no production code in it.
+- **Project checks** (`roadmap.json → meta.checks`, listed in every brief as `projectChecks`): the brief's definition
+  of done has the implementer run each one and put its command, exit code and output tail in the report — nothing
+  that passed before the task may fail after it (on an `_Expect: fail_` task, only its new red tests may); the reviewer
+  checks it. At the end `/spec-finish` needs a passing run of each since the last task activity, on the code as it is
+  now — a run older than an edit of the implementing files reads `code-changed` (`spec_finish {evidence}` or
+  `dev-spec finish <f> --run`).
 - **+saas:** tasks with `_Emits metrics:_` must show the metric emitting in the report. The hot-path
   load test and observability validation stay feature-level "done" checks (run them at the end, as in
   inline Phase 6).
@@ -222,9 +271,11 @@ list, ONE scoped re-review, then adjudicate residuals as in the breaker. No seco
 load-bearing findings go to the human.
 
 Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
-fails, open tasks, tasks without a passing run, pending approvals, artifacts changed since approval, template
-placeholders, a bugfix's missing root cause) and non-blocking warnings, the track-gated checks to run fresh
-(full suite, load test, observability, cost/safety), writes a merge summary built from the spec chain to
+fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick (on the
+current code), pending
+approvals, artifacts changed since approval, template placeholders, a bugfix's missing root cause) and non-blocking
+warnings, the track-gated checks to run fresh (full suite, load test, observability, cost/safety, security scans,
+data subject rights), writes a merge summary built from the spec chain (with the decision log) to
 `.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
 (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
@@ -248,8 +299,9 @@ feature, inline-executed or not.
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
    (`/spec-impact` after the edit), never a task.
 4. **Human approves** the list (edited as needed) → `spec_append_tasks {name, tasks: [{text, requirements,
-   implements, verify, story, parallel}]}`: appended under "Phase: Convergence", numbered after the highest task,
-   existing tasks untouched, an unknown AC ID refuses the whole call. `needsReapproval` → `trace_check`, then
+   implements, verify, makesGreen, expectFail, size, story, parallel}]}`: appended under "Phase: Convergence",
+   numbered after the highest task, existing tasks untouched, an unknown AC ID (or a `makesGreen` T-ID test-plan.md
+   doesn't plan) refuses the whole call. `needsReapproval` → `trace_check`, then
    re-approve the **tasks** phase.
 5. Execute the new tasks with the normal loop (inline or per-task subagents), each with its evidence.
 
@@ -285,3 +337,4 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "Ledger bookkeeping is overhead" | The ledger is what survives compaction. Without it, controllers re-dispatch finished tasks. |
 | "I'll tick the task now and review later" | `tasks.md` `[x]` means reviewed. The roadmap reads it. |
 | "The implementer said the tests pass" | Tick with the evidence from its report (command, exit code, output) — no evidence, no claim. |
+| "The SubagentStop hook let it through, so it passed" | The gate reads the report's text — each `_Verify:_` command with the exit code the task needs — it never ran anything. Read it; record the run with `spec_complete_task`. |

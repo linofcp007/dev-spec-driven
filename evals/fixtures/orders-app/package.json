@@ -1,0 +1,12 @@
+{
+  "name": "orders-app",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Tiny orders CLI used by the dev-spec-driven behavioural evals.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

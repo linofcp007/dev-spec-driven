@@ -1,6 +1,6 @@
 {
   "name": "dev-spec-driven",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Unified, track-based spec-driven development: a Claude Code plugin + a local zero-dependency MCP server + a universal CLI that works in any MCP/agent tool (Claude, Cursor, Windsurf, Copilot, Gemini, Codex). No cloud, no CI, no cost.",
   "type": "commonjs",
   "private": true,
@@ -22,6 +22,7 @@
   },
   "scripts": {
     "test": "node mcp/test.js && node cli/test-cli.js",
+    "test:docker": "node scripts/test-docker.js",
     "mcp": "node mcp/server.js",
     "cli": "node cli/dev-spec.js",
     "evals": "node mcp/evals/run-evals.js"

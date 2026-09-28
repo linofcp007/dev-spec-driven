@@ -11,11 +11,14 @@ Call the `spec_metrics` MCP tool (CLI `dev-spec metrics [feature] [--write]`). E
 from `.state.json`, `.history/` and the artifacts — no model, no cost.
 
 - **With a feature name:** lead time (hours) from creation to the first approval of each phase and to
-  complete / finished, **rework** (re-approvals of a phase), **forced approvals**, **change requests** and
-  reopened tasks (from `spec_impact --reopen`), **evidence pass rate** (passing runs / recorded runs), tasks
-  done/total and open `[NEEDS CLARIFICATION]` markers. A created date or rework flagged approximate / a lower
-  bound comes from approvals made before the change history — say so.
-- **Without a name:** every feature plus averages, medians and totals.
+  complete / finished, **rework** (re-approvals of a phase), **forced approvals** and batch approvals (`/spec-ff`),
+  **change requests** and reopened tasks (from `spec_impact --reopen`), **evidence pass rate** (passing runs /
+  recorded runs — an `_Expect: fail_` task's red run counts as a pass, an unexpected pass as a failure), tasks
+  done/total, open `[NEEDS CLARIFICATION]` markers and the feature's **velocity** (points per working day over the
+  last 28 days, `_Size:_`). A created date or rework flagged approximate / a lower bound comes from approvals made
+  before the change history — say so.
+- **Without a name:** every feature plus averages, medians and totals, and the project's velocity (the rate the
+  roadmap's ETAs use; it needs 3 completed tasks in the window).
 
 Present the numbers briefly and point at what they suggest (a phase approved three times, forced approvals,
 a low pass rate). **`write: true`** (with a name, usually after `/spec-finish`) creates

@@ -18,7 +18,7 @@
     "test-plan": {
       "at": "2026-09-25T17:44:18.837Z",
       "by": "example",
-      "fingerprint": "0788459c7a5c9f7d2c2f7dae3862e8e709f1d6fa"
+      "fingerprint": "d80db0be0089410e1ecc33886670f7c2681d740f"
     },
     "tests": {
       "at": "2026-09-25T17:44:19.012Z",
@@ -27,7 +27,7 @@
     "tasks": {
       "at": "2026-09-25T17:44:19.195Z",
       "by": "example",
-      "fingerprint": "75158691140bfc47629f57fd2b27b8ae738d3d0c"
+      "fingerprint": "6d0ffcc3e6e0eefe1fed16b4d77d49a22a3d0ebc"
     }
   },
   "approvalHistory": [
@@ -56,7 +56,7 @@
       "phase": "test-plan",
       "at": "2026-09-25T17:44:18.837Z",
       "by": "example",
-      "fingerprint": "0788459c7a5c9f7d2c2f7dae3862e8e709f1d6fa",
+      "fingerprint": "d80db0be0089410e1ecc33886670f7c2681d740f",
       "snapshot": ".history/test-plan@1.md"
     },
     {
@@ -68,9 +68,14 @@
       "phase": "tasks",
       "at": "2026-09-25T17:44:19.195Z",
       "by": "example",
-      "fingerprint": "75158691140bfc47629f57fd2b27b8ae738d3d0c",
+      "fingerprint": "6d0ffcc3e6e0eefe1fed16b4d77d49a22a3d0ebc",
       "snapshot": ".history/tasks@1.md"
     }
   ],
-  "lastApprovedPhase": "tasks"
+  "lastApprovedPhase": "tasks",
+  "tracks": [
+    "core",
+    "tdd",
+    "saas"
+  ]
 }

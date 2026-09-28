@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: behavior-gate-refused-es
+context:
+  scaffold_script: fixture.sh

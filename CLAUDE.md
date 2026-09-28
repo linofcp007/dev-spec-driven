@@ -8,8 +8,8 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 - **No GitHub Actions / no paid CI / no pull requests.** All automation is local (hooks + the MCP
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
-- **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`,
-  `readline`, `child_process`, `crypto`, built-in `fetch`). No `npm install` required. Keep it that way.
+- **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
+  `readline`, `string_decoder`, `child_process`, `crypto`, built-in `fetch`). No `npm install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Layout
@@ -19,20 +19,33 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
 skills/.../references/          deep library, read on demand
-commands/*.md                  44 slash commands (thin wrappers that invoke the skill/MCP)
+commands/*.md                  51 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
-evals/                         plugin evals for `claude plugin eval` (triggering EN/PT/ES) — maintainer-side, results ignored
+evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
+                               (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
+                               built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
 mcp/server.js                  MCP stdio protocol (JSON-RPC 2.0, newline-delimited) + argument validation against each inputSchema
-mcp/lib/spec.js                ALL domain logic (classify, scaffold, lint, trace, doctor, gates, state, impact, catalog, drift, upgrade, import, scan)
-mcp/lib/i18n.js                ALL localized content EN/PT/ES (artifact + steering builders, tool/CLI/hook messages)
+mcp/lib/spec.js                ALL domain logic (classify, scaffold, lint, trace, doctor, gates, state, impact, catalog, drift, upgrade,
+                               import, scan, templates, export, changelog, roles, forecasts, evidence, stop gate, decisions, flows)
+mcp/lib/i18n.js                ALL localized content (artifact + steering builders, tool/CLI/hook messages) — EN/PT/ES + pt-BR
+mcp/lib/prompts-resources.js   MCP prompts (one per commands/*.md, read at runtime) + specs:// resources (read-only, confined)
 mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry-run offline)
 mcp/test.js                    smoke test — `node mcp/test.js`
-cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs and rule files)
+cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
 cli/test-cli.js                smoke test for the CLI — `node cli/test-cli.js` (never a top-level bin/, see below)
-hooks/hooks.json               PreToolUse → guard-hook.js · PostToolUse + SessionStart → spec-hook.js
-hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks)
-hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status, drift and upgrade lines
+scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
+hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
+                               (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
+                               (Write|Edit) + observe-hook.js (Bash) · PostToolUseFailure (Bash) → observe-hook.js ·
+                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$)
+                               → stop-hook.js
+hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
+hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
+hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
+hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
+                               "+N more"), drift, upgrade and overlap lines
+hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
 hooks/precommit-check.js       optional git pre-commit validator
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
@@ -50,7 +63,8 @@ passes even when Desktop refuses; it is not a valid pre-check. Executable entry 
 
 ## Three surfaces over ONE engine
 `mcp/lib/spec.js` is the single source of truth. It is exposed three ways: (1) the MCP server for
-MCP clients, (2) the `dev-spec` CLI for any tool/terminal, (3) Claude Code skill+commands+hooks.
+MCP clients (its tools; the prompts are the command files and the resources read `.specs/` through the engine's
+resolver), (2) the `dev-spec` CLI for any tool/terminal, (3) Claude Code skill+commands+hooks.
 When you add an operation, add it to `spec.js` first, then wire it into server.js (tool) AND
 cli/dev-spec.js (subcommand) AND mcp/test.js (assertion). Keep the CLI and MCP behavior identical —
 both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
@@ -64,9 +78,39 @@ codes (`step`, `code`, `unverifiedReason`, check ids) never change, while messag
 `cliText` only localizes the human-readable CLI output.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai` are independent and composable, chosen in Phase 0 by
-`spec_classify` (keyword heuristic with negation + confidence) and confirmed by the human. The
-track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`.
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14) are independent and
+composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
+human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
+(GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
+- **Tracks are data-driven registries — never a hard-coded `saas`/`ai` list.** `VALID_TRACKS` → `OPTIONAL_TRACKS`
+  (everything but core: the classifier's, add_track's and every per-track loop's list); `TRACK_MARKER` (`[SaaS]` `[AI]`
+  `[SEC]` `[PRIVACY]` → `MARKER_TRACKS`, the tracks with mandatory design sections); `TRACK_SECTIONS` (`SAAS_SECTIONS` /
+  `AI_SECTIONS` / `SEC_SECTIONS` / `PRIVACY_SECTIONS` — the ONE table doctor `<track>-sections`, the design gate, status,
+  the roadmap and the design-save hook read); `TRACK_STEERING` (the steering files a track brings). **Adding a track:**
+  `VALID_TRACKS` + its `SIGNALS` (strong / weak / optional `context`, EN/PT/ES); a marker track also needs `TRACK_MARKER`,
+  a sections table in `TRACK_SECTIONS` (EN/PT/ES synonyms), `TRACK_STEERING`, and its i18n builders (requirements
+  criteria under `#### [Marker]`, the design block with the `> **TODO**` sentinel, template tasks, test rows, checklist
+  items, steering stub) and its marker in `RE_STABLE_BRACKET`; the `RE_TRACK_RUN` / heading-lead regexes build themselves
+  from the registries; update the MCP descriptions and CLI help by hand. `templateCorpus()` renders every set of at
+  most two optional tracks plus all of them (quadratic beyond three tracks — verified equal to the full power set's
+  placeholder reports).
+- **SEC / PRIVACY section tables.** `SEC_SECTIONS` never lists a bare "security" synonym (the core design's own
+  "Security Considerations" is not a `[SEC]` section). `PRIVACY_SECTIONS` entries may carry `loose: [...]` — the synonyms
+  that are ordinary design words (Processors, Retention, Conservação, Data inventory, Avaliação de impacto…):
+  `extractSection(md, syn, marker, loose)` accepts them only on a heading carrying `[PRIVACY]` or on an unmarked heading
+  nested under one (`inTrackContext`) — a core `## Processors and queues` must never satisfy a deleted `[PRIVACY]`
+  section. The strict synonyms keep the unmarked fallback anywhere (hand-written and marker-less PT/ES designs).
+- **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
+  `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
+- **Signal tiers** (`SIGNALS[track]`): `strong` (turns a track on alone), `weak` (score 1 — two weak ones, or a strong
+  one, turn it on; a lone weak one is only "possible"), and `context` (corroborating-only, e.g. `permission` for +sec:
+  weak evidence ONLY beside another non-negated signal of that track; alone it is no signal, no "possible" note, no
+  "kept off" note — "file permission bits"). A keyword written with capitals (`STRIDE`) is an acronym matched
+  case-sensitively on the original text; lower-case `stride` is no signal. A WEAK signal inside a longer STRONG signal of
+  another track is shadowed (`model` in "threat model", `security` in "row-level security"). Generic privacy words
+  (`consent`, `retention period` / `retention policy` and twins) are weak; encryption in transit and security testing
+  are strong in EN/PT/ES alike — keep the three languages aligned when you add a signal. `keywordLiteral()` is a literal
+  precheck (a keyword pluralize() leaves alone is its own whole literal) so a text without it never compiles its regex.
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node
@@ -79,14 +123,25 @@ track set drives which artifacts/sections/loops apply. See `references/classific
   result lists them as inactive, and doctor/status/next_action/roadmap stop requiring them (`activeTasks()`
   drops a removed track's task section). `core` can't be removed; a bugfix keeps +tdd.
 
-## Trilingual (EN / PT / ES) — the system both READS and WRITES three languages
+## Languages (EN / PT-PT / PT-BR / ES) — the system both READS and WRITES them
 **All localized content lives in `mcp/lib/i18n.js`** (artifact builders, steering stubs, tool
 messages, CLI and hook output — one set per language). `spec.js` keeps the logic and delegates: each
 template function is a one-line call into `i18n.<builder>(args, lang)`. EN is the canonical reference;
-PT and ES mirror its structure (same sections, IDs, markers and slots). The EN templates are **not** frozen: 1.13 changed them on
-purpose (every template AC planned + tasked, track ACs under `[SaaS]`/`[AI]` headings, the test plan's
-Kind column…). When you change a template, change all three languages together and keep the tests that
-round-trip a PT and an ES scaffold through doctor green.
+PT and ES mirror its structure (same sections, IDs, markers and slots). **pt-BR (1.14) is a DERIVED locale**
+(`lang: "pt-BR"`; `pt_BR` / `pt-br` / `ptbr` fold to it via `canonicalLang()`, `pt` / `pt-PT` stay European): every
+pt-BR string is `toPtBr(<the pt string>)` — protected tokens (code spans, `_Marker:_`s, paths, the caller's arguments),
+then `PTBR_OVERRIDES`, the progressive (`está a correr` → `está rodando`), `PTBR_PHRASES`, the second person (`tens` →
+`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling) — built lazily per
+table group (`defineDerivedLocale`), so it inherits every key, ID, marker and synonym of the PT set and a PT edit
+reaches pt-BR with nothing else to change. **When you add or edit a PT string, read its twin once**
+(`node -e "console.log(require('./mcp/lib/i18n.js').toPtBr('…'))"`): a clause-start 3rd person read as an order goes
+into `RE_PTBR_NOT_IMPERATIVE`, a missed word into `PTBR_WORDS` / `PTBR_PHRASES`, anything else into `PTBR_OVERRIDES`;
+`mcp/test.js` (pD1) lints every pt-BR string (no European-only vocabulary, English-stable tokens byte-identical,
+idempotent). Readers that match PT headings/keywords match pt-BR too (`baseLang()`); the classifier's language guess
+counts Brazilian markers but still answers `pt`. Project templates for it live in `.specs/templates/pt-BR/`.
+The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
+`[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
+(and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.
 - **Language resolution (single source of truth + per-feature override).** The PROJECT language lives
   in `.specs/roadmap.json` `meta.lang`, seeded by `spec_init {lang}` (read via `projectLang()`). Each
   FEATURE may override it; the resolved feature language is persisted in `.specs/<feature>/.state.json`
@@ -94,26 +149,32 @@ round-trip a PT and an ES scaffold through doctor green.
   writes the state file, and generates every artifact in that language; every feature operation, the
   CLI and the hooks read `featureLang()` so messages match the spec.
 - **English-STABLE tokens (the tooling matches them literally — never translate, in any language):**
-  AC/SC/test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`, `NFR-1`), section markers `[SaaS]`/`[AI]`,
-  story/parallel tags `[US1]`/`[US2]`/`[shared]`/`[P]`, the unfilled sentinel `> **TODO**`,
-  `[NEEDS CLARIFICATION]`, annotation tags `_Requirements:_`/`_Makes green:_`/`_Affects evals:_`/
-  `_Emits metrics:_`/`_Implements:_`/`_Verify:_`/`_Supersedes:_`, `**Checkpoint:**`, the test plan's Kind
-  values `example`/`property`, the steering front-matter keys and values (`inclusion: always|fileMatch|manual`,
-  `fileMatchPattern`), evidence reason codes, the ` ```mermaid `/` ```typescript ` fences, and the
-  eval-harness headings `## System` / `## User Template`.
+  AC/SC/test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`, `NFR-1`), decision IDs `D-n`, section markers
+  `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]` (case-sensitive), story/parallel tags `[US1]`/`[US2]`/`[shared]`/`[P]`, the
+  unfilled sentinel `> **TODO**`, `[NEEDS CLARIFICATION]`, annotation tags `_Requirements:_`/`_Makes green:_`/
+  `_Affects evals:_`/`_Emits metrics:_`/`_Implements:_`/`_Verify:_`/`_Expect:_`/`_Size:_`/`_Supersedes:_`, the
+  decision-log markers `_Kind:_`/`_Date:_`/`_Affects:_` and the spike's `_Outcome:_` (values `go`/`no-go`/`pivot`),
+  `**Checkpoint:**`, the test plan's Kind values `example`/`property`, the steering front-matter keys and values
+  (`inclusion: always|fileMatch|manual`, `fileMatchPattern`), template variables `{{name}}`…`{{date}}`, evidence reason
+  codes and every other stable code (check ids, `step`, forecast reasons, suite statuses), the
+  ` ```mermaid `/` ```typescript ` fences, and the eval-harness headings `## System` / `## User Template`.
 - **TRANSLATED, but matched by synonyms** so generated PT/ES specs still pass `doctor`/`clarify`: EARS
   keywords (QUANDO/CUANDO, O SISTEMA DEVE/EL SISTEMA DEBE, SE…ENTÃO/SI…ENTONCES — recognized by
-  `earsValidate`), and section headings (matched by `SAAS_SECTIONS`/`AI_SECTIONS` synonym tables, the
-  `RE_*` matchers, and `RE_TESTABILITY` for the +tdd block). The Kind column header (Kind/Tipo) and the
-  converge heading (`Phase: Convergence` / `Fase: Convergência` / `Fase: Convergencia`) are localized too.
+  `earsValidate`), and section headings (matched by the `TRACK_SECTIONS` synonym tables, the
+  `RE_*` matchers, and `RE_TESTABILITY` for the +tdd block). The decision log's Context / Decision / Discovery /
+  Consequences labels (`DECISION_LABELS`) and spike.md's headings are read in any EN/PT/ES spelling. The Kind column
+  header (Kind/Tipo) and the converge heading (`Phase: Convergence` / `Fase: Convergência` / `Fase: Convergencia`)
+  are localized too.
   **When you add/rename a translated heading, add the matching synonym** or `doctor` will think the
   section is missing.
 - **Terminology** mirrors the existing `ROADMAP_I18N` per language (PT keeps the "Feature/Tasks/Tracks"
   anglicisms; ES translates to Función/Tareas). Eval sample JSON (`golden.json`/`adversarial.json`) is
   data and stays as-is; its surrounding prose (README, prompt stub) is localized.
-- **Adding a 4th language:** add a block to `BUILD`/`STEERING`/`MSG`/`EVALS_README` in `i18n.js`, add
-  it to `LANGS`, extend the classifier `SIGNALS`, `ROADMAP_I18N`, the `SAAS_SECTIONS`/`AI_SECTIONS`
-  synonyms and the `RE_*` matchers, then add a test asserting a localized scaffold round-trips.
+- **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
+  overrides). A new language adds a block to `BUILD`/`STEERING`/`MSG`/`EVALS_README` in `i18n.js`, adds it to `LANGS`,
+  extends the classifier `SIGNALS`, `ROADMAP_I18N`, the `TRACK_SECTIONS` synonyms (all four tables), the stop gate's
+  `stopGate.claims` / `negators` / `admissions`, the `RE_*` matchers and the `lang` enums of the MCP schemas, then adds
+  a test asserting a localized scaffold round-trips.
 
 ## MCP tools (in `mcp/lib/spec.js`, dispatched by `mcp/server.js`)
 `spec_init` · `spec_classify` · `spec_create` · `spec_list` · `spec_status` · `spec_next_task` ·
@@ -121,14 +182,40 @@ round-trip a PT and an ES scaffold through doctor green.
 `steering_scaffold` · `spec_roadmap` · `spec_backlog` · `spec_depend` · `spec_scan` ·
 `spec_coverage` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` ·
 `spec_task_brief` · `spec_finish` · `spec_import` · `spec_append_tasks` · `spec_impact` ·
-`spec_metrics` · `spec_catalog` · `spec_drift` · `spec_upgrade` (**30 total**; `mcp/test.js` asserts the exact count —
-verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). The server is
-**tools-only** — it advertises `capabilities: { tools: { listChanged: false } }` and exposes no
-`resources`/`prompts`. All tools are pure-local file ops on `.specs/` (or a read-only codebase scan for
-brownfield / `trace --code` / import); none hit the network. Scaffolders never overwrite an existing file;
-mutators edit only what they own (checkboxes, appended tasks and track sections, `.state.json` /
-`roadmap.json`, generated `ROADMAP.*` / `SPECS.md` / `UPGRADE.md`) and never rewrite spec prose. Roadmap/deps persist in
-`.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
+`spec_metrics` · `spec_catalog` · `spec_drift` · `spec_upgrade` · `spec_templates` · `spec_export` ·
+`spec_changelog` · `spec_decide` (**34 total**; `mcp/test.js` asserts the exact count —
+verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). All tools are pure-local file ops on
+`.specs/` (or a read-only codebase scan for brownfield / `trace --code` / import); none hit the network, run a command or
+call git. Scaffolders never overwrite an existing file; mutators edit only what they own (checkboxes, appended tasks and
+track sections, appended `decisions.md` entries, `.state.json` / `roadmap.json`, generated `ROADMAP.*` / `SPECS.md` /
+`UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose. The
+observed-run log (`.execution/observed.jsonl`, F1) is written only by `hooks/observe-hook.js` through `observeRun()` —
+no tool writes it, and no tool accepts an `observed` stamp from its caller.
+Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
+
+**Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
+{listChanged: false}` and `resources {listChanged: false, subscribe: false}`; the logic lives in
+`mcp/lib/prompts-resources.js`, server.js only maps it onto JSON-RPC. `SPEC_MCP_PROMPTS=off|0|false|no` drops the
+prompts capability (and `prompts/*` answers -32601): `mcp/servers.json` sets it for the Claude Code plugin, whose own
+slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-impact`).
+- **Prompts** = `commands/*.md`, read at runtime (never a hardcoded list — a new command is a new prompt): name = file
+  name without `.md`, description = front-matter `description`, one optional `args` argument described from
+  `argument-hint` (front matter parsed by hand: BOM/CRLF, quoted values, block scalars). `prompts/get` renders the body
+  with `$ARGUMENTS` ← args (split/join — `$&` stays literal) and `${CLAUDE_PLUGIN_ROOT}` resolved to this clone, after a
+  one-line localized preamble for agents without the skill (follow AGENTS.md; where references/ lives). CLI parity:
+  `dev-spec prompts [name] [--args "…"]`.
+- **Resources**: `specs://roadmap` (ROADMAP.md, else rendered in memory from roadmap.json), `specs://catalog`
+  (SPECS.md), `specs://steering/<file>`, `specs://feature/<slug>/<artifact>` for the allowlisted artifacts of each
+  ACTIVE feature (classification, requirements, design, test-plan, eval-plan, load-test, tasks, bug, quickstart,
+  checklist, integration-plan, retro, spike, decisions — `RESOURCE_ARTIFACTS`: add a new artifact there);
+  `resources/templates/list` gives the two templates. The list is capped (`RESOURCE_CAP` = 500,
+  `_meta {truncated, total, cap, note}`). `resources/read` parses the URI segment by segment (percent-decoded; `..`, separators, `:` and control characters refused — never a URL
+  parser, which would resolve `feature/../x`), resolves features through `resolveFeature`/`existingFeature`, reads
+  allowlisted names only and never follows a symlink/junction out of `.specs/` (lstat + realpath).
+- **Error codes**: an unknown prompt or bad prompt arguments, and an invalid / refused URI → `-32602` (Invalid params);
+  a well-formed URI naming nothing → `-32002` (Resource not found); a `resources/read` error carries `data.uri`
+  (JSON-RPC `error()` takes an optional `data`). Prompts and resources use the default project (SPEC_PROJECT_DIR /
+  CLAUDE_PROJECT_DIR / cwd) — neither request carries a projectDir — and speak its language.
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`: required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
@@ -144,6 +231,9 @@ still validates what schemas can't express (track names, AC IDs, paths). String 
 (`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`
 straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` stays exact on both surfaces
 (`EXACT_ENUMS`). The engine and the CLI fold `backlog`'s action too (`ADD` adds on every surface).
+A schema `type` is always ONE string, never a list (`["string", "boolean"]` — not every MCP client handles list-valued
+types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `foldEnumArgs` turns a boolean into
+`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working).
 
 ## Config paths: committable (relative) vs. host-installed (absolute)
 Two distinct distribution targets, deliberately kept separate — never conflate them:
@@ -188,7 +278,14 @@ the brief is regenerated, `ledger.md` is created once and only ever appended by 
 keeps paths + identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate) and drops the spec text the brief
 quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/` paths. The protocol is prose in
 `references/subagent-execution.md` + `agents/spec-implementer.md` / `agents/spec-reviewer.md`; the engine
-never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT).
+never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT). 1.14 adds to the brief:
+`verifyPipes` (the `_Verify:_` commands that pipe), `expect: "fail"` for an `_Expect: fail_` task, `projectChecks`
+(meta.checks, in the definition of done), `decisions` (the current decisions.md entries citing the task's ACs / T-IDs,
+bounded: 5 entries / 2000 characters) and, for a task proving a `[SEC]` / `[PRIVACY]` criterion, that track's design
+sections. An `_Expect: fail_` task's brief is a RED task's: its own tests heading (`BRIEF.testsRed` — the tests it writes
+must fail first) and definition of done (`redRules` in place of the loop's green-making rules; the project-checks item is
+`projectChecks.briefDodRed` — only the task's new red tests may fail). 1.14 F3: the default task is `taskSchedule()`'s
+next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, status}] (see Task dependencies).
 
 ## Gates (1.13) — an approval is a gate, not a stamp
 - **Placeholders — a lookup, never a guess from the shape.** `placeholderReport()` reports a bracket only when
@@ -197,7 +294,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   combination and kind, the track/import task slots `acPlaceholder` / `taskAcPlaceholder`, the steering and custom
   stubs, init's `[fill me in]`) **plus** `LEGACY_TEMPLATE_PLACEHOLDERS` (the 1.12.1 templates' bracket texts, a static
   list extracted once from `main:mcp/lib/i18n.js` — a 1.12 spec still holds them) **plus** `isGenericSlot()` (TODO
-  upper-case only — "todo" is a PT/ES word —, TBD, TBC, FIXME, `...`, `…`, a/por definir) — and the `> **TODO**`
+  upper-case only — "todo" is a PT/ES word —, TBD, TBC, FIXME, `...`, `…`, a/por definir) **plus** the project's own
+  templates' slots (1.14 — see Project templates) — and the `> **TODO**`
   sentinel. Everything else in brackets is the user's content: `[free: 60, pro: 600]`, `[admin, billing-manager, read
   only]`, `[10 MB, 25 MB for pro]` (1.13's shape heuristics refused those and blocked upgraded, finished 1.12 specs).
   `scanBrackets()` walks outermost first and descends into a non-placeholder group, so a half-edited template sentence
@@ -231,7 +329,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
 - **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
-  when a snapshot exists) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
+  when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
+  named — never an approval that would be refused) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
   when `testsGateDue()`; classification only when classification.md exists): `fill` (one of its `gateArtifacts()` is
   missing / a template; `file`) → `fix` (its `approvalChecks()` fail — `refusedGate`, so it never recommends an
   approval that would be refused) → `approve`; the next phase only after that approval (1.13 filled the whole chain
@@ -242,7 +341,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   it; it looped "close the feature" / "finished — nothing left" → refused → the same) → `finish` (or `tasks` when
   there are none). Doctor surfaces the same gate as `nextGate`. Once `state.finished`
   exists (finish `{write}` recorded it), `finish` becomes `finished` (asks for the `execution` sign-off while it is
-  missing) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
+  missing — with execution roles configured it names the missing ones, `missingRoles`, `--role <next>`; project checks
+  without a passing run turn it into `verify` with `suite` [{name, status}] and `finish --run`) or `drift` (`baselineDrift()` of the recorded files; `drift` {finishedAt, files, changed, missing,
   nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
   baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts. A baseline is STALE
   (`staleFinish()`) once a change request or a re-approval of another phase is newer than `finished.at`, or an active
@@ -252,8 +352,10 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
   before any re-baseline.
 - **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
-  anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates.
-  `warnings` (EC/NFR/SC, planned-not-in-code) never block.
+  anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates (a phase still
+  missing a role's sign-off is pending), and — with `meta.checks` set (1.14) — `suite-evidence`.
+  `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role, a T-ID planned outside test code whose
+  artifact is still the scaffold — `outside-code-artifacts`) never block.
 - **Bugfix execution gate (`bugfixGate()`):** while bug.md → Root Cause is unfilled, no task after the one
   that writes it (names bug.md + a Root Cause synonym, carries no `_Makes green:_`/`_Verify:_`) can be ticked
   or given evidence; `done --run` refuses before running anything. The root-cause task itself can be ticked
@@ -262,26 +364,56 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 
 ## Evidence (v1.12, gate tightened in 1.13)
 - **`_Verify: <command>_`** is an English-stable task marker; `taskMarkers()` keeps its value whole (commas
-  belong to the command), drops wrapping backticks and ignores a `[placeholder]`. The MCP server never
+  belong to the command), drops wrapping backticks and ignores a `[placeholder]`. ONE reader, `taskMarkerSpans()`, serves
+  every task marker (taskMarkers, trace_check, implementsRefs, `_Size:_`, the templates check): a value ends at the
+  closing `_` — or `*`: `*Verify: …*` is the same marker — followed by whitespace, the end of the line, or closing
+  punctuation (`.,;:!?)]`) then whitespace / end, so `(_Verify: npm test_)` and `_Implements: a.ts_;` are markers (they
+  were silently dropped: nothing to verify, a verified tick) — but a plain closer (followed by whitespace / the end) before
+  the next marker opener, else the end of the line, wins over a punctuation one: `_Verify: python -c "import a_; print(1)"_`
+  keeps its whole command. Doctor warns `malformed-markers` for text on a task line that
+  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
-  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). On Windows with the default
+  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). The shell is `resolveRunShell()`'s
+  (engine, pure — the CLI passes `git --exec-path`'s output): the platform default (cmd.exe / `/bin/sh`) or the one
+  named; on Windows a bare `bash` (flag or env) is Git Bash — `<git --exec-path>/../../../bin/bash.exe` (then
+  `…/usr/bin/bash.exe`), `%ProgramFiles%` / `%ProgramW6432%` / `%ProgramFiles(x86)%` / `%LOCALAPPDATA%\Programs` +
+  `\Git\bin\bash.exe`, then the first bash.exe on PATH that isn't WSL's. WSL's launcher (`isWslLauncher()`: a bash.exe /
+  wsl.exe in System32, SysWOW64, Sysnative or WindowsApps — it runs the command inside a Linux distribution, or fails every
+  command with exit 1) is never used: named as `--shell <path>`, it is refused before anything runs (`couldNotRun:
+  "wsl-bash"`); a bare `bash` with no Git Bash found → `no-git-bash`.
+  On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
   and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway. After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
+- **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
+  `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
+  a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
+  error ENOENT / EACCES / ENOEXEC / EPERM / EISDIR / ENOTDIR / UNKNOWN) · `run-error` (any other spawn error) · `signal` (no
+  exit status — killed; a CRASH of the check itself, SIGSEGV / SIGABRT / SIGBUS / SIGFPE / SIGILL, is a failed run with exit
+  128 + the signal number instead, and on an `_Expect: fail_` task no red test) · `output-too-large` (over the 64 MB buffer) · `timeout` (`--timeout <seconds>`, an integer ≥ 1 validated
+  before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
+  an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
+  whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
+  `_Expect: fail_` below); the shell resolution adds `wsl-bash` / `no-git-bash`. `finish --run` stays all-or-nothing: one
+  check that could not run records none.
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
-  `evidenceGate.redPhaseVerify` (move the command to the fix task, or drop it and record the red run as a note) to the
+  `evidenceGate.redPhaseVerify` (1.14: mark it `_Expect: fail_`, or move the command to the fix task) to the
   failed-run refusal, the failed-run / note-only / no-evidence note and next_action's `verify` step, with the stable
-  field `redPhaseVerify: true`. The bugfix template's tasks comment says task 3 carries no `_Verify:_` (EN/PT/ES).
+  field `redPhaseVerify: true` — never for a task that already carries `_Expect: fail_`. The bugfix template scaffolds
+  task 3 with `_Verify: [command that runs T-01]_` + `_Expect: fail_` (its red run is the proof) and keeps guard test T-02
+  out of every `_Makes green:_` (green before and after the fix — doctor's `red-green` asks no red run for it) (EN/PT/ES).
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
-  `duplicate-number` · `stale-evidence`. They are RETURNED in `spec_complete_task`'s `unverifiedReason` (set
+  `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
+  with `meta.evidence: "observed"` — see Harness-observed evidence). They are RETURNED in
+  `spec_complete_task`'s `unverifiedReason` (set
   exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
   `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
   localized note. Internally `verificationStatus().unverifiedDetail` holds them; doctor and `spec_finish` render
@@ -301,7 +433,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   was duplicated carries `shared` and only counts for its own task; other tasks' records under that number
   are kept in `others`. A note after a run is attached as `note`, never overwrites it (a v1.12 bare
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
-  `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it.
+  `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
+  (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
+  none).
 - **Without a runnable `_Verify:_`** a task is outside the run gate: no record passes, a bare legacy
   `{exitCode: 0}` or a summary verifies, and `verificationStatus()` skips a `no-evidence` record there —
   only `failed-run` / `stale-evidence` / `duplicate-number` count against it.
@@ -312,6 +446,110 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `_Verify:_` example is never run by `done --run`. `spec_task_brief` reads its AC / T-IDs (loop, stories, design
   needles) from `taskProse()` too; only the rendered task block shows the whole body.
 - `verificationStatus()` feeds doctor (`verification`), `ROADMAP.md` attention and `spec_finish` blockers.
+
+**1.14 additions** (engine: the `B5` block of spec.js; the engine still never runs a command or git):
+- **`_Expect: fail_`** — an English-stable marker, value kept whole like `_Verify:_`; only `fail` (any case, backticks
+  dropped) sets it (`expectsFail()`). On such a task a RED run `{command, exitCode ≠ 0}` is the proof: stored with
+  `expected: "fail"`, it ticks and verifies (`redRecorded: true`). A pass with no red run of the SAME `_Verify:_` on
+  record is refused and recorded (`unexpectedPass: true`, reason `unexpected-pass`; a ticked task becomes unverified);
+  a pass after a red run is the fix going green — the red run is kept as `red` and stays the proof (`redProof()`; a
+  `stale` record proves nothing). Exit 126 / 127 / 9009 (`CANT_RUN_EXIT`: not executable, not found, cmd.exe "not
+  recognized") is never a red test — refused and recorded like a failed (re-)check (`recorded: true`; a ticked task turns
+  unverified, while a red run already on record is kept, so the pass after the fix still counts as green) — `couldNotRun:
+  "exit-code"`. Nor is a failing run whose output shows the test never ran: `couldNotRunOutput()` (`CANT_RUN_OUTPUT`,
+  literal runner phrases, linear, NULs dropped — kind `test`: node's "Could not find '…'", "Cannot find module",
+  ERR_MODULE_NOT_FOUND, python "can't open file" / ModuleNotFoundError, pytest "file or directory not found" / "no tests
+  ran", jest "No tests found", vitest / mocha "No test files found", npm "Missing script" / ENOENT, make "No rule to make
+  target"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind never applies to output that shows an
+  assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest "E   assert", expect(…), "Expected:" — a red run
+  whose message quotes "Cannot find module" is still red) — `spec_complete_task` refuses and records a run whose
+  `summary` shows it (`couldNotRun: "output"`), `done --run` refuses it with nothing recorded, and `cantRunRecord()` keeps
+  an older record of either kind from being a red proof (`isRedRun()`). On an `_Expect: fail_` task under `done --run`, a
+  line cmd.exe itself could not run (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded whenever
+  cmd.exe is the shell (`--shell cmd` too). Every result for
+  such a task carries `expected: "fail"`. Doctor `red-green` (warn, +tdd): T-IDs DONE tasks make green with no recorded
+  red run of an `_Expect: fail_` task citing them. Metrics count a red run as a pass and an unexpected pass as a failure.
+- **Project checks** — `roadmap.json → meta.checks` `{name: command}` (`spec_init {checks}` / `init --check name="cmd"`,
+  repeatable, `name=` or an empty command removes one; names `^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$`, never a prototype key,
+  ≤ 20 checks, a command one line ≤ 500 chars — validated before any write, under the roadmap lock; spec_init's result
+  always reports them). Briefs list them (`projectChecks`). `spec_finish {evidence: [{name, command, exitCode,
+  summary}]}` records runs in `.state.json → finishChecks[name]` (all-or-nothing, under the feature lock, BEFORE
+  readiness is computed; stamped `check` = the configured command, so an edited command reads `changed`, and `code` =
+  `suiteCodeStamp()` — one sha1 over the feature's ACTIVE tasks' `_Implements:_` set as the finish baseline records it
+  (`baselineFiles()` + each file's `fileHash()`), no stamp when that walk hit its cap; a failed run is recorded too).
+  `completeTask` stamps `lastTickAt`; `lastTaskActivity()` = the latest of it and every recorded task run, a stamp more
+  than 5 minutes in the future ignored (as `stopActivity()`). `suiteStatus(projectDir, state, dir)` (dir: the feature
+  folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`
+  (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
+  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` · `before-last-tick` ·
+  `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
+  keeps the older rules) · `unobserved` (1.14 F1, only with `meta.evidence: "observed"`: a passing run whose `observed` is
+  neither `true` nor `"cli"`; each item also carries the run's `observed`). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
+  {evidence}` while a check is missing (`projectChecks.naFinish`). Without meta.checks nothing changes. CLI `finish <f>
+  --run` executes them (explicit flag only; `--shell` / `DEV_SPEC_SHELL`, `--timeout`, the POSIX refusal under cmd.exe,
+  the pipe hint, a check that could not run records nothing). The merge summary labels an `_Expect: fail_` task's red run
+  as the expected one (`redGreen.prRed`) and a pass after it with the red run it keeps (`prRedKept`).
+- **Git-linked evidence** (CLI only, read-only git): `done --run` / `finish --run` record `{commit, dirty}` (`dirty`
+  ignores `.specs/`; silently skipped without git; a malformed value is dropped, never an error — `gitEvidence()`); the
+  merge summary tags a run `@sha` / `@sha-dirty`. `parseGitLog()` + `taskCommits()` work on git log TEXT (so the MCP
+  server stays exec-free); `dev-spec log <feature> [--max N] [-]` feeds them `git log` (or stdin). Conventions (what
+  /spec-commit writes): a message cites task N when it names the feature (its slug as a word — `.specs/<slug>/`,
+  `feat(<slug>):`) AND "task #N" / "task N" / "#N" (PT "tarefa N", ES "tarea N"); it cites every task whose text / markers
+  name one of its T-IDs (`T-01` = `T-1`) or AC IDs — unless the message names another feature and not this one. +tdd
+  red-first: a task with `_Makes green: T-xx_` whose first citing commit is older than the first commit touching a test
+  file naming T-xx gets a warning; a full `--max` window makes an unknowable order `outside-window`.
+- **Pipes** — `verifyPipeMasked()` runs over a small shell lexer: an unquoted single `|` (also `|&`, inside a subshell,
+  and inside `bash -c` / `sh -c` / `pwsh -Command` / `cmd /c` scripts) is flagged; never `||`, a quoted `'|'` / `"|"`,
+  `\|` / `^|`, `>|`, a pipe inside `$(…)` or backticks, and only `set -o pipefail` run BEFORE the pipe (or a shell's
+  `-o pipefail`) silences it; a Windows path ending in `\` before its closing quote doesn't hide a pipe. Surfaces: the
+  brief's `verifyPipes` + a note, `done --run`'s hint line (stderr under `--json`; it still runs), doctor `verify-pipes`
+  (warn), and `spec_complete_task`'s `pipeMasked: true` + note on a passing piped run — the verification rules are
+  unchanged.
+
+## Task dependencies and execution waves (1.14 F3)
+- **`_Depends: 3, 5_`** — an English-stable task marker (the task line or a sub-line, never fenced code — `taskMarkers()`
+  reads it like every marker: `taskMarkers(b).depends`). Tokens split on commas, semicolons or spaces; `#3` = `3`; a value
+  wholly in `[brackets]` is a template slot (nothing declared). `taskDependsSpec(block)` → `{declared, numbers (unique, as
+  written), invalid (tokens that are no task number)}` — with a fast path: no "depends" on the task's lines, nothing parsed.
+  The numbers name tasks of the SAME tasks.md. Every reader works on ONE view, the ACTIVE tasks (`activeTasks()`), with
+  resolveTask's duplicate rule: a dependency on n is done once EVERY task numbered n is done; a number no active task
+  carries never is. **A tasks.md without `_Depends:_` behaves exactly as before** (same next task, no new fields).
+- **`taskSchedule(blocks)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order
+  (parseTasks' — by number, stable; only the task resolveTask answers for its number is a candidate) whose dependencies are
+  all done. `skipped` `[{number, waitsOn}]` = open tasks passed over because they wait; `blocked` `[{number, waitsOn}]` =
+  open tasks that can never start as things stand (Kahn's walk, `stuckTasks()`: a cycle, a dependency no task carries, or
+  waiting on such a task — only computed when some task declares `_Depends:_`; a task without one is never blocked).
+  Consumers: `spec_next_task` / `next`, next_action's implement step (open tasks, none startable → step `fix` with
+  `blocked` and `taskDepsBlockedNote()` — never "finish"), `spec_task_brief`'s default task (none startable → `task: null`
+  + `blocked`/`skipped` + the note, never "all done"), `next --batch` (`parallelBatch()`: a [P] task waiting on an open
+  dependency — one in the batch included — ends the batch), `spec_status`'s `next`, the roadmap's next task (open tasks none of which can start → the feature reads `blocked` in
+  ROADMAP.md / .html, never "ready", with a `taskDeps.roadmapBlocked` attention line), complete_task's
+  `next` (+ `blocked` and the note when none can start), the spike's investigate step and the scope guard's likely task.
+  **Never compute "next" with `find(!done)`** again.
+- **`taskWaves(blocks, tracks)`** (`spec_next_task {waves: true}` / `next --waves`) → `{waves: [[numbers…]…], cycles,
+  blocked}` over the open tasks. A task WITH `_Depends:_` waits for exactly those tasks (an explicit list replaces the
+  implicit order); a task WITHOUT one keeps tasks.md order among the undeclared tasks — it waits for the open ones before
+  it, and a run of consecutive `[P]` tasks of one section (phase + checkpoint) waits together (join node) and is waited
+  for as a whole. A wave is filled greedily in tasks order with the batch's limits: never two tasks sharing an
+  `_Implements:_` file (`implementsKey`; a folder overlaps its files), and a task with no `_Implements:_` (its files can't
+  be proven disjoint) or an +ai prompt task (`isPromptTask`, inline only) is a wave of its own. `cycles` =
+  `dependencyCycles(g, true)` (iterative Tarjan over the OPEN tasks). Only a task's own `_Depends:_` can take it ahead of
+  an earlier section's checkpoint — the controller still stops at each checkpoint (`references/subagent-execution.md`). All
+  walks are linear and iterative (no recursion on a long chain).
+- **complete_task never refuses on dependencies** (a tick records what happened): ticking a task whose `_Depends:_` are
+  open (`openDependenciesOf()`) returns `waitsOn` [numbers] + `taskDeps.tickedEarly`. The bugfix gate keeps its
+  precedence (the only refusal).
+- **Doctor `task-deps`** (fail, `CHECK_PHASE` 5 = the tasks phase; in the feature doctor and `spikeDoctor`) — only when
+  some active task declares `_Depends:_` (`taskDepsCheck()` → null otherwise): an invalid token, a number no active task
+  carries, a self-dependency, a cycle (`dependencyCycles(g, false)` — the whole plan, done tasks included). The tasks
+  approval refuses on it (`approvalChecks` tasks → `task-deps`). Doctor's `malformed-markers` reads "depends:" as a marker
+  look-alike only before a task number (`**Depends:** 1`) — "(depends: the schema from task 1)" is prose.
+- **The brief** carries `dependsOn` `[{number, status: done | open | missing}]` (kept with `write: true`: identifiers only)
+  and renders a "Depends on" section (`taskDeps.briefHeading`) with a NEEDS_CONTEXT note while one is still open.
+- **`spec_append_tasks {tasks: [{depends}]}`** / `append-tasks --depends 3,5` (repeatable): every number names an ACTIVE
+  task or a task of this same call (by the number it gets here — the error names them), never the task itself, and may
+  not close a new cycle (a pre-existing cycle is doctor's); all-or-nothing like every other field; stored as a
+  `_Depends: 3, 5_` sub-line and read back through `taskDependsSpec()` before anything is written.
 
 ## Change history (1.13)
 - **Approval history.** `approvals[phase]` stays the latest approval (with its content `fingerprint`);
@@ -337,7 +575,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `traceGapLines()` name the change request instead of "(typos?)" — the phantom stays a gap.
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); on written requirements (add_track tdd, create +tdd on an existing
-  feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks.
+  feature) one generic row per real AC — a template row would plan a test for a criterion the feature lacks; written
+  requirements with NO AC get one generic row whose Covers cell is a slot (`acSlot`) — never the template's rows (an
+  ID-less import used to fail traceability on phantoms). spec_import warns when it found no criterion (`wNoCriteriaAtAll`).
   `spec_import` re-plans after writing the imported requirements (createFeature scaffolded from the template ones) and
   fits a kept scaffold tasks.md with `fitTemplateTasks()` (known ACs only, `_Makes green:_` = the tests covering them).
   A +saas / +ai track block (there and in `trackTaskBlock()`, spec_add_track) keeps an ID only when `trackAcIds()` finds it
@@ -353,9 +593,14 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **`spec_metrics`** derives everything from `.state.json`, `.history/` and the artifacts (`createdAt` is
   stored by createFeature; older features get an approximate one). `write` creates `retro.md` (writeIfAbsent).
 - **`spec_append_tasks`** (converge) appends only: numbers after every number in use (tasks.md + leftover
-  evidence), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
+  evidence records and tick times — a new task never inherits a removed one's run or completion time), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
   inactive-track / Global Constraints headings), a read-back check that existing tasks didn't change, and
-  CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`.
+  CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`. Per task, besides `requirements`
+  / `implements` / `verify` / `story` / `parallel`: `makesGreen` (T-IDs — `T-1`, `t-01`, `T01` accepted —, each planned in
+  test-plan.md as `planIdText()` reads it, else `phantomTests` / `noTestPlan` and nothing written; stored as the plan
+  spells it, so trace_check matches), `expectFail` (`_Expect: fail_`) and `size` (XS…XL, case-insensitive, stored
+  upper-case — `badSize`); every marker must read back as given (`unstorable`), and the result's `appended` carries them.
+  CLI `--makes-green` (repeatable, comma lists), `--expect-fail`, `--size`.
 
 ## Catalog, drift, restore, guard, steering (1.13)
 - **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_catalog {write}` and `maybeRefreshCatalog()` use
@@ -381,7 +626,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   SessionStart adds one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
 - **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
   BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
-  in their old position (only for features that still exist; a now-circular edge is skipped and reported). The
+  in their old position (only for features that still exist; a now-circular edge is skipped and reported). An edge to a
+  feature that is ARCHIVED too is handed to that feature's own archive record (reason `archived`), so its restore puts it
+  back — in either order (it was dropped as "gone" for good). The
   archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
   warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
   meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
@@ -396,10 +643,19 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   source file"; add a language there (and to the guard test) rather than rewording. Docs, config, data, markup and
   styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
-  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). A
+  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). Two exceptions,
+  at both levels: a TEST file while some non-archived feature has an approved test plan and is unfinished (why
+  `tests-phase` — Phase 4 writes the failing tests before tasks can be approved), and any code edit while an ACTIVE spike
+  (undecided, or with open tasks, its timebox not passed) exists (why `spike`, field `spikes` — prototype work; a spike has
+  no tasks gate, so it is never listed as "awaiting approval"; at the `scope` level a spike never overrides the approved
+  features' plan). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
   normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
+  Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
+  symlink to the project is inside — read only when the text comparison says outside; errors fall back to it).
   **It never blocks on its own errors:** a malformed payload, a broken roadmap.json or any exception exits 0.
+  1.14 adds the stricter `"scope"` level (see End-of-turn evidence gate and scope guard); a phase still waiting for a
+  role's sign-off is not an approved tasks phase.
 - **Scoped steering:** `steeringFrontMatter()` reads Kiro-compatible front matter — `inclusion: always |
   fileMatch | manual` + `fileMatchPattern` (string or list). No front matter → the brief's default files
   (constitution/tech/structure + the active tracks' files) count as `always`, others stay out; front matter
@@ -446,11 +702,384 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - CLI `dev-spec upgrade [--apply] [--json]` prints `lines`; exit 0 with a report, 1 on an error (no .specs/, a broken
   roadmap.json, a feature that couldn't be migrated).
 
+## Project templates (1.14) — `.specs/templates/`
+- **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
+  built-in i18n builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
+  (classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan,
+  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks) plus `steering/<file>.md` (a known stub, or a name
+  steering_scaffold accepts). Every path is built from the allowlist and `LANGS`, never from a caller's string; at most
+  three levels; dot files are not listed; a linked folder is never entered, a file whose real path is outside the project
+  is ignored, and `init` refuses to write through a link. Files are read BOM-stripped with LF line ends; a
+  whitespace-only file is ignored.
+- **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks` (spec_add_track), `initProject` and
+  `scaffoldSteeringFile` — still create-only (`writeIfAbsent`); results name the templates used (`templates`).
+- **Variables** (case-insensitive, spaces allowed inside the braces): `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}`
+  `{{lang}}` `{{date}}`; an unknown `{{x}}` is left as is; no summary → the language's generic slot (`[TBD]` /
+  `[a definir]` / `[por definir]`) so the scaffold still reads 'placeholder'. For steering, `{{name}}` / `{{slug}}` are the
+  project folder's name and `{{tracks}}` the tracks init was given. For a spike, `{{summary}}` is its question.
+- **Track-block rule — ONE rule for an overridden design / requirements / tasks / test-plan:** every active track still
+  gets what the built-in template would hold for it, appended at the end as spec_add_track appends it
+  (`trackDesignBlock`, `trackRequirementsBlock` — renumbered after the template's own US-1 ACs when an ID would collide —,
+  `trackTaskBlock`, `trackTestRowsBlock` — T-IDs after the template's), citing the IDs requirements.md defines for the
+  track (`trackIdMap`) — UNLESS the template already carries that track (its marker on a real heading, the localized
+  Testability Notes, the track's task-block heading; for the test plan: it cites the track's criteria). The bugfix /
+  spike variants and every other artifact are written as the template says.
+- **Placeholder corpus from the project:** `projectTemplateSets()` adds the bracket texts, code-span slots and task lines
+  of the project's templates to the corpus, so an untouched custom scaffold reads 'placeholder' for doctor / approve /
+  next_action (and bug.md's own slots join `bugTemplateSlots()` — the root-cause gate holds). Scoped to the `.specs/`
+  folder the current engine call works in (`TEMPLATE_SCOPE_ROOT`, set by `specsRoot()`), memoized per call, dropped when
+  the engine writes under `templates/` (`forgetCached`), each file's parse cached by content (`TEMPLATE_PARSE_CACHE`). A
+  slot holding a variable (`[Describe {{name}}]`) matches whatever the variable became through a LINEAR wildcard match
+  (`templateWildcard`) — never a regex built from template text.
+- **Reserved slugs:** `RESERVED_SLUGS` = `steering`, `exports`, `templates` (`resolveFeature` refuses them for new
+  features). **Legacy exception** (`reservedSlug(name, root)`): a `templates/` or `exports/` folder holding a
+  `.state.json` is a feature created before 1.14 — it stays a feature (listed, reachable, renameable) and is never read as
+  templates (`templateFileList()` returns nothing; every `spec_templates` action refuses with `legacyFeature: true`). The
+  PostToolUse hook and the pre-commit check skip `.specs/templates/` with the same exception.
+- **`check`** validates against the current rules (a design template with some of a track's marker headings but not all
+  its sections, a track section without its `> **TODO**`, EARS / AC-ID problems, phantom AC and `_Makes green:_` T-IDs
+  across the trio, bug.md without a real Root Cause slot, unknown `{{variables}}`, chain templates with no slot at all,
+  empty files, non-template names) → `{file, line?, code, severity, message}` + verdict pass | warn | fail; CLI exit 1 on
+  an error.
+
+## Stakeholder export and release notes (1.14)
+- **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
+  the traceability matrix — see below) — the project: `project.<fmt>`, a feature
+  slugged `project`: `project.feature.<fmt>` — with the `RE_AUTOGEN` marker family; `isGeneratedOrAbsent()` means never
+  over a hand-written file (an error). A feature renders in its language, the project in the project language. The HTML
+  is offline by construction: a zero-dep markdown renderer (`expInline` and friends) escapes EVERY text run (`htmlEsc` —
+  a `<script>` in a criterion is shown as text), keeps link targets only for http(s) / mailto, turns an image into its alt
+  text, and loads no font, script or stylesheet URL (a test asserts it); roadmap palette, system light/dark + toggle,
+  print rules. Approvals are flagged "changed since" by content fingerprint only — a file date is no evidence (as in
+  finish). A story written as its own `## US-n` section appears once, under the stories.
+- **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
+  (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
+  criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since
+  then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
+  root-cause one-liner. A feature shipped before `since` is never Added again (a role's `partial` execution sign-off is no shipment — only the
+  completing one); a spike is never listed. `since`: an ISO
+  date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.
+  `write` → `.specs/RELEASE-NOTES.md` (AUTO-GENERATED, never over a hand-written one) and stamps `meta.changelogAt`, both
+  under the roadmap lock; nothing to report → nothing written or stamped (`note`).
+
+## Requirements traceability matrix (1.14 F5)
+- **`buildTraceMatrix(projectDir, {slug, dir}, {code?, scan?, supBy?})`** (`traceMatrix(projectDir, name, opts)` resolves
+  the name) REUSES the readers — never a second verdict, nothing new recorded. Rows = trace_check's AC set
+  (`requirementAcIds`, document order) then the secondary IDs (`secondaryDefinitions`: EC, NFR, SC — kind order) over the
+  ACTIVE requirements (`activeDesign`: a removed track's criteria are out). Per row: `text` (`acOneLine`, ≤ 1000 chars),
+  `template` (`placeholderReport`; a secondary ID trace doesn't count as defined), `design` (the design.md `##` sections
+  naming the ID — a bugfix: `bug.md: …` + `design.md: …`, spec_impact's keys — plus, for a `[SEC]` / `[PRIVACY]`
+  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskProse`, never a fenced example — cites
+  the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
+  `taskVerification()` in the project's evidence mode (F1: `unobserved` under `"observed"`), `rtmEvidence()` = the latest
+  record's command / exitCode / at / expected / observed / commit / dirty, or its note, `stale`), `tests` (+tdd: the T-IDs of
+  the test-plan entries citing it — `planIdText`; with `code` the files naming each, `outsideCode` for a T-ID run outside
+  test code; one `scanTestCode()` walk shared with trace's `code`), `decisions` (current decisions.md entries whose
+  `_Affects:_` name it), `supersedes` / `supersededBy` (`supersededByIndex()`, built once per call — the project export
+  passes it to every feature), `approval` `{at, by, forced, changed}` — the requirements approval and whether THIS row's
+  text changed since the approved snapshot (`latestSnapshot`); a fingerprint-only approval knows only whether the file
+  changed (`changed: null` when it did — unknown which row); none → `null`. Plus `approval` (with `baseline: snapshot |
+  fingerprint-only | none`), `counts` {rows, verified, implemented, planned, untraced, template, superseded}, `lang`,
+  `kind`, `tracks`.
+- **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
+  open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
+  done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
+  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
+  scaffold's untouched EC / NFR / SC row, `template: true`, which trace_check doesn't warn about either) — exactly
+  trace_check's gaps and secondary warnings for that ID. Labels are localized (`i18n.msg(lang).rtm`, EN/PT/ES).
+- **Surfaces.** `trace_check {matrix: true}` → `matrix` (informational — never the verdict; with `code` both share ONE
+  walk); `dev-spec trace <f> --matrix` (a table, `printMatrix`) and `--csv` (the data alone on stdout — no BOM, no marker
+  record — exit code still = trace gaps; under `--json` the JSON result); `spec_export {format: "csv"}` / `export [f] --csv
+  [--write]` (one of `--md` / `--html` / `--csv`) → `.specs/exports/<slug>.rtm.csv` (the project: `project.rtm.csv`, every
+  active feature's rows; a feature slugged `project`: `project.feature.rtm.csv`), `isGeneratedOrAbsent()` like every export;
+  the HTML / md FEATURE export gains a "Traceability matrix" section (`rtmMarkdown` — not for a spike; cells through
+  `rtmCell`, a `<!--` opener neutralized so a cell can't swallow the next ones) and the PROJECT export each feature's counts
+  by status (`rtmProjectMarkdown`).
+- **CSV** (`matrixCsv(matrices, lang, {document?})`): RFC 4180 — CRLF records, a field holding `,` `"` CR or LF quoted
+  (quotes doubled); localized header row; a Test files column only when some matrix was built with `code`; formula guard
+  (`RE_CSV_FORMULA`): a cell starting with `=` `+` `-` `@`, a tab or a CR gets a leading apostrophe. `{document: true}`
+  (spec_export) adds a UTF-8 BOM (Excel reads a BOM-less CSV in the ANSI code page) and a LAST record carrying `#
+  AUTO-GENERATED by dev-spec …` in its first cell, the other cells empty — the header stays row 1, the table rectangular,
+  and `isGeneratedOrAbsent` finds the marker in the file's tail.
+
+## Team governance — approvals by role and fast-forward (1.14)
+- **`roadmap.json → meta.approvalRoles`** `{<phase>: [roles]}` — PHASES order, lower-cased, a role matches
+  `^[\p{L}\p{N}][\p{L}\p{N}_.-]{0,39}$`; `{}` / `--roles none` clears it. CLI text form `requirements=product,design=tech+security`
+  (`+` or a bare word after a comma adds a role to the previous phase). Without it nothing changes (a `role` given is only
+  recorded).
+- **Sign-offs:** a listed phase needs `role` (`roleRequired` / `roleNotListed` refusals). Each sign-off runs that phase's
+  gate like any approval (force records it forced) and is appended to `approvalHistory` with its `role`; until the last
+  role signs it waits in `.state.json → signoffs[<phase>][<role>]` (its history record `partial: true`, no snapshot). The
+  completing sign-off writes `approvals[<phase>]` (with `roles` `{<role>: {by, at, fingerprint…}}`) and the snapshot
+  exactly like a single approval — so every reader of `approvals[<phase>]` (doctor approval-gates / `nextGate.missingRoles`
+  / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
+  approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
+  tests, execution — keeps its sign-offs until approved). readState refuses a non-object `signoffs`.
+- `spec_impact` returns `missingRoles` when the changed phase needs roles, and its "→ re-approve" line carries
+  `--role <first>`; a fast-forward stopped by a role error says what it approved before (`ffWhyRole`).
+- **Legacy rule:** a phase approved WITHOUT the roles now required (approved before roles were configured, or before a
+  role was added) stays approved — by an unknown role, never retroactively pending; doctor / finish warn and ask each
+  role to re-sign.
+- **Fast-forward** (`through`, `approve --through`, /spec-ff): approves the active phases IN ORDER (the flow's order) from
+  the first unapproved one up to `through` (never `execution`), each through its own gate — snapshot + history record
+  flagged `batch: true` (`metrics.batchApprovals`). It stops at the first refused gate (`ok: false`, `refused`,
+  `stoppedAt`, `failing`, `checks`; the phases before it stay approved, listed in `approved`) or at a phase still waiting
+  for another role (`ok: true`, `complete: false`). `phase` is optional only with `through`. next_action suggests it
+  when every planning artifact through tasks is filled and passes its gate.
+
+## Forecasts and cross-feature overlap (1.14)
+- **Sizes:** `_Size: XS|S|M|L|XL_` (English-stable; its line or a sub-line, never fenced code) = 1/2/3/5/8 points
+  (`SIZE_POINTS`); an unsized task counts as its feature's median sized task, else M.
+- **Ticks:** `spec_complete_task` records `.state.json → ticks[n]` = ISO, written BEFORE the tick (`recordTick`; a
+  non-object `ticks` is left alone). A task ticked before 1.14 falls back to its first passing evidence run, else the
+  record's time (`taskCompletedAt`); a box ticked by hand has no time and is not counted.
+- **Velocity** = points per WORKING day (Mon–Fri, UTC days) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
+  counted from the day of the window's first completion through today — project-wide, and per feature once it has
+  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **ETA** = open points ÷ velocity, in working days from
+  today or from the working day after each unfinished dependency's ETA, with a ±`FORECAST_SPREAD` (25%) range (low/high
+  chain off the dependencies' low/high). No ETA → `eta: null` + a stable `reason`: `not-enough-data` (< 3 completions in
+  the window) · `no-tasks` · `dependency` · `cycle` · `done`. Surfaces: `spec_roadmap` (`velocity`, each feature's
+  `forecast`), the ROADMAP.md / .html ETA column ('—' without one) + velocity line, `spec_metrics.velocity`, the CLI
+  roadmap. Pure reads of tasks.md + .state.json.
+- **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
+  covers the files under it, a glob what it matches and its literal folder), or an active feature planning a file a
+  FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
+  transitively — a finished pair included) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
+  `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS` 50), text reads only — nothing hashed, since SessionStart runs it.
+  Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_depend or
+  `_Supersedes:_`), one SessionStart line.
+
+## End-of-turn evidence gate and scope guard (1.14)
+- **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; `hooks/stop-hook.js` and `dev-spec stop-check`
+  print the same decision) sends a turn back (`block: true`, `reason`) ONLY when (a) the closing message CLAIMS the work
+  is done or verified and (b) a non-archived feature active in the last `STOP_RECENT_HOURS` = 4 h (lastTickAt, ticks,
+  evidence `at` / `noteAt` / history — only what the engine recorded, never a file date (a fresh clone stamps tasks.md
+  "now"), and a stamp in the future is ignored; at most 50 features) has ticked tasks `verificationStatus()`
+  reports unverified — or, every active task done, project checks without a passing run since the last task activity
+  (`suiteStatus().missing` — any status but `pass`, `code-changed` included).
+  Stable `why` codes: `stop-hook-active` · `no-specs` · `off` · `no-claim` · `admitted` · `verified` · `no-recent` ·
+  `unverified` (+ the implementer's `not-done` · `no-task` · `nothing-to-verify` · `report-ok` · `implementer-evidence`).
+  The reason is localized in the project language (an implementer's in its feature's). An unreadable `.state.json` is
+  skipped — the gate never blocks on its own trouble.
+- **Claims** (`stopClaims()`): the patterns are i18n `stopGate.claims` / `negators` / `admissions` of EVERY language,
+  compiled together (unicode word boundaries — JS `\b` never matched "concluído"), over the message's last 20 000
+  characters minus fenced code, inline code, HTML comments and quoted (`>`) lines. A claim doesn't count when a negator or
+  condition sits up to 3 words before it in its sentence ("not done", "once the tests pass", words ending in `n't` /
+  `'ll`, or the claim's own first word — "Nothing is done"), nor when its sentence is a question. An ADMISSION anywhere
+  ("task 3 is not verified", "2 failing", "2 are failing") means the honest answer is never sent back — unless a `fixed`
+  word — a fixing verb or "previously", never an auxiliary ("was", "had", PT "havia", ES "había": "2 tests failed and I
+  was unable to fix them" is an honest admission) — sits within 4 words of it in its clause with no negator anywhere in
+  that window (`stopPastFailure()`: "I fixed the 2 failing tests", "previously 4 failed"; "I haven't fixed the 2 failing
+  tests", "the 3 failing tests were not fixed" stay admissions). The look-back and the question tail are bounded
+  (`STOP_CLAUSE_SPAN`) — slicing the whole text per hit was quadratic. A noun + done claim ("Feature complete") must end
+  its clause ("the implementation done so far" claims nothing). The negator window is cut at
+  `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
+  clitic, never in guessed-PT text — em+o; "se" — PT "if" — only for a PT claim, never in guessed-ES text nor before a
+  Spanish auxiliary or preterite). Claims include "All tasks
+  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
+  held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
+  language, add its four lists (claims, negators, admissions, fixed).
+- **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
+  task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
+  every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
+  1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
+  `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
+  (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
+  STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed.
+- **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
+  `^(dev-spec-driven:)?spec-implementer$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
+  live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
+  honours `stop_hook_active` (never sends the same stop back twice in a row), answers `{"decision": "block", "reason"}`,
+  is silent when there is nothing to say, when `.specs/` isn't dev-spec's, or when `roadmap.json → meta.stopCheck` is
+  exactly `false` (on by default — `spec_init {stopCheck}` / `init --stop-check on|off`; the result always reports it), and
+  exits 0 on any error. CLI: `dev-spec stop-check [--message "<text>"|-] [--agent <type>]` (exit 1 = would send it back).
+- **Scope guard:** `meta.guard` is `false | true | "scope"` (`guardLevel()`; the hook reads the same raw value;
+  `guardInput()`: true / "on" → true, false / "off" → false, "scope" → "scope", strings case-insensitive). `scope` adds,
+  once some feature holds approved (or forced) tasks with open ones, `scopeGuardDecision()`: a code file is allowed when
+  an OPEN task of such a feature names it in `_Implements:_` (the file via `implementsKey`, a folder above it, or a glob
+  matching it) or when it is a test file (tests are planned by T-ID); otherwise ask, naming the likely task (a planned
+  file in the same folder, else the longest shared folder prefix, else the `taskSchedule()` next task of the first covering
+  feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
+
+## Harness-observed evidence (1.14 F1)
+- **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
+  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or the ` && ` join of
+  a task's several commands — `verifyCommandSet()`, how `done --run` reports them) or of a `meta.checks` command.
+  `spec.observeRun()` appends ONE JSON line `{command, exitCode, at, event, session}` (command flattened by `flatCommand()`:
+  backticks dropped, whitespace runs folded — the implementer gate's rule) to `.specs/<feature>/.execution/observed.jsonl`
+  for each non-archived feature whose tasks.md holds that `_Verify:_`, and to `.specs/.execution/observed.jsonl` for a
+  project check (a dot folder is never a feature; each `.execution/` gets its self-ignoring `.gitignore` `*`). It never
+  creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
+  (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
+  command over `OBSERVED_MAX_COMMAND` (4000) is never logged; at most `OBSERVED_MAX_FEATURES` (200) feature folders.
+- **The hook** exits 0 at once unless the tool is `Bash` / `PowerShell` on one of the two events and a project is found —
+  EVERY distinct dev-spec one (`isDevSpecProject`) among the nearest folder holding `.specs/` at or above the payload's `cwd`
+  and `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`: a subagent working in a git worktree of the project runs in the worktree's
+  copy, whose git-ignored log is never merged back, so the run is logged in the main project too. Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
+  the payload's own), else a response text starting `Exit code N`; else (never for PowerShell — no code, no run) 0 on PostToolUse (1 when the response says
+  `is_error`), and on PostToolUseFailure the code named in `error` ("… exit code 1"), else 1 — a failure is never 0. An
+  interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,
+  `backgroundedByUser`) and a run with no explicit code but a `returnCodeInterpretation` (a non-zero exit the Bash tool read
+  as no error — grep's "No matches found") are no run. A leading `cd <project root> &&` (or `;`) is stripped (Git Bash
+  `/c/…` paths read as `C:/…`); any other folder keeps the whole command, which then matches nothing. The engine is loaded
+  only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
+  folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
+  ignored), and exits 0 on any error.
+- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode)` → `{observed, at?}`: true when the LATEST
+  logged run of the same flattened command within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future
+  ignored) exited with the same code — a report of exit 0 after an observed exit 1 is not what the harness saw
+  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed.
+  `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
+  is stamped `observed: true | false`; `done --run` / `finish --run` pass `ranBy: "cli"` → `observed: "cli"` (the CLI ran it
+  itself; counts as observed). The MCP server never passes `ranBy`, and `normalizeEvidence()` keeps no caller-given
+  `observed`. Every `spec_complete_task` result carries `observed` when a run was given (stable); `suiteChecks[]` items carry
+  their run's `observed`, and so do the matrix's task evidence records (F5, `rtmEvidence()` — JSON only; the CSV / table /
+  export words don't print it). The brief and the merge summary don't show it.
+- **The mode.** `roadmap.json → meta.evidence` = `"reported"` (default — absent is reported: the 1.14 verdict, the stamp is
+  context only) | `"observed"` (opt-in; switching to it stamps `meta.evidenceSince`, switching back removes it).
+  `evidenceMode()` fails CLOSED: an unparseable roadmap.json whose raw text says `"evidence": "observed"` stays observed
+  (one stray byte switched the rule off). `spec_init {evidence}` / `init --evidence reported|observed` (case-insensitive;
+  anything else is an error before any write; under the roadmap lock, no write when the effective mode doesn't change);
+  the result always reports the current `evidence` (+ `evidenceNote` when given). `evidenceRule(projectDir)` (`{mode, since}`) is read by
+  `taskVerification(evidence, block, dup, rule)` (a bare mode string is accepted) — under `"observed"`, a runnable `_Verify:_` is verified only when the run
+  that proves it (the latest passing run; an `_Expect: fail_` task's red proof, `redProof()`) is stamped `true` or `"cli"`
+  (`observedProof()` — an `_Expect: fail_` red proof recorded BEFORE `evidenceSince` also counts once the fix's passing run
+  is observed / CLI-made: re-making it would mean breaking the fixed code), else reason **`unobserved`** — so every surface of the one verdict follows (complete_task, status,
+  impact, doctor, finish, ROADMAP.md, the stop gate, the matrix). A task without a runnable `_Verify:_` is unaffected.
+  `suiteStatus()` → **`unobserved`** for a passing project-check run that isn't observed (a finish blocker like any status
+  but `pass`). complete_task's note (`observed.unobservedNote`; `observed.unobservedRedNote` for an `_Expect: fail_` task — re-make the
+  red run observed, never a `--run` of the green test) adds `observed.neverObserved` when no run was ever logged in
+  the project (`observedAny()` — an MCP-only client has no hook); next_action's `verify` step adds `observed.naHint`.
+- **Not a security boundary:** an agent with a shell could write the log itself. It raises the bar on a hallucinated or
+  paraphrased report — the run has to have happened in the harness. MCP-only clients have no hook: under `"observed"` they
+  record runs with `dev-spec done <f> <n> --run` (or switch back to `"reported"`).
+
+## Human approval guard (1.14 F2)
+- **`roadmap.json → meta.approvalGuard`** = `off` (default; absent = off) | `ask` | `deny` (`APPROVAL_GUARD_LEVELS`, in
+  order — a later one is stricter). `spec_init {approvalGuard}` — a plain string enum in the schema — / `init
+  --approval-guard off|ask|deny` (anything else: a localized CLI error; `approvalGuardInput()` → undefined leaves it
+  unchanged in the engine); written under the roadmap lock, no write when unchanged; the result always reports the
+  current `approvalGuard` (+ `approvalGuardNote` when given).
+- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher `^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$`)
+  is silent unless the guard is on: a tool call that can't be an approval (a Bash / PowerShell command not containing
+  `dev-spec`) exits before any file read; otherwise ONE raw read of roadmap.json per candidate project — the project the
+  call names (MCP `projectDir`, CLI `--project` in the command), the payload `cwd`, `CLAUDE_PROJECT_DIR`,
+  `SPEC_PROJECT_DIR` (at most 8; `${VAR}` unexpanded and network paths — `\\host\share`, `//host/share`, `\\?\UNC\…` —
+  refused, `\\?\C:\…` is local); the STRICTEST level wins. The engine is loaded only then; it answers
+  `{hookSpecificOutput: {permissionDecision, permissionDecisionReason}}` (+ `systemMessage` for deny). It never blocks on
+  its own trouble: a malformed payload, a broken roadmap.json or any exception exits 0 silently.
+- **`approvalGuardDecision(payload, level, {lang, cli?})`** — PURE (reads nothing) → `{decision: allow | ask | deny, why,
+  level, …}`; `why` (stable): `off` · `no-payload` · `not-pre-tool-use` · `not-an-approval` · `approval`. On an approval:
+  `actions` `[{kind: approve | remove | guard-down, source: mcp | cli, feature, phase, through, role, by, force, from, to,
+  project}]`, `force`, `command` (what the human runs, `!`-prefixed), `reason` (localized, `approvalGuard.ask` /
+  `approvalGuard.deny`) and, for deny, `userNote`. What counts: `spec_approve` under ANY MCP server prefix (or bare);
+  `spec_feature {action: "remove", confirm: true}` (a preview isn't); `spec_init {approvalGuard}` LOWERING the level
+  (raising is always fine); through the Bash / PowerShell tool, `dev-spec approve …` (phase or `--through`, `--role`,
+  `--by`, `--force`), `dev-spec feature remove … --yes` and `dev-spec init --approval-guard <lower>` — `--help` runs nothing.
+- **The shell lexer** (`shellCommandWords()`, one linear pass, nothing evaluated): separators outside quotes are newline
+  `;` `&` `|` `(` `)` `{` `}` backtick and `$(`; single quotes are literal; inside double quotes a backslash escapes only
+  `"` `\` `$` `` ` ``; outside quotes it stays (a Windows path). `devSpecWordAt()`: the CLI's script (`dev-spec`,
+  `dev-spec.js` / `.cjs` / `.mjs` / `.cmd` / `.ps1` / `.exe`, any path) counts only in PROGRAM position — after launchers
+  and shell keywords (`APPROVAL_WRAPPERS`: node, npx, bun, deno, sudo, env, time, `!`, if/then/do…), env assignments,
+  options and a timeout — never as another program's argument (`echo dev-spec approve x`, `git commit -m "…"`).
+  `cliApprovalAction()` reads the words after it with `CLI_SWITCHES` (a `--flag` that is no switch takes the next word),
+  then again with every flag as a switch. A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program
+  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch…) is lexed as a script
+  in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read.
+- **ask** → `permissionDecision: "ask"`: the user confirms or declines; the reason names the feature, phase(s), role, the
+  `by` and, loudly, `--force`. Claude Code's auto / bypass permission modes may skip the prompt. **deny** →
+  `permissionDecision: "deny"` (holds in every mode): the reason tells the agent approvals are the human's (stop and ask);
+  the user sees `systemMessage` with the command to run — `! node "<clone>/cli/dev-spec.js" approve <f> <phase> [--role r]
+  [--force] [--project "…"]` (`approvalCommand()`: a value from the agent's call goes in only when it is plainly safe to
+  paste into bash / PowerShell, else a `<placeholder>`; the `!` line run by the agent itself is still an approval).
+- **A guardrail on the approve paths, not a sandbox:** an agent editing `.state.json` or running `node -e` isn't caught.
+  `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (see Conventions): a CLI-only switch would make this lexer
+  read the next word as its value.
+- **The lexer (review fixes).** `shellCommandWords(cmd, mode)` lexes by the tool's shell: `bash` (`\x`, `\⏎`, `$'…'`,
+  `$( )` / backticks also inside "…"; `raw` keeps backslashes for Windows paths), `ps` (the backtick is PowerShell's escape
+  and line continuation, `@'…'@` / `@"…"@`, `#`, `<# #>`), `cmd` (`^`). Recursive, bounded by `APPROVAL_LEX_DEPTH` (32),
+  linear. Redirections go to `redirs`, never words. Heredoc bodies are data: skipped when the delimiter is quoted, only
+  `$( )` / backticks read when unquoted, read as a script when fed to a shell (`bash <<EOF`, `sh <<<`); `<<` inside `(( ))`
+  is a shift. `programAt()` skips launchers and their value options (`APPROVAL_OPTION_VALUES`: `sudo -u`, `exec -a`,
+  `node -r` …) and counts npm / pnpm / yarn / bun / deno only through a real run subcommand (`APPROVAL_SUBCOMMANDS`).
+- **Guard-down actions** (`kind: "guard-down"`, `setting`: approvalGuard · evidence · roles · check · stopCheck · guard ·
+  roadmap) — lowering the guard, and weakening what it protects: evidence observed → reported, approval roles cleared or a
+  required role dropped, a project check removed or its command changed, the stop gate off, the edit guard lowered, a
+  shell write / move / delete of `.specs/roadmap.json` (or of `.specs/`; `command: null` — the user makes that change).
+  Judged against the project's meta, which the hook passes in (`opts.meta`); no readable meta → fail closed. Raising,
+  adding or a no-op stays allowed. A `roadmap.json` that exists but doesn't parse keeps the strictest `"approvalGuard"` its
+  raw text names (`approvalGuardLevel` and the hook). Known limits: shell variables, aliases, splatting, inline scripts
+  (`node -e`), `cd .specs && … > roadmap.json`, and the Write / Edit tools.
+
+## Decisions and spikes (1.14)
+- **`decisions.md`** (committed with the spec — `.execution/` is the scratch area): a localized header, then per entry
+  ```
+  ## D-<n> — <title>
+  - _Kind: decision | discovery_
+  - _Date: <ISO timestamp>_
+  - _Affects: US-1.AC-2, T-03, <design section>_      (optional)
+  - _Supersedes: D-1_                                 (optional)
+  **Context:** …  **Decision:** (or **Discovery:**) …  **Consequences:** …   (localized labels; any EN/PT/ES spelling read)
+  ```
+  The IDs and markers are English-stable; markers are read only between the heading and the first label; HTML comments
+  and fenced code never hold an entry. `spec_decide` appends under the feature lock: numbered after the highest D-n, the
+  existing bytes never rewritten (a BOM and CRLF kept — the entry follows the file's line ends; a code fence left open at
+  the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again); title ≤ 200 and texts ≤
+  20 000 characters. `_Affects:_` is validated when written (an AC defined in requirements.md, a T-ID planned in
+  test-plan.md, an EC/NFR/SC ID written in requirements.md, anything else a design.md section heading — bug.md /
+  design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written) and `_Supersedes:_ D-n`
+  must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
+  marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_catalog (count + titles),
+  trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
+  a current decision recorded AFTER the approval of the requirements / design it names).
+- **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options
+  considered · Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up — localized headings matched by
+  `SPIKE_SYN`; `_Outcome:_` also reads the PT/ES words and yes/no) + investigation tasks; core-only; `gateWalk`,
+  `pendingGateList` and `chainArtifacts` are empty for it, approve refuses every phase but the execution sign-off and
+  add_track refuses it. Own doctor (`spikeDoctor`: question; decision — FAIL until written, prose outside the brackets,
+  the `_Outcome:_` line alone is no rationale —; timebox — warn once past with no decision), next_action (question →
+  investigate → decide → go: spec the real feature seeded from question + decision and archive the spike · no-go: archive
+  · pivot: a new spike), finish (ready once decided and every task ticked — no suite / evidence gates) and detectPhase
+  (requirements → tasks-ready → executing → complete). Roadmap (🔬, timebox attention), catalog, export and resources know
+  it; the changelog never lists one. Prototype code lives outside `.specs/`.
+
+## Import sources and flows (1.14)
+- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad`,
+  same guarantees for all (a NEW feature, the source only read and inside the project, mapping + warnings, the localized
+  "Imported from" note, tracks auto-classified unless given; nothing dropped silently — what no mapping takes goes to
+  design.md (plan / ExecPlan) or requirements.md (PRD), or into a warning).
+  - `plan` — a Claude Code plan-mode file (plansDirectory defaults to `~/.claude/plans`, OUTSIDE the project — the refusal
+    says to copy it in or point plansDirectory inside) or a Cursor `.cursor/plans/*.plan.md` (front matter name / overview /
+    todos): goals and acceptance-like bullets → US-1's criteria (EARS when they already read like one, else
+    `[NEEDS CLARIFICATION]`); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
+    only when there is no other), else its
+    sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
+    home path, `..`, alias, glob; `:line` / `#L10` dropped); the rest → design.md. A folder holding several plans is
+    refused (name the file).
+  - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
+    → tasks (deduplicated), a step naming a check command → `_Verify:_`; Decision Log → design.md `## Decisions` (D-1…);
+    Purpose → summary; living sections → design.md verbatim.
+  - `bmad` — the PRD (`docs/prd.md`, sharded `docs/prd/`, v6 `_bmad-output/planning-artifacts/`) FR / NFR lines → FR-n /
+    NFR-n; epic stories + story files (`docs/stories/*.md`; the file wins over the PRD's copy) → US-1…US-n in story order,
+    their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_`; architecture + Dev
+    Notes → design.md. One story file imports one story.
+- **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
+  `spec_feature {action: "flow"}` / `feature flow <name> <flow>` — approved phases stay approved, pending gates follow the
+  new order) orders the chain classification → design → requirements → test-plan / eval-plan → tests → tasks
+  (`DESIGN_FIRST_PHASES`, `phaseOrder()`, `flowIndex()` swaps the requirements/design slots). Every reader of the order
+  goes through it: `gateWalk` / `pendingGateList` (next_action, doctor, approve's phase-order check, the fast-forward),
+  `detectPhase`, `chainArtifacts` (the placeholder gate's phase scoping), next_action's failing-check filter, the roadmap
+  percent and spec_upgrade's status. The design gate of a design-first feature never reads the requirements; doctor
+  defers AC traceability and the requirements' own checks while requirements.md is still a later phase's template. No
+  flow / `requirements-first` = the default order. Any kind but a plain feature (bugfix, spike) ignores the flow
+  (`flowOfState()`; spec_create says so, spec_feature refuses it).
+
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
   never `path.join(specsRoot, slugify(name))`. An empty slug (non-Latin names, `...`, `undefined`)
   used to resolve to `.specs/` itself, so `spec_feature remove` deleted every spec (the v1.11
-  Critical). The resolver also rejects `steering` and Windows device names (`nul`, `con`, `com1`…),
+  Critical). The resolver also rejects the reserved slugs (`steering`; since 1.14 `templates` / `exports` too, with the
+  pre-1.14-feature exception — see Project templates) and Windows device names (`nul`, `con`, `com1`…),
   transliterates accents (`Autenticação` → `autenticacao`) and falls back to the pre-1.11 slug
   (`autentica-o`) so old folders are still found. `slugify(undefined)` is `""`, never `"undefined"`.
   `listFeatures` skips dot-folders and non-slug folders (reported as `ignored`).
@@ -461,7 +1090,7 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `roadmap.json` / `.state.json` that exists but doesn't parse is an ERROR every mutator returns
   (`roadmapError()`, `state.invalid`) — never "repaired" into `{}` (that erased deps, backlog,
   approvals and `meta.lang`). **Valid JSON of the wrong shape is refused the same way:** `readState()` checks
-  the top level, `approvals`/`evidence` (objects), `tracks`/`approvalHistory`/`changes` (lists);
+  the top level, `approvals`/`evidence`/`finishChecks`/`signoffs` (objects), `tracks`/`approvalHistory`/`changes` (lists);
   `loadRoadmap()` checks `features` and each entry, `dependsOn` (string lists), `meta`, `backlog`. Readers get
   a sanitized copy; every mutator refuses BEFORE its destructive step. A leading BOM is tolerated.
   `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename and the
@@ -471,7 +1100,7 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   ticks go through it too (a reader never sees a truncated tasks.md).
 - **Feature mutators hold a cross-process lock** (`withFeatureLock` / `featureLocked` in the exports):
   `completeTask`, `approvePhase`, `appendTasks`, `addTrack` / `removeTrack`, `impactReport` with `reopen`,
-  `finishFeature` with `write`, `taskBrief` / `metrics` with `write` (a derived file written into the feature folder is a
+  `finishFeature` with `write` or `evidence` (finishChecks), `decide`, `manageFeature`'s `flow`, `taskBrief` / `metrics` with `write` (a derived file written into the feature folder is a
   write: resolved before a rename and written after it, the brief recreated a zombie `.specs/<old>/.execution/`), and
   `createFeature` re-run on an EXISTING feature (it adds tracks through
   `applyTracks`, spec_add_track's path — a NEW feature has no folder to lock). Two MCP servers (or MCP + `dev-spec done`)
@@ -505,7 +1134,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   and wrote into it — the removed feature came back (.state.json, .history/) after an ok remove. Dot folders are never
   features (list / roadmap / catalog / drift skip them, the hook exits for `/.specs/.removing-`); `sweepTombstones()` deletes
   a leftover one older than 60 s on the next remove. **`roadmap.json`** read-modify-writes (depend, backlog add/rm, `pruneBacklog`,
-  `pruneRoadmapRefs`, restore, init `--lang`/`--guard`, roadmap `--lang`) hold `.specs/.roadmap.lock`
+  `pruneRoadmapRefs`, restore, init `--lang`/`--guard`/`--stop-check`/`--check`/`--roles`, roadmap `--lang`, changelog
+  `--write`'s `meta.changelogAt`) hold `.specs/.roadmap.lock`
   (`withRoadmapLock`, `err.roadmapBusy`; it forgets only roadmap.json from the read cache). Lock order: a feature lock,
   then the roadmap lock — never the reverse; the ROADMAP.md refresh runs after both are released. Internal calls use
   the unwrapped functions. **The lock files are git-ignored**: `ensureLockIgnore()` keeps `.specs/.gitignore` holding
@@ -525,7 +1155,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `writeRoadmapMd/Html` skip a same-named file without it — the hooks run in every project; `spec_roadmap`
   returns a refused ROADMAP.md write as an error (a kept hand-written ROADMAP.html is a warning). The
   roadmap chrome language is `meta.roadmapLang`; `meta.lang` is the project language and only `spec_init`
-  sets it.
+  sets it. The other generated files — `SPECS.md`, `UPGRADE.md`, `RELEASE-NOTES.md`, `.specs/exports/*` — use the same
+  marker family and `isGeneratedOrAbsent()`: a hand-written file of that name is never overwritten.
 - **`spec_depend`**: `dependsOn` REPLACES the list (`[]` / CLI `--clear` clears), `add`/`remove` (CLI
   `--add`/`--rm`, repeatable) edit it, `name` alone is a read (a bare `dev-spec depend <f>` used to clear the
   deps). Every dependency must be an existing feature.
@@ -545,7 +1176,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
   first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
   (`finishFeature(…, {gateOnly: true})` → stable ids `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
-  `tasks`, `open-tasks`, `verification`, `approval-gates`); otherwise only `force` records it. spec_metrics' `finished`
+  `tasks`, `open-tasks`, `verification`, `approval-gates`, `suite-evidence` with meta.checks; a spike: `spike`, `decision`);
+  otherwise only `force` records it. spec_metrics' `finished`
   = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).
 - **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
@@ -558,7 +1190,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   include `EC-n`, `NFR-n`, `SC-nnn`; a deeper sub-list continues its parent criterion.
 - **Mandatory sections**: `extractSection(md, syn, marker)` prefers the heading carrying the track
   marker (`[SaaS]`/`[AI]`), skips fenced code, **never matches the H1 title** (it carries the feature name)
-  and requires the synonym to START the heading (after marker / numbering / "Section N:"), word-bounded.
+  and requires the synonym to START the heading (after marker / numbering / "Section N:" / an emoji), word-bounded; a
+  track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling").
   "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing).
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
@@ -576,7 +1209,11 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **`trace --code` T-ID convention:** a test names its T-ID — `T-01` anywhere (`test("T-01 …")`), or without
   the hyphen an uppercase `T` + zero-padded number (`test_T01_…`, `testT01`, `TestT01`, `T01_…`) — see
   `RE_CODE_TID`. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
-  concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts.
+  concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
+  ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
+  for this feature's T-IDs (T-IDs restart at T-01 in every feature: a new feature's Phase 4 gate passed on another
+  feature's tests). A folder token (`test/`) scopes rows but claims no file, and a claim is the EXACT project-relative path (a suffix match
+  made `tests/test_api.py` own a monorepo package's `services/beta/tests/test_api.py`).
   A T-ID whose EVERY row names only non-code artifacts in its File column (`load-test.md`, `evals/*.json`, a
   `.feature` — any extension outside `GUARD_CODE_EXT`) is run outside test code: `plannedOutsideCode`, never
   `plannedNotInCode`, so neither doctor, finish nor the Phase 4 gate expects it in a test file (the scaffold's own
@@ -595,7 +1232,16 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`).
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). Every unit
+  that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
+  body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
+  heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list
+  item defines that ID anywhere or an earlier unit already did (a Notes line "US-1.AC-2 depends on …", a coverage table),
+  and outside an acceptance-criteria context a line or heading defines one only when it carries a modal verb or a
+  capitalised EARS keyword. Doctor's `ears` FAILS (and the requirements approval
+  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsUnlinted()`, `earsNoCriteria`). The
+  requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
+  without a modal is an EARS error there too.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
   `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
@@ -611,7 +1257,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   `tran·sla·te`, `auth` inside `auth·or` — and a phantom STRONG signal auto-enables a track, which
   then *hides* the negation the classifier computed for it. The regex allows inflections
   (`payment→payments`, `rate-limit→rate-limiting`), plural-only for ≤3-char acronyms (so `rag`+`ing`
-  ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`),
+  ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`), `VERB_STEMS` (a stem + its
+  listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
   (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). When you add a
   keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
@@ -622,8 +1269,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template
-  examples inside comments. A `<!--` that never closes is plain text everywhere — `stripHtmlComments` (closed only),
-  `scanTaskLines`, and `criterionBlocks` / `placeholderReport` via `closerBelow()`: a stray marker used to hide every
+  examples inside comments. A `<!--` that never closes is plain text everywhere — ONE comment reader, `commentLines()`, serves
+  `stripHtmlComments`, `criterionBlocks` and the placeholder scan (and `scanTaskLines` keeps its own): a `<!--` inside
+  fenced code or an inline code span is text, and a comment opens only when a `-->` outside code follows it: a stray marker used to hide every
   criterion below it (EARS 0 criteria → pass, the requirements approval passed) while trace_check counted them.
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
@@ -637,13 +1285,16 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   keeps the Mermaid graph); `ROADMAP.html` is opt-in (`html:true`, self-contained, zero-dep, brand
   palette + system-default light/dark toggle). `roadmapData()` is the shared computation;
   `renderRoadmapMd`/`renderRoadmapHtml` (both take `lang`) build the output; `ROADMAP_I18N` holds
-  EN/PT/ES chrome; `meta.lang` in `roadmap.json` persists the language for auto-refresh.
+  EN/PT/ES chrome; `meta.roadmapLang` (else `meta.lang`) in `roadmap.json` persists the language for auto-refresh.
   `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
   best-effort. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
   `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
-  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug.
-- **Multilingual headings:** `SAAS_SECTIONS`/`AI_SECTIONS` are `{name, syn:[…]}` with EN/PT/ES
-  synonyms; `extractSection` matches any synonym. `doctor`/`clarify` use `RE_CONSTITUTION_CHECK`,
+  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
+  line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
+  already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
+- **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /
+  `PRIVACY_SECTIONS`) are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
+  (a `loose` one only in the track's context — see The track model). `doctor`/`clarify` use `RE_CONSTITUTION_CHECK`,
   `RE_SUCCESS_CRITERIA`, `RE_INDEPENDENT_TEST`, `RE_OUT_OF_SCOPE`, `RE_NFR`, `RE_EDGE_CASES`,
   `RE_GLOBAL_CONSTRAINTS`; `addTrack` uses `RE_TESTABILITY` for the +tdd block heading. Add a synonym when
   adding a language. Localized BODY content is in `mcp/lib/i18n.js`, not spec.js.
@@ -655,23 +1306,45 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
   requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings, design.md →
-  `designSaveCheck()` (active tracks' `[SaaS]`/`[AI]` sections, Constitution Check, placeholders).
-- **Hooks on Windows**: read stdin asynchronously (not `fs.readFileSync(0)`), and flush stdout
-  before `process.exit` (write callback) — pipes truncate otherwise. The pre-commit validator reads staged
+  `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
+  `.specs/templates/` (unless that folder is a pre-1.14 feature) and generated files. The Stop / SubagentStop hook
+  follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
+  exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
+  output is a permission decision).
+- **Flush stdout before exiting — on Windows AND Linux pipes.** Hooks read stdin asynchronously (not
+  `fs.readFileSync(0)`) and exit only in the write callback. The same holds for the test harnesses (they exit once stdout
+  has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
+  total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
+  got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
+  and exits 1). Never `process.exit()` right after a write. The pre-commit validator reads staged
   names NUL-separated with `core.quotePath=false`, so accented paths work. Only EARS errors and phantom task refs
   block; a requirements.md with EARS warnings or template placeholders (the STAGED text, `featurePlaceholders(…, text)`)
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
-  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec`, the schema enum) on both surfaces, and it
-  never imports over an existing feature.
+  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad`, the schema enum) on
+  both surfaces, and it never imports over an existing feature.
+- **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
+  `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
+  accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
+  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError).
+- **Never write a literal U+FEFF into source.** The Edit tool can turn the escape `\uFEFF` inside a regex or string into
+  the raw BOM character (invisible, and it breaks the match). Build it: `String.fromCharCode(0xfeff)` /
+  `new RegExp("^" + String.fromCharCode(0xfeff))` (as prompts-resources.js does), or check the bytes after an edit.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
 - **Protocol**: stdio transport is newline-delimited JSON; messages must not contain embedded
-  newlines (tool descriptions are single-line strings). `initialize` echoes the client's `protocolVersion`
-  when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`. Notifications
-  never get a reply (and never run tools); a JSON-RPC batch gets ONE array reply; `null`/malformed input gets
-  -32600/-32700.
+  newlines (tool descriptions are single-line strings). Framing splits on `\n` ONLY (a `StringDecoder` keeps multibyte
+  characters whole across chunks; one trailing `\r` is dropped) — never `readline`, which also splits on U+2028 / U+2029,
+  both legal raw inside a JSON string (text pasted from Word / PDF): a valid request was cut in two and never answered.
+  Replies escape U+2028 / U+2029 (`frame()`) so readline-based clients survive them. `initialize` echoes the client's
+  `protocolVersion` when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`.
+  A message without an `id` member is a notification: never a reply (and never runs a tool). An `id` must be a string or
+  an integer — null, an object, an array, a boolean or a fraction gets -32600 (id null); an id without a string `method`
+  gets -32600, except a client's JSON-RPC response (`result` / `error`, no method), which is ignored whatever its id (checked
+  before the id rule — a client's error reply carries id null). A JSON-RPC batch gets ONE array
+  reply; `null`/malformed input gets -32600/-32700; an unknown method -32601; an unknown tool (or `tools/call` without a
+  name) -32602, localized (`args.unknownTool` / `args.noTool`); prompts/resources use -32602 / -32002 (see Capabilities).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
@@ -687,11 +1360,15 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.
   The guess decides how `no` is read — a negator in EN/ES, the contraction *em+o* in PT ("aplicado no
   checkout"; also after a lowercase participle, never after a capitalised name like "Canada"). An
-  explicit `lang` overrides the guess for negation too. One matched span counts once per track. Prose pairs like
+  explicit `lang` overrides the guess for negation too. Without one, every surface — spec_classify / classify, spec_create /
+  create (a new feature), spec_import — reads the text in its OWN language, with roadmap.json `meta.lang` only as the
+  fallback when the text is inconclusive (`classify(…, {projectDir})` → `configuredLang()` → `guessLang(text, fallback)`;
+  never the 'en' default): forcing meta.lang read "no checkout" in a PT summary as an English negation in an EN project,
+  and create disagreed with the classify the human confirms. One matched span counts once per track. Prose pairs like
   `login/signup` are split before matching; path-like tokens (`src/rag.ts`) are not. PT/ES plurals
   (`-ções`, `-ciones`, first word of a phrase) are generated by `pluralize()`.
-- **CLI `--lang` is the MCP enum**: `main()` refuses anything but `en|pt|es` (case-folded) with the localized
-  `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
+- **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
+  localized `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
   `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
   (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
@@ -700,12 +1377,18 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
-  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`.
+  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
+  (1.14): ONE list, which the approval hook's lexer (`cliApprovalAction()`) also reads to tell a switch from a value flag —
+  a new switch goes into `spec.CLI_SWITCHES` (never a CLI-only list: the hook would read the word after it as its value), a new
+  value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
+  localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
+  run-evals.js untouched); `--` ends the options; `--help` anywhere prints the help and runs nothing. An explicit
+  `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
-  Numeric flags that MCP bounds (`--cap`, `--max`) go through `intFlag()` (integer ≥ 1). The engine refuses what
-  the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
-  task 1 / 2), `createFeature` kind ∈ feature|bugfix, `backlog` action ∈ add|rm|remove|list.
+  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1).
+  The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
+  task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex
@@ -713,12 +1396,28 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
   runs: a dry run exits 1 naming each bad item, a live run calls no model while any set is invalid.
 
 ## Tests
-`node mcp/test.js` drives the full MCP handshake and exercises every tool against a temp project
-(766 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
-README tool tables, rule files, no PR/CI steering — and a regression per review finding);
-`node cli/test-cli.js` adds 257 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
+(1221 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
+`node cli/test-cli.js` adds 395 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
+Exact counts that change when a package adds a command, tool or template (51 command files, the tools/list length, the
+template keys, the resource list) are asserted in place — update them in the same change.
+- **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
+  `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim` and `node:24-alpine`:
+  `docker run --rm --network none --user 1000:1000 -v <repo>:/repo:ro`, `--init`, the repo READ-ONLY (the suites work
+  under `os.tmpdir()`), no network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
+  and to build a cached derived image `dev-spec-test:<image>` that adds git (`--no-git` skips it; the git-dependent tests
+  then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`. Exit 0 all passed · 1 a
+  suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a
+  usage error; logs in `<tmp>/dev-spec-docker/<image>-<suite>.log`. Never wire it to hosted CI.
+- **Plugin evals** (`claude plugin eval`, maintainer-side, cost tokens, local only): the triggering suite
+  (`--tag triggering negative`) and the behavioural suite (`--tag behavior` plus `--scaffold --allow-real-servers
+  --allow-tools …` — the exact command is in evals/README.md). `mcp/test.js` checks every behavioural case is well-formed
+  (runs, turns, a scaffold, ≥ 3 graders incl. a deterministic one, regexes compile, every MCP tool it names exists) and
+  builds every fixture with the current engine (bash / Git Bash; skipped without bash) — fix a fixture there, not after
+  a paid run.
 
 ## Bugfix and finish (v1.12)
 - **`kind: "bugfix"`** is stored in `.state.json`; `createFeature` scaffolds `bug.md` +
@@ -731,8 +1430,8 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
   run CI (a test asserts no command/skill/agent text does).
 - **Global Constraints** heading synonyms: `RE_GLOBAL_CONSTRAINTS` (EN/PT/ES); placeholder bullets are
   skipped when inlined into briefs.
-- **Plugin evals** (`evals/<case>/prompt.md` + `graders/*.md`) follow the `claude plugin eval`
-  reference; they cost tokens and run locally only (never CI).
+- **Plugin evals** (`evals/<case>/prompt.md` + `graders/*.md`; behavioural cases add `case.yaml` +
+  `fixture.sh`) follow the `claude plugin eval` reference; they cost tokens and run locally only (never CI).
 
 ## When extending
 - New MCP tool → add the function to `mcp/lib/spec.js`, a TOOLS entry + dispatch case in
@@ -740,6 +1439,16 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
   subcommand, a test in `mcp/test.js` (and bump the exact tool count), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), and (usually) a thin command in `commands/`.
-- Any generated/returned user-facing text → put the strings in `mcp/lib/i18n.js` for all three
-  languages and resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable.
+- New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
+  prompt too (bump the exact command count in `mcp/test.js` and the README command lists). Never a Claude Code built-in
+  name.
+- New track → see The track model (registries); new artifact → the resource allowlist, the template allowlist
+  (`TEMPLATE_ARTIFACTS`) and `templateCorpus()` if it has slots.
+- New CLI switch (a flag that takes no value) → `spec.CLI_SWITCHES` in `mcp/lib/spec.js` (the CLI's `BOOL_FLAGS` and the
+  approval hook's lexer both read it); a new value flag → the CLI's `VALUE_FLAGS`.
+- New hook → `hooks/hooks.json` (never `plugin.json` — see Conventions), silent and exit 0 on any error, the engine loaded
+  only after a cheap raw pre-check (roadmap.json / the payload), and a row in `references/tooling-reference.md`.
+- Any generated/returned user-facing text → put the strings in `mcp/lib/i18n.js` for every language (EN / PT / ES;
+  pt-BR inherits PT unless it needs its own wording) and resolve the lang via `featureLang()`/`projectLang()`; keep
+  IDs/markers English-stable.
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin.

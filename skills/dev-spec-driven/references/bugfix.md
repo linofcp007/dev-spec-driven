@@ -15,6 +15,11 @@ Adapted from the `systematic-debugging` skill of [obra/superpowers](https://gith
 `bug.md → Root Cause` holds real content — the cause *with evidence*, never "probably". A symptom fix
 that makes the error go away without explaining it is a new bug waiting.
 
+**And no fix before the human approved that root cause.** "Fix this" / "corrige isto" / "arréglalo" asks for the
+outcome — it is **not** an approval of the root cause you found, of the test plan or of the tasks. After writing the
+reproduction and the root cause, **stop**: present them (the evidence, the one-line cause, the fix you propose, the
+regression test that will prove it) and ask for the approvals. Nothing under the product code changes in that turn.
+
 The engine enforces it at every step, not only in doctor:
 
 - **Approvals.** A bugfix has no design of its own: `bug.md` stands in for it. The **requirements** gate checks
@@ -23,7 +28,9 @@ The engine enforces it at every step, not only in doctor:
   not a `design.md`), so `spec_next_action` asks for it, `gatesOk` counts it and `spec_finish` blocks without it.
   Its snapshot and fingerprint are `bug.md`'s, so an edit to the root cause after approval shows up as
   `changed-since-approval` and in `spec_impact --phase design` (sections keyed `bug.md: Root Cause`). A bugfix has
-  no Phase 4 (`tests`) gate: its failing regression test is task 3.
+  no Phase 4 (`tests`) gate: its failing regression test is task 3. Once the user has reviewed `bug.md`, the test
+  plan and the tasks and says go, `/spec-ff` (`spec_approve {through: "tasks"}`) records requirements → design →
+  test-plan → tasks in one call, each through its own gate.
 - **Execution gate.** While `Root Cause` is unfilled, `spec_complete_task` (and `dev-spec done --run`, which then
   runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
   test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the
@@ -38,21 +45,36 @@ The engine enforces it at every step, not only in doctor:
 1. **Reproduce** (task 1). Read the error completely — message, stack trace, line numbers. Find the exact
    steps / input / environment that trigger it *every time*. Can't reproduce? Gather more data (logs,
    inputs, versions); don't guess. Check what changed recently (`git log`, dependency bumps, config).
-   Write the steps in `bug.md → Reproduction`.
+   Write the steps in `bug.md → Reproduction`, then tick task 1 with a note of what you ran and saw
+   (`dev-spec done <f> 1 --evidence "…"` — it has no `_Verify:_`, so the note is its evidence).
 2. **Root cause** (task 2). Trace the bad value backwards to where it originates. In a multi-component
    path (API → service → DB, build → package → deploy), instrument each boundary once and run it, so the
    evidence shows WHERE it breaks before you theorise WHY. Compare with a working example of the same
    pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
-   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`.
+   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`, then tick task 2
+   the same way — tasks 1 and 2 ticked is what makes task 3 the next one `spec_next_action` names.
+
+   **→ Gate: STOP here.** Fill the criterion (`US-1.AC-1`: the real condition and the correct behaviour), the test
+   plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor`, and present the reproduction, the root
+   cause and its evidence for the approvals (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
 3. **Failing regression test** (task 3). Write `T-01` so it reproduces the bug and watch it fail *for the
-   right reason* (the wrong behaviour, not a typo or a missing import). Paste the red output in the
-   report. This is the proof the fix fixes *this* bug.
+   right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 3 **`_Expect: fail_`**
+   with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
+   its failing run is then the recorded proof (`dev-spec done <f> 3 --run` while the test fails; a passing run is
+   refused — `unexpected-pass`, the test doesn't reproduce the bug yet; so is a failure whose output shows the test
+   never ran, such as a missing test file or module — `couldNotRun`). Paste the red output in the report. This
+   is the proof the fix fixes *this* bug. **No shell to run it?** Ask the user to run the test and paste the output
+   — don't write the fix on a red you haven't seen.
 4. **Fix** (task 4). One change that removes the root cause — not a bundle of "while I'm here"
    improvements. Run `T-01`, `T-02` and the full suite (`_Verify:_` records the evidence). Consider
    defence in depth: should the invalid value also be rejected at the boundary where it entered?
 
 **Checkpoint:** the reproduction steps no longer reproduce the bug and the full suite is green. Close
 with `/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
+
+`T-02` guards behaviour that already works, so it passes before the fix too: it sits in no task's `_Makes green:_`
+(only `T-01` does, on task 4), so doctor's `red-green` check asks no red run for it. Never make a guard test fail
+artificially — and never list it under `_Makes green:_`, or `red-green` will (rightly) ask for a red run it can't have.
 
 ## When a fix doesn't work
 
@@ -67,8 +89,10 @@ not bad luck. Say so to the human and discuss before attempt four.
 | "Quick fix now, investigate later" | "Later" never comes, and the quick fix hides the evidence. |
 | "Just try changing X and see" | That's guessing. Form a hypothesis you can state and test. |
 | "It's probably Y, let me fix that" | "Probably" isn't a root cause. Find the evidence. |
+| "The user said 'fix it', so the root cause is approved" | "Fix it" asks for the outcome. Present the root cause and wait for the `bug.md` approval. |
 | "Several changes at once will be faster" | You won't know which one worked — or which one broke something else. |
 | "The test is hard to write, I'll verify manually" | Then the bug can come back silently. The regression test IS the fix's proof. |
+| "I can't run the test here, I'll write the fix anyway" | An unseen red proves nothing. Ask the user to run it. |
 | "One more fix attempt" (after two failed) | After three, question the design, not the line. |
 
 ## If the bug is bigger than it looked
