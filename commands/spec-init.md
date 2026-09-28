@@ -31,7 +31,7 @@ unchanged):
 - `approvalGuard` — the human approval guard, `"off"` (default) / `"ask"` / `"deny"`: an agent's `spec_approve`,
   `spec_feature` remove, `dev-spec approve` / `feature remove --yes` through the shell, or lowering this guard, asks the
   user first (`ask` — a prompt Claude Code's auto / bypass modes may skip) or is refused in every mode (`deny` — the user
-  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it is guarded too — only the user switches it off.
+  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, a shell write of .specs/roadmap.json) — is guarded too: only the user does that.
 - `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —

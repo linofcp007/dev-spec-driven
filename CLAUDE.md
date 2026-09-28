@@ -995,6 +995,21 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **A guardrail on the approve paths, not a sandbox:** an agent editing `.state.json` or running `node -e` isn't caught.
   `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (see Conventions): a CLI-only switch would make this lexer
   read the next word as its value.
+- **The lexer (review fixes).** `shellCommandWords(cmd, mode)` lexes by the tool's shell: `bash` (`\x`, `\⏎`, `$'…'`,
+  `$( )` / backticks also inside "…"; `raw` keeps backslashes for Windows paths), `ps` (the backtick is PowerShell's escape
+  and line continuation, `@'…'@` / `@"…"@`, `#`, `<# #>`), `cmd` (`^`). Recursive, bounded by `APPROVAL_LEX_DEPTH` (32),
+  linear. Redirections go to `redirs`, never words. Heredoc bodies are data: skipped when the delimiter is quoted, only
+  `$( )` / backticks read when unquoted, read as a script when fed to a shell (`bash <<EOF`, `sh <<<`); `<<` inside `(( ))`
+  is a shift. `programAt()` skips launchers and their value options (`APPROVAL_OPTION_VALUES`: `sudo -u`, `exec -a`,
+  `node -r` …) and counts npm / pnpm / yarn / bun / deno only through a real run subcommand (`APPROVAL_SUBCOMMANDS`).
+- **Guard-down actions** (`kind: "guard-down"`, `setting`: approvalGuard · evidence · roles · check · stopCheck · guard ·
+  roadmap) — lowering the guard, and weakening what it protects: evidence observed → reported, approval roles cleared or a
+  required role dropped, a project check removed or its command changed, the stop gate off, the edit guard lowered, a
+  shell write / move / delete of `.specs/roadmap.json` (or of `.specs/`; `command: null` — the user makes that change).
+  Judged against the project's meta, which the hook passes in (`opts.meta`); no readable meta → fail closed. Raising,
+  adding or a no-op stays allowed. A `roadmap.json` that exists but doesn't parse keeps the strictest `"approvalGuard"` its
+  raw text names (`approvalGuardLevel` and the hook). Known limits: shell variables, aliases, splatting, inline scripts
+  (`node -e`), `cd .specs && … > roadmap.json`, and the Write / Edit tools.
 
 ## Decisions and spikes (1.14)
 - **`decisions.md`** (committed with the spec — `.execution/` is the scratch area): a localized header, then per entry
@@ -1382,9 +1397,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1207 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1221 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 392 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 395 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (51 command files, the tools/list length, the

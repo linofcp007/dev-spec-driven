@@ -70,7 +70,10 @@ local Linux test runner.
   `dev-spec init --approval-guard`; default `off`, nothing changes) — a new PreToolUse hook (`hooks/approval-hook.js`)
   catches an agent's approval: `spec_approve` under any MCP server prefix, `spec_feature` remove with `confirm`,
   `dev-spec approve` / `feature remove --yes` run through the Bash or PowerShell tool (quotes, chains and nested
-  `bash -c` / `cmd /c` / `pwsh -Command` scripts read by a linear lexer), and lowering the guard itself. `ask` shows a
+  `bash -c` / `cmd /c` / `pwsh -Command` scripts, heredocs and each shell's escapes read by a linear lexer), lowering the
+  guard itself, and weakening what it protects (evidence observed → reported, approval roles cleared, a project check
+  removed or changed, the stop gate or the edit guard off, a shell write of `.specs/roadmap.json`); a `roadmap.json` that
+  no longer parses keeps the guard on (fail closed). `ask` shows a
   permission prompt naming the feature, phase, role and — loudly — `--force` (Claude Code's auto / bypass modes may skip
   it); `deny` refuses it in every mode, tells the agent to stop and ask, and shows the user the
   `! node <clone>/cli/dev-spec.js …` command to run themselves. Silent unless on (a shell command not naming dev-spec is
@@ -278,7 +281,7 @@ local Linux test runner.
   suiteChecks items, `evidence` and `approvalGuard` on every `spec_init` result, `skipped` / `blocked` / `waitsOn` on the
   next-task surfaces once a task declares `_Depends:_`, doctor check `task-deps`, and `spec_export`'s `format: "csv"`.
 ### Tests
-- `node mcp/test.js` 1207 assertions (was 766), `node cli/test-cli.js` 392 (was 257); the README tool tables are
+- `node mcp/test.js` 1221 assertions (was 766), `node cli/test-cli.js` 395 (was 257); the README tool tables are
   checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
   (`npm run test:docker`).
 
