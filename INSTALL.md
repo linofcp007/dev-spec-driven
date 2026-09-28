@@ -154,6 +154,27 @@ node "$plugin\cli\dev-spec.js" init --guard scope # stricter: once tasks are app
 The setting lives in `.specs/roadmap.json` (`meta.guard`). Only Claude Code runs the hook; other tools
 store the setting but don't enforce it.
 
+**Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, Bash tool)
+silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
+so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
+harness saw (or that `dev-spec done --run` made):
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back
+```
+
+**Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
+human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, or tries
+to lower the guard, you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with
+Claude Code's `!` prefix):
+
+```powershell
+node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to disable (only you can lower it)
+```
+
+`ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
+Both are guardrails, not a sandbox, and only Claude Code runs these hooks.
+
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the
 plugin folder later moves:
