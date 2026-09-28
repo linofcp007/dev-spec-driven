@@ -11735,6 +11735,19 @@ function endRun() {
       "feature F5: headers and labels in the feature's language (PT / ES CSV, md export, the PT marker record), pt-BR derived from PT; IDs, AC and the kind stay English; the rtm messages have the same keys in EN / PT / ES");
   }
 
+  // 1.14 features — integration across the branches: the matrix (F5) gives the ONE verdict in the project's evidence mode (F1).
+  {
+    const fi = path.join(tmp, "proj-features-integration");
+    S.initProject(fi, ["core"], "en", { evidence: "observed" });
+    const c = S.createFeature(fi, "Matrix mode", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    S.completeTask(fi, "matrix-mode", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0 }); // reported, never observed
+    const row = (S.traceMatrix(fi, "matrix-mode").rows || []).find((r) => r.id === "US-1.AC-1");
+    const t1 = row && row.tasks.find((t) => t.number === 1);
+    ok(t1 && t1.verified === false && t1.reason === "unobserved" && t1.evidence && t1.evidence.observed === false && row.status !== "verified",
+      "features F1 × F5: under meta.evidence 'observed' the matrix reads a reported-only run as unobserved (the gates' verdict) and shows the observed stamp (got " + JSON.stringify(t1) + ")");
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

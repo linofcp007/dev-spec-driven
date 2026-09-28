@@ -12946,7 +12946,7 @@ function supersededByIndex(projectDir) {
 function rtmEvidence(rec) {
   if (!isRecord(rec)) return null;
   const o = {};
-  for (const k of ["command", "exitCode", "at", "expected"]) if (rec[k] != null && typeof rec[k] !== "object") o[k] = rec[k];
+  for (const k of ["command", "exitCode", "at", "expected", "observed"]) if (rec[k] != null && typeof rec[k] !== "object") o[k] = rec[k]; // observed: 1.14 F1
   Object.assign(o, gitEvidence(rec));
   if (rec.exitCode == null && typeof rec.summary === "string" && rec.summary.trim()) o.note = oneLiner(rec.summary, 200);
   if (rec.stale === true) o.stale = true;
@@ -12989,6 +12989,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const blocks = taskBlocks(activeTasks(read("tasks.md") || "", tracks) || "");
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
+  const evMode = evidenceMode(projectDir); // 1.14 F1: the ONE verdict, in the project's evidence mode (unobserved under "observed")
   const tinfo = blocks.map((b) => {
     const prose = taskProse(b).join("\n");
     return { b, acs: extractAcIds(prose), sec: secondaryIds(prose), tids: new Set([...extractTestIds(prose)].map((t) => tKey(t.slice(2)))) };
@@ -13076,7 +13077,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       if (!via.length) continue;
       const b = t.b;
       const dup = dups.has(b.number);
-      const v = b.done ? taskVerification(evidence, b, dup) : { reason: null, nothingToVerify: false };
+      const v = b.done ? taskVerification(evidence, b, dup, evMode) : { reason: null, nothingToVerify: false };
       const task = { number: b.number, text: oneLiner(cleanTaskText(b.text) || b.text, 200) || "", done: b.done, verified: b.done && v.reason == null, reason: b.done ? v.reason : null };
       if (b.done && v.nothingToVerify) task.nothingToVerify = true;
       task.cites = via;
