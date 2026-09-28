@@ -12876,17 +12876,32 @@ function endRun() {
       { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8", env: childEnv(env), timeout: 30000 });
     const jsonOut = (r) => { try { return JSON.parse(r.stdout); } catch { return null; } };
     const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-none-")); // no .specs/ at or above it
+    // A core feature whose planning chain is filled (every gate through tasks passes — approvals need no force; a FORCED approval
+    // whose gate still fails is a `fix` for next_action and the status line alike).
+    const cFill = (dir, name) => {
+      const w = (rel, txt) => fs.writeFileSync(path.join(dir, rel), txt);
+      w("classification.md", `# Classification: ${name}\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; one module.\n\n## Compliance Tags\nnone\n`);
+      w("requirements.md", `# Feature: ${name}\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n` +
+        "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+        "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+        "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+        "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+      w("design.md", `# Design: ${name}\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n` +
+        "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+        "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+    };
 
     // --- C1: the status line (engine) ---
     const sl = path.join(cRoot, "status");
     withOpts({}, () => {
       S.initProject(sl, ["core"], "en");
-      S.createFeature(sl, "Billing", ["core"], "Invoices", undefined, "en");
+      const bill = S.createFeature(sl, "Billing", ["core"], "Invoices", undefined, "en");
+      cFill(bill.dir, "Billing");
       fs.writeFileSync(path.join(sl, ".specs", "billing", "tasks.md"), ["# Tasks: Billing", "", "## Phase 1", "",
         "- [ ] 1. Charge the card", "  - _Requirements: US-1.AC-1_", "  - _Verify: node -e \"process.exit(0)\"_",
         "- [ ] 2. Send the invoice", "  - _Requirements: US-1.AC-2_", "  - _Verify: node -e \"process.exit(0)\"_",
-        "- [ ] 3. Refund", "  - _Requirements: US-1.AC-3_", "- [ ] 4. Report", "  - _Requirements: US-1.AC-4_", ""].join("\n"));
-      for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(sl, "billing", ph, "t", { force: true });
+        "- [ ] 3. Refund", "  - _Requirements: US-1.AC-1_", "- [ ] 4. Report", "  - _Requirements: US-1.AC-2_", ""].join("\n"));
+      S.approvePhase(sl, "billing", null, "t", { through: "tasks" });
       S.completeTask(sl, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" });
       S.completeTask(sl, "billing", 2, { summary: "sent by hand" }); // a note on a runnable _Verify:_ — ticked, not verified
       S.createFeature(sl, "Auth", ["core"], "Login", undefined, "en"); // newer, nothing under way
@@ -13110,6 +13125,212 @@ function endRun() {
       !cRead(path.join(root, "hooks", "plan-hook.js")).includes(String.fromCharCode(0xfeff)),
       "1.16 C4: hooks/plan-hook.js (PostToolUse, matcher ExitPlanMode, timeout 10) adds one line of context in a dev-spec project — the plan's text, or its path when the file is inside the project, in the project language — and is silent (exit 0) elsewhere, on a malformed payload, another tool or event (got " +
       JSON.stringify(hp.map((h) => [h.status, h.stdout.slice(0, 50)])) + ")");
+
+    // --- 1.16 C review: the status line agrees with spec_next_action; UNC, user defaults, import language, config guidance ---
+    // PARITY: the status line's step against next_action's, over the states a feature goes through. The mapping (spec.js statusNext):
+    // blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and an end state
+    // (finish, verify, sign-off, finished) may be next_action's `drift` (the status line never hashes the recorded files).
+    const PARITY = { "re-review": ["re-review"], fill: ["fill"], fix: ["fix"], approve: ["approve"], tests: ["fix", "approve"], tasks: ["tasks"],
+      implement: ["implement"], blocked: ["fix"], verify: ["verify", "drift"], decide: ["decide"], promote: ["promote"], archive: ["archive"],
+      pivot: ["pivot"], finish: ["finish", "drift"], "sign-off": ["finished", "drift"], finished: ["finished", "drift"] };
+    const pRoot = path.join(cRoot, "parity");
+    const pRun = 'node -e "process.exit(0)"';
+    let pSeq = 0;
+    const pNew = () => { const p = path.join(pRoot, "p" + ++pSeq); fs.mkdirSync(p, { recursive: true }); return p; };
+    const pWrite = (p, rel, txt) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), txt); };
+    const pTasks = "# Tasks: login\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Implement the login handler\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/login.js_\n" +
+      "  - _Verify: " + pRun + "_\n- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + pRun + "_\n**Checkpoint:** US-1 works.\n";
+    // A new project with one filled feature `login` (its tasks implement src/login.js); o.tracks, o.checks (meta.checks).
+    const pProj = (o = {}) => withOpts({}, () => {
+      const p = pNew();
+      S.initProject(p, ["core"], "en", o.checks ? { checks: o.checks } : undefined);
+      const r = S.createFeature(p, "login", o.tracks || ["core"], "Users log in", undefined, "en");
+      cFill(r.dir, "login");
+      pWrite(p, "src/login.js", "module.exports = 1;\n");
+      pWrite(r.dir, "tasks.md", pTasks);
+      return { p, f: "login", dir: r.dir };
+    });
+    const pApprove = (x) => S.approvePhase(x.p, x.f, null, "t", { through: "tasks" });
+    const pDone = (x, n) => S.completeTask(x.p, x.f, n, { command: pRun, exitCode: 0, summary: "ok" });
+    const pFinished = (o) => { const x = pProj(o); pApprove(x); pDone(x, 1); pDone(x, 2); x.fin = S.finishFeature(x.p, x.f, { write: true, ...(o && o.evidence ? { evidence: o.evidence } : {}) }); return x; };
+    const parity = [];
+    const pCase = (label, x, want) => {
+      const na = S.nextAction(x.p, x.f);
+      const r = S.statusLine(x.p);
+      const step = r.next ? r.next.step : null;
+      parity.push({ label, want, sl: step, na: na.step, ok: r.feature === x.f && step === want && (PARITY[step] || []).includes(na.step), line: r.line });
+      return r;
+    };
+    // Planning.
+    { const p = pNew(); withOpts({}, () => { S.initProject(p, ["core"], "en"); S.createFeature(p, "Billing", ["core"], "Invoices", undefined, "en"); }); pCase("fresh scaffold", { p, f: "billing" }, "fill"); }
+    pCase("filled, nothing approved", pProj(), "approve");
+    { const x = pProj(); pApprove(x); fs.appendFileSync(path.join(x.dir, "requirements.md"), "- Sessions last 8 hours\n"); pCase("requirements edited after approval", x, "re-review"); }
+    { const x = pProj(); pApprove(x); S.approvePhase(x.p, x.f, "design", "t", { revoke: true, reason: "rework" }); pCase("design approval revoked", x, "approve"); }
+    const forcedX = pProj();
+    fs.appendFileSync(path.join(forcedX.dir, "requirements.md"), "- [NEEDS CLARIFICATION: how long does a session last?]\n");
+    for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(forcedX.p, forcedX.f, ph, "t", { force: true });
+    const forcedR = pCase("forced approvals, a gate still failing", forcedX, "fix");
+    { const x = pProj(); pWrite(x.dir, "design.md", cRead(path.join(x.dir, "design.md")).replace("- [x] Simplicity — complies\n", ""));
+      S.approvePhase(x.p, x.f, "classification", "t"); S.approvePhase(x.p, x.f, "requirements", "t"); S.approvePhase(x.p, x.f, "design", "t", { force: true }); S.approvePhase(x.p, x.f, "tasks", "t");
+      pCase("forced design, only a doctor warning left", x, "implement"); }
+    { const p = pNew(); withOpts({}, () => { S.initProject(p, ["core"], "en"); S.createFeature(p, "Port", ["core"], "Port the API", undefined, "en", "feature", { flow: "design-first" }); });
+      const d = path.join(p, ".specs", "port"); const des = cRead(path.join(d, "design.md")); cFill(d, "port"); pWrite(d, "design.md", des);
+      S.approvePhase(p, "port", "classification", "t"); pCase("design-first, classification approved", { p, f: "port" }, "fill"); }
+    // Phase 4 (+tdd): the planned T-IDs in the test file their plan row names → approve tests; not written yet → write, then approve.
+    const tddX = pProj({ tracks: ["tdd"] });
+    pWrite(tddX.dir, "test-plan.md", "# Test Plan: login\n\n## Traceability Matrix\n\n| Test ID | Covers | Level | Kind | File | Description |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | US-1.AC-1 | unit | example | test/login.test.js | opens a session |\n| T-02 | US-1.AC-2 | unit | example | test/login.test.js | shows the error |\n");
+    S.approvePhase(tddX.p, tddX.f, null, "t", { through: "test-plan" });
+    const tddR1 = pCase("+tdd, tests not written yet", tddX, "tests");
+    pWrite(tddX.p, "test/login.test.js", "test('T-01 opens a session', () => {});\ntest('T-02 shows the error', () => {});\n");
+    const tddR2 = pCase("+tdd, the planned tests in their file", tddX, "approve");
+    // Execution.
+    { const x = pProj(); pApprove(x); pDone(x, 1); pCase("executing", x, "implement"); }
+    { const x = pProj(); pApprove(x); pDone(x, 1); S.completeTask(x.p, x.f, 2, { summary: "by hand" }); pCase("every task ticked, one unverified", x, "verify"); }
+    { const x = pProj(); pApprove(x); pDone(x, 1); pDone(x, 2); pCase("every task verified", x, "finish"); }
+    // A bugfix whose design (bug.md) was approved by force with Root Cause empty, tasks 1-2 ticked: the bugfix gate refuses task 3.
+    const bugX = (() => {
+      const p = pNew();
+      let dir;
+      withOpts({}, () => { S.initProject(p, ["core"], "en"); dir = S.createFeature(p, "Crash on save", undefined, "the app crashes on save", undefined, "en", "bugfix").dir; });
+      cFill(dir, "crash-on-save");
+      fs.rmSync(path.join(dir, "classification.md")); // a bugfix has no classification gate
+      pWrite(dir, "bug.md", "# Bug: Crash on save\n\n## Summary\nThe app crashes on save.\n\n## Reproduction\n1. Open a new document and press Ctrl+S.\n2. The app exits with a TypeError.\n\n" +
+        "## Expected vs Actual\n- **Expected:** the document is saved.\n- **Actual:** TypeError: doc is undefined.\n\n## Root Cause\n\n## Fix\nGuard the unsaved document.\n");
+      pWrite(dir, "test-plan.md", "# Test Plan: crash-on-save\n\n## Traceability Matrix\n\n| Test ID | Covers | Level | Kind | File | Description |\n|---|---|---|---|---|---|\n" +
+        "| T-01 | US-1.AC-1 | unit | example | test/save.test.js | saves a new document |\n| T-02 | US-1.AC-2 | unit | example | test/save.test.js | shows the error |\n");
+      pWrite(dir, "tasks.md", "# Tasks: Crash on save\n\n## Global Constraints\n- Node >= 18\n\n## Phase: Fix\n" +
+        "- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 3. [US1] Write regression test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(1)\"_\n  - _Expect: fail_\n" +
+        "- [ ] 4. [US1] Fix the root cause\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n  - _Verify: " + pRun + "_\n**Checkpoint:** fixed.\n");
+      S.approvePhase(p, "crash-on-save", "requirements", "t");
+      S.approvePhase(p, "crash-on-save", "design", "t", { force: true });
+      S.approvePhase(p, "crash-on-save", "test-plan", "t");
+      S.approvePhase(p, "crash-on-save", "tasks", "t");
+      S.completeTask(p, "crash-on-save", 1, { summary: "reproduced" });
+      S.completeTask(p, "crash-on-save", 2, { summary: "looked into it" });
+      return { p, f: "crash-on-save", dir };
+    })();
+    const bugR = pCase("bugfix, Root Cause empty (design forced), tasks 1-2 ticked", bugX, "fix");
+    const bug3 = S.completeTask(bugX.p, bugX.f, 3, { command: 'node -e "process.exit(1)"', exitCode: 1, summary: "red" });
+    // Finish, sign-off, reopened work, drift, project checks.
+    const finX = pFinished();
+    const finR1 = pCase("finished, not signed off", finX, "sign-off");
+    S.approvePhase(finX.p, finX.f, "execution", "t");
+    const finR2 = pCase("finished and signed off", finX, "finished");
+    const undoX = pFinished();
+    S.approvePhase(undoX.p, undoX.f, "execution", "t");
+    S.completeTask(undoX.p, undoX.f, 2, undefined, { undo: true, reason: "rework" });
+    pCase("finished, task 2 undone", undoX, "implement");
+    pDone(undoX, 2);
+    const undoR = pCase("finished, task 2 undone and re-ticked", undoX, "finish");
+    const revX = pFinished();
+    S.approvePhase(revX.p, revX.f, "execution", "t");
+    S.approvePhase(revX.p, revX.f, "execution", "t", { revoke: true });
+    const revR = pCase("execution sign-off revoked", revX, "sign-off");
+    { const x = pFinished(); S.approvePhase(x.p, x.f, "execution", "t"); S.approvePhase(x.p, x.f, "design", "t"); pCase("design re-approved after the finish", x, "finish"); }
+    const driftX = pFinished();
+    S.approvePhase(driftX.p, driftX.f, "execution", "t");
+    pWrite(driftX.p, "src/login.js", "module.exports = 2;\n");
+    const driftR = pCase("finished, then src/login.js drifted", driftX, "finished");
+    const suiteX = pFinished({ checks: { unit: pRun }, evidence: [{ name: "unit", command: pRun, exitCode: 0 }] });
+    S.approvePhase(suiteX.p, suiteX.f, "execution", "t");
+    await new Promise((res) => setTimeout(res, 30)); // the re-run below is later than the check run
+    pDone(suiteX, 2);
+    const suiteR = pCase("finished, a task re-run after the project checks", suiteX, "verify");
+    // Spikes: next_action's own steps.
+    const spikeP = (o = {}) => {
+      const p = pNew();
+      let dir;
+      withOpts({}, () => { S.initProject(p, ["core"], "en"); dir = S.createFeature(p, "Try Redis", undefined, undefined, undefined, "en", "spike", { question: "Is Redis fast enough for sessions?", timebox: "3d" }).dir; });
+      if (o.tasks) pWrite(dir, "tasks.md", o.tasks);
+      else if (o.done) pWrite(dir, "tasks.md", cRead(path.join(dir, "tasks.md")).replace(/- \[ \]/g, "- [x]"));
+      if (o.decision) {
+        pWrite(dir, "spike.md", cRead(path.join(dir, "spike.md")).replace("> **TODO** — go / no-go / pivot, and why: the evidence that decided it.", "Redis answered in 0.2 ms at p99 under 5k rps, within the budget.")
+          .replace("_Outcome: [go | no-go | pivot]_", o.outcome ? "_Outcome: " + o.outcome + "_" : ""));
+      }
+      return { p, f: "try-redis", dir };
+    };
+    pCase("spike, a _Depends:_ cycle", spikeP({ tasks: "# Tasks\n\n- [ ] 1. Measure reads\n  - _Depends: 2_\n- [ ] 2. Measure writes\n  - _Depends: 1_\n" }), "blocked");
+    pCase("spike, investigation done, no decision", spikeP({ done: true }), "decide");
+    const spikeNo = pCase("spike, a decision without its _Outcome:_", spikeP({ done: true, decision: true }), "decide");
+    pCase("spike, go", spikeP({ done: true, decision: true, outcome: "go" }), "promote");
+    pCase("spike, no-go", spikeP({ done: true, decision: true, outcome: "no-go" }), "archive");
+    pCase("spike, pivot", spikeP({ done: true, decision: true, outcome: "pivot" }), "pivot");
+    ok(parity.length === 27 && parity.every((c) => c.ok),
+      "1.16 C review (parity): the status line's step maps to spec_next_action's in 27 states — scaffold, pending / forced / revoked approvals, design-first, Phase 4, executing, unverified, bugfix gate, finish, sign-off, undo, drift, project checks, spikes (got " +
+      JSON.stringify(parity.filter((c) => !c.ok).map((c) => [c.label, "want " + c.want, "sl " + c.sl, "na " + c.na])) + ")");
+    ok(bugR.next.phase === "design" && bugR.next.file === "bug.md" && bugR.line.endsWith("next: write the root cause in bug.md") && !/task 3/.test(bugR.line) &&
+      bug3.ok === false && bug3.gated === "root-cause" && forcedR.next.phase === "requirements" && forcedR.next.failing.includes("clarifications"),
+      "1.16 C review 1: a bugfix with bug.md → Root Cause empty says 'write the root cause in bug.md', never the task the bugfix gate refuses; a forced approval whose gate still fails (a doctor failure) says fix, naming the phase (got " +
+      JSON.stringify([bugR.line, bug3.gated, forcedR.next]) + ")");
+    const allLines = parity.map((c) => c.line);
+    const finishedTexts = ["en", "pt", "pt-BR", "es"].map((l) => require("./lib/i18n.js").msg(l).claudeCode.statusLine.steps.finished({}));
+    ok(finR1.line.endsWith("next: approve execution (sign-off)") && finR2.line.endsWith("next: finished") && undoR.next.again === true && undoR.line.endsWith("next: /spec-finish again") &&
+      revR.next.step === "sign-off" && driftR.line.endsWith("next: finished") && suiteR.next.suite.join() === "unit" && suiteR.line.endsWith("next: run the project checks (unit)") &&
+      !allLines.some((l) => l.includes("✓")) && !finishedTexts.some((t) => t.includes("✓")),
+      "1.16 C review 2: finished → sign off the execution, then 'finished' (never ✓ — drift is not checked); an undo + re-tick or a later re-approval → /spec-finish again; a revoked sign-off → sign off; a project check without a passing run since the last task → run it (got " +
+      JSON.stringify([finR1.line, undoR.line, revR.line, driftR.line, suiteR.line]) + ")");
+    ok(spikeNo.next.outcome === true && /add the _Outcome:_ line/.test(spikeNo.line) && parity.filter((c) => /^spike, (go|no-go|pivot)$/.test(c.label)).map((c) => c.sl).join() === "promote,archive,pivot",
+      "1.16 C review 3: a spike's decision without _Outcome:_ → decide (the outcome line); go / no-go / pivot → promote / archive / pivot, as next_action (got " +
+      JSON.stringify(parity.filter((c) => /^spike/.test(c.label)).map((c) => c.line)) + ")");
+    ok(tddR1.next.step === "tests" && /write the tests, then approve them/.test(tddR1.line) && tddR2.next.step === "approve" && tddR2.next.phase === "tests",
+      "1.16 C review 4: Phase 4 — the planned T-IDs found in the test file their plan row names → approve tests (as next_action); otherwise 'write the tests, then approve them' (got " +
+      JSON.stringify([tddR1.line, tddR2.line]) + ")");
+    // UNC: never stat'ed — the pure rule, then the plan hook on a TEST-NET address in a child process with a timeout (no network).
+    const netForms = ["\\\\192.0.2.1\\share\\proj", "//192.0.2.1/share", "\\\\?\\UNC\\192.0.2.1\\share", "\\\\.\\UNC\\192.0.2.1\\share", "\\\\.\\pipe\\x"];
+    const localForms = ["\\\\?\\C:\\work", "\\\\.\\C:\\work", "\\\\wsl$\\Ubuntu\\home", "\\\\wsl.localhost\\Ubuntu\\home", "C:\\work", "/home/me/x", "relative\\dir"];
+    const tUnc = Date.now();
+    const uncHook = spawnSync(process.execPath, [path.join(root, "hooks", "plan-hook.js")], { input: JSON.stringify({ ...exit, cwd: "\\\\192.0.2.1\\share\\proj" }),
+      encoding: "utf8", env: childEnv(), timeout: 20000 });
+    const uncMs = Date.now() - tUnc;
+    ok(netForms.every((p) => S.isNetworkPath(p)) && !localForms.some((p) => S.isNetworkPath(p)) && !uncHook.error && uncHook.status === 0 && uncHook.stdout === "" && uncMs < 10000,
+      "1.16 C review 5: a network path (UNC, //host, \\\\?\\UNC, device paths — spec.isNetworkPath) is skipped before any fs call by the plan hook (TEST-NET cwd: silent, " + uncMs + " ms; the status line: cli/test-cli.js); \\\\?\\C:, WSL hosts stay local (got " +
+      JSON.stringify([netForms.map((p) => S.isNetworkPath(p)), localForms.map((p) => S.isNetworkPath(p)), uncHook.status, uncHook.error && uncHook.error.code]) + ")");
+    // spec_import in a brand-new project takes DEV_SPEC_DEFAULT_LANG for its own text too (spec_create's resolution).
+    const execPlan = "# ExecPlan: Cache layer\n\n## Purpose / Big Picture\nAdd a read-through cache in front of the orders API.\n\n## Progress\n- [x] Draft the design\n- [ ] Implement the cache in src/cache.js\n\n" +
+      "## Validation and Acceptance\n- Run `npm test` and expect all tests to pass.\n\n## Decision Log\n- Decision: use an LRU. Rationale: bounded memory.\n";
+    const impL = path.join(cRoot, "import-lang");
+    const impR = withOpts({ DEV_SPEC_DEFAULT_LANG: "pt" }, () => S.importSpec(impL, "execplan", undefined, { text: execPlan }));
+    const impDesign = impR.ok ? cRead(path.join(impR.dir, "design.md")) : "";
+    ok(impR.ok && impR.lang === "pt" && impR.userDefaults && impR.userDefaults.lang === "pt" && cMeta(impL).lang === "pt" && /^## Decisões$/m.test(impDesign) &&
+      impR.warnings.length > 0 && impR.warnings.every((w) => !/^(?:not converted|the imported tasks)/i.test(w)) && impR.warnings.some((w) => /não/.test(w)),
+      "1.16 C review 6: spec_import in a new project follows DEV_SPEC_DEFAULT_LANG for its own output — design.md's Decisions heading and the warnings in PT — and reports userDefaults (got " +
+      JSON.stringify([impR.lang, impR.userDefaults, impR.warnings && impR.warnings.map((w) => w.slice(0, 40))]) + ")");
+    // DEV_SPEC_STOP_CHECK=off also holds while roadmap.json doesn't parse (engine and hook).
+    const stopB = path.join(cRoot, "stop-broken");
+    withOpts({}, () => { S.initProject(stopB, ["core"], "en"); S.createFeature(stopB, "Billing", ["core"], "Invoices", undefined, "en"); });
+    pWrite(stopB, ".specs/billing/tasks.md", "# Tasks\n\n## Phase 1\n\n- [ ] 1. Charge\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + pRun + "_\n");
+    S.completeTask(stopB, "billing", 1, { summary: "did it by hand" });
+    pWrite(stopB, ".specs/roadmap.json", '{ "meta": { "lang": "en", }');
+    const stopMsg = { hook_event_name: "Stop", cwd: stopB, last_assistant_message: "All tasks are done and verified." };
+    const stopH = [hook("stop-hook.js", stopMsg, { DEV_SPEC_STOP_CHECK: "off" }), hook("stop-hook.js", stopMsg)];
+    ok(withOpts({ DEV_SPEC_STOP_CHECK: "off" }, () => S.stopCheckEnabled(stopB)) === false && withOpts({}, () => S.stopCheckEnabled(stopB)) === true &&
+      stopH[0].status === 0 && stopH[0].stdout === "" && (jsonOut(stopH[1]) || {}).decision === "block",
+      "1.16 C review 7: a roadmap.json that doesn't parse — DEV_SPEC_STOP_CHECK=off still turns the stop gate off (engine and hook); unset, the gate stays on (got " +
+      JSON.stringify([stopH.map((h) => h.stdout.slice(0, 30))]) + ")");
+    // statusline --print-config guidance: a project's .claude/settings.local.json (the path is this machine's), never the committed file.
+    const heads = ["en", "pt", "pt-BR", "es"].map((l) => require("./lib/i18n.js").msg(l).claudeCode.statusLine.config.head);
+    ok(heads.every((h) => h.includes("~/.claude/settings.json") && h.includes(".claude/settings.local.json") && /nunca|never/.test(h)),
+      "1.16 C review 8: the --print-config guidance names ~/.claude/settings.json or a project's .claude/settings.local.json — never the committed .claude/settings.json (EN / PT / pt-BR / ES) (got " + JSON.stringify(heads) + ")");
+    // DEV_SPEC_GUARD_DEFAULT in a project made before roadmap.json (a dev-spec .specs/ without it): the engine and the hook agree.
+    const gLegacy = path.join(cRoot, "guard-legacy");
+    withOpts({}, () => S.createFeature(gLegacy, "Old", ["core"], "x", undefined, "en"));
+    fs.rmSync(path.join(gLegacy, ".specs", "roadmap.json"), { force: true });
+    const gOther = path.join(cRoot, "guard-other"); // another tool's .specs/ (no steering/, no feature state)
+    pWrite(gOther, ".specs/notes.md", "# notes\n");
+    const gBroken = path.join(cRoot, "guard-broken");
+    withOpts({}, () => S.initProject(gBroken, ["core"], "en"));
+    pWrite(gBroken, ".specs/roadmap.json", "{ broken");
+    const gPay = (dir) => ({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(dir, "src", "a.js") }, cwd: dir });
+    const gOn = { DEV_SPEC_GUARD_DEFAULT: "on" };
+    const gH = [hook("guard-hook.js", gPay(gLegacy), gOn), hook("guard-hook.js", gPay(gLegacy)), hook("guard-hook.js", gPay(gOther), gOn), hook("guard-hook.js", gPay(gBroken), gOn)];
+    const gE = withOpts(gOn, () => [S.guardLevel(gLegacy), S.guardLevel(gOther), S.guardLevel(gBroken), S.guardLevel(none)]);
+    ok(((jsonOut(gH[0]) || {}).hookSpecificOutput || {}).permissionDecision === "ask" && gH.slice(1).every((h) => h.status === 0 && h.stdout === "") &&
+      JSON.stringify(gE) === "[true,false,false,false]" && withOpts({}, () => S.guardLevel(gLegacy)) === false,
+      "1.16 C review 10: DEV_SPEC_GUARD_DEFAULT=on reaches a dev-spec project without roadmap.json (the hook asks, guardLevel true); never a folder without .specs/, another tool's .specs/ or a roadmap.json that doesn't parse (got " +
+      JSON.stringify([gH.map((h) => h.stdout.slice(0, 40)), gE]) + ")");
     try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
   }
 

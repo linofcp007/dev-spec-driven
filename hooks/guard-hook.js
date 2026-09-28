@@ -42,15 +42,36 @@ function userGuardDefault() {
   }
   return false;
 }
-// Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project.
+// A .specs/ dev-spec owns but without a roadmap.json (a project made before it): steering/ or a feature folder with its
+// .state.json — the engine's rule (spec.guardLevel), so neither a folder without .specs/ nor another tool's .specs/ gets the
+// user's default.
+function devSpecWithoutRoadmap(dir) {
+  const root = path.join(dir, ".specs");
+  try {
+    fs.lstatSync(path.join(root, "roadmap.json"));
+    return false; // it exists (readable or not): its meta decides
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") return false;
+  }
+  try {
+    if (!fs.statSync(root).isDirectory()) return false;
+    if (fs.existsSync(path.join(root, "steering"))) return true;
+    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() && !d.name.startsWith(".") && fs.existsSync(path.join(root, d.name, ".state.json")));
+  } catch {
+    return false;
+  }
+}
+// Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project. No roadmap.json in a dev-spec
+// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off.
 function guardOn(dir) {
+  if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
     if (!j || typeof j !== "object" || Array.isArray(j)) return false;
     const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
     return meta.guard === true || meta.guard === "scope" || (meta.guard === undefined && userGuardDefault());
   } catch {
-    return false; // missing, unreadable or broken → the guard stays out of the way
+    return false; // missing (no user default), unreadable or broken → the guard stays out of the way
   }
 }
 

@@ -2582,12 +2582,18 @@ function seedProjectLang(projectDir, lang) {
 }
 
 // roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT (1.16 C2), else off.
-// hooks/guard-hook.js reads the same values raw.
+// The user's default applies to a dev-spec project only (isDevSpecDir): roadmap.json without meta.guard, or no roadmap.json in a
+// .specs/ dev-spec owns (steering/ or a feature folder with its .state.json — a project made before roadmap.json) — never a folder
+// without one, nor another tool's .specs/. A roadmap.json that exists but doesn't parse: off (the guard never acts on a file it
+// can't read). hooks/guard-hook.js reads the same values raw, with the same rule.
 function guardLevel(projectDir) {
   const l = loadRoadmap(projectDir);
   if (l.parseError) return false;
   const g = isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
-  if (g === undefined) { const d = userDefaults().guard; return d === true || d === "scope" ? d : false; }
+  if (g === undefined) {
+    const d = userDefaults().guard;
+    return (d === true || d === "scope") && isDevSpecDir(path.resolve(projectDir)) ? d : false;
+  }
   return g === true ? true : g === "scope" ? "scope" : false;
 }
 // spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope" (strings case-insensitive);
@@ -2598,11 +2604,11 @@ function guardInput(v) {
   return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
 }
 // roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`);
-// not a boolean (unset) → the user's STOP_CHECK option (1.16 C2), else on. An unreadable roadmap.json: on (the gate itself never
-// blocks on a file it can't read).
+// not a boolean (unset) → the user's STOP_CHECK option (1.16 C2), else on. An unreadable roadmap.json: the user's option too, else
+// on (the gate itself never blocks on a file it can't read) — DEV_SPEC_STOP_CHECK=off was ignored while the file didn't parse.
 function stopCheckEnabled(projectDir) {
   const l = loadRoadmap(projectDir);
-  if (l.parseError) return true;
+  if (l.parseError) return userDefaults().stopCheck !== false;
   const v = isObj(l.rm.meta) ? l.rm.meta.stopCheck : undefined;
   if (typeof v === "boolean") return v;
   return userDefaults().stopCheck !== false;
@@ -19458,7 +19464,9 @@ function parseBmad(dir, read0, W, src) {
 const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad };
 
 function importSpec(projectDir, tool, source, opts = {}) {
-  const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
+  // The language of the import's own text (warnings, design.md's Decisions heading…): explicit, else the project's configured one,
+  // else — a brand-new project (1.16 C2) — the user's DEV_SPEC_DEFAULT_LANG, spec_create's resolution (configuredLang).
+  const lang0 = normalizeLang(opts.lang || configuredLang(projectDir) || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
   // Exact names only — the values spec_import's schema enum allows, so the CLI accepts exactly what MCP does
   // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
@@ -19672,6 +19680,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     toolName: IMPORT_TOOLS[t],
     source: srcRel, // C3: the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
     ...(inline ? { inline: true } : {}), // 1.16 C4: imported from text (spec_import {text}) — source is null
+    ...(cr.userDefaults ? { userDefaults: cr.userDefaults } : {}), // 1.16 C2: the language a new project took from DEV_SPEC_DEFAULT_LANG
     tracks: cr.tracks,
     label: cr.label,
     lang: lng,
@@ -19689,6 +19698,30 @@ function importSpec(projectDir, tool, source, opts = {}) {
 
 const STATUS_MAX_FEATURES = 200; // feature folders a status line reads, at most (sorted by name)
 const STATUS_MAX_UP = 40; // folders walked up from a status line's cwd looking for a dev-spec .specs/
+const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's gate, at most (statusTestsGate)
+// Approve-gate checks the doctor only WARNS about (spec_doctor: success-criteria, priorities, reproduction, constitution-check) —
+// a forced approval failing only these is no `fix` for next_action, so none for the status line either.
+const STATUS_DOCTOR_WARNS = new Set(["success-criteria", "priorities", "reproduction", "constitution-check"]);
+// A network path — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — opens an SMB/WebDAV connection to
+// whatever host it names (on Windows the redirector sends the user's NTLM credentials) and, the engine being synchronous, blocks
+// until an unreachable host times out (a status line hung 7 minutes on a payload cwd `\\192.0.2.1\share`). The MCP server
+// refuses such a projectDir before any fs call; the status line and hooks/plan-hook.js skip such a candidate folder. Local:
+// the extended/device forms of a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`).
+// Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. (A drive letter mapped to a share can't be
+// told apart without I/O.)
+function isNetworkPath(p) {
+  const s = String(p).trim();
+  if (!/^[\\/]{2}/.test(s)) return false;
+  let rest = s.slice(2);
+  if (/^[?.][\\/]/.test(rest)) {
+    rest = rest.slice(2);
+    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
+    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
+    rest = rest.slice(4);
+  }
+  const host = rest.split(/[\\/]/)[0].toLowerCase();
+  return host !== "wsl$" && host !== "wsl.localhost";
+}
 // A folder whose .specs/ dev-spec owns: roadmap.json, steering/, or a feature folder with its .state.json (the hooks' rule).
 function isDevSpecDir(dir) {
   const root = path.join(dir, ".specs");
@@ -19697,12 +19730,13 @@ function isDevSpecDir(dir) {
   return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
 }
 // The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
-// dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`) are skipped.
+// dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`, a network
+// path — isNetworkPath, skipped before any fs call) are skipped.
 // → the project folder | null
 function statusLineProject(candidates) {
   const seen = new Set();
   for (const c of Array.isArray(candidates) ? candidates : []) {
-    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096) continue;
+    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
     let dir = path.resolve(c.trim());
     for (let i = 0; i < STATUS_MAX_UP; i++) {
       const key = FOLD_CASE ? dir.toLowerCase() : dir;
@@ -19729,21 +19763,84 @@ function statusActivity(dir, st) {
   }
   return best;
 }
-// The step the status line names — spec_next_action's order, kept cheap (a status line runs after every assistant message): an
-// artifact changed since its approval → re-review; the first unapproved phase → fill / fix (its approve gate's own checks —
-// never Phase 4's, which scans the test code) / approve / tests; then the next task, verify, finish, finished. Never the doctor
-// (it scans the test code) nor the drift hash. → { step, … } with stable step codes.
+// Phase 4's gate for the status line, kept cheap (approvalChecks' `tests` case runs trace_check's code scan — a walk of the
+// whole project): +ai's eval-sets check is the gate's own (one read of evals/golden.json); +tdd's tests-in-code is answered only
+// when it can be proven without the walk — no planned T-ID (the gate refuses: noPlannedTests), or every planned T-ID found in a
+// test FILE its own plan row names (read directly: at most STATUS_TEST_FILES files, inside the project, never through a hidden or
+// ignored folder the scan skips, never a link) or checked outside test code. Anything else is unknown. → "pass" | "fail" | "unknown"
+function statusTestsGate(pdir, dir, tracks) {
+  const tdd = tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md"));
+  const ai = tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"));
+  if (ai) {
+    const golden = readJson(path.join(dir, "evals", "golden.json"));
+    const items = golden.data && Array.isArray(golden.data.items) ? golden.data.items : null;
+    const sample = items && JSON.stringify(golden.data) === JSON.stringify(JSON.parse(SAMPLE_GOLDEN));
+    if (!(items && items.length) || sample) return "fail";
+  }
+  if (!tdd) return "pass";
+  const planText = planIdText(readIfExists(path.join(dir, "test-plan.md")) || "");
+  const planned = [...new Set([...extractTestIds(planText)].map((id) => tKey(id.slice(2))))];
+  if (!planned.length) return "fail";
+  const { scopes, outside } = planFileScopes(planText);
+  const root = path.resolve(pdir);
+  const read = new Map(); // project-relative file → the T-ID keys it names (null: not a file the scan would read)
+  const keysOf = (p) => {
+    const rel = toPosix(p).replace(/^\.\/+/, "");
+    if (read.has(rel)) return read.get(rel);
+    let keys = null;
+    const abs = path.resolve(root, rel);
+    const segs = toPosix(path.relative(root, abs)).split("/");
+    if (read.size < STATUS_TEST_FILES && withinRoot(root, abs) && !segs.slice(0, -1).some((s) => s.startsWith(".") || SCAN_IGNORE.has(s)) &&
+      !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
+      try {
+        if (fs.lstatSync(abs).isFile()) {
+          keys = new Set();
+          for (const m of fs.readFileSync(abs, "utf8").slice(0, SCAN_READ_BYTES).matchAll(RE_CODE_TID)) keys.add(tKey(m[1] || m[2] || m[3]));
+        }
+      } catch { keys = null; }
+    }
+    read.set(rel, keys);
+    return keys;
+  };
+  for (const k of planned) {
+    if (outside.has(k)) continue;
+    const files = (scopes.get(k) || []).filter((p) => !p.endsWith("/") && path.posix.extname(p));
+    if (!files.some((p) => { const ks = keysOf(p); return !!ks && ks.has(k); })) return "unknown";
+  }
+  return "pass";
+}
+// The step the status line names — spec_next_action's order, kept cheap (a status line runs after every assistant message; it
+// never runs the doctor, trace_check's code scan or the drift hash):
+//   spike: fill spike.md (its question) → the next investigation task → blocked (none can start) → decide (the decision, then its
+//     _Outcome:_ line) → promote (go) · archive (no-go) · pivot — next_action's own spike steps;
+//   re-review (an artifact changed since its approval, as far as the first pending phase) → the first unapproved phase: fill its
+//     artifact / fix (its approve gate's checks) / approve — Phase 4 (tests) through statusTestsGate: approve · fix · tests (not
+//     known cheaply: write the tests, then approve them);
+//   every phase approved: a FORCED approval whose gate still fails (approvalChecks re-run for the forced phases — next_action's
+//     doctor step for a forced approval), or a bugfix whose bug.md → Root Cause is still empty (the doctor's root-cause failure; the
+//     bugfix gate refuses every task after the one that writes it) → fix;
+//   tasks: none → tasks · the next startable one → implement · none startable → blocked;
+//   every task done: a tick not verified → verify · no finish baseline → finish · a baseline older than a change (staleFinish,
+//     state only — the _Implements:_ walk skipped) → finish (again) · a project check without a passing run since the last task
+//     activity (suiteStatus without the code hash) → verify · the execution sign-off missing or older than a change → sign-off ·
+//     else finished — the drift of the recorded files is NOT checked (next_action's `drift`), so the line never says "clean".
+// → { step, … } with stable step codes: re-review · fill · fix · approve · tests · tasks · implement · blocked · verify · decide ·
+// promote · archive · pivot · finish · sign-off · finished. The parity with spec_next_action's `step` (mcp/test.js "1.16 C review"):
+// blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and any end state
+// (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
   const approvals = isObj(st.approvals) ? st.approvals : {};
   const open = f.blocks.filter((b) => !b.done);
-  const taskStep = () => { const nx = taskSchedule(f.blocks).next; return nx ? { step: "implement", task: nx.number } : { step: "blocked" }; };
-  const endStep = () => (unverified.length ? { step: "verify", task: unverified[0] } : isObj(st.finished) ? { step: "finished" } : { step: "finish" });
   if (kind === "spike") {
     const si = spikeInfo(f.dir);
     if (!si.questionFilled) return { step: "fill", file: SPIKE_FILE };
-    if (open.length) return taskStep();
-    return si.decisionFilled ? endStep() : { step: "decide" };
+    const nx = taskSchedule(f.blocks).next;
+    if (nx) return { step: "implement", task: nx.number };
+    if (open.length) return { step: "blocked" };
+    if (!si.decisionFilled) return { step: "decide" };
+    if (!si.outcome) return { step: "decide", outcome: true };
+    return { step: si.outcome === "go" ? "promote" : si.outcome === "no-go" ? "archive" : "pivot", outcome: si.outcome };
   }
   const walk = gateWalk(f.dir, f.tracks, kind);
   const pending = walk.find((ph) => !approvals[ph]) || null;
@@ -19754,12 +19851,42 @@ function statusNext(pdir, f, kind, lng, unverified) {
   if (pending) {
     const art = gateArtifacts(f.dir, f.tracks, kind, pending).map((file) => artifactReport(f.dir, file, f.tracks)).find((r) => r.state !== "filled");
     if (art) return { step: "fill", file: art.file, phase: pending };
-    if (pending === "tests") return { step: "tests" };
+    if (pending === "tests") {
+      const g = statusTestsGate(pdir, f.dir, f.tracks);
+      return g === "pass" ? { step: "approve", phase: "tests" } : g === "fail" ? { step: "fix", phase: "tests" } : { step: "tests" };
+    }
     const g = approvalChecks(pdir, f.slug, f.dir, pending, f.tracks, kind, lng);
     return g.checks.length ? { step: "fix", phase: pending, failing: g.checks.map((c) => c.id) } : { step: "approve", phase: pending };
   }
+  // Every phase approved. A forced approval (force: true — recorded with the checks it failed) is re-checked: while its gate still
+  // fails on a check the DOCTOR fails too, next_action's doctor step says fix (never Phase 4's: its tests-in-code is a doctor
+  // warning, and its gate scans the code). The gate is stricter than the doctor on a few checks (STATUS_DOCTOR_WARNS), and its
+  // clarifications count design.md's markers where the doctor reads requirements.md's only.
+  for (const ph of walk) {
+    if (ph === "tests" || !isRecord(approvals[ph]) || approvals[ph].forced !== true) continue;
+    const failing = approvalChecks(pdir, f.slug, f.dir, ph, f.tracks, kind, lng).checks.map((c) => c.id).filter((id) => !STATUS_DOCTOR_WARNS.has(id) &&
+      (id !== "clarifications" || clarificationMarkers(readIfExists(path.join(f.dir, "requirements.md")) || "").length > 0));
+    if (failing.length) return { step: "fix", phase: ph, failing, ...(failing.includes("root-cause") ? { file: "bug.md" } : {}) };
+  }
+  // A bugfix: no fix before its root cause — bug.md → Root Cause empty fails the doctor (root-cause) and the bugfix gate refuses
+  // every task after the one that writes it (one read of bug.md).
+  if (kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
+    return { step: "fix", phase: "design", failing: ["root-cause"], file: "bug.md" };
+  }
   if (!f.blocks.length) return { step: "tasks" };
-  return open.length ? taskStep() : endStep();
+  if (open.length) {
+    const nx = taskSchedule(f.blocks).next;
+    return nx ? { step: "implement", task: nx.number } : { step: "blocked" };
+  }
+  if (unverified.length) return { step: "verify", task: unverified[0] };
+  const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
+  if (!fin) return { step: "finish" };
+  if (staleFinish(pdir, st, "", { newFiles: false })) return { step: "finish", again: true };
+  const suite = suiteStatus(pdir, st, null).missing; // no `dir`: the code-changed hash is skipped (state and roadmap.json only)
+  if (suite.length) return { step: "verify", suite: suite.map((i) => i.name) };
+  if (!isRecord(approvals.execution)) return { step: "sign-off" };
+  if (executionSignOffStale(st)) return { step: "sign-off", again: true };
+  return { step: "finished" };
 }
 // `dev-spec statusline` — ONE short line about the project for Claude Code's status line (settings.json "statusLine"), e.g.
 // "◆ billing · 4/9 tasks · 1 unverified · next: approve tasks", in the project language. The feature shown: the most recently
@@ -20009,6 +20136,7 @@ module.exports = {
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
+  isNetworkPath,
   planBridge,
   userDefaults,
   isTestFile,
