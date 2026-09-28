@@ -10979,6 +10979,215 @@ function endRun() {
   }
 
   // 1.14 feature (F1) — harness-observed evidence.
+  {
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const obsCall = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
+    // The runner may itself run inside Claude Code: the hook gets the project it is told about, nothing else.
+    const obsHook = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
+    const bash = (cwd, command, extra) => ({ session_id: "s-obs", transcript_path: path.join(cwd, "t.jsonl"), cwd, permission_mode: "default", hook_event_name: "PostToolUse",
+      tool_name: "Bash", tool_input: { command, description: "Run it", timeout: 120000, run_in_background: false }, tool_use_id: "toolu_01", ...extra });
+    const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const obsState = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const quiet = (r) => r.status === 0 && r.stdout === "" && r.stderr === "";
+    const pO = path.join(tmp, "ffobs-proj");
+    const CHECK = 'node -e "process.exit(0)"';
+    S.initProject(pO, ["core"], "en", { checks: { test: CHECK } });
+    const fO = S.createFeature(pO, "Auth", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fO.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Verify: `node t1.js`_\n- [ ] 2. [US1] Logout\n  - _Verify: node t2.js_\n" +
+      "- [ ] 3. [US1] Both\n  - _Verify: node a.js_\n  - _Verify: node b.js_\n- [ ] 4. [US1] Docs\n\n```\n- [ ] 9. fenced\n  - _Verify: node fenced.js_\n```\n");
+
+    // hooks.json: PostToolUse (matcher Bash) and PostToolUseFailure (matcher Bash) run hooks/observe-hook.js, beside spec-hook's entry.
+    const hc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const obsCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"';
+    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "Bash" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10);
+    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(e.hooks[0].command)) &&
+      !fs.readFileSync(obsJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher Bash, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
+
+    // Both payload shapes: PostToolUse with exit_code (or none → 0), PostToolUseFailure with `error` ("exit code 3", else 1).
+    const h1 = obsHook(pO, bash(pO, "node t1.js", { tool_response: { stdout: "ok", stderr: "", interrupted: false, exit_code: 0 } }));
+    const h2 = obsHook(pO, bash(pO, "node  t2.js", { tool_response: { stdout: "", stderr: "", interrupted: false } })); // no exit code: the success event → 0
+    const h3 = obsHook(pO, { ...bash(pO, "node t2.js"), hook_event_name: "PostToolUseFailure", error: "Command failed with exit code 3", is_interrupt: false });
+    const h4 = obsHook(pO, { ...bash(pO, "node t1.js"), hook_event_name: "PostToolUseFailure", error: "Command failed", is_interrupt: false });
+    const h5 = obsHook(pO, bash(pO, "node t1.js", { tool_response: { exit_code: "2" } }));
+    const log1 = logOf(fO.dir);
+    ok([h1, h2, h3, h4, h5].every(quiet) && JSON.stringify(log1.map((e) => [e.command, e.exitCode, e.event])) === JSON.stringify([["node t1.js", 0, "PostToolUse"], ["node t2.js", 0, "PostToolUse"],
+      ["node t2.js", 3, "PostToolUseFailure"], ["node t1.js", 1, "PostToolUseFailure"], ["node t1.js", 2, "PostToolUse"]]) && log1.every((e) => e.session === "s-obs" && Number.isFinite(Date.parse(e.at))) &&
+      fs.readFileSync(path.join(fO.dir, ".execution", ".gitignore"), "utf8") === "*\n",
+      "feature F1: the hook logs a _Verify:_ run from both payload shapes — PostToolUse exit_code (none → 0, \"2\" → 2), PostToolUseFailure's error (exit code 3; none → 1) — one JSON line {command, exitCode, at, event, session} in the self-ignoring .execution/; silent, exit 0 (got " +
+      JSON.stringify(log1.map((e) => [e.command, e.exitCode, e.event])) + ")");
+
+    // cd <project root> && <cmd> is the command; another folder, another command, a fenced example, an interrupted or
+    // backgrounded run, another tool → nothing. A project check goes to .specs/.execution/observed.jsonl.
+    const before = logOf(fO.dir).length;
+    const skipped = [
+      obsHook(pO, bash(pO, "cd sub && node t1.js", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "npm run build", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "node fenced.js", { tool_response: { exit_code: 0 } })),
+      obsHook(pO, bash(pO, "node t1.js", { tool_response: { exit_code: 0, interrupted: true } })),
+      obsHook(pO, { ...bash(pO, "node t1.js"), hook_event_name: "PostToolUseFailure", error: "Interrupted", is_interrupt: true }),
+      obsHook(pO, bash(pO, "node t1.js", { tool_input: { command: "node t1.js", run_in_background: true }, tool_response: { backgroundTaskId: "b1" } })),
+      obsHook(pO, bash(pO, "node t1.js", { tool_response: { stdout: "", stderr: "", returnCodeInterpretation: "No matches found" } })), // a non-zero code the tool read as no error: unknown
+      obsHook(pO, { ...bash(pO, "node t1.js", { tool_response: { exit_code: 0 } }), tool_name: "Write" }),
+      obsHook(pO, { ...bash(pO, "node t1.js", { tool_response: { exit_code: 0 } }), hook_event_name: "PreToolUse" }),
+    ];
+    const hCd = obsHook(pO, bash(pO, 'cd "' + pO + '" && node t1.js', { tool_response: { exit_code: 0 } }));
+    const hCheck = obsHook(pO, bash(pO, CHECK, { tool_response: { exit_code: 0 } }));
+    const projLog = logOf(path.join(pO, ".specs"));
+    ok(skipped.every(quiet) && quiet(hCd) && quiet(hCheck) && logOf(fO.dir).length === before + 1 && logOf(fO.dir).slice(-1)[0].command === "node t1.js" &&
+      projLog.length === 1 && projLog[0].command === CHECK && projLog[0].exitCode === 0 && fs.readFileSync(path.join(pO, ".specs", ".execution", ".gitignore"), "utf8") === "*\n" &&
+      !S.listFeatures(pO).features.some((f) => f.name.startsWith(".")) && !(S.listFeatures(pO).ignored || []).length,
+      "feature F1: `cd <root> && cmd` counts as cmd; another folder, an unplanned command, a fenced example, an interrupted / backgrounded run, a code the tool read as no error (returnCodeInterpretation), another tool or event log nothing; a project check goes to .specs/.execution/observed.jsonl (self-ignoring, never a feature) (got " +
+      JSON.stringify([logOf(fO.dir).length - before, projLog.map((e) => e.command)]) + ")");
+
+    // Malformed / empty / huge stdin: exit 0, silent, nothing written. A .specs/ that is not dev-spec's: nothing written.
+    const n0 = logOf(fO.dir).length;
+    const bad = ["", "not json", "null", "[]", "42", JSON.stringify({ tool_name: "Bash" }), JSON.stringify({ tool_name: "Bash", tool_input: { command: 42 } }),
+      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHook(pO, s));
+    const huge = obsHook(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
+    const other = path.join(tmp, "ffobs-other");
+    fs.mkdirSync(path.join(other, ".specs", "notes"), { recursive: true });
+    fs.writeFileSync(path.join(other, ".specs", "notes", "tasks.md"), "- [ ] 1. x\n  - _Verify: node t1.js_\n");
+    const hOther = obsHook(other, bash(other, "node t1.js", { tool_response: { exit_code: 0 } }));
+    ok(bad.every(quiet) && quiet(huge) && logOf(fO.dir).length === n0 && quiet(hOther) && !fs.existsSync(path.join(other, ".specs", "notes", ".execution")) &&
+      !fs.existsSync(path.join(other, ".specs", ".execution")),
+      "feature F1: malformed, empty, truncated or oversized (5 MB) stdin → exit 0, silent, nothing logged; a project whose .specs/ is not dev-spec's → nothing written");
+
+    // The log stays bounded (newest lines kept).
+    const pB = path.join(tmp, "ffobs-bounded");
+    S.initProject(pB, ["core"], "en");
+    const fB = S.createFeature(pB, "Big", ["core"], "", undefined, "en");
+    const longCmd = "node t.js --reporter spec --grep " + "x".repeat(200);
+    fs.writeFileSync(path.join(fB.dir, "tasks.md"), "- [ ] 1. [US1] Big\n  - _Verify: " + longCmd + "_\n");
+    for (let i = 0; i < 600; i++) S.observeRun(pB, { command: longCmd, exitCode: i % 7, event: "PostToolUse", session: "s" + i });
+    const bSize = fs.statSync(path.join(fB.dir, ".execution", "observed.jsonl")).size;
+    const bLog = logOf(fB.dir);
+    ok(bSize <= S.OBSERVED_MAX_BYTES && bLog.length > 50 && bLog.slice(-1)[0].session === "s599" && bLog.every((e) => e.command === longCmd),
+      "feature F1: the observed log stays bounded (≤ " + S.OBSERVED_MAX_BYTES + " bytes after 600 runs, the newest kept) (got " + bSize + " bytes, " + bLog.length + " lines)");
+
+    // observedRun: the LATEST observed run of the same command decides; `a && b` = both parts passed; other commands / codes: not observed.
+    S.observeRun(pO, { command: "node t1.js", exitCode: 2 }); // t1: passed (the cd run above), then failed — the failure is the latest
+    S.observeRun(pO, { command: "node a.js", exitCode: 0 });
+    S.observeRun(pO, { command: "node b.js", exitCode: 0 });
+    const lk = [S.observedRun(pO, fO.slug, "node t1.js", 2).observed, S.observedRun(pO, fO.slug, "node t1.js", 0).observed, S.observedRun(pO, fO.slug, "`node   t1.js`", 2).observed,
+      S.observedRun(pO, fO.slug, "node t2.js", 3).observed, S.observedRun(pO, fO.slug, "node t2.js", 0).observed, S.observedRun(pO, fO.slug, "node a.js && node b.js", 0).observed,
+      S.observedRun(pO, fO.slug, "node zzz.js", 0).observed, S.observedRun(pO, null, CHECK, 0).observed, S.observedRun(pO, null, CHECK, 1).observed,
+      S.observedRun(pO, fO.slug, "node t1.js", 2, { now: Date.now() + 25 * 3600 * 1000 }).observed];
+    ok(JSON.stringify(lk) === JSON.stringify([true, false, true, true, false, true, false, true, false, false]),
+      "feature F1: observedRun — the latest observed run of the same (flattened) command with the same exit code; an earlier pass doesn't cover a later failure; `a && b` counts when both passed; older than 24 h → not observed (got " + JSON.stringify(lk) + ")");
+
+    // Default mode (reported): exactly today's verdict — every run is stamped (observed true | false) and the result says so.
+    const c1 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 2, summary: "1 failing" } });
+    S.observeRun(pO, { command: "node t1.js", exitCode: 0 });
+    const c1b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 0 } });
+    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } }); // a caller can't claim "cli"
+    const c4 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 4 });
+    const st1 = obsState(fO);
+    const docR = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
+    ok(c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
+      !c2.p.unverifiedReason && c4.p.ok && c4.p.observed === undefined && st1.evidence["1"].observed === true && st1.evidence["1"].history[0].observed === true &&
+      st1.evidence["2"].observed === false && S.evidenceMode(pO) === "reported" && docR.status === "pass",
+      "feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +
+      JSON.stringify([c1.p.observed, c1b.p.observed, c2.p.observed, c2.p.verified, st1.evidence["2"].observed, docR.status]) + ")");
+
+    // spec_init {evidence}: folded, reported back; a bad value is refused by the schema.
+    const i1 = await obsCall("spec_init", { projectDir: pO, evidence: "OBSERVED" });
+    const i2 = await obsCall("spec_init", { projectDir: pO });
+    const i3 = await obsCall("spec_init", { projectDir: pO, evidence: "maybe" });
+    const rmO = JSON.parse(fs.readFileSync(path.join(pO, ".specs", "roadmap.json"), "utf8"));
+    ok(i1.p.evidence === "observed" && /Evidence mode OBSERVED/.test(i1.p.evidenceNote || "") && /MCP-only client has no such hook/.test(i1.p.evidenceNote || "") &&
+      i2.p.evidence === "observed" && i2.p.evidenceNote === undefined && i3.isError && rmO.meta.evidence === "observed",
+      "feature F1: spec_init {evidence} sets roadmap.json meta.evidence (case-folded), the result always reports it (+ a note naming the MCP-only limit when set); a value outside reported | observed is refused (got " +
+      JSON.stringify([i1.p.evidence, i2.p.evidence, i3.isError]) + ")");
+
+    // meta.evidence "observed": the ONE verdict — status, doctor, finish, next_action, the stop gate — says `unobserved` for task 2.
+    const s2 = S.statusFeature(pO, fO.slug).tasks.list.find((t) => t.number === 2);
+    const docO = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
+    fs.writeFileSync(path.join(fO.dir, "tasks.md"), fs.readFileSync(path.join(fO.dir, "tasks.md"), "utf8").replace("- [ ] 3.", "- [x] 3.").replace("- [ ] 4.", "- [x] 4."));
+    const fin = S.finishFeature(pO, fO.slug);
+    const stop = S.stopCheck(pO, { message: "Done — all tasks are complete and verified." });
+    S.writeRoadmapMd(pO);
+    const road = fs.readFileSync(path.join(pO, ".specs", "ROADMAP.md"), "utf8");
+    ok(s2 && s2.verified === false && docO.status === "warn" && /#2 \(run not observed by the harness\)/.test(docO.detail) &&
+      fin.blockers.some((b) => /#2 \(run not observed by the harness\)/.test(b)) && stop.block === true && /#2 \(run not observed by the harness\)/.test(stop.reason) &&
+      /#2 \(run not observed by the harness\)/.test(road),
+      "feature F1: meta.evidence observed — a reported run the harness never saw is `unobserved` everywhere (status, doctor, the finish blocker, the stop gate, ROADMAP.md) (got " +
+      JSON.stringify([s2 && s2.verified, docO.detail, stop.why]).slice(0, 400) + ")");
+    // next_action's verify step names it and says how to get an observed run (a written bugfix, gated phase by phase).
+    const pNa = path.join(tmp, "ffobs-na");
+    S.initProject(pNa, ["core"], "en", { evidence: "observed" });
+    const bNa = S.createFeature(pNa, "Obs loop", undefined, "loop", undefined, "en", "bugfix");
+    const naFill = (rel, re, by) => { const f = path.join(bNa.dir, rel); fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(re, by)); };
+    naFill("tasks.md", /  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n");
+    naFill("bug.md", /> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).");
+    naFill("bug.md", /\[[^\]\n]+\]/g, "the dashboard opens");
+    naFill("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
+    naFill("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+    naFill("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
+    ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(pNa, bNa.slug, ph));
+    S.completeTask(pNa, bNa.slug, 1); S.completeTask(pNa, bNa.slug, 2);
+    const red3 = S.completeTask(pNa, bNa.slug, 3, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    naFill("tasks.md", /- \[ \] 4\./, "- [x] 4.");
+    const naObs = S.nextAction(pNa, bNa.slug);
+    ok(red3.ok && red3.unverifiedReason === "unobserved" && naObs.step === "verify" && /#3 \(run not observed by the harness\)/.test(naObs.recommendation) &&
+      /only runs the harness saw \(roadmap\.json meta\.evidence: observed\)/.test(naObs.recommendation),
+      "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red3.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
+
+    // A new report of task 2: unobserved (reason + note; nothing ever observed in a project → the MCP-only line); after the hook saw it → verified.
+    const c2b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
+    const pN = path.join(tmp, "ffobs-never");
+    S.initProject(pN, ["core"], "en", { evidence: "observed" });
+    const fN = S.createFeature(pN, "Solo", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fN.dir, "tasks.md"), "- [ ] 1. [US1] Solo\n  - _Verify: node s.js_\n");
+    const cN = await obsCall("spec_complete_task", { projectDir: pN, name: "solo", number: 1, evidence: { command: "node s.js", exitCode: 0 } });
+    obsHook(pO, bash(pO, "node t2.js", { tool_response: { exit_code: 0 } }));
+    const c2c = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
+    const cCli = S.completeTask(pN, "solo", 1, { command: "node s.js", exitCode: 0 }, { ranBy: "cli" });
+    ok(c2b.p.ok && c2b.p.verified === false && c2b.p.unverifiedReason === "unobserved" && c2b.p.observed === false && /dev-spec done auth 2 --run/.test(c2b.p.note) &&
+      !/No run was ever observed/.test(c2b.p.note) && cN.p.unverifiedReason === "unobserved" && /No run was ever observed in this project/.test(cN.p.note) &&
+      /MCP-only client has no hook/.test(cN.p.note) && c2c.p.verified === true && c2c.p.observed === true && !c2c.p.unverifiedReason &&
+      cCli.verified === true && cCli.observed === "cli" && obsState(fN).evidence["1"].observed === "cli",
+      "feature F1: meta.evidence observed — an unobserved report ticks but stays unverified (unverifiedReason unobserved + a note naming --run; the MCP-only line when nothing was ever observed there); once the hook saw the run it verifies; a CLI run (observed: \"cli\") verifies (got " +
+      JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")");
+
+    // _Expect: fail_: the red run is the proof — it must be the observed one.
+    const fR = S.createFeature(pO, "Red", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fR.dir, "tasks.md"), "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node red.js_\n  - _Expect: fail_\n");
+    const r1 = S.completeTask(pO, "red", 1, { command: "node red.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    obsHook(pO, { ...bash(pO, "node red.js"), hook_event_name: "PostToolUseFailure", error: "Command failed with exit code 1" });
+    const r2 = S.completeTask(pO, "red", 1, { command: "node red.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    ok(r1.ok && r1.redRecorded && r1.verified === false && r1.unverifiedReason === "unobserved" && r2.ok && r2.verified === true && r2.observed === true,
+      "feature F1: an _Expect: fail_ task's red run counts only once observed (the hook's PostToolUseFailure) (got " + JSON.stringify([r1.unverifiedReason, r2.verified]) + ")");
+
+    // Project checks: an unobserved passing run is status `unobserved` (a blocker); the hook-observed one passes; finish --run's "cli" too.
+    const fS = S.createFeature(pO, "Suite obs", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fS.dir, "tasks.md"), "- [ ] 1. [US1] Do it\n");
+    S.completeTask(pO, "suite-obs", 1);
+    const pPlain = path.join(tmp, "ffobs-plain");
+    S.initProject(pPlain, ["core"], "en", { checks: { lint: "npm run lint" }, evidence: "observed" });
+    const fP = S.createFeature(pPlain, "Plain", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fP.dir, "tasks.md"), "- [x] 1. [US1] Do it\n");
+    const u1 = await obsCall("spec_finish", { projectDir: pPlain, name: "plain", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }] });
+    obsHook(pPlain, bash(pPlain, "npm run lint", { tool_response: { exit_code: 0 } }));
+    const u2 = await obsCall("spec_finish", { projectDir: pPlain, name: "plain", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0 }] });
+    const u3 = S.finishFeature(pO, "suite-obs", { evidence: [{ name: "test", command: CHECK, exitCode: 0 }], ranBy: "cli" });
+    const lintU1 = u1.p.suiteChecks.find((c) => c.name === "lint"), lintU2 = u2.p.suiteChecks.find((c) => c.name === "lint");
+    ok(lintU1.status === "unobserved" && lintU1.observed === false && u1.p.blockers.some((b) => /lint \(the run was not observed by the harness\)/.test(b)) &&
+      JSON.stringify(u1.p.recordedChecks) === JSON.stringify([{ name: "lint", exitCode: 0 }]) && lintU2.status === "pass" && lintU2.observed === true &&
+      u3.suiteChecks.find((c) => c.name === "test").observed === "cli" && u3.suiteChecks.find((c) => c.name === "test").status === "pass",
+      "feature F1: project checks — spec_finish {evidence} stamps each run observed; with meta.evidence observed an unobserved pass is status `unobserved` (a blocker), the hook-observed one and finish --run's (\"cli\") pass (got " +
+      JSON.stringify([lintU1.status, lintU2.status, u3.suiteChecks.map((c) => c.status)]) + ")");
+
+    // Localized labels (PT, ES, pt-BR) and back to reported: the same records verify again.
+    ok(S.msg("pt").evidenceGate.reason.unobserved === "execução não observada pelo harness" && S.msg("es").evidenceGate.reason.unobserved === "ejecución no observada por el harness" &&
+      /Execute o comando/.test(S.msg("pt-BR").observed.unobservedNote(2, "auth")) && S.msg("es").observed.badValue("x") === "--evidence admite reported u observed (recibido 'x')." &&
+      S.msg("pt").projectChecks.status({ status: "unobserved" }) === "a execução não foi observada pelo harness",
+      "feature F1: the unobserved labels and notes are localized (PT, ES; pt-BR derived from PT)");
+    S.initProject(pN, ["core"], "en", { evidence: "reported" });
+    ok(S.statusFeature(pN, "solo").tasks.list[0].verified === true && S.evidenceMode(pN) === "reported" && S.initProject(pN, [], undefined, { evidence: "sometimes" }).ok === false,
+      "feature F1: back to meta.evidence reported, the same records verify as before; the engine refuses an unknown mode");
+  }
 
   // 1.14 feature (F2) — human approval guard.
 

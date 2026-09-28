@@ -28,6 +28,7 @@ unchanged):
   them): each listed phase is approved only once every role has signed off its current content (see `/approve`).
 - `stopCheck` — the end-of-turn evidence gate (on by default; `false` / `--stop-check off` turns the Stop and
   SubagentStop hooks' check off for this project).
+- `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —
 a steering file full of placeholders is a liability (`spec_doctor` warns about each one by name). For rules that

@@ -17,6 +17,7 @@
  *                                      --guard on|off|scope → guard mode: code edits ask while no approved tasks
  *                                      (scope: also a code file no open task names in _Implements:_);
  *                                      --stop-check on|off → the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default);
+ *                                      --evidence reported|observed → roadmap.json meta.evidence (observed: only runs the harness saw verify);
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
@@ -345,18 +346,26 @@ function main() {
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]));
       }
       const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
+      // 1.14 F1: --evidence reported|observed = spec_init {evidence} (roadmap.json meta.evidence); absent leaves it as it is.
+      let evidenceMode;
+      if (flags.evidence !== undefined) {
+        const v = String(flags.evidence).trim().toLowerCase();
+        if (v === "reported" || v === "observed") evidenceMode = v;
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).observed.badValue(flags.evidence));
+      }
       // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
       let approvalRoles;
       if (flags.roles !== undefined) {
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
         if (approvalRoles.error) die(approvalRoles.error);
       }
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck });
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck, evidence: evidenceMode });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
         if (r.guardNote) console.log("  " + r.guardNote);
         if (r.stopCheckNote) console.log("  " + r.stopCheckNote);
+        if (r.evidenceNote) console.log("  " + r.evidenceNote); // 1.14 F1
         if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
         if (r.rolesNote) console.log("  " + r.rolesNote);
       });
@@ -471,7 +480,7 @@ function main() {
         if (!rc.ok) return fail(rc, rc.hint);
         evidence = rc.evidence;
       }
-      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence }); // = spec_finish {includeBody, evidence}
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli" } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
       if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
@@ -582,7 +591,8 @@ function main() {
       } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
-      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence);
+      // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, on("run") ? { ranBy: "cli" } : undefined);
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
@@ -1220,6 +1230,9 @@ function helpText() {
                                   --guard on|off|scope: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
                                   (scope: once tasks are approved, also a code file no open task names in _Implements:_ — test files excepted)
                                   --stop-check on|off: the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default)
+                                  --evidence reported|observed: the evidence mode (roadmap.json meta.evidence; reported by default) —
+                                  observed: a runnable _Verify:_ is verified only by a run the harness saw (the plugin's Bash hook in
+                                  Claude Code) or that done --run / finish --run made
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
@@ -1323,7 +1336,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --guard on|off|scope / --stop-check on|off (init)  --message "…" / --agent <type> (stop-check)
+         --guard on|off|scope / --stop-check on|off / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.

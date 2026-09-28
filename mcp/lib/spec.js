@@ -1365,6 +1365,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const guardValue = guardInput(opts.guard); // true | false | "scope" (1.14 C1) — anything else leaves the guard unchanged
   const setsGuard = guardValue !== undefined;
   const setsStop = typeof opts.stopCheck === "boolean"; // 1.14 C1: roadmap.json meta.stopCheck (the end-of-turn evidence gate)
+  // 1.14 F1: roadmap.json meta.evidence — "reported" (the default) | "observed"; anything else is refused before any write.
+  const evMode = opts.evidence == null ? undefined : evidenceModeInput(opts.evidence);
+  if (opts.evidence != null && !evMode) return { ok: false, error: i18n.msg(normalizeLang(lang || projectLang(projectDir))).observed.badInput(String(opts.evidence)) };
   // B5: meta.checks (named project commands) — {name: command} adds/replaces, "" removes; validated before any write.
   const nc = checksInput(opts.checks, lang || projectLang(projectDir));
   if (nc && nc.error) return { ok: false, error: nc.error };
@@ -1372,7 +1375,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const setsRoles = opts.approvalRoles !== undefined && opts.approvalRoles !== null;
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
-  if (lang || setsGuard || nc || setsRoles || setsStop) {
+  if (lang || setsGuard || nc || setsRoles || setsStop || evMode) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
@@ -1381,6 +1384,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
       if (setsGuard) setGuard(projectDir, guardValue);
       if (setsStop) setStopCheck(projectDir, opts.stopCheck);
+      if (evMode) setEvidenceMode(projectDir, evMode);
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
       return { ok: true };
@@ -1413,10 +1417,12 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     stopCheck: stopCheckEnabled(projectDir), // 1.14 C1: the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // B5: the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
+    evidence: evidenceMode(projectDir), // 1.14 F1: the CURRENT evidence mode ("reported" | "observed"), whether or not this call changed it
   };
   if (Object.keys(templates).length) res.templates = templates;
   if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
+  if (evMode) res.evidenceNote = i18n.msg(lng).observed[res.evidence === "observed" ? "on" : "off"];
   // The CURRENT approval roles, when the project has some or this call set them (+ a note when it did).
   const current = approvalRolesOf(projectDir);
   if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
@@ -3185,8 +3191,9 @@ function statusFeature(projectDir, name) {
   const blocks = taskBlocks(tasksText || "");
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
+  const mode = evidenceMode(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
   const list = blocks.map((b) => {
-    const v = taskVerification(evidence, b, dups.has(b.number)); // doctor's rule — never a second opinion
+    const v = taskVerification(evidence, b, dups.has(b.number), mode); // doctor's rule — never a second opinion
     return { number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text, verified: !v.reason, ...(v.nothingToVerify ? { nothingToVerify: true } : {}) };
   }).sort((a, b) => a.number - b.number);
 
@@ -3322,7 +3329,10 @@ function taskNumber(v) {
   const n = parseInt(v, 10);
   return Number.isSafeInteger(n) ? n : NaN;
 }
-function completeTask(projectDir, name, number, evidence) {
+// opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
+// server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
+// harness's log (observedRun).
+function completeTask(projectDir, name, number, evidence, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const file = path.join(f.dir, "tasks.md");
@@ -3352,6 +3362,11 @@ function completeTask(projectDir, name, number, evidence) {
   const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
   if (gate) return { ok: false, ...gate };
   const key = String(n);
+  // 1.14 F1: every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
+  // every result of this call carries it (stable).
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy);
+  if (observed !== undefined) ev.observed = observed;
+  const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
   // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
   const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup)) : null;
@@ -3394,18 +3409,18 @@ function completeTask(projectDir, name, number, evidence) {
   // its unverified note say how to fix the task (redPhaseHint) — never only "re-run it" / "fix the code first".
   const redHint = redPhaseHint(task, f.slug, lng);
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
-  if (failed && xf) return expectFailRefusal(n, ev, alreadyDone, lng); // B5: a pass (unexpected-pass) or a command that couldn't run
+  if (failed && xf) return withObserved(expectFailRefusal(n, ev, alreadyDone, lng)); // B5: a pass (unexpected-pass) or a command that couldn't run
   if (failed) {
     const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (redHint ? " " + redHint : "") };
     if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
-    return out;
+    return withObserved(out);
   }
   const tasks = parseTasks(activeTasks(updated, detectTracks(f.dir))); // done/total/next as status counts them
   const next = tasks.find((t) => !t.done) || null;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
   // The same verdict doctor, spec_finish and ROADMAP.md give (taskVerification): unverified ⇔ a reason code.
-  const { reason, nothingToVerify } = taskVerification(state.evidence || {}, task, dup);
+  const { reason, nothingToVerify } = taskVerification(state.evidence || {}, task, dup, evidenceMode(projectDir));
   const res = {
     ok: true,
     feature: f.slug,
@@ -3425,6 +3440,8 @@ function completeTask(projectDir, name, number, evidence) {
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
+      // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
+      : reason === "unobserved" ? i18n.msg(lng).observed.unobservedNote(n, f.slug) + (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved)
       : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
     if (redHint && ["failed-run", "manual-note-on-runnable-verify", "no-evidence"].includes(reason)) {
       res.note += " — " + redHint;
@@ -3445,7 +3462,7 @@ function completeTask(projectDir, name, number, evidence) {
     res.note = [res.note, i18n.msg(lng).verifyPipe.completeNote(n, ev.command)].filter(Boolean).join(" ");
   }
   if (xf) expectFailResult(res, xf, n, lng); // B5: expected: "fail" (+ redRecorded / the pass-after-red note)
-  return res;
+  return withObserved(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -4835,8 +4852,14 @@ function taskEvidenceIssue(evidence, block, dup) {
 // worse than no record, and passes (`nothingToVerify`: nothing was run or attested, so no surface calls it a check); only
 // its own failed run or stale record counts against it. (spec_complete_task used to answer verified:false with no reason
 // for such a task while doctor, finish and the roadmap passed it.)
-function taskVerification(evidence, block, dup) {
-  if (taskMarkers(block).verify.length) return { reason: taskEvidenceIssue(evidence, block, dup), nothingToVerify: false };
+// mode (1.14 F1): the project's evidenceMode — "observed" verifies a runnable _Verify:_ only when the run that proves it was
+// observed by the harness or made by the CLI (observedProof), else reason `unobserved`; "reported" / absent: today's rule.
+function taskVerification(evidence, block, dup, mode) {
+  if (taskMarkers(block).verify.length) {
+    const reason = taskEvidenceIssue(evidence, block, dup);
+    if (reason || mode !== "observed" || observedProof(ownEvidence(evidence, block, dup), expectsFail(block))) return { reason, nothingToVerify: false };
+    return { reason: "unobserved", nothingToVerify: false };
+  }
   const reason = ownEvidence(evidence, block, dup) == null ? "no-evidence" : taskEvidenceIssue(evidence, block, dup);
   return reason === "no-evidence" ? { reason: null, nothingToVerify: true } : { reason, nothingToVerify: false };
 }
@@ -4879,8 +4902,9 @@ function storeEvidence(slot, block, dup, ev, at) {
 }
 function runOf(e) {
   const r = {};
-  // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw) — B5; absent on older records
-  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty"]) if (e[k] != null) r[k] = e[k];
+  // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw) — B5; observed (true | false | "cli": the
+  // harness — or the CLI itself — saw the run, 1.14 F1); absent on older records
+  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed"]) if (e[k] != null) r[k] = e[k];
   return r;
 }
 function stateEvidence(projectDir, slug) {
@@ -4895,10 +4919,11 @@ function verificationStatus(projectDir, slug, dir) {
   const evidence = stateEvidence(projectDir, slug);
   const withVerify = blocks.filter((b) => taskMarkers(b).verify.length);
   const dups = new Set(duplicateTaskNumbers(blocks));
+  const mode = evidenceMode(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
   const unverifiedDetail = [];
   for (const b of blocks) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
-    const { reason } = taskVerification(evidence, b, dups.has(b.number)); // the rule every `verified` shares
+    const { reason } = taskVerification(evidence, b, dups.has(b.number), mode); // the rule every `verified` shares
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
     if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
   }
@@ -5292,6 +5317,182 @@ function gitEvidence(ev) {
   if (out.commit && typeof ev.dirty === "boolean") out.dirty = ev.dirty;
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 1.14 F1 — harness-observed evidence. In Claude Code the plugin's hooks/observe-hook.js (PostToolUse and PostToolUseFailure,
+// matcher Bash) sees every Bash run: a run of a task's runnable _Verify:_ command (or the " && " join of a task's commands) or
+// of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session} — to a
+// git-ignored, size-bounded log: .specs/<feature>/.execution/observed.jsonl for a task's command, .specs/.execution/
+// observed.jsonl for a project check's (a dot folder is never a feature; both .execution/ folders ignore themselves).
+// spec_complete_task / `done` and spec_finish {evidence} stamp every reported run `observed: true | false` from that log
+// (observedRun: the LATEST observed run of the same command, within OBSERVED_WINDOW_MS, has the same exit code); `done --run`
+// / `finish --run` ran the command themselves → `observed: "cli"` (counts as observed). The stamp is context by default
+// (roadmap.json meta.evidence "reported", today's rule); with meta.evidence "observed" (opt-in) a runnable _Verify:_ is
+// verified only by an observed run — reason `unobserved`, through taskVerification (the one verdict) — and a project check's
+// passing run counts only when observed (suiteChecks status `unobserved`). The engine never runs a command.
+// ---------------------------------------------------------------------------
+const OBSERVED_LOG = "observed.jsonl";
+const OBSERVED_MAX_BYTES = 64 * 1024; // a log past this keeps its newest lines, up to half of it
+const OBSERVED_WINDOW_MS = 24 * 3600 * 1000; // an observed run counts for this long
+const OBSERVED_MAX_COMMAND = 4000; // a longer Bash command is never logged (no _Verify:_ / check command is that long)
+const OBSERVED_MAX_FEATURES = 200; // feature folders an observed run is matched against, at most
+const EVIDENCE_MODES = ["reported", "observed"];
+// A command as the log and the lookup compare it: backticks dropped, whitespace runs flattened (the implementer gate's rule).
+const flatCommand = (s) => String(s == null ? "" : s).replace(/`/g, "").replace(/\s+/g, " ").trim();
+// roadmap.json meta.evidence → "observed" | "reported" (absent or anything else: reported — the default, today's rule).
+function evidenceMode(projectDir) {
+  const l = loadRoadmap(projectDir);
+  return !l.parseError && isObj(l.rm.meta) && l.rm.meta.evidence === "observed" ? "observed" : "reported";
+}
+// spec_init {evidence} / `init --evidence`: "reported" | "observed" (case-insensitive) → the mode; anything else → undefined.
+function evidenceModeInput(v) {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return EVIDENCE_MODES.includes(s) ? s : undefined;
+}
+// Inside initProject's roadmap lock: no write when the effective mode doesn't change.
+function setEvidenceMode(projectDir, mode) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  if (rm.meta.evidence === mode || (mode === "reported" && rm.meta.evidence === undefined)) return;
+  rm.meta.evidence = mode;
+  writeRoadmap(projectDir, rm);
+}
+// The log a feature's task runs (slug) or the project checks' runs (slug null) go to — null when the feature doesn't exist.
+function observedLogFile(projectDir, slug) {
+  if (slug == null) return path.join(specsRoot(projectDir), ".execution", OBSERVED_LOG);
+  const f = existingFeature(projectDir, slug);
+  return f.ok ? path.join(f.dir, ".execution", OBSERVED_LOG) : null;
+}
+// The log's entries, oldest first (malformed lines skipped; at most the newest 4 × OBSERVED_MAX_BYTES read).
+function readObservedLog(file) {
+  let text = "";
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const size = fs.fstatSync(fd).size;
+    const len = Math.min(size, 4 * OBSERVED_MAX_BYTES);
+    const buf = Buffer.alloc(len);
+    text = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, len, size - len));
+    if (len < size) text = text.slice(text.indexOf("\n") + 1); // started mid-line
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* closed */ }
+  }
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (isRecord(e) && typeof e.command === "string" && Number.isInteger(e.exitCode) && typeof e.at === "string") out.push(e);
+  }
+  return out;
+}
+// Did the harness observe this run? → { observed: boolean, at? } — true when the LATEST observed run of the same command
+// (flatCommand) within OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the
+// harness saw). A command `a && b` — how `done --run` reports a task with several _Verify:_ commands — also counts when each
+// part's latest observed run passed and the report is exit 0. slug: the feature's log; null: the project checks' log.
+function observedRun(projectDir, slug, command, exitCode, opts = {}) {
+  const key = flatCommand(command);
+  const code = typeof exitCode === "number" ? exitCode : /^\s*-?\d+\s*$/.test(String(exitCode)) ? parseInt(String(exitCode), 10) : NaN;
+  if (!key || !Number.isInteger(code)) return { observed: false };
+  const file = observedLogFile(projectDir, slug);
+  if (!file) return { observed: false };
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const entries = readObservedLog(file).filter((e) => { const t = Date.parse(e.at); return Number.isFinite(t) && t >= now - OBSERVED_WINDOW_MS && t <= now + 5 * 60 * 1000; });
+  const latest = (k) => { for (let i = entries.length - 1; i >= 0; i--) if (flatCommand(entries[i].command) === k) return entries[i]; return null; };
+  const hit = latest(key);
+  if (hit) return hit.exitCode === code ? { observed: true, at: hit.at } : { observed: false, latestExitCode: hit.exitCode };
+  if (code === 0 && key.includes(" && ")) {
+    const hits = key.split(" && ").map((p) => p.trim()).filter(Boolean).map(latest);
+    if (hits.length > 1 && hits.every((h) => h && h.exitCode === 0)) return { observed: true, at: hits.map((h) => h.at).sort().pop() };
+  }
+  return { observed: false };
+}
+// Was any run ever observed in this project (a log with an entry, project or active feature)? The "MCP-only client" note.
+function observedAny(projectDir) {
+  const files = [observedLogFile(projectDir, null), ...featureDirs(projectDir).filter((f) => !f.archived).slice(0, OBSERVED_MAX_FEATURES)
+    .map((f) => path.join(f.dir, ".execution", OBSERVED_LOG))];
+  return files.some((f) => { try { return fs.statSync(f).size > 0; } catch { return false; } });
+}
+// The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says.
+function observedStamp(projectDir, slug, ev, ranBy) {
+  if (!ev || typeof ev.command !== "string" || !ev.command.trim() || !Number.isInteger(ev.exitCode)) return undefined;
+  return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode).observed;
+}
+// meta.evidence "observed": the run that proves a runnable _Verify:_ — the latest passing run, or an _Expect: fail_ task's red
+// proof — was observed by the harness (true) or made by the CLI itself ("cli").
+function observedProof(e, expectFail) {
+  const run = expectFail ? redProof(e) : e;
+  return isRecord(run) && (run.observed === true || run.observed === "cli");
+}
+// Every runnable _Verify:_ command of a tasks.md (flattened), plus the " && " join of a task's commands when it has several.
+function verifyCommandSet(tasksText) {
+  const set = new Set();
+  for (const b of taskBlocks(tasksText)) {
+    const v = taskMarkers(b).verify.map(flatCommand).filter(Boolean);
+    v.forEach((c) => set.add(c));
+    if (v.length > 1) set.add(v.join(" && "));
+  }
+  return set;
+}
+// hooks/observe-hook.js, once its cheap text pre-filter found the command in a tasks.md or meta.checks: one log line per
+// target the run belongs to — each non-archived feature with a task whose runnable _Verify:_ is this command, and the project
+// log when it is a project check. Never creates a feature folder (a feature renamed or removed meanwhile stays gone), never
+// throws. run: {command, exitCode, event?, session?, at?} → { recorded: [{feature | null, file}] }
+function observeRun(projectDir, run) {
+  const pdir = path.resolve(projectDir);
+  const root = specsRoot(pdir);
+  const key = flatCommand(run && run.command);
+  const code = run && Number.isInteger(run.exitCode) ? run.exitCode : null;
+  if (!key || key.length > OBSERVED_MAX_COMMAND || code == null || !isDirSafe(root)) return { recorded: [] };
+  const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
+  if (typeof run.event === "string" && run.event) entry.event = run.event.slice(0, 40);
+  if (typeof run.session === "string" && run.session) entry.session = run.session.slice(0, 200);
+  const targets = [];
+  for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, OBSERVED_MAX_FEATURES)) {
+    const text = readIfExists(path.join(f.dir, "tasks.md"));
+    if (text && flatCommand(text).includes(key) && verifyCommandSet(text).has(key)) targets.push({ feature: f.slug, dir: path.join(f.dir, ".execution") });
+  }
+  if (projectChecks(pdir).checks.some((c) => flatCommand(c.command) === key)) targets.push({ feature: null, dir: path.join(root, ".execution") });
+  const recorded = [];
+  for (const t of targets) {
+    const file = appendObserved(t.dir, entry);
+    if (file) recorded.push({ feature: t.feature, file: toPosix(path.relative(pdir, file)) });
+  }
+  return { recorded };
+}
+function appendObserved(exDir, entry) {
+  try {
+    if (!isDirSafe(path.dirname(exDir))) return null; // the feature folder (or .specs/) must exist — never recreated here
+    try { fs.mkdirSync(exDir); } catch (e) { if (e.code !== "EEXIST") return null; }
+    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // .execution/ ignores itself
+    const file = path.join(exDir, OBSERVED_LOG);
+    forgetCached(file);
+    fs.appendFileSync(file, JSON.stringify(entry) + "\n", "utf8");
+    trimObservedLog(file);
+    return file;
+  } catch {
+    return null;
+  }
+}
+// Bounded: past OBSERVED_MAX_BYTES the log keeps its newest lines, up to half of that (replaced atomically). Two hooks
+// appending while one trims can lose a line — the run then reads unobserved and is simply run again.
+function trimObservedLog(file) {
+  let size;
+  try { size = fs.statSync(file).size; } catch { return; }
+  if (size <= OBSERVED_MAX_BYTES) return;
+  const keep = [];
+  let bytes = 0;
+  const entries = readObservedLog(file);
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const line = JSON.stringify(entries[i]) + "\n";
+    if (bytes + Buffer.byteLength(line) > OBSERVED_MAX_BYTES / 2) break;
+    keep.unshift(line);
+    bytes += Buffer.byteLength(line);
+  }
+  writeFileAtomic(file, keep.join(""));
+}
 // The feature's last task activity (ms): the last tick completeTask stamped (lastTickAt) or the newest recorded task run. A
 // box ticked by hand in tasks.md leaves no time; null = nothing known (then any passing check run counts). A stamp in the
 // future is ignored, as the stop gate's stopActivity does (full review Ga4): a .state.json committed from a machine with a
@@ -5371,7 +5572,9 @@ function writeChecks(projectDir, nc) {
 // ran them, validated all-or-nothing, then recorded in .state.json → finishChecks[name]: the latest run {command, exitCode,
 // summary, at, commit?, dirty?} stamped `check` (the meta.checks command it ran for — an edited command makes it `changed`)
 // plus a short history. A failed run is recorded too (it stays a blocker). → { recorded } | { error }
-function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
+// ranBy "cli" (1.14 F1): `finish --run` ran the checks itself — each run is stamped observed: "cli"; otherwise the harness's
+// project-check log says whether it saw each run (observed: true | false).
+function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy) {
   const P = i18n.msg(lng).projectChecks;
   if (!Array.isArray(evidence)) return { error: P.evidenceNotList };
   if (!evidence.length) return { recorded: [] };
@@ -5388,6 +5591,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
     const code = it.exitCode == null ? "" : String(it.exitCode).trim();
     if (!/^-?\d+$/.test(code)) return bad(P.needsExit);
     const run = { command: it.command.trim().slice(0, 500), exitCode: parseInt(code, 10), ...gitEvidence(it) };
+    run.observed = observedStamp(projectDir, null, run, ranBy); // 1.14 F1
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
     runs.push({ name: it.name, check: byName.get(it.name), run });
   }
@@ -5406,15 +5610,18 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng) {
   }
   state.finishChecks = fc;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
-  return { recorded: runs.map((r) => ({ name: r.name, exitCode: r.run.exitCode })) };
+  return { recorded: runs.map((r) => ({ name: r.name, exitCode: r.run.exitCode })) }; // the observed stamp: suiteChecks[].observed
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
 // command changed since the run) · before-last-tick · code-changed (full review Ga3: the run's `code` stamp no longer matches
 // the feature's implementing files — code edited after the checks ran; a run recorded without a stamp keeps the older rule).
 // dir: the feature folder (the stamp is only compared with it). → { items, missing (not pass), invalid, lastActivity }
+// · unobserved (1.14 F1, only with roadmap.json meta.evidence "observed": a passing run the harness never saw — observed is
+// neither true nor "cli").
 function suiteStatus(projectDir, state, dir) {
   const { checks, invalid } = projectChecks(projectDir);
+  const observedOnly = evidenceMode(projectDir) === "observed";
   const last = lastTaskActivity(state);
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
   let codeNow; // computed once, only when a passing stamped run needs it
@@ -5427,9 +5634,10 @@ function suiteStatus(projectDir, state, dir) {
     const r = Object.prototype.hasOwnProperty.call(fc, name) && isRecord(fc[name]) ? fc[name] : null;
     if (!r || typeof r.command !== "string" || !Number.isInteger(r.exitCode)) return { name, command, status: "no-run" };
     const it = { name, command, exitCode: r.exitCode, at: typeof r.at === "string" ? r.at : null, ranCommand: r.command, ...runOf({ summary: r.summary, ...gitEvidence(r) }) };
+    if (r.observed === true || r.observed === false || r.observed === "cli") it.observed = r.observed; // 1.14 F1
     const t = Date.parse(r.at);
     it.status = r.check !== command ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
-      : codeChanged(r) ? "code-changed" : "pass";
+      : codeChanged(r) ? "code-changed" : observedOnly && r.observed !== true && r.observed !== "cli" ? "unobserved" : "pass";
     return it;
   });
   return { items, missing: items.filter((i) => i.status !== "pass"), invalid, lastActivity: last != null ? new Date(last).toISOString() : null };
@@ -5963,7 +6171,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // the feature ready); all-or-nothing, under the feature lock.
   let recordedChecks = null;
   if (opts.evidence != null) {
-    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng);
+    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy); // ranBy "cli": `finish --run` (1.14 F1; never from MCP)
     if (rc.error) return { ok: false, error: rc.error };
     recordedChecks = rc.recorded;
   }
@@ -6848,8 +7056,9 @@ function impactReport(projectDir, name, opts = {}) {
   const blocks = activeTaskBlocks(tasksText, tracks);
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
+  const mode = evidenceMode(projectDir); // 1.14 F1
   const taskView = (b) => {
-    const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number));
+    const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number), mode);
     return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(nothingToVerify ? { nothingToVerify: true } : {}),
       ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
   };
@@ -8294,6 +8503,7 @@ function nextAction(projectDir, name, opts = {}) {
         if (detail && detail.reason === "duplicate-number") recommendation = nx.verifyDuplicate(slug, unverifiedLabel(vs, lng), n);
         else {
           recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
+          if (detail && detail.reason === "unobserved") recommendation += " " + i18n.msg(lng).observed.naHint; // 1.14 F1 (meta.evidence "observed")
           // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
           const red = redPhaseHint(blk, slug, lng);
           if (red) recommendation += " " + red;
@@ -15628,6 +15838,12 @@ module.exports = {
   FLOWS: Object.freeze(FLOWS.slice()), // the phase orders spec_create {flow} / spec_feature {action: "flow"} take (requirements-first = the default)
   featureFlow: (projectDir, name) => { const f = existingFeature(projectDir, name); return f.ok ? featureFlow(f.dir) : null; }, // a feature's flow (null: no such feature)
   planPaths, // the file paths a plan step names (spec_import plan → _Implements:_)
+
+  // 1.14 F1 — harness-observed evidence
+  observeRun, // hooks/observe-hook.js: log a Bash run of a _Verify:_ / project-check command (.specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl)
+  observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
+  evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
+  OBSERVED_MAX_BYTES, // the log's size bound
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a
