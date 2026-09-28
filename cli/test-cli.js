@@ -40,8 +40,26 @@ const inSection = (name) => SECTION === name;
 function exitFlushed(code) {
   process.stdout.write("", () => process.exit(code));
 }
+// Temp dirs: a crashed, killed or timed-out section — or, on Windows, a file a just-exited command or a virus scanner still
+// held (rmSync threw EBUSY / EPERM; `force` only silences ENOENT) — left its cli-test-XXXXXX folder behind, run after run.
+// Every removal retries (maxRetries), and the parent sweeps this runner's OWN leftovers first: exactly the mkdtemp shape,
+// a real directory, untouched for 2 h.
+function rmTmpDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch {}
+}
+function sweepStaleTmp() {
+  let names = [];
+  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  const cutoff = Date.now() - 2 * 3600 * 1000;
+  for (const n of names) {
+    if (!/^cli-test-[A-Za-z0-9]{6}$/.test(n)) continue;
+    const p = path.join(os.tmpdir(), n);
+    try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
+  }
+}
 if (!SECTION) {
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} // the children make their own
+  rmTmpDir(tmp); // the children make their own
+  sweepStaleTmp();
   const { spawn } = require("child_process");
   const runSection = (name) => new Promise((resolve) => {
     let out = "";
@@ -70,7 +88,7 @@ if (!SECTION) {
   return; // CommonJS module scope: the parent only dispatches
 }
 if (!SECTIONS.includes(SECTION)) {
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  rmTmpDir(tmp);
   console.log(`unknown CLI_TEST_SECTION '${SECTION}' (known: ${SECTIONS.join(", ")})\n\n0 passed, 1 failed`);
   process.exit(1);
 }
@@ -2864,7 +2882,7 @@ if (inSection("frga")) {
 
   // Ga10: --timeout, output over the buffer and a cmd.exe failure under --shell cmd are could-not-run too — nothing recorded.
   const f10 = Sga.createFeature(gp, "Limits", ["core"], "", undefined, "en");
-  wGa(f10.dir, "tasks.md", "- [ ] 1. [US1] Slow\n  - _Verify: node -e \"setTimeout(function () {}, 4000)\"_\n" +
+  wGa(f10.dir, "tasks.md", "- [ ] 1. [US1] Slow\n  - _Verify: node -e \"setTimeout(function () {}, 2500)\"_\n" +
     "- [ ] 2. [US1] Loud\n  - _Verify: node -e \"process.stdout.write(Buffer.alloc(70 * 1024 * 1024, 120).toString())\"_\n  - _Expect: fail_\n" +
     "- [ ] 3. [US1] Write T-03 red\n  - _Verify: cd no-such-dir-dsd_\n  - _Expect: fail_\n");
   const g10t = rga(gp, ["done", f10.slug, "1", "--run", "--timeout", "1", "--json"]);
@@ -3060,5 +3078,5 @@ if (inSection("frs")) {
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
 
 console.log(`\n${pass} passed, ${fail} failed`);
-try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+rmTmpDir(tmp);
 exitFlushed(fail ? 1 : 0);

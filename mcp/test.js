@@ -25,7 +25,25 @@ const SECTION = process.env.MCP_TEST_SECTION || "";
 function exitFlushed(code) {
   process.stdout.write("", () => process.exit(code));
 }
+// Temp dirs: a crashed, killed or timed-out run — or, on Windows, a file a just-exited child or a virus scanner still
+// held (rmSync threw EBUSY / EPERM; `force` only silences ENOENT) — left its spec-test-XXXXXX folder behind, run after
+// run. Every removal retries (maxRetries), and the parent sweeps this runner's OWN leftovers first: exactly the mkdtemp
+// shape, a real directory, untouched for 2 h.
+function rmTmpDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch {}
+}
+function sweepStaleTmp() {
+  let names = [];
+  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  const cutoff = Date.now() - 2 * 3600 * 1000;
+  for (const n of names) {
+    if (!/^spec-test-[A-Za-z0-9]{6}$/.test(n)) continue;
+    const p = path.join(os.tmpdir(), n);
+    try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
+  }
+}
 if (!SECTION) {
+  sweepStaleTmp();
   const runSection = (name) => new Promise((resolve) => {
     let out = "";
     const kid = spawn(process.execPath, [__filename], { env: { ...process.env, MCP_TEST_SECTION: name }, stdio: ["ignore", "pipe", "pipe"] });
@@ -109,12 +127,24 @@ child.stdout.on("data", (d) => {
 
 // A server that dies or stops answering must FAIL the suite — never let the event loop drain and exit 0.
 function abort(reason) {
+  if (aborting) return; // a second timer, or the server's exit after the first abort
+  aborting = true;
+  finished = true;
   console.log("  FAIL - " + reason);
   console.log(`\n${pass} passed, ${fail + 1} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  exitFlushed(1);
+  try { child.kill(); } catch {}
+  closeRun(1, 2000);
 }
 let finished = false;
+let aborting = false;
+// Remove the temp dir only once the server has exited — while it runs it may hold a file under it, and Windows then
+// refuses the removal (the folder stayed behind, run after run) — with a fallback timer; then exit once stdout flushed.
+function closeRun(code, waitMs) {
+  const done = () => { rmTmpDir(tmp); exitFlushed(code); };
+  if (child.exitCode !== null || child.signalCode !== null) return done();
+  const t = setTimeout(() => { try { child.kill(); } catch {} done(); }, waitMs);
+  child.once("exit", () => { clearTimeout(t); done(); });
+}
 child.on("exit", (code) => { if (!finished) abort("MCP server exited early (code " + code + ") with " + pending.size + " request(s) pending"); });
 
 let idc = 1;
@@ -146,8 +176,7 @@ function endRun() {
   finished = true;
   child.stdin.end();
   console.log(`\n${pass} passed, ${fail} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  exitFlushed(fail ? 1 : 0);
+  closeRun(fail ? 1 : 0, 5000);
 }
 
 (async () => {
@@ -10876,9 +10905,5 @@ function endRun() {
   const vMkt = JSON.parse(fs.readFileSync(path.join(vRoot, ".claude-plugin", "marketplace.json"), "utf8")).plugins[0].version;
   ok(vPkg === vPlugin && vPlugin === vMkt, `package.json / plugin.json / marketplace.json versions agree (${vPkg} / ${vPlugin} / ${vMkt})`);
 
-  finished = true;
-  child.stdin.end();
-  console.log(`\n${pass} passed, ${fail} failed`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-  exitFlushed(fail ? 1 : 0);
+  endRun();
 })();
