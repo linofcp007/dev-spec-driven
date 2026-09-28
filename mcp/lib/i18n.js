@@ -2108,6 +2108,9 @@ const STEERING = {
       "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
     "privacy.md":
       "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
+    // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
+    "glossary.md":
+      "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
   },
   pt: {
     "constitution.md":
@@ -2132,6 +2135,8 @@ const STEERING = {
       "# Padrões de Segurança\n\n## Nível de Garantia\n- Nível OWASP ASVS alvo: [L1 | L2 | L3] — porquê: []\n\n## Modelação de Ameaças\n- Método: STRIDE por componente e fronteira de confiança, revisto a cada alteração de design.\n- Onde ficam os modelos de ameaças: no design.md de cada feature +sec → Modelo de Ameaças.\n\n## Autenticação e Autorização\n- Fornecedor de identidade / modelo de sessão: []\n- Modelo de autorização (RBAC / ABAC / verificação de titularidade), negar por omissão: []\n\n## Segredos e Criptografia\n- Cofre de segredos: [] — nunca no código, em configuração versionada, em logs ou em tickets.\n- Cifragem em repouso / em trânsito (versão de TLS, rotação de chaves): []\n\n## Regras de Código Seguro\n- Validar a entrada nas fronteiras de confiança; codificar a saída; só queries parametrizadas.\n- Nenhum segredo, token ou stack trace em respostas ou logs.\n\n## Testes de Segurança (locais)\n- SAST: [] · auditoria de dependências: [] · análise de segredos: [] · DAST (serviços expostos): []\n- Cada ameaça relevante tem um teste de caso de abuso.\n\n## Gestão de Vulnerabilidades\n- Prazos de correção por severidade (crítica / alta / média): [] · quem faz a triagem: []\n",
     "privacy.md":
       "# Padrões de Privacidade (RGPD)\n\n## Papéis\n- Responsável pelo tratamento: [] · EPD / contacto de privacidade: [] · autoridade de controlo: [ex.: CNPD]\n\n## Princípios (RGPD, art. 5.º)\n- Licitude, lealdade e transparência · limitação das finalidades · minimização dos dados · exatidão · limitação da conservação · integridade e confidencialidade · responsabilidade.\n\n## Registo das Atividades de Tratamento (art. 30.º)\n- Onde está o registo das atividades de tratamento: []\n\n## Fundamentos de Licitude em Uso (art. 6.º)\n- [atividade de tratamento → fundamento de licitude]\n\n## Prazos de Conservação\n| Categoria de dados | Prazo de conservação | Método de eliminação |\n|---|---|---|\n| | | |\n\n## Pedidos dos Titulares\n- Canal · verificação de identidade · prazo de um mês (art. 12.º, n.º 3) · responsável: []\n\n## Subcontratantes e Transferências\n- Subcontratantes aprovados (contratos do art. 28.º): [] · transferências para fora do EEE e a sua garantia: []\n\n## Proteção de Dados desde a Conceção (art. 25.º)\n- Por omissão: recolher o mínimo, pseudonimizar sempre que possível, sem dados pessoais nos logs.\n\n## Resposta a Violações de Dados\n- Notificar a autoridade de controlo no prazo de 72 horas (art. 33.º) · runbook: []\n",
+    "glossary.md":
+      "# Glossário\n\n<!-- A linguagem ubíqua do produto: uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
   },
   es: {
     "constitution.md":
@@ -2156,6 +2161,8 @@ const STEERING = {
       "# Estándares de Seguridad\n\n## Nivel de Garantía\n- Nivel OWASP ASVS objetivo: [L1 | L2 | L3] — por qué: []\n\n## Modelado de Amenazas\n- Método: STRIDE por componente y frontera de confianza, revisado en cada cambio de diseño.\n- Dónde viven los modelos de amenazas: en el design.md de cada función +sec → Modelo de Amenazas.\n\n## Autenticación y Autorización\n- Proveedor de identidad / modelo de sesión: []\n- Modelo de autorización (RBAC / ABAC / comprobación de propiedad), denegar por defecto: []\n\n## Secretos y Criptografía\n- Almacén de secretos: [] — nunca en el código, en configuración versionada, en logs ni en tickets.\n- Cifrado en reposo / en tránsito (versión de TLS, rotación de claves): []\n\n## Reglas de Código Seguro\n- Validar la entrada en las fronteras de confianza; codificar la salida; solo queries parametrizadas.\n- Ningún secreto, token ni stack trace en respuestas o logs.\n\n## Pruebas de Seguridad (locales)\n- SAST: [] · auditoría de dependencias: [] · análisis de secretos: [] · DAST (servicios expuestos): []\n- Cada amenaza relevante tiene una prueba de caso de abuso.\n\n## Gestión de Vulnerabilidades\n- Plazos de corrección por severidad (crítica / alta / media): [] · quién hace el triaje: []\n",
     "privacy.md":
       "# Estándares de Privacidad (RGPD)\n\n## Roles\n- Responsable del tratamiento: [] · DPD / contacto de privacidad: [] · autoridad de control: [p.ej., AEPD]\n\n## Principios (RGPD, art. 5)\n- Licitud, lealtad y transparencia · limitación de la finalidad · minimización de datos · exactitud · limitación del plazo de conservación · integridad y confidencialidad · responsabilidad proactiva.\n\n## Registro de Actividades de Tratamiento (art. 30)\n- Dónde está el registro de actividades de tratamiento: []\n\n## Bases Jurídicas en Uso (art. 6)\n- [actividad de tratamiento → base jurídica]\n\n## Plazos de Conservación\n| Categoría de datos | Plazo de conservación | Método de supresión |\n|---|---|---|\n| | | |\n\n## Solicitudes de los Interesados\n- Canal · verificación de identidad · plazo de un mes (art. 12.3) · responsable: []\n\n## Encargados y Transferencias\n- Encargados aprobados (contratos del art. 28): [] · transferencias fuera del EEE y su garantía: []\n\n## Protección de Datos desde el Diseño (art. 25)\n- Por defecto: recoger lo mínimo, seudonimizar siempre que sea posible, sin datos personales en los logs.\n\n## Respuesta a Brechas de Datos\n- Notificar a la autoridad de control en un plazo de 72 horas (art. 33) · runbook: []\n",
+    "glossary.md":
+      "# Glosario\n\n<!-- El lenguaje ubicuo del producto: una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
   },
 };
 
@@ -7045,6 +7052,105 @@ _Outcome: [go | no-go | pivot]_
 // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
 for (const l of BASE_LANGS) Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
 
+// 1.16 Q — spec quality: steering amendments (Q1), cross-feature acceptance criteria (Q2), the glossary (Q3). One group per
+// language, merged into MSG (pt-BR derives from pt's). Check ids, reason codes and file names stay English.
+const QUALITY_MSG = {
+  en: {
+    steeringChange: { modified: "changed", removed: "removed" },
+    steeringItem: (phase, day, files) => `${phase} (approved ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering changed after approval — ${items}: re-review against the amended steering, then re-approve (dev-spec impact ${slug} --phase steering; without a feature it lists every one concerned).`,
+    naSteering: (phases, files, slug) => `Also: steering changed after the approval of ${phases} (${files}) — re-review against it and re-approve if it still holds (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `name required — only phase 'steering' works project-wide (without a feature). Phases: ${phases}.`,
+    impactNoReopen: "reopen doesn't apply to phase 'steering' — nothing is unticked: re-review the features listed and re-approve their requirements / design.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: approved under an older version of steering that changed since` : `Steering — ${feature}: no approval was made under steering that changed since`)
+      : (n ? `Steering — ${n} active feature(s) approved under an older version of steering that changed since` : "Steering — no requirements / design approval was made under steering that changed since")),
+    impactUntracked: (list) => `approved before 1.16 (no steering fingerprints — never flagged): ${list}`,
+    impactUnreadable: (list) => `skipped — .state.json unreadable: ${list}`,
+    impactReReview: (slug, phase) => `Re-review each against the amended steering, then re-approve (/approve ${slug} ${phase}) — the approval records the current steering.`,
+    xacKind: { duplicate: "near-duplicate", conflict: "possible conflict" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `SHALL vs SHALL NOT, ${pct}% alike` : reason === "different-numbers" ? `different numbers ${nums}, ${pct}% alike` : `${pct}% alike`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} criterion pair(s) read like another active feature's or may contradict them — ${list}. Merge or reword them, or declare _Supersedes: <feature>/US-n.AC-m_ on the newer one.`,
+    xacMore: (n) => `… +${n} more`,
+    xacHeading: "Possible duplicates / conflicts",
+    xacIntro: "Acceptance criteria of different active features that read alike (near-duplicates) or may contradict each other (the same trigger with SHALL vs SHALL NOT, or different numbers) — a heuristic: merge or reword them, or declare _Supersedes:_ on the newer one.",
+    xacTruncated: "(bounded — not every criterion was compared)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — the glossary says ${term}${def ? ` (${def})` : ""}. Use "${term}", or amend .specs/steering/glossary.md if '${word}' means something else here.`,
+    glossaryMore: (n) => `… and ${n} more word(s) the glossary says to avoid — see spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} use(s) of words the glossary says to avoid — ${list} (spec_clarify asks about each)`,
+    glossaryOk: (n) => `no word the glossary says to avoid in requirements.md / design.md (${n} term(s))`,
+    briefGlossaryHeading: "## Glossary (terms this task uses)",
+    briefGlossaryIntro: "Use these words exactly as defined (.specs/steering/glossary.md) — never the avoided ones:",
+    briefGlossaryAvoid: (list) => `avoid: ${list}`,
+    briefGlossaryOmitted: (list) => `More entries apply (size) — read them in .specs/steering/glossary.md: ${list}`,
+  },
+  pt: {
+    steeringChange: { modified: "alterado", removed: "removido" },
+    steeringItem: (phase, day, files) => `${phase} (aprovado em ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering alterado depois da aprovação — ${items}: revê à luz do steering alterado e volta a aprovar (dev-spec impact ${slug} --phase steering; sem feature lista todas as afetadas).`,
+    naSteering: (phases, files, slug) => `Nota: o steering mudou depois da aprovação de ${phases} (${files}) — revê à luz dele e volta a aprovar se continuar válido (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `nome em falta — só a fase 'steering' funciona para o projeto todo (sem feature). Fases: ${phases}.`,
+    impactNoReopen: "o reopen não se aplica à fase 'steering' — nada é desmarcado: revê as features listadas e volta a aprovar os requisitos / o design.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: aprovada com uma versão anterior de steering que mudou desde então` : `Steering — ${feature}: nenhuma aprovação foi feita com steering que mudou desde então`)
+      : (n ? `Steering — ${n} feature(s) ativa(s) aprovada(s) com uma versão anterior de steering que mudou desde então` : "Steering — nenhuma aprovação de requisitos / design foi feita com steering que mudou desde então")),
+    impactUntracked: (list) => `aprovadas antes da 1.16 (sem fingerprints do steering — nunca sinalizadas): ${list}`,
+    impactUnreadable: (list) => `ignoradas — .state.json ilegível: ${list}`,
+    impactReReview: (slug, phase) => `Revê cada uma à luz do steering alterado e volta a aprovar (/approve ${slug} ${phase}) — a aprovação regista o steering atual.`,
+    xacKind: { duplicate: "quase duplicado", conflict: "possível conflito" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `DEVE vs NÃO DEVE, ${pct}% semelhantes` : reason === "different-numbers" ? `números diferentes ${nums}, ${pct}% semelhantes` : `${pct}% semelhantes`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} par(es) de critérios parecem-se com os de outra feature ativa ou podem contradizê-los — ${list}. Junta-os ou muda um deles, ou declara _Supersedes: <feature>/US-n.AC-m_ no mais recente.`,
+    xacMore: (n) => `… +${n}`,
+    xacHeading: "Possíveis duplicados / conflitos",
+    xacIntro: "Critérios de aceitação de features ativas diferentes que se parecem (quase duplicados) ou podem contradizer-se (o mesmo gatilho com DEVE vs NÃO DEVE, ou números diferentes) — uma heurística: junta-os ou muda um deles, ou declara _Supersedes:_ no mais recente.",
+    xacTruncated: "(limitado — nem todos os critérios foram comparados)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — o glossário diz ${term}${def ? ` (${def})` : ""}. Usa "${term}", ou corrige o .specs/steering/glossary.md se '${word}' significar outra coisa aqui.`,
+    glossaryMore: (n) => `… e mais ${n} palavra(s) que o glossário manda evitar — ver spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} uso(s) de palavras que o glossário manda evitar — ${list} (o spec_clarify pergunta por cada uma)`,
+    glossaryOk: (n) => `nenhuma palavra que o glossário manda evitar no requirements.md / design.md (${n} termo(s))`,
+    briefGlossaryHeading: "## Glossário (termos que esta task usa)",
+    briefGlossaryIntro: "Usa estas palavras exatamente como estão definidas (.specs/steering/glossary.md) — nunca as que são para evitar:",
+    briefGlossaryAvoid: (list) => `evitar: ${list}`,
+    briefGlossaryOmitted: (list) => `Aplicam-se mais entradas (tamanho) — lê-as no .specs/steering/glossary.md: ${list}`,
+  },
+  es: {
+    steeringChange: { modified: "modificado", removed: "eliminado" },
+    steeringItem: (phase, day, files) => `${phase} (aprobado el ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering modificado después de la aprobación — ${items}: revisa según el steering modificado y vuelve a aprobar (dev-spec impact ${slug} --phase steering; sin función lista todas las afectadas).`,
+    naSteering: (phases, files, slug) => `Nota: el steering cambió después de la aprobación de ${phases} (${files}) — revisa según él y vuelve a aprobar si sigue siendo válido (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `falta el nombre — solo la fase 'steering' funciona para todo el proyecto (sin función). Fases: ${phases}.`,
+    impactNoReopen: "reopen no se aplica a la fase 'steering' — no se desmarca nada: revisa las funciones listadas y vuelve a aprobar sus requisitos / su diseño.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: aprobada con una versión anterior de steering que cambió desde entonces` : `Steering — ${feature}: ninguna aprobación se hizo con steering que cambió desde entonces`)
+      : (n ? `Steering — ${n} función(es) activa(s) aprobada(s) con una versión anterior de steering que cambió desde entonces` : "Steering — ninguna aprobación de requisitos / diseño se hizo con steering que cambió desde entonces")),
+    impactUntracked: (list) => `aprobadas antes de la 1.16 (sin fingerprints del steering — nunca señaladas): ${list}`,
+    impactUnreadable: (list) => `omitidas — .state.json ilegible: ${list}`,
+    impactReReview: (slug, phase) => `Revisa cada una según el steering modificado y vuelve a aprobar (/approve ${slug} ${phase}) — la aprobación registra el steering actual.`,
+    xacKind: { duplicate: "casi duplicado", conflict: "posible conflicto" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `DEBE vs NO DEBE, ${pct}% parecidos` : reason === "different-numbers" ? `números distintos ${nums}, ${pct}% parecidos` : `${pct}% parecidos`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} par(es) de criterios se parecen a los de otra función activa o pueden contradecirlos — ${list}. Únelos o reescríbelos, o declara _Supersedes: <feature>/US-n.AC-m_ en el más reciente.`,
+    xacMore: (n) => `… +${n}`,
+    xacHeading: "Posibles duplicados / conflictos",
+    xacIntro: "Criterios de aceptación de funciones activas distintas que se parecen (casi duplicados) o pueden contradecirse (el mismo disparador con DEBE vs NO DEBE, o números distintos) — una heurística: únelos o reescríbelos, o declara _Supersedes:_ en el más reciente.",
+    xacTruncated: "(limitado — no se compararon todos los criterios)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — el glosario dice ${term}${def ? ` (${def})` : ""}. Usa "${term}", o corrige .specs/steering/glossary.md si '${word}' significa otra cosa aquí.`,
+    glossaryMore: (n) => `… y ${n} palabra(s) más que el glosario manda evitar — ver spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} uso(s) de palabras que el glosario manda evitar — ${list} (spec_clarify pregunta por cada una)`,
+    glossaryOk: (n) => `ninguna palabra que el glosario manda evitar en requirements.md / design.md (${n} término(s))`,
+    briefGlossaryHeading: "## Glosario (términos que usa esta tarea)",
+    briefGlossaryIntro: "Usa estas palabras tal como están definidas (.specs/steering/glossary.md) — nunca las que hay que evitar:",
+    briefGlossaryAvoid: (list) => `evitar: ${list}`,
+    briefGlossaryOmitted: (list) => `Se aplican más entradas (tamaño) — léelas en .specs/steering/glossary.md: ${list}`,
+  },
+};
+for (const l of BASE_LANGS) MSG[l].quality = QUALITY_MSG[l];
+
 // ===========================================================================
 // Task brief (spec_task_brief) — the self-contained brief a fresh implementer reads first.
 // Labels and loop rules per language; renderBrief() owns the layout. IDs, `_Label:_` markers and
@@ -7276,6 +7382,13 @@ function renderBrief(d, lang) {
   push("", t.acs);
   if (d.acceptanceCriteria.length) d.acceptanceCriteria.forEach((a) => push("- " + a.text));
   else push(t.acsNone);
+  // 1.16 Q3: the glossary entries this task's text and criteria use (bounded) — the words to use, and the ones to avoid
+  if ((d.glossary || []).length) {
+    const Q = MSG[normalizeLang(lang)].quality;
+    push("", Q.briefGlossaryHeading, Q.briefGlossaryIntro);
+    d.glossary.forEach((g) => push(`- **${g.term}**${g.definition ? " — " + g.definition : ""}${g.avoid.length ? ` _(${Q.briefGlossaryAvoid(g.avoid.join(", "))})_` : ""}`));
+    if ((d.glossaryOmitted || []).length) push(Q.briefGlossaryOmitted(d.glossaryOmitted.join(", ")));
+  }
 
   if (d.tests.length) {
     push("", d.expectFail ? t.testsRed : t.tests); // full review Ga7: a red task writes the tests; it never makes them green

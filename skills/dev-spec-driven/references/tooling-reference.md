@@ -13,7 +13,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 |---|---|
 | `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware) |
 | `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`"on"` / `"off"` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands), `approvalRoles` (phase → roles), `evidence` (`"reported"` default / `"observed"` — only runs the harness saw, or the CLI made, verify a runnable `_Verify:_`) and `approvalGuard` (`"off"` / `"ask"` / `"deny"` — an agent's approval asks the user or is refused) — each stored in `roadmap.json → meta` and always reported back |
-| `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
+| `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`, and `glossary.md` — the terms to use and the words to avoid, `_Avoid:_`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
@@ -22,11 +22,11 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_status` | One feature: kind (feature / bugfix / spike), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
 | `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` |
-| `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention) |
+| `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC, `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
 | `spec_doctor` | One health-check → `readyToAdvance` (the checks are listed below) |
 | `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate |
-| `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint |
+| `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint; `phase: "steering"` (no name = every active feature) lists the approvals made under steering that changed since (read-only) |
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, its `_Depends:_` and where each stands, DoD); default = the next task by `spec_next_task`'s rule; `write: true` → `.specs/<feature>/.execution/` |
@@ -35,7 +35,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
-| `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions; `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
+| `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
 | `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv) |
 | `spec_changelog` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md` |
 | `spec_add_track` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites); `remove: true` takes a track off without deleting files |
@@ -74,8 +74,11 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   warning) · `integration-plan` (brownfield template unfilled) · bugfix
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom
   `_Affects:_`) · `decision-affects-approved` (a decision recorded after the approval of what it affects) ·
-  `cross-feature-overlap` (another active feature's open tasks plan the same files) · spike `timebox` (past its date
-  with no decision).
+  `cross-feature-overlap` (another active feature's open tasks plan the same files) · `cross-feature-acs` (a criterion
+  that reads like another active feature's, or may contradict it: SHALL vs SHALL NOT, different numbers) ·
+  `steering-changed-since-approval` (a steering file that governed the requirements / design approval changed or was
+  removed since — `steeringChanged`; approvals before 1.16 never) · `glossary` (words the glossary says to avoid, used in
+  requirements.md / design.md) · spike `timebox` (past its date with no decision).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
   `tests` on +tdd / +ai once its plan exists, a phase still missing a role's sign-off), forced approvals with their
   failing checks, and what the next approval would refuse (`nextGate {phase, ready, failing, missingRoles}`).
@@ -126,7 +129,7 @@ next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [-
 done <feature> <n> [--run [--shell bash] [--timeout <s>] | --evidence "…" --exit N --cmd "…"]
 approve <feature> <phase> [--by NAME] [--role ROLE] [--force]
 approve <feature> --through <phase> [--role ROLE] [--force]
-impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]
+impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]    impact [feature] --phase steering
 decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects ids,…] [--supersedes D-n] [--discovery]
 next-action|na <feature>                 finish <feature> [--write] [--include-body] [--run [--shell bash] [--timeout <s>]]
 append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--makes-green T-01,…] [--expect-fail]

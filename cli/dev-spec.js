@@ -21,7 +21,7 @@
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
  *                                      --approval-guard off|ask|deny → an agent's approval asks the user / is refused (meta.approvalGuard)
- *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
+ *   steering <file> [--lang]            Create one steering file from its template (glossary.md: the terms to use / avoid), or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
@@ -53,6 +53,8 @@
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
  *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
+ *   impact [feature] --phase steering  The features (all active ones without a name) whose requirements / design approval was
+ *                                      made under steering (constitution, track files…) that changed since — re-review, re-approve
  *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate, velocity (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
@@ -155,7 +157,7 @@ function withTracksFlag(list) {
 ["task", "req", "implements", "verify", "story", "heading", "makes-green", "size"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("timeout"); // done --run / finish --run --timeout <seconds> (full review Ga10): a run past it is could-not-run, nothing recorded
 
-VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
+VALUE_FLAGS.add("phase"); // impact [f] --phase requirements|design|test-plan|eval-plan|tasks|steering (1.16: steering needs no feature)
 
 VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
 ["stop-check", "message", "agent"].forEach((k) => VALUE_FLAGS.add(k)); // 1.14 C1: init --stop-check on|off (= spec_init {stopCheck}); stop-check --message "…" --agent <type>
@@ -931,8 +933,10 @@ function main() {
     }
 
     case "impact": {
-      // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact
-      if (!pos[0]) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]");
+      // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact;
+      // 1.16 Q1: `impact [feature] --phase steering` — the features approved under steering that changed since (no feature = all)
+      const steeringPhase = String(flags.phase == null ? "" : flags.phase).trim().toLowerCase() === "steering";
+      if (!pos[0] && !steeringPhase) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] · dev-spec impact [feature] --phase steering");
       const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: on("reopen") });
       if (!r.ok) return fail(r);
       return out(r, (r) => spec.impactLines(r).forEach((l) => console.log(l)));
@@ -1318,7 +1322,8 @@ function helpText() {
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
                                   its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)
-  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
+  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, glossary.md — the terms to
+                                  use and the words to avoid (_Avoid:_), …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
@@ -1375,6 +1380,9 @@ function helpText() {
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
                                   (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
+  impact [feature] --phase steering   Every active feature (or the one named) whose requirements / design approval was made under
+                                  a steering file (constitution, the tracks' files, always / matching fileMatch ones) that changed
+                                  since — read-only; re-review, then re-approve (the approval records the current steering)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);

@@ -176,6 +176,10 @@ next, `dev-spec next-action <feature>` names the single next step.
   it. `--reopen` unticks the affected done tasks and marks their evidence stale — never the tasks of a
   removed criterion: `retire` lists them (and their test rows) to delete or point at the criterion that
   replaces it; then re-review and re-approve.
+- **Steering amendments.** Requirements / design approvals record the steering that governed them; after editing
+  `constitution.md` or a track's steering file, `dev-spec impact --phase steering` lists every feature approved under the
+  old version (doctor: `steering-changed-since-approval`) — re-review each and re-approve. A glossary
+  (`dev-spec steering glossary.md`: `- **Customer** — … _Avoid: client, user_`) makes `clarify` ask about avoided words.
 - **Record decisions.** A design choice or a discovery made while implementing goes into the feature's decision log:
   `dev-spec decide <feature> --title "…" --decision "…" --affects US-1.AC-2,T-03` appends `D-n` to `decisions.md`
   (unknown references are refused). Briefs, the merge summary and the export show the entries; a decision recorded after

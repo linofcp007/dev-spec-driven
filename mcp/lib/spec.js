@@ -475,10 +475,12 @@ function shapeError(lang, rel, problems) {
 // could see it (forgetCached); a created folder alone adds no file, so it leaves the globs alone.
 let READ_CACHE = null; // Map(key → text | null | boolean | Dirent[]), only while a withReadCache scope runs
 let GLOB_CACHE = null; // Map(key → { base, allowDir, result }) — globFiles results, same scope
+let XAC_MEMO = null; // 1.16 Q2: { root, table } — crossFeatureAcs' criteria table, same scope (dropped by any engine write)
 function withReadCache(fn) {
   if (READ_CACHE) return fn();
   READ_CACHE = new Map();
   GLOB_CACHE = new Map();
+  XAC_MEMO = null;
   TEMPLATE_SCOPE_ROOT = null; // the call's project (specsRoot) and its parsed templates live as long as the scope
   TEMPLATE_MEMO = null;
   PACK_MEMO = null; // … and its track packs (1.15)
@@ -488,6 +490,7 @@ function withReadCache(fn) {
   } finally {
     READ_CACHE = null;
     GLOB_CACHE = null;
+    XAC_MEMO = null;
     TEMPLATE_SCOPE_ROOT = null;
     TEMPLATE_MEMO = null;
     PACK_MEMO = null;
@@ -558,6 +561,7 @@ function forgetCached(file, opts = {}) {
   if (!READ_CACHE) return;
   let k = readCacheKey(file);
   READ_CACHE.delete(k);
+  XAC_MEMO = null; // 1.16 Q2: any write may change a criterion, a state or a template — the cross-feature table is rebuilt
   // A write under .specs/templates/ (templates init) changes the project's template corpus.
   if (TEMPLATE_MEMO && (k === TEMPLATE_MEMO.tdirKey || k.startsWith(TEMPLATE_MEMO.tdirKey + path.sep))) TEMPLATE_MEMO = null;
   // … and a write under .specs/tracks/ (tracks init) changes the project's track packs (1.15).
@@ -588,6 +592,7 @@ function invalidateReadCache() {
   if (GLOB_CACHE) GLOB_CACHE.clear();
   TEMPLATE_MEMO = null;
   PACK_MEMO = null;
+  XAC_MEMO = null;
 }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
@@ -7968,6 +7973,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
   const dec = briefDecisions(dir, acIds, testIds, blockText); // 1.14 C2: decisions.md entries citing the task's IDs (bounded)
+  // 1.16 Q3: the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
+  const gloss = briefGlossary(root, [blockText, ...acceptanceCriteria.map((a) => a.text)].join("\n"));
 
   // Which loop the implementer follows; +ai prompt work stays with the controller (evals cost money,
   // accept/revert is a judgment call).
@@ -8034,6 +8041,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     stories,
     bug,
     acceptanceCriteria,
+    glossary: gloss.items,
+    glossaryOmitted: gloss.omitted,
     tests: testRows,
     evals: mk["affects evals"],
     metrics: mk["emits metrics"],
@@ -8096,6 +8105,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
+  if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
+  if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -8105,7 +8116,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // texts, test rows, design sections, steering, bug.md). includeBrief:true returns everything, brief included.
     res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
     if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // 1.14 C2: the IDs only (their text is in the brief)
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions"]) delete res[k];
+    if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // 1.16 Q3: the terms only (the entries are in the brief)
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary"]) delete res[k];
   }
   return res;
 }
@@ -8423,6 +8435,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
+  // 1.16 Q1: the steering that governed a requirements / design approval (constitution, the tracks' files, always / matching
+  // fileMatch files) — doctor warns steering-changed-since-approval once one of them changes.
+  if (STEERING_GOVERNED.includes(p)) entry.steering = steeringFingerprints(f.root, f.dir, tracks);
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -8437,6 +8452,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.file) record.file = entry.file;
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   if (entry.forced) { record.forced = true; record.failing = failing; }
+  if (entry.steering) record.steering = entry.steering; // 1.16 Q1
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -8977,13 +8993,17 @@ function activeTaskBlocks(tasksText, tracks) {
 // change request in .state.json `changes` — it never edits requirements.md or design.md. Idempotent: a change already
 // recorded against the same snapshot reopens nothing again.
 function impactReport(projectDir, name, opts = {}) {
+  // 1.16 Q1: phase 'steering' — the features approved under steering that changed since (project-wide without a name).
+  const ph0 = opts.phase == null ? "" : String(opts.phase).toLowerCase().trim();
+  if (ph0 === "steering") return steeringImpact(projectDir, name, opts);
+  if (name == null || String(name).trim() === "") return { ok: false, error: i18n.msg(projectLang(projectDir)).quality.impactNeedsName([...IMPACT_PHASES, "steering"].join(", ")) };
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const I = i18n.msg(lng).impact;
   const phase = opts.phase == null || String(opts.phase).trim() === "" ? "requirements" : String(opts.phase).toLowerCase().trim();
-  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), IMPACT_PHASES.join(", ")) };
+  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), [...IMPACT_PHASES, "steering"].join(", ")) };
   const reopen = opts.reopen === true;
   if (reopen && phase === "tasks") return { ok: false, error: I.reopenTasks };
   const state = readState(projectDir, slug);
@@ -9197,6 +9217,7 @@ function impactReport(projectDir, name, opts = {}) {
 
 // Human-readable spec_impact (CLI), in the feature's language.
 function impactLines(r) {
+  if (r.phase === "steering") return steeringImpactLines(r); // 1.16 Q1
   const I = i18n.msg(r.lang).impact;
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
@@ -9234,6 +9255,495 @@ function impactLines(r) {
   else if (r.hint) out.push("  " + r.hint);
   if (r.changed) out.push("  → " + I.reReview(r.feature, r.phase, r.missingRoles)); // 1.14: with the role(s) still to sign
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
+// ---------------------------------------------------------------------------
+
+// --- Q1: steering amendments ---
+// A requirements / design approval records `steering` {file: fingerprint} (on approvals[phase] and its history record): the
+// steering files that governed it — constitution.md, the active tracks' steering files (a track pack's too), every file whose
+// front matter says `inclusion: always`, and each `fileMatch` file whose pattern matches an _Implements:_ path of the feature's
+// active tasks. Only those few files are hashed (fingerprintText: BOM / CRLF are encoding), never the tree. A recorded file
+// that changed or was removed since → doctor warns steering-changed-since-approval, next_action adds a re-review hint (never a
+// block), spec_impact {phase: "steering"} lists every active feature concerned. Re-approving the phase records the current
+// steering. An approval made before 1.16 (no `steering`) is never flagged — spec_impact lists it as `untracked`.
+const STEERING_GOVERNED = ["requirements", "design"];
+// A recorded steering name: one .md file straight under .specs/steering/ (a hand-edited state never reads elsewhere).
+const safeSteeringName = (n) => typeof n === "string" && /^[^\\/:*?"<>|\u0000-\u001f]{1,120}\.md$/i.test(n) && !n.startsWith(".") && !n.includes("..");
+function governingSteering(root, dir, tracks) {
+  const sdir = path.join(root, "steering");
+  const names = safeReaddir(sdir).filter(safeSteeringName).sort();
+  if (!names.length) return [];
+  const always = new Set(["constitution.md", ...optionalTracks().filter((t) => tracks.includes(t)).flatMap((t) => trackSteeringFiles(t))]);
+  let targets = null; // the feature's _Implements:_ paths — read once, only when a fileMatch file exists
+  const out = [];
+  for (const n of names) {
+    const text = readIfExists(path.join(sdir, n));
+    if (text == null) continue; // a folder named *.md, an unreadable file
+    if (always.has(n)) { out.push(n); continue; }
+    const fm = steeringFrontMatter(text);
+    if (!fm.frontMatter) continue; // no front matter: not in the governing set (the brief's rule for non-default files)
+    if (fm.inclusion === "always") out.push(n);
+    else if (fm.inclusion === "fileMatch" && fm.patterns.length) {
+      if (targets === null) targets = featureImplementsTargets(dir, tracks);
+      if (targets.some((t) => fm.patterns.some((p) => steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/")))) out.push(n);
+    }
+  }
+  return out;
+}
+// The project-relative _Implements:_ paths of a feature's active tasks (template slots and absolute paths left out).
+function featureImplementsTargets(dir, tracks) {
+  const out = new Set();
+  for (const b of taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")) {
+    for (const r of taskMarkers(b).implements) {
+      const p = implementsRel(r);
+      if (p && !path.isAbsolute(p) && !/^\[.*\]$/.test(p)) out.add(p);
+    }
+  }
+  return [...out];
+}
+// → { <file>: fingerprint } of the governing steering files ({} when there is none — still a 1.16 approval).
+function steeringFingerprints(root, dir, tracks) {
+  const out = {};
+  for (const n of governingSteering(root, dir, tracks)) {
+    const raw = readIfExists(path.join(root, "steering", n));
+    if (raw != null) out[n] = textFingerprint(raw, "steering");
+  }
+  return out;
+}
+// The recorded steering of the requirements / design approvals that no longer matches → [{ phase, approvedAt, files: [{ file,
+// change: "modified" | "removed" }] }] (stable codes). Approvals without `steering` (before 1.16) are skipped.
+function steeringChanges(root, approvals) {
+  const out = [];
+  if (!isObj(approvals)) return out;
+  for (const p of STEERING_GOVERNED) {
+    const a = approvals[p];
+    if (!isRecord(a) || !isObj(a.steering)) continue;
+    const files = [];
+    for (const [file, fp] of Object.entries(a.steering)) {
+      if (!safeSteeringName(file) || typeof fp !== "string") continue;
+      const raw = readIfExists(path.join(root, "steering", file));
+      if (raw == null) files.push({ file, change: "removed" });
+      else if (!fingerprintMatches(raw, "steering", fp)) files.push({ file, change: "modified" });
+    }
+    if (files.length) out.push({ phase: p, approvedAt: typeof a.at === "string" ? a.at : null, files });
+  }
+  return out;
+}
+// "requirements (approved 2026-09-01): constitution.md (changed); design (…): …" — doctor's and the CLI's wording.
+function steeringChangeText(changes, lng) {
+  const Q = i18n.msg(lng).quality;
+  return changes.map((c) => Q.steeringItem(c.phase, day(c.approvedAt) || "?", c.files.map((x) => `${x.file} (${Q.steeringChange[x.change] || x.change})`).join(", "))).join("; ");
+}
+// spec_impact {phase: "steering", name?} / `dev-spec impact [feature] --phase steering`: the active features (or the one named)
+// whose requirements / design approval was made under an older version of a steering file that changed since. Read-only:
+// nothing is reopened (reopen is refused). → { phase, lang, scope: project | feature, feature?, changed, files, features:
+// [{ feature, approvals: [{ phase, approvedAt, files }] }], untracked: [{ feature, phases }] (approved before 1.16), unreadable? }
+function steeringImpact(projectDir, name, opts = {}) {
+  const named = name != null && String(name).trim() !== "";
+  let feats, lng, slug = null;
+  if (named) {
+    const f = existingFeature(projectDir, name);
+    if (!f.ok) return { ok: false, error: f.error };
+    feats = [{ slug: f.slug, dir: f.dir }];
+    slug = f.slug;
+    lng = featureLang(projectDir, f.slug);
+  } else {
+    feats = featureDirs(projectDir).filter((s) => !s.archived);
+    lng = projectLang(projectDir);
+  }
+  const Q = i18n.msg(lng).quality;
+  if (opts.reopen === true) return { ok: false, error: Q.impactNoReopen };
+  const root = specsRoot(projectDir);
+  const features = [], untracked = [], unreadable = [];
+  const files = new Set();
+  for (const s of feats) {
+    const st = stateFromFile(projectDir, statePath(s.dir));
+    if (st.invalid) { unreadable.push(s.slug); continue; }
+    const approvals = isObj(st.approvals) ? st.approvals : {};
+    const legacy = STEERING_GOVERNED.filter((p) => isRecord(approvals[p]) && !isObj(approvals[p].steering));
+    if (legacy.length) untracked.push({ feature: s.slug, phases: legacy });
+    const changes = steeringChanges(root, approvals);
+    if (!changes.length) continue;
+    features.push({ feature: s.slug, approvals: changes });
+    for (const c of changes) for (const x of c.files) files.add(x.file);
+  }
+  const res = { ok: true, phase: "steering", lang: lng, scope: named ? "feature" : "project" };
+  if (slug) res.feature = slug;
+  Object.assign(res, { changed: features.length > 0, files: [...files].sort(), features, untracked });
+  if (unreadable.length) res.unreadable = unreadable;
+  if (features.length) res.hint = Q.impactReReview(features[0].feature, features[0].approvals[0].phase);
+  return res;
+}
+function steeringImpactLines(r) {
+  const Q = i18n.msg(r.lang).quality;
+  const out = [Q.impactHead(r.features.length, r.scope === "feature" ? r.feature : null)];
+  for (const f of r.features) out.push(`  ${f.feature} — ${steeringChangeText(f.approvals, r.lang)}`);
+  if (r.untracked.length) out.push("  " + Q.impactUntracked(r.untracked.map((u) => `${u.feature} (${u.phases.join(", ")})`).join(", ")));
+  if (r.unreadable && r.unreadable.length) out.push("  " + Q.impactUnreadable(r.unreadable.join(", ")));
+  if (r.hint) out.push("  → " + r.hint);
+  return out;
+}
+
+// --- Q2: cross-feature acceptance criteria — near-duplicates and likely conflicts ---
+// A deterministic heuristic over the ACTIVE plain features' criteria (bugfixes restate the behaviour they restore; spikes have
+// none; archived features are out). Each criterion is normalized (acShape): _Supersedes:_ markers and IDs dropped, accents
+// folded, lower-cased, EN/PT/ES stop words and EARS keywords out, a light plural fold → its content words; the numbers apart
+// (1,000 = 1000; 0,5 = 0.5); the modal's polarity (SHALL NOT / NÃO DEVE / NO DEBE / never …); the trigger's words (before the
+// modal). A pair of criteria of two different features is
+//   duplicate (near-duplicate)       — Jaccard similarity of the words ≥ XAC_DUPLICATE, same polarity, same numbers;
+//   conflict  (opposite-modal)       — similarity ≥ XAC_CONFLICT, the triggers alike (≥ XAC_TRIGGER, or both without one),
+//                                      one SHALL, the other SHALL NOT;
+//   conflict  (different-numbers)    — the same, same polarity, both with numbers and not the same ones.
+// Left out: template criteria (a slot left, or the words of a built-in / track-pack / project template criterion whatever its
+// numbers — two +sec features share their scaffolded [SEC] criteria, two +ai ones their "at least N% of the golden set"), a pair
+// of light edits of the SAME template criterion (both ≥ XAC_DUPLICATE alike to it), criteria with fewer than XAC_MIN_WORDS
+// words, criteria retired by a shipped feature's _Supersedes:_, and a pair where one declares _Supersedes:_ of the other
+// (shipped or pending). Bounded: candidates
+// come from an inverted index over each criterion's rarest words (the all-pairs prefix filter — exact for the similarity
+// threshold, never O(n²) over a big catalog), capped at XAC_MAX_CRITERIA criteria, XAC_MAX_COMPARISONS comparisons and
+// XAC_MAX_PAIRS pairs (`truncated`). Surfaces: doctor warn cross-feature-acs, spec_catalog `crossAcs` + a SPECS.md section.
+const XAC_DUPLICATE = 0.8;
+const XAC_CONFLICT = 0.7;
+const XAC_TRIGGER = 0.5;
+const XAC_MIN_WORDS = 3;
+const XAC_MAX_CRITERIA = 4000;
+const XAC_MAX_COMPARISONS = 200000;
+const XAC_MAX_PAIRS = 200;
+const XAC_STOP = new Set((
+  // EN
+  "a an the and or nor of to in on at for from by with as is are was were be been being it its this that these those which who whom whose " +
+  "when while if then where whenever shall must should will would may might can could not never no any all each every some such than into onto " +
+  "over under within without between after before during per via about up down out system systems also only both either neither so do does " +
+  "has have had there their them they " +
+  // PT (accents folded)
+  "o os um uma uns umas de do da dos das em na nos nas num numa por para com sem e ou que se entao quando enquanto onde sistema deve devera " +
+  "devem deverao nao nunca ao aos pelo pela pelos pelas seu sua seus suas este esta estes estas esse essa esses essas isso isto qualquer cada " +
+  "todo toda todos todas caso sempre ja pode podera ser sao foi " +
+  // ES (accents folded)
+  "el la los las un unos unas del al con sin y si cuando mientras donde debe debera deben deberan su sus estos ese esos eso esto cualquier " +
+  "lo le les sea es son fue siempre ya puede podra"
+).split(/\s+/).filter(Boolean));
+const RE_XAC_MODAL = /(?<![\p{L}\p{N}])(?:shall|must|deve|devera|devem|deverao|debe|debera|deben|deberan)(?![\p{L}\p{N}])/u;
+const RE_XAC_NEG = new RegExp([
+  "(?:shall|must|should|will|may|can)\\s+(?:not|never)",
+  "(?:shan't|mustn't|won't|cannot|can't)",
+  "(?:nao|nunca|jamais)\\s+(?:deve|devera|devem|deverao|pode|podera)",
+  "(?:deve|devera|devem|deverao|debe|debera|deben|deberan)\\s+(?:nunca|jamais|jamas)",
+  "(?:no|nunca|jamas)\\s+(?:debe|debera|deben|deberan|puede|podra)",
+].map((s) => "(?<![\\p{L}\\p{N}])" + s + "(?![\\p{L}\\p{N}])").join("|"), "u");
+const RE_XAC_IDS = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+|FR-\d+|T-\d+)(?!\d)/g;
+// "1,000" / "1.000" (thousands) → 1000; "0,5" → 0.5; "15" → 15.
+function xacNumber(s) {
+  const parts = s.split(/[.,]/);
+  if (parts.length > 1 && parts.slice(1).every((p) => p.length === 3)) return String(Number(parts.join("")));
+  if (parts.length === 1) return String(Number(s));
+  return String(Number(parts.slice(0, -1).join("") + "." + parts[parts.length - 1]));
+}
+// A light plural fold: EN drops a final "s" (not "ss" / "us" / "is"); PT / ES also "-es" after r, l, n, z, d ("valores" →
+// "valor", "notificaciones" → "notificacion").
+function xacStem(w, base) {
+  if (w.length <= 3) return w;
+  if (base !== "en" && w.length > 5 && /[rlnzd]es$/.test(w)) return w.slice(0, -2);
+  return /(?:ss|us|is)$/.test(w) || !w.endsWith("s") ? w : w.slice(0, -1);
+}
+function xacWords(text, base) {
+  const out = [];
+  for (const t of text.match(/\p{L}+/gu) || []) {
+    if (t.length < 2 || XAC_STOP.has(t)) continue;
+    out.push(xacStem(t, base));
+  }
+  return out;
+}
+// One criterion → { words: Set, list: [sorted words], trig: Set, nums: [sorted], neg }.
+function acShape(text, lang) {
+  const base = i18n.baseLang(normalizeLang(lang));
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY)\]/g, " ")
+    .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  const m = low.match(RE_XAC_MODAL);
+  const words = new Set(xacWords(low, base));
+  const trig = new Set(m ? xacWords(low.slice(0, m.index), base) : []);
+  const nums = (low.match(/\p{N}+(?:[.,]\p{N}+)*/gu) || []).map(xacNumber).sort((a, b) => Number(a) - Number(b) || (a < b ? -1 : a > b ? 1 : 0));
+  return { words, list: [...words].sort(), trig, nums, neg: RE_XAC_NEG.test(low) };
+}
+// A criterion's skeleton: its words and polarity, the numbers aside — a template criterion with its [85] / $[0.03] slots filled
+// in ("at least 90% of the golden eval set") is still that template's boilerplate, in every feature that has the track.
+const acSkeleton = (s) => s.list.join(" ") + "|" + (s.neg ? 1 : 0);
+// A template-criteria table → { skel: Set, shapes: [shape] } (shapes: one per skeleton).
+function templateShapeTable(texts) {
+  const skel = new Set(), shapes = [];
+  for (const [text, l] of texts) {
+    for (const e of acIndex(text || "").values()) {
+      if (e.text.includes("{{")) continue; // a {{variable}} differs per feature
+      const s = acShape(e.text, l);
+      const k = acSkeleton(s);
+      if (!s.list.length || skel.has(k)) continue;
+      skel.add(k);
+      shapes.push(s);
+    }
+  }
+  return { skel, shapes };
+}
+// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide.
+let XAC_TEMPLATES = null;
+function builtinTemplateAcs() {
+  if (XAC_TEMPLATES) return XAC_TEMPLATES;
+  const texts = [];
+  for (const l of i18n.LANGS) {
+    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
+      try { texts.push([fn(), l]); } catch { /* a builder's trouble never breaks the check */ }
+    }
+  }
+  return (XAC_TEMPLATES = templateShapeTable(texts));
+}
+// …and the project's own (this call's): its track packs' criteria and its requirements templates (.specs/templates/).
+function projectTemplateAcs(projectDir) {
+  const texts = [];
+  for (const tr of packTracks()) {
+    const pack = packOf(tr);
+    if (pack) for (const l of i18n.LANGS) { try { texts.push([packRequirementsBlock(pack, l, "", {}), l]); } catch { /* ignore */ } }
+  }
+  for (const key of ["requirements", "bug-requirements"]) for (const l of i18n.LANGS) {
+    try { const o = templateOverride(projectDir, key, l); if (o) texts.push([o.text, l]); } catch { /* ignore */ }
+  }
+  return templateShapeTable(texts);
+}
+const jaccard = (a, b) => {
+  if (!a.size && !b.size) return 1;
+  let n = 0;
+  for (const w of a) if (b.has(w)) n++;
+  return n / (a.size + b.size - n);
+};
+// The criteria crossFeatureAcs compares, with the prefix-filter index over them → { crit, index, truncated }. Built once per
+// engine call (the read-cache scope: doctor runs once per feature in spec_upgrade — rebuilding it every time cost seconds on
+// 50 features); any engine write in the call drops it (forgetCached / invalidateReadCache).
+function xacTable(projectDir) {
+  const root = dirKey(specsRoot(projectDir));
+  if (READ_CACHE && XAC_MEMO && XAC_MEMO.root === root) return XAC_MEMO.table;
+  const sup = supersededByIndex(projectDir);
+  let tmpl = null; // the template criteria (built-in + this project's), read on the first criterion
+  const crit = [];
+  let truncated = false;
+  outerFeat: for (const s of featureDirs(projectDir)) {
+    if (s.archived) continue;
+    const state = stateFromFile(projectDir, statePath(s.dir));
+    if ((state.kind || "feature") !== "feature") continue;
+    const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
+    if (!raw) continue;
+    const lng = typeof state.lang === "string" ? state.lang : projectLang(projectDir);
+    const tracks = detectTracks(s.dir);
+    for (const e of acIndex(activeDesign(raw, tracks)).values()) {
+      const key = dirKey(s.dir) + "\n" + e.id;
+      if (sup.live.has(key)) continue; // retired by a shipped feature: not what the system does today
+      if (placeholderReport(e.text).length) continue; // a slot left: nothing written to compare
+      const shape = acShape(e.text, lng);
+      if (shape.list.length < XAC_MIN_WORDS) continue;
+      if (!tmpl) {
+        const b = builtinTemplateAcs(), p = projectTemplateAcs(projectDir);
+        tmpl = { skel: new Set([...b.skel, ...p.skel]), shapes: b.shapes.concat(p.shapes) };
+      }
+      if (tmpl.skel.has(acSkeleton(shape))) continue; // a template criterion (its number slots filled in or not)
+      // The template criteria it is a light edit of: two criteria near the SAME one are that template's boilerplate, not a pair.
+      const n = shape.words.size;
+      const near = [];
+      tmpl.shapes.forEach((t, ti) => {
+        if (t.neg === shape.neg && t.words.size >= n * XAC_DUPLICATE && t.words.size * XAC_DUPLICATE <= n && jaccard(t.words, shape.words) >= XAC_DUPLICATE) near.push(ti);
+      });
+      if (crit.length >= XAC_MAX_CRITERIA) { truncated = true; break outerFeat; }
+      crit.push({ feature: s.slug, id: e.id, text: acOneLine(e.text, e.id), shape, near, declared: sup.get(key) || [] });
+    }
+  }
+  // The prefix filter: words ordered rarest first (document frequency, then the word); a criterion is indexed by its first
+  // |w| - ⌈t·|w|⌉ + 1 words — two criteria at least t alike always share one of them (exact, never a missed pair).
+  const df = new Map();
+  for (const c of crit) for (const w of c.shape.list) df.set(w, (df.get(w) || 0) + 1);
+  const rank = (a, b) => df.get(a) - df.get(b) || (a < b ? -1 : a > b ? 1 : 0);
+  const index = new Map();
+  crit.forEach((c, i) => {
+    const toks = c.shape.list.slice().sort(rank);
+    c.prefix = toks.slice(0, toks.length - Math.ceil(XAC_CONFLICT * toks.length) + 1);
+    for (const w of c.prefix) { const post = index.get(w); if (post) post.push(i); else index.set(w, [i]); }
+  });
+  const table = { crit, index, truncated };
+  if (READ_CACHE) XAC_MEMO = { root, table };
+  return table;
+}
+// spec_catalog's / doctor's pairs. opts.only (a slug): only the pairs involving that feature. → { pairs: [{ kind, reason,
+// similarity, a: { feature, id, text }, b, numbers? }] (a = the criterion listed first: feature folder order, then its
+// criteria in order), criteria, comparisons, truncated }
+function crossFeatureAcs(projectDir, opts = {}) {
+  const { crit, index, truncated: cut } = xacTable(projectDir);
+  let truncated = cut;
+  // A declared replacement (either way) is never a duplicate or a conflict: "<slug>/<AC>" (or "<slug>" — a marker outside a criterion).
+  const declares = (x, y) => y.declared.includes(x.feature + "/" + x.id) || y.declared.includes(x.feature);
+  const pairs = [];
+  let comparisons = 0;
+  outer: for (let i = 0; i < crit.length; i++) {
+    const c = crit[i];
+    if (opts.only && c.feature !== opts.only) continue; // only that feature's criteria look up their candidates
+    const seen = new Set();
+    for (const w of c.prefix) {
+      for (const j of index.get(w)) {
+        // every unordered pair once: without `only` from its later criterion; with it, from the feature's side
+        if (seen.has(j) || (!opts.only && j >= i)) continue;
+        seen.add(j);
+        const d = crit[j];
+        if (d.feature === c.feature) continue;
+        if (++comparisons > XAC_MAX_COMPARISONS) { truncated = true; break outer; }
+        const p = j < i ? comparePair(d, c, declares) : comparePair(c, d, declares);
+        if (!p) continue;
+        pairs.push(p);
+        if (pairs.length >= XAC_MAX_PAIRS) { truncated = true; break outer; }
+      }
+    }
+  }
+  return { pairs, criteria: crit.length, comparisons: Math.min(comparisons, XAC_MAX_COMPARISONS), truncated };
+}
+function comparePair(a, b, declares) {
+  const A = a.shape, B = b.shape;
+  const sim = jaccard(A.words, B.words);
+  if (sim < XAC_CONFLICT || declares(a, b) || declares(b, a) || a.near.some((t) => b.near.includes(t))) return null;
+  const side = (x) => ({ feature: x.feature, id: x.id, text: x.text });
+  const base = { similarity: Math.round(sim * 100) / 100, a: side(a), b: side(b) };
+  const trigAlike = (!A.trig.size && !B.trig.size) || jaccard(A.trig, B.trig) >= XAC_TRIGGER;
+  const numsDiffer = A.nums.length > 0 && B.nums.length > 0 && A.nums.join(",") !== B.nums.join(",");
+  if (A.neg !== B.neg && trigAlike) return { kind: "conflict", reason: "opposite-modal", ...base };
+  if (A.neg === B.neg && numsDiffer && trigAlike) return { kind: "conflict", reason: "different-numbers", ...base, numbers: { a: A.nums, b: B.nums } };
+  if (sim >= XAC_DUPLICATE && A.neg === B.neg && !numsDiffer) return { kind: "duplicate", reason: "near-duplicate", ...base };
+  return null;
+}
+// One pair as a line, from `slug`'s side when given ("US-1.AC-2 ↔ billing/US-1.AC-3 (near-duplicate: 86% alike)"), else both qualified.
+function crossAcItem(p, slug, lng) {
+  const Q = i18n.msg(lng).quality;
+  const flip = slug != null && p.a.feature !== slug;
+  const [me, other] = flip ? [p.b, p.a] : [p.a, p.b];
+  const nums = p.numbers ? (flip ? [p.numbers.b, p.numbers.a] : [p.numbers.a, p.numbers.b]).map((x) => x.join("/")).join(" ↔ ") : "";
+  return Q.xacItem(slug != null ? me.id : me.feature + "/" + me.id, other.feature + "/" + other.id, Q.xacKind[p.kind] || p.kind, Q.xacWhy(p.reason, Math.round(p.similarity * 100), nums));
+}
+// spec_doctor's cross-feature-acs detail for `slug` (its pairs only; at most 6 shown).
+function crossAcDoctorDetail(pairs, slug, lng) {
+  const Q = i18n.msg(lng).quality;
+  const items = pairs.slice(0, 6).map((p) => crossAcItem(p, slug, lng));
+  if (pairs.length > 6) items.push(Q.xacMore(pairs.length - 6));
+  return Q.xacDoctor(pairs.length, items.join("; "));
+}
+// SPECS.md's section (only when there is a pair): one line per pair, both sides qualified.
+function renderCrossAcsMd(x, lang) {
+  if (!x || !x.pairs.length) return "";
+  const Q = i18n.msg(lang).quality;
+  const icon = { duplicate: "≈", conflict: "⚡" };
+  let md = `\n## ⚠ ${Q.xacHeading}\n\n> ${Q.xacIntro}${x.truncated ? " " + Q.xacTruncated : ""}\n\n`;
+  for (const p of x.pairs) md += `- ${icon[p.kind] || "•"} ${crossAcItem(p, null, lang)}\n`;
+  return md;
+}
+
+// --- Q3: the glossary (.specs/steering/glossary.md) ---
+// One entry per list item: `- **Customer** — a person or company with a signed contract. _Avoid: client, user_` (a sub-line of
+// the item may carry the `_Avoid:_` marker — English-stable in every language). HTML comments and fenced code never hold an
+// entry; a [placeholder] term (the stub) is no entry. spec_clarify asks about every avoided word found in the feature's
+// requirements.md / design.md (word-matched, case-insensitive, a plural "s" / "es" allowed, outside code spans, fenced code,
+// comments and _Marker:_ tags; the glossary's own terms masked first, so "End user" never reads as "user"), doctor warns
+// `glossary` with the count, spec_task_brief quotes the entries its task's text and criteria use (bounded). No glossary →
+// nothing changes.
+const GLOSSARY_FILE = "glossary.md";
+const GLOSSARY_MAX_ENTRIES = 300;
+const GLOSSARY_MAX_AVOID = 20;
+const GLOSSARY_MAX_HITS = 200; // locations recorded per call
+const GLOSSARY_BRIEF_MAX = 8;
+const GLOSSARY_BRIEF_CHARS = 1500;
+const RE_GLOSSARY_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\*\*|__)([^*_\n]{1,120}?)(?:\*\*|__)(.*)$/;
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const foldTerm = (s) => String(s).toLowerCase().replace(/\s+/g, " ").trim();
+// → { file, entries: [{ term, definition, avoid: [words] }] } | null (no glossary.md).
+function glossaryEntries(root) {
+  const file = path.join(root, "steering", GLOSSARY_FILE);
+  const raw = readIfExists(file);
+  if (raw == null) return null;
+  const entries = [];
+  let cur = null;
+  const flush = () => { if (cur && entries.length < GLOSSARY_MAX_ENTRIES) { const e = glossaryEntry(cur); if (e) entries.push(e); } cur = null; };
+  for (const l of scanTaskLines(steeringFrontMatter(raw).body)) {
+    if (l.code) { flush(); continue; }
+    const vis = l.vis.slice(0, 2000);
+    const m = vis.match(RE_GLOSSARY_ITEM);
+    if (m) { flush(); cur = { indent: m[1].length, term: m[2], rest: [m[3]] }; continue; }
+    if (!cur) continue;
+    if (!vis.trim() || /^\s*#/.test(vis)) { flush(); continue; }
+    // a sub-line (its own bullet dropped) or a lazy continuation of the item
+    if (vis.match(/^\s*/)[0].length > cur.indent || !RE_LIST_ITEM.test(vis)) cur.rest.push(vis.trim().replace(RE_LIST_ITEM, ""));
+    else flush();
+  }
+  flush();
+  return { file, entries };
+}
+function glossaryEntry(cur) {
+  const term = cur.term.trim().replace(/[:：]\s*$/, "").trim();
+  if (!term || /^\[.*\]$/.test(term) || isGenericSlot(term)) return null;
+  const avoid = [];
+  const seen = new Set([foldTerm(term)]);
+  const rest = cur.rest.join(" ").replace(/_Avoid:[ \t]*([^_]*)_/gi, (m, list) => {
+    for (const w0 of list.split(/[,;]/)) {
+      const w = w0.trim().replace(/^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g, "").trim();
+      if (!w || w.length > 60 || /^\[.*\]$/.test(w) || !/\p{L}/u.test(w) || seen.has(foldTerm(w)) || avoid.length >= GLOSSARY_MAX_AVOID) continue;
+      seen.add(foldTerm(w));
+      avoid.push(w);
+    }
+    return " ";
+  });
+  const def = rest.replace(/^\s*[—–:-]+\s*/, "").replace(/\s+/g, " ").trim().replace(/[.;,]\s*$/, "");
+  return { term, definition: !def || /^\[[^\]]*\]$/.test(def) ? "" : def, avoid };
+}
+const RE_WORD_BEFORE = "(?<![\\p{L}\\p{N}_])", RE_WORD_AFTER = "(?![\\p{L}\\p{N}_])";
+// One case-insensitive regex for a word list (longest first; a plural "s" / "es" allowed; spaces match any whitespace).
+const wordListRe = (words, capture) => new RegExp(RE_WORD_BEFORE + (capture ? "(" : "(?:") + words.slice().sort((a, b) => b.length - a.length)
+  .map((w) => escRe(w).replace(/\s+/g, "\\s+")).join("|") + ")(?:e?s)?" + RE_WORD_AFTER, "giu");
+// The avoided words the feature's requirements.md / design.md use → [{ word, term, definition, avoid, count, locations:
+// ["requirements.md:12", …] (≤ 5 each) }] in first-seen order.
+function glossaryHits(dir, gl) {
+  const withAvoid = gl ? gl.entries.filter((e) => e.avoid.length) : [];
+  if (!withAvoid.length) return [];
+  const byWord = new Map();
+  for (const e of withAvoid) for (const w of e.avoid) if (!byWord.has(foldTerm(w))) byWord.set(foldTerm(w), { word: w, entry: e });
+  const reAvoid = wordListRe([...byWord.values()].map((x) => x.word), true);
+  const reTerm = wordListRe(gl.entries.map((e) => e.term), false);
+  const blank = (m) => " ".repeat(m.length);
+  const hits = new Map();
+  let total = 0;
+  for (const file of ["requirements.md", "design.md"]) {
+    const text = readIfExists(path.join(dir, file));
+    if (text == null) continue;
+    scanTaskLines(text).forEach((l, i) => {
+      if (l.code || total >= GLOSSARY_MAX_HITS) return;
+      const v = l.vis.slice(0, 4000).replace(/`[^`\n]*`/g, blank).replace(/_[A-Z][A-Za-z ]{1,30}:[^_\n]*_/g, blank).replace(reTerm, blank);
+      for (const m of v.matchAll(reAvoid)) {
+        const x = byWord.get(foldTerm(m[1]));
+        if (!x) continue;
+        const k = foldTerm(x.word);
+        const h = hits.get(k) || { word: x.word, term: x.entry.term, definition: x.entry.definition, avoid: x.entry.avoid, count: 0, locations: [] };
+        h.count++;
+        total++;
+        const loc = `${file}:${i + 1}`;
+        if (h.locations.length < 5 && !h.locations.includes(loc)) h.locations.push(loc);
+        hits.set(k, h);
+      }
+    });
+  }
+  return [...hits.values()];
+}
+// The glossary entries a text uses (a term or an avoided word, word-matched) — the task brief's, bounded by count and size.
+function briefGlossary(root, text) {
+  const gl = glossaryEntries(root);
+  if (!gl || !gl.entries.length) return { items: [], omitted: [] };
+  const items = [], omitted = [];
+  let budget = GLOSSARY_BRIEF_CHARS;
+  for (const e of gl.entries) {
+    if (!wordListRe([e.term, ...e.avoid], false).test(text)) continue;
+    const size = e.term.length + e.definition.length + e.avoid.join(", ").length + 20;
+    if (items.length < GLOSSARY_BRIEF_MAX && size <= budget) { items.push(e); budget -= size; } else omitted.push(e.term);
+  }
+  return { items, omitted };
 }
 
 // ---------------------------------------------------------------------------
@@ -10633,6 +11143,13 @@ function nextAction(projectDir, name, opts = {}) {
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
+  // 1.16 Q1: steering amended after the requirements / design approval — a re-review hint added to whatever the step is, never a
+  // step (or a block) of its own; re-approving the phase records the current steering.
+  if (Array.isArray(doc.steeringChanged) && doc.steeringChanged.length) {
+    res.steeringChanged = doc.steeringChanged;
+    res.recommendation += " " + fm.quality.naSteering(doc.steeringChanged.map((c) => c.phase).join(", "),
+      [...new Set(doc.steeringChanged.flatMap((c) => c.files.map((x) => x.file)))].join(", "), slug);
+  }
   if (flow === "design-first") { // C3: stable `flow`; the order is named while the design / requirements gates are the open ones
     res.flow = flow;
     if (["fill", "fix", "approve"].includes(step) && (pending === "design" || pending === "requirements")) res.recommendation += " " + fm.flow.nextNote(flowOrderText(dir, tracks, flow));
@@ -10768,6 +11285,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
+Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -11658,6 +12176,16 @@ function specDoctor(projectDir, name, opts = {}) {
   const steeringIssues = [missingSteering.length ? m.steeringMissing(missingSteering.join(", ")) : null,
     stubSteering.length ? fm.scopedSteering.placeholders(stubSteering.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
   add("steering", steeringIssues.length ? "warn" : "pass", steeringIssues.join("; ") || m.steeringOk);
+  // 1.16 Q3 — the glossary (.specs/steering/glossary.md): words it says to avoid used in requirements.md / design.md — a warn
+  // with the count (spec_clarify asks about each). Only when the glossary lists an avoided word: no glossary, no check.
+  const gloss = glossaryEntries(root);
+  if (gloss && gloss.entries.some((e) => e.avoid.length)) {
+    const Q = fm.quality;
+    const gh = glossaryHits(dir, gloss);
+    const items = gh.slice(0, 6).map((h) => Q.glossaryItem(h.word, h.term, h.locations.join(", ")));
+    if (gh.length > 6) items.push(Q.xacMore(gh.length - 6));
+    add("glossary", gh.length ? "warn" : "pass", gh.length ? Q.glossaryDoctor(gh.reduce((a, h) => a + h.count, 0), items.join("; ")) : Q.glossaryOk(gloss.entries.length));
+  }
 
   // Requirements + EARS
   const reqs = readIfExists(path.join(dir, "requirements.md"));
@@ -11821,6 +12349,12 @@ function specDoctor(projectDir, name, opts = {}) {
   // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
   const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
   if (overlapPairs.length) add("cross-feature-overlap", "warn", overlapDoctorDetail(overlapPairs, slug, lng));
+  // 1.16 Q2 — cross-feature acceptance criteria: this feature's criteria that read like another active feature's (near-duplicate)
+  // or may contradict them (same trigger, SHALL vs SHALL NOT or different numbers) — a warn, only when there is a pair.
+  if (kind === "feature") {
+    const xac = crossFeatureAcs(projectDir, { only: slug }).pairs;
+    if (xac.length) add("cross-feature-acs", "warn", crossAcDoctorDetail(xac, slug, lng));
+  }
 
   // Brownfield: an integration plan that is still the template (only when the feature has one).
   const planFile = path.join(dir, "integration-plan.md");
@@ -11864,6 +12398,10 @@ function specDoctor(projectDir, name, opts = {}) {
     add("changed-since-approval", "warn", impactPhases.length
       ? fm.impact.doctorChanged(changedArts.join(", "), slug, impactPhases) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
+  // 1.16 Q1 — a steering file that governed the requirements / design approval changed (or was removed) since: re-review, then
+  // re-approve (which records the current steering). A warn; approvals made before 1.16 (no steering fingerprints) never.
+  const steeringChanged = steeringChanges(root, approvals);
+  if (steeringChanged.length) add("steering-changed-since-approval", "warn", fm.quality.steeringDoctor(steeringChangeText(steeringChanged, lng), slug));
   add("approval-gates", shownPending.length || forcedGates.length || rv.notes.length ? "warn" : "pass",
     [shownPending.length ? m.gatesPending(shownPending.map(rv.label).join(", ")) : null,
       nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
@@ -11895,6 +12433,7 @@ function specDoctor(projectDir, name, opts = {}) {
   // needs roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (rv.any) Object.assign(res, { pendingRoles: rv.pending, unsignedRoles: rv.unsigned });
   if (featureFlow(dir, kind) === "design-first") res.flow = "design-first"; // C3 (only then: the default flow's result is unchanged)
+  if (steeringChanged.length) res.steeringChanged = steeringChanged; // 1.16 Q1 (stable): [{phase, approvedAt, files: [{file, change}]}]
   return res;
 }
 
@@ -13170,6 +13709,8 @@ function catalogData(projectDir) {
   const pending = currentAcs.filter((a) => a.supersedePending).length;
   const totals = { features: features.length, acs: all.length, current: currentAcs.length, superseded, pending };
   const data = { lang, features, totals };
+  const xac = crossFeatureAcs(projectDir); // 1.16 Q2: near-duplicate / conflicting criteria across the active features
+  data.crossAcs = { pairs: xac.pairs, truncated: xac.truncated };
   data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
   return data;
 }
@@ -13203,7 +13744,7 @@ function renderCatalogMd(data, lang, proj) {
       md += line + "\n";
     }
   }
-  return md;
+  return md + renderCrossAcsMd(data.crossAcs, lang); // 1.16 Q2 (only when there is a pair)
 }
 // spec_catalog {write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing). Writing never
 // replaces a same-named file dev-spec didn't generate (the roadmap's guard) — the result is then an error.
@@ -13211,7 +13752,7 @@ function catalog(projectDir, opts = {}) {
   const root = specsRoot(projectDir);
   const file = path.join(root, "SPECS.md");
   const data = catalogData(projectDir);
-  const res = { ok: true, file, lang: data.lang, totals: data.totals, features: data.features, wrote: false };
+  const res = { ok: true, file, lang: data.lang, totals: data.totals, features: data.features, crossAcs: data.crossAcs, wrote: false };
   if (opts.write) {
     const E = i18n.msg(data.lang).err;
     if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
@@ -18223,8 +18764,16 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
+  // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
+  // pointing at doctor). No glossary → nothing asked.
+  const gh = glossaryHits(dir, glossaryEntries(f.root));
+  const Q = fm.quality;
+  gh.slice(0, 10).forEach((h) => add(Q.glossaryQuestion(h.locations.join(", "), h.word, h.term, h.definition)));
+  if (gh.length > 10) add(Q.glossaryMore(gh.length - 10));
 
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
+  const res = { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
+  if (gh.length) res.glossary = gh.map((h) => ({ word: h.word, term: h.term, count: h.count, locations: h.locations })); // 1.16 Q3 (stable)
+  return res;
 }
 
 module.exports = {
@@ -18385,6 +18934,9 @@ module.exports = {
   roadmapData, // the ROADMAP.* computation (+ opts.now for the forecasts)
   forecastData, // velocity + per-feature ETA (roadmap() features; opts.now fixes "today")
   featureOverlaps, // cross-feature file overlap pairs (roadmap attention, doctor, SessionStart)
+  crossFeatureAcs, // 1.16 Q2: near-duplicate / conflicting acceptance criteria across the active features ({only}: one feature's pairs)
+  glossaryEntries, // 1.16 Q3: .specs/steering/glossary.md → { file, entries: [{ term, definition, avoid }] } | null (takes the .specs root)
+  steeringFingerprints, // 1.16 Q1: (specsRoot, featureDir, tracks) → { file: fingerprint } of the steering a requirements / design approval records
   taskSize, // a task block's _Size:_ (XS|S|M|L|XL) or null
   SIZE_POINTS, // XS=1 S=2 M=3 L=5 XL=8
   etaText, // "2026-10-05 (10-03…10-08)" for a forecast (CLI: cli=true)

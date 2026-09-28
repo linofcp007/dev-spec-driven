@@ -67,15 +67,15 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `evidence` records the project checks' runs; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", phase by phase: re-review → fill → fix → approve (the next phase only after that approval) → implement → verify → finish (then finished / drift) |
 | `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot; `role` signs off as one of the roles `approvalRoles` lists for that phase (required there), `through` fast-forwards every phase up to it, each through its own gate |
-| `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those) |
+| `spec_impact` | What an edit after approval touches (changed ACs, sections, planned tests, tasks → tasks, tests, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` unticks the affected done tasks (never a removed criterion's — `retire` lists those); `phase` steering (no name = every active feature) lists the approvals made under steering that changed since |
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`), or set its `flow` |
 | `spec_decide` | Append a decision (or a discovery) to the feature's `decisions.md` — `D-n`, with the ACs, tests or design sections it affects (checked) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files; `matrix:true` adds the requirements traceability matrix |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
-| `spec_clarify` | Surface requirement ambiguities/gaps before design |
+| `spec_clarify` | Surface requirement ambiguities/gaps before design (with a glossary: every word it says to avoid) |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
-| `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"), plus possible duplicate / conflicting criteria across active features; `write` → `.specs/SPECS.md` |
 | `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
@@ -83,7 +83,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list), an ETA per feature from the velocity of ticked tasks and the files two features' open tasks both plan; `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
 | `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations) + the share of code files named in `_Implements:_` |
-| `steering_scaffold` | Create one steering file from its template (incl. `constitution.md`), or a custom scoped one |
+| `steering_scaffold` | Create one steering file from its template (incl. `constitution.md`, `glossary.md`), or a custom scoped one |
 
 **Prompts and resources.** The server also serves one MCP **prompt** per plugin command — `/spec`, `/spec-status`,
 `/spec-impact`, … become slash commands in MCP clients that surface prompts (VS Code / Copilot Chat, for one) — and the
@@ -431,15 +431,15 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `evidence` regista as execuções das verificações do projeto; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", fase a fase: rever → preencher → corrigir → aprovar (a fase seguinte só depois dessa aprovação) → implementar → verificar → fechar (depois fechada / deriva) |
 | `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot; `role` valida como um dos papéis que o `approvalRoles` indica para essa fase (obrigatório aí), `through` avança todas as fases até essa, cada uma pelo seu gate |
-| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as) |
+| `spec_impact` | O que uma edição depois da aprovação afeta (ACs, secções, testes planeados, tarefas alteradas → tarefas, testes, design; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca as tarefas feitas afetadas (nunca as de um critério removido — `retire` lista-as); `phase` steering (sem nome = todas as funcionalidades ativas) lista as aprovações feitas com steering que mudou desde então |
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`), ou define o seu `flow` |
 | `spec_decide` | Acrescenta uma decisão (ou uma descoberta) ao `decisions.md` da funcionalidade — `D-n`, com os ACs, testes ou secções do design que afeta (verificados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
 | `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste; `matrix:true` junta a matriz de rastreabilidade dos requisitos |
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS, placeholders, trace, secções, evidência, gates, steering) |
-| `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design |
+| `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design (com um glossário: cada palavra que ele manda evitar) |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
-| `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"), e os possíveis critérios duplicados / em conflito entre funcionalidades ativas; `write` → `.specs/SPECS.md` |
 | `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
@@ -447,7 +447,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista), uma ETA por funcionalidade a partir da velocidade das tarefas marcadas e os ficheiros que as tarefas abertas de duas funcionalidades planeiam em comum; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
 | `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações) + a parte dos ficheiros de código indicados em `_Implements:_` |
-| `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`), ou um ficheiro personalizado com âmbito |
+| `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`, `glossary.md`), ou um ficheiro personalizado com âmbito |
 
 **Prompts e recursos.** O servidor serve também um **prompt** MCP por cada comando do plugin — `/spec`, `/spec-status`,
 `/spec-impact`, … passam a comandos de barra nos clientes MCP que mostram prompts (o VS Code / Copilot Chat, por
@@ -809,15 +809,15 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `evidence` registra las ejecuciones de las comprobaciones del proyecto; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", fase a fase: revisar → completar → corregir → aprobar (la fase siguiente solo tras esa aprobación) → implementar → verificar → cerrar (después cerrada / deriva) |
 | `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot; `role` valida como uno de los roles que `approvalRoles` indica para esa fase (obligatorio ahí), `through` avanza todas las fases hasta esa, cada una por su gate |
-| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista) |
+| `spec_impact` | Qué afecta una edición posterior a la aprobación (ACs, secciones, pruebas planificadas, tareas cambiadas → tareas, pruebas, diseño; `phase` requirements · design · test-plan · eval-plan · tasks); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado — `retire` las lista); `phase` steering (sin nombre = todas las funciones activas) lista las aprobaciones hechas con steering que cambió desde entonces |
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`), o fija su `flow` |
 | `spec_decide` | Añade una decisión (o un descubrimiento) al `decisions.md` de la función — `D-n`, con los ACs, pruebas o secciones del diseño que afecta (comprobados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba; `matrix:true` añade la matriz de trazabilidad de requisitos |
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS, placeholders, trace, secciones, evidencia, gates, steering) |
-| `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño |
+| `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño (con un glosario: cada palabra que manda evitar) |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
-| `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"), y los posibles criterios duplicados / en conflicto entre funciones activas; `write` → `.specs/SPECS.md` |
 | `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
@@ -825,7 +825,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
 | `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones) + la parte de los archivos de código nombrados en `_Implements:_` |
-| `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`), o uno personalizado con ámbito |
+| `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`, `glossary.md`), o uno personalizado con ámbito |
 
 **Prompts y recursos.** El servidor sirve también un **prompt** MCP por cada comando del plugin — `/spec`,
 `/spec-status`, `/spec-impact`, … pasan a ser comandos de barra en los clientes MCP que muestran prompts (VS Code /
