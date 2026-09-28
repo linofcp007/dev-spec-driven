@@ -1,6 +1,6 @@
 ---
 description: Import a spec written for Kiro, spec-kit or OpenSpec — or a plan (Claude Code plan mode, Cursor, Codex ExecPlan) or BMAD docs — as a new dev-spec feature (IDs remapped, source untouched). PT - importa uma spec do Kiro, spec-kit, OpenSpec, um plano ou docs BMAD. ES - importa una spec de Kiro, spec-kit, OpenSpec, un plan o docs BMAD.
-argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad] [path] [--name n] [--tracks tdd,saas] [--lang pt]"
+argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt]"
 ---
 
 Use the **dev-spec-driven** skill, import from other tools (`references/brownfield.md` → Import).
@@ -8,7 +8,9 @@ Use the **dev-spec-driven** skill, import from other tools (`references/brownfie
 Args: $ARGUMENTS
 
 Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?}` (CLI
-`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks tdd,saas] [--lang pt]`):
+`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks tdd,saas] [--lang pt]`) — or, for
+a plan / ExecPlan, `{tool, text, …}` with the document's markdown instead of `path` (CLI `dev-spec import plan - < plan.md`
+reads stdin, `--text "…"` takes it inline):
 
 - `tool` — `kiro` (`.kiro/specs/<name>/`; a Portuguese / Spanish one too — `### Requisito N`, `## Introdução` /
   `## Introducción`), `spec-kit` (`specs/<nnn-name>/`), `openspec`
@@ -18,8 +20,11 @@ Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?}` (CLI
   v6 `_bmad-output/planning-artifacts/`; or one story file);
 - `path` — the spec folder (or a file in it), **inside the project**; the source is only read, never modified. For a
   plan / ExecPlan pass the file itself when its folder holds several. Claude Code plan mode saves plans under
-  `plansDirectory` — by default `~/.claude/plans`, **outside the project**: copy the plan into the project first, or
-  point `plansDirectory` at a folder inside it;
+  `plansDirectory` — by default `~/.claude/plans`, **outside the project**: pass the plan's markdown as `text` instead
+  (the plan you just approved is in the conversation; the plugin's ExitPlanMode hook reminds you), copy the plan into the
+  project, or point `plansDirectory` at a folder inside it;
+- `text` — `plan` / `execplan` only, never with `path`: the document itself. Same mapping, same guarantees; the note
+  reads "Imported from plan (inline text)", the result has `inline: true` and `source: null`;
 - `name` — defaults to the source folder name (spec-kit's number prefix dropped); a plan / ExecPlan takes its title,
   BMAD the PRD's title (one story file: the story's title); an existing feature with that slug is an error (import
   never writes over a feature);

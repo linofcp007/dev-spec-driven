@@ -1080,7 +1080,8 @@ function guessLang(text, fallback) {
 function configuredLang(projectDir, lang) {
   if (lang) return lang;
   const l = (readRoadmap(projectDir).meta || {}).lang;
-  return typeof l === "string" && l.trim() ? normalizeLang(l) : undefined;
+  // 1.16 C2: a brand-new project without meta.lang reads it in the user's DEFAULT_LANG option, the language it is about to get.
+  return typeof l === "string" && l.trim() ? normalizeLang(l) : projectDir ? newProjectLang(projectDir) : undefined;
 }
 
 function isNegated(text, idx, kwLen, lang, cased) {
@@ -1375,6 +1376,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const steering = path.join(root, "steering");
   // Before anything is written: a project with no feature yet is brand-new (stamped with this engine's version below).
   const fresh = featureDirs(projectDir).length === 0;
+  // 1.16 C2: no lang given, a brand-new project without a language of its own → the user's DEFAULT_LANG option (seeded below
+  // into meta.lang like an explicit --lang, so the project keeps it on every machine).
+  const userLang = !lang && fresh ? newProjectLang(projectDir) : undefined;
+  if (userLang) lang = userLang;
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
   const guardValue = guardInput(opts.guard); // true | false | "scope" (1.14 C1) — anything else leaves the guard unchanged
@@ -1438,6 +1443,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     evidence: evidenceMode(projectDir), // 1.14 F1: the CURRENT evidence mode ("reported" | "observed"), whether or not this call changed it
   };
   if (Object.keys(templates).length) res.templates = templates;
+  // 1.16 C2: which of the reported values come from the user's plugin options (the project sets none of them itself).
+  const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
+  if (Object.keys(fromUser).length) res.userDefaults = fromUser;
   if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
@@ -1859,7 +1867,8 @@ const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") rea
 const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at most this deep (deeper: read as a plain subshell)
 // The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves"]); // the CLI's BOOL_FLAGS ARE this list
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
+  "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
 CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
@@ -2500,10 +2509,78 @@ const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
 
-// roadmap.json meta.guard → false | true | "scope" (anything else: off). hooks/guard-hook.js reads the same value raw.
+// 1.16 C2 — the user's plugin options (.claude-plugin/plugin.json userConfig), read as FALLBACKS only: a project's own
+// roadmap.json meta always wins, and an option that is unset, empty, unexpanded (`${user_config.x}` from a Claude Code without
+// userConfig) or not a valid value changes nothing (today's behaviour). Claude Code exports every option to the hooks as
+// CLAUDE_PLUGIN_OPTION_<KEY>; mcp/servers.json passes the same variables to the MCP server; DEV_SPEC_<KEY> (a terminal, another
+// tool, the CLI outside Claude Code) wins over both. Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang),
+// STOP_CHECK (the end-of-turn evidence gate while meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is
+// unset). hooks/guard-hook.js and hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
+function userOptionRaw(key) {
+  for (const name of ["DEV_SPEC_" + key, "CLAUDE_PLUGIN_OPTION_" + key]) {
+    const v = process.env[name];
+    const s = typeof v === "string" ? v.trim() : "";
+    if (s && !/^\$\{[^}]*\}$/.test(s)) return s;
+  }
+  return null;
+}
+const boolWord = (s) => (/^(?:true|on|yes|1)$/i.test(s) ? true : /^(?:false|off|no|0)$/i.test(s) ? false : undefined);
+// → { lang?, stopCheck?, guard? } — only the options that are set to a valid value.
+function userDefaults() {
+  const out = {};
+  const l = userOptionRaw("DEFAULT_LANG");
+  const c = l ? i18n.canonicalLang(l) : null;
+  if (c && i18n.LANGS.includes(c)) out.lang = c;
+  const s = userOptionRaw("STOP_CHECK");
+  if (s && boolWord(s) !== undefined) out.stopCheck = boolWord(s);
+  const g = userOptionRaw("GUARD_DEFAULT");
+  const gv = g ? (boolWord(g) !== undefined ? boolWord(g) : guardInput(g)) : undefined;
+  if (gv !== undefined) out.guard = gv;
+  return out;
+}
+// The user's default language for a NEW project: only while roadmap.json names no language (meta.lang) and the project has no
+// feature yet (active or archived) — an existing project keeps the language it was written in. → lang | undefined
+function newProjectLang(projectDir) {
+  const d = userDefaults().lang;
+  if (!d) return undefined;
+  const l = loadRoadmap(projectDir);
+  if (l.parseError) return undefined;
+  const cur = isObj(l.rm.meta) ? l.rm.meta.lang : undefined;
+  if (typeof cur === "string" && cur.trim()) return undefined;
+  return featureDirs(projectDir).length ? undefined : d;
+}
+// The settings of a project that its user's options decide right now (meta leaves them unset) — spec_init reports them as
+// `userDefaults` {lang?, stopCheck?, guard?}; opts.lang: the language this call seeded from the user's option.
+function userDefaultsApplied(projectDir, opts = {}) {
+  const d = userDefaults();
+  const l = loadRoadmap(projectDir);
+  const meta = l.parseError ? null : isObj(l.rm.meta) ? l.rm.meta : {}; // an unreadable roadmap.json: the options decide nothing
+  const out = {};
+  if (opts.lang) out.lang = opts.lang;
+  if (meta && d.stopCheck !== undefined && typeof meta.stopCheck !== "boolean") out.stopCheck = d.stopCheck;
+  if (meta && d.guard !== undefined && meta.guard === undefined) out.guard = d.guard;
+  return out;
+}
+// meta.lang := lang, under the roadmap lock, only while it is still unset (spec_create's first feature with the user's default).
+function seedProjectLang(projectDir, lang) {
+  return withRoadmapLock(projectDir, () => {
+    if (roadmapError(projectDir)) return false;
+    const rm = readRoadmap(projectDir);
+    rm.meta = isObj(rm.meta) ? rm.meta : {};
+    if (typeof rm.meta.lang === "string" && rm.meta.lang.trim()) return false;
+    rm.meta.lang = normalizeLang(lang);
+    writeRoadmap(projectDir, rm);
+    return true;
+  }, () => false);
+}
+
+// roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT (1.16 C2), else off.
+// hooks/guard-hook.js reads the same values raw.
 function guardLevel(projectDir) {
   const l = loadRoadmap(projectDir);
-  const g = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
+  if (l.parseError) return false;
+  const g = isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
+  if (g === undefined) { const d = userDefaults().guard; return d === true || d === "scope" ? d : false; }
   return g === true ? true : g === "scope" ? "scope" : false;
 }
 // spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope" (strings case-insensitive);
@@ -2513,16 +2590,23 @@ function guardInput(v) {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
   return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
 }
-// roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`).
+// roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`);
+// not a boolean (unset) → the user's STOP_CHECK option (1.16 C2), else on. An unreadable roadmap.json: on (the gate itself never
+// blocks on a file it can't read).
 function stopCheckEnabled(projectDir) {
   const l = loadRoadmap(projectDir);
-  return !(!l.parseError && isObj(l.rm.meta) && l.rm.meta.stopCheck === false);
+  if (l.parseError) return true;
+  const v = isObj(l.rm.meta) ? l.rm.meta.stopCheck : undefined;
+  if (typeof v === "boolean") return v;
+  return userDefaults().stopCheck !== false;
 }
-// Inside initProject's roadmap lock. ON is the default (absent = on): no write when the effective value doesn't change.
+// Inside initProject's roadmap lock. ON is the default (absent = on): no write when the effective value doesn't change — with or
+// without the user's STOP_CHECK option (an explicit on / off where that option decides pins it for the project).
 function setStopCheck(projectDir, on) {
   const rm = readRoadmap(projectDir);
   rm.meta = isObj(rm.meta) ? rm.meta : {};
-  if ((rm.meta.stopCheck !== false) === on) return;
+  if (rm.meta.stopCheck === on) return;
+  if (rm.meta.stopCheck === undefined && on === true && userDefaults().stopCheck !== false) return;
   rm.meta.stopCheck = on;
   writeRoadmap(projectDir, rm);
 }
@@ -2968,14 +3052,18 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // The first feature of a project that has none (active or archived) makes it a brand-new project: stamped with this
   // engine's version (meta.specVersion). A new feature in a legacy project stamps nothing — spec_upgrade does, after its audit.
   const fresh = !existed && featureDirs(projectDir).length === 0;
+  // 1.16 C2: the first feature of a project with no language of its own (meta.lang) and no explicit lang → the user's
+  // DEFAULT_LANG option, seeded into meta.lang too (finish, below) — computed before the folder exists (newProjectLang
+  // requires a project without features).
+  const userLang = fresh && !lang ? newProjectLang(projectDir) : undefined;
   ensureDir(dir);
   ensureLockIgnore(f.root); // .specs/.gitignore: the lock files are never committable
 
-  // Resolve the feature's language (explicit > project default > en) and persist it so later
-  // tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
+  // Resolve the feature's language (explicit > project default > the user's default for a new project > en) and persist it so
+  // later tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
   // persisted too — detectTracks reads it back instead of guessing from the files.
   const stored = readState(projectDir, slug).lang;
-  const lng = normalizeLang(stored || lang || projectLang(projectDir));
+  const lng = normalizeLang(stored || lang || userLang || projectLang(projectDir));
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
   // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
   const createdAt = new Date().toISOString();
@@ -3010,6 +3098,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     const fromBacklog = pruneBacklog(projectDir, slug);
     if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
     if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
+    if (userLang && !stored) { try { if (seedProjectLang(projectDir, lng)) res.userDefaults = { lang: lng }; } catch { /* best-effort */ } } // 1.16 C2
     maybeRefreshRoadmap(projectDir);
     const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
@@ -16834,6 +16923,7 @@ function coverage(projectDir) {
 
 const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD" }; // C3: + plan · execplan · bmad
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const TEXT_IMPORT_TOOLS = ["plan", "execplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function isInsideDir(root, p) {
@@ -18239,37 +18329,59 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
   const t = typeof tool === "string" && own(IMPORT_TOOLS, tool) ? tool : null;
   if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
-  if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired };
+  // 1.16 C4 — the plan-mode bridge: `text` imports a single-document source (a plan / an ExecPlan) from its markdown, no file
+  // needed — Claude Code keeps plans in plansDirectory (~/.claude/plans by default, outside the project), so the plan the user
+  // approved is passed as text. Same parser, same mapping, same guarantees; nothing is read from disk for it.
+  const C = i18n.msg(lang0).claudeCode.importText;
+  const inline = opts.text != null;
+  if (inline) {
+    if (typeof opts.text !== "string") { const A = i18n.msg(lang0).args; return { ok: false, error: A.invalid(A.item("text", A.type.string, String(JSON.stringify(opts.text)).slice(0, 60))) }; }
+    if (!TEXT_IMPORT_TOOLS.includes(t)) return { ok: false, error: C.textOnly(t, TEXT_IMPORT_TOOLS.join(", ")) };
+    if (source != null && String(source).trim()) return { ok: false, error: C.pathAndText };
+    if (!stripHtmlComments(opts.text).split(BOM_CHAR).join("").trim()) return { ok: false, error: C.empty(IMPORT_TOOLS[t]) };
+  } else if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired + (TEXT_IMPORT_TOOLS.includes(t) ? " " + C.orText : "") };
   const root = path.resolve(projectDir);
-  const abs = path.resolve(root, String(source).trim());
-  const shown = String(source).trim();
-  // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
-  // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3).
-  const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir : "") });
-  if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
-  if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
-  let realRoot, realSrc;
-  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
-  if (!isInsideDir(realRoot, realSrc)) return outside();
-  const isFileSrc = !fs.statSync(realSrc).isDirectory();
-  const dir = isFileSrc ? path.dirname(realSrc) : realSrc;
-  const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const readWarnings = [];
-  const read = (file) => {
-    try {
-      if (!fs.existsSync(file)) return null;
-      const real = fs.realpathSync.native(file);
-      if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
-      if (!fs.statSync(real).isFile()) return null;
-      return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
-    } catch { return null; }
-  };
+  let realRoot, realSrc, isFileSrc, dir, rel, read;
+  if (inline) {
+    try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
+    realSrc = path.join(realRoot, t + ".md"); // a virtual file — its stem is the parsers' fallback feature name (the title wins)
+    isFileSrc = true;
+    dir = realRoot;
+    rel = C.label;
+    const doc = opts.text.slice(0, IMPORT_MAX_BYTES).replace(new RegExp("^" + BOM_CHAR), "");
+    read = (file) => (file === realSrc ? doc : null);
+  } else {
+    const abs = path.resolve(root, String(source).trim());
+    const shown = String(source).trim();
+    // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
+    // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and that its text
+    // can be imported instead (1.16 C4).
+    const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") });
+    if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
+    if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
+    try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
+    if (!isInsideDir(realRoot, realSrc)) return outside();
+    isFileSrc = !fs.statSync(realSrc).isDirectory();
+    dir = isFileSrc ? path.dirname(realSrc) : realSrc;
+    rel = toPosix(path.relative(realRoot, dir)) || ".";
+    read = (file) => {
+      try {
+        if (!fs.existsSync(file)) return null;
+        const real = fs.realpathSync.native(file);
+        if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
+        if (!fs.statSync(real).isFile()) return null;
+        return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+      } catch { return null; }
+    };
+  } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
   const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot });
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
-  const srcRel = model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel; // C3: a single-document source shows its file
+  // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
+  const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
   const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
   const f = resolveFeature(projectDir, name);
@@ -18288,7 +18400,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
-  const note = L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
+  const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], new Date().toISOString().slice(0, 10))
+    : L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
@@ -18423,6 +18536,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     tool: t,
     toolName: IMPORT_TOOLS[t],
     source: srcRel, // C3: the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
+    ...(inline ? { inline: true } : {}), // 1.16 C4: imported from text (spec_import {text}) — source is null
     tracks: cr.tracks,
     label: cr.label,
     lang: lng,
@@ -18431,6 +18545,151 @@ function importSpec(projectDir, tool, source, opts = {}) {
     mapping,
     warnings,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 1.16 C — Claude Code integration: the status line (`dev-spec statusline`) and the plan-mode bridge (hooks/plan-hook.js).
+// The user's plugin options (userDefaults) live beside guardLevel / stopCheckEnabled, which read them.
+// ---------------------------------------------------------------------------
+
+const STATUS_MAX_FEATURES = 200; // feature folders a status line reads, at most (sorted by name)
+const STATUS_MAX_UP = 40; // folders walked up from a status line's cwd looking for a dev-spec .specs/
+// A folder whose .specs/ dev-spec owns: roadmap.json, steering/, or a feature folder with its .state.json (the hooks' rule).
+function isDevSpecDir(dir) {
+  const root = path.join(dir, ".specs");
+  if (!isDirSafe(root)) return false;
+  if (fs.existsSync(path.join(root, "roadmap.json")) || isDirSafe(path.join(root, "steering"))) return true;
+  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
+}
+// The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
+// dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`) are skipped.
+// → the project folder | null
+function statusLineProject(candidates) {
+  const seen = new Set();
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096) continue;
+    let dir = path.resolve(c.trim());
+    for (let i = 0; i < STATUS_MAX_UP; i++) {
+      const key = FOLD_CASE ? dir.toLowerCase() : dir;
+      if (seen.has(key)) break;
+      seen.add(key);
+      if (isDevSpecDir(dir)) return dir;
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+  return null;
+}
+// The latest activity of a feature for the status line (ms): what the engine recorded (ticks, evidence, approvals, creation,
+// finish) and the dates of .state.json / tasks.md — a status line shows what is being worked on, so a file date counts here.
+function statusActivity(dir, st) {
+  let best = stopActivity(st) || 0;
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t > best) best = t; };
+  see(st.createdAt);
+  if (isObj(st.approvals)) Object.values(st.approvals).forEach((a) => isObj(a) && see(a.at));
+  if (isObj(st.finished)) see(st.finished.at);
+  for (const f of [statePath(dir), path.join(dir, "tasks.md")]) {
+    try { const m = fs.statSync(f).mtimeMs; if (m > best) best = m; } catch { /* absent */ }
+  }
+  return best;
+}
+// The step the status line names — spec_next_action's order, kept cheap (a status line runs after every assistant message): an
+// artifact changed since its approval → re-review; the first unapproved phase → fill / fix (its approve gate's own checks —
+// never Phase 4's, which scans the test code) / approve / tests; then the next task, verify, finish, finished. Never the doctor
+// (it scans the test code) nor the drift hash. → { step, … } with stable step codes.
+function statusNext(pdir, f, kind, lng, unverified) {
+  const st = f.st;
+  const approvals = isObj(st.approvals) ? st.approvals : {};
+  const open = f.blocks.filter((b) => !b.done);
+  const taskStep = () => { const nx = taskSchedule(f.blocks).next; return nx ? { step: "implement", task: nx.number } : { step: "blocked" }; };
+  const endStep = () => (unverified.length ? { step: "verify", task: unverified[0] } : isObj(st.finished) ? { step: "finished" } : { step: "finish" });
+  if (kind === "spike") {
+    const si = spikeInfo(f.dir);
+    if (!si.questionFilled) return { step: "fill", file: SPIKE_FILE };
+    if (open.length) return taskStep();
+    return si.decisionFilled ? endStep() : { step: "decide" };
+  }
+  const walk = gateWalk(f.dir, f.tracks, kind);
+  const pending = walk.find((ph) => !approvals[ph]) || null;
+  const phaseOfFile = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === "design.md" ? "design" : null);
+  const changed = changedSinceApproval(f.dir, approvals, f.tracks, kind)
+    .filter((file) => { if (!pending) return true; const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); });
+  if (changed.length) return { step: "re-review", files: changed };
+  if (pending) {
+    const art = gateArtifacts(f.dir, f.tracks, kind, pending).map((file) => artifactReport(f.dir, file, f.tracks)).find((r) => r.state !== "filled");
+    if (art) return { step: "fill", file: art.file, phase: pending };
+    if (pending === "tests") return { step: "tests" };
+    const g = approvalChecks(pdir, f.slug, f.dir, pending, f.tracks, kind, lng);
+    return g.checks.length ? { step: "fix", phase: pending, failing: g.checks.map((c) => c.id) } : { step: "approve", phase: pending };
+  }
+  if (!f.blocks.length) return { step: "tasks" };
+  return open.length ? taskStep() : endStep();
+}
+// `dev-spec statusline` — ONE short line about the project for Claude Code's status line (settings.json "statusLine"), e.g.
+// "◆ billing · 4/9 tasks · 1 unverified · next: approve tasks", in the project language. The feature shown: the most recently
+// active one with work under way (some tasks done, some open), else the most recently active one. Read-only and bounded: each
+// active feature's .state.json + tasks.md (at most STATUS_MAX_FEATURES), then the chosen feature's evidence and the step
+// statusNext names. opts: { columns } — the line is cut to that width. → { ok, found, project, lang, feature, kind, tasks,
+// unverified, next, features, line }; found false (line "") when there is no .specs/.
+function statusLine(projectDir, opts = {}) {
+  const pdir = path.resolve(projectDir);
+  const root = specsRoot(pdir);
+  if (!isDirSafe(root)) return { ok: true, found: false, project: pdir, line: "" };
+  const lng = projectLang(pdir);
+  const SL = i18n.msg(lng).claudeCode.statusLine;
+  const rows = [];
+  for (const n of safeReaddir(root).filter((x) => isFeatureFolder(x, root)).sort().slice(0, STATUS_MAX_FEATURES)) {
+    const dir = path.join(root, n);
+    if (!isDirSafe(dir)) continue;
+    const j = readJson(statePath(dir));
+    const st = isObj(j.data) ? j.data : {};
+    const tracks = detectTracks(dir);
+    const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
+    const done = blocks.filter((b) => b.done).length;
+    rows.push({ slug: n, dir, st, tracks, blocks, done, total: blocks.length, at: statusActivity(dir, st) });
+  }
+  const clip = (s) => {
+    const cols = Number.isSafeInteger(opts.columns) && opts.columns >= 20 ? opts.columns : 0;
+    const cps = [...s];
+    return cols && cps.length > cols ? cps.slice(0, cols - 1).join("") + "…" : s;
+  };
+  if (!rows.length) return { ok: true, found: true, project: pdir, lang: lng, feature: null, features: 0, line: clip(SL.none) };
+  const executing = rows.filter((r) => r.done > 0 && r.done < r.total);
+  const f = (executing.length ? executing : rows).slice().sort((a, b) => b.at - a.at || (a.slug < b.slug ? -1 : 1))[0];
+  const kind = typeof f.st.kind === "string" ? f.st.kind : "feature";
+  const unverified = f.done ? verificationStatus(pdir, f.slug, f.dir).unverified : [];
+  let next = null;
+  try { next = statusNext(pdir, f, kind, lng, unverified); } catch { next = null; } // a status line never fails on one feature's files
+  const stepText = next && own(SL.steps, next.step) ? SL.steps[next.step](next) : null;
+  const parts = [SL.head(f.slug, kind)];
+  if (f.total) parts.push(SL.tasks(f.done, f.total));
+  if (unverified.length) parts.push(SL.unverified(unverified.length));
+  if (stepText) parts.push(SL.next(stepText));
+  return { ok: true, found: true, project: pdir, lang: lng, feature: f.slug, kind, tasks: { done: f.done, total: f.total },
+    unverified: unverified.length, next, features: rows.length, line: clip(parts.join(" · ")) };
+}
+
+// The plan-mode bridge (hooks/plan-hook.js, PostToolUse on ExitPlanMode): the plan the user just approved can become a spec —
+// one line of context for the agent suggesting /spec-import (spec_import {tool: "plan", text} — or {path} when the plan file
+// is inside the project). The payload shape is read defensively (tool_input.plan, a planFilePath / filePath in the input or the
+// response); nothing is read from disk. → { hint, lang, planFile, inProject, hasText } | null (not an ExitPlanMode payload)
+function planBridge(projectDir, payload) {
+  if (!isObj(payload) || (payload.tool_name || payload.toolName) !== "ExitPlanMode") return null;
+  const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
+  const tr = isObj(payload.tool_response) ? payload.tool_response : isObj(payload.toolResponse) ? payload.toolResponse : {};
+  const usable = (v) => typeof v === "string" && v.trim() && v.length <= 4096 && !/[\u0000-\u001f]/.test(v);
+  const hasText = [ti.plan, tr.plan].some((v) => typeof v === "string" && v.trim() !== "");
+  const file = [ti.planFilePath, ti.plan_file_path, tr.planFilePath, tr.plan_file_path, tr.filePath].find(usable) || null;
+  const pdir = path.resolve(projectDir);
+  const lng = projectLang(pdir);
+  const P = i18n.msg(lng).claudeCode.planBridge;
+  let rel = null;
+  if (file) {
+    const abs = path.resolve(pdir, file.trim());
+    if (isInsideDir(pdir, abs) && !toPosix(path.relative(pdir, abs)).split("/").includes(".specs")) rel = toPosix(path.relative(pdir, abs));
+  }
+  return { hint: rel ? P.byPath(rel) : P.byText, lang: lng, planFile: file, inProject: !!rel, hasText };
 }
 
 // ---------------------------------------------------------------------------
@@ -18604,6 +18863,11 @@ module.exports = {
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
 
   importSpec,
+  // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's plugin options (fallbacks)
+  statusLine,
+  statusLineProject,
+  planBridge,
+  userDefaults,
   isTestFile,
   implementsTargets,
 

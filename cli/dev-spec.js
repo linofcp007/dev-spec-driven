@@ -85,6 +85,9 @@
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
  *   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
+ *   import <plan|execplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
+ *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
+ *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
  *   mcp-config [client]                Print ready MCP config (claude-desktop|claude-code|
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
@@ -101,6 +104,7 @@
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
+ *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  */
 
@@ -310,7 +314,68 @@ function mcpConfig(client) {
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+
+// ---- statusline (1.16 C1) ----------------------------------------------------
+// Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
+// update starts) with its session JSON on stdin, and shows what it prints — a non-zero exit or no output blanks the line. So
+// the render path never fails: no flag refusal, no usage error, bounded stdin, every error swallowed, exit 0 always, nothing
+// printed outside a dev-spec project. The project: the nearest dev-spec .specs/ at or above --project / workspace.current_dir /
+// cwd / workspace.project_dir of the payload (no payload — a terminal: --project / SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / the
+// working folder). The line is spec.statusLine's, cut to $COLUMNS; --json prints the whole result.
+const STATUS_STDIN_MAX = 1024 * 1024;
+function statusLineRender() {
+  let done = false;
+  let data = "";
+  process.stdout.on("error", () => process.exit(0)); // a reader gone (Claude Code cancelled this run): nothing left to show
+  const render = () => {
+    if (done) return;
+    done = true;
+    let r = { ok: true, found: false, line: "" };
+    try {
+      let payload = null;
+      try { payload = data.trim() ? JSON.parse(data) : null; } catch { payload = null; }
+      if (payload !== null && (typeof payload !== "object" || Array.isArray(payload))) payload = null;
+      const ws = payload && payload.workspace && typeof payload.workspace === "object" ? payload.workspace : {};
+      const given = typeof flags.project === "string" ? [flags.project] : [];
+      const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
+        : given.concat([process.env.SPEC_PROJECT_DIR, process.env.CLAUDE_PROJECT_DIR, process.cwd()]);
+      const pdir = spec.statusLineProject(cands);
+      const cols = parseInt(process.env.COLUMNS, 10);
+      if (pdir) r = spec.statusLine(pdir, { columns: Number.isSafeInteger(cols) && cols > 0 ? cols : undefined });
+    } catch {
+      r = { ok: true, found: false, line: "" }; // never a stack trace in the status line
+    }
+    const text = flags.json === true ? JSON.stringify(r) + "\n" : r.line ? r.line + "\n" : "";
+    try { process.stdout.write(text, () => process.exit(0)); } catch { process.exit(0); }
+  };
+  if (process.stdin.isTTY) return render();
+  try {
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { if (data.length < STATUS_STDIN_MAX) data += c; });
+    process.stdin.on("end", render);
+    process.stdin.on("error", render);
+  } catch {
+    return render();
+  }
+  setTimeout(render, 1500).unref(); // a caller that never closes stdin still gets its line
+}
+// `statusline --print-config`: the settings.json snippet with THIS clone's absolute path (never committed — like mcp-config).
+function statusLineConfig() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  const command = `node "${cli}" statusline`;
+  const cfg = { statusLine: { type: "command", command } };
+  if (flags.json) return console.log(JSON.stringify(cfg, null, 2));
+  const C = spec.msg(spec.projectLang(projectDir)).claudeCode.statusLine.config;
+  console.log(C.head);
+  console.log(JSON.stringify(cfg, null, 2));
+  console.log(C.after);
+  if (/\/plugins\/cache\//i.test(cli)) console.log(C.cacheNote);
+  console.log(C.tryIt(command));
+}
+
 function main() {
+  // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
+  if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
@@ -895,17 +960,28 @@ function main() {
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy]");
-      const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
-      if (!r.ok) return fail(r);
-      return out(r, (r) => {
-        const B = spec.msg(r.lang).importSpec;
-        console.log(B.done(r.toolName, r.source, r.feature, r.label, r.lang));
-        console.log("  " + r.files.join(", "));
-        const ids = Object.entries(r.mapping);
-        console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
-        r.warnings.forEach((w) => console.log("  ⚠ " + w));
-      });
+      // 1.16 C4: `import plan|execplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
+      // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy] · import <plan|execplan> - | --text \"<markdown>\"";
+      const fromStdin = pos[1] === "-";
+      const hasText = typeof flags.text === "string";
+      if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
+      // With --text the words after the tool are tracks; with - or a path, the words after it.
+      const doImport = (text) => {
+        const r = spec.importSpec(projectDir, pos[0], text != null ? undefined : pos[1], { name: flags.name, lang: flags.lang,
+          tracks: withTracksFlag(pos.slice(hasText ? 1 : 2)), text });
+        if (!r.ok) return fail(r);
+        return out(r, (r) => {
+          const B = spec.msg(r.lang).importSpec;
+          console.log(B.done(r.toolName, r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source, r.feature, r.label, r.lang));
+          console.log("  " + r.files.join(", "));
+          const ids = Object.entries(r.mapping);
+          console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          r.warnings.forEach((w) => console.log("  ⚠ " + w));
+        });
+      };
+      if (fromStdin) return readStdin((text) => doImport(text));
+      return doImport(hasText ? flags.text : undefined);
     }
 
     case "append-tasks": {
@@ -1279,6 +1355,9 @@ function main() {
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
+    case "statusline": // --print-config (the render path runs before the flag checks, in main)
+      return on("print-config") ? statusLineConfig() : statusLineRender();
+
     default:
       die(projectText().unknownCommand(cmd));
   }
@@ -1440,8 +1519,13 @@ function helpText() {
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy
-                                  plan = Claude Code plan mode / Cursor .cursor/plans (copy a ~/.claude/plans file into the project first),
-                                  execplan = a Codex ExecPlan (PLANS.md), bmad = BMAD-METHOD docs (prd.md + docs/stories/)
+                                  plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
+                                  bmad = BMAD-METHOD docs (prd.md + docs/stories/)
+  import <plan|execplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
+                                  --text takes it inline — for a plan outside the project (Claude Code keeps plans in ~/.claude/plans)
+  statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
+                                  step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
+                                  --print-config prints the settings.json "statusLine" snippet with this clone's path
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
@@ -1457,6 +1541,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
+         --text "<markdown>" (import plan|execplan)  --print-config (statusline)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).

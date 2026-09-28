@@ -17,7 +17,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
-| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan or BMAD docs (path inside the project) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched |
+| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan or BMAD docs (path inside the project — or, for a plan / ExecPlan, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
@@ -84,8 +84,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
 ## MCP prompts and resources (other MCP clients)
 
-Besides the tools, the server advertises **prompts** and **resources** (`capabilities: {tools, prompts, resources}`,
-none of them `listChanged`), so a client that is not Claude Code still gets the plugin's commands and can read the specs:
+Besides the tools, the server advertises **prompts**, **resources** and **completions** (`capabilities: {tools, prompts,
+resources, completions}`, none of them `listChanged`), so a client that is not Claude Code still gets the plugin's commands
+and can read the specs:
 
 - **Prompts** — one per `commands/*.md`, read at runtime: name = the file name (`spec-doctor`, `spec-finish`…),
   description = its front-matter description, one optional `args` argument (from `argument-hint`). `prompts/get` returns
@@ -99,6 +100,15 @@ none of them `listChanged`), so a client that is not Claude Code still gets the 
   quickstart, checklist, integration-plan, retro, spike, decisions). Templates: `specs://feature/{slug}/{artifact}`,
   `specs://steering/{file}`. The list is capped (the result says so); `..`, absolute paths, other schemes and links out
   of `.specs/` are refused.
+- **Completions** (`completion/complete`, 1.16) — a prompt whose argument names a feature (`[feature name]`, `[feature] …`)
+  completes its first word to the active features' slugs; `specs://feature/{slug}/{artifact}` completes `{slug}` and
+  `{artifact}` (the artifacts the feature in `context.arguments.slug` has, else every allowlisted one) and
+  `specs://steering/{file}` completes `{file}` — prefix matches first, then substring matches, at most 100 values (`total`,
+  `hasMore`). An unknown prompt, template or argument name is `-32602`; with `SPEC_MCP_PROMPTS=off` a `ref/prompt` is too.
+- **Tool annotations** (1.16) — every tool carries MCP `annotations`: `readOnlyHint: true` only for the tools no
+  argument can make write (status, doctor, trace, ears, classify, list, next task / action, clarify, scan, coverage,
+  drift), `destructiveHint: true` only on `spec_feature` (remove), `idempotentHint` where a repeat changes nothing more,
+  `openWorldHint: false` everywhere. Hints only — the engine enforces its own rules.
 - **CLI parity:** `dev-spec prompts` lists them; `dev-spec prompts <name> [--args "…"]` prints one rendered as
   `prompts/get` returns it.
 
@@ -122,6 +132,7 @@ tracks [list|init <name>|check] [name] [--lang]
 create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
 import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]
+import <plan|execplan> - | --text "<markdown>"   (the document from stdin / inline — a plan outside the project)
 list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code] [--matrix | --csv]
 next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [--include-brief]
@@ -142,7 +153,7 @@ feature <remove|archive|rename|restore> <name> [new] [--yes]     feature flow <n
 roadmap [--write] [--html] [--lang]      depend <feature> [deps...] [--add x] [--rm x] [--clear] [--order N]
 backlog [add|rm|remove <name> [note]]    scan [path] [--cap N] · coverage
 evals <feature> [--dry-run ...]          mcp-config [client] · rules <cursor|windsurf|copilot|gemini|agents>
-prompts [name] [--args "…"]
+prompts [name] [--args "…"]              statusline [--print-config]
 ```
 
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
@@ -156,7 +167,11 @@ observed`). `next --waves` prints the execution waves (+ cycles, blocked tasks);
 traceability matrix as a table and `trace --csv` as CSV on stdout (data only — `export <f> --csv --write` writes the
 file with a BOM and the marker record; the exit code stays trace's). `stop-check` prints the Stop hook's decision for a
 closing message (MCP: `spec_stop_check`; `log`'s MCP twin is `spec_log`, fed the `git log` text). `undone` unticks a task —
-its evidence turns stale, so a re-tick needs a new run. `rules <tool>` prints a rule file with this
+its evidence turns stale, so a re-tick needs a new run. `statusline` prints one line for Claude Code's status bar (the
+feature with work under way, its tasks, unverified ticks and the next step, in the project language; nothing outside a
+dev-spec project; exit 0 always; it reads the session JSON on stdin and walks up from its folder to the nearest
+`.specs/`) — `--print-config` prints the `settings.json` `statusLine` entry with this clone's absolute path
+(`/spec-statusline` installs it). `rules <tool>` prints a rule file with this
 clone's absolute paths, to paste into another project; `mcp-config <client>` prints a ready MCP config.
 
 ## Hooks (Claude Code, local — never block on their own errors)
@@ -169,10 +184,18 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 | `hooks/spec-hook.js` | SessionStart | One status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), and one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`) |
 | `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing; PowerShell runs are not observed |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
+| `hooks/plan-hook.js` | PostToolUse (`ExitPlanMode`) | The plan-mode bridge: when the user approves a plan in a dev-spec project, one line of context suggests `/spec-import` of it (`spec_import {tool: "plan", text}` — or `{path}` when the plan file is inside the project); never imports by itself, silent elsewhere |
 | `hooks/stop-hook.js` | SubagentStop (`spec-implementer` only) | A DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task), else the stop is sent back |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references). The
 evidence rules behind the Stop hooks: `references/verification.md`.
+
+**Plugin options (Claude Code `userConfig`, 1.16)** — fallbacks only; a project's own `roadmap.json` meta always wins:
+`default_lang` (the language a NEW project gets when `spec_init` / its first `spec_create` names none — seeded into
+`meta.lang`), `stop_check` (the Stop gate while `meta.stopCheck` is unset), `guard_default` (`off` / `on` / `scope` while
+`meta.guard` is unset). Precedence: project meta → `DEV_SPEC_<KEY>` → `CLAUDE_PLUGIN_OPTION_<KEY>` (Claude Code exports it to
+the hooks; `mcp/servers.json` passes it to the MCP server) → the built-in default; an empty, invalid or unexpanded value
+changes nothing. `spec_init` reports the values an option decides in `userDefaults`.
 
 ## Directory structure
 
@@ -265,7 +288,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (52 commands)
+## Command reference (53 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -318,6 +341,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
 | `/migrateModel` | support | (+ai) eval-gated model migration |
 | `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |
+| `/spec-statusline` | setup | Claude Code status line: the active feature, tasks, unverified ticks, next step — writes the `settings.json` entry after you confirm (uses `dev-spec statusline`) |
 
 **Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/spec-status`. (As a plugin, all
 commands are namespaced, e.g. `/dev-spec-driven:spec-doctor`. The `spec-` prefix on `/spec-init`, `/spec-status`,

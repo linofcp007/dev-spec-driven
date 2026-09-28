@@ -6582,9 +6582,9 @@ function endRun() {
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
     "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 52 && ["spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 53 && ["spec-statusline.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "52 commands incl. the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "53 commands incl. the 1.16 /spec-statusline, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -10848,8 +10848,8 @@ function endRun() {
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 56 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 52 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    ok(d4Files.length === 57 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 53 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
@@ -12812,6 +12812,307 @@ function endRun() {
   }
 
   // 1.16 package (C) — Claude Code integration: status line, userConfig, annotations / completion, plan-mode bridge.
+
+  {
+    const cRoot = path.join(tmp, "p16c");
+    fs.mkdirSync(cRoot, { recursive: true });
+    const cRead = (f) => fs.readFileSync(f, "utf8");
+    const cMeta = (d) => (JSON.parse(cRead(path.join(d, ".specs", "roadmap.json"))).meta || {});
+    const OPT_KEYS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
+      "DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"];
+    // The user's plugin options for one in-process engine call (restored after it); unset keys are removed.
+    const withOpts = (vars, fn) => {
+      const saved = OPT_KEYS.map((k) => [k, process.env[k]]);
+      for (const k of OPT_KEYS) { if (vars[k] == null) delete process.env[k]; else process.env[k] = vars[k]; }
+      try { return fn(); } finally { for (const [k, v] of saved) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+    };
+    // A child's environment: no plugin option and no project folder from this process unless given.
+    const childEnv = (env) => {
+      const e = { ...process.env };
+      for (const k of OPT_KEYS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR"])) delete e[k];
+      return { ...e, ...(env || {}) };
+    };
+    // Every file under a folder with its size, date and content — a read-only call leaves it identical.
+    const cSnap = (d) => {
+      const out = [];
+      const walk = (p) => {
+        for (const e of fs.readdirSync(p, { withFileTypes: true })) {
+          const f = path.join(p, e.name);
+          if (e.isDirectory()) walk(f);
+          else { const st = fs.statSync(f); out.push(path.relative(d, f) + "|" + st.size + "|" + st.mtimeMs + "|" + cRead(f)); }
+        }
+      };
+      walk(d);
+      return out.sort().join("\n");
+    };
+    // An MCP session of its own (its env and default project).
+    const cServer = (projectDir, env) => {
+      const kid = spawn(process.execPath, [SERVER], { env: { ...childEnv(env), SPEC_PROJECT_DIR: projectDir }, stdio: ["pipe", "pipe", "inherit"] });
+      const waiting = new Map();
+      let b = "";
+      let n = 0;
+      kid.stdout.on("data", (d) => {
+        b += d.toString();
+        let nl;
+        while ((nl = b.indexOf("\n")) >= 0) {
+          const line = b.slice(0, nl).trim();
+          b = b.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "c-" + ++n;
+        const t = setTimeout(() => abort("1.16 C: no reply to " + method + " (" + id + ") within 15s"), 15000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        kid.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      });
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { req, stop };
+    };
+    const hook = (script, input, env) => spawnSync(process.execPath, [path.join(root, "hooks", script)],
+      { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8", env: childEnv(env), timeout: 30000 });
+    const jsonOut = (r) => { try { return JSON.parse(r.stdout); } catch { return null; } };
+    const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-none-")); // no .specs/ at or above it
+
+    // --- C1: the status line (engine) ---
+    const sl = path.join(cRoot, "status");
+    withOpts({}, () => {
+      S.initProject(sl, ["core"], "en");
+      S.createFeature(sl, "Billing", ["core"], "Invoices", undefined, "en");
+      fs.writeFileSync(path.join(sl, ".specs", "billing", "tasks.md"), ["# Tasks: Billing", "", "## Phase 1", "",
+        "- [ ] 1. Charge the card", "  - _Requirements: US-1.AC-1_", "  - _Verify: node -e \"process.exit(0)\"_",
+        "- [ ] 2. Send the invoice", "  - _Requirements: US-1.AC-2_", "  - _Verify: node -e \"process.exit(0)\"_",
+        "- [ ] 3. Refund", "  - _Requirements: US-1.AC-3_", "- [ ] 4. Report", "  - _Requirements: US-1.AC-4_", ""].join("\n"));
+      for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(sl, "billing", ph, "t", { force: true });
+      S.completeTask(sl, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" });
+      S.completeTask(sl, "billing", 2, { summary: "sent by hand" }); // a note on a runnable _Verify:_ — ticked, not verified
+      S.createFeature(sl, "Auth", ["core"], "Login", undefined, "en"); // newer, nothing under way
+    });
+    const slBefore = cSnap(path.join(sl, ".specs"));
+    const sl1 = S.statusLine(sl);
+    ok(sl1.ok && sl1.found && sl1.feature === "billing" && sl1.kind === "feature" && sl1.tasks.done === 2 && sl1.tasks.total === 4 && sl1.unverified === 1 &&
+      sl1.next && sl1.next.step === "implement" && sl1.next.task === 3 && sl1.features === 2 && sl1.line === "◆ billing · 2/4 tasks · 1 unverified · next: task 3" &&
+      cSnap(path.join(sl, ".specs")) === slBefore,
+      "1.16 C1: statusLine shows the feature with work under way (not the newer planning one) — tasks, unverified ticks, the next task — and writes nothing (got " + JSON.stringify(sl1) + ")");
+    // Planning features: the first unapproved phase — fill its artifact while it is a template, approve it once filled; PT line.
+    const sl2 = path.join(cRoot, "status-pt");
+    withOpts({}, () => { S.initProject(sl2, ["core"], "pt"); S.createFeature(sl2, "Auth", ["core"], "Login", undefined, "pt"); });
+    const sl2a = S.statusLine(sl2);
+    const cls2 = path.join(sl2, ".specs", "auth", "classification.md");
+    fs.writeFileSync(cls2, cRead(cls2).replace(/\[[^\]\n]*\]/g, (m) => (/^\[(?:US\d+|P|shared|x| )\]$/.test(m) ? m : "o login com e-mail")));
+    const sl2b = S.statusLine(sl2);
+    ok(sl2a.next.step === "fill" && sl2a.next.file === "classification.md" && /^◆ auth · 0\/\d+ tarefas · a seguir: preencher classification\.md$/.test(sl2a.line) &&
+      sl2b.next.step === "approve" && sl2b.next.phase === "classification" && /· a seguir: aprovar classification$/.test(sl2b.line),
+      "1.16 C1: a planning feature — fill the first unapproved phase's template, then approve it (its gate passes); the line in the project language (got " +
+      JSON.stringify([sl2a.line, sl2b.line, sl2b.next]) + ")");
+    // No feature yet · no .specs/ · the project found by walking up · the width cut.
+    const sl3 = path.join(cRoot, "status-es");
+    withOpts({}, () => S.initProject(sl3, ["core"], "es"));
+    const sl3r = S.statusLine(sl3);
+    const slNone = S.statusLine(none);
+    const cut = S.statusLine(sl, { columns: 24 }).line;
+    ok(sl3r.found && sl3r.feature === null && sl3r.line === "◆ dev-spec · aún no hay funciones — /spec" && slNone.found === false && slNone.line === "" &&
+      S.statusLineProject([path.join(sl, "src", "deep", "er")]) === path.resolve(sl) && S.statusLineProject(["${CLAUDE_PROJECT_DIR}", 42, "", none]) === null &&
+      S.statusLineProject([none, path.join(sl2, "lib")]) === path.resolve(sl2) && [...cut].length === 24 && cut.endsWith("…"),
+      "1.16 C1: no feature → a hint line; no .specs/ → nothing; the project is the nearest dev-spec .specs/ at or above the folder (unexpanded / empty candidates skipped); cut to the width (got " +
+      JSON.stringify([sl3r.line, slNone, cut]) + ")");
+    // Bounded: 50 features read in well under a second once the engine is warm.
+    const sl50 = path.join(cRoot, "status-50");
+    withOpts({}, () => { S.initProject(sl50, ["core"], "en"); S.createFeature(sl50, "Feature 0", ["core"], "x", undefined, "en"); });
+    for (let i = 1; i < 50; i++) fs.cpSync(path.join(sl50, ".specs", "feature-0"), path.join(sl50, ".specs", "feature-" + i), { recursive: true });
+    const t50 = Date.now();
+    const r50 = S.statusLine(sl50);
+    const first50 = Date.now() - t50;
+    const t50w = Date.now();
+    for (let i = 0; i < 3; i++) S.statusLine(sl50);
+    const warm50 = (Date.now() - t50w) / 3;
+    ok(r50.features === 50 && typeof r50.line === "string" && r50.line.startsWith("◆ feature-") && first50 < 3000 && warm50 < 1000,
+      "1.16 C1: a 50-feature project — one line, bounded time (first " + first50 + " ms, warm " + warm50.toFixed(1) + " ms per call)");
+
+    // --- C2: the user's plugin options (userConfig) — fallbacks only; the project's meta wins ---
+    const u1 = path.join(cRoot, "opts-fresh");
+    const u1r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "false", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.initProject(u1, ["core"]));
+    const u1m = cMeta(u1);
+    ok(u1r.lang === "pt" && u1m.lang === "pt" && u1r.stopCheck === false && u1r.guard === "scope" && JSON.stringify(u1r.userDefaults) === '{"lang":"pt","stopCheck":false,"guard":"scope"}' &&
+      !("stopCheck" in u1m) && !("guard" in u1m) && withOpts({}, () => S.stopCheckEnabled(u1) === true && S.guardLevel(u1) === false && S.projectLang(u1) === "pt"),
+      "1.16 C2: a new project takes the user's options — default_lang seeded into meta.lang (kept without the option), stop_check / guard_default as fallbacks only, reported in userDefaults (got " +
+      JSON.stringify([u1r.lang, u1r.userDefaults, u1m]) + ")");
+    const u2 = path.join(cRoot, "opts-meta");
+    const u2r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "on" },
+      () => [S.initProject(u2, ["core"], "es", { stopCheck: true, guard: "off" }), S.stopCheckEnabled(u2), S.guardLevel(u2)]);
+    const u2m = cMeta(u2);
+    ok(u2r[0].lang === "es" && u2m.lang === "es" && u2m.stopCheck === true && u2m.guard === false && u2r[1] === true && u2r[2] === false && !u2r[0].userDefaults,
+      "1.16 C2: the project wins — an explicit lang, stopCheck on (written where the user's option says off) and guard off beat the options (got " + JSON.stringify([u2m, u2r.slice(1), u2r[0].userDefaults]) + ")");
+    const prec = [
+      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off", DEV_SPEC_STOP_CHECK: "on" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "${user_config.stop_check}" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "maybe" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.guardLevel(sl)),
+      withOpts({ DEV_SPEC_GUARD_DEFAULT: "on", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.guardLevel(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" }, () => S.stopCheck(sl, { message: "All tasks are done." }).why),
+      withOpts({}, () => S.stopCheck(sl, { message: "All tasks are done." }).block),
+    ];
+    ok(JSON.stringify(prec) === '[false,true,true,true,"scope",true,"off",true]',
+      "1.16 C2: precedence — meta unset → DEV_SPEC_<KEY> over CLAUDE_PLUGIN_OPTION_<KEY>; an unexpanded ${user_config.x} or an invalid value changes nothing; the stop gate answers 'off' (got " + JSON.stringify(prec) + ")");
+    // default_lang never re-labels an existing project; the first spec_create of a new one takes it (and seeds meta.lang).
+    const u4 = path.join(cRoot, "opts-legacy");
+    withOpts({}, () => S.createFeature(u4, "Old", ["core"], "x", undefined, "en"));
+    const u4r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => [S.initProject(u4, ["core"]).lang, S.createFeature(u4, "New", ["core"], "y").lang]);
+    const u5 = path.join(cRoot, "opts-create");
+    const u5r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => S.createFeature(u5, "Pagos", ["core"], "cobros con tarjeta"));
+    const u6 = path.join(cRoot, "opts-explicit");
+    const u6r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => S.createFeature(u6, "Pay", ["core"], "cards", undefined, "pt-BR"));
+    ok(JSON.stringify(u4r) === '["en","en"]' && !("lang" in cMeta(u4)) && u5r.ok && u5r.lang === "es" && cMeta(u5).lang === "es" && u5r.userDefaults && u5r.userDefaults.lang === "es" &&
+      /^## Historias de Usuario/m.test(cRead(path.join(u5r.dir, "requirements.md"))) && u6r.lang === "pt-BR" && !("lang" in cMeta(u6)) && !u6r.userDefaults,
+      "1.16 C2: default_lang — never for a project that has features; a new project's first spec_create takes it and seeds meta.lang; an explicit lang wins (got " +
+      JSON.stringify([u4r, u5r.lang, cMeta(u5).lang, u6r.lang]) + ")");
+    // The options reach the MCP server (mcp/servers.json env) and the hooks (Claude Code's CLAUDE_PLUGIN_OPTION_<KEY>).
+    const u7 = path.join(cRoot, "opts-mcp");
+    const u7s = cServer(u7, { CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt-BR" });
+    await u7s.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const u7r = payload(await u7s.req("tools/call", { name: "spec_init", arguments: { tracks: ["core"] } }));
+    await u7s.stop();
+    const u8 = path.join(cRoot, "opts-mcp-literal");
+    const u8s = cServer(u8, { CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "${user_config.default_lang}", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "${user_config.stop_check}" });
+    await u8s.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const u8r = payload(await u8s.req("tools/call", { name: "spec_init", arguments: { tracks: ["core"] } }));
+    await u8s.stop();
+    const stopPayload = { hook_event_name: "Stop", cwd: sl, last_assistant_message: "All tasks are done and verified." };
+    const guardPayload = { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(sl2, "src", "login.js") }, cwd: sl2 };
+    const hStop = [hook("stop-hook.js", stopPayload), hook("stop-hook.js", stopPayload, { CLAUDE_PLUGIN_OPTION_STOP_CHECK: "false" })];
+    const hGuard = [hook("guard-hook.js", guardPayload), hook("guard-hook.js", guardPayload, { CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "on" })];
+    const hg = jsonOut(hGuard[1]);
+    ok(u7r.lang === "pt-BR" && cMeta(u7).lang === "pt-BR" && u8r.lang === "en" && u8r.stopCheck === true && !u8r.userDefaults &&
+      (jsonOut(hStop[0]) || {}).decision === "block" && hStop[1].status === 0 && hStop[1].stdout === "" &&
+      hGuard[0].status === 0 && hGuard[0].stdout === "" && hg && hg.hookSpecificOutput.permissionDecision === "ask",
+      "1.16 C2: the options reach the MCP server (servers.json env; a literal ${user_config.x} is ignored) and the hooks — stop_check off silences the Stop gate, guard_default on makes the guard ask (got " +
+      JSON.stringify([u7r.lang, u8r.lang, hStop.map((h) => h.stdout.slice(0, 40)), hGuard.map((h) => h.stdout.slice(0, 60))]) + ")");
+    // The manifest: three userConfig options, each referenced by mcp/servers.json as CLAUDE_PLUGIN_OPTION_<KEY>; no hooks key.
+    const man = JSON.parse(cRead(path.join(root, ".claude-plugin", "plugin.json")));
+    const srvEnv = JSON.parse(cRead(path.join(root, "mcp", "servers.json"))).mcpServers["spec-driven"].env;
+    const uc = man.userConfig || {};
+    const refs = Object.values(srvEnv).map((v) => (/^\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(v) || [])[1]).filter(Boolean);
+    ok(Object.keys(uc).join() === "default_lang,stop_check,guard_default" &&
+      Object.values(uc).every((o) => ["string", "boolean"].includes(o.type) && o.title && o.description && "default" in o && Object.keys(o).every((k) => ["type", "title", "description", "default"].includes(k))) &&
+      refs.length === 3 && refs.every((k) => k in uc && srvEnv["CLAUDE_PLUGIN_OPTION_" + k.toUpperCase()] === "${user_config." + k + "}") && !("hooks" in man),
+      "1.16 C2: plugin.json declares userConfig default_lang / stop_check / guard_default (type, title, description, default) and mcp/servers.json passes each as CLAUDE_PLUGIN_OPTION_<KEY>; still no hooks key (got " +
+      JSON.stringify([Object.keys(uc), srvEnv]) + ")");
+
+    // --- C3: MCP tool annotations and completion/complete ---
+    const tl = (await rpc("tools/list", {})).result.tools;
+    const roTools = tl.filter((t) => t.annotations && t.annotations.readOnlyHint === true).map((t) => t.name).sort();
+    ok(tl.every((t) => t.annotations && t.annotations.openWorldHint === false && typeof t.annotations.readOnlyHint === "boolean" &&
+      (t.annotations.readOnlyHint || (typeof t.annotations.destructiveHint === "boolean" && typeof t.annotations.idempotentHint === "boolean"))) &&
+      tl.filter((t) => t.annotations.destructiveHint === true).map((t) => t.name).join() === "spec_feature" &&
+      roTools.join() === ["ears_validate", "spec_classify", "spec_clarify", "spec_coverage", "spec_doctor", "spec_drift", "spec_list", "spec_next_action", "spec_next_task",
+        "spec_scan", "spec_status", "trace_check", "spec_stop_check", "spec_log"].sort().join() &&
+      ["spec_complete_task", "spec_approve", "spec_append_tasks", "spec_decide", "spec_finish"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === false) &&
+      ["spec_roadmap", "spec_catalog", "spec_export", "spec_upgrade", "spec_init"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === true),
+      "1.16 C3: every tool carries annotations — openWorldHint false everywhere, readOnlyHint only for the 14 tools no argument makes write, destructiveHint only on spec_feature, idempotentHint per tool (got " +
+      JSON.stringify(tl.filter((t) => !t.annotations || t.annotations.destructiveHint === true).map((t) => t.name).concat(roTools)) + ")");
+    const roBefore = cSnap(path.join(sl, ".specs"));
+    const roCalls = [];
+    for (const n of roTools) roCalls.push(await rpc("tools/call", { name: n, arguments: { name: "billing", description: "billing invoices", code: true, matrix: true, message: "All done.", gitLog: "commit 0123456789abcdef0123456789abcdef01234567", projectDir: sl } }));
+    ok(roCalls.every((m) => m.result && !m.result.isError) && cSnap(path.join(sl, ".specs")) === roBefore,
+      "1.16 C3: the read-only tools leave .specs/ exactly as it was — every file, size and date (got " + JSON.stringify(roCalls.filter((m) => !m.result || m.result.isError).map((m) => JSON.stringify(m).slice(0, 120))) + ")");
+    const cs = cServer(sl, { SPEC_MCP_PROMPTS: "" });
+    const csInit = await cs.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const comp = async (params) => cs.req("completion/complete", params);
+    const vals = (m) => (m.result && m.result.completion) || null;
+    const pr = { ref: { type: "ref/prompt", name: "spec-status" }, argument: { name: "args", value: "bi" } };
+    const cp = [await comp(pr), await comp({ ...pr, ref: { type: "ref/prompt", name: "spec-doctor" }, argument: { name: "args", value: "" } }),
+      await comp({ ...pr, argument: { name: "args", value: "billing x" } }), await comp({ ref: { type: "ref/prompt", name: "classify" }, argument: { name: "args", value: "a" } }),
+      await comp({ ...pr, argument: { name: "args", value: "ILL" } })];
+    ok(JSON.stringify(csInit.result.capabilities.completions) === "{}" && JSON.stringify(vals(cp[0])) === '{"values":["billing"],"total":1,"hasMore":false}' &&
+      vals(cp[1]).values.join() === "auth,billing" && vals(cp[2]).values.length === 0 && vals(cp[3]).values.length === 0 && vals(cp[4]).values.join() === "billing",
+      "1.16 C3: completion/complete on a prompt whose argument names a feature → the active features' slugs (prefix, then substring, case-insensitive; a second word → none); a prompt taking a description → none (got " +
+      JSON.stringify(cp.map(vals)) + ")");
+    const tpl = "specs://feature/{slug}/{artifact}";
+    const cr = [await comp({ ref: { type: "ref/resource", uri: tpl }, argument: { name: "slug", value: "AU" } }),
+      await comp({ ref: { type: "ref/resource", uri: tpl }, argument: { name: "artifact", value: "t" }, context: { arguments: { slug: "billing" } } }),
+      await comp({ ref: { type: "ref/resource", uri: tpl }, argument: { name: "artifact", value: "spi" } }),
+      await comp({ ref: { type: "ref/resource", uri: "specs://steering/{file}" }, argument: { name: "file", value: "con" } })];
+    const billFiles = fs.readdirSync(path.join(sl, ".specs", "billing"));
+    ok(vals(cr[0]).values.join() === "auth" && vals(cr[1]).values[0] === "tasks.md" && vals(cr[1]).values.every((a) => billFiles.includes(a)) &&
+      vals(cr[2]).values.join() === "spike.md" && vals(cr[3]).values.join() === "constitution.md",
+      "1.16 C3: completion/complete on the specs:// templates — {slug} → features, {artifact} → the artifacts context.arguments.slug has (else every allowlisted one), {file} → steering files (got " +
+      JSON.stringify(cr.map(vals)) + ")");
+    const ce = [await comp({ ref: { type: "ref/prompt", name: "nope" }, argument: { name: "args", value: "" } }),
+      await comp({ ref: { type: "ref/resource", uri: "specs://other/{x}" }, argument: { name: "x", value: "" } }),
+      await comp({ ref: { type: "ref/resource", uri: "specs://steering/{file}" }, argument: { name: "slug", value: "" } }),
+      await comp({ argument: { name: "args", value: "" } }), await comp({ ...pr, argument: { name: "feature", value: "" } }),
+      await comp({ ref: { type: "ref/other" }, argument: { name: "args", value: "" } }), await cs.req("completion/complete", null)];
+    await cs.stop();
+    const code = (m) => (m.error ? m.error.code : null);
+    ok(ce.every((m) => code(m) === -32602 && !m.result) && /Unknown prompt 'nope'/.test(ce[0].error.message) && /Unknown resource template 'specs:\/\/other\/\{x\}'/.test(ce[1].error.message) &&
+      /Unknown argument 'slug' — one of: file/.test(ce[2].error.message) && /needs `ref`/.test(ce[3].error.message) && /Unknown argument 'feature' — one of: args/.test(ce[4].error.message),
+      "1.16 C3: completion/complete errors are JSON-RPC Invalid params (-32602): an unknown prompt, template, argument or ref type, a request without ref / params (got " + JSON.stringify(ce.map((m) => [code(m), m.error && m.error.message.slice(0, 50)])) + ")");
+    const cOff = cServer(sl, { SPEC_MCP_PROMPTS: "off" });
+    const cOffInit = await cOff.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const cOffP = await cOff.req("completion/complete", pr);
+    const cOffR = await cOff.req("completion/complete", { ref: { type: "ref/resource", uri: tpl }, argument: { name: "slug", value: "" } });
+    await cOff.stop();
+    const capRoot = path.join(cRoot, "cap");
+    for (let i = 0; i < 120; i++) fs.mkdirSync(path.join(capRoot, ".specs", "f" + String(i).padStart(3, "0")), { recursive: true });
+    const capR = require("./lib/prompts-resources.js").complete(capRoot, { ref: { type: "ref/resource", uri: tpl }, argument: { name: "slug", value: "f" } }, { lang: "en" });
+    ok(!("prompts" in cOffInit.result.capabilities) && JSON.stringify(cOffInit.result.capabilities.completions) === "{}" && code(cOffP) === -32602 && /SPEC_MCP_PROMPTS=off/.test(cOffP.error.message) &&
+      vals(cOffR).values.join() === "auth,billing" && capR.ok && capR.completion.values.length === 100 && capR.completion.total === 120 && capR.completion.hasMore === true,
+      "1.16 C3: with SPEC_MCP_PROMPTS=off (the Claude Code plugin) a ref/prompt is refused and the resource completions stay; at most 100 values, with total / hasMore (got " +
+      JSON.stringify([cOffP.error, vals(cOffR), capR.completion && [capR.completion.values.length, capR.completion.total, capR.completion.hasMore]]) + ")");
+
+    // --- C4: the plan-mode bridge — spec_import {text} and the ExitPlanMode hook ---
+    const planMd = ["# Plan: Dark mode", "", "## Summary", "Let users switch the app to a dark theme.", "", "## Goals",
+      "- WHEN the user picks dark mode THE SYSTEM SHALL apply the dark palette", "- The choice survives a reload", "", "## Steps",
+      "1. Add the theme context in `src/theme.ts`", "2. Wire the toggle in `src/settings.tsx`", "", "## Approach", "CSS variables per theme.", ""].join("\n");
+    const pa = path.join(cRoot, "plan-file");
+    const pb = path.join(cRoot, "plan-text");
+    fs.mkdirSync(path.join(pa, "plans"), { recursive: true });
+    fs.writeFileSync(path.join(pa, "plans", "dark-mode.md"), planMd);
+    const ia = withOpts({}, () => S.importSpec(pa, "plan", "plans/dark-mode.md", { lang: "en" }));
+    const ib = withOpts({}, () => S.importSpec(pb, "plan", undefined, { text: planMd, lang: "en" }));
+    const noteless = (t) => t.replace(/^> Imported from plan .*$/gm, "> NOTE");
+    const same = ["requirements.md", "design.md", "tasks.md", "classification.md"].filter((f) => noteless(cRead(path.join(ia.dir, f))) !== noteless(cRead(path.join(ib.dir, f))));
+    ok(ia.ok && ib.ok && ia.feature === "dark-mode" && ib.feature === "dark-mode" && same.length === 0 && JSON.stringify(ia.mapping) === JSON.stringify(ib.mapping) &&
+      JSON.stringify(ia.warnings) === JSON.stringify(ib.warnings) && ia.tracks.join() === ib.tracks.join() && JSON.stringify(ia.files) === JSON.stringify(ib.files) &&
+      ib.inline === true && ib.source === null && ia.source === "plans/dark-mode.md" && !("inline" in ia) &&
+      /^> Imported from plan \(inline text\) on \d{4}-\d\d-\d\d\.$/m.test(cRead(path.join(ib.dir, "requirements.md"))),
+      "1.16 C4: spec_import {text} = the file import — same requirements, design, tasks, classification (only the note differs: 'inline text'), mapping, warnings and tracks; inline: true, source: null (got " +
+      JSON.stringify([ia.ok ? ia.feature : ia.error, ib.ok ? ib.feature : ib.error, same]) + ")");
+    const call16 = async (args) => { const m = await rpc("tools/call", { name: "spec_import", arguments: args }); return { isError: m.result && m.result.isError, body: m.result ? JSON.parse(m.result.content[0].text) : m }; };
+    const ic = [await call16({ tool: "plan", text: planMd, name: "Dark Mode MCP", projectDir: pb }), await call16({ tool: "kiro", text: "# x", projectDir: pb }),
+      await call16({ tool: "plan", path: "plans/dark-mode.md", text: planMd, projectDir: pa }), await call16({ tool: "plan", projectDir: pb }),
+      await call16({ tool: "plan", text: 42, projectDir: pb }), await call16({ tool: "plan", text: "<!-- only a comment -->\n", projectDir: pb }),
+      await call16({ tool: "plan", path: "~/.claude/plans/x.md", projectDir: pb })];
+    ok(!ic[0].isError && ic[0].body.feature === "dark-mode-mcp" && ic[0].body.inline === true && ic.slice(1).every((r) => r.isError) &&
+      /`text` imports a single document — tool plan, execplan; 'kiro' reads a folder/.test(ic[1].body.error) && /either `path` or `text`, not both/.test(ic[2].body.error) &&
+      /Missing required argument\(s\): path/.test(ic[3].body.error) && /text/.test(ic[4].body.error) && /The plan text is empty/.test(ic[5].body.error) &&
+      /outside the project/.test(ic[6].body.error) && /pass its markdown as `text`/.test(ic[6].body.error) && !fs.existsSync(path.join(pb, ".specs", "x")),
+      "1.16 C4: spec_import {tool: 'plan', text} over MCP; text for a folder tool, path + text, neither, a non-string, an empty text are refused; a plan outside the project names the text way (got " +
+      JSON.stringify(ic.map((r) => (r.isError ? String(r.body.error).slice(0, 60) : r.body.feature))) + ")");
+    const plain = path.join(cRoot, "plain");
+    fs.mkdirSync(plain, { recursive: true });
+    const exit = { hook_event_name: "PostToolUse", tool_name: "ExitPlanMode", tool_input: { plan: planMd }, tool_response: {} };
+    const hp = [hook("plan-hook.js", { ...exit, cwd: sl }),
+      hook("plan-hook.js", { ...exit, tool_input: { plan: planMd, planFilePath: path.join(sl, "docs", "plan.md") }, cwd: sl }),
+      hook("plan-hook.js", { ...exit, cwd: sl2 }),
+      hook("plan-hook.js", { ...exit, cwd: plain }), hook("plan-hook.js", "{not json"), hook("plan-hook.js", { ...exit, tool_name: "Write", cwd: sl }),
+      hook("plan-hook.js", { ...exit, hook_event_name: "PreToolUse", cwd: sl }), hook("plan-hook.js", { ...exit, cwd: none }, { CLAUDE_PROJECT_DIR: sl })];
+    const hpj = hp.map(jsonOut);
+    const ctx = (j) => (j && j.hookSpecificOutput && j.hookSpecificOutput.hookEventName === "PostToolUse" ? j.hookSpecificOutput.additionalContext : "");
+    const hooksCfg16 = JSON.parse(cRead(path.join(root, "hooks", "hooks.json"))).hooks;
+    const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test(h.command))) || {};
+    ok(hp.every((h) => h.status === 0) && /\/spec-import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
+      /spec_import \{tool: "plan", path: "docs\/plan\.md"\}/.test(ctx(hpj[1])) && /o utilizador aprovou este plano/.test(ctx(hpj[2])) &&
+      hp.slice(3, 7).every((h) => h.stdout === "") && /spec_import/.test(ctx(hpj[7])) &&
+      planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"' && planCfg.hooks[0].timeout === 10 &&
+      !cRead(path.join(root, "hooks", "plan-hook.js")).includes(String.fromCharCode(0xfeff)),
+      "1.16 C4: hooks/plan-hook.js (PostToolUse, matcher ExitPlanMode, timeout 10) adds one line of context in a dev-spec project — the plan's text, or its path when the file is inside the project, in the project language — and is silent (exit 0) elsewhere, on a malformed payload, another tool or event (got " +
+      JSON.stringify(hp.map((h) => [h.status, h.stdout.slice(0, 50)])) + ")");
+    try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
 

@@ -35,7 +35,7 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 52 commands, the 3 agents, the
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 53 commands, the 3 agents, the
 hooks and the `spec-driven` MCP server (37 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
@@ -174,6 +174,39 @@ node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to dis
 
 `ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
 Both are guardrails, not a sandbox, and only Claude Code runs these hooks.
+
+**Plan-mode bridge (always on, one line of context).** A PostToolUse hook on `ExitPlanMode` (`hooks/plan-hook.js`): when
+you approve a plan in Claude Code's plan mode inside a dev-spec project, Claude is reminded that the plan can become a spec
+— `/spec-import` with the plan's text (`spec_import {tool: "plan", text}`, CLI `dev-spec import plan - < plan.md`), since
+plan mode keeps plans in `~/.claude/plans`, outside the project. It never imports by itself and is silent elsewhere.
+
+**Status line (opt-in).** `dev-spec statusline` prints one line for Claude Code's status bar — the feature with work under
+way, its tasks, unverified ticks and the next step (`◆ billing · 4/9 tasks · 1 unverified · next: approve tasks`), in the
+project language, and nothing outside a dev-spec project. `/spec-statusline` sets it up after you confirm; by hand:
+
+```powershell
+node "$plugin\cli\dev-spec.js" statusline --print-config   # prints the "statusLine" entry with this clone's absolute path
+```
+
+Put that entry in `~/.claude/settings.json` (every project) or a project's `.claude/settings.local.json` (the path is this
+machine's — keep it out of a committed `.claude/settings.json`). A plugin installed from a git marketplace lives in a
+versioned cache folder: run `/spec-statusline` again after an update. It reads only `.specs/` (no repo walk), exits 0 always
+and costs no tokens.
+
+**Plugin options (`userConfig`).** Claude Code asks for three optional settings when you enable the plugin (and lists them
+in `/config`); each is a fallback — a project's own `.specs/roadmap.json` always wins:
+
+| Option | Default | What it does |
+|---|---|---|
+| `default_lang` | empty (= en) | The language a NEW project gets when `/spec-init` or its first feature names none — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
+| `stop_check` | on | The end-of-turn evidence gate for every project that doesn't set `meta.stopCheck` itself (`init --stop-check on\|off` pins a project). |
+| `guard_default` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-guard` pins a project). |
+
+Precedence: the project's `roadmap.json` meta → `DEV_SPEC_<KEY>` in the environment (a terminal or another tool — e.g.
+`DEV_SPEC_DEFAULT_LANG=pt`, `DEV_SPEC_STOP_CHECK=off`, `DEV_SPEC_GUARD_DEFAULT=scope`) → the plugin option (Claude Code gives it
+to the hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`, and `mcp/servers.json` passes it to the MCP server) → the built-in default. An
+empty or invalid value changes nothing. The CLI that Claude runs through its Bash tool doesn't receive the plugin options
+(Claude Code exports them to hooks and servers only) — set `DEV_SPEC_<KEY>` for it if you rely on one.
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the

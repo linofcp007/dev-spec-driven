@@ -8,10 +8,10 @@
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
- * 37 tools, verify with an `initialize` + `tools/list` handshake.
+ * 37 tools, verify with an `initialize` + `tools/list` handshake; each carries `annotations` (TOOL_ANNOTATIONS).
  * Prompts: one per plugin command (commands/*.md) — slash commands in MCP clients without the skill
  * (SPEC_MCP_PROMPTS=off drops them). Resources: the project's spec artifacts, read-only, as specs:// URIs.
- * Both live in lib/prompts-resources.js.
+ * Completions (completion/complete): feature slugs and specs:// template variables. All live in lib/prompts-resources.js.
  */
 
 const { StringDecoder } = require("string_decoder"); // stdin framing (main): "\n"-delimited, never readline
@@ -210,18 +210,19 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source files are only read, never modified). `tool`: 'kiro' (.kiro/specs/<name>/ — requirements.md '### Requirement N' + numbered WHEN/THEN/SHALL criteria, design.md, tasks.md with _Requirements: 1.1, 2.3_), 'spec-kit' (specs/<nnn-name>/ — spec.md user stories + Given/When/Then acceptance scenarios + FR-xxx/SC-xxx, plan.md → design.md, tasks.md 'T001 [P] [US1] …'), 'openspec' (openspec/specs/<capability>/spec.md '### Requirement:' + '#### Scenario:', or a change folder openspec/changes/<id>/), 'plan' (a Markdown plan: Claude Code plan mode — saved under plansDirectory, default ~/.claude/plans, OUTSIDE the project: copy the file in first or point plansDirectory inside it — or a Cursor plan .cursor/plans/*.plan.md with name/overview/todos front matter: goals and acceptance-like bullets → US-1's criteria, checklists / Cursor todos / a Steps section's items → tasks keeping their state, the file paths a step names → _Implements:_, the rest → design.md), 'execplan' (a Codex ExecPlan per PLANS.md: Validation and Acceptance → criteria, Progress (state kept) + Concrete Steps → tasks with _Verify:_ when a step names a test/lint/build/curl command, Decision Log → design.md '## Decisions' D-1…, Purpose → summary, the living sections → design.md) or 'bmad' (BMAD-METHOD: docs/prd.md or a sharded docs/prd/ (v6: _bmad-output/planning-artifacts/) FR/NFR lines → FR-n / NFR-n, epic stories + story files docs/stories/*.md → US-1…US-n in story order, their ACs → US-n.AC-m, Tasks / Subtasks → tasks tagged [USn] with '(AC: 1, 3)' → _Requirements:_, architecture.md + Dev Notes → design.md; a single story file imports that story). A folder holding several plans is refused — name the file. Requirement/story N criterion/scenario M → US-N.AC-M; each scenario becomes ONE EARS criterion (WHEN … THE SYSTEM SHALL …) where possible, else its text is kept with [NEEDS CLARIFICATION]; Kiro _Requirements:_ references are rewritten; tasks are renumbered 1…K keeping checkbox state and [P]/[USn] tags; SC-/FR- IDs stay. Every generated artifact carries an 'Imported from <tool> <path> on <date>' note (the file itself for a plan / ExecPlan / single story). `path` must resolve inside the project. Tracks: `tracks`, else auto-classified from the imported requirements. Returns {feature, files, mapping: {oldId: newId}, warnings}.",
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source files are only read, never modified). `tool`: 'kiro' (.kiro/specs/<name>/ — requirements.md '### Requirement N' + numbered WHEN/THEN/SHALL criteria, design.md, tasks.md with _Requirements: 1.1, 2.3_), 'spec-kit' (specs/<nnn-name>/ — spec.md user stories + Given/When/Then acceptance scenarios + FR-xxx/SC-xxx, plan.md → design.md, tasks.md 'T001 [P] [US1] …'), 'openspec' (openspec/specs/<capability>/spec.md '### Requirement:' + '#### Scenario:', or a change folder openspec/changes/<id>/), 'plan' (a Markdown plan: Claude Code plan mode — saved under plansDirectory, default ~/.claude/plans, OUTSIDE the project: pass its markdown as `text` (or copy the file in / point plansDirectory inside it) — or a Cursor plan .cursor/plans/*.plan.md with name/overview/todos front matter: goals and acceptance-like bullets → US-1's criteria, checklists / Cursor todos / a Steps section's items → tasks keeping their state, the file paths a step names → _Implements:_, the rest → design.md), 'execplan' (a Codex ExecPlan per PLANS.md: Validation and Acceptance → criteria, Progress (state kept) + Concrete Steps → tasks with _Verify:_ when a step names a test/lint/build/curl command, Decision Log → design.md '## Decisions' D-1…, Purpose → summary, the living sections → design.md) or 'bmad' (BMAD-METHOD: docs/prd.md or a sharded docs/prd/ (v6: _bmad-output/planning-artifacts/) FR/NFR lines → FR-n / NFR-n, epic stories + story files docs/stories/*.md → US-1…US-n in story order, their ACs → US-n.AC-m, Tasks / Subtasks → tasks tagged [USn] with '(AC: 1, 3)' → _Requirements:_, architecture.md + Dev Notes → design.md; a single story file imports that story). A folder holding several plans is refused — name the file. Requirement/story N criterion/scenario M → US-N.AC-M; each scenario becomes ONE EARS criterion (WHEN … THE SYSTEM SHALL …) where possible, else its text is kept with [NEEDS CLARIFICATION]; Kiro _Requirements:_ references are rewritten; tasks are renumbered 1…K keeping checkbox state and [P]/[USn] tags; SC-/FR- IDs stay. Every generated artifact carries an 'Imported from <tool> <path> on <date>' note (the file itself for a plan / ExecPlan / single story). `path` must resolve inside the project; `text` (plan / execplan only, instead of path) is the document itself — same mapping and guarantees, the note says (inline text), the result has inline: true and source: null. Tracks: `tracks`, else auto-classified from the imported requirements. Returns {feature, files, mapping: {oldId: newId}, warnings}.",
     inputSchema: {
       type: "object",
       properties: {
         tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad"], description: "The format of the source spec." },
-        path: { type: "string", description: "The spec's folder (or a file inside it; for a plan / ExecPlan the file itself when its folder holds several), relative to the project root or absolute — it must be inside the project." },
+        path: { type: "string", description: "The spec's folder (or a file inside it; for a plan / ExecPlan the file itself when its folder holds several), relative to the project root or absolute — it must be inside the project. Required unless `text` is given." },
+        text: { type: "string", description: "tool 'plan' / 'execplan' only, instead of `path`: the document's markdown itself (1.16 — the plan-mode bridge: Claude Code keeps an approved plan in plansDirectory, ~/.claude/plans by default, OUTSIDE the project — pass the plan's text). Same mapping and guarantees as the file; the note reads 'Imported from plan (inline text)', `source` is null and `inline` true. CLI: dev-spec import plan - (stdin) or --text \"…\"." },
         name: { type: "string", description: "Feature name (default: the source folder's name, spec-kit's number prefix dropped; a plan / ExecPlan: its title, else its file name; BMAD: the PRD's title, else the folder — or the story's title for one story file). An existing feature with that slug is an error." },
         tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy, or a project track pack in .specs/tracks/<name>/ (spec_tracks) ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
         lang: { type: "string", enum: LANG_ENUM, description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
         projectDir: { type: "string" },
       },
-      required: ["tool", "path"],
+      required: ["tool"], // + `path` or `text` — the engine says which is missing (a schema can't express "one of")
     },
   },
 
@@ -417,6 +418,32 @@ const TOOLS = [
   },
 ];
 
+// --- Tool annotations (MCP 2025-03-26+) -------------------------------------
+// Hints for clients, one entry per tool (mcp/test.js requires every tool listed here) — never a security boundary: the engine
+// enforces its own rules whatever a client makes of them. readOnlyHint: true only when NO argument can make the tool write
+// (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
+// spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
+// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint: only spec_feature
+// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns. idempotentHint: a second
+// identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a record:
+// false). openWorldHint: false everywhere — local files only, no network, no command, no git.
+const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
+const writes = (idempotent, destructive) => Object.freeze({ readOnlyHint: false, destructiveHint: !!destructive, idempotentHint: idempotent, openWorldHint: false });
+const TOOL_ANNOTATIONS = {
+  spec_init: writes(true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
+  spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false),
+  ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false), steering_scaffold: writes(true),
+  spec_roadmap: writes(true), spec_backlog: writes(true), spec_depend: writes(true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
+  spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true), spec_feature: writes(true, true),
+  spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true), spec_metrics: writes(true),
+  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true),
+  spec_export: writes(true), spec_changelog: writes(true), spec_decide: writes(false),
+  spec_stop_check: READ_ONLY, spec_log: READ_ONLY,
+};
+// A tool missing from the table gets the protocol's own defaults spelled out (may write, may destroy, not idempotent) — the
+// test fails on it anyway.
+for (const t of TOOLS) t.annotations = Object.prototype.hasOwnProperty.call(TOOL_ANNOTATIONS, t.name) ? TOOL_ANNOTATIONS[t.name] : writes(false, true);
+
 // --- Tool dispatch ---------------------------------------------------------
 
 function runTool(name, args) {
@@ -485,8 +512,8 @@ function runTool(name, args) {
     case "spec_feature":
       return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true, flow: args.flow }); // flow (C3): action 'flow'
 
-    case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`)
-      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang });
+    case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`); text: 1.16 C4 (`import plan -`)
+      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text });
 
     case "spec_append_tasks":
       return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
@@ -551,10 +578,16 @@ function error(id, code, message, data) {
 
 // Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
 // error, not a folder called "undefined".
+// Groups of arguments of which ONE is required — a schema's `required` can't say "path or text" (spec_import, 1.16 C4): none
+// given → the group's first name is reported missing, as a required key would be.
+const REQUIRED_ONE_OF = { spec_import: [["path", "text"]] };
 function missingArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
   if (!tool || !tool.inputSchema || !Array.isArray(tool.inputSchema.required)) return [];
-  return tool.inputSchema.required.filter((k) => args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim()));
+  const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim()));
+  const missing = tool.inputSchema.required.filter((k) => !given(k));
+  for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.some(given)) missing.push(group[0]);
+  return missing;
 }
 
 // Argument TYPES, also straight from the inputSchema, checked before dispatch. A wrong type used to reach the
@@ -710,6 +743,11 @@ function handleContent(id, method, params) {
       if (!r.ok) return error(id, r.reason === "not-found" ? -32002 : -32602, r.error, { uri: typeof p.uri === "string" ? p.uri : null });
       return result(id, { contents: r.contents });
     }
+    case "completion/complete": { // 1.16 C3: feature slugs, artifact / steering names — an unknown ref or argument is Invalid params
+      const r = content.complete(pdir, p, { lang, prompts: PROMPTS_ON });
+      if (!r.ok) return error(id, -32602, r.error);
+      return result(id, { completion: r.completion });
+    }
     default:
       return error(id, -32601, "Method not found: " + method);
   }
@@ -741,9 +779,10 @@ function handle(msg) {
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
+          // completions (1.16 C3): completion/complete for the prompts' feature argument and the specs:// template variables.
           capabilities: PROMPTS_ON
-            ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false } }
-            : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false } },
+            ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
+            : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
           instructions:
             "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking. ears_validate, trace_check and spec_doctor enforce quality gates. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
             (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
@@ -755,6 +794,7 @@ function handle(msg) {
       case "tools/list":
         return result(id, { tools: TOOLS });
       case "prompts/list": case "prompts/get": case "resources/list": case "resources/templates/list": case "resources/read":
+      case "completion/complete":
         return handleContent(id, method, params);
       case "tools/call": {
         const toolName = TYPE_CHECK.object(params) ? params.name : undefined;

@@ -3198,6 +3198,56 @@ const MSG = {
       },
     },
 
+    // 1.16 C — Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
+    // spec_import {text} and the MCP completion/complete errors. Phase names and step codes stay English-stable.
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tasks`,
+        unverified: (n) => `${n} unverified`,
+        next: (step) => `next: ${step}`,
+        none: "◆ dev-spec · no features yet — /spec",
+        steps: {
+          "re-review": (s) => `re-review ${s.files.join(", ")}`,
+          fill: (s) => `fill ${s.file}`,
+          fix: (s) => `fix the ${s.phase} gate`,
+          approve: (s) => `approve ${s.phase}`,
+          tests: () => "write the tests (Phase 4)",
+          tasks: () => "break it into tasks",
+          implement: (s) => `task ${s.task}`,
+          blocked: () => "unblock the tasks (_Depends:_)",
+          verify: (s) => `verify task ${s.task}`,
+          decide: () => "write the decision",
+          finish: () => "/spec-finish",
+          finished: () => "finished ✓",
+        },
+        config: {
+          head: "Status line — add this to ~/.claude/settings.json (every project) or to a project's .claude/settings.json:",
+          after: "It prints one line — the most active feature, its tasks, unverified ticks and the next step — and nothing outside a dev-spec project.",
+          cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-statusline again — the old copy is removed 14 days after an update.",
+          tryIt: (cmd) => `Try it: echo '{"cwd": "<your project>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: \"plan\", text: <the approved plan's markdown>} (CLI: dev-spec import plan - < plan.md). The plan file in ~/.claude/plans is outside the project, so pass its text. Skip it for a quick change; import only with the user's OK.",
+        byPath: (rel) => `dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Skip it for a quick change; import only with the user's OK.`,
+      },
+      importText: {
+        label: "(inline text)",
+        note: (tool, date) => `> Imported from ${tool} (inline text) on ${date}.`,
+        orText: "Or pass its markdown as `text` instead of `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < file.md).",
+        textOnly: (tool, list) => `\`text\` imports a single document — tool ${list}; '${tool}' reads a folder: pass its \`path\`.`,
+        pathAndText: "Pass either `path` or `text`, not both.",
+        empty: (tool) => `The ${tool} text is empty — nothing to import.`,
+      },
+      completion: {
+        badRequest: 'completion/complete needs `ref` ({type: "ref/prompt", name} or {type: "ref/resource", uri}) and `argument` {name, value} (strings).',
+        promptsOff: "This server serves no prompts (SPEC_MCP_PROMPTS=off) — nothing to complete.",
+        unknownTemplate: (uri, list) => `Unknown resource template '${uri}' — one of: ${list}.`,
+        unknownArgument: (name, list) => `Unknown argument '${name}' — one of: ${list}.`,
+      },
+    },
+
     // +sec / +privacy (1.14): what their tools report beyond the shared track messages.
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
@@ -4854,6 +4904,55 @@ _Outcome: [go | no-go | pivot]_
       },
     },
 
+    // 1.16 C — integração com o Claude Code (status line, ponte do plan mode, spec_import {text}, completion/complete).
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tarefas`,
+        unverified: (n) => `${n} por verificar`,
+        next: (step) => `a seguir: ${step}`,
+        none: "◆ dev-spec · ainda sem features — /spec",
+        steps: {
+          "re-review": (s) => `rever ${s.files.join(", ")}`,
+          fill: (s) => `preencher ${s.file}`,
+          fix: (s) => `corrigir o gate ${s.phase}`,
+          approve: (s) => `aprovar ${s.phase}`,
+          tests: () => "escrever os testes (Fase 4)",
+          tasks: () => "dividir em tarefas",
+          implement: (s) => `tarefa ${s.task}`,
+          blocked: () => "desbloquear as tarefas (_Depends:_)",
+          verify: (s) => `verificar a tarefa ${s.task}`,
+          decide: () => "escrever a decisão",
+          finish: () => "/spec-finish",
+          finished: () => "concluída ✓",
+        },
+        config: {
+          head: "Status line — acrescenta isto ao ~/.claude/settings.json (todos os projetos) ou ao .claude/settings.json de um projeto:",
+          after: "Resultado: uma linha — a feature mais ativa, as suas tarefas, as tarefas por verificar e o próximo passo — e nada fora de um projeto dev-spec.",
+          cacheNote: "Este caminho é uma cópia com versão na cache de plugins do Claude Code (…/plugins/cache/…): depois de atualizar o plugin, volta a correr /spec-statusline — a cópia antiga é apagada 14 dias após uma atualização.",
+          tryIt: (cmd) => `Experimenta: echo '{"cwd": "<pasta do projeto>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: \"plan\", text: <o markdown do plano aprovado>} (CLI: dev-spec import plan - < plan.md). O plano gravado em ~/.claude/plans está fora do projeto: importar o texto. Numa alteração rápida não é preciso; importar só com o OK do utilizador.",
+        byPath: (rel) => `dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Numa alteração rápida não é preciso; importar só com o OK do utilizador.`,
+      },
+      importText: {
+        label: "(texto)",
+        note: (tool, date) => `> Importado de ${tool} (texto) em ${date}.`,
+        orText: "Ou passa o markdown como `text` em vez de `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < plano.md).",
+        textOnly: (tool, list) => `\`text\` importa um único documento — ferramenta ${list}; '${tool}' lê uma pasta: indica o \`path\`.`,
+        pathAndText: "Indica `path` ou `text`, não os dois.",
+        empty: (tool) => `O texto ${tool} está vazio — nada para importar.`,
+      },
+      completion: {
+        badRequest: 'completion/complete precisa de `ref` ({type: "ref/prompt", name} ou {type: "ref/resource", uri}) e de `argument` {name, value} (texto).',
+        promptsOff: "Este servidor não serve prompts (SPEC_MCP_PROMPTS=off) — nada para completar.",
+        unknownTemplate: (uri, list) => `Template de recurso desconhecido '${uri}' — um de: ${list}.`,
+        unknownArgument: (name, list) => `Argumento desconhecido '${name}' — um de: ${list}.`,
+      },
+    },
+
     secPrivacy: {
       sectionNames: {
         "Threat Model": "Modelo de Ameaças", "Security Requirements": "Requisitos de Segurança", "Authentication & Authorization": "Autenticação e Autorização",
@@ -6471,6 +6570,55 @@ _Outcome: [go | no-go | pivot]_
         unknownArtifact: (a, list) => `Artefacto desconocido '${a}' — uno de: ${list}.`,
         badSteering: (file) => `Nombre de archivo de steering no válido '${file}' — un archivo .md directamente en .specs/steering/.`,
         notFound: (uri, detail) => `Recurso no encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
+
+    // 1.16 C — integración con Claude Code (status line, puente del plan mode, spec_import {text}, completion/complete).
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tareas`,
+        unverified: (n) => `${n} sin verificar`,
+        next: (step) => `siguiente: ${step}`,
+        none: "◆ dev-spec · aún no hay funciones — /spec",
+        steps: {
+          "re-review": (s) => `revisar ${s.files.join(", ")}`,
+          fill: (s) => `completar ${s.file}`,
+          fix: (s) => `corregir el gate ${s.phase}`,
+          approve: (s) => `aprobar ${s.phase}`,
+          tests: () => "escribir los tests (Fase 4)",
+          tasks: () => "dividir en tareas",
+          implement: (s) => `tarea ${s.task}`,
+          blocked: () => "desbloquear las tareas (_Depends:_)",
+          verify: (s) => `verificar la tarea ${s.task}`,
+          decide: () => "escribir la decisión",
+          finish: () => "/spec-finish",
+          finished: () => "terminada ✓",
+        },
+        config: {
+          head: "Status line — añade esto a ~/.claude/settings.json (todos los proyectos) o al .claude/settings.json de un proyecto:",
+          after: "Muestra una línea — la función más activa, sus tareas, las tareas sin verificar y el siguiente paso — y nada fuera de un proyecto dev-spec.",
+          cacheNote: "Esta ruta es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): tras actualizar el plugin, vuelve a ejecutar /spec-statusline — la copia antigua se borra 14 días después de una actualización.",
+          tryIt: (cmd) => `Pruébalo: echo '{"cwd": "<tu proyecto>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: \"plan\", text: <el markdown del plan aprobado>} (CLI: dev-spec import plan - < plan.md). El fichero del plan en ~/.claude/plans está fuera del proyecto, así que pasa su texto. Para un cambio rápido, omítelo; importa solo con el OK del usuario.",
+        byPath: (rel) => `dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Para un cambio rápido, omítelo; importa solo con el OK del usuario.`,
+      },
+      importText: {
+        label: "(texto)",
+        note: (tool, date) => `> Importado de ${tool} (texto) el ${date}.`,
+        orText: "O pasa su markdown como `text` en lugar de `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < fichero.md).",
+        textOnly: (tool, list) => `\`text\` importa un único documento — herramienta ${list}; '${tool}' lee una carpeta: indica su \`path\`.`,
+        pathAndText: "Indica `path` o `text`, no ambos.",
+        empty: (tool) => `El texto ${tool} está vacío — nada que importar.`,
+      },
+      completion: {
+        badRequest: 'completion/complete necesita `ref` ({type: "ref/prompt", name} o {type: "ref/resource", uri}) y `argument` {name, value} (texto).',
+        promptsOff: "Este servidor no sirve prompts (SPEC_MCP_PROMPTS=off) — nada que completar.",
+        unknownTemplate: (uri, list) => `Plantilla de recurso desconocida '${uri}' — una de: ${list}.`,
+        unknownArgument: (name, list) => `Argumento desconocido '${name}' — uno de: ${list}.`,
       },
     },
 
