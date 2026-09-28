@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.14.0] — 2026-09-26
+## [1.14.0] — 2026-09-28
 
 Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project
 templates, a stakeholder export and release notes, a requirements traceability matrix, approvals by role and a
