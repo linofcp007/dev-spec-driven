@@ -57,6 +57,7 @@ dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield] [
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
 dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan or BMAD docs → a NEW feature (IDs remapped)
+dev-spec import <plan|execplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -92,6 +93,7 @@ dev-spec evals <feature> [--dry-run]           # run local eval harness (+ai; yo
 dev-spec mcp-config [client]                   # print MCP config for your tool
 dev-spec rules <cursor|windsurf|copilot|gemini|agents>   # print that tool's rule file with this clone's absolute paths
 dev-spec prompts [name] [--args "…"]           # the plugin's commands as MCP prompts: list them, or print one rendered
+dev-spec statusline [--print-config]           # one status line (Claude Code's statusLine command reads its session JSON on stdin); --print-config: the settings entry
 ```
 
 ## The pipeline (Spec mode)
@@ -215,7 +217,8 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
-  inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — copy it in first).
+  inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — pass its text instead:
+  `dev-spec import plan - < plan.md`, or `--text "…"`).
 - **Spikes.** `dev-spec spike "<name>" --question "…" --timebox 3d` scaffolds `spike.md` + investigation tasks, with no
   requirements / design gates: investigate, then write the Decision (`_Outcome: go | no-go | pivot_` + the rationale).
   Go → spec the real feature; no-go → archive the spike. Prototype code stays outside `.specs/`.

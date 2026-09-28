@@ -6,7 +6,8 @@
  *
  * Wired from hooks/hooks.json as PreToolUse (Write|Edit|MultiEdit|NotebookEdit). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
- * `dev-spec init --guard on`). When on, a code edit outside `.specs/` while no feature has approved, unfinished
+ * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's plugin option guard_default decides). When on, a
+ * code edit outside `.specs/` while no feature has approved, unfinished
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
  * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
  * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
@@ -31,11 +32,23 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
+// The user's GUARD_DEFAULT plugin option (1.16 — plugin.json userConfig guard_default, exported by Claude Code as
+// CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT; DEV_SPEC_GUARD_DEFAULT wins): on / scope turns the guard on for a project whose
+// roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads the same variables.
+function userGuardDefault() {
+  for (const n of ["DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"]) {
+    const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
+    if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:on|true|yes|1|scope)$/i.test(v);
+  }
+  return false;
+}
 // Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project.
 function guardOn(dir) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
-    return !!j && typeof j === "object" && !Array.isArray(j) && !!j.meta && typeof j.meta === "object" && (j.meta.guard === true || j.meta.guard === "scope");
+    if (!j || typeof j !== "object" || Array.isArray(j)) return false;
+    const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
+    return meta.guard === true || meta.guard === "scope" || (meta.guard === undefined && userGuardDefault());
   } catch {
     return false; // missing, unreadable or broken → the guard stays out of the way
   }

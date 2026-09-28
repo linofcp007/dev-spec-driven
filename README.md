@@ -57,7 +57,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
 | `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase, `evidence` reported · observed (only runs the harness saw verify), `approvalGuard` off · ask · deny (an agent's approval asks you / is refused) |
 | `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
-| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
+| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
@@ -335,7 +335,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (52)
+### Commands (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -346,6 +346,7 @@ New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-imp
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. Unreleased (1.15): `/spec-tracks`.
+New in 1.16: `/spec-statusline`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
@@ -356,13 +357,13 @@ prints the raw result, and `help` lists every flag:
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
 ```
 
 ### Why no GitHub Actions
@@ -421,7 +422,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
 | `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase, `evidence` reported · observed (só verificam as execuções que o harness viu), `approvalGuard` off · ask · deny (a aprovação de um agente pergunta-te / é recusada) |
 | `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
-| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
+| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
@@ -713,7 +714,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (52)
+### Comandos (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -724,6 +725,7 @@ Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-i
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. Por lançar (1.15): `/spec-tracks`.
+Novos na 1.16: `/spec-statusline`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
@@ -734,13 +736,13 @@ mostra o resultado em bruto e `help` lista todas as opções:
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
 ```
 
 ### Porque não há GitHub Actions
@@ -799,7 +801,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
 | `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
-| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
+| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
@@ -1095,7 +1097,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (52)
+### Comandos (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -1106,6 +1108,7 @@ Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/sp
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. Sin publicar (1.15): `/spec-tracks`.
+Nuevos en la 1.16: `/spec-statusline`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
@@ -1116,13 +1119,13 @@ El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `de
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
 ```
 
 ### Por qué no hay GitHub Actions
@@ -1158,7 +1161,7 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 52 slash commands (trilingual descriptions; also the MCP prompts)
+├── commands/                         ← 53 slash commands (trilingual descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)

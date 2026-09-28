@@ -28,5 +28,25 @@
   "license": "MIT",
   "skills": "./skills/",
   "commands": "./commands/",
-  "mcpServers": "./mcp/servers.json"
+  "mcpServers": "./mcp/servers.json",
+  "userConfig": {
+    "default_lang": {
+      "type": "string",
+      "title": "Default language for new projects",
+      "description": "en, pt (European Portuguese), pt-BR or es — the language a NEW dev-spec project gets when spec_init / its first spec_create names none (seeded into .specs/roadmap.json meta.lang). Empty = en. A project that has a language keeps it.",
+      "default": ""
+    },
+    "stop_check": {
+      "type": "boolean",
+      "title": "End-of-turn evidence gate",
+      "description": "Send a turn back when it claims done while recently ticked tasks lack verification evidence. Off here switches it off in every project that does not set it itself (roadmap.json meta.stopCheck wins).",
+      "default": true
+    },
+    "guard_default": {
+      "type": "string",
+      "title": "Guard mode default",
+      "description": "off, on or scope — the guard mode of a project whose roadmap.json leaves meta.guard unset (on: code edits ask while no feature has approved tasks; scope: also a code file no open task plans). A project setting (/spec-guard) wins.",
+      "default": "off"
+    }
+  }
 }

@@ -74,16 +74,23 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 52 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
-SubagentStop evidence gate, the Bash observed-evidence log, plus the opt-in PreToolUse guard and approval guard) and the
-MCP server all load:
+Native — it's a plugin. Skills, the 53 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
+SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
+guard and approval guard) and the MCP server all load:
 
 ```bash
 claude --plugin-dir "<PLUGIN>"
 ```
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
-See [INSTALL.md](./INSTALL.md) for the persistent marketplace install.
+See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, the plugin options (`default_lang`, `stop_check`,
+`guard_default` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
+`node "<PLUGIN>/cli/dev-spec.js" statusline --print-config` for the `settings.json` entry).
+
+The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /
+`{artifact}` / `{file}` variables of the `specs://` templates) and marks every tool with MCP `annotations`
+(`readOnlyHint` for the pure reads, `destructiveHint` only on `spec_feature`, `openWorldHint: false` everywhere) — any MCP
+client can use both.
 
 **Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
 review / branch-finishing skills overlap this plugin. `/spec-superpowers` writes (after you confirm) a marked

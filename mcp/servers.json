@@ -6,7 +6,10 @@
       "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {
         "SPEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
-        "SPEC_MCP_PROMPTS": "off"
+        "SPEC_MCP_PROMPTS": "off",
+        "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG": "${user_config.default_lang}",
+        "CLAUDE_PLUGIN_OPTION_STOP_CHECK": "${user_config.stop_check}",
+        "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT": "${user_config.guard_default}"
       }
     }
   }
