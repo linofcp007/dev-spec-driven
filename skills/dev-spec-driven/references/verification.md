@@ -66,11 +66,19 @@ ask the user to run the test and paste the red output — don't write the fix on
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
   task, where the failing run is the proof and a passing one is refused). `--shell bash` (or
-  `DEV_SPEC_SHELL`) picks the shell. On Windows the default shell is cmd.exe, which has no single quotes and never
+  `DEV_SPEC_SHELL`) picks the shell. On Windows `bash` means **Git Bash** (found through `git --exec-path`,
+  `%ProgramFiles%\Git` or a non-WSL `bash.exe` on PATH); WSL's launcher (the `bash.exe` / `wsl.exe` in System32 or
+  WindowsApps) runs the command inside a Linux distribution, so it is refused before anything runs — as is `--shell bash`
+  with no Git Bash installed (pass the full path of a `bash.exe` instead). On Windows the default shell is cmd.exe,
+  which has no single quotes and never
   expands `$VAR` — `node -e 'process.exit(1)'` exits 0 there — so a `_Verify:_` in POSIX syntax is refused before
   anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. A failed run
   suggests `--shell bash` only when cmd.exe itself could not run the line (an unknown command, its syntax error); a
-  check that ran and failed means fixing the code. Or report it by hand: `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
+  check that ran and failed means fixing the code. **A run that could not happen records nothing:** the shell could not
+  be started, the command was killed by a signal, its output passed 64 MB, `--timeout <seconds>` expired, or WSL's relay
+  answered — the task stays open with a `couldNotRun` code (`shell-not-started` · `run-error` · `signal` ·
+  `output-too-large` · `timeout` · `wsl`), never a failed run on record. Or report it by hand:
+  `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
 - **Briefs** (`spec_task_brief`) carry the `_Verify:_` command (and whether its run must fail) and require the
   implementer to paste the command, exit code and output tail in the report; the reviewer checks it is there.
 
@@ -98,7 +106,12 @@ green (the fix), not to this one.
 - Once the red run is on record, a later passing run of the same `_Verify:_` (the fix made the test green) is fine:
   the red run stays the proof.
 - Exit **126 / 127 / 9009** means the command could not run at all (not executable / not found) — no red test; it is
-  refused like a failed run. Under cmd.exe, a line cmd.exe could not run is refused by `done --run` with nothing recorded.
+  refused like a failed run (`couldNotRun: "exit-code"`). So is a failing run whose output shows the test never ran — a
+  missing test file, module or script, nothing collected (node "Could not find", "Cannot find module", python "can't open
+  file", pytest "no tests ran", jest "No tests found", npm "Missing script"…): `spec_complete_task` refuses a run whose
+  `summary` shows it (`couldNotRun: "output"`), `dev-spec done --run` refuses it with nothing recorded, and an older
+  record of that kind is no red proof. Whenever cmd.exe is the shell (the Windows default, or `--shell cmd`), a line
+  cmd.exe itself could not run is refused by `done --run` with nothing recorded.
 - A red-phase task that carries a must-pass `_Verify:_` and no `_Expect: fail_` gets `redPhaseVerify: true` and a note
   saying to mark it `_Expect: fail_` (or move the command to the task that makes it green).
 - `spec_doctor` warns **`red-green`** (+tdd): T-IDs that done tasks make green (`_Makes green:_`) with no recorded red
@@ -133,13 +146,16 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
   `roadmap.json → meta.checks`; the other checks are kept.
 - Every task brief lists them in its definition of done (`projectChecks`).
 - Once they are set, **`spec_finish` needs a passing recorded run of each since the feature's last task activity**
-  (the last tick or task run) — blocker **`suite-evidence`**, with `suiteChecks` [{name, command, status}] where status
-  is `pass` · `no-run` · `failed` · `changed` (the configured command changed since the run) · `before-last-tick`.
-  Doctor warns `suite-evidence` once every task is done; the execution sign-off refuses it too.
+  (the last tick or task run), on the code as it is now — blocker **`suite-evidence`**, with `suiteChecks`
+  [{name, command, status}] where status is `pass` · `no-run` · `failed` · `changed` (the configured command changed
+  since the run) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
+  changed since the run; each recorded run is stamped with a hash of them). Doctor warns `suite-evidence` once every
+  task is done; the execution sign-off refuses it too, and `/next-action`'s finish step says how to run and record them.
 - Record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` (each `name` a `meta.checks` name,
   run from the project root — recorded in `.state.json → finishChecks` before the readiness is computed, so one call
   can make the feature ready; a failed run is recorded and stays a blocker), or let the CLI run them:
-  `dev-spec finish <feature> --run [--shell bash]`.
+  `dev-spec finish <feature> --run [--shell bash] [--timeout <seconds>]` — a check that could not run (no shell, a
+  signal, the timeout) records nothing.
 
 Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite" among the fresh checks to confirm.
 
@@ -166,7 +182,8 @@ clone of someone else's repo doesn't trip it — and the reason never hands you 
 
 - **SubagentStop** (the `spec-implementer` agent only): its DONE is checked against its report — the report file
   `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each runnable `_Verify:_` command of the
-  task and an exit code. BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
+  task and the exit code it needs — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task.
+  BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
   (`references/subagent-execution.md`).
 - It never sends the same stop back twice in a row, stays silent in a project without a dev-spec `.specs/`, and never
   blocks on its own error.

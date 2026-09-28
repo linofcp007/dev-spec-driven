@@ -11,8 +11,8 @@ Call the `spec_templates` MCP tool (CLI `dev-spec templates [list|init|check] [a
 its `lines`.
 
 - **`list`** (default) — for each artifact, whether new features get the built-in template or the project's
-  (`.specs/templates/<artifact>.md`; `.specs/templates/<lang>/<artifact>.md` wins for features in that language), and
-  any file there that is not a template name (ignored).
+  (`.specs/templates/<artifact>.md`; `.specs/templates/<lang>/<artifact>.md` wins for features in that language — a
+  pt-BR feature without a `pt-BR/` file reads `pt/` first), and any file there that is not a template name (ignored).
 - **`init`** — copies the built-in template(s) into `.specs/templates/` (one `artifact`, or all) with the variables in
   place, so the team edits them there. `lang` given → `.specs/templates/<lang>/`. It never overwrites a file. Artifacts:
   classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist,

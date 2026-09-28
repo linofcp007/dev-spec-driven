@@ -157,8 +157,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   test rows) to delete or point at the criterion that replaces it. It never edits your requirements or design.
 - **`/spec-converge`** (`spec_append_tasks`) — when implementation drifted from the plan or a review
   found follow-up work, append new tasks (numbered after the last, under `Phase: Convergence`) with
-  their `_Requirements:_`, `_Implements:_` and `_Verify:_`. Unknown AC IDs are refused, existing tasks are
-  never touched, and an approved task list asks for re-approval.
+  their `_Requirements:_`, `_Implements:_` and `_Verify:_` (and `_Makes green:_`, `_Expect: fail_`, `_Size:_` when
+  given). Unknown AC IDs — or T-IDs the test plan doesn't plan — are refused, existing tasks are never touched, and
+  an approved task list asks for re-approval.
 
 ### Living catalog, drift and restore
 
@@ -176,10 +177,11 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 - **`/spec-guard`** — opt-in guard mode (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   While it is on, a Claude Code PreToolUse hook **asks before** a Write/Edit on a code file outside
-  `.specs/` when no feature has approved, unfinished tasks; `scope` also asks, once tasks are approved, for a
-  code file no open task names in `_Implements:_` (test files excepted), naming the likely task. It is silent
-  when off and never blocks on its own errors. Other tools don't run Claude Code hooks, so there the guard does
-  nothing.
+  `.specs/` when no feature has approved, unfinished tasks — except a test file while a feature's test plan is approved
+  (Phase 4 writes the failing tests first) and any code while an active spike exists (its prototype); `scope` also
+  asks, once tasks are approved, for a code file no open task names in `_Implements:_` (test files excepted), naming
+  the likely task. It is silent when off and never blocks on its own errors. Other tools don't run Claude Code
+  hooks, so there the guard does nothing.
 - **Scoped steering** — steering files take Kiro-compatible front matter: `inclusion: always`,
   `fileMatch` (with `fileMatchPattern: "src/api/**"`) or `manual`. `steering_scaffold` creates custom
   files such as `api-conventions.md`, and each task brief includes the files whose pattern matches the
@@ -208,10 +210,10 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 - **Six tracks** — `+sec` and `+privacy` compose with the others: their `[SEC]` / `[PRIVACY]` criteria, mandatory
   design sections, tasks, test rows and steering (`security.md`, `privacy.md`). Track markers are case-sensitive.
-- **Project templates** (`/spec-templates`) — `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`) replaces a
-  built-in scaffold, with `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` filled in; the active
-  tracks still get their sections, and an untouched custom scaffold still reads as a template to the gates. `check`
-  validates them.
+- **Project templates** (`/spec-templates`) — `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`; pt-BR
+  falls back to `pt/`) replaces a built-in scaffold, with `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}`
+  `{{date}}` filled in; the active tracks still get their sections, and an untouched custom scaffold still reads as a
+  template to the gates. `check` validates them.
 - **For stakeholders** — `/spec-export` writes one offline, printable HTML (or markdown) document of a feature or of the
   project; `/spec-changelog` builds release notes (Added / Changed / Fixed) from what shipped.
 - **Team governance** — `init --roles requirements=product,design=tech+security`: a listed phase is approved once every
@@ -488,8 +490,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   de teste) para apagar ou apontar para o critério que o substitui. Nunca edita os teus requisitos nem o design.
 - **`/spec-converge`** (`spec_append_tasks`) — quando a implementação se afastou do plano ou uma revisão
   encontrou trabalho de seguimento, acrescenta tarefas novas (numeradas depois da última, em
-  `Fase: Convergência`) com `_Requirements:_`, `_Implements:_` e `_Verify:_`. IDs de AC desconhecidos são
-  recusados, as tarefas existentes nunca mudam e uma lista de tarefas já aprovada pede nova aprovação.
+  `Fase: Convergência`) com `_Requirements:_`, `_Implements:_` e `_Verify:_` (e `_Makes green:_`, `_Expect: fail_`,
+  `_Size:_` quando indicados). IDs de AC desconhecidos — ou T-IDs que o plano de testes não prevê — são recusados, as
+  tarefas existentes nunca mudam e uma lista de tarefas já aprovada pede nova aprovação.
 
 ### Catálogo vivo, drift e restauro
 
@@ -507,7 +510,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 
 - **`/spec-guard`** — modo guarda opcional (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   Enquanto está ligado, um hook PreToolUse do Claude Code **pergunta antes** de um Write/Edit num ficheiro de
-  código fora de `.specs/` quando nenhuma funcionalidade tem tarefas aprovadas por terminar; `scope` pergunta
+  código fora de `.specs/` quando nenhuma funcionalidade tem tarefas aprovadas por terminar — exceto um ficheiro de
+  teste enquanto o plano de testes de uma funcionalidade está aprovado (a Fase 4 escreve primeiro os testes a falhar) e
+  qualquer código enquanto existe um spike ativo (o seu protótipo); `scope` pergunta
   também, depois de as tarefas estarem aprovadas, por um ficheiro de código que nenhuma tarefa aberta indica em
   `_Implements:_` (os ficheiros de teste ficam de fora) e diz qual a tarefa provável. Fica em silêncio
   quando desligado e nunca bloqueia por erros próprios. As outras ferramentas não correm hooks do Claude
@@ -543,10 +548,10 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Seis tracks** — `+sec` e `+privacy` combinam-se com os outros: critérios `[SEC]` / `[PRIVACY]`, secções obrigatórias
   do design, tarefas, linhas de teste e steering (`security.md`, `privacy.md`). Os marcadores dos tracks distinguem
   maiúsculas de minúsculas.
-- **Templates do projeto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (ou `<lang>/<artefacto>.md`)
-  substitui um scaffold de origem, com `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}`
-  preenchidos; os tracks ativos continuam a receber as suas secções, e um scaffold personalizado por tocar continua a
-  ler-se como template nos gates. O `check` valida-os.
+- **Templates do projeto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (ou `<lang>/<artefacto>.md`;
+  o pt-BR recorre a `pt/` quando não tem o seu) substitui um scaffold de origem, com `{{name}}` `{{slug}}`
+  `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` preenchidos; os tracks ativos continuam a receber as suas secções, e
+  um scaffold personalizado por tocar continua a ler-se como template nos gates. O `check` valida-os.
 - **Para stakeholders** — o `/spec-export` escreve um documento HTML (ou markdown) offline e imprimível de uma
   funcionalidade ou do projeto; o `/spec-changelog` constrói notas de versão (Added / Changed / Fixed) a partir do que
   foi entregue.
@@ -832,7 +837,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   requisitos ni el diseño.
 - **`/spec-converge`** (`spec_append_tasks`) — cuando la implementación se ha desviado del plan o una revisión
   ha encontrado trabajo de seguimiento, añade tareas nuevas (numeradas tras la última, en
-  `Fase: Convergencia`) con `_Requirements:_`, `_Implements:_` y `_Verify:_`. Los IDs de AC desconocidos se
+  `Fase: Convergencia`) con `_Requirements:_`, `_Implements:_` y `_Verify:_` (y `_Makes green:_`, `_Expect: fail_`,
+  `_Size:_` cuando se indican). Los IDs de AC desconocidos — o los T-IDs que el plan de pruebas no prevé — se
   rechazan, las tareas existentes nunca cambian y una lista de tareas ya aprobada pide una nueva aprobación.
 
 ### Catálogo vivo, drift y restauración
@@ -852,7 +858,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 - **`/spec-guard`** — modo guardia opcional (`spec_init {guard}` / `dev-spec init --guard on|off|scope`).
   Mientras está activo, un hook PreToolUse de Claude Code **pregunta antes** de un Write/Edit en un archivo de
-  código fuera de `.specs/` cuando ninguna función tiene tareas aprobadas sin terminar; `scope` pregunta también, una
+  código fuera de `.specs/` cuando ninguna función tiene tareas aprobadas sin terminar — salvo un archivo de prueba
+  mientras el plan de pruebas de una función está aprobado (la Fase 4 escribe primero las pruebas que fallan) y cualquier
+  código mientras existe un spike activo (su prototipo); `scope` pregunta también, una
   vez aprobadas las tareas, por un archivo de código que ninguna tarea abierta nombra en `_Implements:_` (los archivos
   de prueba quedan fuera) y dice cuál es la tarea probable. No dice nada cuando
   está desactivado y nunca bloquea por sus propios errores. Las demás herramientas no ejecutan hooks de
@@ -888,10 +896,10 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Seis tracks** — `+sec` y `+privacy` se combinan con los demás: criterios `[SEC]` / `[PRIVACY]`, secciones
   obligatorias del diseño, tareas, filas de prueba y steering (`security.md`, `privacy.md`). Los marcadores de los
   tracks distinguen mayúsculas de minúsculas.
-- **Plantillas del proyecto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (o `<lang>/<artefacto>.md`)
-  sustituye un scaffold de origen, con `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}`
-  rellenados; los tracks activos siguen recibiendo sus secciones, y un scaffold personalizado sin tocar sigue
-  leyéndose como plantilla en los gates. `check` las valida.
+- **Plantillas del proyecto** (`/spec-templates`) — `.specs/templates/<artefacto>.md` (o `<lang>/<artefacto>.md`;
+  pt-BR recurre a `pt/` si no tiene el suyo) sustituye un scaffold de origen, con `{{name}}` `{{slug}}` `{{summary}}`
+  `{{tracks}}` `{{lang}}` `{{date}}` rellenados; los tracks activos siguen recibiendo sus secciones, y un scaffold
+  personalizado sin tocar sigue leyéndose como plantilla en los gates. `check` las valida.
 - **Para stakeholders** — `/spec-export` escribe un documento HTML (o markdown) offline e imprimible de una función o
   del proyecto; `/spec-changelog` construye notas de la versión (Added / Changed / Fixed) a partir de lo entregado.
 - **Gobernanza del equipo** — `init --roles requirements=product,design=tech+security`: una fase de la lista queda

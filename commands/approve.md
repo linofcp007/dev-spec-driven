@@ -22,7 +22,7 @@ failing tests / eval harness written and red): +tdd `tests-in-code` (every plann
 +ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
 core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
 `root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
-(project checks without a passing run since the last tick), `approval-gates`.
+(project checks without a passing run since the last tick, on the current code), `approval-gates`.
 `tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
 `gatesOk` stays false and `spec_next_action` asks for it until it is approved. **Phase by phase:** a phase is
 refused while an EARLIER active phase that has an artifact is still unapproved — check `phase-order`, naming the

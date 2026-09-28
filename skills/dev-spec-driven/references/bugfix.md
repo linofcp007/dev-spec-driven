@@ -61,7 +61,8 @@ The engine enforces it at every step, not only in doctor:
    right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 3 **`_Expect: fail_`**
    with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
    its failing run is then the recorded proof (`dev-spec done <f> 3 --run` while the test fails; a passing run is
-   refused — `unexpected-pass`, the test doesn't reproduce the bug yet). Paste the red output in the report. This
+   refused — `unexpected-pass`, the test doesn't reproduce the bug yet; so is a failure whose output shows the test
+   never ran, such as a missing test file or module — `couldNotRun`). Paste the red output in the report. This
    is the proof the fix fixes *this* bug. **No shell to run it?** Ask the user to run the test and paste the output
    — don't write the fix on a red you haven't seen.
 4. **Fix** (task 4). One change that removes the root cause — not a bundle of "while I'm here"

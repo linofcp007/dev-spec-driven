@@ -29,8 +29,8 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next open task (`batch: true` → + the `[P]` tasks that can run beside it) |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, DoD); `write: true` → `.specs/<feature>/.execution/` |
-| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`); a piped command → `pipeMasked` |
-| `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; unknown AC IDs refuse the call; `needsReapproval`) |
+| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked` |
+| `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`; unknown AC IDs or unplanned T-IDs refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
@@ -50,7 +50,8 @@ input schema (a wrong type or unknown value is refused with a clear message).
 
 Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
-- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb) · `clarifications` (open
+- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, or requirements.md
+  defining AC IDs of which no criterion was linted) · `clarifications` (open
   `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` (an active track's mandatory design section missing, empty or still holding its `> **TODO**`
@@ -61,8 +62,12 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `supersedes` (`_Supersedes:_` references that resolve to nothing) · `tests-in-code` (+tdd: T-IDs made green by done
   tasks that no test file names) · `verification` (ticked tasks without passing evidence, with the reason) ·
   `red-green` (+tdd: T-IDs made green with no recorded red run of an `_Expect: fail_` task) · `suite-evidence`
-  (project checks without a passing run since the last task activity, once every task is done) · `duplicate-tasks` ·
-  `verify-pipes` (a `_Verify:_` that pipes) · `integration-plan` (brownfield template unfilled) · bugfix
+  (project checks without a passing run since the last task activity — or run before the implementing files changed —
+  once every task is done) · `duplicate-tasks` · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
+  (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
+  traced) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
+  artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
+  warning) · `integration-plan` (brownfield template unfilled) · bugfix
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom
   `_Affects:_`) · `decision-affects-approved` (a decision recorded after the approval of what it affects) ·
   `cross-feature-overlap` (another active feature's open tasks plan the same files) · spike `timebox` (past its date
@@ -112,13 +117,14 @@ import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [-
 list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code]
 next <feature> [--batch] [--max N]       brief <feature> [n] [--write] [--include-brief]
-done <feature> <n> [--run [--shell bash] | --evidence "…" --exit N --cmd "…"]
+done <feature> <n> [--run [--shell bash] [--timeout <s>] | --evidence "…" --exit N --cmd "…"]
 approve <feature> <phase> [--by NAME] [--role ROLE] [--force]
 approve <feature> --through <phase> [--role ROLE] [--force]
 impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]
 decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects ids,…] [--supersedes D-n] [--discovery]
-next-action|na <feature>                 finish <feature> [--write] [--include-body] [--run [--shell bash]]
-append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared] [--parallel] [--heading "…"]
+next-action|na <feature>                 finish <feature> [--write] [--include-body] [--run [--shell bash] [--timeout <s>]]
+append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--makes-green T-01,…] [--expect-fail]
+             [--size XS|S|M|L|XL] [--story US1|shared] [--parallel] [--heading "…"]
 metrics [feature] [--write]              catalog [--write] · drift [feature] · upgrade [--apply]
 export [feature] [--md] [--write]        changelog [--since <ISO date|last|all>] [--write]
 log <feature> [--max N] [-]              stop-check [--message "…" | -] [--agent <type>]
@@ -132,7 +138,9 @@ prompts [name] [--args "…"]
 
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
-(`meta.checks`) and records them — the only CLI commands that execute anything from your spec. `log` reads `git log`
+(`meta.checks`) and records them — the only CLI commands that execute anything from your spec. On Windows
+`--shell bash` is Git Bash (WSL's `bash.exe` launcher is refused); a run that could not happen (no shell, a signal,
+`--timeout <seconds>` expired, output over 64 MB) records nothing. `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `stop-check` prints the Stop hook's decision for a closing message. `rules <tool>` prints a rule file with this
 clone's absolute paths, to paste into another project; `mcp-config <client>` prints a ready MCP config.
@@ -141,11 +149,11 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 
 | Hook | Event | What it does |
 |---|---|---|
-| `hooks/guard-hook.js` | PreToolUse (Write/Edit/MultiEdit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks; with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
+| `hooks/guard-hook.js` | PreToolUse (Write/Edit/MultiEdit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
 | `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → the active tracks' mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]`), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
-| `hooks/spec-hook.js` | SessionStart | One status line per feature, plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), and one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`) |
+| `hooks/spec-hook.js` | SessionStart | One status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), and one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`) |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
-| `hooks/stop-hook.js` | SubagentStop (`spec-implementer` only) | A DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and an exit code, else the stop is sent back |
+| `hooks/stop-hook.js` | SubagentStop (`spec-implementer` only) | A DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task), else the stop is sent back |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references). The
 evidence rules behind the Stop hooks: `references/verification.md`.
@@ -247,7 +255,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/spec` | entry | Start/resume the whole workflow for a feature — picks mode + tracks, then runs the pipeline (uses `spec_classify`/`spec_next_action`) |
 | `/spec-tour` | entry | A guided ~10-minute tour on the user's own repo: one tiny real change through every gate, then keep / archive / remove it |
 | `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard`, `--check`, `--roles`, `--stop-check` (uses `spec_init`) |
-| `/spec-guard` | setup | Guard mode on / off / scope: code edits ask while no feature has approved tasks — scope: also outside the plan's files (uses `spec_init {guard}`) |
+| `/spec-guard` | setup | Guard mode on / off / scope: code edits ask while no feature has approved tasks (not Phase 4 test files, nor a spike's prototype) — scope: also outside the plan's files (uses `spec_init {guard}`) |
 | `/spec-templates` | setup | The team's own scaffolds in `.specs/templates/`: list / init / check (uses `spec_templates`) |
 | `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
 | `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |

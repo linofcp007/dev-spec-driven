@@ -11,7 +11,8 @@ Feature: $ARGUMENTS
    false, show the **blockers** and stop — fix those first: failing doctor checks, open tasks, tasks ticked
    without a passing run (no evidence, only a note on a runnable `_Verify:_`, a failed or stale run, an
    `_Expect: fail_` task with no red run), **project checks** (`roadmap.json → meta.checks`) without a passing run
-   since the last tick (`suite-evidence` — record them as in step 2; the same call recomputes the readiness),
+   since the last tick on the current code (`suite-evidence`; a run made before the implementing files changed reads
+   `code-changed` — record them as in step 2; the same call recomputes the readiness),
    pending approvals (a role sign-off too), an artifact **changed since its approval** (`/spec-impact`, then
    re-approve), template **placeholders** left anywhere in the chain, and — for a bugfix — an unwritten root cause. Show the **warnings** too (edge cases / NFRs / success criteria no task or test
    covers, planned tests no test file names): they don't block, but each one deserves a decision.
@@ -19,8 +20,9 @@ Feature: $ARGUMENTS
    report lists for the active tracks (+saas load test and observability, +ai cost and safety, +sec security scans
    and the threat model re-checked, +privacy data subject rights and retention, bugfix: the reproduction no longer
    reproduces). With project checks set, record them: run each configured command and pass the results as
-   `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `dev-spec finish <feature> --run`,
-   which runs and records them. Show the commands and their output. No evidence, no "done" — and no shell to run
+   `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `dev-spec finish <feature> --run`
+   (`--timeout <seconds>` optional), which runs and records them; a check that could not run (no shell, a signal,
+   the timeout) records nothing. Show the commands and their output. No evidence, no "done" — and no shell to run
    them? Ask the user to run them and paste the output; never record a run nobody made.
 3. Show the merge title and summary generated from the spec chain
    (`.specs/<feature>/.execution/merge-summary.md`) and ask the user to approve the `execution` phase

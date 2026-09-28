@@ -1,5 +1,5 @@
 ---
-description: Turn guard mode on, off or to scope — Claude Code asks before editing code while no feature has approved tasks (scope - also outside the plan's files). PT - liga/desliga o modo guarda. ES - activa/desactiva el modo guardia.
+description: Turn guard mode on, off or to scope — Claude Code asks before editing code while no feature has approved tasks (not Phase 4 test files or a spike's prototype; scope - also outside the plan's files). PT - liga/desliga o modo guarda. ES - activa/desactiva el modo guardia.
 argument-hint: "[on|off|scope]"
 ---
 
@@ -17,7 +17,10 @@ to look (it scaffolds any missing core steering file).
 **What it does (Claude Code only).** The plugin's PreToolUse hook runs before Write / Edit / MultiEdit /
 NotebookEdit. While the guard is on, an edit to a **code file outside `.specs/`** gets a permission prompt
 ("ask") with a localized reason **unless some feature has an approved tasks phase and open tasks** — then it
-is silent. "Code" means a source file in a broad list of languages — every language the scanner inventories plus
+is silent. It is silent too for a **test file** while some feature has an approved test plan and is not
+finished (Phase 4 writes the failing tests before the tasks can be approved), and for any code edit while an **active
+spike** exists (undecided, or with open investigation tasks — its prototype work; a spike has no tasks to approve).
+"Code" means a source file in a broad list of languages — every language the scanner inventories plus
 many it doesn't (`.mts`/`.cts`, C++ `.cc`/`.hpp`, Scala, Dart, F#, Elixir, Lua, shell including Windows
 `.bat`/`.cmd`, PowerShell, SQL, Kotlin script, CUDA, Fortran, HDL, shaders, code-bearing templates such as
 `.erb`/`.razor`, notebooks…). It is
@@ -32,7 +35,7 @@ never blocks on its own error, and the human can always confirm the edit.
 task of an approved feature names in `_Implements:_`** (the file itself, a folder above it, or a glob that matches
 it) also asks — the reason names the likely task to add it to (one planning a file in the same folder, else the next
 open task) or points to `/spec-converge` (`spec_append_tasks`). Test files are not asked (tests are planned by T-ID
-in test-plan.md). Adding the file to a task changes tasks.md, so re-approve the tasks phase afterwards.
+in test-plan.md), nor is a code edit while an active spike exists (its prototype has no `_Implements:_` to plan it in). Adding the file to a task changes tasks.md, so re-approve the tasks phase afterwards.
 
 Explain it to the user in those terms: it is a reminder to plan before coding, not a lock. Other hosts (Cursor,
 Windsurf, Copilot, Gemini) have no PreToolUse hook — there the rule lives in the workflow text only.

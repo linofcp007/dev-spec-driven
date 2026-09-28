@@ -275,7 +275,9 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 `verifyPipes` (the `_Verify:_` commands that pipe), `expect: "fail"` for an `_Expect: fail_` task, `projectChecks`
 (meta.checks, in the definition of done), `decisions` (the current decisions.md entries citing the task's ACs / T-IDs,
 bounded: 5 entries / 2000 characters) and, for a task proving a `[SEC]` / `[PRIVACY]` criterion, that track's design
-sections.
+sections. An `_Expect: fail_` task's brief is a RED task's: its own tests heading (`BRIEF.testsRed` — the tests it writes
+must fail first) and definition of done (`redRules` in place of the loop's green-making rules; the project-checks item is
+`projectChecks.briefDodRed` — only the task's new red tests may fail).
 
 ## Gates (1.13) — an approval is a gate, not a stamp
 - **Placeholders — a lookup, never a guess from the shape.** `placeholderReport()` reports a bracket only when
@@ -361,13 +363,31 @@ sections.
   were silently dropped: nothing to verify, a verified tick). Doctor warns `malformed-markers` for text on a task line that
   looks like a marker but yields none (`**Verify:**`, a bare `Verify:`). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
-  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). On Windows with the default
+  `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). The shell is `resolveRunShell()`'s
+  (engine, pure — the CLI passes `git --exec-path`'s output): the platform default (cmd.exe / `/bin/sh`) or the one
+  named; on Windows a bare `bash` (flag or env) is Git Bash — `<git --exec-path>/../../../bin/bash.exe` (then
+  `…/usr/bin/bash.exe`), `%ProgramFiles%` / `%ProgramW6432%` / `%ProgramFiles(x86)%` / `%LOCALAPPDATA%\Programs` +
+  `\Git\bin\bash.exe`, then the first bash.exe on PATH that isn't WSL's. WSL's launcher (`isWslLauncher()`: a bash.exe /
+  wsl.exe in System32, SysWOW64, Sysnative or WindowsApps — it runs the command inside a Linux distribution, or fails every
+  command with exit 1) is never used: named as `--shell <path>`, it is refused before anything runs (`couldNotRun:
+  "wsl-bash"`); a bare `bash` with no Git Bash found → `no-git-bash`.
+  On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
   and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway. After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
+- **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
+  `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
+  a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
+  error ENOENT / EACCES / ENOEXEC / EPERM / EISDIR / ENOTDIR / UNKNOWN) · `run-error` (any other spawn error) · `signal` (no
+  exit status) · `output-too-large` (over the 64 MB buffer) · `timeout` (`--timeout <seconds>`, an integer ≥ 1 validated
+  before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
+  an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
+  whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
+  `_Expect: fail_` below); the shell resolution adds `wsl-bash` / `no-git-bash`. `finish --run` stays all-or-nothing: one
+  check that could not run records none.
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
   `evidenceGate.redPhaseVerify` (1.14: mark it `_Expect: fail_`, or move the command to the fix task) to the
@@ -421,9 +441,16 @@ sections.
   a pass after a red run is the fix going green — the red run is kept as `red` and stays the proof (`redProof()`; a
   `stale` record proves nothing). Exit 126 / 127 / 9009 (`CANT_RUN_EXIT`: not executable, not found, cmd.exe "not
   recognized") is never a red test — refused and recorded like a failed (re-)check (`recorded: true`; a ticked task turns
-  unverified, while a red run already on record is kept, so the pass after the fix still counts as green); only on an
-  `_Expect: fail_` task under `done --run` on Windows' cmd.exe, a line cmd.exe itself could not run
-  (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded. Every result for
+  unverified, while a red run already on record is kept, so the pass after the fix still counts as green) — `couldNotRun:
+  "exit-code"`. Nor is a failing run whose output shows the test never ran: `couldNotRunOutput()` (`CANT_RUN_OUTPUT`,
+  literal runner phrases, linear, NULs dropped — kind `test`: node's "Could not find '…'", "Cannot find module",
+  ERR_MODULE_NOT_FOUND, python "can't open file" / ModuleNotFoundError, pytest "file or directory not found" / "no tests
+  ran", jest "No tests found", vitest / mocha "No test files found", npm "Missing script" / ENOENT, make "No rule to make
+  target"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error) — `spec_complete_task` refuses and records a run whose
+  `summary` shows it (`couldNotRun: "output"`), `done --run` refuses it with nothing recorded, and `cantRunRecord()` keeps
+  an older record of either kind from being a red proof (`isRedRun()`). On an `_Expect: fail_` task under `done --run`, a
+  line cmd.exe itself could not run (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded whenever
+  cmd.exe is the shell (`--shell cmd` too). Every result for
   such a task carries `expected: "fail"`. Doctor `red-green` (warn, +tdd): T-IDs DONE tasks make green with no recorded
   red run of an `_Expect: fail_` task citing them. Metrics count a red run as a pass and an unexpected pass as a failure.
 - **Project checks** — `roadmap.json → meta.checks` `{name: command}` (`spec_init {checks}` / `init --check name="cmd"`,
@@ -431,12 +458,20 @@ sections.
   ≤ 20 checks, a command one line ≤ 500 chars — validated before any write, under the roadmap lock; spec_init's result
   always reports them). Briefs list them (`projectChecks`). `spec_finish {evidence: [{name, command, exitCode,
   summary}]}` records runs in `.state.json → finishChecks[name]` (all-or-nothing, under the feature lock, BEFORE
-  readiness is computed; stamped `check` = the configured command, so an edited command reads `changed`; a failed run is
-  recorded too). `completeTask` stamps `lastTickAt`; `lastTaskActivity()` = the latest of it and every recorded task
-  run. Blocker `suite-evidence` (finish + the execution gate) and doctor warn `suite-evidence` (once every task is done):
-  a check without a passing run since the last task activity. `suiteChecks` status codes (stable): `pass` · `no-run` ·
-  `failed` · `changed` · `before-last-tick`. Without meta.checks nothing changes. CLI `finish <f> --run` executes them
-  (explicit flag only; `--shell` / `DEV_SPEC_SHELL`, the POSIX refusal under cmd.exe, the pipe hint).
+  readiness is computed; stamped `check` = the configured command, so an edited command reads `changed`, and `code` =
+  `suiteCodeStamp()` — one sha1 over the feature's ACTIVE tasks' `_Implements:_` set as the finish baseline records it
+  (`baselineFiles()` + each file's `fileHash()`), no stamp when that walk hit its cap; a failed run is recorded too).
+  `completeTask` stamps `lastTickAt`; `lastTaskActivity()` = the latest of it and every recorded task run, a stamp more
+  than 5 minutes in the future ignored (as `stopActivity()`). `suiteStatus(projectDir, state, dir)` (dir: the feature
+  folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`
+  (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
+  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` · `before-last-tick` ·
+  `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
+  keeps the older rules). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
+  {evidence}` while a check is missing (`projectChecks.naFinish`). Without meta.checks nothing changes. CLI `finish <f>
+  --run` executes them (explicit flag only; `--shell` / `DEV_SPEC_SHELL`, `--timeout`, the POSIX refusal under cmd.exe,
+  the pipe hint, a check that could not run records nothing). The merge summary labels an `_Expect: fail_` task's red run
+  as the expected one (`redGreen.prRed`) and a pass after it with the red run it keeps (`prRedKept`).
 - **Git-linked evidence** (CLI only, read-only git): `done --run` / `finish --run` record `{commit, dirty}` (`dirty`
   ignores `.specs/`; silently skipped without git; a malformed value is dropped, never an error — `gitEvidence()`); the
   merge summary tags a run `@sha` / `@sha-dirty`. `parseGitLog()` + `taskCommits()` work on git log TEXT (so the MCP
@@ -498,7 +533,12 @@ sections.
 - **`spec_append_tasks`** (converge) appends only: numbers after every number in use (tasks.md + leftover
   evidence records and tick times — a new task never inherits a removed one's run or completion time), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
   inactive-track / Global Constraints headings), a read-back check that existing tasks didn't change, and
-  CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`.
+  CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`. Per task, besides `requirements`
+  / `implements` / `verify` / `story` / `parallel`: `makesGreen` (T-IDs — `T-1`, `t-01`, `T01` accepted —, each planned in
+  test-plan.md as `planIdText()` reads it, else `phantomTests` / `noTestPlan` and nothing written; stored as the plan
+  spells it, so trace_check matches), `expectFail` (`_Expect: fail_`) and `size` (XS…XL, case-insensitive, stored
+  upper-case — `badSize`); every marker must read back as given (`unstorable`), and the result's `appended` carries them.
+  CLI `--makes-green` (repeatable, comma lists), `--expect-fail`, `--size`.
 
 ## Catalog, drift, restore, guard, steering (1.13)
 - **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_catalog {write}` and `maybeRefreshCatalog()` use
@@ -711,7 +751,8 @@ sections.
   is done or verified and (b) a non-archived feature active in the last `STOP_RECENT_HOURS` = 4 h (lastTickAt, ticks,
   evidence `at` / `noteAt` / history — only what the engine recorded, never a file date (a fresh clone stamps tasks.md
   "now"), and a stamp in the future is ignored; at most 50 features) has ticked tasks `verificationStatus()`
-  reports unverified — or, every active task done, project checks without a passing run since the last task activity.
+  reports unverified — or, every active task done, project checks without a passing run since the last task activity
+  (`suiteStatus().missing` — any status but `pass`, `code-changed` included).
   Stable `why` codes: `stop-hook-active` · `no-specs` · `off` · `no-claim` · `admitted` · `verified` · `no-recent` ·
   `unverified` (+ the implementer's `not-done` · `no-task` · `nothing-to-verify` · `report-ok` · `implementer-evidence`).
   The reason is localized in the project language (an implementer's in its feature's). An unreadable `.state.json` is
@@ -722,17 +763,21 @@ sections.
   condition sits up to 3 words before it in its sentence ("not done", "once the tests pass", words ending in `n't` /
   `'ll`, or the claim's own first word — "Nothing is done"), nor when its sentence is a question. An ADMISSION anywhere
   ("task 3 is not verified", "2 failing", "2 are failing") means the honest answer is never sent back — unless a `fixed`
-  word sits within 4 words of it ("I fixed the 2 failing tests", "previously 4 failed"). The negator window is cut at
+  word sits within 4 words of it in its clause, not itself negated (`stopPastFailure()`: "I fixed the 2 failing tests",
+  "previously 4 failed"; "I haven't fixed the 2 failing tests" stays an admission). The negator window is cut at
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
-  clitic, never in guessed-PT text — em+o; "se" never before a Spanish auxiliary or preterite). Claims include "All tasks
+  clitic, never in guessed-PT text — em+o; "se" — PT "if" — only for a PT claim, never in guessed-ES text nor before a
+  Spanish auxiliary or preterite). Claims include "All tasks
   done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
   language, add its four lists (claims, negators, admissions, fixed).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
   task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
-  every one of those commands (backticks / whitespace flattened) and an exit code ("exit 0", "exit code: 1", "exited with
-  code 0", PT "código de saída", ES "código de salida"). STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable
-  `_Verify:_` → allowed.
+  every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
+  1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
+  `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
+  (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
+  STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed.
 - **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
   `^(dev-spec-driven:)?spec-implementer$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
@@ -972,7 +1017,9 @@ sections.
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
   heading, or carrying a modal — elsewhere it is a summary table). Doctor's `ears` FAILS (and the requirements approval
-  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsNoCriteria`).
+  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsUnlinted()`, `earsNoCriteria`). The
+  requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
+  without a modal is an EARS error there too.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
   `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
@@ -1063,9 +1110,8 @@ sections.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
 - **Protocol**: stdio transport is newline-delimited JSON; messages must not contain embedded
-  newlines (tool descriptions are single-line strings). Framing splits on `
-` ONLY (a `StringDecoder` keeps multibyte
-  characters whole across chunks; one trailing `` is dropped) — never `readline`, which also splits on U+2028 / U+2029,
+  newlines (tool descriptions are single-line strings). Framing splits on `\n` ONLY (a `StringDecoder` keeps multibyte
+  characters whole across chunks; one trailing `\r` is dropped) — never `readline`, which also splits on U+2028 / U+2029,
   both legal raw inside a JSON string (text pasted from Word / PDF): a valid request was cut in two and never answered.
   Replies escape U+2028 / U+2029 (`frame()`) so readline-based clients survive them. `initialize` echoes the client's
   `protocolVersion` when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`.
@@ -1111,8 +1157,8 @@ sections.
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
-  Numeric flags that MCP bounds (`--cap`, `--max`) go through `intFlag()` (integer ≥ 1). The engine refuses what
-  the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
+  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1).
+  The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
@@ -1122,9 +1168,9 @@ sections.
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1067 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1146 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 353 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 372 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (51 command files, the tools/list length, the

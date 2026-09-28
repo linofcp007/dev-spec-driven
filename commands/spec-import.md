@@ -10,7 +10,8 @@ Args: $ARGUMENTS
 Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?}` (CLI
 `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks tdd,saas] [--lang pt]`):
 
-- `tool` — `kiro` (`.kiro/specs/<name>/`), `spec-kit` (`specs/<nnn-name>/`), `openspec`
+- `tool` — `kiro` (`.kiro/specs/<name>/`; a Portuguese / Spanish one too — `### Requisito N`, `## Introdução` /
+  `## Introducción`), `spec-kit` (`specs/<nnn-name>/`), `openspec`
   (`openspec/specs/<capability>/`, or a change folder `openspec/changes/<id>/`), `plan` (a Markdown plan: Claude Code
   plan mode or a Cursor plan `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan written per `PLANS.md`) or
   `bmad` (BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/`, `docs/stories/*.md`, `docs/architecture.md`;
@@ -31,8 +32,8 @@ references are rewritten; tasks are renumbered 1…K keeping their checkbox stat
 `SC-`/`FR-` IDs stay; every artifact carries an "Imported from <tool> <path> on <date>" note. Per source:
 
 - **plan** — goals and acceptance-like bullets (Goals, Acceptance / Success Criteria, Verification…) → US-1's criteria;
-  checklists (Cursor: the front matter `todos`; else a Steps / Implementation section's items or sub-headings) →
-  tasks keeping their state (a cancelled to-do is imported open and warned); the file paths a step names →
+  checklists (Cursor: the front matter `todos`; else a Steps / Implementation section's items or sub-headings — an
+  Approach / Abordagem / Enfoque section counts only when the plan has no other steps section) → tasks keeping their state (a cancelled to-do is imported open and warned); the file paths a step names →
   `_Implements:_`; everything else (context, approach, files, verification commands) → `design.md`.
 - **execplan** — Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps → tasks, with
   `_Verify:_` when a step names a test / lint / build / curl command; Decision Log → `design.md` "## Decisions"

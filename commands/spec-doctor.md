@@ -10,7 +10,9 @@ Feature: $ARGUMENTS
 Run the `spec_doctor` MCP tool for this feature (CLI `dev-spec doctor <feature>`, exit 1 on FAIL) and report the
 result clearly: each check (pass/warn/fail), the recorded phase approvals, and the `readyToAdvance` verdict.
 
-- **Fails** (block advancing): `ears` errors, `clarifications` still open, `ac-uniqueness`, `placeholders` (template
+- **Fails** (block advancing): `ears` errors (or requirements.md cites AC IDs but no criterion was linted — write each AC
+  as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading),
+  `clarifications` still open, `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
   a track section, which the design approval refuses; only a bracket whose text the templates write — the built-in
   ones or the project's own `.specs/templates/` — or TODO / TBD / FIXME / `…`, is a placeholder — real values such as
@@ -29,9 +31,12 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `_Expect: fail_` task), `red-green` (+tdd: T-IDs made green with no recorded red run — a test that never failed
   proves nothing; only `_Makes green:_` IDs count, so a bugfix's guard test T-02 appears here only on a bugfix
   scaffolded before 1.14, whose task 4 still lists it — remove T-02 from that `_Makes green:_`), `suite-evidence`
-  (project checks without a passing run since the last task activity — `/spec-finish` blocks on it), `verify-pipes`
-  (a `_Verify:_` that pipes: its exit code is the last command's), `duplicate-tasks`, `integration-plan` (still the
-  template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
+  (project checks without a passing run since the last task activity, or run before the implementing files changed —
+  `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
+  `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
+  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `outside-code-artifacts` (+tdd: a
+  test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),
+  `duplicate-tasks`, `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),
   `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai, a phase still

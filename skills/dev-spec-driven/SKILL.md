@@ -372,7 +372,7 @@ your understanding to confirm alignment. Then work tasks **in order**, choosing 
 **Evidence, enforced** (`references/verification.md`): no shell to run a `_Verify:_`? Ask for the output or
 `dev-spec done <f> <n> --run` — never tick on your own (Principle 6). A `_Verify:_` that pipes
 (`npm test | tee log`) is flagged (`pipeMasked`, doctor `verify-pipes`): drop the pipe or `set -o pipefail`. With project checks set
-(`spec_init {checks}`) every brief lists them and `/spec-finish` needs a passing run of each since the last tick. In
+(`spec_init {checks}`) every brief lists them and `/spec-finish` needs a passing run of each since the last tick, on the current code. In
 Claude Code a **Stop hook** sends the turn back when your closing message claims done / verified while a recently
 active feature has ticked tasks without passing evidence (opt-out `meta.stopCheck`) — run the check, or say plainly
 what is not verified.
@@ -487,7 +487,7 @@ Depth: `references/change-management.md`.
 | `/spec-templates` | The team's own scaffolds in `.specs/templates/` (`list` · `init` · `check`); the engine still appends each active track's sections. | `references/steering-templates.md` |
 | `/spec-tour` | A guided ~10-minute tour: one tiny real change on the user's repo through every gate, then keep / archive / remove it. | — |
 | `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
-| `/spec-guard` | Opt-in guard mode (`spec_init {guard}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks; `scope` also asks for a code file no open task names in `_Implements:_`. | `references/tooling-reference.md` |
+| `/spec-guard` | Opt-in guard mode (`spec_init {guard}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks (a test file during Phase 4 and an active spike's prototype excepted); `scope` also asks for a code file no open task names in `_Implements:_`. | `references/tooling-reference.md` |
 | `/spec-review-feedback` | Every review comment judged against the spec: fix AC violations, send spec changes back to their phase, push back on out-of-scope asks citing `Out of Scope`, ask about unclear ones. | `references/review-feedback.md` |
 | `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · +sec / +privacy sections honoured · security. | — |
 | `/spec-commit` | Conventional commit referencing the task (`Part of .specs/<feature>/ task #N.`), `Makes T-xx green`, the eval delta and emitted metrics; Phase-4 commits use `test:`. `dev-spec log <feature>` reads them back per task (+tdd: the red-first check). | `references/tooling-reference.md` |
@@ -499,9 +499,9 @@ Depth: `references/change-management.md`.
 **Local automation, not CI:** saving `requirements.md` lints EARS and placeholders, `tasks.md` checks traceability,
 `design.md` the active tracks' mandatory sections and the Constitution Check; session start prints feature status,
 drifted finished features, cross-feature file overlaps and an outdated `.specs/`; guard mode asks before code edits
-while no feature has approved, unfinished tasks; the Stop / SubagentStop evidence gate sends back a "done" without
-passing evidence; the optional `pre-commit` validator blocks staged EARS errors / phantom refs. Hand
-security/quality to **dev-guardian** (`/guardian-review`, `/guardian-scan`) and UI work to **ui-ux-pro-max** when
+while no feature has approved, unfinished tasks (Phase 4 test files and spike prototypes excepted); the Stop /
+SubagentStop evidence gate sends back a "done" without passing evidence; the optional `pre-commit` validator blocks
+staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`, `/guardian-scan`) and UI work to **ui-ux-pro-max** when
 present — route to them, don't duplicate them.
 
 **Commands:** entry `/spec` (alias `/ds`), execute `/executeTask` (`/dsx`), status `/spec-status`

@@ -67,7 +67,7 @@ dev-spec done <feature> <n> --run              # run the task's _Verify:_ comman
 dev-spec approve <feature> <phase> [--force] [--role <role>]   # record an approval gate — refused while that phase's checks fail
 dev-spec approve <feature> --through tasks     # fast-forward: every filled phase in order, each through its own gate; stops at the first refusal
 dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
-dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"]   # converge: append a task (Phase: Convergence)
+dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"] [--makes-green T-01] [--expect-fail] [--size M]   # converge: append a task (Phase: Convergence)
 dev-spec finish <feature> [--write] [--include-body] [--run]   # blockers + fresh checks + merge summary from the spec chain (merge locally; no PRs); --run runs the project checks
 dev-spec decide <feature> --title "…" --decision "…" [--affects US-1.AC-2,T-03] [--discovery]   # append a D-n entry to decisions.md
 dev-spec stop-check --message "<your closing message>"   # before saying "done" / "verified": exit 1 = unverified ticks, fix them or say so
@@ -136,10 +136,16 @@ next, `dev-spec next-action <feature>` names the single next step.
   `nothingToVerify: true` — the same verdict doctor gives; a note records how it was checked.
 - **Red → green.** A task marked `_Expect: fail_` is proven by a FAILING run of its `_Verify:_` (the test fails before
   its fix); a passing run is refused (`unexpected-pass`) until that red run is on record. Exit 126 / 127 / 9009 (the
-  command could not run) is no red test.
+  command could not run) is no red test, nor is a failing run whose output shows the test never ran (a missing test
+  file, module or script, nothing collected).
 - **Project checks.** With `init --check name="cmd"` set, every brief lists them and `finish` blocks (`suite-evidence`)
-  until each has a passing recorded run since the last task activity — run them and report them (MCP `spec_finish
-  {evidence}`), or `dev-spec finish <f> --run`.
+  until each has a passing recorded run since the last task activity, on the current code (a run made before the
+  implementing files changed reads `code-changed`) — run them and report them (MCP `spec_finish {evidence}`), or
+  `dev-spec finish <f> --run`.
+- **`--run` and its shell.** `done --run` / `finish --run` use cmd.exe on Windows (`/bin/sh` elsewhere) unless `--shell`
+  (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash — WSL's `bash.exe` launcher is refused.
+  A run that could not happen (the shell didn't start, a signal, `--timeout <seconds>` expired, output over 64 MB)
+  records nothing: the task stays open.
 - **No pipes in `_Verify:_`.** `npm test | tee log` exits with the last command's code, so a failure can read as
   verified; drop the pipe (or `set -o pipefail;` under bash). doctor warns `verify-pipes`.
 - **Claims at the end of a turn.** Claude Code runs a Stop hook that sends a turn back when its closing message claims
@@ -168,8 +174,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   the approval of the requirements or design it affects makes doctor ask for a re-review.
 - **Converge.** When implementation drifted from the plan or a review found follow-up work, append tasks
   with `dev-spec append-tasks` instead of editing the numbered list by hand: they go under
-  `Phase: Convergence`, numbered after the last task; unknown AC IDs are refused, and an approved task
-  list needs re-approval.
+  `Phase: Convergence`, numbered after the last task; unknown AC IDs (and `--makes-green` T-IDs the test plan
+  doesn't plan) are refused, and an approved task list needs re-approval.
 - **Living catalog.** `dev-spec catalog --write` keeps `.specs/SPECS.md` — every feature's ACs, "what the
   system does today". A criterion that replaces an older feature's one declares
   `_Supersedes: <feature>/US-n.AC-m_` on its line; `trace` warns when the reference resolves to nothing.
@@ -191,9 +197,9 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Scoped steering.** A steering file may start with front matter: `inclusion: always`, `fileMatch` (with
   `fileMatchPattern: "src/api/**"`) or `manual`. `dev-spec brief` includes the `fileMatch` files whose
   pattern matches the task's `_Implements:_` paths and lists `manual` ones as available.
-- **Project templates.** `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`) replaces a built-in scaffold for
-  new features (`{{name}}`, `{{summary}}`, `{{tracks}}`… filled in); `dev-spec templates init` copies the built-in ones to
-  edit, `templates check` validates them. An untouched custom scaffold still counts as a template: fill it in.
+- **Project templates.** `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`; a pt-BR feature falls back to
+  `pt/`) replaces a built-in scaffold for new features (`{{name}}`, `{{summary}}`, `{{tracks}}`… filled in);
+  `dev-spec templates init` copies the built-in ones to edit, `templates check` validates them. An untouched custom scaffold still counts as a template: fill it in.
 - **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
@@ -204,9 +210,10 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **For stakeholders.** `dev-spec export [feature]` builds one offline, printable document; `dev-spec changelog` writes
   release notes from what shipped.
 - **Guard mode is a Claude Code hook.** `dev-spec init --guard on` sets it, but only Claude Code runs the
-  PreToolUse hook that asks before code edits while no feature has approved, unfinished tasks (`--guard scope`: also
-  before a code file no open task names in `_Implements:_`). In other tools, follow the same rule yourself: no
-  implementation before the tasks are approved, and no code outside the plan without a converge task.
+  PreToolUse hook that asks before code edits while no feature has approved, unfinished tasks — except a test file
+  while a feature's test plan is approved (Phase 4) and code while an active spike exists (its prototype); `--guard
+  scope`: also before a code file no open task names in `_Implements:_`. In other tools, follow the same rule yourself:
+  no implementation before the tasks are approved, and no code outside the plan without a converge task.
 - **Alongside superpowers.** If the superpowers skills are installed in your tool too, this workflow replaces
   their planning, TDD, debugging, execution, verification, review and branch-finishing skills for feature work.
   Put the precedence block of the `spec-superpowers` command (`dev-spec prompts spec-superpowers` prints it) into your

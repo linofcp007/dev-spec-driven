@@ -115,12 +115,16 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   path segments, so `tests/beta.test.js` never matches `tests/alpha.test.js`. While the cell is still a
   template slot (`[path]`, `tests/unit/...`) or names a code file outside a test folder (`load/invoice.k6.js`),
   the match is by number across the project, so another feature's `T-01` test would pass this one. A test
-  under **another** feature's `.specs/<feature>/tests/` never counts for this one.
+  under **another** feature's `.specs/<feature>/tests/` never counts for this one, and neither does a test file
+  **another feature's plan** (active or archived) names in its File column while this plan doesn't — that file is the
+  other feature's. A folder in the cell (`test/`) scopes this plan's rows but claims no file for it.
 - A row whose File column names **only non-code artifacts** — `load-test.md`, `evals/golden.json`, a Gherkin
   `.feature`, a JMeter `.jmx` — is a check run outside test code (a load run, the eval harness, a manual pass):
   its T-ID is listed in `plannedOutsideCode`, never in `plannedNotInCode`, so neither doctor, `finish` nor the
   Phase 4 gate expects it in a test file (the scaffold's own load and eval rows are such rows). Its evidence is
-  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead.
+  the task's `_Verify:_` run. To have the scan check it after all, name a test file in the cell instead. While
+  that artifact is still the scaffold (`load-test.md` with its template text, the sample eval set) once the test is
+  due, doctor warns `outside-code-artifacts` and `/spec-finish` repeats it.
 - `inCodeNotInPlan` lists only IDs that appear in **no** feature's test plan. Naming the AC as well
   (`US-1.AC-2`) is welcome: `acsInTests` lists the feature's ACs the test code mentions.
 

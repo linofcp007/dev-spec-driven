@@ -27,8 +27,9 @@ Bug: $ARGUMENTS
    Root Cause), test-plan and tasks — or all four at once with `/spec-ff` once they said so.
 5. **Failing regression test** (T-01, task 3) — the scaffold marks task 3 `_Expect: fail_`; fill its `_Verify:_` with the
    command that runs T-01, write the test and see it fail for the right reason: `dev-spec done <feature> 3 --run` (or
-   `spec_complete_task {…, evidence}` with the failing run) records the red run; a passing run is refused. No shell to
-   run it? Ask the user to run the test and paste the output — never apply the fix on a red nobody saw.
+   `spec_complete_task {…, evidence}` with the failing run) records the red run; a passing run is refused, and so is
+   a failure whose output shows the test never ran (a missing test file or module — not the right reason). No shell
+   to run it? Ask the user to run the test and paste the output — never apply the fix on a red nobody saw.
 6. **Fix the cause** (one change), run the suite, record the evidence:
    `spec_complete_task {…, evidence}` / `dev-spec done <feature> 4 --run`.
 7. Close with `/spec-finish` (the merge summary carries the root cause and the fix; an unwritten root cause

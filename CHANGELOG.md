@@ -149,6 +149,52 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   `spike` passes `--flow`, `approve --through` labels a forced step in the feature's language; pt-BR keeps descriptive
   verbs descriptive ("que faz T-01 passar", "segue") and says "gerado em <data>".
 
+### Fixed — full review before release (seven parallel reviewers, a dogfood run; every fix has a regression test)
+- **Evidence that never ran is no evidence.** `done --run` / `finish --run` turned a shell that could not start, a
+  signal, output over 64 MB or (new) a `--timeout` into "exit 1" — a bogus red proof for an `_Expect: fail_` task, a
+  failed run for any other. They now refuse and record nothing (stable `couldNotRun` code). On Windows `--shell bash`
+  reached the WSL launcher (`System32\bash.exe`) before Git Bash — every command "failed"; a bare `bash` now resolves to
+  Git Bash and the WSL launcher is refused. A red run whose output shows the test never ran (missing test file or
+  module, nothing collected) is refused on `_Expect: fail_` tasks — a bugfix shipped with no regression test that way.
+- **Markers followed by punctuation were invisible.** `(_Verify: npm test_)`, `_Verify: …_.` and `*Verify: …*` yielded no
+  marker, so the task was "verified" with nothing run; `_Implements: x_;` was never traced. One marker reader now ends a
+  value before closing punctuation and reads `*…*` italics; doctor warns `malformed-markers` for look-alikes.
+- **EARS linted only list items.** ACs written as table rows, headings or bold paragraphs were never checked while
+  trace_check counted them; the linter now lints every AC-defining unit, and doctor's `ears` fails (the requirements
+  approval is refused) when AC IDs exist but no criterion was linted. A `<!--` inside a code span no longer opens a
+  comment that hid the criteria after it.
+- **T-IDs are scoped per feature in the code scan**: a new feature's Phase 4 gate passed on ANOTHER feature's
+  `test('T-01 …')`. A test file another feature's plan names is no longer this feature's.
+- **Project checks are tied to the code**: each recorded run carries a hash of the implementing files; after an edit
+  the run reads `code-changed` (finish refuses a re-baseline on an old run). A future timestamp no longer blocks finish.
+- **next_action never dead-ends**: re-review names the checks a re-approval would fail; execution roles are named
+  (`--role qa`, then `--role product`) and doctor lists the pending sign-off; a finished feature with stale project
+  checks asks for `finish --run` instead of "nothing left to do"; duplicate task numbers ask for a renumber instead of a
+  re-run that can't help; `impact` names the role a re-approval needs.
+- **Stop gate**: PT "no" (em+o) and "se" no longer cancel real PT/ES claims; "All tasks done", "All green", "Tasks 1-3
+  done", "Feature complete" and ✅ are claims; "I fixed the 2 failing tests" is not an admission; a spike is never held
+  to project checks; the spec-implementer's report needs exit 0 on a must-pass task.
+- **Guard**: test files are allowed while a feature's approved test plan is being written (Phase 4), prototype edits
+  while a spike is active (it has no tasks gate to approve), and an 8.3 short name, junction or symlink of the project
+  is inside it.
+- **MCP server**: framing splits on `\n` only — `readline` also split on U+2028 / U+2029 (legal inside JSON strings,
+  common in pasted text), so the request was never answered; replies escape them. `id: null` / non-scalar ids get
+  -32600, an unknown tool -32602.
+- **CLI**: unknown `--flags` are refused with a did-you-mean (`done 2 --rnu` ticked the task with no evidence); `--`
+  ends the options; `--include-body=false` is honoured.
+- **Change management**: a partial role sign-off no longer hides a feature from the release notes; restore re-links a
+  dependency on a feature that is archived too; `spec_decide` closes a code fence left open at the end of
+  decisions.md (the entry was unreadable and its D-n reused); append never reuses a removed task's tick time; backlog
+  names and notes are one line and can't name an existing feature; `backlog remove` = `rm`.
+- **Import and classification**: Kiro specs in PT/ES import their stories; a feature is classified in the project's
+  language (a PT summary read "no checkout" as a negation); a plan's "Approach" section no longer duplicates its steps;
+  an ID-less import no longer gets the template's test rows; PT/ES encryption verbs are +sec signals; section headings
+  accept pt-BR (LGPD) names, emoji and "Threat Modeling".
+- **Quality**: pt-BR wording (tem que, se mantém, RIPD, Operadores…) and pt-BR templates fall back to `templates/pt/`;
+  three quadratic regexes made linear; the SessionStart status is capped at 20 features.
+- **Docs**: the red-task and red-green guidance matches the 1.14 bugfix scaffold, `--affects "Data Models"`, `guard:
+  "on"`, strict-YAML command front matter, the implementer and reviewer subagents declare their tools, and the demo in
+  `examples/` is in the 1.14 shape with a red task.
 ### Changed (heads-up)
 - **GDPR / RGPD / HIPAA now point to `+privacy`**, not `+saas` (classifier and classification matrix). Stored tracks
   don't change: add it with `dev-spec add-track <f> privacy` (MCP `spec_add_track`) where a feature processes personal
@@ -176,8 +222,18 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
 - `initialize` advertises `prompts` and `resources` besides `tools`; `spec_import`'s `tool` gains `plan` · `execplan` ·
   `bmad`, `spec_create`'s `kind` gains `spike`, `spec_feature`'s `action` gains `flow`.
 
+- **Unknown CLI `--flags` are refused** (exit 1, with a did-you-mean) — a script with a mistyped flag now fails loudly
+  instead of running without it; `evals` still forwards its own flags.
+- **Doctor's `ears` check can now fail on criteria it never saw**: ACs written as table rows, headings or bold
+  paragraphs are linted (and so reported by the save and pre-commit hooks).
+- **MCP: an unknown tool is a JSON-RPC error `-32602`** (it was a result with `isError`), and so is `tools/call`
+  without a name.
+- New stable codes: `suiteChecks` status `code-changed`; `spec_complete_task` / `done --run` `couldNotRun`; doctor
+  warnings `malformed-markers` and `outside-code-artifacts`. `done --run` / `finish --run` take `--timeout <seconds>`;
+  `spec_append_tasks` takes `makesGreen`, `expectFail` and `size` (CLI `--makes-green`, `--expect-fail`, `--size`);
+  `spec_backlog` takes `remove` (= `rm`).
 ### Tests
-- `node mcp/test.js` 1067 assertions (was 766), `node cli/test-cli.js` 353 (was 257); the README tool tables are
+- `node mcp/test.js` 1146 assertions (was 766), `node cli/test-cli.js` 372 (was 257); the README tool tables are
   checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
   (`npm run test:docker`).
 

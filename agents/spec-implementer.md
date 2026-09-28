@@ -102,7 +102,8 @@ Write the full report to the report path, in the brief's language:
   task is not done (say so; don't report DONE) — except on an `_Expect: fail_` task, where the failing run is the
   proof. Several `_Verify:_` commands → report each; they are recorded as one run (`cmd1 && cmd2`, exit 0 only if
   every one passed). In Claude Code a SubagentStop hook reads this file when you report DONE: without each `_Verify:_`
-  command and an exit code in it, your stop is sent back.
+  command and the exit code the task needs in it — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an
+  `_Expect: fail_` task — your stop is sent back.
 - **Project checks:** each command, its exit code and the output tail (when the brief lists them).
 - Files changed; commits (short SHA + subject)
 - Self-review findings and any concerns
