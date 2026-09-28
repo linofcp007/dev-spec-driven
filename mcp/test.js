@@ -13449,6 +13449,38 @@ function endRun() {
       "1.16 C review 10: DEV_SPEC_GUARD_DEFAULT=on reaches a dev-spec project without roadmap.json (the hook asks, guardLevel true); never a folder without .specs/, another tool's .specs/ or a roadmap.json that doesn't parse (got " +
       JSON.stringify([gH.map((h) => h.stdout.slice(0, 40)), gE]) + ")");
     try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
+
+    // --- 1.16 verify NEW-3: the guard never stats a network path the AGENT names — a Write target, an absolute _Implements:_ — (an SMB
+    // connection to that host before the permission prompt: a hang on an unreachable host, the user's NTLM credentials on Windows);
+    // nor does the save hook. TEST-NET-1 (192.0.2.1) is never routed; each hook runs in a child process with a timeout. Inside /
+    // outside is decided on the text (spec.networkPathInside) — a project living on that share keeps its guard.
+    const vUnc = "\\\\192.0.2.1\\share\\proj";
+    const vG = path.join(cRoot, "verify-guard-unc");
+    withOpts({}, () => { S.initProject(vG, ["core"], "en"); S.createFeature(vG, "Billing", ["core"], "x", undefined, "en"); });
+    const vRmj = JSON.parse(cRead(path.join(vG, ".specs", "roadmap.json")));
+    pWrite(vG, ".specs/roadmap.json", JSON.stringify({ ...vRmj, meta: { ...vRmj.meta, guard: "scope" } }, null, 2));
+    pWrite(vG, ".specs/billing/tasks.md", "# Tasks\n\n## Phase 1\n\n- [ ] 1. Charge\n  - _Requirements: US-1.AC-1_\n  - _Implements: " + vUnc + "\\lib\\pay.js, src/pay.js_\n");
+    const vSt = JSON.parse(cRead(path.join(vG, ".specs", "billing", ".state.json")));
+    pWrite(vG, ".specs/billing/.state.json", JSON.stringify({ ...vSt, approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } }, null, 2));
+    const vRun = (script, input) => {
+      const t = Date.now();
+      const r = spawnSync(process.execPath, [path.join(root, "hooks", script)], { input: JSON.stringify(input), encoding: "utf8", env: childEnv({ CLAUDE_PROJECT_DIR: vG }), timeout: 20000 });
+      return { status: r.status, stdout: r.stdout || "", err: r.error && r.error.code, ms: Date.now() - t };
+    };
+    const vPre = (file) => ({ hook_event_name: "PreToolUse", tool_name: "Write", cwd: vG, tool_input: { file_path: file, content: "x" } });
+    const vH = [vRun("guard-hook.js", vPre(vUnc + "\\src\\a.js")), vRun("guard-hook.js", vPre(path.join(vG, "src", "other.js"))), vRun("guard-hook.js", vPre(path.join(vG, "src", "pay.js"))),
+      vRun("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", cwd: vG, tool_input: { file_path: vUnc + "\\.specs\\billing\\tasks.md" } })];
+    let vAsk = null;
+    try { vAsk = JSON.parse(vH[1].stdout).hookSpecificOutput.permissionDecision; } catch { /* no decision */ }
+    const vPairs = [[vUnc, vUnc + "\\src\\a.js"], [vUnc, "//192.0.2.1/share/proj/src/a.js"], [vUnc, "\\\\?\\UNC\\192.0.2.1\\share\\proj\\a.js"], ["\\\\?\\UNC\\192.0.2.1\\share\\proj", vUnc + "\\a.js"],
+      [vUnc, "\\\\192.0.2.1\\SHARE\\Proj\\a.js"], [vUnc, vUnc], [vUnc, "\\\\192.0.2.1\\share\\projX\\a.js"], [vUnc, vUnc + "\\..\\other\\a.js"], [vUnc, "\\\\192.0.2.2\\share\\proj\\a.js"],
+      ["C:\\work", vUnc + "\\a.js"], [vUnc, "C:\\work\\a.js"], ["\\\\?\\C:\\work", "\\\\?\\C:\\work\\a.js"]];
+    const vIn = vPairs.map(([a, b]) => S.networkPathInside(a, b));
+    ok(JSON.stringify(vIn) === JSON.stringify(["src\\a.js", "src\\a.js", "a.js", "a.js", "a.js", "", null, null, null, null, null, null]) &&
+      vH.every((h) => h.status === 0 && !h.err) && vH[0].stdout === "" && vAsk === "ask" && vH[2].stdout === "" && vH[3].stdout === "" &&
+      (process.platform !== "win32" || vH.every((h) => h.ms < 10000)),
+      "1.16 verify NEW-3: a network path the agent names is decided on its text — the guard hook allows a Write to \\\\192.0.2.1\\share\\… outside the project, an open task's absolute \\\\host _Implements:_ is never stat'ed at the scope level, the save hook skips a network .specs/ file outside the session's folders — each silent / exit 0, fast on Windows (" +
+      vH.map((h) => h.ms + " ms").join(", ") + "); networkPathInside: same \\\\host\\share prefix (\\\\?\\UNC, //, case folded) only (got " + JSON.stringify([vIn, vH.map((h) => [h.status, h.err, h.stdout.slice(0, 60)])]) + ")");
   }
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
@@ -13833,6 +13865,33 @@ function endRun() {
       g6e.entries.length === 300 && g6e.total === 305 && g6e.truncated === true && js(c6.glossaryTruncated) === js({ read: 300, total: 305 }) &&
       /only the first 300 are read/.test(c6.glossaryNote || "") && d6.status === "warn" && /glossary\.md holds 305 entries — only the first 300 are read/.test(d6.detail || ""),
       "1.16 Q review 6: `_client_` / `__org__` (underscore emphasis) are read, client_id / org_name are not; a loose list's indented `_Avoid:_` paragraph after a blank line belongs to its entry; 305 entries → the first 300 read, doctor warns and clarify reports glossaryTruncated {read, total} (got " + js([e6, g6, c6.glossaryTruncated, d6.detail]) + ")");
+
+    // Verify NEW-2: the cross-call criteria cache is keyed by the call's ghost markers too. Yankee used the audit pack (its
+    // .state.json packMarkers); the pack is deleted (Yankee's ghost [AUDIT] makes Xray's [AUDIT] criteria inactive everywhere), then
+    // Yankee is removed — no ghost left, so Xray's [AUDIT] criterion is an ordinary one again and conflicts with Zulu's, as a fresh
+    // process says. Files are dated a minute back: a file modified in the last 2 s is never trusted, which would hide the cache.
+    const vq = qDir("verify-ghost");
+    S.initProject(vq, ["core"], "en");
+    fs.mkdirSync(path.join(vq, ".specs", "tracks", "audit"), { recursive: true });
+    fs.writeFileSync(path.join(vq, ".specs", "tracks", "audit", "track.json"), js({ name: "audit", marker: "AUDIT", title: { en: "Audit trail" }, sections: [{ name: "Audit log" }] }));
+    const vqY = S.createFeature(vq, "Yankee", ["core", "audit"], "y", undefined, "en");
+    S.createFeature(vq, "Xray", ["core"], "x", undefined, "en");
+    S.createFeature(vq, "Zulu", ["core"], "z", undefined, "en");
+    reqOf(vq, "xray", "- US-1.AC-1: WHEN a clerk prints an invoice THE SYSTEM SHALL add the company logo\n\n#### [AUDIT] Audit\n\n- US-1.AC-2: WHEN an admin deletes a record THE SYSTEM SHALL keep a tombstone copy\n");
+    reqOf(vq, "zulu", "- US-1.AC-1: WHEN a guest opens the page THE SYSTEM SHALL show a banner\n- US-1.AC-2: WHEN an admin deletes a record THE SYSTEM SHALL NOT keep a tombstone copy\n");
+    const vqPast = new Date(Date.now() - 60000);
+    for (const f of ["xray", "zulu", "yankee"]) for (const x of ["requirements.md", ".state.json"]) fs.utimesSync(path.join(vq, ".specs", f, x), vqPast, vqPast);
+    const vqPairs = () => js(S.crossFeatureAcs(vq).pairs.map((q) => q.kind + ":" + q.a.feature + "/" + q.a.id + "~" + q.b.feature + "/" + q.b.id));
+    const vq1 = vqPairs();
+    fs.rmSync(path.join(vq, ".specs", "tracks"), { recursive: true, force: true });
+    const vq2 = [vqPairs(), vqPairs()];
+    const vqRm = S.manageFeature(vq, "remove", "yankee", null, { confirm: true });
+    const vq3 = vqPairs();
+    const vqFresh = spawnSync(process.execPath, ["-e", "const S = require(process.argv[1]); console.log(JSON.stringify(S.crossFeatureAcs(process.argv[2]).pairs.map((q) => q.kind + ':' + q.a.feature + '/' + q.a.id + '~' + q.b.feature + '/' + q.b.id)))",
+      path.join(__dirname, "lib", "spec.js"), vq], { encoding: "utf8", timeout: 60000 });
+    ok(vqY.ok && vq1 === "[]" && js(vq2) === js(["[]", "[]"]) && vqRm.ok && vq3 === js(["conflict:xray/US-1.AC-2~zulu/US-1.AC-2"]) && (vqFresh.stdout || "").trim() === vq3,
+      "1.16 verify NEW-2: the cross-feature criteria cache follows the call's ghost markers — once the feature holding a deleted pack's marker is removed, a long-lived process reports the conflict a fresh process reports (got " +
+      js([vq1, vq2, vq3, (vqFresh.stdout || "").trim(), vqFresh.stderr && vqFresh.stderr.slice(0, 200)]) + ")");
   }
 
   // 1.16 package (E) — exports and planning: Gherkin, tracker CSV, milestones.
@@ -14254,6 +14313,56 @@ function endRun() {
     ok(exList.ok === false && /roadmap\.json/.test(exList.error) && !exList.lines && exNotes.ok === false && /roadmap\.json/.test(exNotes.error) && !/No milestone/.test(exNotes.error) &&
       exMcp.result.isError === true && /roadmap\.json/.test(payload(exMcp).error),
       "1.16 E review extra: milestone list / changelog {milestone} on a broken roadmap.json return its error (MCP isError) — never 'No milestones yet' (got " + js([exList, exNotes.error]) + ")");
+
+    // Verify NEW-1: one hand-edit typo (a date that is no real day) and an entry whose name add refuses no longer stop the VALID
+    // milestones from following a feature's rename / archive / restore / remove; the invalid entries stay exactly as they were,
+    // the results say so (milestonesInvalid) and so do ROADMAP.md / .html, spec_roadmap and the CLI lines (EN / PT / pt-BR / ES).
+    const vm = path.join(tmp, "proj-116e-verify-ms");
+    S.initProject(vm, ["core"], "en");
+    for (const n of ["Alpha", "Beta", "Delta"]) S.createFeature(vm, n, ["core"], "x", undefined, "en");
+    S.milestone(vm, "add", { name: "Q4", date: "2099-12-01", features: ["alpha", "beta"] });
+    S.milestone(vm, "add", { name: "Q1", date: "2099-03-01", features: ["alpha"] });
+    S.milestone(vm, "add", { name: "Q2", date: "2099-06-01", features: ["beta", "delta"] });
+    const vmRm = path.join(vm, ".specs", "roadmap.json");
+    const vmJ = JSON.parse(rdf(vmRm));
+    vmJ.meta.milestones[1].date = "2027-02-30";
+    vmJ.meta.milestones.push({ name: "<bad>", date: "2099-01-01", features: ["alpha"], note: "kept" });
+    fs.writeFileSync(vmRm, JSON.stringify(vmJ, null, 2));
+    const vmBad = js([vmJ.meta.milestones[1], vmJ.meta.milestones[3]]);
+    const vRen = S.manageFeature(vm, "rename", "alpha", "gamma");
+    const vArc = S.manageFeature(vm, "archive", "beta");
+    const vArcStored = JSON.parse(rdf(vmRm)).meta.milestones;
+    const vRst = S.manageFeature(vm, "restore", "beta");
+    const vRmv = S.manageFeature(vm, "remove", "delta", undefined, { confirm: true });
+    const vStored = JSON.parse(rdf(vmRm)).meta.milestones;
+    const vInv = js({ count: 2, names: ["Q1", "#4"] });
+    const vRep = S.roadmapReport(vm, { write: true, html: true });
+    const vMd = rdf(path.join(vm, ".specs", "ROADMAP.md")), vHtml = rdf(path.join(vm, ".specs", "ROADMAP.html"));
+    const vMcp = await call("spec_roadmap", { projectDir: vm });
+    const vTail = S.roadmapTailLines(vRep, "en");
+    const vLoc = ["pt", "pt-BR", "es"].map((l) => { S.roadmapReport(vm, { write: true, lang: l }); return (rdf(path.join(vm, ".specs", "ROADMAP.md")).split("\n").find((x) => x.includes("🏁 meta.milestones")) || ""); });
+    ok(vRen.ok && js(vRen.milestonesUpdated) === js(["Q4"]) && js(vRen.milestonesInvalid) === vInv &&
+      vArc.ok && js(vArc.milestonesUpdated) === js(["Q4", "Q2"]) && js(vArcStored[0]) === js({ name: "Q4", date: "2099-12-01", features: ["gamma"], archived: ["beta"] }) &&
+      vRst.ok && js(vRst.restored.milestones) === js(["Q4", "Q2"]) && js(vRst.milestonesInvalid) === vInv &&
+      vRmv.ok && js(vRmv.milestonesUpdated) === js(["Q2"]) && js(vRmv.milestonesInvalid) === vInv &&
+      js(vStored) === js([{ name: "Q4", date: "2099-12-01", features: ["gamma", "beta"] }, JSON.parse(vmBad)[0], { name: "Q2", date: "2099-06-01", features: ["beta"] }, JSON.parse(vmBad)[1]]) &&
+      js(vRep.milestonesInvalid) === vInv && js(payload(vMcp).milestonesInvalid) === vInv && !("milestonesInvalid" in ren) && !("milestonesInvalid" in rr) &&
+      vMd.includes("- **🏁 meta.milestones** — 2 invalid entries (Q1, #4) in .specs/roadmap.json — ignored: no status, and a feature's rename / archive / remove / restore doesn't follow in them") &&
+      vHtml.includes("<b>🏁 meta.milestones</b> — 2 invalid entries (Q1, #4) in .specs/roadmap.json") && !/&lt;bad&gt;|<bad>/.test(vMd + vHtml) &&
+      vTail.some((l) => l.startsWith("⚠ 2 invalid entries (Q1, #4)")) &&
+      vLoc[0].includes("2 entrada(s) inválida(s) (Q1, #4) em .specs/roadmap.json") && /corrige-as à mão/.test(vLoc[0]) && /corrija-as à mão/.test(vLoc[1]) &&
+      vLoc[2].includes("2 entrada(s) no válida(s) (Q1, #4) en .specs/roadmap.json") && /corrígelas a mano/.test(vLoc[2]),
+      "1.16 verify NEW-1: an invalid meta.milestones entry (a date typo, a name add refuses) is left as it is while the valid milestones follow rename / archive / restore / remove (milestonesUpdated, + milestonesInvalid {count, names}); ROADMAP.md / .html Needs attention, spec_roadmap and the CLI lines report it (EN / PT / pt-BR / ES) (got " +
+      js([vRen.milestonesUpdated, vRen.milestonesInvalid, vArc.milestonesUpdated, vRst.restored, vRmv.milestonesUpdated, vStored, vRep.milestonesInvalid, vTail, vLoc]) + ")");
+    const vmJ2 = JSON.parse(rdf(vmRm));
+    vmJ2.meta.milestones = { oops: true };
+    fs.writeFileSync(vmRm, JSON.stringify(vmJ2, null, 2));
+    const vRen2 = S.manageFeature(vm, "rename", "gamma", "omega");
+    const vRep2 = S.roadmapReport(vm, { write: true, lang: "en" });
+    const vMd2 = rdf(path.join(vm, ".specs", "ROADMAP.md"));
+    ok(vRen2.ok && !("milestonesUpdated" in vRen2) && js(vRen2.milestonesInvalid) === js({ count: 1, names: [], notList: true }) && js(JSON.parse(rdf(vmRm)).meta.milestones) === js({ oops: true }) &&
+      js(vRep2.milestonesInvalid) === js({ count: 1, names: [], notList: true }) && vMd2.includes("- **🏁 meta.milestones** — .specs/roadmap.json → meta.milestones is not a list — no milestone is read"),
+      "1.16 verify NEW-1: a meta.milestones that is no list is left as it is by a rename (milestonesInvalid {notList}) and ROADMAP.md says it is not a list (got " + js([vRen2.milestonesInvalid, vRep2.milestonesInvalid]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

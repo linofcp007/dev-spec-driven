@@ -75,7 +75,7 @@ against the forecasts. 38 MCP tools (was 35), 54 commands (was 52).
 - `spec_templates` lists 28 templates (the glossary stub).
 
 ### Tests
-- `node mcp/test.js` 1358 assertions (was 1256), `node cli/test-cli.js` 438 (was 402): every new tool, flag and
+- `node mcp/test.js` 1362 assertions (was 1256), `node cli/test-cli.js` 438 (was 402): every new tool, flag and
   surface (MCP and CLI parity, EN / PT / ES), a status line ↔ next_action parity table over 27 project states, a seeded
   fuzz of the EARS → Gherkin splitter (no character lost), the cross-feature detector on true and false pairs in three
   languages, relative timings for the cached criteria table, and one regression per review finding of the four packages;

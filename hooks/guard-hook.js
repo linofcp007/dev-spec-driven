@@ -17,6 +17,9 @@
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
  * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk.
+ * The edited file's path is the agent's: a network one (\\host\share\…) is never stat'ed or realpath'ed — inside / outside
+ * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named (1.16 verify NEW-3).
+ * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's.
  */
 
 const fs = require("fs");
