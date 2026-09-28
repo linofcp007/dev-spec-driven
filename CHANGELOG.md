@@ -3,6 +3,38 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [Unreleased]
+
+### Added
+- **Project-defined tracks (track packs)** — beyond the six built-in tracks, a project defines its own domain rigor
+  (+a11y, +mobile, +dbmigration…) as a folder `.specs/tracks/<name>/`: `track.json` (JSON, comments allowed — `name` =
+  the folder, a case-sensitive `marker` such as `A11Y`, a localized `title`, classifier `signals` strong / weak / context,
+  the mandatory design `sections` with synonyms, loose words and guidance, an optional `steering` file) plus optional
+  markdown fragments — `requirements.md` (criteria), `tasks.md` (the task block, `{{ac1}}` / `{{acs}}` / `{{t1}}` /
+  `{{tests}}` naming the pack's criteria and tests as the feature numbers them), `test-plan.md` (rows), `checklist.md`,
+  `steering.md`; a `<lang>/` subfolder wins (pt-BR → pt → root). A valid pack is a marker track everywhere, through the
+  same registries as the built-in ones (now project-aware, scoped to the engine call like the project templates):
+  `spec_classify` (new optional `projectDir`) / `spec_create` / `spec_import` score its signals as literal words;
+  `spec_create` scaffolds its `#### [MARKER] <title> — Acceptance Criteria (EARS)` criteria after the US-1 ones, its
+  `## [MARKER] <section>` design sections with the `> **TODO**` sentinel, its task block, test rows (+tdd), checklist
+  items and steering file; `spec_add_track` adds / removes it (non-destructive); doctor fails `<name>-sections` and the
+  design approval is refused until every section is filled; trace_check, spec_status (`packSections`), next_action, the
+  roadmap, the design-save hook, the task brief, spec_export and project templates follow it; its `[bracketed]` slots
+  are template placeholders, its `[MARKER]` never is. A pack is data only (nothing runs; allowlisted file names only,
+  lstat + realpath — a symlink / junction out of `.specs/` is ignored; every size and count bounded) and a bad one is
+  reported and ignored as a whole. A feature whose saved track names a pack that is gone or invalid keeps it (with its
+  marker, `.state.json → packMarkers`) as an INACTIVE track and doctor warns `track-pack-missing`. New MCP tool
+  **`spec_tracks`** `{action: list | init | check, name?, lang?}` (35 tools), CLI `dev-spec tracks [list|init <name>|check]`
+  (check exits 1 on an error), command **`/spec-tracks`** (52 commands), guide `references/project-tracks.md`. `tracks`
+  is a reserved feature slug (a pre-1.15 feature of that name stays a feature); the PostToolUse hook and the pre-commit
+  check never lint a pack's fragments as a feature's spec.
+
+### Tests
+- `node mcp/test.js` 1242 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
+  (classification, the scaffold in EN / PT / ES / pt-BR, the gates, trace, add / remove, a deleted and an invalidated pack,
+  twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook) and the CLI's
+  `tracks` command; every existing assertion unchanged except the exact tool / command counts.
+
 ## [1.14.0] — 2026-09-28
 
 Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project

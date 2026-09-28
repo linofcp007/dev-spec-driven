@@ -24,6 +24,7 @@
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
+ *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
@@ -60,7 +61,7 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
- *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
+ *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy or a track pack (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
@@ -330,7 +331,7 @@ function main() {
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
         const conf = spec.msg(r.lang).classify.conf;
-        console.log(T.tracks(r.label, spec.OPTIONAL_TRACKS.map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", ")));
+        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
       });
@@ -419,6 +420,8 @@ function main() {
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
         for (const tr of ["sec", "privacy"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
+        for (const p of Object.values(r.packSections || {})) console.log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs (1.15)
+        if (r.missingPacks) console.log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
     }
 
@@ -790,7 +793,7 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>... [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
       if (!r.ok) return fail(r);
@@ -1014,6 +1017,16 @@ function main() {
       // (= spec_templates {action, artifact, lang}). check exits 1 when a template has an error (scriptable, like doctor).
       if (pos.length > 2) usage("dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es]");
       const r = spec.templates(projectDir, pos[0], { artifact: pos[1], lang: flags.lang });
+      if (!r.ok) return fail(r);
+      if (r.action === "check" && r.errors) process.exitCode = 1;
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+    }
+
+    case "tracks": {
+      // dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es] — the project's track packs in .specs/tracks/
+      // (= spec_tracks {action, name, lang}). check exits 1 when a pack has an error (scriptable, like templates check).
+      if (pos.length > 2) usage("dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es]");
+      const r = spec.trackPacks(projectDir, pos[0], { name: pos[1], lang: flags.lang });
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) process.exitCode = 1;
       return out(r, (r) => r.lines.forEach((l) => console.log(l)));
@@ -1308,6 +1321,9 @@ function helpText() {
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
                                   edit; check validates them (exit 1 on an error)
+  tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
+                                  fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
+                                  one; check validates them (exit 1 on an error)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
@@ -1360,7 +1376,8 @@ function helpText() {
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);
-                                  --remove turns a track off (non-destructive: files kept, listed as inactive)
+                                  --remove turns a track off (non-destructive: files kept, listed as inactive);
+                                  a project track pack (dev-spec tracks) is named the same way
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)

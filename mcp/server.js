@@ -43,7 +43,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Tracks in use across the project. 'core' is always included." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy, or a project track pack in .specs/tracks/<name>/ (spec_tracks) ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Tracks in use across the project. 'core' is always included." },
         lang: { type: "string", enum: LANG_ENUM, description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
         guard: { type: "string", enum: ["on", "off", "scope"], description: "Guard mode (opt-in): \"on\" = code edits ask for confirmation while no feature has approved, unfinished tasks; \"scope\" = that, and once tasks are approved a code file no open task names in _Implements:_ (the file, a folder above it or a glob; test files excepted) asks too, naming the task to add it to; \"off\" = off. The booleans true / false are accepted as on / off. Omit to leave it unchanged (CLI: --guard on|off|scope)." },
         evidence: { type: "string", enum: ["reported", "observed"], description: "Evidence mode (roadmap.json meta.evidence): \"reported\" (default) — reported runs verify as given; \"observed\" — a runnable _Verify:_ (and a project check) is verified only by a run the harness observed (the plugin's Bash hook in Claude Code) or the CLI ran (done --run / finish --run). Omit to leave it unchanged (CLI: --evidence reported|observed)." },
@@ -58,13 +58,14 @@ const TOOLS = [
   {
     name: "spec_classify",
     description:
-      "Heuristically classify a feature description into the track set (core +tdd? +saas? +ai? +sec? +privacy?) using local keyword signals (EN/PT/ES) — no LLM, no cost. Returns the recommended tracks, matched signals, and reasoning. Use this to seed Phase 0; the human still approves.",
+      "Heuristically classify a feature description into the track set (core +tdd? +saas? +ai? +sec? +privacy?, plus the project's own track packs — .specs/tracks/<name>/track.json signals, see spec_tracks) using local keyword signals (EN/PT/ES) — no LLM, no cost. Returns the recommended tracks, matched signals, and reasoning. Use this to seed Phase 0; the human still approves.",
     inputSchema: {
       type: "object",
       properties: {
         description: { type: "string", description: "Plain-language description of the feature/request." },
         name: { type: "string", description: "Optional feature name (also used as evidence)." },
         lang: { type: "string", enum: LANG_ENUM, description: "Language of the notes/reasoning. Default: the description's own language." },
+        projectDir: { type: "string", description: "The project whose track packs (.specs/tracks/) are classified too, and whose meta.lang is the fallback language. Default: the server's project." },
       },
       required: ["description"],
     },
@@ -77,7 +78,7 @@ const TOOLS = [
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name (human readable; slugified for the folder)." },
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy, or a project track pack in .specs/tracks/<name>/ (spec_tracks) ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
         summary: { type: "string", description: "Optional one-line feature summary." },
         kind: { type: "string", enum: ["feature", "bugfix", "spike"], description: "'bugfix' scaffolds the systematic-debugging flow instead: bug.md (reproduction · root cause · fix), a one-story requirements.md (IF…THEN), a regression test plan and the fixed task order (reproduce → root cause → failing regression test → fix → verify). Always +tdd. 'spike' scaffolds a timeboxed investigation that ends in a decision: spike.md (Question · Timebox · Options considered · Evidence · Decision with _Outcome: go | no-go | pivot_ · Follow-up) and a small tasks.md of investigation steps — core-only, no requirements / design / tasks gates (spec_approve refuses them; spec_add_track refuses a spike); doctor fails `decision` until spike.md → Decision is written and warns `timebox` once its end date passed with no decision; spec_next_action goes question → investigate → decide → go: spec the real feature (seed {name, summary} from the question + decision) and archive the spike · no-go: archive it with its reason · pivot: a new spike; spec_finish is ready once the decision is written and every task ticked. Prototype code lives outside .specs/." },
         question: { type: "string", description: "kind 'spike' only: the question it answers → spike.md → Question (default: summary). Create-only." },
@@ -197,7 +198,7 @@ const TOOLS = [
     name: "spec_add_track",
     description:
       "Escalate an EXISTING feature to a new track (+tdd, +saas, +ai, +sec or +privacy) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md), appends that track's mandatory design.md sections and template tasks, adds its steering files, updates classification.md's Active Tracks line and persists the track set in .state.json. `track` takes one or several ('saas,ai', '+saas +ai'); an unknown track is an error with a did-you-mean. With `remove: true` the track is turned OFF instead - non-destructive: no file is deleted, the result lists the now-inactive artifacts, and doctor/status/next_action stop requiring them ('core' can't be removed; a bugfix keeps +tdd). Use when a feature grew into needing tests, scale, AI, security or privacy work after it was created (or no longer does).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy - or several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files are kept, listed as inactive)." }, projectDir: { type: "string" } }, required: ["name", "track"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy, or a project track pack (spec_tracks) - or several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files are kept, listed as inactive)." }, projectDir: { type: "string" } }, required: ["name", "track"] },
   },
   {
     name: "spec_feature",
@@ -216,7 +217,7 @@ const TOOLS = [
         tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad"], description: "The format of the source spec." },
         path: { type: "string", description: "The spec's folder (or a file inside it; for a plan / ExecPlan the file itself when its folder holds several), relative to the project root or absolute — it must be inside the project." },
         name: { type: "string", description: "Feature name (default: the source folder's name, spec-kit's number prefix dropped; a plan / ExecPlan: its title, else its file name; BMAD: the PRD's title, else the folder — or the story's title for one story file). An existing feature with that slug is an error." },
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
+        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy, or a project track pack in .specs/tracks/<name>/ (spec_tracks) ('tdd,saas' / '+saas +ai' are split; unknown names get a did-you-mean error)" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
         lang: { type: "string", enum: LANG_ENUM, description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
         projectDir: { type: "string" },
       },
@@ -317,6 +318,21 @@ const TOOLS = [
         action: { type: "string", enum: ["list", "init", "check"], description: "list (default) | init | check." },
         artifact: { type: "string", description: "One template: classification | requirements | design | tasks | test-plan | eval-plan | load-test | quickstart | checklist | integration-plan | bug | bug-requirements | bug-test-plan | bug-tasks | spike | spike-tasks | steering/<file>.md ('.md' optional). Omit for all." },
         lang: { type: "string", enum: LANG_ENUM, description: "list: the feature language to resolve for (default: the project language). init: copy the templates in this language into .specs/templates/<lang>/. check: only the templates that apply to it. Messages follow it." },
+        projectDir: { type: "string" },
+      },
+    },
+  },
+
+  {
+    name: "spec_tracks",
+    description:
+      "Project-defined tracks (track packs): a team's own domain rigor (+a11y, +mobile, +dbmigration…) beside the built-in core / tdd / saas / ai / sec / privacy. A pack is the folder .specs/tracks/<name>/ — track.json (JSON; // and /* */ comments allowed): name (= the folder name, ^[a-z][a-z0-9]{1,19}$, never a built-in track or a reserved word), marker (^[A-Z][A-Z0-9]{1,11}$ — the stable, case-sensitive [MARKER] of its sections, criteria and task block; never SaaS / AI / SEC / PRIVACY, unique across packs), title {en, pt?, es?}, signals {strong?, weak?, context?: [keywords]} (spec_classify / spec_create / spec_import read them like the built-in ones — matched as literal words, never as patterns), sections [{name, syn?, loose?, guidance?}] (the mandatory design sections, at least one), steering (optional steering file name); plus optional markdown fragments — requirements.md (criteria, numbered after the feature's US-1 criteria under '#### [MARKER] <title> — Acceptance Criteria (EARS)'), tasks.md (the task block '## Story US-1 — [MARKER] <title>'; {{ac1}}… / {{acs}} = the pack's criteria as the feature numbers them, {{t1}}… / {{tests}} = their planned tests), test-plan.md (rows, +tdd), checklist.md (items), steering.md (the steering stub) — a <lang>/ subfolder's fragment wins over the pack root's (pt-BR → pt → root). A VALID pack is a marker track everywhere: spec_create / spec_add_track scaffold its criteria, design sections ('## [MARKER] <name>' + the > **TODO** sentinel), tasks, test rows, checklist items and steering; spec_doctor fails '<name>-sections' and the design approval is refused until each section is filled; trace_check, spec_status (packSections), spec_next_action, the roadmap, the task brief, spec_export and spec_import follow it; spec_add_track {remove: true} makes it inactive. Its [bracketed] slots are template placeholders; its [MARKER] never is. A pack is data only — nothing in it runs, only allowlisted file names are read from its own folder (a symlink / junction out of .specs/ is ignored), sizes and counts are bounded; a bad pack is reported and IGNORED as a whole, never half-applied; a feature whose saved track names a pack that is gone or invalid keeps it inactive and spec_doctor warns 'track-pack-missing'. `action`: 'list' (default) — the built-in tracks and every pack folder with its validity ({name, marker, title, sections, signals counts, steering, valid, errors}); 'init' — scaffold .specs/tracks/<name>/ (a commented example track.json + one example of each fragment, in `lang` / the project language; never overwrites); 'check' — validate every pack (or `name`): {file, line?, code, severity, message} with stable codes (json-invalid, name-mismatch, marker-reserved, marker-duplicate, signal-invalid, field-invalid, too-big, too-many, linked-folder, fragment-row, fragment-ref, unknown-key, ears-no-modal …) and a verdict pass | warn | fail. A .specs/tracks/ that is a feature created before 1.15 (it holds a .state.json) stays that feature — every action refuses with legacyFeature: true. Returns localized `lines`.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "init", "check"], description: "list (default) | init | check." },
+        name: { type: "string", description: "init: the new pack's name (^[a-z][a-z0-9]{1,19}$). list / check: one pack (or a built-in track for list). Omit for all." },
+        lang: { type: "string", enum: LANG_ENUM, description: "init: the language of the example files' text and comments (default: the project language). Messages follow it." },
         projectDir: { type: "string" },
       },
     },
@@ -459,6 +475,8 @@ function runTool(name, args) {
 
     case "spec_templates": // the same engine call as the CLI's `templates [list|init|check] [artifact] [--lang]`
       return spec.templates(pdir, args.action, { artifact: args.artifact, lang: args.lang });
+    case "spec_tracks": // the same engine call as the CLI's `tracks [list|init <name>|check] [name] [--lang]`
+      return spec.trackPacks(pdir, args.action, { name: args.name, lang: args.lang });
 
     case "spec_export": // the same engine call as the CLI's `export [feature] [--md] [--write]`
       return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });

@@ -29,6 +29,7 @@ scale design + evals at once. Handle both with one pipeline and composable track
 | **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle |
 | **+sec** | 5 mandatory `[SEC]` sections: STRIDE threat model, ASVS level, authn/authz, secrets, security testing |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (GDPR / RGPD): data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA |
+| **+your own** *(1.15)* | A project track pack in `.specs/tracks/<name>/` (`/spec-tracks`): its own `[MARKER]` sections, criteria, tasks and signals — a marker track like +sec (`references/project-tracks.md`) |
 
 **With the superpowers plugin installed too:** for feature work this workflow replaces its brainstorming,
 writing-plans, executing-plans, subagent-driven-development, test-driven-development, systematic-debugging,
@@ -179,7 +180,7 @@ actually honours each principle is judged by the human at the gate and by the `s
 
 Decide the mode, then the track set. This is fast (5–10 min) and saves days of wrong-rigor work.
 
-1. **Run `spec_classify`** with the feature description to get a recommended track set + the
+1. **Run `spec_classify`** with the feature description (and `projectDir` — the project's track packs are classified too) to get a recommended track set + the
    keyword signals that triggered each track. Treat it as a draft, not gospel.
 2. **Sanity-check against the matrix** in `references/classification-matrix.md`. The rule of thumb:
    - `+tdd` if correctness matters or it's hard to undo (billing, auth, data integrity, tricky logic).
@@ -490,7 +491,7 @@ Depth: `references/change-management.md`.
 | `/spec-impact` · `/spec-converge` · `/spec-drift` · `/spec-metrics` · `/spec-catalog` · `/spec-decide` · `/spec-export` · `/spec-changelog` | Change requests, the AC-by-AC converge pass, drift since finish, metrics + retro, the living catalog, the decision log, the stakeholder export, release notes (sections above). | `references/change-management.md` |
 | `/spec-upgrade` | After a plugin update: `spec_upgrade` audits every active feature against the current rules (status, what doctor flags, next step; review `critic` before any task is ticked, `converge` mid-execution); with an OK, `apply` saves inferred tracks, seeds pre-1.13 approval baselines, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec. | `references/change-management.md` |
 | `/spec-import` | A Kiro / spec-kit / OpenSpec spec, a Claude Code or Cursor plan, a Codex ExecPlan or BMAD docs → a NEW feature (IDs remapped, `mapping` + `warnings` shown); then Phase 0 track confirmation and the normal gates. | `references/brownfield.md` |
-| `/spec-templates` | The team's own scaffolds in `.specs/templates/` (`list` · `init` · `check`); the engine still appends each active track's sections. | `references/steering-templates.md` |
+| `/spec-templates` · `/spec-tracks` | The team's own scaffolds in `.specs/templates/` (`list` · `init` · `check`; the engine still appends each active track's sections) · the team's own tracks, packs in `.specs/tracks/<name>/` (`list` · `init <name>` · `check`; a valid pack is a marker track everywhere, a bad one is ignored). | `references/steering-templates.md` · `references/project-tracks.md` |
 | `/spec-tour` | A guided ~10-minute tour: one tiny real change on the user's repo through every gate, then keep / archive / remove it. | — |
 | `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
 | `/spec-guard` | Opt-in guard mode (`spec_init {guard}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks (a test file during Phase 4 and an active spike's prototype excepted); `scope` also asks for a code file no open task names in `_Implements:_`. | `references/tooling-reference.md` |
