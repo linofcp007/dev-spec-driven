@@ -3184,6 +3184,46 @@ if (inSection("ffgate")) {
     JSON.stringify([hook.status, reason.slice(0, 90), suggested, human.status, (human.stdout + human.stderr).trim().slice(0, 160)]) + ")");
   ok(SF.approvalGuardLevel(pd) === "deny" && SF.approvalGuardLevel(pp) === "deny" && SF.approvalGuardLevel(path.join(tmp, "ffgate-none")) === "off",
     "feature F2: approvalGuardLevel reads meta.approvalGuard (no roadmap.json → off)");
+
+  // Review fixes (R10 / R1 / R3 / R9), end to end through the hook and the CLI.
+  const hookRun = (cwd, tool, command) => {
+    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "approval-hook.js")], { encoding: "utf8",
+      input: JSON.stringify({ hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: { command } }), env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    let j = {};
+    try { j = JSON.parse(r.stdout); } catch { /* silent */ }
+    return { status: r.status, decision: (j.hookSpecificOutput || {}).permissionDecision || (r.stdout === "" ? "silent" : "?"), note: j.systemMessage || "" };
+  };
+  const q = JSON.stringify(CLI);
+  const pr = path.join(tmp, "ffgate-r10");
+  const r0 = run(["init", "core", "--approval-guard", "deny", "--evidence", "observed", "--check", 'test=node -e "process.exit(0)"', "--roles", "design=tech", "--stop-check", "on", "--project", pr]);
+  const hEv = hookRun(pr, "Bash", "node " + q + " init --evidence reported");
+  const hChk = hookRun(pr, "Bash", "node " + q + " init --check test=");
+  const hRoles = hookRun(pr, "PowerShell", "node " + q + " init --roles none");
+  const hStop = hookRun(pr, "Bash", "node " + q + " init --stop-check off");
+  const hUp = hookRun(pr, "Bash", "node " + q + " init --check lint=eslint --evidence observed --stop-check on");
+  const userLine = ((hEv.note.match(/: (! node .*)$/) || [])[1] || "");
+  const humanEv = spawnSync(userLine.replace(/^! node /, JSON.stringify(process.execPath) + " "), { shell: true, encoding: "utf8", cwd: pr, env: { ...process.env, SPEC_PROJECT_DIR: pr, CLAUDE_PROJECT_DIR: "" } });
+  ok(r0.code === 0 && hEv.decision === "deny" && /switch the evidence mode \(meta\.evidence\) back to reported/.test(hEv.note) && hChk.decision === "deny" &&
+    hRoles.decision === "deny" && hStop.decision === "deny" && hUp.decision === "silent" &&
+    /init --evidence reported$/.test(userLine) && humanEv.status === 0 && SF.evidenceMode(pr) === "reported",
+    "feature F2 review R10: in a deny project the hook refuses an agent's init --evidence reported / --check test= / --roles none / --stop-check off (raising or adding passes); the line it gives the user runs as is and lowers meta.evidence (got " +
+    JSON.stringify([r0.code, hEv.decision, hChk.decision, hRoles.decision, hStop.decision, hUp.decision, userLine, humanEv.status, meta(pr).evidence]) + ")");
+  // R3 / R9: a line-continued approve is refused; a heredoc that only WRITES the approve line into a doc is not.
+  const hCont = hookRun(pr, "Bash", "node " + q + " \\\n  approve checkout requirements");
+  const hDoc = hookRun(pr, "Bash", "cat > docs/approve.md <<'EOF'\nRun `node " + q + " approve checkout requirements` yourself.\nEOF");
+  const hPsCont = hookRun(pr, "PowerShell", "node " + q + " `\n  ap`prove checkout requirements");
+  ok(hCont.decision === "deny" && hDoc.decision === "silent" && hPsCont.decision === "deny",
+    "feature F2 review R3/R9: the hook refuses a Bash \\⏎-continued and a PowerShell `-escaped approve; a quoted heredoc writing the approve line into a doc passes (got " +
+    JSON.stringify([hCont.decision, hDoc.decision, hPsCont.decision]) + ")");
+  // R1: `echo x >> .specs/roadmap.json` is refused while the guard is on — and a roadmap.json broken that way keeps the guard
+  // (fail closed): the hook still refuses an approve; the CLI refuses to write over the broken file (the human repairs it).
+  const hW = hookRun(pr, "Bash", "echo x >> .specs/roadmap.json");
+  fs.appendFileSync(path.join(pr, ".specs", "roadmap.json"), "x");
+  const hAfter = hookRun(pr, "Bash", "node " + q + " approve checkout requirements");
+  const offTry = run(["init", "--approval-guard", "off", "--project", pr]);
+  ok(hW.decision === "deny" && /Make that change yourself/.test(hW.note) && SF.approvalGuardLevel(pr) === "deny" && hAfter.decision === "deny" && hAfter.status === 0 && offTry.code === 1,
+    "feature F2 review R1: a Bash write of .specs/roadmap.json is refused; after `echo x >> .specs/roadmap.json` the guard still reads deny (engine and hook) and init --approval-guard off can't write over the broken file (got " +
+    JSON.stringify([hW.decision, SF.approvalGuardLevel(pr), hAfter.decision, offTry.code, offTry.out.trim().slice(0, 120)]) + ")");
 }
 
 // 1.14 feature (F3) — task dependencies and waves: if (inSection("ffdeps")) { … }
