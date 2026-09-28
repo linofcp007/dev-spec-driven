@@ -34,6 +34,8 @@
  *   doctor <feature>                   Health-check → ready to advance?
  *   trace <feature> [--code]           Traceability AC↔task↔test↔code (every gap listed; EC/NFR/SC warnings;
  *                                      --code also scans test files for the T-IDs they name)
+ *                                      [--matrix] the requirements traceability matrix (one row per AC/EC/NFR/SC:
+ *                                      status, tasks, tests, evidence, decisions, approval); [--csv] the matrix as RFC 4180 CSV
  *   clarify <feature>                  Surface ambiguities/gaps in requirements
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
@@ -59,6 +61,7 @@
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
+ *                                      [--csv] the traceability matrix as CSV (UTF-8 BOM) → .specs/exports/<feature|project>.rtm.csv
  *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   stop-check [--message "<text>"|-] [--agent <type>]  The Stop hook's evidence gate for a closing message: does it claim
@@ -183,6 +186,7 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
 const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail"];
+BOOL_FLAGS.push("matrix", "csv"); // 1.14 F5: trace <f> --matrix | --csv · export [f] --csv
 const on = (k) => flags[k] === true;
 // A switch passed through to an engine option whose default depends on others (finish's includeBody, brief's includeBrief:
 // true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
@@ -409,13 +413,17 @@ function main() {
     }
 
     case "trace": {
-      if (!pos[0]) usage("dev-spec trace <feature> [--code]");
-      const r = spec.traceCheck(projectDir, pos[0], { code: on("code") }); // = trace_check {code}
+      if (!pos[0]) usage("dev-spec trace <feature> [--code] [--matrix] [--csv]");
+      const matrix = on("matrix") || on("csv"); // 1.14 F5: --csv prints the matrix as CSV
+      const r = spec.traceCheck(projectDir, pos[0], { code: on("code"), matrix }); // = trace_check {code, matrix}
       if (!r.ok) return fail(r);
       if (r.verdict !== "pass") process.exitCode = 1; // scriptable: gaps → non-zero (warnings never change it)
       const lang = spec.featureLang(projectDir, r.feature);
       const T = cliText(lang);
+      // --csv: the data alone on stdout (header + one record per requirement; no BOM, no marker record — `export --csv` is the document)
+      if (on("csv") && !flags.json) return process.stdout.write(spec.matrixCsv([r.matrix], lang));
       return out(r, (r) => {
+        if (r.matrix) printMatrix(r.feature, r.matrix, lang);
         console.log(T.traceHead(r.feature, T.word(r.verdict), r.totalAcs, r.coveredByTasks));
         // Every gap kind the engine reports, with its IDs — never "gaps-found" with nothing listed.
         spec.traceGapLines(r, lang).forEach((l) => console.log("  " + l));
@@ -975,10 +983,10 @@ function main() {
     }
 
     case "export": {
-      // dev-spec export [feature] [--md] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
+      // dev-spec export [feature] [--md|--csv] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
       // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
-      if (pos.length > 1 || (on("md") && on("html"))) usage("dev-spec export [feature] [--md] [--write]");
-      const r = spec.exportSpecs(projectDir, { name: pos[0], format: on("md") ? "md" : "html", write: on("write") });
+      if (pos.length > 1 || [on("md"), on("html"), on("csv")].filter(Boolean).length > 1) usage("dev-spec export [feature] [--md|--csv] [--write]");
+      const r = spec.exportSpecs(projectDir, { name: pos[0], format: on("md") ? "md" : on("csv") ? "csv" : "html", write: on("write") });
       if (!r.ok) return fail(r);
       const X = spec.msg(r.lang).stakeholderExport;
       return out(r, (r) => (r.wrote ? console.log(X.wrote(r.file)) : process.stdout.write(r.content)));
@@ -1212,6 +1220,35 @@ function main2list() {
   });
 }
 
+// 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
+function printMatrix(feature, mx, lang) {
+  const R = spec.msg(lang).rtm;
+  const C = R.cli;
+  console.log(C.head(feature, mx.tracks, mx.counts));
+  const a = mx.approval;
+  const when = (iso) => (typeof iso === "string" && iso.length >= 16 ? iso.slice(0, 16).replace("T", " ") + " UTC" : "—");
+  console.log("  " + (a ? C.approved(when(a.at), a.by == null ? "—" : a.by, a.forced) : C.notApproved));
+  if (!mx.rows.length) return console.log("  " + R.none);
+  const len = (s) => [...s].length;
+  const cut = (s, n) => (len(s) > n ? [...s].slice(0, n - 1).join("") + "…" : s);
+  const task = (t) => "#" + t.number + (!t.done ? "○" : t.verified ? "✓" : "▲");
+  const test = (t) => t.id + (t.outsideCode ? "○" : Array.isArray(t.files) ? (t.files.length ? "✓" : "✗") : "");
+  const rows = mx.rows.map((r) => {
+    const notes = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
+    if (r.template) notes.push(C.notes.template);
+    if (r.supersededBy.length) notes.push(C.notes.superseded(r.supersededBy.join(", ")));
+    if (r.approval && r.approval.changed === true) notes.push(C.notes.changed);
+    return [r.id, R.status[r.status] || r.status, r.tasks.map(task).join(" ") || "—", r.tests.map(test).join(" ") || "—",
+      r.decisions.map((d) => d.id).join(" ") || "—", (notes.length ? "[" + notes.join("; ") + "] " : "") + r.text];
+  });
+  const head = ["id", "status", "tasks", "tests", "decisions", "requirement"].map((c) => R.cols[c]);
+  const widths = head.slice(0, 5).map((h, i) => Math.min(28, Math.max(len(h), ...rows.map((r) => len(r[i])))));
+  const line = (cells) => "  " + cells.slice(0, 5).map((c, i) => { const x = cut(c, widths[i]); return x + " ".repeat(widths[i] - len(x)); }).join("  ") + "  " + cut(cells[5], 110);
+  console.log(line(head));
+  rows.forEach((r) => console.log(line(r)));
+  console.log("  " + C.legend + (mx.code ? " · " + C.codeLegend : ""));
+}
+
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
@@ -1244,6 +1281,9 @@ function helpText() {
   doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)
   trace <feature> [--code]        Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs) — lists every gap,
                                   then the EC/NFR/SC warnings; --code also scans test files for the T-IDs they name
+                                  --matrix: + the requirements traceability matrix — one row per AC / EC / NFR / SC with its
+                                  status (verified · implemented · planned · untraced), tasks, tests, evidence, decisions, approval;
+                                  --csv: the matrix as RFC 4180 CSV on stdout (formula-safe; exit code still = trace gaps)
   clarify <feature>               Surface ambiguities/gaps in requirements before design
   ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})
@@ -1283,6 +1323,8 @@ function helpText() {
   export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
                                   tasks with their verification, approvals, open clarifications) or, without one, the whole project;
                                   offline HTML (light/dark, print-ready) or --md; --write → .specs/exports/<feature|project>.html|.md
+                                  --csv: the traceability matrix for a spreadsheet (UTF-8 BOM, the AUTO-GENERATED marker as its
+                                  last record) → --write: .specs/exports/<feature|project>.rtm.csv
   changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt

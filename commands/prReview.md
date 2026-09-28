@@ -23,3 +23,6 @@ Review against the full chain, gating checks by the feature's active tracks:
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.
+For an audit trail, `trace_check {name, matrix: true}` (CLI `dev-spec trace <feature> --matrix`; `--csv` for a
+spreadsheet, `spec_export {format: "csv"}` to write `.specs/exports/<feature>.rtm.csv`) gives the requirements
+traceability matrix — one row per AC / EC / NFR / SC with its status, tasks, tests, evidence, decisions and approval.

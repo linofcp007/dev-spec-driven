@@ -10985,6 +10985,206 @@ function endRun() {
   // 1.14 feature (F3) — task dependencies and waves.
 
   // 1.14 feature (F5) — traceability matrix.
+  {
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const rp = path.join(tmp, "proj-f5-rtm");
+    S.initProject(rp, ["tdd"], "en");
+    const rf = S.createFeature(rp, "Checkout", ["tdd"], "", undefined, "en");
+    fs.writeFileSync(path.join(rf.dir, "requirements.md"), [
+      "# Feature: Checkout", "", "## Summary", "Pay by card.", "", "### US-1 (P1): Pay", "#### Acceptance Criteria (EARS)",
+      '1. **US-1.AC-1** — WHEN the shopper pays THE SYSTEM SHALL charge "the total", in cents <script>alert(1)</script>',
+      "2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL keep the cart",
+      "   and show the reason to the shopper",
+      "3. **US-1.AC-3** — WHEN [trigger] THE SYSTEM SHALL [behavior]",
+      '4. **US-1.AC-4** — =HYPERLINK("evil") THE SYSTEM SHALL log the attempt', "",
+      "### US-2 (P2): Receipt", "#### Acceptance Criteria (EARS)",
+      "1. **US-2.AC-1** — WHEN the page shows <!-- as text THE SYSTEM SHALL keep it", "",
+      "## Success Criteria", "- **SC-001** — 95% of checkouts finish in 30 s.", "- **SC-002** — refunds settle within a day.", "",
+      "## Edge Cases", "- **EC-1** — WHEN the PSP times out THE SYSTEM SHALL retry once.", "",
+      "## Non-Functional Requirements", "- **NFR-1** — p95 latency under 300 ms.", ""].join("\n"));
+    fs.writeFileSync(path.join(rf.dir, "test-plan.md"), "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | charge | US-1.AC-1 | `test/charge.test.js` |\n| T-02 | unit | example | decline | US-1.AC-2, EC-1 | `test/decline.test.js` |\n" +
+      "| T-03 | load | example | checkout load | SC-001 | `load-test.md` |\n| T-04 | unit | example | receipt | US-2.AC-1 | `test/receipt.test.js` |\n");
+    fs.writeFileSync(path.join(rf.dir, "design.md"), "# Design: Checkout\n\n## Architecture\nCheckoutService implements US-1.AC-1.\n\n## Ops --> alerts\nNFR-1 is watched; US-1.AC-20 is another feature's.\n");
+    fs.writeFileSync(path.join(rf.dir, "tasks.md"), "# Tasks\n\n## Story US-1\n" +
+      '- [ ] 1. [US1] Charge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node -e "process.exit(0)"_\n' +
+      "- [ ] 2. [US1] Decline\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Verify: npm run e2e_\n" +
+      "- [ ] 3. [US1] Log\n  - _Requirements: US-1.AC-4_\n  ```md\n  - _Requirements: US-1.AC-3_\n  ```\n" +
+      "- [ ] 4. [shared] Load\n  - _Makes green: T-03_\n- [ ] 5. [US2] Receipt\n  - _Requirements: US-2.AC-1_\n  - _Makes green: T-04_\n");
+    fs.mkdirSync(path.join(rp, "test"), { recursive: true });
+    fs.writeFileSync(path.join(rp, "test", "charge.test.js"), "test('T-01 charges the total', () => {});\n");
+    S.completeTask(rp, "checkout", 1, { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "1 passing" });
+    S.completeTask(rp, "checkout", 2, { summary: "checked by hand" }); // a note on a runnable _Verify:_: ticked, not verified
+    S.completeTask(rp, "checkout", 5); // no _Verify:_ and nothing recorded: nothing to verify
+    const rsf = path.join(rf.dir, ".state.json");
+    const rst = JSON.parse(fs.readFileSync(rsf, "utf8"));
+    Object.assign(rst.evidence["1"], { commit: "abcdef1234567", dirty: false }); // what `done --run` records in a git checkout
+    fs.writeFileSync(rsf, JSON.stringify(rst, null, 2));
+    S.decide(rp, "checkout", { title: "Stripe, as the PSP", decision: "Use Stripe.", affects: ["US-1.AC-1", "EC-1"] });
+    S.decide(rp, "checkout", { title: "Keep the cart", decision: "Keep it.", affects: ["US-1.AC-2"] });
+    S.decide(rp, "checkout", { title: "Keep the cart 24 h", decision: "Keep it a day.", affects: ["US-1.AC-2"], supersedes: ["D-2"] });
+    S.approvePhase(rp, "checkout", "classification", "alice", { force: true });
+    S.approvePhase(rp, "checkout", "requirements", "alice", { force: true });
+    fs.appendFileSync(path.join(rf.dir, "requirements.md"), "- **NFR-2** — THE SYSTEM SHALL log every charge.\n"); // after the approval
+    const sso = S.createFeature(rp, "SSO", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(sso.dir, "requirements.md"), "# Feature: SSO\n\n### US-1 (P1): IdP\n1. **US-1.AC-1** — WHEN the IdP declines THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+
+    const mx = S.traceMatrix(rp, "checkout", { code: true });
+    const row = (id) => mx.rows.find((r) => r.id === id) || {};
+    const st = (id) => row(id).status + (row(id).gaps.length ? ":" + row(id).gaps.join("+") : "");
+    ok(mx.ok && mx.feature === "checkout" && mx.lang === "en" && mx.kind === "feature" && mx.tracks === "core +tdd" &&
+      JSON.stringify(mx.rows.map((r) => r.id)) === JSON.stringify(["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1", "EC-1", "NFR-1", "NFR-2", "SC-001", "SC-002"]) &&
+      JSON.stringify(mx.rows.map((r) => r.kind)) === JSON.stringify(["ac", "ac", "ac", "ac", "ac", "ec", "nfr", "nfr", "sc", "sc"]) &&
+      row("US-1.AC-2").text === "IF the card is declined THEN THE SYSTEM SHALL keep the cart and show the reason to the shopper" &&
+      row("EC-1").text === "WHEN the PSP times out THE SYSTEM SHALL retry once." && row("US-1.AC-3").template === true && row("US-1.AC-1").template === false,
+      "feature F5: traceMatrix — one row per requirement ID, the ACs in document order then EC / NFR / SC, each with its kind and its one-line text (a wrapped criterion folded, the ID dropped); a template criterion flagged (got " + JSON.stringify(mx.rows.map((r) => r.id)) + ")");
+    ok(st("US-1.AC-1") === "verified" && st("US-1.AC-2") === "implemented" && st("US-1.AC-3") === "untraced:no-task+no-test" && st("US-1.AC-4") === "untraced:no-test" &&
+      st("US-2.AC-1") === "verified" && st("EC-1") === "implemented" && st("NFR-1") === "untraced:no-coverage" && st("NFR-2") === "untraced:no-coverage" &&
+      st("SC-001") === "planned" && st("SC-002") === "untraced:no-coverage" &&
+      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1 }) &&
+      JSON.stringify(S.RTM_STATUSES) === JSON.stringify(["verified", "implemented", "planned", "untraced"]),
+      "feature F5: statuses — verified (every linked task done + verified; a task with no _Verify:_ counts), implemented (a note on a runnable _Verify:_), untraced with the trace gap (no-task / no-test / no-coverage — a fenced example citing US-1.AC-3 is no task), planned (SC-001 via T-03, its task open) (got " + mx.rows.map((r) => r.id + "=" + st(r.id)).join(" ") + ")");
+    const t1 = row("US-1.AC-1").tasks[0] || {};
+    const t2 = row("US-1.AC-2").tasks[0] || {};
+    const t5 = row("US-2.AC-1").tasks[0] || {};
+    ok(t1.number === 1 && t1.done && t1.verified && t1.reason === null && JSON.stringify(t1.cites) === '["US-1.AC-1","T-01"]' &&
+      t1.evidence && t1.evidence.command === 'node -e "process.exit(0)"' && t1.evidence.exitCode === 0 && typeof t1.evidence.at === "string" && t1.evidence.commit === "abcdef1234567" && t1.evidence.dirty === false &&
+      t2.number === 2 && t2.done && !t2.verified && t2.reason === "manual-note-on-runnable-verify" && t2.evidence && t2.evidence.note === "checked by hand" && t2.evidence.exitCode === undefined &&
+      t5.verified && t5.nothingToVerify === true && JSON.stringify(row("SC-001").tasks.map((t) => [t.number, t.done, t.cites])) === '[[4,false,["T-03"]]]' &&
+      JSON.stringify(row("US-1.AC-4").tasks.map((t) => t.number)) === "[3]" && row("US-1.AC-3").tasks.length === 0,
+      "feature F5: the linked tasks — citing the ID or one of its planned T-IDs (cites), done / verified with the ONE verdict's stable reason, and the latest evidence (command, exitCode, at, commit / dirty; a note as note) (got " + JSON.stringify([t1, t2.reason, t5.nothingToVerify]) + ")");
+    ok(JSON.stringify(row("US-1.AC-1").tests) === '[{"id":"T-01","files":["test/charge.test.js"]}]' && JSON.stringify(row("US-1.AC-2").tests) === '[{"id":"T-02","files":[]}]' &&
+      JSON.stringify(row("SC-001").tests) === '[{"id":"T-03","outsideCode":true}]' && JSON.stringify(row("EC-1").tests.map((t) => t.id)) === '["T-02"]' &&
+      JSON.stringify(mx.code) === JSON.stringify({ scanned: 1, truncated: false }) && JSON.stringify(S.traceMatrix(rp, "checkout").rows[0].tests) === '[{"id":"T-01"}]' &&
+      JSON.stringify(row("US-1.AC-1").design) === '["Architecture"]' && JSON.stringify(row("NFR-1").design) === '["Ops --> alerts"]' && row("US-1.AC-2").design.length === 0,
+      "feature F5: tests planned for each ID (EC / SC rows too), with code: true the test files naming each T-ID (a load-test row is outsideCode); design = the sections naming the exact ID (US-1.AC-20 is not US-1.AC-2)");
+    ok(JSON.stringify(row("US-1.AC-1").decisions) === '[{"id":"D-1","title":"Stripe, as the PSP","kind":"decision"}]' && JSON.stringify(row("US-1.AC-2").decisions.map((d) => d.id)) === '["D-3"]' &&
+      JSON.stringify(row("EC-1").decisions.map((d) => d.id)) === '["D-1"]' && JSON.stringify(row("US-1.AC-2").supersededBy) === '["sso/US-1.AC-1"]' && row("US-1.AC-1").supersededBy.length === 0 &&
+      JSON.stringify(S.traceMatrix(rp, "sso").rows[0].supersedes) === '["checkout/US-1.AC-2"]',
+      "feature F5: decisions = the CURRENT decisions.md entries whose _Affects:_ name the ID (D-2, superseded by D-3, is left out); supersededBy / supersedes from the _Supersedes:_ markers");
+    ok(mx.approval && mx.approval.by === "alice" && mx.approval.forced === true && mx.approval.baseline === "snapshot" && mx.approval.changed === true &&
+      row("NFR-2").approval.changed === true && row("US-1.AC-1").approval.changed === false && row("US-1.AC-1").approval.by === "alice" && row("US-1.AC-1").approval.forced === true &&
+      S.traceMatrix(rp, "sso").approval === null && S.traceMatrix(rp, "sso").rows[0].approval === null,
+      "feature F5: the requirements approval (at / by / forced, snapshot baseline) and per row whether ITS text changed since (NFR-2 was added after the approval); never approved → null");
+
+    // trace_check {matrix}: the same matrix (MCP = engine), never part of the verdict; without it, no matrix key.
+    const plain = S.traceCheck(rp, "checkout");
+    const withM = S.traceCheck(rp, "checkout", { matrix: true, code: true });
+    const mcpM = payload(await call("trace_check", { name: "checkout", matrix: true, projectDir: rp }));
+    ok(plain.matrix === undefined && withM.verdict === plain.verdict && withM.matrix && withM.matrix.ok === undefined && withM.matrix.feature === "checkout" &&
+      JSON.stringify(withM.matrix.rows) === JSON.stringify(mx.rows) && JSON.stringify(mcpM.matrix.rows) === JSON.stringify(S.traceMatrix(rp, "checkout").rows) && mcpM.matrix.code === undefined &&
+      withM.code && withM.code.testsInCode["T-01"] && S.traceMatrix(rp, "nope").ok === false,
+      "feature F5: trace_check {matrix: true} (MCP = engine) returns the matrix under `matrix` — code: true shares its walk; the verdict is unchanged; an unknown feature is an error");
+
+    // CSV (RFC 4180): quoting, CRLF, formula-injection guard; the document form (BOM + the marker record) for spec_export.
+    const parseCsv = (t) => {
+      const recs = [];
+      let rec = [], fld = "", q = false;
+      for (let i = 0; i < t.length; i++) {
+        const c = t[i];
+        if (q) { if (c === '"') { if (t[i + 1] === '"') { fld += '"'; i++; } else q = false; } else fld += c; }
+        else if (c === '"') q = true;
+        else if (c === ",") { rec.push(fld); fld = ""; }
+        else if (c === "\r" && t[i + 1] === "\n") { rec.push(fld); recs.push(rec); rec = []; fld = ""; i++; }
+        else fld += c;
+      }
+      if (fld || rec.length) { rec.push(fld); recs.push(rec); }
+      return recs;
+    };
+    const csv = S.matrixCsv([mx], "en");
+    const recs = parseCsv(csv);
+    const hdr = recs[0] || [];
+    const col = (name) => hdr.indexOf(name);
+    const rec = (id) => recs.find((r) => r[1] === id) || [];
+    ok(csv.charCodeAt(0) !== 0xfeff && csv.endsWith("\r\n") && !/[^\r]\n/.test(csv) && recs.length === 11 && recs.every((r) => r.length === hdr.length) &&
+      hdr.join(",") === "Feature,ID,Kind,Requirement,Status,Gaps,Template,Design sections,Tasks,Tests,Test files,Latest evidence,Decisions,Supersedes,Superseded by,Requirements approved,Approved by,Changed since approval" &&
+      csv.includes('"WHEN the shopper pays THE SYSTEM SHALL charge ""the total"", in cents <script>alert(1)</script>"') && rec("US-1.AC-1")[col("Requirement")] === row("US-1.AC-1").text &&
+      rec("US-1.AC-4")[col("Requirement")] === "'" + row("US-1.AC-4").text && csv.includes('"\'=HYPERLINK(""evil"") THE SYSTEM SHALL log the attempt"') &&
+      rec("US-1.AC-2")[col("Tasks")] === "#2 done, not verified (note only, _Verify:_ command not run)" && rec("US-2.AC-1")[col("Tasks")] === "#5 done (nothing to verify)" &&
+      /^#1: node -e "process\.exit\(0\)" → exit 0 @abcdef123456 · \d{4}-/.test(rec("US-1.AC-1")[col("Latest evidence")]) && rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP" &&
+      rec("SC-001")[col("Test files")] === "T-03: run outside test code" && rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file" &&
+      rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it" && rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it" &&
+      rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1" && rec("NFR-2")[col("Changed since approval")] === "yes" && rec("US-1.AC-1")[col("Changed since approval")] === "no" &&
+      rec("US-1.AC-1")[col("Approved by")] === "alice (forced)" && rec("US-1.AC-3")[col("Template")] === "yes" && rec("EC-1")[col("Kind")] === "EC",
+      "feature F5: matrixCsv — RFC 4180 (CRLF records, every record as wide as the header, a field with a comma / quote quoted and its quotes doubled), a criterion starting with '=' neutralized with an apostrophe; tasks, evidence, gaps, supersession, approval in words (got " + JSON.stringify(recs.slice(0, 2)) + ")");
+    ok(S.csvCell("plain") === "plain" && S.csvCell(null) === "" && S.csvCell('a,"b"') === '"a,""b"""' && S.csvCell("a\nb") === '"a\nb"' && S.csvCell("a\r\nb") === '"a\r\nb"' &&
+      S.csvCell("=1+1") === "'=1+1" && S.csvCell("+1") === "'+1" && S.csvCell("-1") === "'-1" && S.csvCell("@SUM(A1)") === "'@SUM(A1)" && S.csvCell("\tx") === "'\tx" &&
+      S.csvCell("\rx") === "\"'\rx\"" && S.csvCell(" =x") === " =x" && S.csvCell("x=1") === "x=1" && S.csvCell(-3) === "'-3",
+      "feature F5: csvCell — quoted only when it must be (comma, quote, CR, LF — quotes doubled); a leading = + - @ tab or CR gets an apostrophe (OWASP CSV injection)");
+
+    // spec_export {format: "csv"}: .specs/exports/<slug>.rtm.csv — BOM, the marker as the LAST record; never over a hand-written file.
+    const ex = S.exportSpecs(rp, { name: "checkout", format: "csv" });
+    const exRecs = parseCsv((ex.content || "").slice(1));
+    const last = exRecs[exRecs.length - 1] || [];
+    const noCode = S.matrixCsv([S.traceMatrix(rp, "checkout")], "en"); // the export reads the specs only: no Test files column
+    ok(ex.ok && ex.format === "csv" && ex.scope === "feature" && ex.feature === "checkout" && ex.file === path.join(rp, ".specs", "exports", "checkout.rtm.csv") &&
+      ex.content.charCodeAt(0) === 0xfeff && ex.content.slice(1, 1 + noCode.length) === noCode && !/Test files/.test(noCode) && exRecs.length === 12 && exRecs.every((r) => r.length === hdr.length - 1) &&
+      /^# AUTO-GENERATED by dev-spec — do not edit by hand\./.test(last[0]) && last.slice(1).every((c) => c === "") && ex.content.endsWith("\r\n"),
+      "feature F5: spec_export {format: 'csv'} — the same records with a UTF-8 BOM first (Excel reads the accents) and the AUTO-GENERATED marker as the LAST record (first cell, the rest empty — the header stays the first row)");
+    const exW = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    const exW2 = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    const pw = S.exportSpecs(rp, { format: "csv", write: true });
+    const pRecs = parseCsv(fs.readFileSync(path.join(rp, ".specs", "exports", "project.rtm.csv"), "utf8").slice(1));
+    const handCsv = path.join(rp, ".specs", "exports", "checkout.rtm.csv");
+    fs.writeFileSync(handCsv, "ID,Owner\r\nUS-1.AC-1,alice\r\n");
+    const exH = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
+    ok(exW.ok && exW.wrote === true && exW.content === undefined && exW.bytes > 500 && exW2.ok && exW2.wrote && pw.ok && pw.file === path.join(rp, ".specs", "exports", "project.rtm.csv") &&
+      JSON.stringify(pw.features) === '["checkout","sso"]' && pRecs.filter((r) => r[0] === "checkout").length === 10 && pRecs.some((r) => r[0] === "sso" && r[1] === "US-1.AC-1") &&
+      exH.ok === false && exH.skipped === true && /\.specs\/exports\/checkout\.rtm\.csv exists and was not generated by dev-spec/.test(exH.error) &&
+      fs.readFileSync(handCsv, "utf8") === "ID,Owner\r\nUS-1.AC-1,alice\r\n" && !S.listFeatures(rp).features.some((f) => f.name === "exports"),
+      "feature F5: spec_export csv {write} — .specs/exports/checkout.rtm.csv, rewritten next time (its marker record); the project: project.rtm.csv with every active feature's rows; a hand-written .rtm.csv is never overwritten (error, file unchanged)");
+
+    // The HTML / md feature document gains the matrix; every cell escaped; the project document gets the counts.
+    const html = S.exportSpecs(rp, { name: "checkout" }).content || "";
+    const sec = html.slice(html.indexOf('<section id="s-rtm">'), html.indexOf("</section>", html.indexOf('<section id="s-rtm">')));
+    ok(/<section id="s-rtm">\n<h2>Traceability matrix<\/h2>/.test(html) && /<li><a href="#s-rtm">Traceability matrix<\/a><\/li>/.test(html) &&
+      sec.includes("<td>US-1.AC-1</td><td>WHEN the shopper pays THE SYSTEM SHALL charge &quot;the total&quot;, in cents &lt;script&gt;alert(1)&lt;/script&gt;</td><td>✅ verified</td><td>Architecture</td><td>#1 ✅</td><td>T-01</td><td>D-1</td>") &&
+      (html.match(/<script/g) || []).length === 1 && !/https?:\/\//.test(html) && /<td><del>US-1\.AC-2<\/del><\/td><td>IF the card is declined[^<]*<em>\(superseded by <code>sso\/US-1\.AC-1<\/code>\)<\/em><\/td><td>⚠ implemented<\/td>/.test(sec) &&
+      sec.includes("<td>US-2.AC-1</td><td>WHEN the page shows &lt;!-- as text THE SYSTEM SHALL keep it</td>") && sec.includes("<td>NFR-1</td>") && sec.includes("<td>Ops --&gt; alerts</td>") &&
+      /<td>✗ untraced — no task cites it; no test-plan row covers it<\/td>/.test(sec) && /\(template — not written yet\)/.test(sec) && /changed since the requirements approval/.test(sec) &&
+      /Requirements approved \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC by alice \(with --force\)\./.test(sec),
+      "feature F5: the HTML export's Traceability matrix section — every cell escaped (a <script> in a criterion is text, the page's own script the only one), an HTML comment opener in one row never swallows the rows up to a later '-->', superseded struck through, gaps, template and changed-since noted");
+    const md = S.exportSpecs(rp, { name: "checkout", format: "md" }).content || "";
+    const pmd = S.exportSpecs(rp, { format: "md" }).content || "";
+    const spk = S.createFeature(rp, "Cache spike", ["core"], "", undefined, "en", "spike");
+    const spkMd = spk.ok ? S.exportSpecs(rp, { name: "cache-spike", format: "md" }).content || "" : "";
+    ok(/\n## Traceability matrix\n\n_One row per requirement ID\./.test(md) && /\n\| ID \| Requirement \| Status \| Design sections \| Tasks \| Tests \| Decisions \|\n\|---\|---\|---\|---\|---\|---\|---\|\n\| US-1\.AC-1 \| /.test(md) &&
+      md.includes("| US-2.AC-1 | WHEN the page shows &lt;!-- as text THE SYSTEM SHALL keep it |") && !/\n\n\n/.test(md.replace(/```[\s\S]*?```/g, "F")) &&
+      /\n## Traceability\n\n_Requirement IDs \(AC \/ EC \/ NFR \/ SC\) per feature/.test(pmd) && pmd.includes("| checkout | 10 | 2 | 2 | 1 | 5 |") && pmd.includes("| sso | 1 | 0 | 0 | 1 | 0 |") &&
+      spk.ok && !/Traceability matrix/.test(spkMd) && S.traceMatrix(rp, "cache-spike").rows.length === 0,
+      "feature F5: the md export carries the same matrix (a '<!--' shown as its entity), the project document each feature's counts by status; a spike has no matrix section");
+
+    // MCP spec_export csv = the engine; the format enum lists csv.
+    const mcpCsv = payload(await call("spec_export", { name: "checkout", format: "csv", projectDir: rp }));
+    const mcpBad = await call("spec_export", { name: "checkout", format: "xlsx", projectDir: rp });
+    ok(mcpCsv.ok && mcpCsv.content === S.exportSpecs(rp, { name: "checkout", format: "csv" }).content && mcpBad.result.isError === true && /html, md, csv/.test(mcpBad.result.content[0].text),
+      "feature F5: MCP spec_export {format: 'csv'} = the engine call; the format enum is html | md | csv");
+
+    // Localized headers and labels (PT / ES / pt-BR); the IDs and the kind column stay English; the message keys agree.
+    const xpt = path.join(tmp, "proj-f5-rtm-pt");
+    S.initProject(xpt, ["core"], "pt");
+    const pf = S.createFeature(xpt, "Pagamento", ["core"], "Pagar.", undefined, "pt");
+    fs.writeFileSync(path.join(pf.dir, "requirements.md"), "# Feature: Pagamento\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE cobrar o total\n");
+    fs.writeFileSync(path.join(pf.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Cobrar\n");
+    const xes = path.join(tmp, "proj-f5-rtm-es");
+    S.initProject(xes, ["core"], "es");
+    const ef = S.createFeature(xes, "Pagos", ["core"], "Pagar.", undefined, "es");
+    fs.writeFileSync(path.join(ef.dir, "requirements.md"), "# Feature: Pagos\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — CUANDO el cliente paga EL SISTEMA DEBE cobrar el total\n");
+    fs.writeFileSync(path.join(ef.dir, "tasks.md"), "# Tareas\n\n- [ ] 1. [US1] Cobrar\n");
+    const ptCsv = S.matrixCsv([S.traceMatrix(xpt, "pagamento")], "pt");
+    const esCsv = S.matrixCsv([S.traceMatrix(xes, "pagos")], "es");
+    const ptMd = S.exportSpecs(xpt, { name: "pagamento", format: "md" }).content || "";
+    const esMd = S.exportSpecs(xes, { name: "pagos", format: "md" }).content || "";
+    const ptDoc = S.exportSpecs(xpt, { name: "pagamento", format: "csv" }).content || "";
+    const keys = (o) => Object.keys(o).sort().map((k) => k + (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? "{" + keys(o[k]) + "}" : Array.isArray(o[k]) ? "[" + o[k].length + "]" : "")).join(",");
+    ok(ptCsv.startsWith("Feature,ID,Tipo,Requisito,Estado,Lacunas,Template,Secções do design,Tasks,Testes,Última evidência,") && /\r\npagamento,US-1\.AC-1,AC,QUANDO o cliente paga O SISTEMA DEVE cobrar o total,sem rastreio,nenhuma task o cita,/.test(ptCsv) &&
+      esCsv.startsWith("Función,ID,Tipo,Requisito,Estado,Lagunas,Plantilla,Secciones del diseño,Tareas,Pruebas,Última evidencia,") && /,sin trazar,ninguna tarea lo cita,/.test(esCsv) &&
+      /\n## Matriz de rastreabilidade\n/.test(ptMd) && /\| ID \| Requisito \| Estado \| Secções do design \| Tasks \| Testes \| Decisões \|/.test(ptMd) && /Requisitos ainda não aprovados\./.test(ptMd) &&
+      /\n## Matriz de trazabilidad\n/.test(esMd) && /✗ sin trazar — ninguna tarea lo cita/.test(esMd) && /\r\n# AUTO-GERADO por dev-spec — não editar à mão\./.test(ptDoc) &&
+      S.msg("pt-BR").rtm.cols.testFiles === "Arquivos de teste" && S.msg("pt-BR").rtm.status.planned === "planejado" &&
+      keys(S.msg("en").rtm) === keys(S.msg("pt").rtm) && keys(S.msg("pt").rtm) === keys(S.msg("es").rtm),
+      "feature F5: headers and labels in the feature's language (PT / ES CSV, md export, the PT marker record), pt-BR derived from PT; IDs, AC and the kind stay English; the rtm messages have the same keys in EN / PT / ES");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
