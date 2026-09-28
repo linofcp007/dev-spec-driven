@@ -210,7 +210,24 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
-### Unreleased (1.15)
+### New in 1.16
+
+- **Undo and revoke** — `dev-spec undone <feature> <n>` reopens a ticked task (its evidence turns stale, so a re-tick
+  needs a new run); `approve <feature> <phase> --revoke` withdraws an approval (kept in the history, never a cascade).
+  `--force --reason "…" --expires 30d` records why a gate was forced and until when — doctor warns once it lapses.
+- **In Claude Code** — `/spec-statusline` puts the active feature, its tasks and the next step in the status bar; the
+  MCP tools carry annotations (read-only / destructive) and prompt arguments complete feature names; an approved plan
+  from plan mode can be imported inline (`import plan -`). Your defaults for every project — `DEV_SPEC_DEFAULT_LANG`,
+  `DEV_SPEC_STOP_CHECK`, `DEV_SPEC_GUARD_DEFAULT` — go in the `env` block of Claude Code's `settings.json`.
+- **Spec quality** — approvals remember the steering they were made under (doctor warns when the constitution or a
+  track's standard changed since; `impact --phase steering` lists who is affected); doctor and the catalog flag
+  criteria that duplicate or contradict another feature's; a glossary (`.specs/steering/glossary.md`, `_Avoid:_`
+  words) makes clarify ask about the words to avoid.
+- **Exports and planning** — `export --gherkin` writes a `.feature` per feature (EARS → Given / When / Then, PT / ES
+  dialects); `export --tracker jira|linear` a CSV for the tracker's importer; `/spec-milestone` sets target dates for
+  sets of features, judged against the forecasts (on-track · at-risk · late · done) in ROADMAP.md.
+
+### New in 1.15
 
 - **Project-defined tracks** (`/spec-tracks`) — beyond the six built-in tracks, a team defines its own (+a11y, +mobile,
   +dbmigration…) as a folder: `.specs/tracks/<name>/track.json` (name, a case-sensitive marker such as `A11Y`, a title,
@@ -348,7 +365,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Unreleased (1.15): `/spec-tracks`.
+`/spec-tour`. New in 1.15: `/spec-tracks`.
 New in 1.16: `/spec-statusline`, `/spec-milestone`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
@@ -582,7 +599,27 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
 
-### Por lançar (1.15)
+### Novidades da 1.16
+
+- **Desfazer e revogar** — `dev-spec undone <funcionalidade> <n>` reabre uma tarefa marcada (a evidência fica
+  desatualizada, por isso voltar a marcá-la exige uma nova execução); `approve <funcionalidade> <fase> --revoke` retira
+  uma aprovação (fica no histórico, sem cascata). `--force --reason "…" --expires 30d` regista porque um gate foi forçado
+  e até quando — o doctor avisa quando expira.
+- **No Claude Code** — `/spec-statusline` põe a funcionalidade ativa, as tarefas e o passo seguinte na barra de estado;
+  as ferramentas MCP trazem anotações (só leitura / destrutiva) e os argumentos dos prompts completam nomes de
+  funcionalidades; um plano aprovado no plan mode pode ser importado em linha (`import plan -`). As tuas predefinições
+  para todos os projetos — `DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`, `DEV_SPEC_GUARD_DEFAULT` — vão no bloco
+  `env` do `settings.json` do Claude Code.
+- **Qualidade das specs** — as aprovações guardam o steering sob o qual foram feitas (o doctor avisa quando a
+  constituição ou a norma de um track mudou desde então; `impact --phase steering` lista quem é afetado); o doctor e o
+  catálogo assinalam critérios que duplicam ou contradizem os de outra funcionalidade; um glossário
+  (`.specs/steering/glossary.md`, palavras `_Avoid:_`) faz o clarify perguntar pelas palavras a evitar.
+- **Exportações e planeamento** — `export --gherkin` escreve um `.feature` por funcionalidade (EARS → Dado / Quando /
+  Então, dialetos PT / ES); `export --tracker jira|linear` um CSV para o importador do tracker; `/spec-milestone` define
+  datas-alvo para conjuntos de funcionalidades, avaliadas face às previsões (on-track · at-risk · late · done) no
+  ROADMAP.md.
+
+### Novidades da 1.15
 
 - **Tracks definidos pelo projeto** (`/spec-tracks`) — além dos seis tracks de origem, uma equipa define os seus (+a11y,
   +mobile, +dbmigration…) como uma pasta: `.specs/tracks/<nome>/track.json` (nome, um marcador sensível a maiúsculas
@@ -730,7 +767,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Por lançar (1.15): `/spec-tracks`.
+`/spec-tour`. Novo na 1.15: `/spec-tracks`.
 Novos na 1.16: `/spec-statusline`, `/spec-milestone`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
@@ -968,7 +1005,27 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
-### Sin publicar (1.15)
+### Novedades de la 1.16
+
+- **Deshacer y revocar** — `dev-spec undone <función> <n>` reabre una tarea marcada (su evidencia queda obsoleta, así
+  que volver a marcarla exige una nueva ejecución); `approve <función> <fase> --revoke` retira una aprobación (queda en
+  el historial, sin cascada). `--force --reason "…" --expires 30d` registra por qué se forzó un gate y hasta cuándo — el
+  doctor avisa cuando vence.
+- **En Claude Code** — `/spec-statusline` pone la función activa, sus tareas y el paso siguiente en la barra de estado;
+  las herramientas MCP llevan anotaciones (solo lectura / destructiva) y los argumentos de los prompts completan nombres
+  de funciones; un plan aprobado en plan mode se puede importar en línea (`import plan -`). Tus valores por defecto para
+  todos los proyectos — `DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`, `DEV_SPEC_GUARD_DEFAULT` — van en el bloque
+  `env` del `settings.json` de Claude Code.
+- **Calidad de las specs** — las aprobaciones recuerdan el steering con el que se hicieron (el doctor avisa cuando la
+  constitución o la norma de un track cambió desde entonces; `impact --phase steering` lista a quién afecta); el doctor
+  y el catálogo señalan criterios que duplican o contradicen los de otra función; un glosario
+  (`.specs/steering/glossary.md`, palabras `_Avoid:_`) hace que clarify pregunte por las palabras a evitar.
+- **Exportaciones y planificación** — `export --gherkin` escribe un `.feature` por función (EARS → Dado / Cuando /
+  Entonces, dialectos PT / ES); `export --tracker jira|linear` un CSV para el importador del tracker; `/spec-milestone`
+  fija fechas objetivo para conjuntos de funciones, evaluadas frente a las previsiones (on-track · at-risk · late ·
+  done) en ROADMAP.md.
+
+### Novedades de la 1.15
 
 - **Tracks definidos por el proyecto** (`/spec-tracks`) — además de los seis tracks de serie, un equipo define los
   suyos (+a11y, +mobile, +dbmigration…) como una carpeta: `.specs/tracks/<nombre>/track.json` (nombre, un marcador que
@@ -1116,7 +1173,7 @@ todas partes, `/plugin disable` — ambos quitan también las skills de superpow
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Sin publicar (1.15): `/spec-tracks`.
+`/spec-tour`. Nuevo en la 1.15: `/spec-tracks`.
 Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
