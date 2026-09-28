@@ -33,6 +33,7 @@ SECTIONS.push("frgb"); // 1.14 full review (Gb) — next_action, doctor, stop ga
 SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR
 SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
 SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
+SECTIONS.push("p16u", "p16c", "p16q", "p16e"); // 1.16 packages U / C / Q / E — each branch fills its own section
 SECTIONS.push("fftracks"); // 1.15 feature F4 — project-defined tracks (track packs)
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
@@ -3462,6 +3463,14 @@ if (inSection("fftracks")) {
     /tracks \[list\|init <name>\|check\]/.test(help) && /tracks \[list\|init <name>\|check\]/.test(doc) && r(["tracks", "bogus"]).code === 1,
     "feature F4: tracks init --lang pt (Portuguese files and messages); help and the docblock document `tracks`; an unknown action exits 1");
 }
+
+// 1.16 package (U): if (inSection("p16u")) { … }
+
+// 1.16 package (C): if (inSection("p16c")) { … }
+
+// 1.16 package (Q): if (inSection("p16q")) { … }
+
+// 1.16 package (E): if (inSection("p16e")) { … }
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");

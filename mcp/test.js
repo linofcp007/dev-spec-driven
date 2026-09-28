@@ -12482,6 +12482,14 @@ function endRun() {
       "1.15: a _Supersedes:_ added to a shipped feature after it shipped (a change request) is 'to be superseded' until it ships again (got " + JSON.stringify(ac3) + ")");
   }
 
+  // 1.16 package (U) — usability: undo, waivers, stop-check / log tools.
+
+  // 1.16 package (C) — Claude Code integration: status line, userConfig, annotations / completion, plan-mode bridge.
+
+  // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
+
+  // 1.16 package (E) — exports and planning: Gherkin, tracker CSV, milestones.
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;
