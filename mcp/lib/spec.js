@@ -3408,7 +3408,7 @@ function statusFeature(projectDir, name) {
   const next = taskSchedule(blocks).next; // 1.14 F3: next_task's rule (_Depends:_ all done)
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
-  const mode = evidenceMode(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
+  const mode = evidenceRule(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
   const list = blocks.map((b) => {
     const v = taskVerification(evidence, b, dups.has(b.number), mode); // doctor's rule — never a second opinion
     return { number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text, verified: !v.reason, ...(v.nothingToVerify ? { nothingToVerify: true } : {}) };
@@ -3931,7 +3931,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
   // The same verdict doctor, spec_finish and ROADMAP.md give (taskVerification): unverified ⇔ a reason code.
-  const { reason, nothingToVerify } = taskVerification(state.evidence || {}, task, dup, evidenceMode(projectDir));
+  const { reason, nothingToVerify } = taskVerification(state.evidence || {}, task, dup, evidenceRule(projectDir));
   const res = {
     ok: true,
     feature: f.slug,
@@ -3952,7 +3952,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
       : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
       // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
-      : reason === "unobserved" ? i18n.msg(lng).observed.unobservedNote(n, f.slug) + (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved)
+      : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
+        (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved) // an _Expect: fail_ task: its RED run must be observed
       : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
     if (redHint && ["failed-run", "manual-note-on-runnable-verify", "no-evidence"].includes(reason)) {
       res.note += " — " + redHint;
@@ -5256,7 +5257,9 @@ function taskMarkers(block) {
 // "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test`,
 // `_Verify:_ npm test`. The tools read nothing there (no check to run, no file to trace). → [{ number, labels }] — doctor's
 // malformed-markers warn.
-const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends)[ \t]*:/giu;
+// "depends:" only before a task number ("depends: 3", "Depends: #3, 5") — prose like "(depends: the schema from task 1)" is
+// prose (feature review R8).
+const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends(?=[ \t]*:[ \t*_]*#?\d))[ \t]*:/giu;
 const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect", depends: "Depends" };
 function malformedMarkers(blocks) {
   const out = [];
@@ -5382,9 +5385,10 @@ function taskEvidenceIssue(evidence, block, dup) {
 // mode (1.14 F1): the project's evidenceMode — "observed" verifies a runnable _Verify:_ only when the run that proves it was
 // observed by the harness or made by the CLI (observedProof), else reason `unobserved`; "reported" / absent: today's rule.
 function taskVerification(evidence, block, dup, mode) {
+  const rule = typeof mode === "string" ? { mode } : mode || {}; // evidenceRule(): { mode, since }
   if (taskMarkers(block).verify.length) {
     const reason = taskEvidenceIssue(evidence, block, dup);
-    if (reason || mode !== "observed" || observedProof(ownEvidence(evidence, block, dup), expectsFail(block))) return { reason, nothingToVerify: false };
+    if (reason || rule.mode !== "observed" || observedProof(ownEvidence(evidence, block, dup), expectsFail(block), rule.since)) return { reason, nothingToVerify: false };
     return { reason: "unobserved", nothingToVerify: false };
   }
   const reason = ownEvidence(evidence, block, dup) == null ? "no-evidence" : taskEvidenceIssue(evidence, block, dup);
@@ -5446,7 +5450,7 @@ function verificationStatus(projectDir, slug, dir) {
   const evidence = stateEvidence(projectDir, slug);
   const withVerify = blocks.filter((b) => taskMarkers(b).verify.length);
   const dups = new Set(duplicateTaskNumbers(blocks));
-  const mode = evidenceMode(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
+  const mode = evidenceRule(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
   const unverifiedDetail = [];
   for (const b of blocks) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
@@ -5867,9 +5871,23 @@ const EVIDENCE_MODES = ["reported", "observed"];
 // A command as the log and the lookup compare it: backticks dropped, whitespace runs flattened (the implementer gate's rule).
 const flatCommand = (s) => String(s == null ? "" : s).replace(/`/g, "").replace(/\s+/g, " ").trim();
 // roadmap.json meta.evidence → "observed" | "reported" (absent or anything else: reported — the default, today's rule).
+// Fails CLOSED: a roadmap.json that doesn't parse (one stray byte appended) keeps "observed" when its raw text says so — it
+// used to read as "reported", and a single write switched the rule off (feature review R1).
 function evidenceMode(projectDir) {
   const l = loadRoadmap(projectDir);
-  return !l.parseError && isObj(l.rm.meta) && l.rm.meta.evidence === "observed" ? "observed" : "reported";
+  if (l.parseError) return /"evidence"\s*:\s*"observed"/.test(readIfExists(roadmapPath(projectDir)) || "") ? "observed" : "reported";
+  return isObj(l.rm.meta) && l.rm.meta.evidence === "observed" ? "observed" : "reported";
+}
+// When the project switched to "observed" (roadmap.json meta.evidenceSince, ms) — null when unknown. A red proof recorded
+// before it is grandfathered (observedProof).
+function evidenceSince(projectDir) {
+  const l = loadRoadmap(projectDir);
+  return !l.parseError && isObj(l.rm.meta) ? timeOf(l.rm.meta.evidenceSince) : null;
+}
+// The rule taskVerification applies: { mode, since } (a bare mode string is accepted too).
+function evidenceRule(projectDir) {
+  const mode = evidenceMode(projectDir);
+  return mode === "observed" ? { mode, since: evidenceSince(projectDir) } : { mode };
 }
 // spec_init {evidence} / `init --evidence`: "reported" | "observed" (case-insensitive) → the mode; anything else → undefined.
 function evidenceModeInput(v) {
@@ -5882,6 +5900,8 @@ function setEvidenceMode(projectDir, mode) {
   rm.meta = isObj(rm.meta) ? rm.meta : {};
   if (rm.meta.evidence === mode || (mode === "reported" && rm.meta.evidence === undefined)) return;
   rm.meta.evidence = mode;
+  if (mode === "observed") rm.meta.evidenceSince = new Date().toISOString(); // the switch — red proofs before it are grandfathered
+  else delete rm.meta.evidenceSince;
   writeRoadmap(projectDir, rm);
 }
 // The log a feature's task runs (slug) or the project checks' runs (slug null) go to — null when the feature doesn't exist.
@@ -5949,9 +5969,14 @@ function observedStamp(projectDir, slug, ev, ranBy) {
 }
 // meta.evidence "observed": the run that proves a runnable _Verify:_ — the latest passing run, or an _Expect: fail_ task's red
 // proof — was observed by the harness (true) or made by the CLI itself ("cli").
-function observedProof(e, expectFail) {
+// An _Expect: fail_ task whose red proof was recorded BEFORE the project switched to "observed" (since) counts once the fix's
+// passing run of it was observed: re-making the red run would mean breaking the fixed code again (feature review R2 — the task
+// stayed unobserved for good and the note sent the user round in circles).
+function observedProof(e, expectFail, since) {
+  const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli");
   const run = expectFail ? redProof(e) : e;
-  return isRecord(run) && (run.observed === true || run.observed === "cli");
+  if (seen(run)) return true;
+  return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
 // Every runnable _Verify:_ command of a tasks.md (flattened), plus the " && " join of a task's commands when it has several.
 function verifyCommandSet(tasksText) {
@@ -5979,7 +6004,10 @@ function observeRun(projectDir, run) {
   const targets = [];
   for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, OBSERVED_MAX_FEATURES)) {
     const text = readIfExists(path.join(f.dir, "tasks.md"));
-    if (text && flatCommand(text).includes(key) && verifyCommandSet(text).has(key)) targets.push({ feature: f.slug, dir: path.join(f.dir, ".execution") });
+    // The cheap text check first — a task's " && " join is never written whole, only its parts are (review R6).
+    const flatTasks = text ? flatCommand(text) : "";
+    const inText = flatTasks.includes(key) || (key.includes(" && ") && key.split(" && ").every((p) => !p.trim() || flatTasks.includes(p.trim())));
+    if (text && inText && verifyCommandSet(text).has(key)) targets.push({ feature: f.slug, dir: path.join(f.dir, ".execution") });
   }
   if (projectChecks(pdir).checks.some((c) => flatCommand(c.command) === key)) targets.push({ feature: null, dir: path.join(root, ".execution") });
   const recorded = [];
@@ -7592,7 +7620,7 @@ function impactReport(projectDir, name, opts = {}) {
   const blocks = activeTaskBlocks(tasksText, tracks);
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
-  const mode = evidenceMode(projectDir); // 1.14 F1
+  const mode = evidenceRule(projectDir); // 1.14 F1
   const taskView = (b) => {
     const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number), mode);
     return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(nothingToVerify ? { nothingToVerify: true } : {}),
@@ -10729,7 +10757,10 @@ function roadmapData(projectDir, opts = {}) {
     const done = tasks.filter((t) => t.done).length;
     tasksDone += done;
     tasksTotal += tasks.length;
-    const next = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")).next; // 1.14 F3: next_task's rule
+    const sch = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")); // 1.14 F3: next_task's rule
+    const next = sch.next;
+    // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): shown blocked, never "ready" (review R7).
+    const depsBlocked = !next && done < tasks.length ? (sch.blocked.length ? sch.blocked : sch.skipped) : null;
     // The icon agrees with the percent: past the requirements (16–25% = design / test / eval plan) a feature is in
     // progress — ⬜ 'not started' only below that; tasks-ready (30%, nothing done) is 📋 planned.
     const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress"
@@ -10749,7 +10780,7 @@ function roadmapData(projectDir, opts = {}) {
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
     const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
     const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
-    return { f, clar, done, total: tasks.length, next, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait, spikeTimebox };
+    return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait, spikeTimebox };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -10759,6 +10790,7 @@ function buildAttention(rows, t, lang) {
   const a = [];
   rows.forEach((r) => {
     if (r.f.blocked) a.push({ name: r.f.name, msg: `${t.blockedBy} ${r.f.unmetDeps.join(", ")}` });
+    if (r.depsBlocked && r.depsBlocked.length) a.push({ name: r.f.name, msg: fm.taskDeps.roadmapBlocked(taskDepsWaitList(r.depsBlocked, lang)) }); // 1.14 F3
     if (r.clar) a.push({ name: r.f.name, msg: `${r.clar} ${t.openClar}` });
     // The named sections say more than "design has unfilled (TODO) sections" — that line stays for a TODO elsewhere.
     if (r.sections && r.sections.length) {
@@ -10799,8 +10831,8 @@ function renderRoadmapMd(projectDir, lang, data) {
   const attention = buildAttention(rows, t, lang);
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
-  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
-  const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
+  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
+  const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
   const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // 1.14 C2: spikes read apart
   const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : "requirements.md"}`;
 
@@ -10846,8 +10878,8 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const attention = buildAttention(rows, t, lang);
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
-  const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked);
-  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(roadmapTaskText(r.next.text, t).slice(0, 60))}` : "…");
+  const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
+  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(roadmapTaskText(r.next.text, t).slice(0, 60))}` : "…");
 
   const featRows = rows
     .map(
@@ -12989,7 +13021,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const blocks = taskBlocks(activeTasks(read("tasks.md") || "", tracks) || "");
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
-  const evMode = evidenceMode(projectDir); // 1.14 F1: the ONE verdict, in the project's evidence mode (unobserved under "observed")
+  const evMode = evidenceRule(projectDir); // 1.14 F1: the ONE verdict, in the project's evidence mode (unobserved under "observed")
   const tinfo = blocks.map((b) => {
     const prose = taskProse(b).join("\n");
     return { b, acs: extractAcIds(prose), sec: secondaryIds(prose), tids: new Set([...extractTestIds(prose)].map((t) => tKey(t.slice(2)))) };
@@ -13088,7 +13120,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     if (row.kind === "ac") {
       if (!tasksAcs.has(row.id)) gaps.push("no-task");
       if (planOn && !planAcs.has(row.id)) gaps.push("no-test");
-    } else if (row.kind === "sc" ? !planSec.has(row.key) && !quickSec.has(row.key) : !tasksSec.has(row.key) && !planSec.has(row.key)) gaps.push("no-coverage");
+    } else if (!row.secTemplate && (row.kind === "sc" ? !planSec.has(row.key) && !quickSec.has(row.key) : !tasksSec.has(row.key) && !planSec.has(row.key))) {
+      gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none (review R11)
+    }
     const status = gaps.length ? "untraced" : !tasks.length || tasks.some((t) => !t.done) ? "planned" : tasks.some((t) => !t.verified) ? "implemented" : "verified";
     const design = dinfo.filter((d) => cites(row, d.acs, d.sec) || (row.kind === "ac" && trackMarks.some((m) => m.acs.has(row.id) && d.title.includes(m.marker)))).map((d) => d.title);
     const decisions = decs.filter((d) => (row.kind === "ac" ? d.acs.has(row.id) : d.secIds.has(row.key))).map((d) => ({ id: d.id, title: d.title, kind: d.kind }));
