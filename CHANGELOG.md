@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.16.0] — 2026-09-28
+## [1.16.0] — 2026-09-29
 
 Day-to-day comfort and reach: undo a tick, revoke an approval, say why a gate was forced and until when; a status line,
 MCP tool annotations and argument completion, a plan-mode bridge; specs that notice an amended constitution, criteria
@@ -73,6 +73,13 @@ against the forecasts. 38 MCP tools (was 35), 54 commands (was 52).
 ### Changed
 - `spec_impact`'s `name` is optional in the MCP schema (phase `steering` only — every other phase still needs it).
 - `spec_templates` lists 28 templates (the glossary stub).
+
+### Fixed
+- **The guard hook never touches a network path an agent names** (`\\host\share\…` in a Write / Edit, or an absolute
+  `_Implements:_` path): inside / outside is decided on the text alone (a project that lives on a share stays guarded).
+  It used to stat and resolve it — an SMB connection to that host before the permission prompt, and a hang until the
+  hook timeout when the host was unreachable. The PostToolUse hook skips a network `.specs/` file outside the session.
+- The README labelled the shipped 1.15 section "Unreleased".
 
 ### Tests
 - `node mcp/test.js` 1362 assertions (was 1256), `node cli/test-cli.js` 438 (was 402): every new tool, flag and
