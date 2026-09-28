@@ -73,7 +73,12 @@
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
  *                                      [--csv] the traceability matrix as CSV (UTF-8 BOM) → .specs/exports/<feature|project>.rtm.csv
- *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
+ *                                      [--gherkin] one Gherkin .feature per feature (a scenario per AC, EARS → Given/When/Then) → <feature>.feature
+ *                                      [--tracker jira|linear] a CSV for the tracker's importer (feature → stories → tasks) → <feature|project>.<tracker>.csv
+ *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt);
+ *                                      --milestone <name>: that milestone's features only → .specs/RELEASE-NOTES.<milestone>.md
+ *   milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]  Milestones in roadmap.json (meta.milestones): each one's
+ *                                      date vs the latest ETA of its features → on-track · at-risk · late · done (ROADMAP.md shows them)
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   stop-check [--message "<text>"|-] [--agent <type>]  The Stop hook's evidence gate for a closing message: does it claim
  *                                      done / verified while a recently active feature has ticked tasks without evidence? (exit 1 = sent back)
@@ -175,6 +180,8 @@ VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes)
 VALUE_FLAGS.add("approval-guard"); // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
+VALUE_FLAGS.add("tracker"); // 1.16 E2: export [f] --tracker jira|linear (= spec_export {format: "jira" | "linear"})
+VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_changelog {milestone})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
@@ -772,6 +779,18 @@ function main() {
       });
     }
 
+    case "milestone":
+    case "milestones": {
+      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_milestone {action, name, date, features}):
+      // a name with spaces is quoted; the features may also be comma-separated. The action is case-folded, like the MCP enum.
+      const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase() || "list";
+      const syntax = "dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]";
+      if ((a0 === "list" && pos.length > 1) || ((a0 === "rm" || a0 === "remove") && pos.length !== 2)) usage(syntax);
+      const r = spec.milestone(projectDir, a0, a0 === "add" ? { name: pos[1], date: pos[2], features: pos.slice(3) } : { name: pos[1] });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+    }
+
     case "roadmap": {
       // Same engine call as spec_roadmap: a failed write (e.g. a hand-written ROADMAP.md) is an error → exit 1.
       const r = spec.roadmapReport(projectDir, { write: on("write") || on("md"), html: on("html"), lang: flags.lang });
@@ -1136,19 +1155,35 @@ function main() {
     }
 
     case "export": {
-      // dev-spec export [feature] [--md|--csv] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
-      // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
-      if (pos.length > 1 || [on("md"), on("html"), on("csv")].filter(Boolean).length > 1) usage("dev-spec export [feature] [--md|--csv] [--write]");
-      const r = spec.exportSpecs(projectDir, { name: pos[0], format: on("md") ? "md" : on("csv") ? "csv" : "html", write: on("write") });
+      // dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
+      // {name, format, write}): printed on stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No
+      // feature = the whole project (--gherkin: one .feature per feature). --tracker takes the tool's name (the MCP format).
+      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]";
+      const tracker = flags.tracker === undefined ? null : String(flags.tracker).trim().toLowerCase();
+      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
+      if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
+        const A = spec.msg(spec.projectLang(projectDir)).args;
+        die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))));
+      }
+      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : "html");
+      const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
       if (!r.ok) return fail(r);
-      const X = spec.msg(r.lang).stakeholderExport;
-      return out(r, (r) => (r.wrote ? console.log(X.wrote(r.file)) : process.stdout.write(r.content)));
+      const M = spec.msg(r.lang);
+      return out(r, (r) => {
+        if (r.format === "gherkin" && r.scope === "project") { // one .feature per feature: written, or each printed under its path
+          if (r.wrote) { r.files.forEach((f) => console.log(M.stakeholderExport.wrote(f))); return console.log(M.gherkin.wroteMany(r.files.length, r.scenarios)); }
+          if (!r.documents.length) return console.log(M.gherkin.noFeatures);
+          return r.documents.forEach((d, i) => process.stdout.write((i ? "\n" : "") + "# ── " + path.relative(projectDir, d.file).split(path.sep).join("/") + " ──\n" + d.content));
+        }
+        if (r.wrote) return console.log(tracker ? M.trackerCsv.wrote(r.file, r.records) : M.stakeholderExport.wrote(r.file));
+        process.stdout.write(r.content);
+      });
     }
     case "changelog": {
       // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_changelog): the
       // markdown on stdout (a note on stderr), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt (exit 1 on a refusal).
-      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--write]");
-      const r = spec.changelog(projectDir, { since: flags.since, write: on("write") });
+      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]");
+      const r = spec.changelog(projectDir, { since: flags.since, write: on("write"), milestone: flags.milestone });
       if (!r.ok) return fail(r);
       const N = spec.msg(r.lang).releaseNotes;
       return out(r, (r) => {
@@ -1503,9 +1538,20 @@ function helpText() {
                                   offline HTML (light/dark, print-ready) or --md; --write → .specs/exports/<feature|project>.html|.md
                                   --csv: the traceability matrix for a spreadsheet (UTF-8 BOM, the AUTO-GENERATED marker as its
                                   last record) → --write: .specs/exports/<feature|project>.rtm.csv
+                                  --gherkin: a BDD .feature — one Scenario per current AC (tags @US-n.AC-m @T-xx @<track>), its EARS
+                                  clauses as Given (WHILE/WHERE/IF) · When (WHEN) · Then (SHALL), PT/ES in Gherkin's own dialect;
+                                  no feature = one file per feature → --write: .specs/exports/<feature>.feature
+                                  --tracker jira|linear: a CSV for the tracker's own importer (nothing is sent) — the feature as the
+                                  parent, its stories, its tasks under their [USn] story; labels = slug, tracks, AC IDs
+                                  → --write: .specs/exports/<feature|project>.<tracker>.csv
   changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
+                                  --milestone <name>: only that milestone's features (since: all by default) → --write:
+                                  .specs/RELEASE-NOTES.<milestone>.md (meta.changelogAt untouched)
+  milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]   Milestones (roadmap.json meta.milestones): a target date
+                                  for a set of features, judged against their ETAs — on-track · at-risk · late · done; add replaces
+                                  an existing one; rename / remove / archive of a feature follow; ROADMAP.md shows them
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
   stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification

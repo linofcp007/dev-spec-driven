@@ -92,7 +92,7 @@ hand-rolled edits for the structural steps. Which tool when:
 - **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files; `matrix: true` → the requirements traceability matrix) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail; `role`, `through`) · `spec_next_action` (you are here, one ordered next step).
 - **Execute:** `spec_next_task` (`waves: true` → the parallel execution waves) · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) · `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
-- **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade` (after a plugin update).
+- **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog`/`spec_milestone` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade` (after a plugin update).
 
 Full tool table, CLI, hooks, and the MCP prompts + `specs://` resources other MCP clients get: `references/tooling-reference.md`.
 The tools produce **skeletons and checks** (never overwriting your files); *you* fill them with real content from
@@ -475,8 +475,8 @@ approval. Keep it tight.
   (`/spec-impact`, or a new feature with `_Supersedes:_`), fix the code, or accept and re-baseline.
 - **Metrics & retro (`/spec-metrics`).** Lead times, rework, forced approvals, change requests, evidence pass rate,
   velocity; `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
-- **Stakeholders.** `/spec-export` — one offline, printable HTML/markdown document of a feature or the project for
-  product, legal and clients; `/spec-changelog` — release notes (Added · Changed · Fixed) since the last notes.
+- **Stakeholders.** `/spec-export` — an offline, printable HTML/md document (`--gherkin`: `.feature` files, steps = the EARS
+  clauses; `--tracker jira|linear`: an import CSV); `/spec-changelog` — release notes (Added · Changed · Fixed), `--milestone`.
 - **Archive, don't delete.** `/feature archive` is reversible (`restore` puts the roadmap deps back).
 
 Depth: `references/change-management.md`.
@@ -500,7 +500,7 @@ Depth: `references/change-management.md`.
 | `/spec-commit` | Conventional commit referencing the task (`Part of .specs/<feature>/ task #N.`), `Makes T-xx green`, the eval delta and emitted metrics; Phase-4 commits use `test:`. `dev-spec log <feature>` reads them back per task (+tdd: the red-first check). | `references/tooling-reference.md` |
 | `/promptReview` · `/migrateModel` (+ai) | Prompt changes are blocked without eval results (golden up, adversarial held, version bumped, cost delta noted). A model migration is eval-gated only: run the current sets on the new model, switch only if equal-or-better (or tune the prompt to recover), record it in Model Lifecycle — never migrate blind. | `references/eval-suite-patterns.md` · `references/model-provider-guide.md` |
 | `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · restore · rename (deps follow) · flow (design-first) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
-| `/roadmap` · `/depend` · `/backlog` | Order and dependencies between features (cycles rejected), %, blocked status, ETA from velocity (`_Size:_`), features whose open tasks plan the same files, planned-but-unspecced work. Don't start a feature whose dependencies aren't met without saying so. `.specs/ROADMAP.md` is regenerated automatically — never hand-edit it. | `references/tooling-reference.md` |
+| `/roadmap` · `/depend` · `/backlog` · `/spec-milestone` | Order and dependencies between features (cycles rejected), %, blocked status, ETA from velocity (`_Size:_`), features whose open tasks plan the same files, planned-but-unspecced work, milestones (a target date for a set of features: on-track · at-risk · late · done). Don't start a feature whose dependencies aren't met without saying so. `.specs/ROADMAP.md` is regenerated automatically — never hand-edit it. | `references/tooling-reference.md` |
 | `/spec-status` | Mode, tracks, phase, task progress, test/eval state, section completeness (`spec_status` / `spec_list`). | — |
 
 **Local automation, not CI:** saving `requirements.md` lints EARS and placeholders, `tasks.md` checks traceability,

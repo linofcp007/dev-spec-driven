@@ -5,7 +5,7 @@ later feature replaces an earlier behaviour, code drifts after the feature shipp
 change — it makes every change **visible, diffable and re-approved**, so an edited spec is never silently shipped
 as if it were the approved one. Inspired by OpenSpec's deltas and BMAD's correct-course, done locally. Sections
 11–13 cover the decision log, approvals by role + fast-forward, and the stakeholder export + release notes; section 14
-the steering amendments (an approval made under a steering file that changed since).
+the steering amendments (an approval made under a steering file that changed since); section 15 milestones.
 
 ## 1. Approval history and snapshots
 
@@ -295,7 +295,33 @@ date|last|all>] [--write]`) builds release notes from the spec data alone — no
 
 `since` defaults to `last` — `roadmap.json → meta.changelogAt`, stamped by the last written notes (everything while it
 is unset). `write: true` writes `.specs/RELEASE-NOTES.md` (AUTO-GENERATED; a hand-written one is never overwritten) and
-stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped.
+stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped. `milestone` (1.16, CLI `--milestone
+<name>`) scopes the notes to a milestone's features (its features and the ones archived since — see §15): `since` then
+defaults to `all`, and `write` goes to `.specs/RELEASE-NOTES.<milestone-slug>.md` without touching `meta.changelogAt`.
+
+**Gherkin (1.16 — `format: "gherkin"`, CLI `export [feature] --gherkin`).** One `.feature` per feature for a BDD
+runner (Cucumber, behave, SpecFlow…): the feature's title and summary, its active tracks as tags (`@SaaS` `@AI` `@SEC`
+`@PRIVACY` `@tdd` …), and one `Scenario` per current acceptance criterion tagged `@US-n.AC-m`, the T-IDs the test plan
+plans for it (`@T-01`) and the marker of the track that defines it. The steps are the criterion's own EARS clauses —
+`WHILE` / `WHERE` / `IF` → `Given`, `WHEN` → `When`, the `SHALL` response → `Then`, verbatim (`THEN` only marks the
+response); a ubiquitous criterion is a `Then` (with a `Given` for a lead set off by a comma). A criterion whose
+clauses can't be split cleanly becomes ONE `Then` step with its whole text (listed in `unsplit`) — nothing is invented
+and no word is lost; quoted and code spans never split a clause. A template criterion and one a shipped feature
+superseded are left out with a comment; one a draft plans to supersede is kept with a comment. PT / ES (and pt-BR)
+features are written in Gherkin's own dialect (`# language: pt` — Funcionalidade / Cenário / Dado / Quando / Então;
+`# language: es` — Característica / Escenario / Dado / Cuando / Entonces). `write` → `.specs/exports/<feature>.feature`;
+without a name, one file per active feature (spikes have no criteria and are skipped), all-or-nothing.
+
+**Tracker CSV (1.16 — `format: "jira"` / `"linear"`, CLI `export [feature] --tracker jira|linear`).** A CSV for the
+tracker's own importer — nothing is sent anywhere. One record per feature (the parent), per user story (a child of the
+feature; its intro and its criteria as the description) and per task (a child of its story through its `[USn]` tag,
+else of the feature), parents first. Jira: `Work item ID` · `Work type` (Epic / Story / Sub-task / Task) · `Summary` ·
+`Description` · `Status` (To Do / In Progress / Done) · `Parent` (the parent's Work item ID) · `Labels` (repeated, one
+label per column). Linear: `ID` · `Title` · `Description` · `Status` (Todo / In Progress / Done) · `Estimate` (a task's
+`_Size:_` points) · `Labels` (comma-separated) · `Parent issue` (local keys). Labels: the feature slug, its tracks, its
+kind (bugfix / spike) and the AC IDs. The matrix CSV's rules apply (RFC 4180, the formula guard, a UTF-8 BOM); the
+AUTO-GENERATED marker is the LAST header cell — an empty column to leave unmapped in the import wizard, never a record
+that would become a work item. `write` → `.specs/exports/<feature>.<tracker>.csv` (the project: `project.<tracker>.csv`).
 
 ## 14. Steering amendments
 
@@ -318,3 +344,24 @@ BOM are encoding, not content).
   the usual change request (`spec_impact --phase requirements|design`, reopen, re-approve).
 - **Older approvals.** An approval made before 1.16 recorded no steering: it is never flagged (`spec_impact` lists it
   under `untracked`). Re-approving starts the tracking.
+
+## 15. Milestones
+
+`/spec-milestone` — `spec_milestone {action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
+<YYYY-MM-DD> <features…> | rm <name> | list]`) keeps named target dates for sets of features in `roadmap.json →
+meta.milestones` (under the roadmap lock). `add` needs a name (letters, digits, spaces, `. _ : # ( ) + -`, ≤ 60
+characters), a real `YYYY-MM-DD` day and existing active features; adding an existing name updates it. Each milestone is
+judged against the roadmap forecasts (the velocity of ticked tasks → each feature's ETA), with stable codes:
+
+- `done` — every active feature is at 100%;
+- `late` — the date has passed and a feature is not done;
+- `at-risk` — `eta-after-date` (the latest ETA of its open features is after the date), `eta-unknown` (an open feature
+  has no ETA yet — not enough velocity data, no tasks, a dependency) or `no-features` (nothing left in it);
+- `on-track` — every open feature's ETA is on or before the date.
+
+`ROADMAP.md` / `.html` show a Milestones table (date, features, done, ETA, status) and list the late and at-risk ones
+under "Needs attention"; `spec_roadmap` returns the same `milestones`. A feature's lifecycle follows like its
+dependencies: a rename renames it in its milestones, a remove drops it, an archive moves it to the milestone's
+`archived` list (its release notes still cover it; its status no longer counts it) and a restore moves it back. A
+`meta.milestones` of the wrong shape is refused by `add` / `rm` (fix it by hand) and read as its valid entries
+otherwise. Treat an ETA as an estimate, never a promise.

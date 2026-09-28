@@ -193,7 +193,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 37, "tools/list returns 37 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 38, "tools/list returns 38 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -6582,9 +6582,9 @@ function endRun() {
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
     "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 53 && ["spec-statusline.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 54 && ["spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "53 commands incl. the 1.16 /spec-statusline, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "54 commands incl. the 1.16 /spec-statusline, /spec-milestone, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -10848,8 +10848,8 @@ function endRun() {
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 57 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 53 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    ok(d4Files.length === 58 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 54 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
@@ -13363,6 +13363,290 @@ function endRun() {
   }
 
   // 1.16 package (E) — exports and planning: Gherkin, tracker CSV, milestones.
+
+  {
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const js = (v) => JSON.stringify(v);
+    const rdf = (f) => fs.readFileSync(f, "utf8");
+    // RFC 4180 reader (CRLF records, quoted fields, doubled quotes) — what an importer does with the file.
+    const parseCsv = (text) => {
+      const t = String(text).split(String.fromCharCode(0xfeff)).join(""); // the BOM a written document starts with
+      const rows = [];
+      let row = [], cell = "", q = false;
+      for (let i = 0; i < t.length; i++) {
+        const c = t[i];
+        if (q) { if (c === '"') { if (t[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+        else if (c === '"') q = true;
+        else if (c === ",") { row.push(cell); cell = ""; }
+        else if (c === "\r" && t[i + 1] === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; i++; }
+        else cell += c;
+      }
+      if (cell || row.length) { row.push(cell); rows.push(row); }
+      return rows;
+    };
+    const setState = (dir, patch) => { const f = path.join(dir, ".state.json"); fs.writeFileSync(f, JSON.stringify(Object.assign(JSON.parse(rdf(f)), patch), null, 2)); };
+    // --- E1 — Gherkin ---
+    const gp = path.join(tmp, "proj-116e-gherkin");
+    S.initProject(gp, ["core"], "en");
+    const co = S.createFeature(gp, "Checkout", ["tdd", "saas"], "x", undefined, "en");
+    fs.writeFileSync(path.join(co.dir, "requirements.md"), "# Feature: Checkout\n\n## Summary\nCustomers pay for their cart in one step.\n\n## User Stories\n\n" +
+      "### US-1 (P1 — MVP): Pay for the cart\n**As a** shopper, **I want** to pay, **so that** I get my order.\n\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN the shopper clicks \"Pay now, safely\" THE SYSTEM SHALL charge the card and show \"Paid, thanks!\"\n" +
+      "2. **US-1.AC-2** — WHILE a payment is pending, WHEN the shopper clicks Pay again THE SYSTEM SHALL ignore the click\n" +
+      "3. **US-1.AC-3** — IF the provider times out THEN THE SYSTEM SHALL retry twice, then show the error\n" +
+      "4. **US-1.AC-4** — THE SYSTEM SHALL keep the cart for 30 days\n\n#### [SaaS] Acceptance Criteria (EARS)\n" +
+      "5. **US-1.AC-5** — WHEN a shopper of tenant A pays, THE SYSTEM SHALL NOT charge tenant B's account.\n\n" +
+      "### US-2 (P2): Receipts\n#### Acceptance Criteria (EARS)\n1. **US-2.AC-1** — WHEN the payment settles receipts SHALL be e-mailed within 5 minutes\n" +
+      "2. **US-2.AC-2** — [ubiquitous] THE SYSTEM SHALL [always-true property]\n");
+    fs.writeFileSync(path.join(co.dir, "test-plan.md"), "# Test Plan\n\n| ID | Covers | Kind | Description | File |\n|---|---|---|---|---|\n" +
+      "| T-01 | US-1.AC-1 | example | charge | tests/pay.test.js |\n| T-02 | US-1.AC-2, US-1.AC-5 | example | double click, tenants | tests/pay.test.js |\n");
+    fs.writeFileSync(path.join(co.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n- [x] 1. [US1] Charge the card _Requirements: US-1.AC-1, US-1.AC-3, US-1.AC-4_ _Size: M_\n" +
+      "- [ ] 2. [US1] Ignore double clicks _Requirements: US-1.AC-2, US-1.AC-5_ _Size: S_\n- [ ] 3. [US2] E-mail receipts _Requirements: US-2.AC-1_ _Size: L_\n" +
+      "- [ ] 4. =HYPERLINK(\"http://x\",\"y\") audit, \"quoted\" _Requirements: US-2.AC-1_\n");
+    const g = S.exportSpecs(gp, { name: "checkout", format: "gherkin" });
+    const gl = (g.content || "").split("\n");
+    const stepsOf = (id) => { const i = gl.findIndex((l) => l.startsWith("  Scenario: " + id + " ")); const out = []; for (let k = i + 1; k < gl.length && /^    /.test(gl[k]); k++) out.push(gl[k].trim()); return i < 0 ? null : out; };
+    const tagsOf = (id) => { const i = gl.findIndex((l) => l.startsWith("  Scenario: " + id + " ")); return i > 0 ? gl[i - 1].trim() : ""; };
+    ok(g.ok && g.format === "gherkin" && g.scope === "feature" && g.file === path.join(gp, ".specs", "exports", "checkout.feature") && g.wrote === false &&
+      gl[0] === "# language: en" && /^# AUTO-GENERATED by dev-spec/.test(gl[1]) && gl.includes("@tdd @SaaS") && gl.includes("Feature: Checkout") &&
+      gl.includes("  Customers pay for their cart in one step.") && gl.includes("  # US-1 (P1 — MVP): Pay for the cart") && g.scenarios === 6 &&
+      js(g.skipped) === js({ template: ["US-2.AC-2"], superseded: [] }) && js(g.unsplit) === js(["US-2.AC-1"]) && /# US-2\.AC-2 — template, not written yet: left out/.test(g.content),
+      "1.16 E1: export --gherkin — # language: en + the marker comment, the tracks as Feature tags, the summary as its description, a story comment, one scenario per current AC; template criteria left out (got " + js({ ...g, content: gl.slice(0, 8) }) + ")");
+    ok(js(stepsOf("US-1.AC-1")) === js(["When the shopper clicks \"Pay now, safely\"", "Then THE SYSTEM SHALL charge the card and show \"Paid, thanks!\""]) &&
+      js(stepsOf("US-1.AC-2")) === js(["Given a payment is pending", "When the shopper clicks Pay again", "Then THE SYSTEM SHALL ignore the click"]) &&
+      js(stepsOf("US-1.AC-3")) === js(["Given the provider times out", "Then THE SYSTEM SHALL retry twice, then show the error"]) &&
+      js(stepsOf("US-1.AC-4")) === js(["Then THE SYSTEM SHALL keep the cart for 30 days"]) &&
+      js(stepsOf("US-2.AC-1")) === js(["Then WHEN the payment settles receipts SHALL be e-mailed within 5 minutes"]) &&
+      tagsOf("US-1.AC-1") === "@US-1.AC-1 @T-01" && tagsOf("US-1.AC-5") === "@US-1.AC-5 @T-02 @SaaS" && tagsOf("US-1.AC-2") === "@US-1.AC-2 @T-02",
+      "1.16 E1: EARS → steps — WHEN → When, WHILE / IF → Given, the SHALL response → Then verbatim (commas and quotes kept, a quoted comma never splits); a criterion that can't be split is ONE Then with its whole text; tags = AC ID + planned T-IDs + the track marker (got " + js([stepsOf("US-1.AC-1"), stepsOf("US-1.AC-2"), tagsOf("US-1.AC-5")]) + ")");
+    // No text lost: every criterion's words (minus the EARS keywords the Gherkin keywords replace) are in its steps, in order.
+    const kwOut = (s) => s.replace(/\*\*/g, "").replace(/(?<![\p{L}])(WHEN|WHILE|IF|WHERE|THEN)(?![\p{L}])/gu, " ").replace(/,/g, " ").replace(/\s+/g, " ").trim();
+    const reqIdx = new Map((rdf(path.join(co.dir, "requirements.md")).match(/\*\*US-\d\.AC-\d\*\* — .*$/gm) || []).map((l) => [l.match(/US-\d\.AC-\d/)[0], l.replace(/^\*\*US-\d\.AC-\d\*\* — /, "")]));
+    const lostE1 = ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-1.AC-5", "US-2.AC-1"].filter((id) =>
+      kwOut(reqIdx.get(id)) !== kwOut((stepsOf(id) || []).map((s) => s.replace(/^(Given|When|Then|And) /, "")).join(" ")));
+    const siEn = S.earsSteps("WHEN the user picks SI units THE SYSTEM SHALL convert", "en").steps;
+    const siEs = S.earsSteps("SI el pago falla, EL SISTEMA DEBE avisar", "es").steps;
+    ok(!lostE1.length && S.earsSteps("WHEN a, b").split === false && S.earsSteps("").steps.length === 1 &&
+      js(siEn) === js([{ kind: "when", text: "the user picks SI units" }, { kind: "then", text: "THE SYSTEM SHALL convert" }]) && siEs[0].kind === "given" && siEs[0].text === "el pago falla",
+      "1.16 E1: no text lost — each scenario's steps hold the criterion's words in order (the EARS keywords aside); no modal → one Then; an English criterion reads English keywords only (SI units is no condition), a Spanish one its own (lost in: " + lostE1.join(", ") + ")");
+    // PT / ES / pt-BR features: Gherkin's own dialect.
+    const ptF = S.createFeature(gp, "Pagamentos", ["core"], "x", undefined, "pt");
+    fs.writeFileSync(path.join(ptF.dir, "requirements.md"), "# Funcionalidade: Pagamentos\n\n## Resumo\nPagar a encomenda.\n\n## Histórias de Utilizador\n\n### US-1 (P1): Pagar\n#### Critérios de Aceitação (EARS)\n" +
+      "1. **US-1.AC-1** — QUANDO o cliente paga O SISTEMA DEVE emitir o recibo\n2. **US-1.AC-2** — SE o cartão for recusado, ENTÃO O SISTEMA DEVE mostrar o erro\n");
+    const esF = S.createFeature(gp, "Pagos", ["core"], "x", undefined, "es");
+    fs.writeFileSync(path.join(esF.dir, "requirements.md"), "# Función: Pagos\n\n## Resumen\nPagar el pedido.\n\n## Historias de Usuario\n\n### US-1 (P1): Pagar\n#### Criterios de Aceptación (EARS)\n" +
+      "1. **US-1.AC-1** — MIENTRAS la sesión está abierta, CUANDO el cliente paga EL SISTEMA DEBE emitir el recibo\n");
+    const brF = S.createFeature(gp, "Pix", ["core"], "x", undefined, "pt-BR");
+    fs.writeFileSync(path.join(brF.dir, "requirements.md"), "# Funcionalidade: Pix\n\n### US-1 (P1): Pagar\n1. **US-1.AC-1** — QUANDO o cliente paga com Pix O SISTEMA DEVE confirmar na hora\n");
+    const gpt = S.exportSpecs(gp, { name: "pagamentos", format: "gherkin" }).content || "";
+    const ges = S.exportSpecs(gp, { name: "pagos", format: "gherkin" }).content || "";
+    const gbr = S.exportSpecs(gp, { name: "pix", format: "gherkin" }).content || "";
+    ok(/^# language: pt\n# AUTO-GERADO por dev-spec/.test(gpt) && /\nFuncionalidade: Pagamentos\n  Pagar a encomenda\.\n/.test(gpt) && /\n  Cenário: US-1\.AC-1 — /.test(gpt) &&
+      /\n    Quando o cliente paga\n    Então O SISTEMA DEVE emitir o recibo\n/.test(gpt) && /\n    Dado o cartão for recusado\n    Então O SISTEMA DEVE mostrar o erro\n/.test(gpt) &&
+      /^# language: es\n# AUTO-GENERADO por dev-spec/.test(ges) && /\nCaracterística: Pagos\n/.test(ges) && /\n  Escenario: US-1\.AC-1 — /.test(ges) &&
+      /\n    Dado la sesión está abierta\n    Cuando el cliente paga\n    Entonces EL SISTEMA DEBE emitir el recibo\n/.test(ges) &&
+      /^# language: pt\n/.test(gbr) && /\nFuncionalidade: Pix\n/.test(gbr) && /\n    Quando o cliente paga com Pix\n    Então O SISTEMA DEVE confirmar na hora\n/.test(gbr),
+      "1.16 E1: a PT feature → # language: pt (Funcionalidade / Cenário / Dado / Quando / Então); ES → # language: es (Característica / Escenario / Dado / Cuando / Entonces); pt-BR uses pt (got " + js([gpt.split("\n").slice(0, 12), ges.split("\n").slice(-5)]) + ")");
+    // Supersession: a shipped feature's _Supersedes:_ leaves the AC out; a draft's keeps it with a comment. A spike has no Gherkin.
+    const old = S.createFeature(gp, "Old Pay", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(old.dir, "requirements.md"), "# Feature: Old Pay\n\n### US-1 (P1): Pay\n1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL charge in USD\n2. **US-1.AC-2** — WHEN a user refunds THE SYSTEM SHALL refund in USD\n");
+    const nw = S.createFeature(gp, "New Pay", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(nw.dir, "requirements.md"), "# Feature: New Pay\n\n### US-1 (P1): Pay\n1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL charge in their currency _Supersedes: old-pay/US-1.AC-1_\n");
+    shipFeature(gp, "new-pay");
+    const dr = S.createFeature(gp, "Draft Pay", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(dr.dir, "requirements.md"), "# Feature: Draft Pay\n\n### US-1 (P1): Refund\n1. **US-1.AC-1** — WHEN a user refunds THE SYSTEM SHALL refund in their currency _Supersedes: old-pay/US-1.AC-2_\n");
+    S.createFeature(gp, "Cache probe", ["core"], "x", undefined, "en", "spike");
+    const gOld = S.exportSpecs(gp, { name: "old-pay", format: "gherkin" });
+    const gNew = S.exportSpecs(gp, { name: "new-pay", format: "gherkin" }).content || "";
+    const gSpike = S.exportSpecs(gp, { name: "cache-probe", format: "gherkin" });
+    ok(gOld.ok && js(gOld.skipped.superseded) === js(["US-1.AC-1"]) && /# US-1\.AC-1 — superseded by new-pay\/US-1\.AC-1 \(shipped\): left out/.test(gOld.content) &&
+      !/Scenario: US-1\.AC-1/.test(gOld.content) && /# to be superseded by draft-pay\/US-1\.AC-1 \(not shipped yet\)\n  @US-1\.AC-2\n  Scenario: US-1\.AC-2/.test(gOld.content) &&
+      /Then THE SYSTEM SHALL charge in their currency\n/.test(gNew) && !/Supersedes/.test(gNew) && gSpike.ok === false && gSpike.spike === true && /is a spike/.test(gSpike.error),
+      "1.16 E1: a criterion a SHIPPED feature superseded is left out (a comment says so), one a draft plans to supersede is kept with a comment; the _Supersedes:_ marker never reaches a step; a spike is refused (got " + js([gOld.skipped, gSpike.error]) + ")");
+    // Write: the file, never over a hand-written one; the project export = one .feature per active feature (spikes skipped), all-or-nothing.
+    const gw = S.exportSpecs(gp, { name: "checkout", format: "gherkin", write: true });
+    const gwText = fs.existsSync(g.file) ? rdf(g.file) : "";
+    const hand = path.join(gp, ".specs", "exports", "pagamentos.feature");
+    fs.writeFileSync(hand, "Feature: mine\n");
+    fs.rmSync(g.file);
+    const gpw = S.exportSpecs(gp, { format: "gherkin", write: true });
+    const gpwRefusedClean = !fs.existsSync(g.file) && rdf(hand) === "Feature: mine\n";
+    fs.rmSync(hand);
+    const gpw2 = S.exportSpecs(gp, { format: "gherkin", write: true });
+    const gpv = S.exportSpecs(gp, { format: "gherkin" });
+    ok(gw.ok && gw.wrote && gw.bytes === Buffer.byteLength(gwText, "utf8") && gwText === g.content && gpw.ok === false && gpw.skipped === true && /pagamentos\.feature/.test(gpw.error) && gpwRefusedClean &&
+      gpw2.ok && gpw2.wrote && gpw2.scope === "project" && js(gpw2.features) === js(["checkout", "draft-pay", "new-pay", "old-pay", "pagamentos", "pagos", "pix"]) &&
+      gpw2.files.length === 7 && gpw2.files.every((f) => fs.existsSync(f) && /AUTO-GE/.test(rdf(f).slice(0, 200))) && !gpw2.features.includes("cache-probe") &&
+      gpv.documents.length === 7 && gpv.documents.every((d) => typeof d.content === "string" && !d.bytes) && gpv.scenarios === gpw2.scenarios,
+      "1.16 E1: --gherkin --write → .specs/exports/<f>.feature; a hand-written .feature refuses the whole project write (nothing written); the project export writes one file per active feature, spikes skipped (got " + js([gpw.error, gpw2.features]) + ")");
+    // MCP = engine.
+    const gm = payload(await call("spec_export", { name: "checkout", format: "gherkin", projectDir: gp }));
+    const gmBad = await call("spec_export", { name: "checkout", format: "cucumber", projectDir: gp });
+    ok(gm.ok && gm.content === S.exportSpecs(gp, { name: "checkout", format: "gherkin" }).content && gmBad.result.isError === true,
+      "1.16 E1: MCP spec_export {format: 'gherkin'} = the engine call; an unknown format is refused by the enum");
+
+    // --- E2 — tracker CSV ---
+    const jr = S.exportSpecs(gp, { name: "checkout", format: "jira" });
+    const jrows = parseCsv(jr.content || "");
+    const jh = jrows[0] || [];
+    const col = (r, name) => r[jh.indexOf(name)];
+    const labelsOf = (r) => jh.map((h, k) => (h === "Labels" ? r[k] : null)).filter(Boolean);
+    const byType = (t) => jrows.slice(1).filter((r) => col(r, "Work type") === t);
+    const epic = byType("Epic")[0] || [];
+    const us1 = byType("Story").find((r) => /^US-1 /.test(col(r, "Summary"))) || [];
+    const t4 = byType("Task")[0] || [];
+    ok(jr.ok && jr.format === "jira" && jr.file === path.join(gp, ".specs", "exports", "checkout.jira.csv") && jr.records === 7 && jr.content.charCodeAt(0) === 0xfeff &&
+      js(jh.slice(0, 6)) === js(["Work item ID", "Work type", "Summary", "Description", "Status", "Parent"]) && jh.filter((h) => h === "Labels").length === 8 &&
+      /^# AUTO-GENERATED by dev-spec/.test(jh[jh.length - 1]) && jrows.every((r) => r.length === jh.length) && jrows.slice(1).every((r) => r[r.length - 1] === "") &&
+      js(jrows.slice(1).map((r) => col(r, "Work type"))) === js(["Epic", "Story", "Sub-task", "Sub-task", "Story", "Sub-task", "Task"]) &&
+      col(epic, "Summary") === "Checkout" && col(epic, "Status") === "In Progress" && col(epic, "Parent") === "" && js(labelsOf(epic)) === js(["checkout", "tdd", "saas"]) &&
+      col(us1, "Parent") === col(epic, "Work item ID") && byType("Sub-task").slice(0, 2).every((r) => col(r, "Parent") === col(us1, "Work item ID")) &&
+      col(t4, "Parent") === col(epic, "Work item ID") && js(byType("Sub-task").map((r) => col(r, "Status"))) === js(["Done", "To Do", "To Do"]) &&
+      js(labelsOf(us1)) === js(["checkout", "tdd", "saas", "US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-1.AC-5"]) &&
+      /Acceptance criteria:\n- US-1\.AC-1 — WHEN the shopper clicks "Pay now, safely" THE SYSTEM SHALL/.test(col(us1, "Description")) &&
+      col(byType("Sub-task")[0], "Summary") === "#1 Charge the card" && col(t4, "Description").startsWith("'=HYPERLINK(\"http://x\",\"y\") audit, \"quoted\"") &&
+      jr.content.includes('"\'=HYPERLINK(""http://x"",""y"") audit, ""quoted""'),
+      "1.16 E2: --tracker jira — Work item ID · Work type · Summary · Description · Status · Parent · Labels×N (+ the marker as the LAST header cell, an empty column); Epic → Story → Sub-task by [USn], a feature-level Task under the Epic; RFC 4180 quoting; a leading = neutralized (got " + js(jrows.slice(0, 3).map((r) => r.slice(0, 6))) + ")");
+    const ln = S.exportSpecs(gp, { name: "checkout", format: "linear" });
+    const lrows = parseCsv(ln.content || "");
+    const lh = lrows[0] || [];
+    const lcol = (key, name) => (lrows.find((r) => r[0] === key) || [])[lh.indexOf(name)];
+    ok(ln.ok && js(lh.slice(0, 7)) === js(["ID", "Title", "Description", "Status", "Estimate", "Labels", "Parent issue"]) && /^# AUTO-GENERATED by dev-spec/.test(lh[7]) &&
+      js(lrows.slice(1).map((r) => r[0])) === js(["checkout", "checkout/US-1", "checkout/#1", "checkout/#2", "checkout/US-2", "checkout/#3", "checkout/#4"]) &&
+      lcol("checkout/#1", "Parent issue") === "checkout/US-1" && lcol("checkout/US-2", "Parent issue") === "checkout" && lcol("checkout/#4", "Parent issue") === "checkout" &&
+      lcol("checkout/#1", "Status") === "Done" && lcol("checkout/#2", "Status") === "Todo" && lcol("checkout/US-1", "Status") === "In Progress" &&
+      lcol("checkout/#1", "Estimate") === "3" && lcol("checkout/#2", "Estimate") === "2" && lcol("checkout/#3", "Estimate") === "5" && lcol("checkout/#4", "Estimate") === "" &&
+      lcol("checkout/#2", "Labels") === "checkout, tdd, saas, US-1.AC-2, US-1.AC-5" && ln.file.endsWith(path.join("exports", "checkout.linear.csv")),
+      "1.16 E2: --tracker linear — ID · Title · Description · Status · Estimate (_Size:_ points) · Labels (comma-separated) · Parent issue (local keys), parents first (got " + js(lrows.slice(0, 4).map((r) => r.slice(0, 7))) + ")");
+    // Write: <slug>.<tracker>.csv / project.<tracker>.csv, never over a hand-written file; MCP = engine; a spike is a parent with its tasks.
+    const jw = S.exportSpecs(gp, { format: "jira", write: true });
+    const jwFile = path.join(gp, ".specs", "exports", "project.jira.csv");
+    fs.writeFileSync(path.join(gp, ".specs", "exports", "checkout.linear.csv"), "Title\r\nmine\r\n");
+    const lw = S.exportSpecs(gp, { name: "checkout", format: "linear", write: true });
+    const jm = payload(await call("spec_export", { format: "linear", projectDir: gp }));
+    const jwRows = parseCsv(fs.existsSync(jwFile) ? rdf(jwFile) : "");
+    ok(jw.ok && jw.wrote && jw.file === jwFile && jw.scope === "project" && jwRows.filter((r) => r[1] === "Epic").length === 8 && jw.records === jwRows.length - 1 &&
+      lw.ok === false && lw.skipped === true && rdf(path.join(gp, ".specs", "exports", "checkout.linear.csv")) === "Title\r\nmine\r\n" &&
+      jm.ok && jm.content === S.exportSpecs(gp, { format: "linear" }).content && jwRows.some((r) => r[2] === "Cache probe" && r[1] === "Epic"),
+      "1.16 E2: --write → project.jira.csv (every active feature an Epic, a spike too); a hand-written <f>.linear.csv is never overwritten; MCP = engine (got " + js([jw.records, lw.error]) + ")");
+
+    // --- E3 — milestones ---
+    const mp = path.join(tmp, "proj-116e-milestones");
+    S.initProject(mp, ["core"], "en");
+    for (const n of ["Alpha", "Beta", "Gamma"]) S.createFeature(mp, n, ["core"], "x", undefined, "en");
+    const tasksOf = (slug, n, done) => fs.writeFileSync(path.join(mp, ".specs", slug, "tasks.md"), "# Tasks\n\n" +
+      Array.from({ length: n }, (_, i) => `- [${i < done ? "x" : " "}] ${i + 1}. [US1] Task ${i + 1} _Requirements: US-1.AC-1_ _Size: S_\n`).join(""));
+    const ticks = (slug, list) => setState(path.join(mp, ".specs", slug), { ticks: Object.fromEntries(list.map((t, i) => [String(i + 1), t])) });
+    tasksOf("alpha", 6, 3); ticks("alpha", ["2026-09-21T10:00:00Z", "2026-09-22T10:00:00Z", "2026-09-23T10:00:00Z"]);
+    tasksOf("beta", 4, 4); ticks("beta", ["2026-09-21T10:00:00Z", "2026-09-22T10:00:00Z", "2026-09-23T10:00:00Z", "2026-09-24T10:00:00Z"]);
+    const now = "2026-09-28T12:00:00Z"; // a Monday: velocity 14 points / 6 working days; alpha's own 1 point/day → 6 points left → ETA 2026-10-05
+    const a1 = S.milestone(mp, "add", { name: "Beta launch", date: "2026-10-30", features: ["Alpha", "beta"], now });
+    S.milestone(mp, "add", { name: "Soon", date: "2026-10-01", features: "alpha", now });
+    S.milestone(mp, "add", { name: "Past", date: "2026-09-01", features: "alpha,beta", now });
+    S.milestone(mp, "add", { name: "Shipped", date: "2026-09-01", features: ["beta"], now });
+    const a5 = S.milestone(mp, "add", { name: "Gam", date: "2026-12-01", features: ["gamma"], now });
+    const st = (r, name) => (r.milestones || []).find((m) => m.name === name) || {};
+    ok(a1.ok && a1.action === "add" && a1.updated === false && js(a1.milestone) === js({ name: "Beta launch", date: "2026-10-30", features: ["alpha", "beta"] }) && a1.today === "2026-09-28" &&
+      st(a5, "Beta launch").status === "on-track" && st(a5, "Beta launch").eta === "2026-10-05" && st(a5, "Beta launch").done === 1 && st(a5, "Beta launch").total === 2 &&
+      st(a5, "Soon").status === "at-risk" && st(a5, "Soon").reason === "eta-after-date" && st(a5, "Past").status === "late" && st(a5, "Shipped").status === "done" &&
+      st(a5, "Gam").status === "at-risk" && st(a5, "Gam").reason === "eta-unknown" && js(st(a5, "Gam").unknownEta) === js(["gamma"]) && st(a5, "Gam").eta === null &&
+      js(S.readRoadmap(mp).meta.milestones.map((m) => m.name)) === js(["Beta launch", "Soon", "Past", "Shipped", "Gam"]) &&
+      a5.lines.some((l) => l === "  ⚠ Soon — 2026-10-01 · 0/1 feature(s) done · ETA 2026-10-05 · at risk · alpha"),
+      "1.16 E3: milestone add (features resolved like dependsOn) — statuses against the forecast ETAs: on-track, at-risk (eta-after-date / eta-unknown), late (date passed), done (got " + js(a5.milestones) + ")");
+    const e = (o) => S.milestone(mp, "add", { now, ...o });
+    const bad = [e({ name: "|bad", date: "2026-10-01", features: ["alpha"] }), e({ name: "  ", date: "2026-10-01", features: ["alpha"] }), e({ name: "X", date: "2026-02-30", features: ["alpha"] }),
+      e({ name: "X", date: "2026-9-1", features: ["alpha"] }), e({ name: "X", date: "2026-10-01", features: [] }), e({ name: "X", date: "2026-10-01", features: ["alpha", "nope"] }),
+      S.milestone(mp, "rm", { name: "nothere" }), S.milestone(mp, "wat", {})];
+    const upd = e({ name: "Soon", date: "2026-10-09", features: ["alpha"] });
+    ok(bad.every((r) => r.ok === false) && /invalid milestone name/.test(bad[0].error) && /Name the milestone/.test(bad[1].error) && /is not a day in YYYY-MM-DD/.test(bad[2].error) &&
+      /is not a day/.test(bad[3].error) && /at least one feature/.test(bad[4].error) && /not found: nope/.test(bad[5].error) && /No milestone 'nothere' \(milestones: Beta launch, Soon/.test(bad[6].error) &&
+      /action must be one of: add, rm, remove, list/.test(bad[7].error) && S.readRoadmap(mp).meta.milestones.length === 5 &&
+      upd.ok && upd.updated === true && st(upd, "Soon").date === "2026-10-09" && st(upd, "Soon").status === "on-track" && upd.milestones.length === 5 && st(upd, "Soon").name === "Soon",
+      "1.16 E3: validation — name, date (a real day), ≥ 1 existing feature, rm of an unknown name, the action enum; add of an existing name (by its slug) updates it (got " + js(bad.map((r) => r.error)) + ")");
+    // The roadmap: a Milestones table and the late / at-risk ones under Needs attention (MD + HTML); spec_roadmap carries them.
+    const rr = S.roadmapReport(mp, { write: true, html: true, now });
+    const md = rdf(path.join(mp, ".specs", "ROADMAP.md"));
+    const html = rdf(path.join(mp, ".specs", "ROADMAP.html"));
+    ok(rr.ok && js(rr.milestones.map((m) => m.status)) === js(["on-track", "on-track", "late", "done", "at-risk"]) &&
+      md.includes("## 🏁 Milestones\n\n| Milestone | Date | Features | Done | ETA | Status |\n") && md.includes("| Past | 2026-09-01 | alpha, beta | 1/2 | 2026-10-05 | ⛔ late |") &&
+      md.includes("| Shipped | 2026-09-01 | beta | 1/1 | — | ✅ done |") && md.includes("- **🏁 Past** — milestone late — its date 2026-09-01 has passed with 1/2 feature(s) done (ETA 2026-10-05)") &&
+      md.includes("- **🏁 Gam** — milestone at risk — no ETA yet for gamma") && !/🏁 (Beta launch|Soon|Shipped)\*\* —/.test(md) &&
+      md.indexOf("## 🏁 Milestones") > md.indexOf("## Features") && md.indexOf("## 🏁 Milestones") < md.indexOf("## Dependencies") &&
+      html.includes("<h2>🏁 Milestones</h2>") && html.includes('<td class="ms-late">⛔ late</td>') && html.includes("<b>🏁 Past</b> — milestone late"),
+      "1.16 E3: ROADMAP.md / .html — a Milestones table (date, features, done, ETA, status) between Features and Dependencies; late / at-risk milestones under Needs attention (got " + js(md.split("## 🏁 Milestones")[1] || "").slice(0, 300) + ")");
+    const plain = path.join(tmp, "proj-116e-nomilestone");
+    S.initProject(plain, ["core"], "en");
+    S.createFeature(plain, "Solo", ["core"], "x", undefined, "en");
+    const pr = S.roadmapReport(plain, { write: true });
+    ok(js(pr.milestones) === "[]" && !/Milestones/.test(rdf(path.join(plain, ".specs", "ROADMAP.md"))),
+      "1.16 E3: a project without milestones — `milestones: []` and no Milestones section in ROADMAP.md");
+    // A feature's lifecycle follows: rename → the new slug; archive → `archived` (restore brings it back); remove → dropped.
+    const ren = S.manageFeature(mp, "rename", "alpha", "alpha-two");
+    const arc = S.manageFeature(mp, "archive", "beta");
+    const afterArc = S.readRoadmap(mp).meta.milestones;
+    const arcList = S.milestone(mp, "list", { now });
+    const rst = S.manageFeature(mp, "restore", "beta");
+    const afterRst = S.readRoadmap(mp).meta.milestones;
+    const rmv = S.manageFeature(mp, "remove", "gamma", undefined, { confirm: true });
+    const afterRm = S.milestone(mp, "list", { now });
+    ok(ren.ok && js(ren.milestonesUpdated) === js(["Beta launch", "Soon", "Past"]) && js(afterArc.find((m) => m.name === "Beta launch")) === js({ name: "Beta launch", date: "2026-10-30", features: ["alpha-two"], archived: ["beta"] }) &&
+      arc.ok && js(arc.milestonesUpdated) === js(["Beta launch", "Past", "Shipped"]) && st(arcList, "Shipped").status === "done" && st(arcList, "Shipped").total === 0 &&
+      rst.ok && js(rst.restored.milestones) === js(["Beta launch", "Past", "Shipped"]) && js(afterRst.find((m) => m.name === "Shipped")) === js({ name: "Shipped", date: "2026-09-01", features: ["beta"] }) &&
+      rmv.ok && js(rmv.milestonesUpdated) === js(["Gam"]) && st(afterRm, "Gam").status === "at-risk" && st(afterRm, "Gam").reason === "no-features" && js(st(afterRm, "Gam").features) === "[]",
+      "1.16 E3: rename → the milestone names the new slug; archive → moved to `archived` (a milestone of archived features only is done); restore → back; remove → dropped (empty → at-risk no-features) (got " + js([afterArc, afterRm.milestones.map((m) => [m.name, m.status, m.reason])]) + ")");
+    // Release notes scoped to a milestone: its features (and the ones archived since) only; own file; meta.changelogAt untouched.
+    setState(path.join(mp, ".specs", "beta"), { approvals: { execution: { at: "2026-09-25T00:00:00.000Z", by: "t" } } });
+    setState(path.join(mp, ".specs", "alpha-two"), { approvals: { execution: { at: "2026-09-26T00:00:00.000Z", by: "t" } } });
+    const clAll = S.changelog(mp, { since: "all" });
+    const clMs = S.changelog(mp, { milestone: "shipped" });
+    const clW = S.changelog(mp, { milestone: "Shipped", write: true });
+    const clBad = S.changelog(mp, { milestone: "nope" });
+    const clMcp = payload(await call("spec_changelog", { milestone: "Shipped", projectDir: mp }));
+    ok(js(clAll.added.map((a) => a.feature)) === js(["beta", "alpha-two"]) && clMs.ok && js(clMs.added.map((a) => a.feature)) === js(["beta"]) && clMs.sinceSource === "all" &&
+      js(clMs.milestone) === js({ name: "Shipped", date: "2026-09-01", features: ["beta"] }) && /^# Release notes — proj-116e-milestones — Shipped\n/.test(clMs.markdown) && /_Milestone Shipped \(2026-09-01\): beta · /.test(clMs.markdown) &&
+      clW.ok && clW.wrote && clW.file === path.join(mp, ".specs", "RELEASE-NOTES.shipped.md") && fs.existsSync(clW.file) && !("changelogAt" in clW) && S.readRoadmap(mp).meta.changelogAt === undefined &&
+      clBad.ok === false && /No milestone 'nope'/.test(clBad.error) && clMcp.ok && js(clMcp.added) === js(clMs.added),
+      "1.16 E3: spec_changelog {milestone} — only its features, since = all by default, → .specs/RELEASE-NOTES.<milestone>.md without stamping meta.changelogAt; an unknown milestone is an error; MCP = engine (got " + js([clMs.added.map((a) => a.feature), clW.file]) + ")");
+    // A meta.milestones of the wrong shape: add / rm refuse (fix it by hand), list warns, the roadmap still renders.
+    const good = S.readRoadmap(mp).meta.milestones;
+    const rmPath = path.join(mp, ".specs", "roadmap.json");
+    const rmj = JSON.parse(rdf(rmPath));
+    rmj.meta.milestones = [{ name: "ok", date: "2026-10-01", features: ["beta"] }, { name: 3 }];
+    fs.writeFileSync(rmPath, JSON.stringify(rmj, null, 2));
+    const badAdd = S.milestone(mp, "add", { name: "New", date: "2026-10-01", features: ["beta"] });
+    const badList = S.milestone(mp, "list", { now });
+    const badRoad = S.roadmapReport(mp, { now });
+    ok(badAdd.ok === false && /meta\.milestones is not a list of \{name, date, features\}/.test(badAdd.error) && JSON.parse(rdf(rmPath)).meta.milestones.length === 2 &&
+      badList.ok && /meta\.milestones/.test(badList.warning) && js(badList.milestones.map((m) => m.name)) === js(["ok"]) && badRoad.milestones.length === 1,
+      "1.16 E3: a malformed meta.milestones is never 'repaired' — add refuses, list warns and reads its valid entries (got " + js([badAdd.error, badList.warning]) + ")");
+    rmj.meta.milestones = good;
+    fs.writeFileSync(rmPath, JSON.stringify(rmj, null, 2));
+    // MCP: the tool, its enum, and the same result as the engine (and the cap).
+    const tl = (await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_milestone") || {};
+    const mAdd = payload(await call("spec_milestone", { action: "ADD", name: "Mcp one", date: "2026-11-02", features: ["beta"], projectDir: mp }));
+    const mList = payload(await call("spec_milestone", { projectDir: mp }));
+    const eList = S.milestone(mp, "list");
+    const mBad = await call("spec_milestone", { action: "delete", projectDir: mp });
+    const mRm = payload(await call("spec_milestone", { action: "remove", name: "mcp one", projectDir: mp }));
+    const cap = JSON.parse(rdf(rmPath));
+    cap.meta.milestones = Array.from({ length: 50 }, (_, i) => ({ name: "M" + i, date: "2026-12-01", features: ["beta"] }));
+    fs.writeFileSync(rmPath, JSON.stringify(cap, null, 2));
+    const capR = S.milestone(mp, "add", { name: "One more", date: "2026-12-01", features: ["beta"] });
+    ok(js(tl.inputSchema && tl.inputSchema.properties.action.enum) === js(["add", "rm", "remove", "list"]) && tl.inputSchema.properties.features.type === "array" &&
+      mAdd.ok && mAdd.milestone.name === "Mcp one" && (mList.today !== eList.today || js(mList.milestones) === js(eList.milestones)) && mBad.result.isError === true &&
+      mRm.ok && mRm.removed === "Mcp one" && capR.ok === false && /at most 50 milestones/.test(capR.error),
+      "1.16 E3: MCP spec_milestone — the action enum (case-folded), add / list / remove = the engine; at most 50 milestones (got " + js([mAdd.message, mRm.message, capR.error]) + ")");
+    // Localized: a PT project's milestones read in Portuguese (the roadmap chrome too).
+    const ptp = path.join(tmp, "proj-116e-pt");
+    S.initProject(ptp, ["core"], "pt");
+    S.createFeature(ptp, "Faturas", ["core"], "x", undefined, "pt");
+    const ptm = S.milestone(ptp, "add", { name: "Lançamento", date: "2026-01-01", features: ["faturas"], now });
+    S.roadmapReport(ptp, { write: true, now });
+    const ptmd = rdf(path.join(ptp, ".specs", "ROADMAP.md"));
+    ok(ptm.ok && /^Marco 'Lançamento' adicionado — 2026-01-01: faturas$/.test(ptm.lines[0]) && /⛔ Lançamento — 2026-01-01 · 0\/1 feature\(s\) feitas · ETA — · atrasado/.test(ptm.lines[2]) &&
+      ptmd.includes("## 🏁 Marcos\n\n| Marco | Data | Features | Feitas | ETA | Estado |") && ptmd.includes("- **🏁 Lançamento** — marco atrasado"),
+      "1.16 E3: a PT project — milestone lines, the Marcos table and the attention line in Portuguese; the status codes stay English (got " + js(ptm.lines) + ")");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
