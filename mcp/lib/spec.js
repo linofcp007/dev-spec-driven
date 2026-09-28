@@ -1860,6 +1860,7 @@ const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at mo
 // The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
   "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves"]); // the CLI's BOOL_FLAGS ARE this list
+CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
@@ -2349,7 +2350,7 @@ function cliApprovalAction(args, level, meta) {
     const base = { source: "cli", project: approvalStr(fl.project) };
     if (cmd === "approve") {
       return [Object.assign({ kind: "approve", feature: approvalStr(pos[1]), phase: approvalStr(pos[2]), through: approvalStr(fl.through),
-        role: approvalStr(fl.role), by: approvalStr(fl.by), force: approvalTruthy(fl.force) }, base)];
+        role: approvalStr(fl.role), by: approvalStr(fl.by), force: approvalTruthy(fl.force) }, approvalExtras(approvalTruthy(fl.revoke), fl.reason, fl.expires), base)];
     }
     // `feature remove <name>` without --yes only previews what it would delete.
     if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return [Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base)];
@@ -2389,11 +2390,20 @@ function shellApprovalActions(command, level, depth, mode, meta) {
   }
   return out;
 }
+// 1.16 U: a revocation (revoke: true — the same gate as an approval: the approval record is the human's) and a waiver's reason /
+// expiry (carried into the command the human runs) → the extra fields of an "approve" action (none when absent).
+function approvalExtras(revoke, reason, expires) {
+  const out = {};
+  if (revoke) out.revoke = true;
+  if (approvalStr(reason)) out.reason = approvalStr(reason);
+  if (approvalStr(expires)) out.expires = approvalStr(expires);
+  return out;
+}
 function mcpApprovalAction(tool, ti, level, meta) {
   const base = { source: "mcp", project: approvalStr(ti.projectDir) };
   if (tool === "spec_approve") {
     return [Object.assign({ kind: "approve", feature: approvalStr(ti.name), phase: approvalStr(ti.phase), through: approvalStr(ti.through),
-      role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, base)];
+      role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, approvalExtras(ti.revoke === true, ti.reason, ti.expires), base)];
   }
   // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow aren't approvals.
   if (tool === "spec_feature") return String(approvalStr(ti.action) || "").toLowerCase() === "remove" && ti.confirm === true ? [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)] : [];
@@ -2427,7 +2437,11 @@ function approvalCommand(a, cli) {
     if (a.through) words.push("--through", word(a.through, "<phase>"));
     else words.push(word(a.phase, "<phase>"));
     if (a.role) words.push("--role", word(a.role, "<role>"));
-    if (a.force) words.push("--force");
+    if (a.revoke) words.push("--revoke"); // 1.16 U2: the human revokes — never an approve line in its place
+    else if (a.force) words.push("--force");
+    // 1.16 U3 / U2: the reason (a waiver's, a revocation's) and the expiry go in only when plainly safe to paste, else a placeholder
+    if (a.reason) words.push("--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
+    if (a.expires && !a.revoke) words.push("--expires", word(a.expires, "<YYYY-MM-DD>"));
   }
   const proj = a.project ? safe(a.project.replace(/\\/g, "/"),/^[\p{L}\p{N} _.@+,:/()~-]{1,400}$/u) : null;
   if (proj) words.push("--project", '"' + proj + '"');
@@ -2652,7 +2666,7 @@ function stopActivity(state) {
 // One unverified task as the reason lists it: "#3 (latest run failed)".
 function stopTaskLabel(d, lng) {
   const M = i18n.msg(lng);
-  const why = d.specChanged ? M.impact.staleSpec : M.evidenceGate.reason[d.reason] || d.reason;
+  const why = d.specChanged ? M.impact.staleSpec : d.unticked ? M.undo.label : M.evidenceGate.reason[d.reason] || d.reason;
   return "#" + d.number + ` (${why})`;
 }
 // The evidence gate at the end of a turn — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`. It sends the
@@ -2713,7 +2727,7 @@ function stopCheck(projectDir, opts = {}) {
   lines.push(S.plainly);
   return res(true, "unverified", {
     claims: cl.claims,
-    features: features.map((f) => ({ feature: f.feature, unverified: f.unverified.map((d) => ({ number: d.number, reason: d.reason, ...(d.specChanged ? { specChanged: true } : {}) })),
+    features: features.map((f) => ({ feature: f.feature, unverified: f.unverified.map((d) => ({ number: d.number, reason: d.reason, ...(d.specChanged ? { specChanged: true } : {}), ...(d.unticked ? { unticked: true } : {}) })),
       suite: f.suite.map((s) => ({ name: s.name, status: s.status })) })),
     reason: lines.join("\n"),
   });
@@ -5256,8 +5270,11 @@ function taskNumber(v) {
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
 function completeTask(projectDir, name, number, evidence, opts = {}) {
+  if (opts && opts.undo === true) return untickTask(projectDir, name, number, { reason: opts.reason, evidence }); // 1.16 U1
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  // 1.16 U1: a reason explains an undo — a tick records evidence instead (refused, never silently dropped).
+  if (opts && opts.reason != null) return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).undo.reasonNeedsUndo };
   const file = path.join(f.dir, "tasks.md");
   const text = readIfExists(file);
   const E = errs(projectDir, f.slug);
@@ -5363,7 +5380,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.note = reason === "failed-run" ? EG.failedRun(n, entry.exitCode, f.slug, runnable)
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
-      : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
+      : reason === "stale-evidence" ? (entry && entry.stale ? (entry.staleBy === "undo" ? i18n.msg(lng).undo.staleNote(n, f.slug, runnable) : i18n.msg(lng).impact.staleNote(n, f.slug, runnable)) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
       // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
       : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
@@ -5400,6 +5417,80 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
   }
   return withObserved(res); // 1.14 F1: the observed stamp on every result
+}
+
+// 1.16 U1 — undo a tick: spec_complete_task {undo: true, reason?} / `dev-spec undone <feature> <n> [--reason "…"]` (both reach
+// it through completeTask, under the feature lock). The task goes back to open: the checkbox of the line it resolves to — the
+// first TICKED task of that number (the mirror of complete's first open one), else the one resolveTask answers — is reset at
+// its checkbox column (CRLF / a BOM kept, tasks.md replaced atomically). In .state.json, written FIRST (a failure after it
+// leaves a ticked task whose evidence no longer counts — erring toward unverified, never a tick that keeps a stale proof):
+// its own evidence record is marked `stale: true` + `staleBy: "undo"` (a re-tick needs a new run, like spec_impact --reopen —
+// reason stale-evidence, with its own label), ticks[n] is dropped (forecasts: it is open again) unless another task of that
+// number stays ticked, and `unticks` gets {n, at, reason?} (changesSince reads it: a finish or an execution sign-off older than
+// an untick is asked for again). An open task → ok, nothing changed (alreadyOpen + a note). Never gated (the bugfix gate
+// refuses TICKS: unticking completes nothing). → { ok, feature, number, unticked, alreadyOpen?, evidenceStale, done, total, next, note }
+const UNDO_REASON_MAX = 500;
+// A one-line reason (revoke, undo, a waiver): whitespace runs folded, at most UNDO_REASON_MAX characters. → { value } | { error }
+function reasonInput(v, lng) {
+  if (v == null) return { value: null };
+  if (typeof v !== "string") return { error: i18n.msg(lng).undo.badReason(UNDO_REASON_MAX) };
+  const s = v.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
+  if (s.length > UNDO_REASON_MAX) return { error: i18n.msg(lng).undo.badReason(UNDO_REASON_MAX) };
+  return { value: s || null };
+}
+function untickTask(projectDir, name, number, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const U = i18n.msg(lng).undo;
+  const E = errs(projectDir, f.slug);
+  if (opts.evidence != null) return { ok: false, error: U.noEvidence };
+  const file = path.join(f.dir, "tasks.md");
+  const text = readIfExists(file);
+  if (text == null) return { ok: false, error: E.tasksMissing(f.slug) };
+  const n = taskNumber(number);
+  if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
+  const reason = reasonInput(opts.reason, lng);
+  if (reason.error) return { ok: false, error: reason.error };
+  const blocks = taskBlocks(text);
+  const same = blocks.filter((b) => b.number === n);
+  if (!same.length) return { ok: false, error: E.taskNotFound(n) };
+  const task = same.find((b) => b.done) || resolveTask(blocks, n);
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const progress = (txt) => {
+    const tracks = detectTracks(f.dir);
+    const tasks = parseTasks(activeTasks(txt, tracks));
+    const next = taskSchedule(taskBlocks(activeTasks(txt, tracks) || "")).next;
+    return { done: tasks.filter((t) => t.done).length, total: tasks.length, next: next && { number: next.number, text: next.text } };
+  };
+  if (!task.done) return { ok: true, feature: f.slug, number: n, unticked: false, alreadyOpen: true, evidenceStale: false, ...progress(text), note: U.alreadyOpen(n) };
+  const key = String(n);
+  const dup = same.length > 1;
+  const rec = ownRecord(isObj(state.evidence) ? state.evidence[key] : undefined, task, dup); // this task's record, never the other "N."'s
+  const staled = isRecord(rec);
+  if (staled) { rec.stale = true; rec.staleBy = "undo"; } // mutates state.evidence in place
+  // ticks[n] (forecasts): dropped unless another task of that number stays ticked; a hand-broken ticks value is left alone.
+  if (isRecord(state.ticks) && own(state.ticks, key) && !same.some((b) => b !== task && b.done)) {
+    delete state.ticks[key];
+    if (!Object.keys(state.ticks).length) delete state.ticks;
+  }
+  const entry = { n, at: new Date().toISOString() };
+  if (reason.value) entry.reason = reason.value;
+  state.unticks = (Array.isArray(state.unticks) ? state.unticks : []).concat([entry]);
+  writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+  const lines = text.split("\n");
+  const raw = lines[task.line];
+  lines[task.line] = raw.slice(0, task.col) + " " + raw.slice(task.col + 1);
+  const updated = lines.join("\n");
+  writeFileAtomic(file, updated);
+  maybeRefreshRoadmap(projectDir);
+  const runnable = taskMarkers(task).verify.length > 0;
+  const notes = [U.unticked(n, f.slug, runnable, staled)];
+  if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));
+  const res = { ok: true, feature: f.slug, number: n, unticked: true, evidenceStale: staled, ...progress(updated), note: notes.join(" ") };
+  if (reason.value) res.reason = reason.value;
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -6822,7 +6913,8 @@ function recordEvidence(prev, ev, at, stamp) {
     const claim = pRun && p.exitCode === 0 && !p.command; // v1.12 bare exit 0: the note replaces it
     const rec = stamped(pRun && !claim ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
     if (stamp.verify) return rec; // a note never clears a stale run of a runnable _Verify:_ (only a new run does)
-    delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change
+    delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change (or an undo)
+    delete rec.staleBy;
     return rec;
   }
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
@@ -6870,7 +6962,8 @@ function verificationStatus(projectDir, slug, dir) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
     const { reason } = taskVerification(evidence, b, dups.has(b.number), mode); // the rule every `verified` shares
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
-    if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
+    if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}),
+      ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) }); // 1.16 U1: unticked since the record
   }
   return { withVerify: withVerify.length, evidence, unverified: unverifiedDetail.map((d) => d.number), unverifiedDetail };
 }
@@ -7812,7 +7905,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
-  const label = (d) => (d.specChanged ? i18n.msg(lang).impact.staleSpec : R[d.reason] || d.reason);
+  const label = (d) => (d.specChanged ? i18n.msg(lang).impact.staleSpec : d.unticked ? i18n.msg(lang).undo.label : R[d.reason] || d.reason);
   return vs.unverifiedDetail.map((d) => "#" + d.number + (d.reason === "no-evidence" ? "" : ` (${label(d)})`)).join(", ");
 }
 // stale-evidence because the spec changed (spec_impact --reopen marked this task's own record), not because the
@@ -7820,7 +7913,14 @@ function unverifiedLabel(vs, lang) {
 function specChangedSince(evidence, block, dup, reason) {
   if (reason !== "stale-evidence") return false;
   const own = ownEvidence(evidence, block, dup);
-  return isRecord(own) && own.stale === true;
+  return isRecord(own) && own.stale === true && own.staleBy !== "undo";
+}
+// 1.16 U1: stale-evidence because the task was unticked after this record (spec_complete_task {undo}: staleBy "undo") — the
+// same code, its own label (undo.label): a re-tick needs a new run.
+function untickedSince(evidence, block, dup, reason) {
+  if (reason !== "stale-evidence") return false;
+  const own = ownEvidence(evidence, block, dup);
+  return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
 // +ai prompt work (touches prompts/, or an _Affects evals:_ task about a prompt) stays with the controller.
@@ -8194,6 +8294,11 @@ function finishFeature(projectDir, name, opts = {}) {
   // doctor's outside-code-artifacts warn, repeated here as a warning (never a blocker).
   const ocWarn = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "outside-code-artifacts") : null;
   if (ocWarn) warnings.push(ocWarn.detail);
+  // 1.16 U3: the forced approvals (each a waived gate, with its waiver when one was recorded) — the merge summary lists them,
+  // an expired waiver is a warning (never a blocker; doctor warns waiver-expired).
+  const forcedList = forcedApprovalList(state.approvals, tracks);
+  const expiredW = forcedList.filter((x) => x.waiver && x.waiver.expired);
+  if (expiredW.length) warnings.push(i18n.msg(lng).waiver.finishWarn(expiredW.map((x) => i18n.msg(lng).waiver.expiredItem(x.phase, x.waiver.expires, x.waiver.reason)).join(", "), slug));
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
@@ -8261,6 +8366,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
   const decLines = decisionSummaryLines(dir, lng); // 1.14 C2: decisions.md
   if (decLines.length) body.push(...decLines, "");
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // 1.16 U3: the waived gates
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
   const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE]
     .filter((x) => fs.existsSync(path.join(dir, x)));
@@ -8299,6 +8405,7 @@ function finishFeature(projectDir, name, opts = {}) {
     wrote: write,
   };
   if (baseline) res.baseline = baseline;
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3: [{phase, failing, reason?, expires?, expired}]
   if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // 1.14 B3: the roles each pending phase waits for
@@ -8334,7 +8441,7 @@ function stateFromFile(projectDir, file) {
     if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
   }
   // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
-  for (const key of ["approvalHistory", "changes"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; }
+  for (const key of ["approvalHistory", "changes", "unticks"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; } // unticks: 1.16 U1 (undone ticks)
   s.approvals = s.approvals || {};
   if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
   return s;
@@ -8379,6 +8486,7 @@ const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "b
 // (doctor's approval-gates and the roadmap keep showing it). A phase with no artifact to sign off (eval-plan
 // without +ai, test-plan without +tdd, a missing file) is an error even with force: there is nothing to approve.
 function approvePhase(projectDir, name, phase, by, opts = {}) {
+  if (opts.revoke === true) return revokeApproval(projectDir, name, phase, by, opts); // 1.16 U2: spec_approve {revoke} / approve --revoke
   if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // 1.14 B3: the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -8388,6 +8496,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const lng = featureLang(projectDir, f.slug);
+  // 1.16 U3: the waiver a forced approval carries (reason / expires) — validated before anything else; either one without force is refused.
+  const wv = waiverInput(opts, lng);
+  if (wv.error) return { ok: false, error: wv.error };
   if (state.kind === "spike" && p !== "execution") return { ok: false, spike: true, error: i18n.msg(lng).spike.noGate(p, f.slug) }; // 1.14 C2
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
@@ -8423,6 +8534,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
+  if (failing.length && wv.waiver) entry.waiver = wv.waiver; // 1.16 U3: why the gate was forced, and until when
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -8430,13 +8542,12 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // A feature upgraded mid-flight: the approvals made before the history are seeded first as `legacy` records (no
   // snapshot), so metrics keep counting them (forced ones too) after their phase is re-approved and they're replaced.
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
-  const legacy = Object.entries(state.approvals).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isRecord(h) && h.phase === ph && h.partial !== true))
-    .map(([ph, a]) => legacyRecord(ph, a))
-    .sort((x, y) => (timeOf(x.at) || 0) - (timeOf(y.at) || 0));
+  const legacy = legacySeeds(state.approvals, hist);
   const record = { phase: p, at: entry.at, by: entry.by };
   if (entry.file) record.file = entry.file;
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   if (entry.forced) { record.forced = true; record.failing = failing; }
+  if (entry.waiver) record.waiver = entry.waiver;
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -8456,6 +8567,145 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (failing.length) Object.assign(res, { forced: true, failing, checks: gate.checks, note: G.approveForced(failing.join(", ")) });
   if (entry.role) res.role = entry.role;
   if (so) roleSignOffResult(res, so, p, lng);
+  // 1.16 U3: the waiver recorded with a forced approval (or sign-off) — or, when the gate passed, that nothing was waived.
+  const W = i18n.msg(lng).waiver;
+  if (failing.length && wv.waiver) Object.assign(res, { waiver: wv.waiver, note: [res.note, W.recorded(wv.waiver.reason, wv.waiver.expires)].filter(Boolean).join(" ") });
+  else if (wv.waiver) Object.assign(res, { waiverIgnored: true, note: [res.note, W.notForced].filter(Boolean).join(" ") });
+  if (so && so.complete && entry.waiver) res.waiver = entry.waiver; // the completing sign-off: the waiver the approval carries
+  return res;
+}
+
+// 1.16 U3 — the waiver a forced approval carries: spec_approve {force: true, reason?, expires?} / `approve <f> <phase> --force
+// --reason "…" --expires 2026-12-31|30d`. reason: one line (reasonInput, ≤ 500 characters); expires: an ISO date (today or later)
+// or a number of days (Nd), at most WAIVER_MAX_DAYS ahead, stored as YYYY-MM-DD (UTC). Either without force is refused (a
+// waiver is what a force records); a force without them stays allowed (no waiver). Recorded as `waiver {reason?, expires?}` on
+// the approval and its history record only when the approval IS forced (a passing gate waives nothing: waiverIgnored + a note).
+// A waiver expires once today (UTC) is past `expires` (valid through that day). → { waiver: null | {reason?, expires?} } | { error }
+const WAIVER_MAX_DAYS = 3650;
+function waiverInput(opts, lng) {
+  const W = i18n.msg(lng).waiver;
+  const r = reasonInput(opts.reason, lng);
+  if (r.error) return { error: r.error };
+  let expires = null;
+  if (opts.expires != null && !(typeof opts.expires === "string" && !opts.expires.trim())) {
+    const bad = { error: W.badExpires(JSON.stringify(opts.expires), WAIVER_MAX_DAYS) };
+    if (typeof opts.expires !== "string") return bad;
+    const v = opts.expires.trim();
+    const t0 = Date.parse(todayIso() + "T00:00:00Z");
+    const day = (k) => new Date(t0 + k * 864e5).toISOString().slice(0, 10);
+    const m = v.match(/^(\d{1,4})\s*d$/i);
+    if (m) {
+      const k = parseInt(m[1], 10);
+      if (k < 1 || k > WAIVER_MAX_DAYS) return bad;
+      expires = day(k);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(v) && validIsoDay(v) && v >= day(0) && v <= day(WAIVER_MAX_DAYS)) expires = v;
+    else return bad;
+  }
+  if ((r.value || expires) && opts.force !== true) return { error: W.needsForce };
+  if (!r.value && !expires) return { waiver: null };
+  return { waiver: Object.assign({}, r.value ? { reason: r.value } : {}, expires ? { expires } : {}) };
+}
+// A stored waiver → { reason, expires, expired } (null when it holds neither); expired: today (UTC) is past its `expires`.
+function waiverView(w) {
+  if (!isRecord(w)) return null;
+  const reason = typeof w.reason === "string" && w.reason.trim() ? w.reason.trim() : null;
+  const expires = typeof w.expires === "string" && /^\d{4}-\d{2}-\d{2}$/.test(w.expires) ? w.expires : null;
+  if (!reason && !expires) return null;
+  return { reason, expires, expired: !!expires && expires < todayIso() };
+}
+// The forced approvals of the ACTIVE phases, in PHASES order → [{phase, failing: [ids], waiver: {reason, expires, expired} | null}]
+// — doctor's waiver-expired, the roadmap's forced line, spec_finish's merge summary / `waivers` / expired warning.
+function forcedApprovalList(approvals, tracks) {
+  const a = isObj(approvals) ? approvals : {};
+  return PHASES.filter((ph) => phaseActive(ph, tracks) && isRecord(a[ph]) && a[ph].forced === true)
+    .map((ph) => ({ phase: ph, failing: Array.isArray(a[ph].failing) ? a[ph].failing.filter((x) => typeof x === "string") : [], waiver: waiverView(a[ph].waiver) }));
+}
+// spec_finish's merge summary: "## Waived gates (forced approvals)" and one line per forced approval (its failing checks, the
+// waiver's reason and expiry — "no reason recorded" for a force without one).
+function waiverSummaryLines(list, lng) {
+  const W = i18n.msg(lng).waiver;
+  return [W.prHeading, ...list.map((x) => W.prLine(x.phase, x.failing.join(", "), x.waiver && x.waiver.reason, x.waiver && x.waiver.expires, !!(x.waiver && x.waiver.expired)))];
+}
+// spec_finish's `waivers` (stable): [{phase, failing, reason?, expires?, expired}] — every forced approval, the waiver's fields when recorded.
+function waiverResult(list) {
+  return list.map((x) => Object.assign({ phase: x.phase, failing: x.failing }, x.waiver && x.waiver.reason ? { reason: x.waiver.reason } : {},
+    x.waiver && x.waiver.expires ? { expires: x.waiver.expires } : {}, { expired: !!(x.waiver && x.waiver.expired) }));
+}
+// doctor's waiver-expired (stable id, a warn): the forced approvals still standing whose waiver expired → the check, or null.
+function waiverExpiredCheck(approvals, tracks, slug, lng) {
+  const W = i18n.msg(lng).waiver;
+  const list = forcedApprovalList(approvals, tracks).filter((x) => x.waiver && x.waiver.expired);
+  return list.length ? { id: "waiver-expired", status: "warn", detail: W.doctor(list.map((x) => W.expiredItem(x.phase, x.waiver.expires, x.waiver.reason)).join(", "), slug) } : null;
+}
+// Of several sign-offs' waivers, the one the completed approval carries: the earliest expiry (the strictest), else the first one.
+function strictestWaiver(list) {
+  const ws = list.filter((w) => waiverView(w));
+  if (!ws.length) return null;
+  const dated = ws.filter((w) => waiverView(w).expires).sort((x, y) => (x.expires < y.expires ? -1 : x.expires > y.expires ? 1 : 0));
+  return dated[0] || ws[0];
+}
+// The approvals not in approvalHistory yet (made before the history, or by an older engine) → their `legacy` records, oldest first
+// — seeded before a new approval's (approvePhase) or a revocation's (revokeApproval) record.
+function legacySeeds(approvals, hist) {
+  return Object.entries(isObj(approvals) ? approvals : {}).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isApprovalRecord(h) && h.phase === ph))
+    .map(([ph, a]) => legacyRecord(ph, a))
+    .sort((x, y) => (timeOf(x.at) || 0) - (timeOf(y.at) || 0));
+}
+
+// 1.16 U2 — revoke an approval: spec_approve {name, phase, revoke: true, reason?} / `approve <f> <phase> --revoke [--reason "…"]`
+// (under the feature lock, through approvePhase). approvals[phase] is removed, and so are the role sign-offs waiting for it
+// (signoffs[phase]); approvalHistory gets {phase, at, by, revoked: true, reason?, role?, roles? (the sign-offs withdrawn),
+// approvedAt?, wasForced?, partial? (only waiting sign-offs were withdrawn — nothing had been approved)} — never a snapshot, and
+// every reader of the history as a list of APPROVALS skips it (isApprovalRecord). Approvals made before the history are seeded as
+// `legacy` records first (approvePhase's rule), so the revoked approval itself stays in the history. NEVER cascades: the later
+// phases stay approved (`laterApproved`); the revoked one is pending again, so doctor / next_action / spec_finish ask for it and
+// approving another phase is refused on phase-order until it is approved again. A phase neither approved nor waiting for a
+// sign-off → error (notApproved); `execution` included (its sign-off is asked for again). force / expires / through are refused.
+function revokeApproval(projectDir, name, phase, by, opts) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const R = i18n.msg(lng).revoke;
+  if (opts.through != null) return { ok: false, error: R.noThrough };
+  if (opts.force === true || opts.expires != null) return { ok: false, error: R.noForce };
+  if (phase == null || String(phase).trim() === "") return { ok: false, error: R.phaseRequired };
+  const p = String(phase).toLowerCase().trim();
+  if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
+  const reason = reasonInput(opts.reason, lng);
+  if (reason.error) return { ok: false, error: reason.error };
+  const role = opts.role == null || String(opts.role).trim() === "" ? null : normRole(opts.role);
+  if (role != null && !RE_ROLE.test(role)) return { ok: false, badRole: true, error: i18n.msg(lng).governance.badRole(String(opts.role)) };
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
+  const waiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
+  if (!appr && !waiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
+  const legacy = legacySeeds(state.approvals, hist);
+  const record = { phase: p, at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user", revoked: true };
+  if (reason.value) record.reason = reason.value;
+  if (role) record.role = role;
+  if (appr) {
+    if (appr.at) record.approvedAt = appr.at;
+    if (appr.forced === true) record.wasForced = true;
+  } else record.partial = true; // only waiting sign-offs were withdrawn: nothing had been approved
+  if (waiting.length) record.roles = waiting;
+  state.approvalHistory = hist.concat(legacy, [record]);
+  delete state.approvals[p];
+  dropRoleSignOffs(state, p);
+  if (state.lastApprovedPhase === p) {
+    const rest = Object.entries(state.approvals).filter(([, a]) => isRecord(a)).sort((x, y) => (timeOf(x[1].at) || 0) - (timeOf(y[1].at) || 0));
+    if (rest.length) state.lastApprovedPhase = rest[rest.length - 1][0];
+    else delete state.lastApprovedPhase;
+  }
+  writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+  maybeRefreshRoadmap(projectDir);
+  const order = phaseOrder(featureFlow(f.dir, state.kind || "feature"));
+  const later = order.slice(order.indexOf(p) + 1).filter((ph) => isRecord(state.approvals[ph]));
+  const message = appr ? [R.revoked(p, f.slug), waiting.length ? R.signOffsToo(waiting.join(", ")) : null, later.length ? R.laterStay(later.join(", "), p) : null].filter(Boolean).join(" ")
+    : R.withdrawn(p, f.slug, waiting.join(", "));
+  const res = { ok: true, feature: f.slug, revoked: p, revokedApproval: !!appr, withdrawnSignOffs: waiting, laterApproved: later, approvals: state.approvals, message };
+  if (reason.value) res.reason = reason.value;
   return res;
 }
 
@@ -8613,6 +8863,7 @@ function recordRoleSignOff(state, phase, entry, required, record) {
   const rec = { by: entry.by, at: entry.at };
   for (const k of ["fingerprint", "designFingerprint"]) if (entry[k]) rec[k] = entry[k];
   if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
+  if (entry.waiver) rec.waiver = entry.waiver; // 1.16 U3: a forced sign-off's waiver
   if (entry.batch) rec.batch = true;
   const signoffs = isObj(state.signoffs) ? state.signoffs : {};
   const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
@@ -8629,6 +8880,9 @@ function recordRoleSignOff(state, phase, entry, required, record) {
     const ids = [...new Set(forced.flatMap((x) => (Array.isArray(x.failing) ? x.failing : [])))];
     entry.forced = true; entry.failing = ids;
     record.forced = true; record.failing = ids;
+    // 1.16 U3: the approval carries a waiver when a forced sign-off that counts gave one (its own, else the strictest).
+    if (!entry.waiver) { const w = strictestWaiver(forced.map((x) => x.waiver)); if (w) entry.waiver = w; }
+    if (entry.waiver) record.waiver = entry.waiver;
   }
   record.roles = required.slice();
   delete signoffs[phase];
@@ -8783,6 +9037,8 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const E = i18n.msg(lng).governance;
   const G = i18n.msg(lng).gates;
   if (phase != null && String(phase).trim() !== "") return { ok: false, error: E.ffBoth };
+  const wv = waiverInput(opts, lng); // 1.16 U3: with force, each forced phase of the run records the same waiver
+  if (wv.error) return { ok: false, error: wv.error };
   const t = String(opts.through || "").toLowerCase().trim();
   if (t === "execution") return { ok: false, error: E.ffExecution };
   if (!PHASES.includes(t)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(opts.through, PHASES.filter((p) => p !== "execution").join(", ")) };
@@ -8797,11 +9053,12 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const approved = [], steps = [];
   let approvals = state.approvals;
   for (const ph of chain) {
-    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true });
+    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires });
     if (r.approvals) approvals = r.approvals;
     const step = { phase: ph, approved: !!r.ok && r.complete !== false };
     if (r.role) step.role = r.role;
     if (r.forced) Object.assign(step, { forced: true, failing: r.failing });
+    if (r.waiver) step.waiver = r.waiver; // 1.16 U3
     if (step.approved) { approved.push(ph); steps.push(step); continue; }
     const list = approved.join(", ");
     if (r.ok) { // signed off by role — the phase waits for the other roles, and the later ones can't pass phase-order before it
@@ -8844,6 +9101,9 @@ const shortDigest = (s) => require("crypto").createHash("sha1").update(normWs(s)
 
 // The approvalHistory record of an approval made before the history existed (no snapshot) — what approvePhase seeds before
 // its own record, and what spec_upgrade {apply} seeds (it may then add the snapshot, when the fingerprint still matches).
+// A history record that IS an approval — not a role's partial sign-off (1.14 B3), not a revocation (1.16 U2): every reader of
+// approvalHistory as a list of approvals (snapshots, metrics, the legacy seeding, shipped supersessions, the changelog, upgrade).
+const isApprovalRecord = (h) => isRecord(h) && h.partial !== true && h.revoked !== true;
 function legacyRecord(ph, a) {
   return Object.assign({ phase: ph, at: a.at, by: a.by }, a.file ? { file: a.file } : {}, a.fingerprint ? { fingerprint: a.fingerprint } : {},
     a.forced === true ? { forced: true, failing: Array.isArray(a.failing) ? a.failing : [] } : {}, { legacy: true });
@@ -8871,7 +9131,7 @@ function historyText(dir, rel) {
 // The snapshot of the phase's LATEST approval → { rel, text, at, record } — null when that approval has none (made
 // before 1.13, or by an older engine after a 1.13 one), or the file is gone / points outside the feature's .history.
 function latestSnapshot(dir, state, phase) {
-  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === phase && h.partial !== true) : []; // partial: a role sign-off (1.14)
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isApprovalRecord(h) && h.phase === phase) : []; // not a partial role sign-off (1.14), nor a revocation (1.16)
   const last = hist[hist.length - 1];
   if (!last || typeof last.snapshot !== "string") return null;
   const appr = isRecord(state.approvals) ? state.approvals[phase] : null;
@@ -9050,7 +9310,7 @@ function impactReport(projectDir, name, opts = {}) {
   const taskView = (b) => {
     const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number), mode);
     return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(nothingToVerify ? { nothingToVerify: true } : {}),
-      ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
+      ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}), ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) };
   };
   const citing = (ids) => blocks.filter((b) => {
     const mk = taskMarkers(b);
@@ -9181,7 +9441,7 @@ function impactReport(projectDir, name, opts = {}) {
   }
   for (const b of toReopen) {
     const rec = ownRecord(evidence[String(b.number)], b, dups.has(b.number)); // this task's record, never the other "N."'s
-    if (isRecord(rec)) rec.stale = true; // mutates state.evidence in place
+    if (isRecord(rec)) { rec.stale = true; delete rec.staleBy; } // mutates state.evidence in place (a spec change — not an undo, 1.16 U1)
   }
   const keys = (list, k) => list.map((x) => x[k]);
   const idKey = byId ? "id" : "section";
@@ -9200,7 +9460,7 @@ function impactLines(r) {
   const I = i18n.msg(r.lang).impact;
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
-  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.nothingToVerify ? I.nothingToVerify : t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
+  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.nothingToVerify ? I.nothingToVerify : t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : t.unticked ? i18n.msg(r.lang).undo.label : R[t.evidence] || t.evidence}`;
   if (r.baseline === "fingerprint-only" || r.baseline === "none") {
     const out = [(r.baseline === "none" ? I.headNone : I.headFp)(r.feature, r.phase, r.changed), "  " + r.hint];
     if (r.note) out.push("  " + r.note);
@@ -9260,7 +9520,7 @@ function featureMetrics(projectDir, slug, dir) {
   // made: approvals/rework unknown (null). A missing history is an empty one (createFeature doesn't seed the key).
   const lost = !!state.invalid && !Array.isArray(state.approvalHistory);
   // A role sign-off that didn't complete its phase (`partial`, 1.14 B3) is no approval: not counted, never a lead time.
-  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && typeof h.phase === "string" && h.partial !== true);
+  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isApprovalRecord(h) && typeof h.phase === "string"); // + no revocation (1.16 U2)
   // Approvals made before the change history (a feature upgraded mid-flight): the `legacy` records approvePhase seeds,
   // and approved phases with no history entry at all (not re-approved since). Each is counted once (its latest
   // approval — earlier ones were overwritten), so their rework is unknown: `rework` is then a lower bound.
@@ -9349,6 +9609,9 @@ function featureMetrics(projectDir, slug, dir) {
     approvalsTotal: history ? history.length + unseeded.length : null,
     rework, reworkByPhase, reworkLowerBound: rework != null && legacyPhases.length > 0, legacyPhases, forcedApprovals,
     batchApprovals: history ? history.filter((h) => h.batch === true).length : null, // 1.14 B3: approvals made by a fast-forward
+    // 1.16 U: approvals revoked (spec_approve {revoke} — a withdrawn role sign-off is none) and ticks undone (spec_complete_task {undo})
+    revokedApprovals: lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && h.revoked === true && h.partial !== true).length,
+    untickedTasks: Array.isArray(state.unticks) ? state.unticks.length : 0,
     changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
     evidence: { runs, passing, passRate: runs ? round1((passing / runs) * 100) : null },
     tasks: { done, total: active.length },
@@ -11871,6 +12134,8 @@ function specDoctor(projectDir, name, opts = {}) {
       ...rv.notes]
       .filter(Boolean).join("; ") || m.gatesOk);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
+  const wExp = waiverExpiredCheck(approvals, tracks, slug, lng); // 1.16 U3: a forced approval whose waiver expired
+  if (wExp) add(wExp.id, wExp.status, wExp.detail);
   const gatesOk = pendingGates.length === 0;
 
   const fails = checks.filter((c) => c.status === "fail");
@@ -12268,10 +12533,12 @@ function roadmapData(projectDir, opts = {}) {
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
+    // 1.16 U3: the waivers of those forced approvals (reason, expiry, expired) — the attention line shows them
+    const waivers = Object.fromEntries(forced.map((p) => [p, waiverView(approvals[p].waiver)]).filter(([, w]) => w));
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
     const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
     const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
-    return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait, spikeTimebox };
+    return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, waivers, overlaps, roleWait, spikeTimebox };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -12289,7 +12556,8 @@ function buildAttention(rows, t, lang) {
     } else if (r.designTodo) a.push({ name: r.f.name, msg: t.designTodo });
     if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
     if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
-    if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.join(", ")}` });
+    // a forced approval with its waiver (1.16 U3): "design (waiver: <reason>, until 2026-12-31)" — an expired one reads EXPIRED
+    if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.map((p) => (r.waivers && r.waivers[p] ? fm.waiver.roadmapItem(p, r.waivers[p].reason, r.waivers[p].expires, r.waivers[p].expired) : p)).join(", ")}` });
     if (r.roleWait && r.roleWait.length) a.push({ name: r.f.name, msg: fm.governance.roadmapAwaiting(r.roleWait.map((w) => `${w.phase} (${w.missing.join(", ")})`).join(", ")) }); // 1.14 B3
     // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
     // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
@@ -13768,6 +14036,8 @@ function spikeDoctor(projectDir, f) {
   const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
   if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
+  const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
+  if (wExp) add(wExp.id, wExp.status, wExp.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
@@ -13838,6 +14108,8 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const dec = decisionSummaryLines(dir, lng);
   if (dec.length) body.push(...dec, "");
   if (blocks.length) body.push(F.prTasks, ...blocks.map((b) => `- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}`), "");
+  const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // 1.16 U3: a forced execution sign-off
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
   body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
   body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";
@@ -13856,6 +14128,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
     blockers, warnings: [], openTasks: open, unverified: [], pendingGates: [], changedSinceApproval: [], placeholders: [], checks: SP.finish.checks.slice(),
     outcome: s.outcome, mergeTitle, paths: { summary: summaryPath }, wrote: write };
   if (baseline) res.baseline = baseline;
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3
   if (recordedChecks) res.recordedChecks = recordedChecks;
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
@@ -14190,7 +14463,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
 
   // Tasks — done / open, and the verification verdict doctor and spec_finish give (with the localized reason).
   const vs = verificationStatus(projectDir, slug, dir);
-  const why = new Map(vs.unverifiedDetail.map((d) => [d.number, d.specChanged ? M.impact.staleSpec : M.evidenceGate.reason[d.reason] || d.reason]));
+  const why = new Map(vs.unverifiedDetail.map((d) => [d.number, d.specChanged ? M.impact.staleSpec : d.unticked ? M.undo.label : M.evidenceGate.reason[d.reason] || d.reason]));
   const taskRows = tasks.map((t) => {
     const v = !t.done ? X.verification.open : why.has(t.number) ? X.verification.unverified(why.get(t.number)) : t.nothingToVerify ? X.verification.nothing : X.verification.verified;
     return `| ${t.number} | ${mdCell(cleanTaskText(t.text))} | ${t.done ? X.taskStatus.done : X.taskStatus.open} | ${mdCell(v)} |`;
@@ -14500,7 +14773,7 @@ function shippedSupersedeKeys(projectDir, dir, state, reqRaw, cache) {
   const t = (v) => timeOf(v) || 0;
   const shipAt = Math.max(t(isObj(state.finished) ? state.finished.at : null), t(isRecord(state.approvals) && isRecord(state.approvals.execution) ? state.approvals.execution.at : null));
   if (!shipAt) return null;
-  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === "requirements" && h.partial !== true &&
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isApprovalRecord(h) && h.phase === "requirements" &&
     typeof h.snapshot === "string" && timeOf(h.at) != null && timeOf(h.at) <= shipAt) : [];
   const rec = hist[hist.length - 1];
   if (!rec) return null;
@@ -14877,7 +15150,7 @@ function changelogData(projectDir, since) {
     const firstFin = isObj(st.finished) ? timeOf(st.finished.firstAt) : null; // a re-finished feature shipped at its first finish
     const before = since != null && ([fin, firstFin, exe].some((t) => t != null && t <= since) ||
       // a role's partial sign-off approves nothing (the phase waits for every role) — only a completed one shipped it
-      hist.some((h) => isRecord(h) && h.phase === "execution" && h.partial !== true && timeOf(h.at) != null && timeOf(h.at) <= since));
+      hist.some((h) => isApprovalRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since)); // a revocation (1.16) shipped nothing either
     if (before) continue;
     shipped.add(s.dir);
     const at = Math.max(...events);
@@ -15236,7 +15509,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
 // the catalog kept calling it finished. tasksText: the ACTIVE tasks (what a finish records). opts.newFiles === false skips
 // the _Implements:_ walk (state only): SessionStart's bounded drift check and the catalog, refreshed after every mutation.
 // → null (no baseline, or still current) | { finishedAt, since: [{ kind: "change-request", n, at } | { kind: "approval",
-// phase, at }], newFiles: [rel …] }
+// phase, at } | { kind: "untick", task, at } (1.16 U1)], newFiles: [rel …] }
 function staleFinish(projectDir, st, tasksText, opts = {}) {
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return null;
@@ -15263,6 +15536,12 @@ function changesSince(st, t, except) {
     const at = phase !== except && isRecord(a) ? timeOf(a.at) : null;
     if (at != null && at > t) out.push({ kind: "approval", phase, at: a.at });
   }
+  // 1.16 U1: a task unticked after t (spec_complete_task {undo}) — the work was reopened: a finish or a sign-off older than it no
+  // longer speaks for the feature once the task is done again.
+  for (const u of Array.isArray(st.unticks) ? st.unticks : []) {
+    const at = isRecord(u) && Number.isSafeInteger(u.n) ? timeOf(u.at) : null;
+    if (at != null && at > t) out.push({ kind: "untick", task: u.n, at: u.at });
+  }
   return out;
 }
 // The execution sign-off predates a change (a change request or a re-approval of another phase after it): it signed
@@ -15281,6 +15560,8 @@ function signOffWhyText(st, lang) {
   if (phases.length) parts.push(W.approvals(phases.join(", ")));
   const crs = since.filter((x) => x.kind === "change-request").map((x) => "#" + x.n);
   if (crs.length) parts.push(W.changeRequests(crs.join(", ")));
+  const un = [...new Set(since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
+  if (un.length) parts.push(i18n.msg(lang).undo.signOffWhy(un.join(", ")));
   return parts.join(W.join);
 }
 // "change request #2, tasks re-approved, 1 implementing file not in the baseline (src/a.js)" — localized.
@@ -15292,6 +15573,8 @@ function staleFinishText(stale, lang) {
   const phases = [...new Set(stale.since.filter((x) => x.kind === "approval").map((x) => x.phase))];
   if (phases.length) parts.push(W.approvals(phases.join(", ")));
   if (stale.newFiles.length) parts.push(W.newFiles(stale.newFiles.length, stale.newFiles.slice(0, 5).join(", ") + (stale.newFiles.length > 5 ? ", …" : "")));
+  const un = [...new Set(stale.since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
+  if (un.length) parts.push(i18n.msg(lang).undo.driftWhy(un.join(", ")));
   return parts.join("; ");
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
@@ -15476,7 +15759,7 @@ function missingIgnoreLines(specsDir) {
 // The last approvalHistory record of a phase (null when none).
 function lastRecord(hist, phase) {
   let r = null;
-  for (const h of hist) if (isRecord(h) && h.phase === phase && h.partial !== true) r = h; // a partial role sign-off (1.14) approved nothing
+  for (const h of hist) if (isApprovalRecord(h) && h.phase === phase) r = h; // a partial role sign-off (1.14) or a revocation (1.16) approved nothing
   return r;
 }
 
@@ -15600,7 +15883,7 @@ function upgradeFeature(projectDir, s, ctx) {
     doctor: { verdict: doc.verdict, failing: fails.map((c) => ({ id: c.id, detail: shortDetail(c.detail) })), warnings: warns.map((c) => c.id) },
     pendingGates: doc.pendingGates, changedSinceApproval: changed, legacyApprovals,
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
-    unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {})),
+    unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
     review, reviewArtifacts, drift,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,

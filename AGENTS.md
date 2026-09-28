@@ -38,7 +38,7 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 35 tools, plus one
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 37 tools, plus one
   prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
   `specs://` resources.
 
@@ -67,7 +67,10 @@ dev-spec next <feature> [--batch] [--waves]    # next task whose _Depends:_ are 
 dev-spec next-action <feature>                 # "you are here → do this next", phase by phase: re-review → fill → fix → approve (then the next phase) → implement → verify → finish
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open; an _Expect: fail_ task: its failing run is the proof)
+dev-spec undone <feature> <n> [--reason "…"]  # untick a task ticked by mistake: its evidence turns stale, a re-tick needs a new run
 dev-spec approve <feature> <phase> [--force] [--role <role>]   # record an approval gate — refused while that phase's checks fail
+dev-spec approve <feature> <phase> --force --reason "…" --expires 30d   # a forced approval with its waiver (doctor warns waiver-expired once it lapses)
+dev-spec approve <feature> <phase> --revoke [--reason "…"]   # revoke an approval: the phase is pending again, later phases stay approved
 dev-spec approve <feature> --through tasks     # fast-forward: every filled phase in order, each through its own gate; stops at the first refusal
 dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
 dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"] [--makes-green T-01] [--expect-fail] [--size M] [--depends 3,5]   # converge: append a task (Phase: Convergence)
@@ -158,7 +161,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   changes nothing.
 - **Claims at the end of a turn.** Claude Code runs a Stop hook that sends a turn back when its closing message claims
   "done" / "verified" while recently ticked tasks lack passing evidence. Other tools have no such hook: run
-  `dev-spec stop-check --message "…"` yourself before claiming it.
+  `dev-spec stop-check --message "…"` yourself before claiming it (MCP-only: `spec_stop_check {message}`; `spec_log {name, gitLog}`
+  reads the `git log --name-only --relative` text you pass — the MCP server never runs git).
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders

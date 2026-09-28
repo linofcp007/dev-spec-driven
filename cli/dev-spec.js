@@ -45,9 +45,14 @@
  *                                      --waves: the execution waves of every open task (+ cycles, blocked tasks)
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
  *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
+ *   undone <feature> <n> [--reason "…"]  Untick task n (ticked by mistake): its evidence turns stale — a re-tick needs a new
+ *                                      run; recorded in .state.json unticks (= spec_complete_task {undo: true, reason})
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
  *                                      (--by = who approved; --force records it anyway, flagged as forced;
+ *                                      --reason "…" --expires YYYY-MM-DD|30d with --force = its waiver: why, until when;
  *                                      --role ROLE = the role you sign off for, when init --roles lists the phase)
+ *   approve <feature> <phase> --revoke [--reason "…"]  Revoke the phase's approval (and its waiting role sign-offs) —
+ *                                      it is pending again; never cascades to the later phases
  *   approve <feature> --through <phase> Fast-forward: approve every active phase up to <phase>, in order, each through its
  *                                      own gate — stops at the first refused one (/spec-ff)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
@@ -91,6 +96,7 @@
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
  *        done: --run · --shell bash|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · --timeout <s> · log: --max N (default 1000)
+ *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
  *        --run: a command that could not run (missing shell, signal, --timeout, WSL's bash launcher) records nothing;
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
@@ -167,6 +173,7 @@ VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
+["reason", "expires"].forEach((k) => VALUE_FLAGS.add(k)); // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires (= spec_complete_task {undo, reason}, spec_approve {revoke, reason, expires})
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -628,7 +635,7 @@ function main() {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
-      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, on("run") ? { ranBy: "cli" } : undefined);
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli" } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
@@ -639,16 +646,31 @@ function main() {
       });
     }
 
+    case "undone": {
+      // 1.16 U1 — dev-spec undone <feature> <n> [--reason "…"] = spec_complete_task {undo: true, reason}: untick a task ticked by
+      // mistake — its evidence turns stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it.
+      if (!pos[0] || pos[1] == null) usage("dev-spec undone <feature> <task-number> [--reason \"…\"]");
+      const M = spec.msg(spec.featureLang(projectDir, pos[0])); // human output in the feature's language
+      const r = spec.completeTask(projectDir, pos[0], pos[1], undefined, { undo: true, reason: flags.reason });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => {
+        console.log((r.unticked ? M.undo.cliDone : M.undo.cliAlready)(r.number, r.done, r.total) + (r.next ? M.taskDone.next(r.next.number, r.next.text) : ""));
+        if (r.note) console.log("  " + (r.unticked ? "⚠ " : "") + r.note);
+      });
+    }
+
     case "approve": {
       // --through <phase> = the fast-forward (spec_approve {through}); --role <role> = the sign-off's role (spec_approve {role}).
       const through = typeof flags.through === "string" ? flags.through : undefined;
-      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force] [--by NAME] [--role ROLE] | dev-spec approve <feature> --through <phase>");
+      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
       const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined,
-        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}) });
+        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}),
+          reason: flags.reason, expires: flags.expires, revoke: on("revoke") }); // 1.16 U2 / U3 (= spec_approve {revoke, reason, expires})
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
       const GV = spec.msg(spec.featureLang(projectDir, r.feature)).governance;
       return out(r, (r) => {
+        if (r.revoked) return console.log(r.message); // 1.16 U2: what was revoked, and that nothing cascades
         if (r.through) { // the fast-forward: its summary, then one line per phase it reached
           console.log(r.message);
           (r.steps || []).forEach((s) => console.log("  " + (s.approved ? "✓" : "◐") + " " + s.phase + (s.role ? " [" + s.role + "]" : "") +
@@ -1071,7 +1093,7 @@ function main() {
         if (!r.ok) return fail(r);
         return out(r, (r) => r.lines.forEach((l) => console.log(l)));
       };
-      if (pos[1] === "-") return readStdin((text) => report(text, {}));
+      if (pos[1] === "-") return readStdin((text) => report(text, { max: intFlag("max") })); // --max: the window the piped log was read with (= spec_log {max})
       const text = b5Git(["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
         "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max]);
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
@@ -1358,6 +1380,8 @@ function helpText() {
                                   Windows, never WSL's launcher; --timeout <s>; a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
                                   A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
                                   records the git commit (and whether the tree was dirty) when git is available
+  undone <feature> <n> [--reason "…"]   Untick task n (ticked by mistake, or its work turned out incomplete): its evidence turns
+                                  stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it
   finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary;
                                   --run [--shell bash|<path>] runs the project checks (meta.checks) and records them — with meta.checks
@@ -1368,7 +1392,10 @@ function helpText() {
                                   · --depends 3,5 (_Depends:_ — task numbers of this tasks.md; must exist, no cycle)
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
-                                  that role (required for a phase init --roles lists)
+                                  that role (required for a phase init --roles lists); with --force, --reason "…" and
+                                  --expires YYYY-MM-DD|30d record its waiver (doctor warns waiver-expired once it lapses)
+  approve <feature> <phase> --revoke [--reason "…"]   Revoke a phase approval (and the role sign-offs waiting for it): the
+                                  phase is pending again; later phases stay approved (never cascades)
   approve <feature> --through <phase>  Fast-forward (/spec-ff): approve every active phase up to <phase>, in order, each through its
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
@@ -1426,6 +1453,7 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
+         --revoke / --reason "…" / --expires YYYY-MM-DD|Nd (approve)  --reason "…" (undone)
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
