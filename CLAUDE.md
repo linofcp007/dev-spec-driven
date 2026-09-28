@@ -522,7 +522,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   Consumers: `spec_next_task` / `next`, next_action's implement step (open tasks, none startable → step `fix` with
   `blocked` and `taskDepsBlockedNote()` — never "finish"), `spec_task_brief`'s default task (none startable → `task: null`
   + `blocked`/`skipped` + the note, never "all done"), `next --batch` (`parallelBatch()`: a [P] task waiting on an open
-  dependency — one in the batch included — ends the batch), `spec_status`'s `next`, the roadmap's next task, complete_task's
+  dependency — one in the batch included — ends the batch), `spec_status`'s `next`, the roadmap's next task (open tasks none of which can start → the feature reads `blocked` in
+  ROADMAP.md / .html, never "ready", with a `taskDeps.roadmapBlocked` attention line), complete_task's
   `next` (+ `blocked` and the note when none can start), the spike's investigate step and the scope guard's likely task.
   **Never compute "next" with `find(!done)`** again.
 - **`taskWaves(blocks, tracks)`** (`spec_next_task {waves: true}` / `next --waves`) → `{waves: [[numbers…]…], cycles,
@@ -541,7 +542,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Doctor `task-deps`** (fail, `CHECK_PHASE` 5 = the tasks phase; in the feature doctor and `spikeDoctor`) — only when
   some active task declares `_Depends:_` (`taskDepsCheck()` → null otherwise): an invalid token, a number no active task
   carries, a self-dependency, a cycle (`dependencyCycles(g, false)` — the whole plan, done tasks included). The tasks
-  approval refuses on it (`approvalChecks` tasks → `task-deps`).
+  approval refuses on it (`approvalChecks` tasks → `task-deps`). Doctor's `malformed-markers` reads "depends:" as a marker
+  look-alike only before a task number (`**Depends:** 1`) — "(depends: the schema from task 1)" is prose.
 - **The brief** carries `dependsOn` `[{number, status: done | open | missing}]` (kept with `write: true`: identifiers only)
   and renders a "Depends on" section (`taskDeps.briefHeading`) with a NEEDS_CONTEXT note while one is still open.
 - **`spec_append_tasks {tasks: [{depends}]}`** / `append-tasks --depends 3,5` (repeatable): every number names an ACTIVE
@@ -782,7 +784,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
   open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
   done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
-  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line) — exactly
+  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
+  scaffold's untouched EC / NFR / SC row, `template: true`, which trace_check doesn't warn about either) — exactly
   trace_check's gaps and secondary warnings for that ID. Labels are localized (`i18n.msg(lang).rtm`, EN/PT/ES).
 - **Surfaces.** `trace_check {matrix: true}` → `matrix` (informational — never the verdict; with `code` both share ONE
   walk); `dev-spec trace <f> --matrix` (a table, `printMatrix`) and `--csv` (the data alone on stdout — no BOM, no marker
@@ -899,8 +902,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
 
 ## Harness-observed evidence (1.14 F1)
-- **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `Bash` — only the
-  Bash tool is observed, never PowerShell) logs a Bash run of a task's runnable `_Verify:_` command (or the ` && ` join of
+- **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
+  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or the ` && ` join of
   a task's several commands — `verifyCommandSet()`, how `done --run` reports them) or of a `meta.checks` command.
   `spec.observeRun()` appends ONE JSON line `{command, exitCode, at, event, session}` (command flattened by `flatCommand()`:
   backticks dropped, whitespace runs folded — the implementer gate's rule) to `.specs/<feature>/.execution/observed.jsonl`
@@ -909,16 +912,17 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
   (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
   command over `OBSERVED_MAX_COMMAND` (4000) is never logged; at most `OBSERVED_MAX_FEATURES` (200) feature folders.
-- **The hook** exits 0 at once unless the tool is `Bash` on one of the two events and the project (the nearest folder
-  holding `.specs/` at or above the payload's `cwd`, else `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR` — the first that is
-  dev-spec's, `isDevSpecProject`) is found. Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
-  the payload's own), else a response text starting `Exit code N`; else 0 on PostToolUse (1 when the response says
+- **The hook** exits 0 at once unless the tool is `Bash` / `PowerShell` on one of the two events and a project is found —
+  EVERY distinct dev-spec one (`isDevSpecProject`) among the nearest folder holding `.specs/` at or above the payload's `cwd`
+  and `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`: a subagent working in a git worktree of the project runs in the worktree's
+  copy, whose git-ignored log is never merged back, so the run is logged in the main project too. Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
+  the payload's own), else a response text starting `Exit code N`; else (never for PowerShell — no code, no run) 0 on PostToolUse (1 when the response says
   `is_error`), and on PostToolUseFailure the code named in `error` ("… exit code 1"), else 1 — a failure is never 0. An
   interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,
   `backgroundedByUser`) and a run with no explicit code but a `returnCodeInterpretation` (a non-zero exit the Bash tool read
   as no error — grep's "No matches found") are no run. A leading `cd <project root> &&` (or `;`) is stripped (Git Bash
   `/c/…` paths read as `C:/…`); any other folder keeps the whole command, which then matches nothing. The engine is loaded
-  only after a plain-text pre-filter (the flattened command appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
+  only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
   folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.
 - **The stamp.** `observedRun(projectDir, slug | null, command, exitCode)` → `{observed, at?}`: true when the LATEST
@@ -932,15 +936,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   their run's `observed`, and so do the matrix's task evidence records (F5, `rtmEvidence()` — JSON only; the CSV / table /
   export words don't print it). The brief and the merge summary don't show it.
 - **The mode.** `roadmap.json → meta.evidence` = `"reported"` (default — absent is reported: the 1.14 verdict, the stamp is
-  context only) | `"observed"` (opt-in). `spec_init {evidence}` / `init --evidence reported|observed` (case-insensitive;
+  context only) | `"observed"` (opt-in; switching to it stamps `meta.evidenceSince`, switching back removes it).
+  `evidenceMode()` fails CLOSED: an unparseable roadmap.json whose raw text says `"evidence": "observed"` stays observed
+  (one stray byte switched the rule off). `spec_init {evidence}` / `init --evidence reported|observed` (case-insensitive;
   anything else is an error before any write; under the roadmap lock, no write when the effective mode doesn't change);
-  the result always reports the current `evidence` (+ `evidenceNote` when given). `evidenceMode(projectDir)` is read by
-  `taskVerification(evidence, block, dup, mode)` — under `"observed"`, a runnable `_Verify:_` is verified only when the run
+  the result always reports the current `evidence` (+ `evidenceNote` when given). `evidenceRule(projectDir)` (`{mode, since}`) is read by
+  `taskVerification(evidence, block, dup, rule)` (a bare mode string is accepted) — under `"observed"`, a runnable `_Verify:_` is verified only when the run
   that proves it (the latest passing run; an `_Expect: fail_` task's red proof, `redProof()`) is stamped `true` or `"cli"`
-  (`observedProof()`), else reason **`unobserved`** — so every surface of the one verdict follows (complete_task, status,
+  (`observedProof()` — an `_Expect: fail_` red proof recorded BEFORE `evidenceSince` also counts once the fix's passing run
+  is observed / CLI-made: re-making it would mean breaking the fixed code), else reason **`unobserved`** — so every surface of the one verdict follows (complete_task, status,
   impact, doctor, finish, ROADMAP.md, the stop gate, the matrix). A task without a runnable `_Verify:_` is unaffected.
   `suiteStatus()` → **`unobserved`** for a passing project-check run that isn't observed (a finish blocker like any status
-  but `pass`). complete_task's note (`observed.unobservedNote`) adds `observed.neverObserved` when no run was ever logged in
+  but `pass`). complete_task's note (`observed.unobservedNote`; `observed.unobservedRedNote` for an `_Expect: fail_` task — re-make the
+  red run observed, never a `--run` of the green test) adds `observed.neverObserved` when no run was ever logged in
   the project (`observedAny()` — an MCP-only client has no hook); next_action's `verify` step adds `observed.naHint`.
 - **Not a security boundary:** an agent with a shell could write the log itself. It raises the bar on a hallucinated or
   paraphrased report — the run has to have happened in the harness. MCP-only clients have no hook: under `"observed"` they
