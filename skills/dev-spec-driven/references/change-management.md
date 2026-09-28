@@ -32,7 +32,9 @@ of approvals (snapshots, metrics' rework, the changelog) skip it. It **never cas
 (`laterApproved`), the revoked one is pending again, and phase by phase still holds — approving another phase is
 refused (`phase-order`) until it is re-approved. `spec_metrics` counts `revokedApprovals` (and `untickedTasks`,
 `spec_complete_task {undo}`). A task unticked after a finish or an execution sign-off makes both stale (finish again,
-sign off again once it is done).
+sign off again once it is done) — and so does a revocation of a planning phase: `spec_drift` reads the feature `stale`
+("approval revoked: …") and the catalog / SPECS.md read it complete, not finished, until the phase is re-approved and the
+feature finished again (revoking the `execution` sign-off only asks for that sign-off again).
 
 ## 2. Noticing a change
 
@@ -143,7 +145,8 @@ CRLF-normalized hash of every file its `_Implements:_` markers name (a folder ex
 inside the project). `spec_drift {name?}` (CLI `dev-spec drift [feature]`, exit 1 on drift or a stale baseline)
 reports per finished feature the files **changed**, **missing**, or **now present** since then; features without a
 baseline are listed as `unbaselined`, finished features whose tasks were reopened as `reopened`, and finished features
-that changed since the finish and are done again as `stale` (a change request or a re-approval after the finish —
+that changed since the finish and are done again as `stale` (a change request, a re-approval, an untick or a revocation
+after the finish —
 the converge pass's `spec_append_tasks`, a reopened change request — or, for an active feature, an `_Implements:_`
 file the baseline never recorded: the old baseline no longer covers them — their recorded files are still hashed, and
 one that drifted lists the feature as drifted too: a stale baseline never hides a changed file). An archived feature

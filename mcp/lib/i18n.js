@@ -3662,6 +3662,11 @@ const MSG = {
       unticked: (n, slug, runnable, stale) => `Task ${n} is open again (unticked).` +
         (stale ? ` Its recorded evidence no longer counts — ticking it again needs ${runnable ? `a new run of its _Verify:_ command: dev-spec done ${slug} ${n} --run` : "new evidence"}.` : ""),
       alreadyOpen: (n) => `Task ${n} is not ticked — nothing to undo.`,
+      // 1.16 U review 1: an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
+      redKept: (n, slug, day) => `Its red run of ${day} (the _Expect: fail_ proof) is kept: ticking it again needs a new run of its _Verify:_ command — once the fix is in, a passing run counts as the fix going green: dev-spec done ${slug} ${n} --run.`,
+      // 1.16 U review 2: several ticked tasks share the number — refused
+      duplicateTicked: (n, list) => `Several ticked tasks share number ${n} (${list}) — undo can't tell which tick was the mistake. Renumber them first so each number is unique (doctor: duplicate-tasks), then undo the one ticked by mistake. Nothing was changed.`,
+      duplicateItem: (line, text) => `line ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' was finished or signed off — once the task is done again, finish it again (/spec-finish ${slug}) and sign it off again (/approve ${slug} execution).`,
       noEvidence: "undo takes no evidence — it only unticks the task (record the new run when you tick it again).",
       reasonNeedsUndo: "reason goes with undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — a tick records evidence instead.",
@@ -3683,6 +3688,9 @@ const MSG = {
       phaseRequired: "Name the phase whose approval to revoke.",
       noThrough: "revoke takes one phase — not through (the fast-forward).",
       noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
+      // 1.16 U review 3: a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
+      driftWhy: (list) => `approval revoked: ${list} (approve it again before finishing again)`,
+      signOffWhy: (list) => `the revocation of ${list}`,
     },
     waiver: {
       badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later, at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
@@ -5405,6 +5413,9 @@ _Outcome: [go | no-go | pivot]_
       unticked: (n, slug, runnable, stale) => `A tarefa ${n} voltou a ficar aberta (desmarcada).` +
         (stale ? ` A evidência registada deixou de contar — voltar a marcá-la exige ${runnable ? `uma nova execução do seu comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nova evidência"}.` : ""),
       alreadyOpen: (n) => `A tarefa ${n} não está marcada — nada a desfazer.`,
+      redKept: (n, slug, day) => `A execução vermelha de ${day} (a prova do _Expect: fail_) mantém-se: voltar a marcá-la exige uma nova execução do seu comando _Verify:_ — com a correção feita, uma execução com sucesso conta como a correção que deixa o teste verde: dev-spec done ${slug} ${n} --run.`,
+      duplicateTicked: (n, list) => `Várias tarefas marcadas partilham o número ${n} (${list}) — o undo não consegue saber qual das marcações foi o engano. Renumera-as primeiro para que cada número seja único (doctor: duplicate-tasks); depois, desfaz a que foi marcada por engano. Nada foi alterado.`,
+      duplicateItem: (line, text) => `linha ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' já estava concluída ou validada — quando a tarefa voltar a estar feita, conclui-a de novo (/spec-finish ${slug}) e volta a validar a execução (/approve ${slug} execution).`,
       noEvidence: "undo não aceita evidência — só desmarca a tarefa (regista a nova execução quando a voltares a marcar).",
       reasonNeedsUndo: "reason acompanha undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — ao marcar uma tarefa regista-se evidência.",
@@ -5426,6 +5437,8 @@ _Outcome: [go | no-go | pivot]_
       phaseRequired: "Indica a fase cuja aprovação queres revogar.",
       noThrough: "revoke aceita uma só fase — não through (o avanço rápido).",
       noForce: "revoke não aceita force nem expires — serve para retirar uma aprovação; reason diz porquê.",
+      driftWhy: (list) => `aprovação revogada: ${list} (volta a aprová-la antes de voltar a fechar a feature)`,
+      signOffWhy: (list) => `a revogação de ${list}`,
     },
     waiver: {
       badExpires: (v, max) => `expires tem de ser uma data ISO (AAAA-MM-DD, hoje ou depois, no máximo daqui a ${max} dias) ou um número de dias (30d, 1–${max}) — recebido: ${v}.`,
@@ -7124,6 +7137,9 @@ _Outcome: [go | no-go | pivot]_
       unticked: (n, slug, runnable, stale) => `La tarea ${n} vuelve a estar abierta (desmarcada).` +
         (stale ? ` Su evidencia registrada deja de contar — volver a marcarla exige ${runnable ? `una nueva ejecución de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nueva evidencia"}.` : ""),
       alreadyOpen: (n) => `La tarea ${n} no está marcada — nada que deshacer.`,
+      redKept: (n, slug, day) => `Su ejecución en rojo del ${day} (la prueba de _Expect: fail_) se mantiene: volver a marcarla exige una nueva ejecución de su comando _Verify:_ — con el arreglo hecho, una ejecución correcta cuenta como el arreglo que pone la prueba en verde: dev-spec done ${slug} ${n} --run.`,
+      duplicateTicked: (n, list) => `Varias tareas marcadas comparten el número ${n} (${list}) — undo no puede saber cuál de las marcas fue el error. Renuméralas primero para que cada número sea único (doctor: duplicate-tasks) y después deshaz la que se marcó por error. No se ha cambiado nada.`,
+      duplicateItem: (line, text) => `línea ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' ya estaba terminada o aprobada — cuando la tarea vuelva a estar hecha, termínala de nuevo (/spec-finish ${slug}) y vuelve a aprobar la ejecución (/approve ${slug} execution).`,
       noEvidence: "undo no acepta evidencia — solo desmarca la tarea (registra la nueva ejecución cuando la vuelvas a marcar).",
       reasonNeedsUndo: "reason acompaña a undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — al marcar una tarea se registra evidencia.",
@@ -7145,6 +7161,8 @@ _Outcome: [go | no-go | pivot]_
       phaseRequired: "Indica la fase cuya aprobación quieres revocar.",
       noThrough: "revoke acepta una sola fase — no through (el avance rápido).",
       noForce: "revoke no acepta force ni expires — elimina una aprobación; reason dice por qué.",
+      driftWhy: (list) => `aprobación revocada: ${list} (apruébala de nuevo antes de volver a cerrarla)`,
+      signOffWhy: (list) => `la revocación de ${list}`,
     },
     waiver: {
       badExpires: (v, max) => `expires debe ser una fecha ISO (AAAA-MM-DD, hoy o después, como máximo dentro de ${max} días) o un número de días (30d, 1–${max}) — recibido: ${v}.`,
