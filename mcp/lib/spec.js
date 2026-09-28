@@ -1372,7 +1372,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const setsRoles = opts.approvalRoles !== undefined && opts.approvalRoles !== null;
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
-  if (lang || setsGuard || nc || setsRoles || setsStop) {
+  const approvalGuard = approvalGuardInput(opts.approvalGuard); // 1.14 F2: "off" | "ask" | "deny" — anything else leaves it unchanged
+  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
@@ -1383,6 +1384,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       if (setsStop) setStopCheck(projectDir, opts.stopCheck);
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
+      if (approvalGuard) setApprovalGuard(projectDir, approvalGuard);
       return { ok: true };
     });
     if (!meta.ok) return meta;
@@ -1413,10 +1415,12 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     stopCheck: stopCheckEnabled(projectDir), // 1.14 C1: the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // B5: the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
+    approvalGuard: approvalGuardLevel(projectDir), // 1.14 F2: the CURRENT human approval guard ("off" | "ask" | "deny")
   };
   if (Object.keys(templates).length) res.templates = templates;
   if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
+  if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
   // The CURRENT approval roles, when the project has some or this call set them (+ a note when it did).
   const current = approvalRolesOf(projectDir);
   if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
@@ -1808,6 +1812,215 @@ function setGuard(projectDir, on) {
     writeRoadmap(projectDir, rm);
     return { ok: true };
   });
+}
+
+// ---------------------------------------------------------------------------
+// 1.14 F2 — the human approval guard (roadmap.json meta.approvalGuard: off | ask | deny; hooks/approval-hook.js, PreToolUse).
+// An approval is the human's act, yet an agent can call spec_approve (force included) or run `dev-spec approve` itself. With the
+// guard on, an AGENT's approval — the spec_approve MCP tool under any server prefix, spec_feature {action: "remove", confirm: true},
+// `dev-spec approve …` / `dev-spec feature remove … --yes` run through the Bash / PowerShell tool (also inside `bash -c "…"`,
+// `cmd /c "…"`, `pwsh -Command "…"`), or lowering the guard itself (spec_init {approvalGuard} / `init --approval-guard`) — asks
+// the user (ask: a permission prompt) or is refused with the command the human runs (deny: in their own terminal, or with
+// Claude Code's `!` prefix). A guardrail on the approve paths, not a sandbox: a shell can still write .specs/ files.
+// approvalGuardDecision is PURE (reads nothing): the hook reads the level (one raw read of roadmap.json) and passes it in.
+// ---------------------------------------------------------------------------
+
+const APPROVAL_GUARD_LEVELS = ["off", "ask", "deny"]; // in order: a later level is stricter
+// The approve-shaped MCP tools, under any server prefix (Claude Code: mcp__plugin_dev-spec-driven_spec-driven__spec_approve;
+// a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare.
+const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init)$/;
+const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
+const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (the hook's payload may be anything)
+const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
+// The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
+const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help"]);
+// Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
+// shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
+const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "sudo", "env", "nohup", "time", "exec", "command", "call",
+  "start", "timeout", "nice", "wsl", "xargs", "!", "if", "then", "else", "elif", "do", "while", "until"]);
+// Programs whose quoted argument is itself a script: bash -c "…", cmd /c "…", pwsh -Command "…", eval "…", Start-Process … "…".
+const APPROVAL_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "iex", "invoke-expression",
+  "start-process", "wsl", "su", "watch"]);
+const RE_DEVSPEC_WORD = /(?:^|[\\/])dev-spec(?:\.(?:[cm]?js|cmd|ps1|exe))?$/i;
+
+// "off" | "ask" | "deny" (any case, trimmed), else undefined — spec_init {approvalGuard} / `init --approval-guard`.
+function approvalGuardInput(v) {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return APPROVAL_GUARD_LEVELS.includes(s) ? s : undefined;
+}
+// roadmap.json meta.approvalGuard → "off" | "ask" | "deny" (anything else, or a broken roadmap.json: off). The hook reads it raw.
+function approvalGuardLevel(projectDir) {
+  const l = loadRoadmap(projectDir);
+  return (!l.parseError && isObj(l.rm.meta) && approvalGuardInput(l.rm.meta.approvalGuard)) || "off";
+}
+// Inside initProject's roadmap lock. Off is the default (absent = off): no write when the effective value doesn't change.
+function setApprovalGuard(projectDir, level) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  if ((approvalGuardInput(rm.meta.approvalGuard) || "off") === level) return;
+  rm.meta.approvalGuard = level;
+  writeRoadmap(projectDir, rm);
+}
+const lowersApprovalGuard = (to, level) => APPROVAL_GUARD_LEVELS.indexOf(to) < APPROVAL_GUARD_LEVELS.indexOf(level);
+
+// A shell command → its simple commands, each a list of words (quotes removed). Separators outside quotes: newline ; & | ( ) { }
+// backtick and `$(`. Single quotes are literal; inside double quotes a backslash escapes only " \ $ `; outside quotes it stays
+// (a Windows path). One linear pass; nothing is evaluated.
+function shellCommandWords(cmd) {
+  const segs = [];
+  let words = [], cur = "", has = false, q = null;
+  const endWord = () => { if (has) words.push(cur); cur = ""; has = false; };
+  const endSeg = () => { endWord(); if (words.length) segs.push(words); words = []; };
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (q === "'") { if (c === "'") q = null; else cur += c; continue; }
+    if (q === '"') {
+      if (c === '"') q = null;
+      else if (c === "\\" && i + 1 < cmd.length && "\"\\$`".includes(cmd[i + 1])) cur += cmd[++i];
+      else cur += c;
+      continue;
+    }
+    if (c === "'" || c === '"') { q = c; has = true; continue; }
+    if (c === "\n" || c === "\r") { endSeg(); continue; }
+    if (c === " " || c === "\t") { endWord(); continue; }
+    if (";&|(){}`".includes(c)) { endSeg(); continue; }
+    if (c === "$" && cmd[i + 1] === "(") { endSeg(); i++; continue; }
+    cur += c;
+    has = true;
+  }
+  endSeg();
+  return segs;
+}
+const approvalProgram = (w) => w.replace(/^.*[\\/]/, "").toLowerCase().replace(/\.exe$/, "");
+// The index of the CLI's script in a simple command, when it is the program run (after launchers / env assignments / options) —
+// never an argument of another program (`echo dev-spec approve x`, `git commit -m "…"`): -1.
+function devSpecWordAt(words) {
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (RE_DEVSPEC_WORD.test(w)) return i;
+    if (/^[A-Za-z_]\w*=/.test(w) || w.startsWith("-") || /^\d+[smhd]?$/.test(w) || APPROVAL_WRAPPERS.has(approvalProgram(w))) continue;
+    return -1;
+  }
+  return -1;
+}
+const approvalStr = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const approvalTruthy = (v) => v === true || (typeof v === "string" && !/^(?:false|0|no|off)$/i.test(v.trim()));
+// The words after the CLI's script → the approval it would record, or null. Read twice: with the CLI's value flags (a `--flag`
+// that is no switch takes the next word), then with every flag as a switch — `approve` is found either way.
+function cliApprovalAction(args, level) {
+  for (const valueFlags of [true, false]) {
+    const pos = [];
+    const fl = Object.create(null);
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--") { pos.push(...args.slice(i + 1)); break; }
+      const m = /^--([A-Za-z][\w-]*)(?:=([\s\S]*))?$/.exec(a);
+      if (!m) { pos.push(a); continue; }
+      const k = m[1].toLowerCase();
+      if (m[2] !== undefined) fl[k] = m[2];
+      else if (valueFlags && !CLI_SWITCHES.has(k) && args[i + 1] !== undefined && !/^--[A-Za-z]/.test(args[i + 1])) fl[k] = args[++i];
+      else fl[k] = true;
+    }
+    if (approvalTruthy(fl.help)) return null; // `<command> --help` prints the help and runs nothing
+    const cmd = String(pos[0] || "").toLowerCase();
+    const base = { source: "cli", project: approvalStr(fl.project) };
+    if (cmd === "approve") {
+      return Object.assign({ kind: "approve", feature: approvalStr(pos[1]), phase: approvalStr(pos[2]), through: approvalStr(fl.through),
+        role: approvalStr(fl.role), by: approvalStr(fl.by), force: approvalTruthy(fl.force) }, base);
+    }
+    // `feature remove <name>` without --yes only previews what it would delete.
+    if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base);
+    if (cmd === "init") {
+      const to = approvalGuardInput(fl["approval-guard"]);
+      if (to && lowersApprovalGuard(to, level)) return Object.assign({ kind: "guard-down", from: level, to }, base);
+    }
+  }
+  return null;
+}
+// Every approval a shell command runs through the CLI (each simple command; the scripts of bash -c / cmd /c / pwsh -Command …).
+function shellApprovalActions(command, level, depth) {
+  const out = [];
+  for (const words of shellCommandWords(command)) {
+    const at = devSpecWordAt(words);
+    if (at >= 0) { const a = cliApprovalAction(words.slice(at + 1), level); if (a) out.push(a); }
+    if (depth >= APPROVAL_SHELL_DEPTH) continue;
+    const end = at >= 0 ? at : words.length;
+    for (let j = 1; j < end; j++) {
+      if (/\s/.test(words[j]) && /dev-spec/i.test(words[j]) && words.slice(0, j).some((w) => APPROVAL_SHELLS.has(approvalProgram(w)))) {
+        out.push(...shellApprovalActions(words[j], level, depth + 1));
+      }
+    }
+  }
+  return out;
+}
+function mcpApprovalAction(tool, ti, level) {
+  const base = { source: "mcp", project: approvalStr(ti.projectDir) };
+  if (tool === "spec_approve") {
+    return Object.assign({ kind: "approve", feature: approvalStr(ti.name), phase: approvalStr(ti.phase), through: approvalStr(ti.through),
+      role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, base);
+  }
+  // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow aren't approvals.
+  if (tool === "spec_feature") return String(approvalStr(ti.action) || "").toLowerCase() === "remove" && ti.confirm === true ? Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base) : null;
+  const to = approvalGuardInput(ti.approvalGuard); // spec_init: only LOWERING the guard is guarded (raising it is always fine)
+  return to && lowersApprovalGuard(to, level) ? Object.assign({ kind: "guard-down", from: level, to }, base) : null;
+}
+// The command the human runs instead (`! node "<clone>/cli/dev-spec.js" approve <f> <phase> …`). A value from the agent's call
+// goes in only when it is plainly safe to paste into bash / PowerShell (else a <placeholder>): no quote, $, backtick or backslash.
+function approvalCommand(a, cli) {
+  const safe = (v, re) => (typeof v === "string" && re.test(v) ? v : null);
+  const word = (v, ph) => safe(v, /^[\p{L}\p{N}_.-]{1,80}$/u) || ph;
+  const name = (v) => { const s = safe(v, /^[\p{L}\p{N} _.@+,-]{1,120}$/u); return s ? (/\s/.test(s) ? '"' + s + '"' : s) : "<feature>"; };
+  const words = ["node", '"' + cli + '"'];
+  if (a.kind === "remove") words.push("feature", "remove", name(a.feature), "--yes");
+  else if (a.kind === "guard-down") words.push("init", "--approval-guard", a.to);
+  else {
+    words.push("approve", name(a.feature));
+    if (a.through) words.push("--through", word(a.through, "<phase>"));
+    else words.push(word(a.phase, "<phase>"));
+    if (a.role) words.push("--role", word(a.role, "<role>"));
+    if (a.force) words.push("--force");
+  }
+  const proj = a.project ? safe(a.project.replace(/\\/g, "/"),/^[\p{L}\p{N} _.@+,:/()~-]{1,400}$/u) : null;
+  if (proj) words.push("--project", '"' + proj + '"');
+  return words.join(" ");
+}
+
+// The approval guard's decision for ONE tool call (the PreToolUse payload: tool_name + tool_input) at `level` ("off" | "ask" |
+// "deny" — the project's meta.approvalGuard, read by the caller). Pure. → { decision: "allow" | "ask" | "deny", why, level, … };
+// why (stable): off · no-payload · not-pre-tool-use · not-an-approval · approval. On an approval: `actions` [{kind: approve |
+// remove | guard-down, source: mcp | cli, feature, phase, through, role, by, force, from, to, project}], `force`, `command` (what
+// the human runs, `!`-prefixed), `reason` (localized — opts.lang: the user reads it for ask, the agent for deny) and, for deny,
+// `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js).
+function approvalGuardDecision(payload, level, opts = {}) {
+  const lvl = approvalGuardInput(level) || "off";
+  const allow = (why, extra) => Object.assign({ decision: "allow", why, level: lvl }, extra);
+  if (lvl === "off") return allow("off");
+  if (!isObj(payload)) return allow("no-payload");
+  const event = payload.hook_event_name || payload.hookEventName;
+  if (event && event !== "PreToolUse") return allow("not-pre-tool-use");
+  const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
+  const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
+  let actions = [];
+  const m = RE_APPROVAL_MCP.exec(tool);
+  if (m) {
+    const a = mcpApprovalAction(m[1], ti, lvl);
+    if (a) actions.push(a);
+  } else if (APPROVAL_SHELL_TOOLS.has(tool) && typeof ti.command === "string" && /dev-spec/i.test(ti.command)) {
+    actions = shellApprovalActions(ti.command.slice(0, APPROVAL_COMMAND_MAX), lvl, 0);
+  }
+  if (!actions.length) return allow("not-an-approval", { tool });
+  const A = i18n.msg(normalizeLang(opts.lang || "en")).approvalGuard;
+  // Shown as text (the prompt, the agent's context): one line each, bounded.
+  const show = (v) => (v == null ? v : (() => { const s = String(v).replace(/[\u0000-\u001f\u007f]+/g, " "); return s.length > 80 ? s.slice(0, 79) + "…" : s; })());
+  const list = actions.map((a) => A.action(Object.assign({}, a, { feature: show(a.feature), phase: show(a.phase), through: show(a.through), role: show(a.role), by: show(a.by) })));
+  const text = [...new Set(list)].join("; ");
+  const force = actions.some((a) => a.force);
+  const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : toPosix(path.resolve(__dirname, "..", "..", "cli", "dev-spec.js"));
+  const command = "! " + [...new Set(actions.map((a) => approvalCommand(a, cli)))].join(" && ");
+  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, reason: lvl === "deny" ? A.deny(text, command) : A.ask(text, force) };
+  if (lvl === "deny") res.userNote = A.denyUser(text, command);
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -15618,6 +15831,9 @@ module.exports = {
   stopClaims, // does a message claim the work is done / verified? (EN / PT / ES, conservative) → { claim, admitted, claims }
   stopCheckEnabled, // roadmap.json meta.stopCheck (on unless false)
   guardLevel, // roadmap.json meta.guard → false | true | "scope"
+  approvalGuardDecision, // 1.14 F2: the human approval guard's decision for one PreToolUse payload (hooks/approval-hook.js) — pure
+  approvalGuardLevel, // roadmap.json meta.approvalGuard → "off" | "ask" | "deny"
+  APPROVAL_GUARD_LEVELS: Object.freeze(APPROVAL_GUARD_LEVELS.slice()), // in order, a later one stricter
   STOP_RECENT_HOURS, // the gate's "recently active" window, in hours
 
   decide: featureLocked(decide), // spec_decide / `dev-spec decide` — append a D-n entry to decisions.md (under the feature lock)

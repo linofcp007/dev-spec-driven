@@ -1,14 +1,14 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off]"
+argument-hint: "[tracks, e.g. tdd saas ai sec privacy] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.
 
 Args: $ARGUMENTS
 
-Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?}` (CLI
-`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off]`)
+Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?}` (CLI
+`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny]`)
 to create `.specs/steering/` and the steering files the given tracks require (constitution/product/tech/structure always;
 testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for
 +privacy). Tracks may be given as `tdd saas`, `'tdd,saas'` or `+saas +ai`; an unknown name is an error with a
@@ -28,6 +28,10 @@ unchanged):
   them): each listed phase is approved only once every role has signed off its current content (see `/approve`).
 - `stopCheck` — the end-of-turn evidence gate (on by default; `false` / `--stop-check off` turns the Stop and
   SubagentStop hooks' check off for this project).
+- `approvalGuard` — the human approval guard, `"off"` (default) / `"ask"` / `"deny"`: an agent's `spec_approve`,
+  `spec_feature` remove, `dev-spec approve` / `feature remove --yes` through the shell, or lowering this guard, asks the
+  user first (`ask` — a prompt Claude Code's auto / bypass modes may skip) or is refused in every mode (`deny` — the user
+  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it is guarded too — only the user switches it off.
 
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —
 a steering file full of placeholders is a liability (`spec_doctor` warns about each one by name). For rules that

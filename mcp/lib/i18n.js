@@ -2991,6 +2991,29 @@ const MSG = {
       off: "Guard mode OFF — code edits are not gated.",
       badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
     },
+    // 1.14 F2 — the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
+    // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
+    // the AGENT (+ `denyUser`, the line the user sees). The "dev-spec approval guard" prefix stays English, like "dev-spec guard".
+    approvalGuard: {
+      on: {
+        ask: "Approval guard ASK — an agent's approval (spec_approve / dev-spec approve, a feature removal, lowering this guard) asks you first (roadmap.json meta.approvalGuard). A permission prompt may be skipped in Claude Code's auto / bypass permission modes — 'deny' holds in every mode.",
+        deny: "Approval guard DENY — an agent's approval (spec_approve / dev-spec approve, a feature removal, lowering this guard) is refused: you approve in your own terminal, or in Claude Code with the ! prefix (roadmap.json meta.approvalGuard).",
+      },
+      off: "Approval guard OFF — an agent's approval calls are not gated (roadmap.json meta.approvalGuard).",
+      badValue: (v) => `--approval-guard takes off, ask or deny (got '${v}').`,
+      action: (a) => {
+        const f = a.feature || "?";
+        if (a.kind === "remove") return `permanently delete the feature '${f}' (its .specs/ folder, approvals and history)`;
+        if (a.kind === "guard-down") return `lower the approval guard from ${a.from} to ${a.to}`;
+        return (a.through ? `approve every phase of '${f}' through ${a.through}` : `approve the ${a.phase || "?"} phase of '${f}'`) +
+          (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "") +
+          (a.force ? " — FORCED (--force)" : "");
+      },
+      ask: (list, force) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
+        " Approvals are yours — allow this only if you approve it yourself. (meta.approvalGuard: ask — dev-spec init --approval-guard deny refuses agent approvals outright.)",
+      deny: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. Stop and ask the user to run it themselves, in their own terminal or in Claude Code with the ! prefix (it runs as the user, not as your tool call): ${command} — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)`,
+      denyUser: (list, command) => `dev-spec approval guard refused an agent's request to ${list}. To approve it yourself: ${command}`,
+    },
     // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
     scopedSteering: {
       customHint: "— or a custom scoped steering file: lowercase letters, digits and '-', ending in .md (e.g. api-conventions.md).",
@@ -4372,6 +4395,26 @@ _Outcome: [go | no-go | pivot]_
       off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
       badValue: (v) => `--guard aceita on, off ou scope (recebido '${v}').`,
     },
+    approvalGuard: {
+      on: {
+        ask: "O guarda de aprovações está em ASK — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) pede primeiro a tua confirmação (roadmap.json meta.approvalGuard). Nos modos de permissão auto / bypass do Claude Code o pedido de permissão pode não aparecer — 'deny' vale em todos os modos.",
+        deny: "O guarda de aprovações está em DENY — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) é recusada: só a pessoa aprova, no seu próprio terminal ou no Claude Code com o prefixo ! (roadmap.json meta.approvalGuard).",
+      },
+      off: "O guarda de aprovações está DESLIGADO — as aprovações pedidas por um agente não são controladas (roadmap.json meta.approvalGuard).",
+      badValue: (v) => `--approval-guard aceita off, ask ou deny (recebido '${v}').`,
+      action: (a) => {
+        const f = a.feature || "?";
+        if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
+        if (a.kind === "guard-down") return `baixar o guarda de aprovações de ${a.from} para ${a.to}`;
+        return (a.through ? `aprovar todas as fases de '${f}' até ${a.through}` : `aprovar a fase ${a.phase || "?"} de '${f}'`) +
+          (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "") +
+          (a.force ? " — FORÇADA (--force)" : "");
+      },
+      ask: (list, force) => `dev-spec approval guard: o agente quer ${list}.` + (force ? " ⚠ FORCE: as verificações da fase são ignoradas — um gate que falha ficaria registado como aprovado mesmo assim." : "") +
+        " As aprovações são tuas — confirma só se aprovares isto. (meta.approvalGuard: ask — dev-spec init --approval-guard deny recusa de vez as aprovações dos agentes.)",
+      deny: (list, command) => `dev-spec approval guard: recusado — as aprovações são da pessoa, e um agente não pode ${list}. Pede ao utilizador que o execute ele próprio, no seu terminal ou no Claude Code com o prefixo ! (o comando é executado como o utilizador, não pela tua chamada de ferramenta): ${command} — e espera por ele. Não tentes outra via (a ferramenta MCP, a CLI, um script ou uma edição dos ficheiros de .specs/). (meta.approvalGuard: deny.)`,
+      denyUser: (list, command) => `dev-spec approval guard recusou o pedido de um agente para ${list}. Para aprovar: ${command}`,
+    },
     scopedSteering: {
       customHint: "— ou um ficheiro de steering próprio, com âmbito: letras minúsculas, algarismos e '-', a terminar em .md (ex.: api-conventions.md).",
       reservedName: (file) => `'${file}' é um nome reservado (um nome de dispositivo do Windows ou um membro nativo do JavaScript) — escolhe outro nome para o ficheiro de steering.`,
@@ -5717,6 +5760,26 @@ _Outcome: [go | no-go | pivot]_
       on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
       off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
       badValue: (v) => `--guard admite on, off o scope (recibido '${v}').`,
+    },
+    approvalGuard: {
+      on: {
+        ask: "Guardia de aprobaciones ASK — una aprobación hecha por un agente (spec_approve / dev-spec approve, la eliminación de una función, bajar esta guardia) te pide confirmación antes (roadmap.json meta.approvalGuard). En los modos de permiso auto / bypass de Claude Code la solicitud de permiso puede no aparecer — 'deny' se mantiene en todos los modos.",
+        deny: "Guardia de aprobaciones DENY — una aprobación hecha por un agente (spec_approve / dev-spec approve, la eliminación de una función, bajar esta guardia) se rechaza: apruebas tú, en tu propio terminal o en Claude Code con el prefijo ! (roadmap.json meta.approvalGuard).",
+      },
+      off: "Guardia de aprobaciones DESACTIVADA — las aprobaciones que pide un agente no se controlan (roadmap.json meta.approvalGuard).",
+      badValue: (v) => `--approval-guard admite off, ask o deny (recibido '${v}').`,
+      action: (a) => {
+        const f = a.feature || "?";
+        if (a.kind === "remove") return `borrar definitivamente la función '${f}' (su carpeta en .specs/, sus aprobaciones y su historial)`;
+        if (a.kind === "guard-down") return `bajar la guardia de aprobaciones de ${a.from} a ${a.to}`;
+        return (a.through ? `aprobar todas las fases de '${f}' hasta ${a.through}` : `aprobar la fase ${a.phase || "?"} de '${f}'`) +
+          (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "") +
+          (a.force ? " — FORZADA (--force)" : "");
+      },
+      ask: (list, force) => `dev-spec approval guard: el agente quiere ${list}.` + (force ? " ⚠ FORCE: se saltan las comprobaciones de la fase — un gate que falla quedaría registrado como aprobado igualmente." : "") +
+        " Las aprobaciones te corresponden — permítelo solo si lo apruebas tú. (meta.approvalGuard: ask — dev-spec init --approval-guard deny rechaza sin más las aprobaciones de los agentes.)",
+      deny: (list, command) => `dev-spec approval guard: rechazado — las aprobaciones son de la persona, y un agente no puede ${list}. Detente y pide al usuario que lo ejecute él mismo, en su propio terminal o en Claude Code con el prefijo ! (se ejecuta como el usuario, no como tu llamada de herramienta): ${command} — y espéralo. No lo reintentes por otra vía (la herramienta MCP, la CLI, un script o una edición de los ficheros de .specs/). (meta.approvalGuard: deny.)`,
+      denyUser: (list, command) => `dev-spec approval guard rechazó la petición de un agente de ${list}. Para aprobarlo tú: ${command}`,
     },
     scopedSteering: {
       customHint: "— o un fichero de steering propio, con alcance: letras minúsculas, dígitos y '-', terminado en .md (p. ej. api-conventions.md).",

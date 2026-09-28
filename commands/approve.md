@@ -10,6 +10,9 @@ Args: $ARGUMENTS
 Only record an approval the user actually gave. Run `spec_doctor` first and show the verdict. Then call the
 `spec_approve` MCP tool with the feature name and phase (one of: classification, requirements, design,
 test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <phase> [--by NAME]`).
+With the human approval guard on (`spec_init {approvalGuard: "ask" | "deny"}`), the plugin's hook asks the user
+before that call, or refuses it: then give the user the command the refusal names to run themselves (their own
+terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never retry it another way.
 
 **The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
