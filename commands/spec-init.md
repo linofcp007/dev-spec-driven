@@ -1,14 +1,14 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny]"
+argument-hint: "[tracks, e.g. tdd saas ai sec privacy] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.
 
 Args: $ARGUMENTS
 
-Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?}` (CLI
-`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny]`)
+Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?}` (CLI
+`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]`)
 to create `.specs/steering/` and the steering files the given tracks require (constitution/product/tech/structure always;
 testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for
 +privacy). Tracks may be given as `tdd saas`, `'tdd,saas'` or `+saas +ai`; an unknown name is an error with a

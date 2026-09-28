@@ -87,9 +87,9 @@ their most recent message.
 The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over
 hand-rolled edits for the structural steps. Which tool when:
 
-- **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering; opt-in `guard`, project `checks`, `approvalRoles`) → `spec_create` (one feature; `kind: "bugfix"` for a defect, `kind: "spike"` for a question, `brownfield: true` in existing code, `flow: "design-first"`) — or `spec_import` (Kiro / spec-kit / OpenSpec / a plan / a Codex ExecPlan / BMAD). The team's own scaffolds: `spec_templates`.
-- **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail; `role`, `through`) · `spec_next_action` (you are here, one ordered next step).
-- **Execute:** `spec_next_task` · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
+- **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering; opt-in `guard`, project `checks`, `approvalRoles`, `evidence: "observed"`, `approvalGuard`) → `spec_create` (one feature; `kind: "bugfix"` for a defect, `kind: "spike"` for a question, `brownfield: true` in existing code, `flow: "design-first"`) — or `spec_import` (Kiro / spec-kit / OpenSpec / a plan / a Codex ExecPlan / BMAD). The team's own scaffolds: `spec_templates`.
+- **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files; `matrix: true` → the requirements traceability matrix) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail; `role`, `through`) · `spec_next_action` (you are here, one ordered next step).
+- **Execute:** `spec_next_task` (`waves: true` → the parallel execution waves) · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) · `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
 - **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade` (after a plugin update).
 
@@ -343,6 +343,8 @@ Traceability markers per task:
 - A task that writes a test before its code (a bugfix's regression test, a red phase): `_Expect: fail_` — its
   failing `_Verify:_` run is the proof, a pass is refused (`unexpected-pass`)
 - Optional: `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points — the roadmap's velocity and ETA)
+- Optional: `_Depends: 3, 5_` — tasks of this tasks.md that must be done first (the next task and the waves follow it;
+  doctor fails `task-deps` on an unknown number or a cycle); without it, tasks.md order is the order
 - +tdd: `_Makes green: T-01, T-02_`
 - +saas: `_Emits metrics: req_duration_ms{feature=X}_` + an observability task + (hot path) a load-test task
 - +ai: `_Affects evals: golden (maintain baseline)_` + a separate task per prompt change + a cost-monitoring task
@@ -356,7 +358,8 @@ every planned T-ID should map to a task). Keep task numbers unique and replace e
 ## Phase 6: Execute (`/executeTask`)
 
 Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize
-your understanding to confirm alignment. Then work tasks **in order**, choosing the loop per task:
+your understanding to confirm alignment. Then work tasks **in order** — the next is `spec_next_task`'s: the first open
+task whose `_Depends:_` are all done — choosing the loop per task:
 
 - **core task (no +tdd):** announce → implement per design → run existing tests and the task's
   `_Verify:_` → `spec_complete_task {evidence}` → report.
@@ -375,7 +378,8 @@ your understanding to confirm alignment. Then work tasks **in order**, choosing 
 (`spec_init {checks}`) every brief lists them and `/spec-finish` needs a passing run of each since the last tick, on the current code. In
 Claude Code a **Stop hook** sends the turn back when your closing message claims done / verified while a recently
 active feature has ticked tasks without passing evidence (opt-out `meta.stopCheck`) — run the check, or say plainly
-what is not verified.
+what is not verified. With `spec_init {evidence: "observed"}` only a run the harness saw (Claude Code's Bash hook) or
+`done --run` made verifies: run the `_Verify:_` with the Bash tool, then record exactly that command and exit code.
 
 Track-gated "done" checks before a feature is finished:
 - **+saas:** the hot-path load test from `load-test.md` meets the P50/P95/P99 budget (missed → root-cause and fix,
@@ -440,6 +444,8 @@ approved while an earlier one is unapproved (`phase-order`). **Several filled ph
 (`spec_approve {through: "tasks"}`) approves them in order, each through its own gate, stopping at the first
 refusal — only after the user said go. **Teams:** with `spec_init {approvalRoles}` (e.g. design → tech + security)
 a listed phase counts as approved only once every role signed off its current content (`spec_approve {role}`).
+With `spec_init {approvalGuard: "ask" | "deny"}` a hook asks the user before your approval or refuses it — then give
+the user the command it names to run themselves and wait; never retry it another way.
 Lost? `/next-action <feature>` gives ONE next step — re-review what changed since approval → the first phase not
 approved yet (fill → fix what its gate would refuse → approve) → fix → implement → verify an unverified tick →
 finish (then `finished`, or `drift` to decide on).

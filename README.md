@@ -55,14 +55,14 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | Tool | Does |
 |---|---|
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
-| `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase |
+| `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase, `evidence` reported · observed (only runs the harness saw verify), `approvalGuard` off · ask · deny (an agent's approval asks you / is refused) |
 | `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
 | `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
-| `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run); `batch` for parallel `[P]` tasks |
+| `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run; each run stamped `observed`); the next task is the first open one whose `_Depends:_` are done; `batch` for parallel `[P]` tasks, `waves` for the execution waves of every open task |
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
-| `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones |
+| `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones (`depends` adds `_Depends:_`) |
 | `spec_finish` | Close a feature: blockers, warnings, fresh checks to run, and a merge summary generated from the spec chain; `evidence` records the project checks' runs; `write` also records the drift baseline |
 | `spec_next_action` | "You are here → do this next", phase by phase: re-review → fill → fix → approve (the next phase only after that approval) → implement → verify → finish (then finished / drift) |
 | `spec_approve` | Approve a phase gate — refused while that phase's checks fail (`force` records a flagged, forced approval); every approval is kept in a history with a snapshot; `role` signs off as one of the roles `approvalRoles` lists for that phase (required there), `through` fast-forwards every phase up to it, each through its own gate |
@@ -70,12 +70,12 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_add_track` / `spec_feature` | Add a track (additive; `remove:true` turns one off, files kept) / archive · restore · rename · remove a feature (remove needs `confirm:true`), or set its `flow` |
 | `spec_decide` | Append a decision (or a discovery) to the feature's `decisions.md` — `D-n`, with the ACs, tests or design sections it affects (checked) |
 | `ears_validate` | Lint requirements (SHALL/DEVE/DEBE, stable IDs, vague words, template placeholders — EN/PT/ES) |
-| `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files |
+| `trace_check` | Every AC covered by a task (and a test on +tdd); phantom refs; EC/NFR/SC warnings; `code:true` finds T-IDs in test files; `matrix:true` adds the requirements traceability matrix |
 | `spec_doctor` | One health-check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
 | `spec_clarify` | Surface requirement ambiguities/gaps before design |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
-| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders; `write` → `.specs/exports/` |
+| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, what doctor flags, next step, a critic / converge review); `apply` saves inferred tracks, gives pre-1.13 approvals a history baseline, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec |
@@ -228,6 +228,22 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Evidence at the end of a turn** — in Claude Code a Stop hook sends the turn back when the closing message claims
   "done" or "verified" while a feature active in the last hours has ticked tasks without passing evidence
   (`init --stop-check off` turns it off; other tools: `dev-spec stop-check`).
+- **Evidence the harness saw** — in Claude Code a hook logs every Bash run of a `_Verify:_` or project-check command,
+  and each run an agent reports is stamped `observed: true | false` (`"cli"` for `done --run` / `finish --run`). Opt in
+  with `init --evidence observed` and only such runs verify a task (reason `unobserved` otherwise); the default
+  `reported` keeps today's rule. Not a security boundary; MCP-only clients have no hook — use `done --run`.
+- **Human approval guard** — `init --approval-guard ask|deny` (off by default): an agent's `spec_approve`, a feature
+  removal, `dev-spec approve` run through its shell, or lowering the guard asks you first (`ask` — Claude Code's auto /
+  bypass modes may skip the prompt) or is refused in every mode (`deny` — you run the command it shows in your own
+  terminal or with Claude Code's `!` prefix). A guardrail on the approve paths, not a sandbox.
+- **Task dependencies and waves** — a task may carry `_Depends: 3, 5_`: the next task is then the first open one whose
+  dependencies are done, `dev-spec next <f> --waves` (`spec_next_task {waves}`) groups the open tasks into waves that can
+  run at once (no shared `_Implements:_` file), and doctor fails `task-deps` on a cycle or an unknown number. A tasks.md
+  without `_Depends:_` behaves as before.
+- **Traceability matrix** — `dev-spec trace <f> --matrix` (`trace_check {matrix}`): one row per AC / EC / NFR / SC with
+  its status (`verified` · `implemented` · `planned` · `untraced`), tasks and their evidence, tests, design sections,
+  decisions and whether it changed since approval; `--csv` / `export <f> --csv --write` → `.specs/exports/<f>.rtm.csv`
+  (formula-safe, opens in Excel) for audits.
 - **Decisions and spikes** — `/spec-decide` appends `D-n` entries to `decisions.md` (what they affect is checked;
   briefs, the merge summary and the export show them). `/spec-spike` runs a timeboxed investigation that ends in a
   decision — go / no-go / pivot — instead of made-up requirements.
@@ -243,7 +259,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Hooks** (`hooks/hooks.json`): on saving `requirements.md` → EARS lint + placeholders; on saving
   `tasks.md` → traceability check; on saving `design.md` → the active tracks' mandatory sections; at
   session start → feature status + drift + overlapping features; at the end of a turn (and of a
-  `spec-implementer` subagent) → the evidence gate. The opt-in guard runs before code edits. Plus an optional git
+  `spec-implementer` subagent) → the evidence gate; after each Bash run → the observed-evidence log (silent). The
+  opt-in guard runs before code edits, the opt-in approval guard before an agent's approval. Plus an optional git
   `pre-commit` validator.
 - **Eval harness** (`mcp/evals/run-evals.js`): runs golden/adversarial/regression sets with **your
   own `ANTHROPIC_API_KEY`**; `--dry-run` validates offline, `--set-baseline` records a baseline.
@@ -325,11 +342,13 @@ The same engine from any terminal (`node cli/dev-spec.js <command>`, or `dev-spe
 prints the raw result, and `help` lists every flag:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
-trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
-approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
-add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
+append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
+finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
+catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
@@ -388,14 +407,14 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | Ferramenta | O que faz |
 |---|---|
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
-| `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase |
+| `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase, `evidence` reported · observed (só verificam as execuções que o harness viu), `approvalGuard` off · ask · deny (a aprovação de um agente pergunta-te / é recusada) |
 | `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
 | `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
-| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha); `batch` para tarefas paralelas `[P]` |
+| `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha; cada execução leva o carimbo `observed`); a próxima tarefa é a primeira aberta cujas `_Depends:_` estão feitas; `batch` para tarefas paralelas `[P]`, `waves` para as vagas de execução de todas as tarefas abertas |
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
-| `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes |
+| `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes (`depends` acrescenta `_Depends:_`) |
 | `spec_finish` | Fecha uma funcionalidade: bloqueios, avisos, verificações a correr de novo e um resumo de merge gerado a partir da cadeia da spec; `evidence` regista as execuções das verificações do projeto; `write` regista também a baseline de drift |
 | `spec_next_action` | "Estás aqui → faz isto a seguir", fase a fase: rever → preencher → corrigir → aprovar (a fase seguinte só depois dessa aprovação) → implementar → verificar → fechar (depois fechada / deriva) |
 | `spec_approve` | Aprova um gate de fase — recusado enquanto as verificações dessa fase falham (`force` regista uma aprovação forçada e assinalada); cada aprovação fica num histórico com snapshot; `role` valida como um dos papéis que o `approvalRoles` indica para essa fase (obrigatório aí), `through` avança todas as fases até essa, cada uma pelo seu gate |
@@ -403,12 +422,12 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_add_track` / `spec_feature` | Acrescenta um track (aditivo; `remove:true` desliga um, sem apagar ficheiros) / arquiva · restaura · renomeia · remove uma funcionalidade (remover exige `confirm:true`), ou define o seu `flow` |
 | `spec_decide` | Acrescenta uma decisão (ou uma descoberta) ao `decisions.md` da funcionalidade — `D-n`, com os ACs, testes ou secções do design que afeta (verificados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estáveis, palavras vagas, placeholders do template — EN/PT/ES) |
-| `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste |
+| `trace_check` | Cada AC coberto por uma tarefa (e um teste em +tdd); referências fantasma; avisos de EC/NFR/SC; `code:true` procura T-IDs nos ficheiros de teste; `matrix:true` junta a matriz de rastreabilidade dos requisitos |
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS, placeholders, trace, secções, evidência, gates, steering) |
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
-| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders; `write` → `.specs/exports/` |
+| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_upgrade` | Depois de atualizar o plugin: audita cada funcionalidade ativa face às regras atuais (estado, o que o doctor assinala, próximo passo, uma revisão critic / converge); `apply` guarda os tracks inferidos, dá às aprovações anteriores à 1.13 uma baseline no histórico, carimba `meta.specVersion` e escreve `.specs/UPGRADE.md` — nunca edita uma spec |
@@ -569,6 +588,24 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Evidência no fim do turno** — no Claude Code, um hook Stop devolve o turno quando a mensagem final afirma "feito" ou
   "verificado" enquanto uma funcionalidade ativa nas últimas horas tem tarefas marcadas sem a evidência de uma execução
   bem-sucedida (`init --stop-check off` desliga-o; noutras ferramentas: `dev-spec stop-check`).
+- **Evidência que o harness viu** — no Claude Code, um hook regista cada execução Bash de um comando `_Verify:_` ou de
+  uma verificação do projeto, e cada execução que um agente reporta leva o carimbo `observed: true | false` (`"cli"` para
+  `done --run` / `finish --run`). Com `init --evidence observed` (opcional), só essas execuções verificam uma tarefa
+  (motivo `unobserved` caso contrário); o modo por omissão, `reported`, mantém a regra de hoje. Não é uma fronteira de
+  segurança; um cliente só MCP não tem hook — usa `done --run`.
+- **Guarda humana das aprovações** — `init --approval-guard ask|deny` (desligada por omissão): o `spec_approve` de um
+  agente, a remoção de uma funcionalidade, um `dev-spec approve` corrido pela shell dele, ou baixar a guarda,
+  pergunta-te primeiro (`ask` — os modos auto / bypass do Claude Code podem saltar a pergunta) ou é recusado em qualquer
+  modo (`deny` — corres tu o comando indicado no teu terminal ou com o prefixo `!` do Claude Code). Uma barreira nos
+  caminhos de aprovação, não uma sandbox.
+- **Dependências entre tarefas e vagas** — uma tarefa pode ter `_Depends: 3, 5_`: a próxima tarefa passa a ser a
+  primeira aberta cujas dependências estão feitas, `dev-spec next <f> --waves` (`spec_next_task {waves}`) agrupa as
+  tarefas abertas em vagas que podem correr ao mesmo tempo (sem ficheiros `_Implements:_` partilhados), e o doctor falha
+  `task-deps` num ciclo ou num número desconhecido. Um tasks.md sem `_Depends:_` comporta-se como antes.
+- **Matriz de rastreabilidade** — `dev-spec trace <f> --matrix` (`trace_check {matrix}`): uma linha por AC / EC / NFR /
+  SC com o seu estado (`verified` · `implemented` · `planned` · `untraced`), as tarefas e a sua evidência, testes,
+  secções do design, decisões e se mudou desde a aprovação; `--csv` / `export <f> --csv --write` →
+  `.specs/exports/<f>.rtm.csv` (à prova de fórmulas, abre no Excel) para auditorias.
 - **Decisões e spikes** — o `/spec-decide` acrescenta entradas `D-n` ao `decisions.md` (o que afetam é verificado; os
   briefs, o resumo de merge e a exportação mostram-nas). O `/spec-spike` faz uma investigação com prazo que acaba numa
   decisão — go / no-go / pivot — em vez de requisitos inventados.
@@ -585,8 +622,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Hooks** (`hooks/hooks.json`): ao gravar `requirements.md` → valida EARS + placeholders; ao gravar
   `tasks.md` → verifica a rastreabilidade; ao gravar `design.md` → as secções obrigatórias dos tracks ativos;
   no arranque da sessão → estado das funcionalidades + drift + funcionalidades que se sobrepõem; no fim de um turno
-  (e de um subagente `spec-implementer`) → o gate de evidência. O modo guarda opcional corre antes das edições
-  de código. Mais um validador `pre-commit` opcional do git.
+  (e de um subagente `spec-implementer`) → o gate de evidência; depois de cada execução Bash → o registo da evidência
+  observada (silencioso). O modo guarda opcional corre antes das edições de código, a guarda opcional das aprovações
+  antes da aprovação de um agente. Mais um validador `pre-commit` opcional do git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): corre os conjuntos golden/adversarial/regression
   com a **tua própria `ANTHROPIC_API_KEY`**; `--dry-run` valida offline, `--set-baseline` grava uma
   baseline.
@@ -669,11 +707,13 @@ O mesmo motor em qualquer terminal (`node cli/dev-spec.js <comando>`, ou `dev-sp
 mostra o resultado em bruto e `help` lista todas as opções:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
-trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
-approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
-add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
+append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
+finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
+catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
@@ -732,14 +772,14 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | Herramienta | Qué hace |
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
-| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase |
+| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
-| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla); `batch` para tareas paralelas `[P]` |
+| `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla; cada ejecución lleva el sello `observed`); la siguiente tarea es la primera abierta cuyas `_Depends:_` están hechas; `batch` para tareas paralelas `[P]`, `waves` para las oleadas de ejecución de todas las tareas abiertas |
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
-| `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes |
+| `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes (`depends` añade `_Depends:_`) |
 | `spec_finish` | Cierra una función: bloqueos, avisos, comprobaciones a repetir y un resumen de merge generado desde la cadena de la spec; `evidence` registra las ejecuciones de las comprobaciones del proyecto; `write` registra también la línea base de drift |
 | `spec_next_action` | "Estás aquí → haz esto a continuación", fase a fase: revisar → completar → corregir → aprobar (la fase siguiente solo tras esa aprobación) → implementar → verificar → cerrar (después cerrada / deriva) |
 | `spec_approve` | Aprueba un gate de fase — rechazado mientras fallen las comprobaciones de esa fase (`force` registra una aprobación forzada y señalada); cada aprobación queda en un historial con snapshot; `role` valida como uno de los roles que `approvalRoles` indica para esa fase (obligatorio ahí), `through` avanza todas las fases hasta esa, cada una por su gate |
@@ -747,12 +787,12 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_add_track` / `spec_feature` | Añade un track (aditivo; `remove:true` desactiva uno sin borrar archivos) / archiva · restaura · renombra · elimina una función (eliminar exige `confirm:true`), o fija su `flow` |
 | `spec_decide` | Añade una decisión (o un descubrimiento) al `decisions.md` de la función — `D-n`, con los ACs, pruebas o secciones del diseño que afecta (comprobados) |
 | `ears_validate` | Valida requisitos (SHALL/DEVE/DEBE, IDs estables, palabras vagas, placeholders de la plantilla — EN/PT/ES) |
-| `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba |
+| `trace_check` | Cada AC cubierto por una tarea (y una prueba en +tdd); referencias fantasma; avisos de EC/NFR/SC; `code:true` busca T-IDs en los archivos de prueba; `matrix:true` añade la matriz de trazabilidad de requisitos |
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS, placeholders, trace, secciones, evidencia, gates, steering) |
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
-| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders; `write` → `.specs/exports/` |
+| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
@@ -917,6 +957,24 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Evidencia al final del turno** — en Claude Code, un hook Stop devuelve el turno cuando el mensaje final afirma
   "hecho" o "verificado" mientras una función activa en las últimas horas tiene tareas marcadas sin la evidencia de
   una ejecución correcta (`init --stop-check off` lo desactiva; en otras herramientas: `dev-spec stop-check`).
+- **Evidencia que el harness vio** — en Claude Code, un hook registra cada ejecución Bash de un comando `_Verify:_` o de
+  una comprobación del proyecto, y cada ejecución que un agente reporta lleva el sello `observed: true | false`
+  (`"cli"` para `done --run` / `finish --run`). Con `init --evidence observed` (opcional), solo esas ejecuciones
+  verifican una tarea (motivo `unobserved` si no); el modo por defecto, `reported`, mantiene la regla de hoy. No es una
+  frontera de seguridad; un cliente solo MCP no tiene hook — usa `done --run`.
+- **Guardia humana de las aprobaciones** — `init --approval-guard ask|deny` (desactivada por defecto): el
+  `spec_approve` de un agente, la eliminación de una función, un `dev-spec approve` ejecutado por su shell, o bajar la
+  guardia, te pregunta primero (`ask` — los modos auto / bypass de Claude Code pueden saltarse la pregunta) o se rechaza
+  en cualquier modo (`deny` — ejecutas tú el comando indicado en tu terminal o con el prefijo `!` de Claude Code). Una
+  barrera en los caminos de aprobación, no una sandbox.
+- **Dependencias entre tareas y oleadas** — una tarea puede llevar `_Depends: 3, 5_`: la siguiente tarea pasa a ser la
+  primera abierta cuyas dependencias están hechas, `dev-spec next <f> --waves` (`spec_next_task {waves}`) agrupa las
+  tareas abiertas en oleadas que pueden ejecutarse a la vez (sin archivos `_Implements:_` compartidos), y el doctor falla
+  `task-deps` ante un ciclo o un número desconocido. Un tasks.md sin `_Depends:_` se comporta como antes.
+- **Matriz de trazabilidad** — `dev-spec trace <f> --matrix` (`trace_check {matrix}`): una fila por AC / EC / NFR / SC
+  con su estado (`verified` · `implemented` · `planned` · `untraced`), las tareas y su evidencia, pruebas, secciones del
+  diseño, decisiones y si cambió desde la aprobación; `--csv` / `export <f> --csv --write` →
+  `.specs/exports/<f>.rtm.csv` (a prueba de fórmulas, se abre en Excel) para auditorías.
 - **Decisiones y spikes** — `/spec-decide` añade entradas `D-n` a `decisions.md` (lo que afectan se comprueba; los
   briefs, el resumen de merge y la exportación las muestran). `/spec-spike` hace una investigación con plazo que
   termina en una decisión — go / no-go / pivot — en lugar de requisitos inventados.
@@ -933,8 +991,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Hooks** (`hooks/hooks.json`): al guardar `requirements.md` → valida EARS + placeholders; al guardar
   `tasks.md` → comprueba la trazabilidad; al guardar `design.md` → las secciones obligatorias de los tracks
   activos; al iniciar la sesión → estado de las funciones + drift + funciones que se solapan; al final de un turno
-  (y de un subagente `spec-implementer`) → la puerta de evidencia. El modo guardia opcional se ejecuta antes
-  de las ediciones de código. Más un validador `pre-commit` opcional de git.
+  (y de un subagente `spec-implementer`) → la puerta de evidencia; tras cada ejecución Bash → el registro de la
+  evidencia observada (silencioso). El modo guardia opcional se ejecuta antes de las ediciones de código, la guardia
+  opcional de las aprobaciones antes de la aprobación de un agente. Más un validador `pre-commit` opcional de git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): ejecuta los conjuntos
   golden/adversarial/regression con **tu propia `ANTHROPIC_API_KEY`**; `--dry-run` valida sin
   conexión, `--set-baseline` registra una baseline.
@@ -1017,11 +1076,13 @@ El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `de
 `--json` muestra el resultado en bruto y `help` lista todas las opciones:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …] · steering · templates
+classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import · list · status · doctor
-trace [--code] · clarify · ears · next [--batch] · next-action · brief · done [--run] · append-tasks
-approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write] · finish [--write] [--run] · decide
-add-track [--remove] · feature <remove|archive|rename|restore|flow> · catalog [--write] · export · changelog
+trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
+append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
+finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
+catalog [--write] · export [--md|--csv] [--write] · changelog
 drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
@@ -1072,7 +1133,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
 │   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
 ├── scripts/test-docker.js            ← both suites in Linux containers (npm run test:docker)
-├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, opt-in PreToolUse guard, pre-commit)
+├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, Bash observed-evidence log, opt-in PreToolUse guard + approval guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)

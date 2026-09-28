@@ -6,9 +6,11 @@ this project versions the plugin as a whole.
 ## [1.14.0] — 2026-09-26
 
 Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project
-templates, a stakeholder export and release notes, approvals by role and a fast-forward, roadmap forecasts, red → green
-evidence and project checks, an end-of-turn evidence gate, a decision log and spikes, import from plans / ExecPlans /
-BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian Portuguese and a local Linux test runner.
+templates, a stakeholder export and release notes, a requirements traceability matrix, approvals by role and a
+fast-forward, an opt-in human approval guard, roadmap forecasts, task dependencies and execution waves, red → green
+evidence and project checks, harness-observed evidence, an end-of-turn evidence gate, a decision log and spikes, import
+from plans / ExecPlans / BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian Portuguese and a
+local Linux test runner.
 34 MCP tools (was 30), 51 commands (was 44), six tracks (was four).
 
 ### Added
@@ -46,6 +48,16 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   Added (features shipped since then + their ACs), Changed (superseded ACs, change requests with the current AC text),
   Fixed (bugfixes + their root cause), from the spec data only. `write` → `.specs/RELEASE-NOTES.md` and stamps
   `meta.changelogAt` (the default `since`); nothing to report writes nothing.
+- **Requirements traceability matrix** (`trace_check {matrix: true}`, `dev-spec trace <f> --matrix | --csv`,
+  `spec_export {format: "csv"}` / `dev-spec export [f] --csv [--write]`) — one row per requirement ID (the US-n.AC-m
+  criteria, then EC / NFR / SC) with its linked tasks (done, verified + the stable reason, the latest evidence), planned
+  tests (+ the test files naming them with `--code`), design sections, current decisions, `_Supersedes:_` both ways and
+  whether the row changed since the requirements approval. Stable status codes `verified` · `implemented` · `planned` ·
+  `untraced` and gap codes `no-task` · `no-test` · `no-coverage`, computed by the same readers as trace_check and the
+  evidence gate (no second verdict). The CSV is RFC 4180 and formula-safe (a cell starting with `=` `+` `-` `@` gets an
+  apostrophe); the exported file (`.specs/exports/<feature>.rtm.csv`, `project.rtm.csv`) adds a UTF-8 BOM for Excel and
+  the AUTO-GENERATED marker as its last record. The HTML / md feature export gains a Traceability matrix section, the
+  project export each feature's counts by status. Informational only — trace_check's verdict doesn't change.
 - **Approvals by role** — `roadmap.json` `meta.approvalRoles` (`spec_init {approvalRoles}`, `init --roles
   requirements=product,design=tech+security`, `--roles none` clears): a listed phase is approved once every role has
   signed off its current content (`spec_approve {role}`, `approve --role`); until then the sign-offs wait in
@@ -54,6 +66,15 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
 - **Fast-forward approval** (`spec_approve {through}`, `approve --through <phase>`, `/spec-ff`) — approves the filled
   phases in order, each through its own gate (snapshot + history, flagged `batch`), and stops at the first refusal;
   next_action suggests it when every planning artifact passes its gate.
+- **Human approval guard** (opt-in; `roadmap.json` `meta.approvalGuard` `off | ask | deny` — `spec_init {approvalGuard}`,
+  `dev-spec init --approval-guard`; default `off`, nothing changes) — a new PreToolUse hook (`hooks/approval-hook.js`)
+  catches an agent's approval: `spec_approve` under any MCP server prefix, `spec_feature` remove with `confirm`,
+  `dev-spec approve` / `feature remove --yes` run through the Bash or PowerShell tool (quotes, chains and nested
+  `bash -c` / `cmd /c` / `pwsh -Command` scripts read by a linear lexer), and lowering the guard itself. `ask` shows a
+  permission prompt naming the feature, phase, role and — loudly — `--force` (Claude Code's auto / bypass modes may skip
+  it); `deny` refuses it in every mode, tells the agent to stop and ask, and shows the user the
+  `! node <clone>/cli/dev-spec.js …` command to run themselves. Silent unless on (a shell command not naming dev-spec is
+  never read further), never blocks on its own errors; a guardrail on the approve paths, not a sandbox.
 - **Roadmap forecasts** — `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points; unsized = the feature's median, else M);
   `spec_complete_task` records when each task is ticked (`.state.json` `ticks`); velocity = points per working day over
   the last 28 days (project-wide, and per feature with 3+ completions); each feature gets an ETA with a ±25% range,
@@ -62,6 +83,17 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
 - **Cross-feature overlap** — two active features whose open tasks plan the same files (or an active one planning files
   a finished feature's drift baseline holds), unless ordered by a dependency or declared with `_Supersedes:_`: listed
   under ROADMAP.md "Needs attention", doctor warn `cross-feature-overlap`, one SessionStart line.
+- **Task dependencies and execution waves** — `_Depends: 3, 5_` on a task (English-stable; `#3` = 3) names tasks of the
+  same tasks.md that must be done first. The next task (`spec_next_task`, next_action, the brief's default task,
+  `next --batch`, `spec_status`, the roadmap, `spec_complete_task`'s `next`, the spike's steps, the scope guard's hint)
+  is now the first open task whose dependencies are all done — with `skipped` / `blocked` `[{number, waitsOn}]`, and
+  next_action's step `fix` when no open task can start. `spec_next_task {waves: true}` / `dev-spec next <f> --waves`
+  returns the execution waves of every open task (dependencies done or in earlier waves, no two tasks sharing an
+  `_Implements:_` file, a task without `_Implements:_` or a prompt task alone; undeclared tasks keep tasks.md order, a
+  `[P]` run together) plus `cycles` and `blocked`. Ticking a task early is allowed (`waitsOn` + a note); doctor fails
+  `task-deps` (unknown numbers, self-dependency, cycles) and the tasks approval refuses on it; the brief lists the
+  task's dependencies; `spec_append_tasks {depends}` / `append-tasks --depends 3,5`. A tasks.md without `_Depends:_`
+  behaves exactly as before.
 - **Red → green evidence** — `_Expect: fail_` on a task that writes a test before its fix: a failing run
   `{command, exitCode ≠ 0}` is its proof (`expected: "fail"`, `redRecorded`); a passing run is refused and recorded
   (`unexpectedPass`, reason code `unexpected-pass`) unless the red run is already on record; exit 126 / 127 / 9009 is no
@@ -82,6 +114,15 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   feature lacks a passing project-check run — the turn is sent back once with a localized reason. A
   `spec-implementer`'s DONE needs its task's `_Verify:_` command(s) and an exit code in its report. CLI:
   `dev-spec stop-check [--message "…"|-] [--agent <type>]` (exit 1 = sent back).
+- **Harness-observed evidence** — a new hook (`hooks/observe-hook.js`, PostToolUse + PostToolUseFailure on the Bash
+  tool) logs each Bash run of a task's `_Verify:_` command or a project check to a git-ignored, size-bounded
+  `.execution/observed.jsonl`. Every run `spec_complete_task` / `done` and `spec_finish {evidence}` record is stamped
+  `observed: true | false` (the same command, the same exit code, logged in the last 24 h); `done --run` /
+  `finish --run` stamp `"cli"`. Opt-in `meta.evidence: "observed"` (`spec_init {evidence}`, `dev-spec init --evidence
+  observed`) makes it the rule: a runnable `_Verify:_` is verified only by an observed (or CLI) run — new reason code
+  `unobserved`, and project checks likewise (suiteChecks status `unobserved`). The default `reported` keeps the verdict
+  unchanged (the stamp is information only). Claude Code only (an MCP-only client has no hook — use `done --run`); not
+  a security boundary.
 - **Scope guard** — `guard: "scope"` (`init --guard scope`, `/spec-guard scope`): once tasks are approved, a code file
   no open task names in `_Implements:_` (test files excepted) asks, naming the likely task or `/spec-converge`.
 - **Decision log** (`spec_decide`, `dev-spec decide`, `/spec-decide`) — `.specs/<feature>/decisions.md`, committed with
@@ -231,10 +272,13 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   without a name.
 - New stable codes: `suiteChecks` status `code-changed`; `spec_complete_task` / `done --run` `couldNotRun`; doctor
   warnings `malformed-markers` and `outside-code-artifacts`. `done --run` / `finish --run` take `--timeout <seconds>`;
-  `spec_append_tasks` takes `makesGreen`, `expectFail` and `size` (CLI `--makes-green`, `--expect-fail`, `--size`);
-  `spec_backlog` takes `remove` (= `rm`).
+  `spec_append_tasks` takes `makesGreen`, `expectFail`, `size` and `depends` (CLI `--makes-green`, `--expect-fail`,
+  `--size`, `--depends`); `spec_backlog` takes `remove` (= `rm`). The four opt-ins above add: reason code and suiteChecks
+  status `unobserved` (only with `meta.evidence: "observed"`), an `observed` field on `spec_complete_task` results and
+  suiteChecks items, `evidence` and `approvalGuard` on every `spec_init` result, `skipped` / `blocked` / `waitsOn` on the
+  next-task surfaces once a task declares `_Depends:_`, doctor check `task-deps`, and `spec_export`'s `format: "csv"`.
 ### Tests
-- `node mcp/test.js` 1155 assertions (was 766), `node cli/test-cli.js` 372 (was 257); the README tool tables are
+- `node mcp/test.js` 1207 assertions (was 766), `node cli/test-cli.js` 392 (was 257); the README tool tables are
   checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
   (`npm run test:docker`).
 

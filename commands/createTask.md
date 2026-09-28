@@ -18,7 +18,10 @@ plus an observability task and a hot-path load-test task (+saas); `_Affects eval
 task per prompt change, and a cost-monitoring task (+ai); keep the scaffolded security tasks (threat model, authz,
 secrets, security testing — its `_Verify:_` runs the scans and abuse-case tests) on +sec and the privacy tasks (data
 inventory, data subject requests, retention job) on +privacy; `_Implements: path_` on tasks that touch real files. Optionally
-`_Size: XS|S|M|L|XL_` (1/2/3/5/8 points) — the roadmap turns sizes and the recorded velocity into an ETA.
+`_Size: XS|S|M|L|XL_` (1/2/3/5/8 points) — the roadmap turns sizes and the recorded velocity into an ETA — and
+`_Depends: 3, 5_` where a task needs other tasks of this tasks.md done first (without it, tasks.md order is the order):
+`spec_next_task` then serves the first open task whose dependencies are done, `dev-spec next <feature> --waves` shows
+what can run in parallel, and doctor / the tasks gate refuse a number no task carries or a cycle (`task-deps`).
 Replace every scaffold placeholder task and keep task numbers unique — the tasks gate refuses placeholder tasks.
 Run the `trace_check` MCP tool and close any gap it reports (every AC must map to ≥1 task; its warnings name
 edge cases / NFRs / success criteria nothing covers). Present for review. Tasks added after approval go through

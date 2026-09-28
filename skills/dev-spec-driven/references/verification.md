@@ -149,7 +149,8 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
   (the last tick or task run), on the code as it is now — blocker **`suite-evidence`**, with `suiteChecks`
   [{name, command, status}] where status is `pass` · `no-run` · `failed` · `changed` (the configured command changed
   since the run) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
-  changed since the run; each recorded run is stamped with a hash of them). Doctor warns `suite-evidence` once every
+  changed since the run; each recorded run is stamped with a hash of them) · `unobserved` (only with
+  `meta.evidence: "observed"` — a passing run the harness never saw, see below). Doctor warns `suite-evidence` once every
   task is done; the execution sign-off refuses it too, and `/next-action`'s finish step says how to run and record them.
 - Record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` (each `name` a `meta.checks` name,
   run from the project root — recorded in `.state.json → finishChecks` before the readiness is computed, so one call
@@ -158,6 +159,33 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
   signal, the timeout) records nothing.
 
 Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite" among the fresh checks to confirm.
+
+## Evidence the harness observed (Claude Code)
+
+A reported run is what the agent SAYS it ran. In Claude Code the plugin's `hooks/observe-hook.js` (PostToolUse and
+PostToolUseFailure on the **Bash** tool — PowerShell runs are not observed) logs every Bash run of a task's runnable
+`_Verify:_` command (or the `&&` join of a task's commands) or of a project check, with its exit code, to a
+git-ignored, size-bounded log (`.specs/<feature>/.execution/observed.jsonl`, `.specs/.execution/observed.jsonl` for
+project checks). Interrupted and backgrounded runs are not logged.
+
+- **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the same command in
+  the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not observed). `dev-spec
+  done --run` / `finish --run` stamp `"cli"` (the CLI ran it itself). The MCP tools never take the stamp from the caller.
+  `spec_complete_task` returns it, and so do the finish's `suiteChecks` items and the traceability matrix's task
+  evidence (`trace_check {matrix}`).
+- **By default the stamp is information** (`roadmap.json → meta.evidence: "reported"`): the verdict is the one above.
+- **Opt in to make it the rule:** `spec_init {evidence: "observed"}` (CLI `dev-spec init --evidence observed`; back with
+  `--evidence reported`). Then a task whose `_Verify:_` is runnable is verified only when the run that proves it — the
+  latest passing run, or an `_Expect: fail_` task's red run — is observed (`true`) or made by the CLI (`"cli"`);
+  otherwise reason **`unobserved`**. A project check's passing run counts only when observed too (suiteChecks status
+  `unobserved`). Every surface of the verdict follows (complete_task, status, doctor, finish, the roadmap, the Stop
+  gate, the matrix). A task without a runnable `_Verify:_` is unaffected.
+- **What to do:** run the `_Verify:_` command yourself with the Bash tool, then record exactly that command and its exit
+  code — or let the CLI run it (`dev-spec done <feature> <n> --run`). An MCP-only client has no hook: every run it
+  reports reads unobserved, so in that setup record runs with `done --run` (the note says so when no run was ever
+  observed in the project).
+- **Not a security boundary:** an agent with a shell could write the log itself. It raises the bar on a paraphrased or
+  invented report — the run has to have happened.
 
 ## Evidence linked to git
 
@@ -208,6 +236,7 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 | `stale-evidence` | The record no longer proves this task: `spec_impact --reopen` marked it stale (the spec it proved changed), or it was recorded for an earlier `_Verify:_` command / another task that held the number | Run the check again on the current code |
 | `duplicate-number` | Another task shares this number and the record isn't this task's | Renumber the tasks (doctor warns `duplicate-tasks`) |
 | `unexpected-pass` | The task is marked `_Expect: fail_`, but its latest run passed with no red run before it | Make the test fail for the right reason and record that run (or drop the marker) |
+| `unobserved` | Only with `meta.evidence: "observed"`: the run that proves it was reported, but the harness never saw it (nor did the CLI make it) | Run the command with the Bash tool in Claude Code and record it again, or `dev-spec done <feature> <n> --run` |
 
 **Duplicate numbers.** `spec_complete_task`, `spec_task_brief` and `done --run` resolve a duplicated number to
 its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.

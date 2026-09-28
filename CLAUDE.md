@@ -35,9 +35,14 @@ mcp/test.js                    smoke test — `node mcp/test.js`
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
 cli/test-cli.js                smoke test for the CLI — `node cli/test-cli.js` (never a top-level bin/, see below)
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
-hooks/hooks.json               PreToolUse → guard-hook.js · PostToolUse + SessionStart → spec-hook.js ·
-                               Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$) → stop-hook.js
+hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
+                               (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
+                               (Write|Edit) + observe-hook.js (Bash) · PostToolUseFailure (Bash) → observe-hook.js ·
+                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$)
+                               → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
+hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
+hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
 hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
                                "+N more"), drift, upgrade and overlap lines
 hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
@@ -183,7 +188,9 @@ verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). A
 `.specs/` (or a read-only codebase scan for brownfield / `trace --code` / import); none hit the network, run a command or
 call git. Scaffolders never overwrite an existing file; mutators edit only what they own (checkboxes, appended tasks and
 track sections, appended `decisions.md` entries, `.state.json` / `roadmap.json`, generated `ROADMAP.*` / `SPECS.md` /
-`UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose.
+`UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose. The
+observed-run log (`.execution/observed.jsonl`, F1) is written only by `hooks/observe-hook.js` through `observeRun()` —
+no tool writes it, and no tool accepts an `observed` stamp from its caller.
 Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
 
 **Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
@@ -277,7 +284,8 @@ never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (
 bounded: 5 entries / 2000 characters) and, for a task proving a `[SEC]` / `[PRIVACY]` criterion, that track's design
 sections. An `_Expect: fail_` task's brief is a RED task's: its own tests heading (`BRIEF.testsRed` — the tests it writes
 must fail first) and definition of done (`redRules` in place of the loop's green-making rules; the project-checks item is
-`projectChecks.briefDodRed` — only the task's new red tests may fail).
+`projectChecks.briefDodRed` — only the task's new red tests may fail). 1.14 F3: the default task is `taskSchedule()`'s
+next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, status}] (see Task dependencies).
 
 ## Gates (1.13) — an approval is a gate, not a stamp
 - **Placeholders — a lookup, never a guess from the shape.** `placeholderReport()` reports a bracket only when
@@ -403,7 +411,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
-  `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`). They are RETURNED in
+  `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
+  with `meta.evidence: "observed"` — see Harness-observed evidence). They are RETURNED in
   `spec_complete_task`'s `unverifiedReason` (set
   exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
   `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
@@ -424,7 +433,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   was duplicated carries `shared` and only counts for its own task; other tasks' records under that number
   are kept in `others`. A note after a run is attached as `note`, never overwrites it (a v1.12 bare
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
-  `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it.
+  `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
+  (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
+  none).
 - **Without a runnable `_Verify:_`** a task is outside the run gate: no record passes, a bare legacy
   `{exitCode: 0}` or a summary verifies, and `verificationStatus()` skips a `no-evidence` record there —
   only `failed-run` / `stale-evidence` / `duplicate-number` count against it.
@@ -472,7 +483,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
   it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` · `before-last-tick` ·
   `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
-  keeps the older rules). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
+  keeps the older rules) · `unobserved` (1.14 F1, only with `meta.evidence: "observed"`: a passing run whose `observed` is
+  neither `true` nor `"cli"`; each item also carries the run's `observed`). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
   {evidence}` while a check is missing (`projectChecks.naFinish`). Without meta.checks nothing changes. CLI `finish <f>
   --run` executes them (explicit flag only; `--shell` / `DEV_SPEC_SHELL`, `--timeout`, the POSIX refusal under cmd.exe,
   the pipe hint, a check that could not run records nothing). The merge summary labels an `_Expect: fail_` task's red run
@@ -493,6 +505,49 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   brief's `verifyPipes` + a note, `done --run`'s hint line (stderr under `--json`; it still runs), doctor `verify-pipes`
   (warn), and `spec_complete_task`'s `pipeMasked: true` + note on a passing piped run — the verification rules are
   unchanged.
+
+## Task dependencies and execution waves (1.14 F3)
+- **`_Depends: 3, 5_`** — an English-stable task marker (the task line or a sub-line, never fenced code — `taskMarkers()`
+  reads it like every marker: `taskMarkers(b).depends`). Tokens split on commas, semicolons or spaces; `#3` = `3`; a value
+  wholly in `[brackets]` is a template slot (nothing declared). `taskDependsSpec(block)` → `{declared, numbers (unique, as
+  written), invalid (tokens that are no task number)}` — with a fast path: no "depends" on the task's lines, nothing parsed.
+  The numbers name tasks of the SAME tasks.md. Every reader works on ONE view, the ACTIVE tasks (`activeTasks()`), with
+  resolveTask's duplicate rule: a dependency on n is done once EVERY task numbered n is done; a number no active task
+  carries never is. **A tasks.md without `_Depends:_` behaves exactly as before** (same next task, no new fields).
+- **`taskSchedule(blocks)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order
+  (parseTasks' — by number, stable; only the task resolveTask answers for its number is a candidate) whose dependencies are
+  all done. `skipped` `[{number, waitsOn}]` = open tasks passed over because they wait; `blocked` `[{number, waitsOn}]` =
+  open tasks that can never start as things stand (Kahn's walk, `stuckTasks()`: a cycle, a dependency no task carries, or
+  waiting on such a task — only computed when some task declares `_Depends:_`; a task without one is never blocked).
+  Consumers: `spec_next_task` / `next`, next_action's implement step (open tasks, none startable → step `fix` with
+  `blocked` and `taskDepsBlockedNote()` — never "finish"), `spec_task_brief`'s default task (none startable → `task: null`
+  + `blocked`/`skipped` + the note, never "all done"), `next --batch` (`parallelBatch()`: a [P] task waiting on an open
+  dependency — one in the batch included — ends the batch), `spec_status`'s `next`, the roadmap's next task, complete_task's
+  `next` (+ `blocked` and the note when none can start), the spike's investigate step and the scope guard's likely task.
+  **Never compute "next" with `find(!done)`** again.
+- **`taskWaves(blocks, tracks)`** (`spec_next_task {waves: true}` / `next --waves`) → `{waves: [[numbers…]…], cycles,
+  blocked}` over the open tasks. A task WITH `_Depends:_` waits for exactly those tasks (an explicit list replaces the
+  implicit order); a task WITHOUT one keeps tasks.md order among the undeclared tasks — it waits for the open ones before
+  it, and a run of consecutive `[P]` tasks of one section (phase + checkpoint) waits together (join node) and is waited
+  for as a whole. A wave is filled greedily in tasks order with the batch's limits: never two tasks sharing an
+  `_Implements:_` file (`implementsKey`; a folder overlaps its files), and a task with no `_Implements:_` (its files can't
+  be proven disjoint) or an +ai prompt task (`isPromptTask`, inline only) is a wave of its own. `cycles` =
+  `dependencyCycles(g, true)` (iterative Tarjan over the OPEN tasks). Only a task's own `_Depends:_` can take it ahead of
+  an earlier section's checkpoint — the controller still stops at each checkpoint (`references/subagent-execution.md`). All
+  walks are linear and iterative (no recursion on a long chain).
+- **complete_task never refuses on dependencies** (a tick records what happened): ticking a task whose `_Depends:_` are
+  open (`openDependenciesOf()`) returns `waitsOn` [numbers] + `taskDeps.tickedEarly`. The bugfix gate keeps its
+  precedence (the only refusal).
+- **Doctor `task-deps`** (fail, `CHECK_PHASE` 5 = the tasks phase; in the feature doctor and `spikeDoctor`) — only when
+  some active task declares `_Depends:_` (`taskDepsCheck()` → null otherwise): an invalid token, a number no active task
+  carries, a self-dependency, a cycle (`dependencyCycles(g, false)` — the whole plan, done tasks included). The tasks
+  approval refuses on it (`approvalChecks` tasks → `task-deps`).
+- **The brief** carries `dependsOn` `[{number, status: done | open | missing}]` (kept with `write: true`: identifiers only)
+  and renders a "Depends on" section (`taskDeps.briefHeading`) with a NEEDS_CONTEXT note while one is still open.
+- **`spec_append_tasks {tasks: [{depends}]}`** / `append-tasks --depends 3,5` (repeatable): every number names an ACTIVE
+  task or a task of this same call (by the number it gets here — the error names them), never the task itself, and may
+  not close a new cycle (a pre-existing cycle is doctor's); all-or-nothing like every other field; stored as a
+  `_Depends: 3, 5_` sub-line and read back through `taskDependsSpec()` before anything is written.
 
 ## Change history (1.13)
 - **Approval history.** `approvals[phase]` stays the latest approval (with its content `fingerprint`);
@@ -686,7 +741,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   an error.
 
 ## Stakeholder export and release notes (1.14)
-- **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` — the project: `project.<fmt>`, a feature
+- **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
+  the traceability matrix — see below) — the project: `project.<fmt>`, a feature
   slugged `project`: `project.feature.<fmt>` — with the `RE_AUTOGEN` marker family; `isGeneratedOrAbsent()` means never
   over a hand-written file (an error). A feature renders in its language, the project in the project language. The HTML
   is offline by construction: a zero-dep markdown renderer (`expInline` and friends) escapes EVERY text run (`htmlEsc` —
@@ -703,6 +759,45 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.
   `write` → `.specs/RELEASE-NOTES.md` (AUTO-GENERATED, never over a hand-written one) and stamps `meta.changelogAt`, both
   under the roadmap lock; nothing to report → nothing written or stamped (`note`).
+
+## Requirements traceability matrix (1.14 F5)
+- **`buildTraceMatrix(projectDir, {slug, dir}, {code?, scan?, supBy?})`** (`traceMatrix(projectDir, name, opts)` resolves
+  the name) REUSES the readers — never a second verdict, nothing new recorded. Rows = trace_check's AC set
+  (`requirementAcIds`, document order) then the secondary IDs (`secondaryDefinitions`: EC, NFR, SC — kind order) over the
+  ACTIVE requirements (`activeDesign`: a removed track's criteria are out). Per row: `text` (`acOneLine`, ≤ 1000 chars),
+  `template` (`placeholderReport`; a secondary ID trace doesn't count as defined), `design` (the design.md `##` sections
+  naming the ID — a bugfix: `bug.md: …` + `design.md: …`, spec_impact's keys — plus, for a `[SEC]` / `[PRIVACY]`
+  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskProse`, never a fenced example — cites
+  the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
+  `taskVerification()` in the project's evidence mode (F1: `unobserved` under `"observed"`), `rtmEvidence()` = the latest
+  record's command / exitCode / at / expected / observed / commit / dirty, or its note, `stale`), `tests` (+tdd: the T-IDs of
+  the test-plan entries citing it — `planIdText`; with `code` the files naming each, `outsideCode` for a T-ID run outside
+  test code; one `scanTestCode()` walk shared with trace's `code`), `decisions` (current decisions.md entries whose
+  `_Affects:_` name it), `supersedes` / `supersededBy` (`supersededByIndex()`, built once per call — the project export
+  passes it to every feature), `approval` `{at, by, forced, changed}` — the requirements approval and whether THIS row's
+  text changed since the approved snapshot (`latestSnapshot`); a fingerprint-only approval knows only whether the file
+  changed (`changed: null` when it did — unknown which row); none → `null`. Plus `approval` (with `baseline: snapshot |
+  fingerprint-only | none`), `counts` {rows, verified, implemented, planned, untraced, template, superseded}, `lang`,
+  `kind`, `tracks`.
+- **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
+  open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
+  done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
+  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line) — exactly
+  trace_check's gaps and secondary warnings for that ID. Labels are localized (`i18n.msg(lang).rtm`, EN/PT/ES).
+- **Surfaces.** `trace_check {matrix: true}` → `matrix` (informational — never the verdict; with `code` both share ONE
+  walk); `dev-spec trace <f> --matrix` (a table, `printMatrix`) and `--csv` (the data alone on stdout — no BOM, no marker
+  record — exit code still = trace gaps; under `--json` the JSON result); `spec_export {format: "csv"}` / `export [f] --csv
+  [--write]` (one of `--md` / `--html` / `--csv`) → `.specs/exports/<slug>.rtm.csv` (the project: `project.rtm.csv`, every
+  active feature's rows; a feature slugged `project`: `project.feature.rtm.csv`), `isGeneratedOrAbsent()` like every export;
+  the HTML / md FEATURE export gains a "Traceability matrix" section (`rtmMarkdown` — not for a spike; cells through
+  `rtmCell`, a `<!--` opener neutralized so a cell can't swallow the next ones) and the PROJECT export each feature's counts
+  by status (`rtmProjectMarkdown`).
+- **CSV** (`matrixCsv(matrices, lang, {document?})`): RFC 4180 — CRLF records, a field holding `,` `"` CR or LF quoted
+  (quotes doubled); localized header row; a Test files column only when some matrix was built with `code`; formula guard
+  (`RE_CSV_FORMULA`): a cell starting with `=` `+` `-` `@`, a tab or a CR gets a leading apostrophe. `{document: true}`
+  (spec_export) adds a UTF-8 BOM (Excel reads a BOM-less CSV in the ANSI code page) and a LAST record carrying `#
+  AUTO-GENERATED by dev-spec …` in its first cell, the other cells empty — the header stays row 1, the table rectangular,
+  and `isGeneratedOrAbsent` finds the marker in the file's tail.
 
 ## Team governance — approvals by role and fast-forward (1.14)
 - **`roadmap.json → meta.approvalRoles`** `{<phase>: [roles]}` — PHASES order, lower-cased, a role matches
@@ -800,8 +895,98 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   once some feature holds approved (or forced) tasks with open ones, `scopeGuardDecision()`: a code file is allowed when
   an OPEN task of such a feature names it in `_Implements:_` (the file via `implementsKey`, a folder above it, or a glob
   matching it) or when it is a test file (tests are planned by T-ID); otherwise ask, naming the likely task (a planned
-  file in the same folder, else the longest shared folder prefix, else the next open task) or `/spec-converge`. Text reads
-  only; `guard: true` is unchanged.
+  file in the same folder, else the longest shared folder prefix, else the `taskSchedule()` next task of the first covering
+  feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
+
+## Harness-observed evidence (1.14 F1)
+- **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `Bash` — only the
+  Bash tool is observed, never PowerShell) logs a Bash run of a task's runnable `_Verify:_` command (or the ` && ` join of
+  a task's several commands — `verifyCommandSet()`, how `done --run` reports them) or of a `meta.checks` command.
+  `spec.observeRun()` appends ONE JSON line `{command, exitCode, at, event, session}` (command flattened by `flatCommand()`:
+  backticks dropped, whitespace runs folded — the implementer gate's rule) to `.specs/<feature>/.execution/observed.jsonl`
+  for each non-archived feature whose tasks.md holds that `_Verify:_`, and to `.specs/.execution/observed.jsonl` for a
+  project check (a dot folder is never a feature; each `.execution/` gets its self-ignoring `.gitignore` `*`). It never
+  creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
+  (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
+  command over `OBSERVED_MAX_COMMAND` (4000) is never logged; at most `OBSERVED_MAX_FEATURES` (200) feature folders.
+- **The hook** exits 0 at once unless the tool is `Bash` on one of the two events and the project (the nearest folder
+  holding `.specs/` at or above the payload's `cwd`, else `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR` — the first that is
+  dev-spec's, `isDevSpecProject`) is found. Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
+  the payload's own), else a response text starting `Exit code N`; else 0 on PostToolUse (1 when the response says
+  `is_error`), and on PostToolUseFailure the code named in `error` ("… exit code 1"), else 1 — a failure is never 0. An
+  interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,
+  `backgroundedByUser`) and a run with no explicit code but a `returnCodeInterpretation` (a non-zero exit the Bash tool read
+  as no error — grep's "No matches found") are no run. A leading `cd <project root> &&` (or `;`) is stripped (Git Bash
+  `/c/…` paths read as `C:/…`); any other folder keeps the whole command, which then matches nothing. The engine is loaded
+  only after a plain-text pre-filter (the flattened command appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
+  folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
+  ignored), and exits 0 on any error.
+- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode)` → `{observed, at?}`: true when the LATEST
+  logged run of the same flattened command within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future
+  ignored) exited with the same code — a report of exit 0 after an observed exit 1 is not what the harness saw
+  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed.
+  `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
+  is stamped `observed: true | false`; `done --run` / `finish --run` pass `ranBy: "cli"` → `observed: "cli"` (the CLI ran it
+  itself; counts as observed). The MCP server never passes `ranBy`, and `normalizeEvidence()` keeps no caller-given
+  `observed`. Every `spec_complete_task` result carries `observed` when a run was given (stable); `suiteChecks[]` items carry
+  their run's `observed`, and so do the matrix's task evidence records (F5, `rtmEvidence()` — JSON only; the CSV / table /
+  export words don't print it). The brief and the merge summary don't show it.
+- **The mode.** `roadmap.json → meta.evidence` = `"reported"` (default — absent is reported: the 1.14 verdict, the stamp is
+  context only) | `"observed"` (opt-in). `spec_init {evidence}` / `init --evidence reported|observed` (case-insensitive;
+  anything else is an error before any write; under the roadmap lock, no write when the effective mode doesn't change);
+  the result always reports the current `evidence` (+ `evidenceNote` when given). `evidenceMode(projectDir)` is read by
+  `taskVerification(evidence, block, dup, mode)` — under `"observed"`, a runnable `_Verify:_` is verified only when the run
+  that proves it (the latest passing run; an `_Expect: fail_` task's red proof, `redProof()`) is stamped `true` or `"cli"`
+  (`observedProof()`), else reason **`unobserved`** — so every surface of the one verdict follows (complete_task, status,
+  impact, doctor, finish, ROADMAP.md, the stop gate, the matrix). A task without a runnable `_Verify:_` is unaffected.
+  `suiteStatus()` → **`unobserved`** for a passing project-check run that isn't observed (a finish blocker like any status
+  but `pass`). complete_task's note (`observed.unobservedNote`) adds `observed.neverObserved` when no run was ever logged in
+  the project (`observedAny()` — an MCP-only client has no hook); next_action's `verify` step adds `observed.naHint`.
+- **Not a security boundary:** an agent with a shell could write the log itself. It raises the bar on a hallucinated or
+  paraphrased report — the run has to have happened in the harness. MCP-only clients have no hook: under `"observed"` they
+  record runs with `dev-spec done <f> <n> --run` (or switch back to `"reported"`).
+
+## Human approval guard (1.14 F2)
+- **`roadmap.json → meta.approvalGuard`** = `off` (default; absent = off) | `ask` | `deny` (`APPROVAL_GUARD_LEVELS`, in
+  order — a later one is stricter). `spec_init {approvalGuard}` — a plain string enum in the schema — / `init
+  --approval-guard off|ask|deny` (anything else: a localized CLI error; `approvalGuardInput()` → undefined leaves it
+  unchanged in the engine); written under the roadmap lock, no write when unchanged; the result always reports the
+  current `approvalGuard` (+ `approvalGuardNote` when given).
+- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher `^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$`)
+  is silent unless the guard is on: a tool call that can't be an approval (a Bash / PowerShell command not containing
+  `dev-spec`) exits before any file read; otherwise ONE raw read of roadmap.json per candidate project — the project the
+  call names (MCP `projectDir`, CLI `--project` in the command), the payload `cwd`, `CLAUDE_PROJECT_DIR`,
+  `SPEC_PROJECT_DIR` (at most 8; `${VAR}` unexpanded and network paths — `\\host\share`, `//host/share`, `\\?\UNC\…` —
+  refused, `\\?\C:\…` is local); the STRICTEST level wins. The engine is loaded only then; it answers
+  `{hookSpecificOutput: {permissionDecision, permissionDecisionReason}}` (+ `systemMessage` for deny). It never blocks on
+  its own trouble: a malformed payload, a broken roadmap.json or any exception exits 0 silently.
+- **`approvalGuardDecision(payload, level, {lang, cli?})`** — PURE (reads nothing) → `{decision: allow | ask | deny, why,
+  level, …}`; `why` (stable): `off` · `no-payload` · `not-pre-tool-use` · `not-an-approval` · `approval`. On an approval:
+  `actions` `[{kind: approve | remove | guard-down, source: mcp | cli, feature, phase, through, role, by, force, from, to,
+  project}]`, `force`, `command` (what the human runs, `!`-prefixed), `reason` (localized, `approvalGuard.ask` /
+  `approvalGuard.deny`) and, for deny, `userNote`. What counts: `spec_approve` under ANY MCP server prefix (or bare);
+  `spec_feature {action: "remove", confirm: true}` (a preview isn't); `spec_init {approvalGuard}` LOWERING the level
+  (raising is always fine); through the Bash / PowerShell tool, `dev-spec approve …` (phase or `--through`, `--role`,
+  `--by`, `--force`), `dev-spec feature remove … --yes` and `dev-spec init --approval-guard <lower>` — `--help` runs nothing.
+- **The shell lexer** (`shellCommandWords()`, one linear pass, nothing evaluated): separators outside quotes are newline
+  `;` `&` `|` `(` `)` `{` `}` backtick and `$(`; single quotes are literal; inside double quotes a backslash escapes only
+  `"` `\` `$` `` ` ``; outside quotes it stays (a Windows path). `devSpecWordAt()`: the CLI's script (`dev-spec`,
+  `dev-spec.js` / `.cjs` / `.mjs` / `.cmd` / `.ps1` / `.exe`, any path) counts only in PROGRAM position — after launchers
+  and shell keywords (`APPROVAL_WRAPPERS`: node, npx, bun, deno, sudo, env, time, `!`, if/then/do…), env assignments,
+  options and a timeout — never as another program's argument (`echo dev-spec approve x`, `git commit -m "…"`).
+  `cliApprovalAction()` reads the words after it with `CLI_SWITCHES` (a `--flag` that is no switch takes the next word),
+  then again with every flag as a switch. A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program
+  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch…) is lexed as a script
+  in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read.
+- **ask** → `permissionDecision: "ask"`: the user confirms or declines; the reason names the feature, phase(s), role, the
+  `by` and, loudly, `--force`. Claude Code's auto / bypass permission modes may skip the prompt. **deny** →
+  `permissionDecision: "deny"` (holds in every mode): the reason tells the agent approvals are the human's (stop and ask);
+  the user sees `systemMessage` with the command to run — `! node "<clone>/cli/dev-spec.js" approve <f> <phase> [--role r]
+  [--force] [--project "…"]` (`approvalCommand()`: a value from the agent's call goes in only when it is plainly safe to
+  paste into bash / PowerShell, else a `<placeholder>`; the `!` line run by the agent itself is still an approval).
+- **A guardrail on the approve paths, not a sandbox:** an agent editing `.state.json` or running `node -e` isn't caught.
+  `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (see Conventions): a CLI-only switch would make this lexer
+  read the next word as its value.
 
 ## Decisions and spikes (1.14)
 - **`decisions.md`** (committed with the spec — `.execution/` is the scratch area): a localized header, then per entry
@@ -1100,7 +1285,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings, design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
   `.specs/templates/` (unless that folder is a pre-1.14 feature) and generated files. The Stop / SubagentStop hook
-  follows the same rules (see End-of-turn evidence gate).
+  follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
+  exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
+  output is a permission decision).
 - **Flush stdout before exiting — on Windows AND Linux pipes.** Hooks read stdin asynchronously (not
   `fs.readFileSync(0)`) and exit only in the write callback. The same holds for the test harnesses (they exit once stdout
   has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
@@ -1167,7 +1354,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
-  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value; a new switch goes into `BOOL_FLAGS`, a new
+  `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
+  (1.14): ONE list, which the approval hook's lexer (`cliApprovalAction()`) also reads to tell a switch from a value flag —
+  a new switch goes into `spec.CLI_SWITCHES` (never a CLI-only list: the hook would read the word after it as its value), a new
   value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
   run-evals.js untouched); `--` ends the options; `--help` anywhere prints the help and runs nothing. An explicit
@@ -1185,9 +1374,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1155 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1207 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 372 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 392 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (51 command files, the tools/list length, the
@@ -1232,6 +1421,10 @@ template keys, the resource list) are asserted in place — update them in the s
   name.
 - New track → see The track model (registries); new artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`) and `templateCorpus()` if it has slots.
+- New CLI switch (a flag that takes no value) → `spec.CLI_SWITCHES` in `mcp/lib/spec.js` (the CLI's `BOOL_FLAGS` and the
+  approval hook's lexer both read it); a new value flag → the CLI's `VALUE_FLAGS`.
+- New hook → `hooks/hooks.json` (never `plugin.json` — see Conventions), silent and exit 0 on any error, the engine loaded
+  only after a cheap raw pre-check (roadmap.json / the payload), and a row in `references/tooling-reference.md`.
 - Any generated/returned user-facing text → put the strings in `mcp/lib/i18n.js` for every language (EN / PT / ES;
   pt-BR inherits PT unless it needs its own wording) and resolve the lang via `featureLang()`/`projectLang()`; keep
   IDs/markers English-stable.

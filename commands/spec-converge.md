@@ -25,8 +25,9 @@ Use it when implementation drifted from the plan, after a review found follow-up
    Tasks go under a localized **Phase: Convergence** heading, numbered after the highest task; existing tasks are
    never renumbered or edited; an unknown AC ID refuses the whole call.
    Optional per task: `makesGreen` (planned T-IDs → `_Makes green:_`, each must be in test-plan.md), `expectFail: true`
-   (`_Expect: fail_` — a red task whose proof is a FAILING run) and `size` (XS|S|M|L|XL → `_Size:_`, for the roadmap ETA);
-   CLI `--makes-green T-01,T-02 --expect-fail --size M`.
+   (`_Expect: fail_` — a red task whose proof is a FAILING run), `size` (XS|S|M|L|XL → `_Size:_`, for the roadmap ETA)
+   and `depends` (task numbers → `_Depends:_` — an active task or one of this call, never itself, no cycle);
+   CLI `--makes-green T-01,T-02 --expect-fail --size M --depends 3,5`.
 5. The result carries `needsReapproval`: run `trace_check`, then re-approve the **tasks** phase (`/approve`).
 6. Execute the new tasks as usual (`/executeTask`), with evidence for each.
 

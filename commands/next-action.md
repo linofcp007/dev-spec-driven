@@ -28,7 +28,9 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
    carries `flow: "design-first"`), and `spec_approve` refuses a phase while an earlier one is unapproved (`phase-order`);
 3. **fix** — every phase is approved, but a check of the current phase (or an earlier one) still fails, e.g. after
    an approval forced over it;
-4. **implement** — the next open task;
+4. **implement** — the next task: the first open one whose `_Depends:_` tasks are all done (`spec_next_task`'s rule).
+   Open tasks none of which can start (a `_Depends:_` cycle, or one naming no task) → **fix** instead, with `blocked`
+   [{number, waitsOn}]: correct the `_Depends:_` markers (`spec_doctor` fails `task-deps`);
 5. **verify** — every task is ticked, but one is not verified (its latest run failed, or its runnable `_Verify:_`
    has only a note, stale or shared-number evidence): `/spec-finish` and the `execution` sign-off would refuse. The
    recommendation names each task with its reason — re-run its `_Verify:_` with `dev-spec done <feature> <n> --run`
