@@ -48,7 +48,7 @@ point there). A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
-### The local MCP server (`spec-driven`) — 35 tools
+### The local MCP server (`spec-driven`) — 36 tools
 
 Pure Node core — **no `npm install`, no network, no cost.** Tools:
 
@@ -76,11 +76,12 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_clarify` | Surface requirement ambiguities/gaps before design |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"); `write` → `.specs/SPECS.md` |
-| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`); `write` → `.specs/exports/` |
-| `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) or a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks); `write` → `.specs/exports/` |
+| `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `milestone` scopes them to a milestone's features; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, what doctor flags, next step, a critic / converge review); `apply` saves inferred tracks, gives pre-1.13 approvals a history baseline, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec |
 | `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list), an ETA per feature from the velocity of ticked tasks and the files two features' open tasks both plan; `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
+| `spec_milestone` | Milestones: a target date for a set of features (`add` · `rm` · `list`), judged against their ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md shows them; a feature's rename / archive / remove follows) |
 | `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations) + the share of code files named in `_Implements:_` |
 | `steering_scaffold` | Create one steering file from its template (incl. `constitution.md`), or a custom scoped one |
@@ -335,7 +336,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (52)
+### Commands (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -345,7 +346,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Unreleased (1.15): `/spec-tracks`.
+`/spec-tour`. Unreleased (1.15): `/spec-tracks`. New in 1.16: `/spec-milestone`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
@@ -360,8 +361,8 @@ create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike ·
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv] [--write] · changelog
-drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
 
@@ -412,7 +413,7 @@ a HIPAA apontam para aí). Uma alteração de texto é modo Vibe: sem cerimónia
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
 
-### O servidor MCP local (`spec-driven`) — 35 ferramentas
+### O servidor MCP local (`spec-driven`) — 36 ferramentas
 
 Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
@@ -440,11 +441,12 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"); `write` → `.specs/SPECS.md` |
-| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`); `write` → `.specs/exports/` |
-| `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) ou um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas); `write` → `.specs/exports/` |
+| `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `milestone` restringe-as às funcionalidades de um marco; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_upgrade` | Depois de atualizar o plugin: audita cada funcionalidade ativa face às regras atuais (estado, o que o doctor assinala, próximo passo, uma revisão critic / converge); `apply` guarda os tracks inferidos, dá às aprovações anteriores à 1.13 uma baseline no histórico, carimba `meta.specVersion` e escreve `.specs/UPGRADE.md` — nunca edita uma spec |
 | `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista), uma ETA por funcionalidade a partir da velocidade das tarefas marcadas e os ficheiros que as tarefas abertas de duas funcionalidades planeiam em comum; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
+| `spec_milestone` | Marcos: uma data-alvo para um conjunto de funcionalidades (`add` · `rm` · `list`), avaliada face às ETAs — `on-track` · `at-risk` · `late` · `done` (o ROADMAP.md mostra-os; renomear / arquivar / remover uma funcionalidade reflete-se neles) |
 | `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações) + a parte dos ficheiros de código indicados em `_Implements:_` |
 | `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`), ou um ficheiro personalizado com âmbito |
@@ -713,7 +715,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (52)
+### Comandos (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -723,7 +725,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Por lançar (1.15): `/spec-tracks`.
+`/spec-tour`. Por lançar (1.15): `/spec-tracks`. Novo na 1.16: `/spec-milestone`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
@@ -738,8 +740,8 @@ create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike ·
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv] [--write] · changelog
-drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
 
@@ -790,7 +792,7 @@ RGPD, el GDPR y la HIPAA apuntan ahí). Un cambio de texto es modo Vibe: sin cer
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
 
-### El servidor MCP local (`spec-driven`) — 35 herramientas
+### El servidor MCP local (`spec-driven`) — 36 herramientas
 
 Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
@@ -818,11 +820,12 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"); `write` → `.specs/SPECS.md` |
-| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`); `write` → `.specs/exports/` |
-| `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) o un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas); `write` → `.specs/exports/` |
+| `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
 | `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
+| `spec_milestone` | Hitos: una fecha objetivo para un conjunto de funciones (`add` · `rm` · `list`), evaluada frente a sus ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md los muestra; renombrar / archivar / eliminar una función se refleja en ellos) |
 | `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
 | `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones) + la parte de los archivos de código nombrados en `_Implements:_` |
 | `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`), o uno personalizado con ámbito |
@@ -1095,7 +1098,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (52)
+### Comandos (53)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -1105,7 +1108,7 @@ todas partes, `/plugin disable` — ambos quitan también las skills de superpow
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Sin publicar (1.15): `/spec-tracks`.
+`/spec-tour`. Sin publicar (1.15): `/spec-tracks`. Nuevo en la 1.16: `/spec-milestone`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
@@ -1120,8 +1123,8 @@ create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike ·
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run]
 append-tasks [--depends 3,5] · approve [--force] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv] [--write] · changelog
-drift · stop-check · log · upgrade [--apply] · roadmap · depend · backlog · scan · coverage · evals
+catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts
 ```
 
@@ -1158,12 +1161,12 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 52 slash commands (trilingual descriptions; also the MCP prompts)
+├── commands/                         ← 53 slash commands (trilingual descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (35 tools + prompts + resources, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (36 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
 │   ├── lib/i18n.js                   ← localized content (artifact + steering builders, messages)

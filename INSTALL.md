@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its 35 tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 36 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 52 commands, the 3 agents, the
-hooks and the `spec-driven` MCP server (35 tools) load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 53 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (36 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell

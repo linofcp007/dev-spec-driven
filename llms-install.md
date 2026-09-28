@@ -43,7 +43,7 @@ no API key.
    # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
-4. **Reload the MCP client.** The server advertises **35 tools** over stdio — `spec_init`,
+4. **Reload the MCP client.** The server advertises **36 tools** over stdio — `spec_init`,
    `spec_classify`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`, `spec_roadmap`,
    and more — for spec-driven development (EARS requirements → design → traceable tasks →
    approval-gated execution). It also offers MCP **prompts** (one per plugin command, for clients that show them as

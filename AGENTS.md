@@ -38,7 +38,7 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 35 tools, plus one
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 36 tools, plus one
   prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
   `specs://` resources.
 
@@ -81,10 +81,13 @@ dev-spec feature <archive|restore|rename|remove> <name> [new-name] [--yes]   # l
 dev-spec feature flow <name> <requirements-first|design-first>   # the phase order (design-first: the design before the requirements)
 dev-spec catalog [--write]                     # living catalog of every feature's ACs (_Supersedes:_ marks replaced ones) → .specs/SPECS.md
 dev-spec export [feature] [--md|--csv] [--write]   # one offline, printable document (HTML / markdown) for stakeholders, or the traceability matrix as CSV → .specs/exports/
-dev-spec changelog [--since <date|last|all>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
+dev-spec export [feature] --gherkin [--write]  # BDD: one Gherkin .feature per feature — a scenario per current AC, its EARS clauses as Given / When / Then
+dev-spec export [feature] --tracker jira|linear [--write]   # a CSV for Jira's / Linear's importer (feature → stories → tasks; nothing is sent)
+dev-spec changelog [--since <date|last|all>] [--milestone <name>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
-dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features
+dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features, milestones
+dev-spec milestone [add "<name>" <YYYY-MM-DD> <features…> | rm "<name>" | list]   # target dates vs ETAs → on-track · at-risk · late · done
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
 dev-spec backlog [add|rm|remove "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
 dev-spec scan [path]  /  dev-spec coverage     # brownfield: routes, tests, entrypoints, env var names, migrations + % of code named in _Implements:_

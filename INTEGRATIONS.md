@@ -2,7 +2,7 @@
 
 The methodology travels through **three portable layers**, so it works far beyond Claude Code:
 
-1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 35
+1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 36
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
    `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
@@ -74,7 +74,7 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 52 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
+Native — it's a plugin. Skills, the 53 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
 SubagentStop evidence gate, the Bash observed-evidence log, plus the opt-in PreToolUse guard and approval guard) and the
 MCP server all load:
 

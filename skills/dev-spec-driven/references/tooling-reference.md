@@ -3,7 +3,7 @@
 Read on demand from `SKILL.md`. The workflow itself lives in `SKILL.md`; this file holds the lookup
 tables.
 
-## MCP tools (`spec-driven` server — 35 tools)
+## MCP tools (`spec-driven` server — 36 tools)
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
@@ -36,12 +36,13 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
 | `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions; `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
-| `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv) |
-| `spec_changelog` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `format: "gherkin"` (1.16) → a Gherkin `.feature` per feature: one Scenario per current acceptance criterion (tags `@US-n.AC-m`, its planned `@T-xx`, the track markers), the EARS clauses as Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL response, verbatim) — a criterion that can't be split cleanly is one Then step with its whole text (`unsplit`); template and shipped-superseded criteria left out with a comment; PT / ES in Gherkin's own dialect (`# language: pt` / `es`); `format: "jira"` · `"linear"` (1.16) → a CSV for the tracker's importer (feature → stories → tasks by `[USn]`; Jira: Work item ID · Work type · Summary · Description · Status · Parent · Labels…; Linear: ID · Title · Description · Status · Estimate · Labels · Parent issue; the marker is the last header cell); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv, `<feature>.feature`, `<feature>.<tracker>.csv` / `project.<tracker>.csv`) |
+| `spec_changelog` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md`; `milestone` → only that milestone's features (`since` defaults to `all`; `write` → `.specs/RELEASE-NOTES.<milestone>.md`, `meta.changelogAt` untouched) |
 | `spec_add_track` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites); `remove: true` takes a track off without deleting files |
 | `spec_feature` | archive (reversible) · restore · rename (deps follow) · flow (`design-first` / `requirements-first`) · remove (destructive — needs `confirm: true`) |
 | `spec_roadmap` | Multi-feature roadmap (%, blocked, cycles, velocity + ETA forecasts, cross-feature overlaps, needs attention); `write: true` → `.specs/ROADMAP.md` (+ `html: true`), `lang` = chrome language |
 | `spec_depend` | Show / replace (`dependsOn`) / edit (`add`, `remove`) dependencies and `order` — existing features only, cycles rejected |
+| `spec_milestone` | Milestones (`meta.milestones`): `add` (name, date YYYY-MM-DD, existing active features — an existing name is updated) · `rm` · `list`; each judged against its features' ETAs → `on-track` · `at-risk` (`eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done`; ROADMAP.md shows a Milestones table and lists late / at-risk ones under Needs attention; rename / remove / archive (→ `archived`, restore puts it back) of a feature follow |
 | `spec_backlog` | Planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` | Brownfield inventory: stack, frameworks, routes (method + path + file:line), tests, entrypoints, env var names, migrations |
 | `spec_coverage` | Brownfield: share of code files named in any `_Implements:_` marker, per folder, + unmatched markers |
@@ -132,7 +133,9 @@ next-action|na <feature>                 finish <feature> [--write] [--include-b
 append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--makes-green T-01,…] [--expect-fail]
              [--size XS|S|M|L|XL] [--depends 3,5] [--story US1|shared] [--parallel] [--heading "…"]
 metrics [feature] [--write]              catalog [--write] · drift [feature] · upgrade [--apply]
-export [feature] [--md | --csv] [--write]    changelog [--since <ISO date|last|all>] [--write]
+export [feature] [--md | --csv | --gherkin | --tracker jira|linear] [--write]
+changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]
+milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]
 log <feature> [--max N] [-]              stop-check [--message "…" | -] [--agent <type>]
 add-track <feature> <track...> [--remove]
 feature <remove|archive|rename|restore> <name> [new] [--yes]     feature flow <name> <requirements-first|design-first>
@@ -177,7 +180,7 @@ All artifacts live in `.specs/` at the project root:
 ```
 project-root/
 └── .specs/
-    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, checks, approvalRoles, changelogAt, specVersion)
+    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, checks, approvalRoles, changelogAt, specVersion, milestones)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
     ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
     ├── RELEASE-NOTES.md          # generated release notes (spec_changelog write) — never hand-edit
@@ -261,7 +264,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (52 commands)
+## Command reference (53 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -298,8 +301,9 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/depend` | any | Show / set / edit feature dependencies and order, cycle-checked; CLI `--add` / `--rm` / `--clear` (uses `spec_depend`) |
 | `/backlog` | any | Add/remove planned features shown in ROADMAP.md (uses `spec_backlog`) |
 | `/spec-catalog` | any | Living catalog of every feature + AC, superseded ones marked → `.specs/SPECS.md` (uses `spec_catalog`) |
-| `/spec-export` | any | One offline, printable document of a feature or the project for stakeholders (uses `spec_export`) |
-| `/spec-changelog` | after | Release notes (Added · Changed · Fixed) from the specs → `.specs/RELEASE-NOTES.md` (uses `spec_changelog`) |
+| `/spec-export` | any | One offline, printable document of a feature or the project for stakeholders; `--csv` the traceability matrix, `--gherkin` BDD `.feature` files, `--tracker jira` · `--tracker linear` a tracker import CSV (uses `spec_export`) |
+| `/spec-changelog` | after | Release notes (Added · Changed · Fixed) from the specs → `.specs/RELEASE-NOTES.md`; `--milestone <name>` scopes them (uses `spec_changelog`) |
+| `/spec-milestone` | any | Milestones: a target date for a set of features vs their ETAs → on-track · at-risk · late · done (uses `spec_milestone`) |
 | `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
 | `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
 | `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
