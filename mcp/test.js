@@ -11298,10 +11298,11 @@ function endRun() {
     ok(/^deny\|/.test(decided(hNamed) || "") && /^ask\|/.test(decided(hFlag) || "") && /^ask\|/.test(decided(hEnv) || "") && silent(hNet) && Date.now() - t0 < 10000,
       "feature F2: the hook checks the project the call names (projectDir, --project) and the session's (cwd, CLAUDE_PROJECT_DIR) — the strictest level wins; a network projectDir is never read (got " +
       JSON.stringify([decided(hNamed), decided(hFlag), decided(hEnv), hNet.stdout]) + ")");
-    // Never blocks on its own trouble: malformed / empty / huge stdin, a wrong shape, another event, a broken roadmap.json → exit 0, silent.
+    // Never blocks on its own trouble: malformed / empty / huge stdin, a wrong shape, another event, a broken roadmap.json that names
+    // no guard level → exit 0, silent. (A broken one that still names "approvalGuard": "deny" fails CLOSED — review R1 below.)
     const pBroken = path.join(tmp, "proj-f2-broken");
     fs.mkdirSync(path.join(pBroken, ".specs"), { recursive: true });
-    fs.writeFileSync(path.join(pBroken, ".specs", "roadmap.json"), '{"meta": {"approvalGuard": "deny"');
+    fs.writeFileSync(path.join(pBroken, ".specs", "roadmap.json"), '{"meta": {"lang": "en"');
     const odd = ["{not json", "", "[1,2]", "null", "42", JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: "node cli/dev-spec.js approve a b", cwd: pAsk }),
       JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "spec_approve", tool_input: { name: "a", phase: "design" }, cwd: pAsk }),
       JSON.stringify(pre(pAsk, "Bash", { command: "npm test && git status" })), JSON.stringify(pre(pAsk, "Bash", { command: 12 })),
@@ -11340,6 +11341,187 @@ function endRun() {
       m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote),
       "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused (got " +
       JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote]) + ")");
+  }
+
+  // 1.14 feature (F2) — review fixes: the shell lexer reads the tool's shell (R3), heredoc bodies are data (R9), guard-down actions
+  // (R10), fail closed on a broken roadmap.json and on a shell write of it (R1).
+  {
+    const CLI_PATH = "/clone/cli/dev-spec.js";
+    const D = (tool, input, level, opts) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input }, level || "deny", Object.assign({ cli: CLI_PATH }, opts));
+    const sh = (command, tool, opts) => D(tool || "Bash", { command }, "deny", opts);
+    const kinds = (r) => (r.actions || []).map((a) => [a.kind, a.setting || "", a.feature || "", a.phase || a.through || (typeof a.to === "string" ? a.to : a.to === null ? "-" : ""), a.force ? "force" : ""].join(":")).join(",");
+    const BS = "\\", NL = "\n", CRLF = "\r\n";
+    const OK_APPROVE = "approve::login:requirements:";
+
+    // R3: Bash escapes / line continuations / ANSI-C quoting, PowerShell's backtick, cmd's caret; launchers with value options and
+    // bin runners; a substitution or a redirection before the program.
+    const r3Yes = {
+      Bash: ["node cli/dev-spec.js " + BS + NL + "  approve login requirements", "node cli/dev-spec.js " + BS + CRLF + "  approve login requirements",
+        "node cli/dev-spec.js a" + BS + "pprove login requirements", "node cli/dev-spec.js $'approve' login requirements",
+        "node cli/dev-spec.js $'" + BS + "x61pprove' login requirements", "node cli/dev" + BS + "-spec.js approve login requirements",
+        "node cli/d'e'v-spec.js approve login requirements", "sudo -u bob node cli/dev-spec.js approve login requirements",
+        "sudo --user=bob -- node cli/dev-spec.js approve login requirements", "doas -u bob node cli/dev-spec.js approve login requirements",
+        "exec -a x node cli/dev-spec.js approve login requirements", "node -r ./x.js cli/dev-spec.js approve login requirements",
+        "node --require ./x.js cli/dev-spec.js approve login requirements", "timeout -s KILL 30 node cli/dev-spec.js approve login requirements",
+        "npm exec -- dev-spec approve login requirements", "npm x dev-spec approve login requirements", "pnpm dlx dev-spec approve login requirements",
+        "yarn dlx dev-spec approve login requirements", "bunx dev-spec approve login requirements", "bun x dev-spec approve login requirements",
+        "deno run -A cli/dev-spec.js approve login requirements", "env -S 'node cli/dev-spec.js approve login requirements'",
+        "npx -c 'dev-spec approve login requirements'", 'echo "$(node cli/dev-spec.js approve login requirements)"',
+        "$(command -v node) cli/dev-spec.js approve login requirements", "$NODE cli/dev-spec.js approve login requirements",
+        ">log.txt node cli/dev-spec.js approve login requirements", 'cmd /c "node cli' + BS + 'dev-spec.js ap^prove login requirements"',
+        "node C:" + BS + "repo" + BS + "cli" + BS + "dev-spec.js approve login requirements", "n=${#x}; node cli/dev-spec.js approve login requirements"],
+      PowerShell: ["node cli/dev-spec.js ap`prove login requirements", "node cli/dev-spec.js `" + NL + "  approve login requirements",
+        "node cli/dev-spec.js `" + CRLF + "  approve login requirements", '& node "C:' + BS + "repo" + BS + "cli" + BS + 'dev-spec.js" approve login requirements',
+        '$m = @"' + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + '"@', "Start-Process node -ArgumentList 'cli/dev-spec.js approve login requirements'"],
+    };
+    const r3No = {
+      Bash: ["npm install dev-spec", "npm run approve", "yarn add dev-spec", "pnpm add dev-spec", "echo $'dev-spec approve login requirements'",
+        "# node cli/dev-spec.js approve login requirements" + NL + "echo hi", "echo x # ; node cli/dev-spec.js approve login requirements",
+        "git commit -m 'feat: `dev-spec approve x y` now asks'", "printf '%s" + BS + "n' 'dev-spec approve x y'", "sudo -u bob echo dev-spec approve x y"],
+      PowerShell: ["<# node cli/dev-spec.js approve login requirements #> echo hi", 'echo `"dev-spec approve x y`"', "git commit -m 'dev-spec approve x y'",
+        "# node cli/dev-spec.js approve login requirements", "git commit -m @'" + NL + "fix: it's `dev-spec approve x y` now" + NL + "'@"],
+    };
+    const r3Bad = Object.entries(r3Yes).flatMap(([tool, list]) => list.map((c) => [tool, c, kinds(sh(c, tool))])).filter(([, , k]) => k !== OK_APPROVE);
+    const r3NoBad = Object.entries(r3No).flatMap(([tool, list]) => list.filter((c) => sh(c, tool).decision !== "allow").map((c) => [tool, c]));
+    ok(r3Bad.length === 0 && r3NoBad.length === 0,
+      "feature F2 review R3: the lexer reads the tool's shell — Bash \\⏎ continuation, \\x escapes, $'…' (ANSI-C), PowerShell's backtick (escape and `⏎), cmd's ^; launchers with value options (sudo -u, doas -u, exec -a, node -r / --require, timeout -s) and bin runners (npm exec / x, pnpm dlx, yarn dlx, bunx, bun x, deno run, env -S, npx -c), \"$( )\", a substitution / variable / redirection before the program → caught; npm install / run, yarn add, echo $'…', # and <# #> comments, a quoted commit message, a PowerShell here-string → not (got " +
+      JSON.stringify([r3Bad, r3NoBad]) + ")");
+    const n64 = 64 * 1024;
+    const r3Times = ["$(".repeat(n64 / 2), BS.repeat(n64), "`".repeat(n64), "<<EOF" + NL.repeat(n64 / 2), "$'" + BS.repeat(n64), '"$('.repeat(n64 / 3), "${".repeat(n64 / 2),
+      "${$(".repeat(n64 / 4), "a<<b ".repeat(n64 / 5) + NL + "x", '@"' + NL + "$(".repeat(n64 / 2), "`$(".repeat(n64 / 3), ("x" + NL).repeat(n64 / 2)]
+      .map((c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; });
+    ok(r3Times.every((t) => t < 2000), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each < 2 s, got " + JSON.stringify(r3Times) + " ms)");
+
+    // R9: a heredoc body is data — skipped (<<'EOF', <<"EOF", <<\EOF, <<-EOF), read only for $( ) / `…` when unquoted, or as the
+    // script when fed to a shell (bash <<EOF, sh <<<); what follows the terminator is a command again.
+    const r9No = ["cat > docs.md <<'EOF'" + NL + "Run:" + NL + "dev-spec approve login requirements" + NL + "EOF",
+      "cat > docs.md <<'EOF'" + NL + "Run `dev-spec approve login requirements` to approve." + NL + "EOF",
+      "git commit -F - <<'EOF'" + NL + "feat: gate the approval" + NL + NL + "`dev-spec approve login requirements` asks" + NL + "EOF",
+      'git commit -F - <<"EOF"' + NL + "`dev-spec approve login requirements` asks" + NL + "EOF",
+      "cat <<" + BS + "EOF" + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + "EOF",
+      "cat <<-'EOF' > x.md" + NL + "\tnode cli/dev-spec.js approve login requirements" + NL + "\tEOF",
+      "cat <<'EOF' > x.md" + CRLF + "node cli/dev-spec.js approve login requirements" + CRLF + "EOF" + CRLF,
+      'git commit -m "$(cat <<\'EOF\'' + NL + "feat: dev-spec approve x y now asks" + NL + "`dev-spec approve login requirements`" + NL + "EOF" + NL + ')"',
+      "cat <<EOF > notes.md" + NL + "dev-spec approve login requirements" + NL + "EOF"];
+    const r9Yes = ["cat > docs.md <<'EOF'" + NL + "dev-spec approve a b" + NL + "EOF" + NL + "node cli/dev-spec.js approve login requirements",
+      "cat <<'A' <<'B'" + NL + "x" + NL + "A" + NL + "dev-spec approve a b" + NL + "B" + NL + "node cli/dev-spec.js approve login requirements",
+      "cat <<EOF" + NL + "$(node cli/dev-spec.js approve login requirements)" + NL + "EOF",
+      "cat <<EOF" + NL + "`node cli/dev-spec.js approve login requirements`" + NL + "EOF",
+      "bash <<'EOF'" + NL + "node cli/dev-spec.js approve login requirements" + NL + "EOF",
+      "sudo sh <<'EOF'" + NL + "cd /repo" + NL + "node cli/dev-spec.js approve login requirements" + NL + "EOF",
+      "sh <<< 'node cli/dev-spec.js approve login requirements'",
+      "((x = 1 << 2))" + NL + "node cli/dev-spec.js approve login requirements", "echo $((1 << 2))" + NL + "node cli/dev-spec.js approve login requirements",
+      'git commit -m "feat: `node cli/dev-spec.js approve login requirements`"'];
+    const r9NoBad = r9No.filter((c) => sh(c).decision !== "allow");
+    const r9Bad = r9Yes.map((c) => [c, kinds(sh(c))]).filter(([, k]) => k !== OK_APPROVE);
+    ok(r9NoBad.length === 0 && r9Bad.length === 0,
+      "feature F2 review R9: heredoc bodies are data (cat > docs.md <<'EOF', git commit -F - <<'EOF' with `dev-spec approve …` in backticks, <<\"EOF\", <<\\EOF, <<-EOF, CRLF, the -m \"$(cat <<'EOF' … EOF)\" form); an unquoted body's $( ) / `…`, a body fed to a shell (bash / sudo sh <<EOF, sh <<<), the command after the terminator and `…` inside \"…\" still run (got " +
+      JSON.stringify([r9NoBad, r9Bad]) + ")");
+
+    // R10: guard-down actions — weakening what the guard stands for, through spec_init and `dev-spec init` alike, compared with the
+    // project's meta (opts.meta — the hook passes roadmap.json's); raising or adding stays allowed; unknown meta → fail closed.
+    const meta = { evidence: "observed", approvalRoles: { design: ["tech", "security"], requirements: ["product"] }, checks: { test: "npm test" }, stopCheck: true, guard: "scope" };
+    const init = (input, m, lang) => D("mcp__plugin_dev-spec-driven_spec-driven__spec_init", input, "deny", { meta: m === undefined ? meta : m, lang });
+    const cliInit = (args, m, lang) => sh("node cli/dev-spec.js init " + args, "Bash", { meta: m === undefined ? meta : m, lang });
+    const r10Yes = [[init({ evidence: "reported" }), "guard-down:evidence::reported:"], [init({ evidence: " REPORTED " }), "guard-down:evidence::reported:"],
+      [init({ approvalRoles: {} }), "guard-down:roles:::"], [init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }), "guard-down:roles:::"],
+      [init({ checks: { test: "" } }), "guard-down:check::-:"], [init({ checks: { test: null } }), "guard-down:check::-:"], [init({ checks: { test: "exit 0" } }), "guard-down:check::exit 0:"],
+      [init({ stopCheck: false }), "guard-down:stopCheck::off:"], [init({ guard: "off" }), "guard-down:guard::off:"], [init({ guard: true }), "guard-down:guard::on:"],
+      [init({ guard: false }), "guard-down:guard::off:"], [init({ evidence: "reported" }, null), "guard-down:evidence::reported:"],
+      [cliInit("--evidence reported"), "guard-down:evidence::reported:"], [cliInit("--evidence=reported"), "guard-down:evidence::reported:"],
+      [cliInit("--roles none"), "guard-down:roles:::"], [cliInit("--roles requirements=product"), "guard-down:roles:::"],
+      [cliInit("--check test="), "guard-down:check::-:"], [cliInit("--check=test="), "guard-down:check::-:"], [cliInit("--check 'test=exit 0'"), "guard-down:check::exit 0:"],
+      [cliInit("--stop-check off"), "guard-down:stopCheck::off:"], [cliInit("--guard off"), "guard-down:guard::off:"], [cliInit("--stop-check=no", null), "guard-down:stopCheck::off:"],
+      [cliInit("--approval-guard ask --evidence reported"), "guard-down:approvalGuard::ask:,guard-down:evidence::reported:"]];
+    const r10No = [init({ evidence: "observed" }), init({ evidence: "reported" }, {}), init({ approvalRoles: { design: ["tech", "security", "legal"], requirements: ["product"], tasks: ["lead"] } }),
+      init({ checks: { lint: "eslint ." } }), init({ checks: { test: "npm test" } }), init({ checks: { lint: "" } }), init({ stopCheck: true }), init({ stopCheck: false }, { stopCheck: false }),
+      init({ guard: "scope" }), init({ tracks: ["tdd"] }), init({ approvalRoles: { bogus: ["x"] } }), init({ checks: { "bad name": "" } }),
+      cliInit("--evidence observed"), cliInit("--check lint=eslint"), cliInit("--stop-check on"), cliInit("--guard scope"), cliInit("--check test"),
+      cliInit('--roles "design=tech+security+legal,requirements=product"'), cliInit("--roles none", {}), cliInit("--evidence reported --help")];
+    const r10Bad = r10Yes.map(([r, want], i) => [i, kinds(r), want]).filter(([, got, want]) => got !== want);
+    const r10NoBad = r10No.map((r, i) => [i, r.decision, kinds(r)]).filter(([, d]) => d !== "allow");
+    ok(r10Bad.length === 0 && r10NoBad.length === 0,
+      "feature F2 review R10: guard-down actions (MCP spec_init and CLI init alike) — evidence observed → reported, roles cleared or a required role dropped, a project check removed or its command changed, the stop gate off, the edit guard lowered; unknown meta fails closed; raising / adding / a no-op / a refused value / --help → allowed (got " +
+      JSON.stringify([r10Bad, r10NoBad]) + ")");
+    const dEv = init({ evidence: "reported" });
+    const dRoles = init({ approvalRoles: { design: ["tech"], requirements: ["product"] } });
+    const dClear = cliInit("--roles none");
+    const dCheck = init({ checks: { test: "" } });
+    const dCheckCmd = init({ checks: { test: "rm -rf $HOME" } });
+    const dMulti = cliInit("--approval-guard off --evidence reported --stop-check off");
+    ok(dEv.command === '! node "/clone/cli/dev-spec.js" init --evidence reported' && /may not switch the evidence mode \(meta\.evidence\) back to reported/.test(dEv.reason) &&
+      /drop required approval roles \(design=security\) from meta\.approvalRoles/.test(dRoles.reason) && dRoles.command === '! node "/clone/cli/dev-spec.js" init --roles "requirements=product,design=tech"' &&
+      /clear the approval roles/.test(dClear.reason) && dClear.command === '! node "/clone/cli/dev-spec.js" init --roles none' &&
+      /remove the project check 'test' \(meta\.checks\)/.test(dCheck.reason) && dCheck.command === '! node "/clone/cli/dev-spec.js" init --check "test="' &&
+      /change the command of the project check 'test'/.test(dCheckCmd.reason) && dCheckCmd.command === '! node "/clone/cli/dev-spec.js" init --check "test=<command>"' &&
+      dMulti.command === '! node "/clone/cli/dev-spec.js" init --approval-guard off && node "/clone/cli/dev-spec.js" init --evidence reported && node "/clone/cli/dev-spec.js" init --stop-check off' &&
+      /lower the approval guard from deny to off; switch the evidence mode .*; turn off the end-of-turn evidence gate/.test(dMulti.reason) &&
+      /voltar a pôr o modo de evidência \(meta\.evidence\) em reported/.test(init({ evidence: "reported" }, meta, "pt").reason) &&
+      /retirar papéis de aprovação exigidos \(design=security\)/.test(init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }, meta, "pt-BR").reason) &&
+      /Peça ao usuário/.test(init({ stopCheck: false }, meta, "pt-BR").reason) && /volver a poner el modo de evidencia/.test(init({ evidence: "reported" }, meta, "es").reason) &&
+      /eliminar la verificación del proyecto 'test'/.test(cliInit("--check test=", meta, "es").reason) && /desligar o gate de evidência/.test(cliInit("--stop-check off", meta, "pt").reason),
+      "feature F2 review R10: a guard-down reason names what weakens (EN / PT / pt-BR / ES) and the human's command is the same init change (an unsafe check command → <command>); several at once are listed and chained (got " +
+      JSON.stringify([dEv.command, dRoles.command, dCheckCmd.command, dMulti.command]) + ")");
+
+    // R1: fail closed — a roadmap.json that exists but doesn't parse keeps the strictest level its text names; a shell command that
+    // writes, moves or deletes .specs/roadmap.json (or .specs/ itself) is a guard-down action (no command to hand over).
+    const r1Yes = [["Bash", "echo x >> .specs/roadmap.json"], ["Bash", "echo '{}' > ./.specs/roadmap.json"], ["Bash", "echo x > .specs" + BS + "roadmap.json"],
+      ["Bash", "echo x 1>>.specs/roadmap.json"], ["Bash", "echo x &> .specs/roadmap.json"], ["Bash", "sed -i 's/deny/off/' .specs/roadmap.json"],
+      ["Bash", "perl -pi -e 's/deny/off/' .specs/roadmap.json"], ["Bash", "echo '{}' | tee .specs/roadmap.json"],
+      ["Bash", "jq '.meta.approvalGuard=\"off\"' .specs/roadmap.json > t && mv t .specs/roadmap.json"], ["Bash", "cp /tmp/r.json .specs/roadmap.json"],
+      ["Bash", "cp /tmp/roadmap.json .specs/"], ["Bash", "rm .specs/roadmap.json"], ["Bash", "rm -rf .specs"], ["Bash", "mv .specs .specs-old"],
+      ["Bash", "truncate -s 0 .specs/roadmap.json"], ["Bash", "dd if=/dev/null of=.specs/roadmap.json"], ["Bash", 'cmd /c "echo x > .specs' + BS + 'roadmap.json"'],
+      ["Bash", "bash -c 'echo {} > .specs/roadmap.json'"], ["PowerShell", "Set-Content .specs/roadmap.json '{}'"],
+      ["PowerShell", "'{}' | Out-File -FilePath .specs" + BS + "roadmap.json"], ["PowerShell", "Add-Content -Path .specs/roadmap.json -Value x"],
+      ["PowerShell", "Copy-Item -Path x.json -Destination .specs/roadmap.json"], ["PowerShell", "Remove-Item -Recurse .specs"], ["PowerShell", "echo x > .specs/roadmap.json"]];
+    const r1No = [["Bash", "cat .specs/roadmap.json"], ["Bash", "jq . .specs/roadmap.json > /tmp/x"], ["Bash", "cp .specs/roadmap.json /tmp/backup.json"],
+      ["Bash", "git add .specs/roadmap.json"], ["Bash", "sed 's/a/b/' .specs/roadmap.json"], ["Bash", "mv notes.md .specs/"], ["Bash", "rm -rf .specs/checkout/.execution"],
+      ["Bash", "node cli/dev-spec.js status > .specs/status.txt"], ["Bash", "ls .specs"], ["Bash", "grep -n approvalGuard .specs/roadmap.json"],
+      ["PowerShell", "Get-Content .specs/roadmap.json"], ["PowerShell", "Copy-Item .specs/roadmap.json backup.json"]];
+    const r1Bad = r1Yes.map(([t, c]) => [t, c, kinds(sh(c, t))]).filter(([, , k]) => k !== "guard-down:roadmap:::");
+    const r1NoBad = r1No.filter(([t, c]) => sh(c, t).decision !== "allow");
+    const dW = sh("echo x >> .specs/roadmap.json"), dWpt = sh("rm .specs/roadmap.json", "Bash", { lang: "pt" }), aW = D("Bash", { command: "rm -rf .specs" }, "ask");
+    ok(r1Bad.length === 0 && r1NoBad.length === 0 && dW.command === null && /may not change \.specs\/roadmap\.json from the shell — write, move or delete it/.test(dW.reason) &&
+      /Stop and ask the user to make that change themselves/.test(dW.reason) && !/null/.test(dW.reason + dW.userNote) && /Make that change yourself/.test(dW.userNote) &&
+      /alterar \.specs\/roadmap\.json a partir da shell/.test(dWpt.reason) && /faça ele próprio essa alteração/.test(dWpt.reason) && aW.decision === "ask" && aW.command === null,
+      "feature F2 review R1: a shell write of .specs/roadmap.json (> >> &> 1>>, tee, sed / perl -i, cp / mv / Copy-Item onto it, rm / truncate / dd / Set-Content / Add-Content / Out-File, deleting or moving .specs/ away, inside cmd /c or bash -c) is a guard-down action with no command to hand over (the user makes the change); reading it (cat, jq, grep, cp FROM it, git add) is not (got " +
+      JSON.stringify([r1Bad, r1NoBad, dW.reason.slice(0, 120)]) + ")");
+    // The level: engine and hook read a broken roadmap.json's raw text (the strictest level it names); no level named → off.
+    const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
+    const runHook = (input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 15000 });
+    const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+    const decision = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.status === 0 && r.stdout === "" ? "silent" : "?"; } };
+    const pB = path.join(tmp, "proj-f2-r1-broken"), pB2 = path.join(tmp, "proj-f2-r1-noguard"), pB3 = path.join(tmp, "proj-f2-r1-two"), pOffW = path.join(tmp, "proj-f2-r1-off");
+    S.initProject(pB, ["core"], "en", { approvalGuard: "deny" });
+    fs.appendFileSync(path.join(pB, ".specs", "roadmap.json"), "x"); // what `echo x >> .specs/roadmap.json` does
+    fs.mkdirSync(path.join(pB2, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pB2, ".specs", "roadmap.json"), '{"meta": {"lang": "en"}');
+    fs.mkdirSync(path.join(pB3, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pB3, ".specs", "roadmap.json"), '{"meta": {"approvalGuard": "ask"}}\n{"meta": {"approvalGuard" : " DENY "}}');
+    S.initProject(pOffW, ["core"], "en");
+    const hB = runHook(pre(pB, "mcp__spec-driven__spec_approve", { name: "x", phase: "design" }));
+    const hBinit = runHook(pre(pB, "mcp__spec-driven__spec_init", { evidence: "reported" })); // broken → meta unknown → fail closed
+    const hB2 = runHook(pre(pB2, "mcp__spec-driven__spec_approve", { name: "x", phase: "design" }));
+    const hB3 = runHook(pre(pB3, "Bash", { command: "node cli/dev-spec.js approve x design" }));
+    const hOffW = runHook(pre(pOffW, "Bash", { command: "echo x >> .specs/roadmap.json" }));
+    ok(S.approvalGuardLevel(pB) === "deny" && S.approvalGuardLevel(pB2) === "off" && S.approvalGuardLevel(pB3) === "deny" &&
+      decision(hB) === "deny" && decision(hBinit) === "deny" && decision(hB2) === "silent" && decision(hB3) === "deny" && decision(hOffW) === "silent",
+      "feature F2 review R1: fail closed — a roadmap.json broken by an appended byte keeps its approvalGuard deny (engine approvalGuardLevel and the hook; a spec_init there is judged with unknown meta); the strictest level a broken file names wins; a broken file naming none, or a guard-off project, stays silent (got " +
+      JSON.stringify([S.approvalGuardLevel(pB), S.approvalGuardLevel(pB2), S.approvalGuardLevel(pB3), decision(hB), decision(hBinit), decision(hB2), decision(hB3), decision(hOffW)]) + ")");
+    // The hook end to end: the project's meta decides a spec_init / init change (lowering → deny, raising → silent); a shell write of
+    // roadmap.json is denied with the user's line naming no command.
+    const pM = path.join(tmp, "proj-f2-r10-hook");
+    S.initProject(pM, ["core"], "en", { approvalGuard: "deny", evidence: "observed", checks: { test: "npm test" }, approvalRoles: { design: ["tech"] } });
+    const hM = [runHook(pre(pM, "mcp__spec-driven__spec_init", { evidence: "reported" })), runHook(pre(pM, "mcp__spec-driven__spec_init", { evidence: "observed" })),
+      runHook(pre(pM, "Bash", { command: 'node cli/dev-spec.js init --check "test="' })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js init --check lint=eslint" })),
+      runHook(pre(pM, "PowerShell", { command: "node cli/dev-spec.js init --roles none" })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js init --roles design=tech+security" })),
+      runHook(pre(pM, "Bash", { command: "echo x >> .specs/roadmap.json" })), runHook(pre(pM, "Bash", { command: "node cli/dev-spec.js " + BS + NL + " approve x design" }))];
+    let wOut = {};
+    try { wOut = JSON.parse(hM[6].stdout); } catch { /* checked below */ }
+    ok(JSON.stringify(hM.map(decision)) === '["deny","silent","deny","silent","deny","silent","deny","deny"]' && /refused an agent's request to change \.specs\/roadmap\.json/.test(wOut.systemMessage || "") &&
+      !/To approve it yourself/.test(wOut.systemMessage || ""),
+      "feature F2 review R10/R1: the hook passes the project's meta — spec_init {evidence: reported}, init --check test=, init --roles none are denied where they lower it, their raising twins pass; a Bash write of roadmap.json and a \\⏎-continued approve are denied (got " +
+      JSON.stringify([hM.map(decision), wOut.systemMessage]) + ")");
   }
 
   // 1.14 feature (F3) — task dependencies and waves.
