@@ -99,6 +99,14 @@ function ok(cond, label) {
     console.log("  FAIL - " + label);
   }
 }
+// 1.15: only a SHIPPED feature's _Supersedes:_ retires an AC in the catalog / export / matrix (a draft's is "to be
+// superseded"). The tests exercising the marker's reading mark the declaring feature shipped: an execution sign-off.
+function shipFeature(dir, slug, at) {
+  const sp = path.join(dir, ".specs", slug, ".state.json");
+  const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+  st.approvals = { ...(st.approvals || {}), execution: { at: at || "2026-09-01T00:00:00.000Z", by: "test" } };
+  fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+}
 
 const child = spawn(process.execPath, [SERVER], {
   env: { ...process.env, SPEC_PROJECT_DIR: tmp },
@@ -185,7 +193,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 34, "tools/list returns 34 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 35, "tools/list returns 35 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -4393,7 +4401,9 @@ function endRun() {
     ok(ap10.ok === false && /US-1\.AC-3/.test(ap10.error) && ms10.split("## Acceptance criteria\n")[1].split("\n\n")[0].split("\n").length === 2,
       "a superseded ID is another feature's AC: append_tasks refuses it as phantom, finish lists only this feature's 2 criteria");
 
-    // spec_catalog: the structure + markdown, superseded ACs struck through with the ID that replaces them.
+    // spec_catalog: the structure + markdown, superseded ACs struck through with the ID that replaces them — billing-v2
+    // SHIPPED (1.15: a draft's _Supersedes:_ is only "to be superseded"; see the full review 1.15 block).
+    shipFeature(w10, "billing-v2");
     const cat = await call10("spec_catalog", { projectDir: w10 });
     const cf = (n) => cat.p.features.find((f) => f.feature === n);
     const bAcs = cf("billing").acs;
@@ -4537,6 +4547,8 @@ function endRun() {
     req10(w10r, "account-lockout", "1. **US-1.AC-1** — IF five failed attempts occur THEN THE SYSTEM SHALL lock the account for 15 minutes _Supersedes: user-login/US-1.AC-3_\n\n" +
       "<!-- e.g. _Supersedes: user-login/US-1.AC-2_ -->\n");
     req10(w10r, "old-lockout", "1. **US-1.AC-1** — WHEN q THE SYSTEM SHALL r _Supersedes: `user-login/US-1.AC-2`, User Login/US-1.AC-1_\n");
+    shipFeature(w10r, "account-lockout"); // 1.15: shipped declarers retire (old-lockout shipped, then archived to declutter)
+    shipFeature(w10r, "old-lockout");
     S.manageFeature(w10r, "archive", "old-lockout");
     S.setDependency(w10r, "billing", ["auth"]);
     S.manageFeature(w10r, "archive", "auth");
@@ -4590,6 +4602,8 @@ function endRun() {
       trO10.totalAcs === 1 && trO10.supersedes.length === 0 && trO10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by).join() === "unterminated:billing/US-1.AC-7 and more:US-1.AC-1" &&
       /never closed/.test(S.supersedesWarnings(trO10, "en")[0]) && /nunca é fechado/.test(S.supersedesWarnings(trO10, "pt")[0]),
       "_Supersedes:_ followed by punctuation resolves (no spurious gap); a table-row marker's `by` is its row's AC; an unterminated marker is an `unterminated` warning and its ID is never an own AC");
+    shipFeature(w10x, "paren"); // 1.15: shipped declarers retire the targets
+    shipFeature(w10x, "table-row");
     const catX = S.catalog(w10x);
     const xAcs = (n) => catX.features.find((f) => f.feature === n).acs;
     ok(xAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2" &&
@@ -4615,6 +4629,8 @@ function endRun() {
       trW10.supersedes.map((s) => s.by + ">" + s.ref + "@" + s.line).join() === "US-1.AC-1>billing/US-1.AC-2@10,US-1.AC-1>billing/US-1.AC-3@10,US-1.AC-1>billing/US-1.AC-4@10" &&
       trOW10.totalAcs === 2 && trOW10.supersedes.length === 0 && trOW10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by + "@" + p.line).join() === "unterminated:billing/US-1.AC-2, billing/US-1.AC-3:US-1.AC-1@10",
       "a _Supersedes:_ marker wrapped onto its next line resolves whole (no gap, no phantom, doctor traceability passes); a wrapped marker that never closes is ONE `unterminated` warning and its continuation ID is never an own AC");
+    shipFeature(w10w, "wrapped"); // 1.15: shipped declarers retire the targets
+    shipFeature(w10w, "bold");
     const catW10 = S.catalog(w10w);
     const wAcs = (n) => catW10.features.find((f) => f.feature === n).acs;
     ok(wAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:bold/US-1.AC-1,US-1.AC-2:wrapped/US-1.AC-1,US-1.AC-3:wrapped/US-1.AC-1,US-1.AC-4:wrapped/US-1.AC-1,US-1.AC-5:bold/US-1.AC-2" &&
@@ -6566,9 +6582,9 @@ function endRun() {
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
     "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 51 && ["spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 52 && ["spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "51 commands incl. the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "52 commands incl. the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -7660,6 +7676,7 @@ function endRun() {
     const xs = S.createFeature(xp, "SSO", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(xs.dir, "requirements.md"), "# Feature: SSO\n\n## Summary\nSign in with the company IdP.\n\n### US-1 (P1): IdP sign-in\n" +
       "1. **US-1.AC-1** — WHEN the shopper is declined by the IdP THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+    shipFeature(xp, "sso"); // 1.15: a shipped declarer retires checkout/US-1.AC-2 (a draft's would read "to be superseded")
 
     const h = S.exportSpecs(xp, { name: "checkout" });
     const html = h.content || "";
@@ -10149,10 +10166,14 @@ function endRun() {
       pwsh: S.resolveRunShell("pwsh", { platform: "win32" }), linuxBash: S.resolveRunShell("bash", { platform: "linux" }), linuxDef: S.resolveRunShell("", { platform: "linux" }),
     };
     ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
-      r9.sys32Path.error === "wsl-bash" && r9.appsPath.error === "wsl-bash" && r9.wslExe.error === "wsl-bash" &&
+      // 1.15: an EXPLICIT path to WSL's launcher is the user's choice — used as given, flagged wsl (1.14 refused it)
+      r9.sys32Path.shell === wp(sys32, "bash.exe") && r9.sys32Path.wsl === true && r9.appsPath.wsl === true && !r9.sys32Path.error &&
+      // wsl.exe is no shell (it rejects -c): refused, named or bare; a quoted path loses its quotes
+      r9.wslExe.error === "wsl-exe" && S.resolveRunShell("wsl", { platform: "win32" }).error === "wsl-exe" &&
+      S.resolveRunShell('"' + wp(sys32, "bash.exe") + '"', { platform: "win32" }).shell === wp(sys32, "bash.exe") &&
       r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
       r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
-      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), WSL's System32 / WindowsApps launcher is refused (no-git-bash / wsl-bash), cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
+      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), never WSL's launcher (only WSL there → no-git-bash); an explicit WSL path is used as given (wsl: true); cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
       JSON.stringify(r9).slice(0, 500) + ")");
   }
 
@@ -10827,8 +10848,8 @@ function endRun() {
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 55 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 51 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    ok(d4Files.length === 56 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 52 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
@@ -10856,8 +10877,8 @@ function endRun() {
     const d7Readme = dRead("examples", "README.md");
     ok(S.specVersionStatus(d7).behind === false && d7States.every((st) => Array.isArray(st.tracks) && st.tracks.includes("core")) &&
       fs.readFileSync(path.join(d7, ".specs", ".gitignore"), "utf8") === fs.readFileSync(path.join(d7Init, ".specs", ".gitignore"), "utf8") &&
-      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && /^# Example — a fully worked spec \(1\.14 shape\)/.test(d7Readme) && /0\/9 tasks done/.test(d7Readme),
-      "full review D7: the demo is 1.14-shaped (no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
+      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && /^# Example — a fully worked spec \(1\.15 shape\)/.test(d7Readme) && /0\/9 tasks done/.test(d7Readme),
+      "full review D7: the demo is current-shaped (1.15 — no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
       JSON.stringify([S.specVersionStatus(d7), d7Red.ok, d7Rg && d7Rg.status]) + ")");
     // The +tdd reference example: an _Expect: fail_ task names every T-ID the other tasks make green; the combined example
     // no longer claims "all four tracks" (there are six).
@@ -11759,6 +11780,7 @@ function endRun() {
     fs.appendFileSync(path.join(rf.dir, "requirements.md"), "- **NFR-2** — THE SYSTEM SHALL log every charge.\n"); // after the approval
     const sso = S.createFeature(rp, "SSO", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(sso.dir, "requirements.md"), "# Feature: SSO\n\n### US-1 (P1): IdP\n1. **US-1.AC-1** — WHEN the IdP declines THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+    shipFeature(rp, "sso"); // 1.15: a shipped declarer retires the AC (a draft's is supersedePending)
 
     const mx = S.traceMatrix(rp, "checkout", { code: true });
     const row = (id) => mx.rows.find((r) => r.id === id) || {};
@@ -11772,7 +11794,7 @@ function endRun() {
     ok(st("US-1.AC-1") === "verified" && st("US-1.AC-2") === "implemented" && st("US-1.AC-3") === "untraced:no-task+no-test" && st("US-1.AC-4") === "untraced:no-test" &&
       st("US-2.AC-1") === "verified" && st("EC-1") === "implemented" && st("NFR-1") === "untraced:no-coverage" && st("NFR-2") === "untraced:no-coverage" &&
       st("SC-001") === "planned" && st("SC-002") === "untraced:no-coverage" &&
-      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1 }) &&
+      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1, supersedePending: 0 }) &&
       JSON.stringify(S.RTM_STATUSES) === JSON.stringify(["verified", "implemented", "planned", "untraced"]),
       "feature F5: statuses — verified (every linked task done + verified; a task with no _Verify:_ counts), implemented (a note on a runnable _Verify:_), untraced with the trace gap (no-task / no-test / no-coverage — a fenced example citing US-1.AC-3 is no task), planned (SC-001 via T-03, its task open) (got " + mx.rows.map((r) => r.id + "=" + st(r.id)).join(" ") + ")");
     const t1 = row("US-1.AC-1").tasks[0] || {};
@@ -11999,6 +12021,465 @@ function endRun() {
     const sec11 = S.traceMatrix(r11, "tpl").rows.filter((r) => r.kind !== "ac");
     ok(sec11.length > 0 && sec11.every((r) => r.template === true && r.gaps.length === 0 && r.status !== "untraced") && S.traceCheck(r11, "tpl").warnings.length === 0,
       "feature review R11: template EC/NFR/SC rows carry no gap and are not untraced, as trace_check says nothing about them (got " + JSON.stringify(sec11.map((r) => r.id + ":" + r.status)) + ")");
+  }
+
+  // 1.15 feature (F4) — project-defined tracks (track packs in .specs/tracks/<name>/).
+  {
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const js = (x) => JSON.stringify(x);
+    const rd = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "");
+    const packDir = (proj, n) => path.join(proj, ".specs", "tracks", n);
+    const writePack = (proj, n, json, frags = {}) => {
+      const d = packDir(proj, n);
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, "track.json"), typeof json === "string" ? json : JSON.stringify(json, null, 2));
+      for (const [f, text] of Object.entries(frags)) { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), text); }
+      return d;
+    };
+    const A11Y_JSON = `// the team's accessibility track — comments are allowed
+{
+  "name": "a11y",
+  "marker": "A11Y",
+  "title": { "en": "Accessibility", "pt": "Acessibilidade", "es": "Accesibilidad" },
+  /* strong: one turns the track on */
+  "signals": { "strong": ["accessibility", "screen reader", "wcag 2.1"], "weak": ["keyboard", "contrast"], "context": ["focus"] },
+  "sections": [
+    { "name": { "en": "Keyboard Navigation", "pt": "Navegação por Teclado", "es": "Navegación por Teclado" }, "syn": ["keyboard access"],
+      "guidance": { "en": "Tab order, focus traps, shortcuts.", "pt": "Ordem de tabulação, armadilhas de foco, atalhos." } },
+    { "name": { "en": "Screen Reader Support", "pt": "Leitor de Ecrã", "es": "Lector de Pantalla" }, "guidance": "Landmarks, labels, live regions." },
+    { "name": "Contrast", "loose": ["colours"] }
+  ],
+  "steering": "accessibility.md"
+}
+`;
+    const A11Y_FRAGS = {
+      "requirements.md": "<!-- the criteria every +a11y feature starts with -->\n- WHEN a user navigates with the keyboard only THE SYSTEM SHALL make every control reachable and operable\n- THE SYSTEM SHALL keep a text contrast ratio of at least [4.5:1] on every screen\n",
+      "tasks.md": "- [ ] Keyboard walk-through of {{name}}\n  - _Requirements: {{ac1}}_\n  - _Makes green: {{t1}}_\n- [ ] Contrast audit\n  - _Requirements: {{ac2}}_\n  - _Makes green: {{t2}}_\n",
+      "test-plan.md": "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n| T-00 | e2e | example | keyboard-only walk-through reaches every control | {{ac1}} | `tests/e2e/a11y-keyboard.spec.ts` |\n| T-00 | unit | property | every text / background pair keeps its contrast ratio | {{ac2}} | `tests/unit/contrast.test.ts` |\n",
+      "checklist.md": "- axe-core reports no violation on the feature's pages\n",
+      "steering.md": "# Accessibility\n\n- WCAG 2.1 AA is the floor.\n",
+      "pt/requirements.md": "- QUANDO um utilizador navega só com o teclado O SISTEMA DEVE tornar todos os controlos alcançáveis\n- O SISTEMA DEVE manter um contraste de texto de pelo menos [4,5:1] em todos os ecrãs\n",
+    };
+    const tp = path.join(tmp, "proj-f4-tracks");
+    S.initProject(tp, ["core"], "en");
+    writePack(tp, "a11y", A11Y_JSON, A11Y_FRAGS);
+
+    // spec_tracks list / check (MCP) — the built-in tracks and the pack, valid; check passes.
+    const lst = payload(await call("spec_tracks", { projectDir: tp }));
+    const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
+    const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+      a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
+      "feature F4: spec_tracks list shows the six built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
+
+    // Classification: spec_classify with the project picks +a11y from its signals (a strong keyword); without it, never.
+    const cl = payload(await call("spec_classify", { description: "Make the settings page usable with a screen reader and the keyboard", projectDir: tp }));
+    const clNo = S.classify("Make the settings page usable with a screen reader and the keyboard");
+    const clWcag = S.classify("Meets WCAG 2.1 AA", { projectDir: tp }), clNot = S.classify("Meets WCAG 2x1 AA", { projectDir: tp });
+    ok(cl.tracks.includes("a11y") && cl.signals.a11y.includes("screen reader") && /\+a11y: ON/.test(cl.reasoning) && !clNo.tracks.includes("a11y") &&
+      clWcag.tracks.includes("a11y") && !clNot.tracks.includes("a11y"),
+      "feature F4: spec_classify reads the pack's signals as literal words (\"wcag 2.1\" — the dot is no wildcard: \"wcag 2x1\" stays off); without the project no pack (got " + js(cl.tracks) + " " + js(clWcag.tracks) + "/" + js(clNot.tracks) + ")");
+    // Linear on adversarial text, with the pack's keywords in play.
+    const t0 = Date.now();
+    S.classify(("a".repeat(5000) + "(a+)+$ wcag 2. screen-readerx ").repeat(40), { projectDir: tp });
+    ok(Date.now() - t0 < 5000, "feature F4: classify with a pack stays linear on a 200 KB adversarial text (" + (Date.now() - t0) + " ms)");
+
+    // spec_create +tdd +a11y: criteria under #### [A11Y] (after the US-1 ones, before US-2), design sections with the TODO sentinel,
+    // the task block, the test rows, the checklist item and the steering file.
+    const cr = payload(await call("spec_create", { name: "Settings", tracks: ["tdd,a11y"], summary: "Settings page", lang: "en", projectDir: tp }));
+    const sd = path.join(tp, ".specs", "settings");
+    const req = rd(path.join(sd, "requirements.md")), des = rd(path.join(sd, "design.md")), tsk = rd(path.join(sd, "tasks.md"));
+    const plan = rd(path.join(sd, "test-plan.md")), chl = rd(path.join(sd, "checklist.md")), cls = rd(path.join(sd, "classification.md"));
+    const steer = rd(path.join(tp, ".specs", "steering", "accessibility.md"));
+    ok(cr.ok && cr.tracks.join() === "core,tdd,a11y" && /#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user navigates with the keyboard only/.test(req) &&
+      /6\. \*\*US-1\.AC-6\*\* — THE SYSTEM SHALL keep a text contrast ratio/.test(req) && req.indexOf("[A11Y]") < req.indexOf("### US-2") &&
+      /## \[A11Y\] Keyboard Navigation\n> \*\*TODO\*\* — replace with real values \(remove this line when done\)\.\nTab order, focus traps, shortcuts\./.test(des) &&
+      /## \[A11Y\] Screen Reader Support\n> \*\*TODO\*\*/.test(des) && /## \[A11Y\] Contrast\n> \*\*TODO\*\*/.test(des) &&
+      /## Story US-1 — \[A11Y\] Accessibility\n- \[ \] 7\. \[US1\] Keyboard walk-through of Settings\n  - _Requirements: US-1\.AC-5_\n  - _Makes green: T-06_\n- \[ \] 8\. \[US1\] Contrast audit\n  - _Requirements: US-1\.AC-6_\n  - _Makes green: T-07_/.test(tsk) &&
+      /## \[A11Y\] Traceability Matrix[\s\S]*\| T-06 \| e2e \| example \| keyboard-only walk-through reaches every control \| US-1\.AC-5 \|[\s\S]*\| T-07 \| unit \| property \|/.test(plan) &&
+      /\| T-05 \| integration \| example \| \[behavior\] \| US-2\.AC-1 \|/.test(plan) && /- \[ \] A11Y: axe-core reports no violation/.test(chl) &&
+      /## Active Tracks\ncore \+tdd \+a11y/.test(cls) && /\*\*\+a11y:\*\*/.test(cls) && /WCAG 2\.1 AA is the floor/.test(steer) && cr.created.includes("steering/accessibility.md"),
+      "feature F4: spec_create +tdd +a11y scaffolds the [A11Y] criteria (US-1.AC-5/6, before US-2), the 3 design sections with the > **TODO** sentinel, the task block (Requirements + Makes green), the T-06/T-07 rows after the template's, the checklist item, classification and the steering file (got " + js(cr.created) + ")");
+    const st = S.statusFeature(tp, "settings");
+    ok(st.tracks === "core +tdd +a11y" && st.packSections && st.packSections.a11y.marker === "[A11Y]" && st.packSections.a11y.sections.every((s) => s.present && !s.filled),
+      "feature F4: spec_status reports the pack's sections (present, not filled) under packSections (got " + js(st.packSections) + ")");
+
+    // Doctor fails a11y-sections until every section is filled; the design approval is refused on it; [A11Y] is never a placeholder.
+    const d1 = S.specDoctor(tp, "settings");
+    const sec1 = d1.checks.find((c) => c.id === "a11y-sections");
+    const ph1 = [...S.featurePlaceholders(tp, "settings", "requirements.md").items, ...S.featurePlaceholders(tp, "settings", "design.md").items, ...S.featurePlaceholders(tp, "settings", "tasks.md").items].map((x) => x.text);
+    const ap1 = S.approvePhase(tp, "settings", "design", "t");
+    ok(sec1 && sec1.status === "fail" && /Keyboard Navigation/.test(sec1.detail) && /Contrast/.test(sec1.detail) && !ph1.some((x) => /A11Y/.test(x)) && ph1.includes("[4.5:1]") &&
+      ap1.ok === false && (ap1.failing || []).includes("a11y-sections"),
+      "feature F4: doctor fails a11y-sections (every section unfilled), the design approval is refused on it, the pack's [4.5:1] slot is a placeholder and [A11Y] never is (got " + js(sec1) + " / " + js(ap1.failing) + ")");
+    fs.writeFileSync(path.join(sd, "design.md"), des.replace(/(## \[A11Y\] Keyboard Navigation\n)> \*\*TODO\*\*[^\n]*\n/, "$1Tab through every control; no focus trap.\n")
+      .replace(/(## \[A11Y\] Screen Reader Support\n)> \*\*TODO\*\*[^\n]*\n/, "$1Landmarks and labelled inputs.\n").replace(/(## \[A11Y\] Contrast\n)> \*\*TODO\*\*[^\n]*\n/, "$1Tokens checked on every local run.\n"));
+    const d2 = S.specDoctor(tp, "settings");
+    const ap2 = S.approvePhase(tp, "settings", "design", "t");
+    ok(d2.checks.find((c) => c.id === "a11y-sections").status === "pass" && !(ap2.failing || []).includes("a11y-sections"),
+      "feature F4: once every [A11Y] section is filled, a11y-sections passes and the design gate no longer names it (got " + js(ap2.failing) + ")");
+
+    // trace_check sees the pack's criteria: covered by its tasks and rows; without its tasks they are uncovered.
+    const tr1 = S.traceCheck(tp, "settings");
+    fs.writeFileSync(path.join(sd, "tasks.md"), tsk.replace(/## Story US-1 — \[A11Y\][\s\S]*$/, ""));
+    const tr2 = S.traceCheck(tp, "settings");
+    fs.writeFileSync(path.join(sd, "tasks.md"), tsk);
+    ok(tr1.ok && tr1.totalAcs === 7 && !tr1.uncoveredByTasks.length && !tr1.uncoveredByTests.length && !tr1.testsNotMappedToTasks.length &&
+      js(tr2.uncoveredByTasks) === js(["US-1.AC-5", "US-1.AC-6"]),
+      "feature F4: trace_check counts the [A11Y] criteria (7 ACs, all tasked and planned); without the pack's tasks US-1.AC-5/6 are uncovered (got " + js(tr2.uncoveredByTasks) + ")");
+
+    // The brief of a pack task carries the pack's design sections; ROADMAP.md names the unfilled ones of another feature.
+    const br = S.taskBrief(tp, "settings", 7, { includeBrief: true });
+    ok(br.ok && /\[A11Y\] Keyboard Navigation/.test(br.brief || br.markdown || js(br)), "feature F4: a pack task's brief quotes the [A11Y] design sections (trackMarks)");
+
+    // add_track / remove on an existing core feature: sections, task block (the criterion slot), steering; remove makes them inactive.
+    S.createFeature(tp, "Profile", ["core"], "Profile page", undefined, "en");
+    const pd = path.join(tp, ".specs", "profile");
+    const at = payload(await call("spec_add_track", { name: "profile", track: "+a11y", projectDir: tp }));
+    const pdes = rd(path.join(pd, "design.md")), ptsk = rd(path.join(pd, "tasks.md"));
+    const pdoc = S.specDoctor(tp, "profile");
+    ok(at.ok && at.addedTracks.join() === "a11y" && /## \[A11Y\] Keyboard Navigation\n> \*\*TODO\*\*/.test(pdes) &&
+      /## Story US-1 — \[A11Y\] Accessibility\n- \[ \] \d+\. \[US1\] Keyboard walk-through of profile[\s\S]*_Requirements: \[the \+a11y criterion this task proves\]_/.test(ptsk) &&
+      pdoc.checks.find((c) => c.id === "a11y-sections").status === "fail" && JSON.parse(rd(path.join(pd, ".state.json"))).tracks.includes("a11y"),
+      "feature F4: spec_add_track +a11y appends the [A11Y] design sections and the task block (citing the track's criterion slot) and saves the track; doctor fails a11y-sections (got " + js(at.added) + ")");
+    const rm = payload(await call("spec_add_track", { name: "profile", track: "a11y", remove: true, projectDir: tp }));
+    const pdoc2 = S.specDoctor(tp, "profile");
+    const rmPh = pdoc2.checks.find((c) => c.id === "placeholders");
+    ok(rm.ok && rm.removedTracks.join() === "a11y" && rm.inactive.some((x) => /\[A11Y\]/.test(x)) && rm.inactive.some((x) => /tasks\.md \(Story US-1 — \[A11Y\]/.test(x)) &&
+      !pdoc2.checks.some((c) => c.id === "a11y-sections") && !/\+a11y criterion/.test(rmPh.detail) && rd(path.join(pd, "design.md")) === pdes,
+      "feature F4: remove +a11y is non-destructive — the files stay, the [A11Y] sections / task block are listed inactive and doctor stops requiring them (got " + js(rm.inactive) + ")");
+
+    // PT / ES scaffolds: the pack's title, section names and a pt/ fragment in the feature's language; doctor finds the sections.
+    const crPt = S.createFeature(tp, "Definições", ["a11y"], "", undefined, "pt");
+    const reqPt = rd(path.join(crPt.dir, "requirements.md")), desPt = rd(path.join(crPt.dir, "design.md")), tskPt = rd(path.join(crPt.dir, "tasks.md"));
+    const crEs = S.createFeature(tp, "Ajustes", ["a11y"], "", undefined, "es");
+    const reqEs = rd(path.join(crEs.dir, "requirements.md")), desEs = rd(path.join(crEs.dir, "design.md")), tskEs = rd(path.join(crEs.dir, "tasks.md"));
+    const crBr = S.createFeature(tp, "Configurações", ["a11y"], "", undefined, "pt-BR");
+    const reqBr = rd(path.join(crBr.dir, "requirements.md"));
+    const dPt = S.specDoctor(tp, crPt.slug).checks.find((c) => c.id === "a11y-sections"), dEs = S.specDoctor(tp, crEs.slug).checks.find((c) => c.id === "a11y-sections");
+    ok(/#### \[A11Y\] Acessibilidade — Critérios de Aceitação \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — QUANDO um utilizador navega só com o teclado/.test(reqPt) &&
+      /## \[A11Y\] Navegação por Teclado\n> \*\*TODO\*\* — substituir pelos valores reais/.test(desPt) && /## \[A11Y\] Leitor de Ecrã/.test(desPt) && /## História US-1 — \[A11Y\] Acessibilidade/.test(tskPt) &&
+      /#### \[A11Y\] Accesibilidad — Criterios de Aceptación \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user navigates/.test(reqEs) && /## \[A11Y\] Navegación por Teclado\n> \*\*TODO\*\* — reemplazar con valores reales/.test(desEs) &&
+      /## Historia US-1 — \[A11Y\] Accesibilidad/.test(tskEs) && /QUANDO um utilizador navega só com o teclado|QUANDO um usuário navega só com o teclado/.test(reqBr) &&
+      dPt && dPt.status === "fail" && !/missing|em falta/.test(dPt.detail) && dEs && dEs.status === "fail",
+      "feature F4: PT / ES / pt-BR scaffolds — the pack's title and section names in the feature's language, pt/requirements.md for pt and pt-BR (the root one for es), localized TODO line and task heading; doctor finds the localized sections (got " + js(dPt && dPt.detail) + ")");
+
+    // A pack the project loses: the saved track stays, inactive (its sections and tasks are no gate, no placeholder), doctor warns.
+    const tq = path.join(tmp, "proj-f4-gone");
+    S.initProject(tq, ["core"], "en");
+    writePack(tq, "a11y", A11Y_JSON, A11Y_FRAGS);
+    S.createFeature(tq, "Search", ["a11y"], "Search page", undefined, "en");
+    fs.rmSync(packDir(tq, "a11y"), { recursive: true, force: true });
+    let gone = null, goneErr = null;
+    try { gone = S.specDoctor(tq, "search"); } catch (e) { goneErr = e; }
+    const miss = gone && gone.checks.find((c) => c.id === "track-pack-missing");
+    const gph = S.featurePlaceholders(tq, "search", "design.md").items.map((x) => x.text).join(" | ");
+    const gst = S.statusFeature(tq, "search");
+    S.addTrack(tq, "search", "tdd");
+    const gstate = JSON.parse(rd(path.join(tq, ".specs", "search", ".state.json")));
+    const gtr = S.traceCheck(tq, "search");
+    ok(!goneErr && miss && miss.status === "warn" && /\+a11y \(no \.specs\/tracks\/a11y\/ in this project\)/.test(miss.detail) && !gone.checks.some((c) => c.id === "a11y-sections") &&
+      !/replace with real values/.test(gph) && gst.tracks === "core" && js(gst.missingPacks) === js(["a11y"]) && gstate.tracks.includes("a11y") && gstate.packMarkers.a11y === "[A11Y]" &&
+      gtr.ok && gtr.verdict === "pass",
+      "feature F4: a deleted pack — no crash; doctor warns track-pack-missing, its sections / tasks are inactive (no a11y-sections, no > **TODO** placeholder in the active design, trace passes), the saved track and its marker stay in .state.json after another add_track (got " + js(miss) + " / " + gph.slice(0, 300) + ")");
+    // … and an INVALID pack the same way, naming why.
+    writePack(tq, "a11y", "{ not json", {});
+    const inval = S.specDoctor(tq, "search").checks.find((c) => c.id === "track-pack-missing");
+    ok(inval && /\+a11y \(the pack is invalid: json-invalid\)/.test(inval.detail), "feature F4: a pack that turned invalid → track-pack-missing names the check code (got " + js(inval && inval.detail) + ")");
+
+    // Invalid packs: every one reported by check with its stable code — and ignored everywhere (never half-applied).
+    const tv = path.join(tmp, "proj-f4-bad");
+    S.initProject(tv, ["core"], "en");
+    const base = (n, over = {}) => ({ name: n, marker: n.toUpperCase(), title: { en: n }, sections: [{ name: "Scope" }], ...over });
+    writePack(tv, "badjson", "{ \"name\": \"badjson\", ");
+    writePack(tv, "mismatch", base("mismatch", { name: "other" }));
+    writePack(tv, "builtin", base("builtin", { marker: "SEC" }));
+    writePack(tv, "alpha", base("alpha", { marker: "DUPE" }));
+    writePack(tv, "beta", base("beta", { marker: "DUPE" }));
+    writePack(tv, "huge", JSON.stringify(base("huge", { description: "x" })) + " ".repeat(40 * 1024));
+    writePack(tv, "regexy", base("regexy", { signals: { strong: ["(a+)+$"] } }));
+    writePack(tv, "nosections", base("nosections", { sections: [] }));
+    writePack(tv, "badrow", base("badrow"), { "test-plan.md": "| T-1 | unit | {{ac1}} |\n" });
+    writePack(tv, "badref", base("badref"), { "tasks.md": "- [ ] do it\n  - _Requirements: {{ac3}}_\n" });
+    writePack(tv, "sec", base("sec", { marker: "SECX" }));
+    writePack(tv, "Upper", base("Upper"));
+    const bc = payload(await call("spec_tracks", { action: "check", projectDir: tv }));
+    const code = (pack, c) => bc.problems.some((p) => p.pack === pack && p.code === c && p.severity === "error");
+    const bl = S.trackPacks(tv, "list");
+    const validNames = bl.packs.filter((p) => p.valid).map((p) => p.name);
+    const bcr = S.createFeature(tv, "Thing", ["regexy"], "", undefined, "en");
+    ok(bc.ok && bc.verdict === "fail" && code("badjson", "json-invalid") && code("mismatch", "name-mismatch") && code("builtin", "marker-reserved") && code("beta", "marker-duplicate") &&
+      code("huge", "too-big") && code("regexy", "signal-invalid") && code("nosections", "field-invalid") && code("badrow", "fragment-row") && code("badref", "fragment-ref") &&
+      code("sec", "name-reserved") && code("Upper", "name-invalid") && js(validNames) === js(["alpha"]) && bcr.ok === false && /Unknown track/.test(bcr.error),
+      "feature F4: invalid packs — bad JSON, name ≠ folder, a built-in marker, a duplicate marker (the first by name keeps it), an oversized track.json, a regex-looking keyword, no sections, a malformed row, an {{ac3}} naming nothing, a reserved and an invalid name — each an error with its code, and ignored (only 'alpha' is a track; +regexy is an unknown track) (got " + js(validNames) + " / " + js(bc.problems.filter((p) => p.severity === "error").map((p) => p.pack + ":" + p.code)) + ")");
+
+    // A pack folder that is a link (symlink / junction) out of .specs/ is never read.
+    const tl = path.join(tmp, "proj-f4-link");
+    S.initProject(tl, ["core"], "en");
+    const outside = path.join(tmp, "f4-outside-pack");
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, "track.json"), JSON.stringify(base("evil")));
+    fs.mkdirSync(path.join(tl, ".specs", "tracks"), { recursive: true });
+    let linked = false;
+    try { fs.symlinkSync(outside, path.join(tl, ".specs", "tracks", "evil"), "junction"); linked = true; } catch { /* no link support */ }
+    if (linked) {
+      const lc = S.trackPacks(tl, "check");
+      ok(lc.problems.some((p) => p.pack === "evil" && p.code === "linked-folder") && !S.trackPacks(tl, "list").packs.some((p) => p.valid) && S.createFeature(tl, "X", ["evil"], "", undefined, "en").ok === false,
+        "feature F4: a pack folder linked (junction / symlink) to a folder outside .specs/ is reported linked-folder and never read");
+    } else ok(true, "feature F4: (no link support here — the linked-pack check is skipped)");
+
+    // `tracks` is a reserved feature slug — unless .specs/tracks/ is a feature created before 1.15 (its .state.json): then no packs.
+    const rs = S.createFeature(tp, "tracks", ["core"], "", undefined, "en");
+    const tg = path.join(tmp, "proj-f4-legacy");
+    S.initProject(tg, ["core"], "en");
+    fs.mkdirSync(path.join(tg, ".specs", "tracks"), { recursive: true });
+    fs.writeFileSync(path.join(tg, ".specs", "tracks", ".state.json"), JSON.stringify({ lang: "en", tracks: ["core"], approvals: {} }));
+    fs.writeFileSync(path.join(tg, ".specs", "tracks", "requirements.md"), "# Feature: tracks\n");
+    writePack(tg, "a11y", A11Y_JSON, {});
+    const lg = S.trackPacks(tg, "list");
+    ok(rs.ok === false && /reserved/i.test(rs.error) && S.listFeatures(tg).features.some((f) => f.name === "tracks") && lg.ok === false && lg.legacyFeature === true &&
+      S.createFeature(tg, "Y", ["a11y"], "", undefined, "en").ok === false,
+      "feature F4: 'tracks' is a reserved slug; a pre-1.15 feature named tracks stays a feature and is never read as packs (legacyFeature)");
+
+    // init scaffolds a valid, commented pack (never overwriting); the scaffold reads 'placeholder' for a feature using it.
+    const ti = path.join(tmp, "proj-f4-init");
+    S.initProject(ti, ["core"], "en");
+    const in1 = payload(await call("spec_tracks", { action: "init", name: "mobile", projectDir: ti }));
+    const in2 = S.trackPacks(ti, "init", { name: "mobile" });
+    const inBad = S.trackPacks(ti, "init", { name: "sec" }), inBad2 = S.trackPacks(ti, "init", { name: "Bad Name" });
+    const ic = S.trackPacks(ti, "check");
+    const mcr = S.createFeature(ti, "Offline", ["mobile"], "Offline mode", undefined, "en");
+    const mreq = rd(path.join(mcr.dir || "", "requirements.md"));
+    const mdoc = mcr.ok ? S.specDoctor(ti, "offline") : null;
+    ok(in1.ok && in1.created.length === 6 && in1.marker === "[MOBILE]" && /^\/\/ Track pack \+mobile/.test(rd(path.join(packDir(ti, "mobile"), "track.json"))) && in2.ok && in2.created.length === 0 && in2.kept.length === 6 &&
+      inBad.ok === false && inBad2.ok === false && ic.verdict !== "fail" && mcr.ok && /#### \[MOBILE\] Mobile — Acceptance Criteria/.test(mreq) &&
+      mdoc.checks.find((c) => c.id === "mobile-sections").status === "fail" && S.featurePlaceholders(ti, "offline", "requirements.md").items.some((x) => x.text === "[the Mobile behavior]"),
+      "feature F4: spec_tracks init scaffolds a commented, valid pack (6 files, never overwritten; reserved / invalid names refused); a feature using it reads its slots as placeholders and fails mobile-sections (got " + js(ic.problems) + ")");
+
+    // Every reader: ROADMAP.md names the unfilled [A11Y] sections, the design-save check lists them, the stakeholder export carries
+    // them, and the PostToolUse hook never lints a pack's own fragments as a feature's spec (.specs/tracks/ is no feature).
+    const rmap = rd(path.join(tp, ".specs", "ROADMAP.md"));
+    const dsc = S.designSaveCheck(tp, crEs.slug);
+    const exp = S.exportSpecs(tp, { name: "settings", format: "md" });
+    const hookOut = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse",
+      tool_input: { file_path: path.join(packDir(tp, "a11y"), "requirements.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    ok(/\[A11Y\] Keyboard Navigation/.test(rmap) && dsc.ok && dsc.sections.some((x) => x.track === "a11y" && x.marker === "[A11Y]" && x.sections.length === 3) &&
+      exp.ok && /\[A11Y\] Keyboard Navigation/.test(exp.content) && /core \+tdd \+a11y/.test(exp.content) && hookOut.status === 0 && !hookOut.stdout.trim(),
+      "feature F4: ROADMAP.md attention, the design-save check and spec_export know the [A11Y] sections; the hook is silent on .specs/tracks/<pack>/requirements.md (got " + js(hookOut.stdout.slice(0, 200)) + ")");
+
+    // A pack marker is an exact, case-sensitive token: beside a ROLE pack the template's lower-case [role] slot stays a slot.
+    const tr0 = path.join(tmp, "proj-f4-role");
+    S.initProject(tr0, ["core"], "en");
+    writePack(tr0, "roles", { name: "roles", marker: "ROLE", title: { en: "Roles" }, sections: [{ name: "Role Matrix" }] });
+    S.createFeature(tr0, "Admin", ["roles"], "Admin page", undefined, "en");
+    const roleItems = S.featurePlaceholders(tr0, "admin", "requirements.md").items.map((x) => x.text);
+    ok(roleItems.includes("[role]") && !roleItems.includes("[ROLE]") && S.specDoctor(tr0, "admin").checks.some((c) => c.id === "roles-sections"),
+      "feature F4: a ROLE pack never hides the template's [role] slot (markers are case-sensitive); roles-sections is checked (got " + js(roleItems.slice(0, 6)) + ")");
+
+    // A project template for requirements + a pack: the pack's criteria still land after the template's own US-1 criteria.
+    fs.mkdirSync(path.join(tp, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "requirements.md"), "# Feature: {{name}}\n\n### US-1 (P1): [Story]\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [x] THE SYSTEM SHALL [y]\n\n## Out of Scope\n- [none]\n");
+    const tcr = S.createFeature(tp, "Team", ["a11y"], "", undefined, "en");
+    const treq = rd(path.join(tcr.dir, "requirements.md"));
+    ok(tcr.templates && tcr.templates["requirements.md"] && /1\. \*\*US-1\.AC-1\*\*[\s\S]*#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n2\. \*\*US-1\.AC-2\*\*[\s\S]*## Out of Scope/.test(treq),
+      "feature F4: a project requirements template still gets the pack's criteria — numbered after its own US-1 ACs, before the next section");
+    fs.rmSync(path.join(tp, ".specs", "templates"), { recursive: true, force: true });
+
+    // --- F4 review (R1 … R10) ---
+    const rvNew = (n) => { const p = path.join(tmp, "proj-f4r-" + n); S.initProject(p, ["core"], "en"); return p; };
+    const A11Y_OBJ = JSON.parse(A11Y_JSON.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""));
+    // R1: a pack turned OFF for a feature and later deleted from the project stays inactive (its sections, criteria and task block
+    // are no gate, no placeholder, no open task).
+    const r1 = rvNew("r1");
+    writePack(r1, "a11y", A11Y_JSON, A11Y_FRAGS);
+    S.createFeature(r1, "Login", ["a11y"], "Login form", undefined, "en");
+    S.addTrack(r1, "login", "a11y", { remove: true });
+    fs.rmSync(packDir(r1, "a11y"), { recursive: true, force: true });
+    const r1Design = S.featurePlaceholders(r1, "login", "design.md").items.map((x) => x.text).join(" | ");
+    const r1Open = (S.finishFeature(r1, "login", {}).blockers || []).find((b) => /open tasks/.test(b)) || "";
+    const r1Req = S.traceMatrix(r1, "login").rows.map((r) => r.id);
+    ok(!/replace with real values/.test(r1Design) && /#6\b/.test(r1Open) && !/#7\b/.test(r1Open) && !r1Req.includes("US-1.AC-5") &&
+      !S.specDoctor(r1, "login").checks.some((c) => c.id === "track-pack-missing"),
+      "F4 review R1: a pack turned off, then deleted from the project — its [A11Y] sections, criteria and task block stay inactive (no TODO placeholder, open tasks #1–#6 only, no matrix row) and no pack-missing warning (the feature no longer uses it) (got " + js(r1Open) + ")");
+
+    // R2: a fragment slot holding {{name}} / {{slug}} / {{acN}} is still a template placeholder once substituted; a task line too.
+    const r2 = rvNew("r2");
+    writePack(r2, "a11y", A11Y_JSON, {
+      "requirements.md": "- WHEN a user tabs through [the {{name}} screens] THE SYSTEM SHALL move focus in reading order\n",
+      "tasks.md": "- [ ] Keyboard audit of {{name}}\n  - _Requirements: {{ac1}}_\n",
+      "checklist.md": "- [record the {{slug}} axe report for {{ac1}}]\n",
+    });
+    S.createFeature(r2, "Login", ["a11y"], "Login form", undefined, "en");
+    const r2Req = S.featurePlaceholders(r2, "login", "requirements.md").items.map((x) => x.text);
+    const r2Chk = S.featurePlaceholders(r2, "login", "checklist.md").items.map((x) => x.text);
+    const r2Task = S.withReadCache(() => { S.specsRoot(r2); return S.isPlaceholderTask("[US1] Keyboard audit of Login"); });
+    const r2Other = S.withReadCache(() => { S.specsRoot(r2); return S.isPlaceholderTask("[US1] Audit the checkout flow with a screen reader"); });
+    const r2Free = S.placeholderReport("the ratio [free: 60, pro: 600] and [owner, admin]");
+    ok(r2Req.includes("[the Login screens]") && r2Chk.includes("[record the login axe report for US-1.AC-5]") && r2Task === true && r2Other === false && r2Free.length === 0,
+      "F4 review R2: fragment slots with {{name}} / {{slug}} / {{acN}} read as placeholders after substitution ([the Login screens], the checklist item), the untouched task line is a template task — a linear wildcard, never a match-all (got " + js(r2Req) + " / " + js(r2Chk) + ")");
+
+    // R3: a project requirements template whose US-1 criteria are followed by an HTML comment holding a "### US-2" example: the pack
+    // block lands after the comment, never inside it.
+    const r3 = rvNew("r3");
+    writePack(r3, "a11y", A11Y_JSON, A11Y_FRAGS);
+    fs.mkdirSync(path.join(r3, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(r3, ".specs", "templates", "requirements.md"), ["# Feature: {{name}}", "", "### US-1 (P1): [Story Title]", "#### Acceptance Criteria (EARS)",
+      "1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]", "", "<!-- Add more stories like this:", "### US-2 (P2): [Story Title]",
+      "1. **US-2.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]", "-->", "", "## Out of Scope", "- [none]", ""].join("\n"));
+    const r3c = S.createFeature(r3, "Login", ["a11y"], "", undefined, "en");
+    const r3Req = rd(path.join(r3c.dir, "requirements.md"));
+    const r3Tr = S.traceCheck(r3, "login");
+    ok(r3Req.indexOf("#### [A11Y]") > r3Req.indexOf("-->") && r3Req.indexOf("#### [A11Y]") < r3Req.indexOf("## Out of Scope") && r3Tr.totalAcs === 3 && !r3Tr.uncoveredByTasks.length,
+      "F4 review R3: the [A11Y] criteria go after an HTML comment that holds a heading, before the next real heading — trace sees all 3 criteria (got " + js(r3Tr.uncoveredByTasks) + ")");
+
+    // R4 + R7: section names with a heading lead (emoji, numbering, "Section N", a dash) match their own headings (check warns); pack
+    // sections are marker-bound — a core "## Architecture" never satisfies "[MOB] Architecture", an unmarked heading UNDER a [MOB]
+    // heading does.
+    const r4 = rvNew("r4");
+    writePack(r4, "mob", { name: "mob", marker: "MOB", title: "Mobile", sections: [{ name: "🔐 Secrets" }, { name: "2 Offline Modes" }, { name: "Section 3 Push" },
+      { name: "- Store Review" }, { name: "Architecture" }, { name: "Battery", loose: ["power"] }, { name: "Crash Reporting" }] });
+    const r4Chk = S.trackPacks(r4, "check");
+    const r4c = S.createFeature(r4, "App", ["mob"], "An app", undefined, "en");
+    const r4dp = path.join(r4c.dir, "design.md");
+    let r4d = rd(r4dp).replace(/> \*\*TODO\*\* — replace with real values \(remove this line when done\)\.\n/g, "Real content.\n");
+    fs.writeFileSync(r4dp, r4d);
+    const r4Filled = S.statusFeature(r4, "app").packSections.mob.sections.every((x) => x.present && x.filled);
+    r4d = r4d.replace("## [MOB] Architecture\nReal content.\n", "").replace("## [MOB] Battery\nReal content.\n", "")
+      .replace("## [MOB] Crash Reporting\nReal content.\n", "## [MOB] Platform\n### Crash Reporting\nNested under the marker.\n");
+    fs.writeFileSync(r4dp, r4d + "\n## Power budget\nplain text\n");
+    const r4After = Object.fromEntries(S.statusFeature(r4, "app").packSections.mob.sections.map((x) => [x.section, x.present && x.filled]));
+    const r4Codes = r4Chk.problems.map((x) => x.code);
+    ok(r4Chk.verdict === "warn" && r4Codes.filter((c) => c === "section-name-lead").length === 4 && r4Filled &&
+      r4After["2 Offline Modes"] === true && r4After["🔐 Secrets"] === true && r4After["Section 3 Push"] === true && r4After["- Store Review"] === true,
+      "F4 review R4: section names with a heading lead (emoji, '2 ', 'Section 3', '- ') match their own headings once filled — check warns section-name-lead (got " + js(r4After) + ")");
+    ok(r4Codes.includes("section-core-name") && r4After["Architecture"] === false && r4After["Battery"] === false && r4After["Crash Reporting"] === true,
+      "F4 review R7: pack sections are marker-bound — a core '## Architecture' (and a loose '## Power budget') never satisfies them, check warns section-core-name; an unmarked heading nested under a [MOB] heading does (got " + js(r4After) + ")");
+
+    // R5: a missing pack's ghost sections never join another track's criteria — a pack added later cites its own slot.
+    const r5 = rvNew("r5");
+    writePack(r5, "a11y", A11Y_JSON, A11Y_FRAGS);
+    S.createFeature(r5, "Login", ["tdd", "sec", "a11y"], "Login form", undefined, "en");
+    fs.rmSync(packDir(r5, "a11y"), { recursive: true, force: true });
+    writePack(r5, "mob", { name: "mob", marker: "MOB", title: "Mobile", sections: [{ name: "Offline" }] });
+    S.addTrack(r5, "login", "mob");
+    const r5Block = rd(path.join(r5, ".specs", "login", "tasks.md")).split("## Story US-1 — [MOB] Mobile")[1] || "";
+    ok(/_Requirements: \[the \+mob criterion this task proves\]_/.test(r5Block) && !/US-1\.AC-1[3-9]|T-\d+/.test(r5Block),
+      "F4 review R5: after the a11y pack is deleted, a new +mob task block cites +mob's own criterion slot — never the ghost [A11Y] criteria or their tests (got " + js(r5Block.slice(0, 200)) + ")");
+
+    // R6: a hand-edited saved list with a word that is no pack (a typo, "security", "gdpr") keeps 1.14's rule — the files decide.
+    const r6 = rvNew("r6");
+    S.createFeature(r6, "Pay", ["tdd", "sec"], "payments", undefined, "en");
+    const r6sp = path.join(r6, ".specs", "pay", ".state.json");
+    const r6Out = [["core", "tdd", "security"], ["core", "tdd", "secc"], ["core", "gdpr"]].map((list) => {
+      const st = JSON.parse(rd(r6sp));
+      st.tracks = list;
+      fs.writeFileSync(r6sp, JSON.stringify(st));
+      const d = S.specDoctor(r6, "pay");
+      return S.statusFeature(r6, "pay").tracks + (d.checks.some((c) => c.id === "track-pack-missing") ? " +warn" : "");
+    });
+    ok(r6Out.every((x) => x === "core +tdd +sec"), "F4 review R6: a saved list naming no pack (\"security\", a typo, \"gdpr\") falls back to the files as in 1.14 — core +tdd +sec, no track-pack-missing (got " + js(r6Out) + ")");
+
+    // R8: import with a pack — its criteria come back after the imported US-1 ones, its test rows and task block cite them; trace passes.
+    const r8 = rvNew("r8");
+    writePack(r8, "a11y", A11Y_JSON, A11Y_FRAGS);
+    const r8src = path.join(r8, "kiro", "login");
+    fs.mkdirSync(r8src, { recursive: true });
+    fs.writeFileSync(path.join(r8src, "requirements.md"), "# Requirements\n\n## Introduction\nLog in.\n\n### Requirement 1\n**User Story:** As a user, I want to log in, so that I can work.\n\n#### Acceptance Criteria\n1. WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. IF the password is wrong THEN THE SYSTEM SHALL show an error\n");
+    const r8i = S.importSpec(r8, "kiro", "kiro/login", { tracks: ["tdd", "a11y"] });
+    const r8Req = rd(path.join(r8, ".specs", "login", "requirements.md")), r8Plan = rd(path.join(r8, ".specs", "login", "test-plan.md"));
+    const r8Tasks = rd(path.join(r8, ".specs", "login", "tasks.md"));
+    const r8Tr = S.traceCheck(r8, "login");
+    ok(r8i.ok && /#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n3\. \*\*US-1\.AC-3\*\* — WHEN a user navigates with the keyboard only/.test(r8Req) &&
+      /## \[A11Y\] Traceability Matrix[\s\S]*\| US-1\.AC-3 \|[\s\S]*\| US-1\.AC-4 \|/.test(r8Plan) && /\[A11Y\] Accessibility\n- \[ \] \d+\. \[US1\] Keyboard walk-through of login\n  - _Requirements: US-1\.AC-3_\n  - _Makes green: T-03_/.test(r8Tasks) &&
+      r8Tr.verdict === "pass" && r8Tr.totalAcs === 4,
+      "F4 review R8: spec_import with a pack — the [A11Y] criteria follow the imported US-1 ones (AC-3/4), the pack's rows plan them and its task block cites them; trace passes (got " + js(r8Tr.verdict) + ")");
+
+    // R9: packs are cached across calls, and an edit is picked up by the very next call; a large pack set stays cheap once warm.
+    const r9 = rvNew("r9");
+    writePack(r9, "a11y", A11Y_JSON, A11Y_FRAGS);
+    const r9t1 = S.trackPacks(r9, "list").packs[0].title;
+    fs.writeFileSync(path.join(packDir(r9, "a11y"), "track.json"), JSON.stringify({ ...A11Y_OBJ, title: { en: "Accessible UI" } }));
+    const r9t2 = S.trackPacks(r9, "list").packs[0].title;
+    fs.writeFileSync(path.join(packDir(r9, "a11y"), "requirements.md"), "- THE SYSTEM SHALL label every [form field]\n- THE SYSTEM SHALL announce every error\n");
+    const r9c = S.createFeature(r9, "Form", ["a11y"], "x", undefined, "en");
+    const r9Req = rd(path.join(r9c.dir, "requirements.md"));
+    for (let i = 0; i < 20; i++) {
+      const n = "pk" + String.fromCharCode(97 + i);
+      const fr = {};
+      for (const l of ["", "pt/", "es/", "pt-BR/"]) for (const [k, v] of Object.entries(A11Y_FRAGS)) if (!k.includes("/")) fr[l + k] = v;
+      writePack(r9, n, { ...A11Y_OBJ, name: n, marker: "PK" + String.fromCharCode(65 + i), steering: n + ".md" }, fr);
+    }
+    S.listFeatures(r9); // warm the caches
+    const r9s = Date.now();
+    for (let i = 0; i < 5; i++) S.featurePlaceholders(r9, "form", "requirements.md");
+    const r9ms = (Date.now() - r9s) / 5;
+    ok(r9t1 === "Accessibility" && r9t2 === "Accessible UI" && /#### \[A11Y\] Accessible UI — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — THE SYSTEM SHALL label every \[form field\]/.test(r9Req) &&
+      S.featurePlaceholders(r9, "form", "requirements.md").items.some((x) => x.text === "[form field]") && r9ms < 1000,
+      "F4 review R9: pack edits (track.json, a fragment) are picked up by the next call despite the cross-call cache; 20 packs × 4 languages stay cheap once warm (" + r9ms.toFixed(1) + " ms per call)");
+
+    // R10: fragment-ref names its language context and where the count comes from; the guidance's {{name}} is filled in.
+    const r10 = rvNew("r10");
+    writePack(r10, "a11y", { ...A11Y_OBJ, sections: [{ name: "Keyboard Map", guidance: "The keyboard map of {{name}} ({{marker}})." }] }, {
+      "requirements.md": "- THE SYSTEM SHALL do one\n- THE SYSTEM SHALL do two\n",
+      "tasks.md": "- [ ] both\n  - _Requirements: {{ac2}}_\n",
+      "pt/requirements.md": "- O SISTEMA DEVE fazer uma coisa\n",
+    });
+    const r10p = S.trackPacks(r10, "check").problems.find((x) => x.code === "fragment-ref") || {};
+    writePack(r10, "kbd", { name: "kbd", marker: "KBD", title: "Keyboard", sections: [{ name: "Keyboard Map", guidance: "The keyboard map of {{name}} ({{marker}})." }] });
+    const r10c = S.createFeature(r10, "Search", ["kbd"], "x", undefined, "en");
+    ok(/for pt features/.test(r10p.message || "") && /pt\/requirements\.md gives 1 criterion/.test(r10p.message || "") && r10p.file === ".specs/tracks/a11y/tasks.md" &&
+      /## \[KBD\] Keyboard Map\n> \*\*TODO\*\*[^\n]*\nThe keyboard map of Search \(\[KBD\]\)\./.test(rd(path.join(r10c.dir, "design.md"))),
+      "F4 review R10: fragment-ref names the language context and the file its count comes from; a section's guidance fills in {{name}} / {{marker}} (got " + js(r10p.message) + ")");
+  }
+
+  // 1.15 — only a SHIPPED feature's _Supersedes:_ retires the older criterion (catalog, export, matrix): a draft's is "to be
+  // superseded", and a feature archived without ever shipping declares nothing and does nothing today.
+  {
+    const sp = path.join(tmp, "proj-115-supersedes");
+    S.initProject(sp, ["core"], "en");
+    const reqOf = (slug, body) => fs.writeFileSync(path.join(sp, ".specs", slug, "requirements.md"), "# Feature: " + slug + "\n\n### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n" + body);
+    ["Base", "Draft", "Shipped", "Abandoned"].forEach((n) => S.createFeature(sp, n, ["core"], "x", undefined, "en"));
+    reqOf("base", "1. **US-1.AC-1** — WHEN a WHEN THE SYSTEM SHALL a\n2. **US-1.AC-2** — WHEN b THE SYSTEM SHALL b\n3. **US-1.AC-3** — WHEN c THE SYSTEM SHALL c\n");
+    reqOf("draft", "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL x _Supersedes: base/US-1.AC-1_\n");
+    reqOf("shipped", "1. **US-1.AC-1** — WHEN y THE SYSTEM SHALL y _Supersedes: base/US-1.AC-2_\n");
+    reqOf("abandoned", "1. **US-1.AC-1** — WHEN z THE SYSTEM SHALL z _Supersedes: base/US-1.AC-3_\n");
+    shipFeature(sp, "shipped");
+    S.manageFeature(sp, "archive", "abandoned"); // never shipped: declares nothing
+    const cat = S.catalog(sp);
+    const base = cat.features.find((f) => f.feature === "base").acs;
+    const by = (id) => base.find((a) => a.id === id) || {};
+    ok(by("US-1.AC-1").supersedePending === true && JSON.stringify(by("US-1.AC-1").supersededBy) === '["draft/US-1.AC-1"]' &&
+      by("US-1.AC-2").supersededBy && !by("US-1.AC-2").supersedePending && !by("US-1.AC-3").supersededBy &&
+      cat.totals.superseded === 1 && cat.totals.pending === 1 && cat.totals.acs === 6 && cat.totals.current === 4 &&
+      cat.markdown.includes("- **US-1.AC-1** — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft/US-1.AC-1` (not shipped yet)") &&
+      cat.markdown.includes("- ~~**US-1.AC-2** — WHEN b THE SYSTEM SHALL b~~ — superseded by `shipped/US-1.AC-1`") && /4 current \(1 to be superseded\), 1 superseded\*\*/.test(cat.markdown),
+      "1.15 catalog: a draft's _Supersedes:_ marks the AC 'to be superseded' (not struck, still current); a shipped feature's retires it; an abandoned archived feature's does nothing and its own AC is not current (got " +
+      JSON.stringify([base.map((a) => a.id + ":" + (a.supersededBy || []).join("|") + (a.supersedePending ? "(pending)" : "")), cat.totals]) + ")");
+    const ex = S.exportSpecs(sp, { name: "base", format: "md" }).content || "";
+    const mx = S.traceMatrix(sp, "base");
+    const mrow = (id) => mx.rows.find((r) => r.id === id) || {};
+    ok(/US-1\.AC-1\*\* — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft\/US-1\.AC-1`/.test(ex) && /~~\*\*US-1\.AC-2\*\*/.test(ex) && !/~~\*\*US-1\.AC-1\*\*/.test(ex) &&
+      mrow("US-1.AC-1").supersedePending === true && !mrow("US-1.AC-2").supersedePending && mx.counts.superseded === 1 && mx.counts.supersedePending === 1,
+      "1.15 export + matrix: the same rule — a draft's supersession is 'to be superseded' (never struck), a shipped one's is (got " + JSON.stringify([mx.counts, (ex.match(/^.*US-1\.AC-[12]\*\*.*$/gm) || [])]) + ")");
+    // The CSV and the CLI table read a pending one apart; a retired AC also planned by a draft names the shipped declarer only.
+    reqOf("draft", "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL x _Supersedes: base/US-1.AC-1, base/US-1.AC-2_\n");
+    const csv = S.matrixCsv([S.traceMatrix(sp, "base")], "en");
+    const cat2 = S.catalog(sp).features.find((f) => f.feature === "base").acs.find((a) => a.id === "US-1.AC-2");
+    const cli = spawnSync(process.execPath, [path.join(__dirname, "..", "cli", "dev-spec.js"), "trace", "base", "--matrix", "--project", sp], { encoding: "utf8" }).stdout || "";
+    ok(/to be superseded by draft\/US-1\.AC-1 \(not shipped yet\)/.test(csv) && JSON.stringify(cat2.supersededBy) === '["shipped/US-1.AC-1"]' && !cat2.supersedePending &&
+      /to be superseded by draft\/US-1\.AC-1/.test(cli) && !/superseded by draft\/US-1\.AC-2/.test(cli),
+      "1.15: the matrix CSV and `trace --matrix` show a pending supersession apart; a retired AC names only its SHIPPED declarers, never a draft that also plans it (got " +
+      JSON.stringify([cat2, (csv.match(/superseded by [^\r\n,]*/g) || [])]) + ")");
+    // A declaration a change request adds AFTER the ship waits until the feature ships again (the requirements snapshot
+    // approved before the ship doesn't hold it).
+    const later = S.createFeature(sp, "Later", ["core"], "x", undefined, "en");
+    reqOf("later", "1. **US-1.AC-1** — WHEN l THE SYSTEM SHALL l\n");
+    S.approvePhase(sp, "later", "requirements", "t", { force: true }); // the snapshot the feature ships with (no _Supersedes:_)
+    shipFeature(sp, "later", new Date().toISOString()); // shipped AFTER that approval
+    reqOf("later", "1. **US-1.AC-1** — WHEN l THE SYSTEM SHALL l _Supersedes: base/US-1.AC-3_\n"); // a change request, after the ship
+    const ac3 = S.catalog(sp).features.find((f) => f.feature === "base").acs.find((a) => a.id === "US-1.AC-3");
+    ok(later.ok && ac3 && ac3.supersedePending === true && JSON.stringify(ac3.supersededBy) === '["later/US-1.AC-1"]',
+      "1.15: a _Supersedes:_ added to a shipped feature after it shipped (a change request) is 'to be superseded' until it ships again (got " + JSON.stringify(ac3) + ")");
   }
 
   // Release hygiene: the three version fields agree.

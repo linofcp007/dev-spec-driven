@@ -38,7 +38,7 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 34 tools, plus one
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 35 tools, plus one
   prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
   `specs://` resources.
 
@@ -52,6 +52,7 @@ dev-spec init --roles requirements=product,design=tech+security   # approvals by
 dev-spec init [--evidence reported|observed] [--approval-guard off|ask|deny]   # opt-ins enforced by Claude Code hooks only (see Gates and evidence)
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …) or a custom scoped one (api-rules.md)
 dev-spec templates [list|init|check] [artifact] [--lang]   # the team's own scaffolds in .specs/templates/ (replace the built-in ones)
+dev-spec tracks [list|init <name>|check] [name] [--lang]   # the team's own tracks: packs in .specs/tracks/<name>/ (marker tracks like +sec)
 dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield] [--flow design-first]  # scaffold the feature (no tracks → auto-classify; --brownfield → integration-plan.md)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
@@ -145,7 +146,7 @@ next, `dev-spec next-action <feature>` names the single next step.
   implementing files changed reads `code-changed`) — run them and report them (MCP `spec_finish {evidence}`), or
   `dev-spec finish <f> --run`.
 - **`--run` and its shell.** `done --run` / `finish --run` use cmd.exe on Windows (`/bin/sh` elsewhere) unless `--shell`
-  (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash — WSL's `bash.exe` launcher is refused.
+  (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash, never WSL's `bash.exe` launcher (name that one by its path to run inside WSL).
   A run that could not happen (the shell didn't start, a signal, `--timeout <seconds>` expired, output over 64 MB)
   records nothing: the task stays open.
 - **No pipes in `_Verify:_`.** `npm test | tee log` exits with the last command's code, so a failure can read as
@@ -207,6 +208,10 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Project templates.** `.specs/templates/<artifact>.md` (or `<lang>/<artifact>.md`; a pt-BR feature falls back to
   `pt/`) replaces a built-in scaffold for new features (`{{name}}`, `{{summary}}`, `{{tracks}}`… filled in);
   `dev-spec templates init` copies the built-in ones to edit, `templates check` validates them. An untouched custom scaffold still counts as a template: fill it in.
+- **Project-defined tracks.** A pack `.specs/tracks/<name>/` (`track.json` + optional markdown fragments) is a track like
+  +sec: `classify` reads its signals, `create` / `add-track` scaffold its `[MARKER]` criteria, design sections, tasks and
+  test rows, and `doctor` fails `<name>-sections` until they are filled. `dev-spec tracks init <name>` scaffolds one,
+  `tracks check` validates them (a bad pack is ignored). Guide: `skills/dev-spec-driven/references/project-tracks.md`.
 - **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be

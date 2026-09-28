@@ -3,6 +3,64 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.15.0] — 2026-09-28
+
+Your own tracks: a project defines its domain rigor (+a11y, +mobile, +compliance…) as a local track pack, and it
+behaves like a built-in track everywhere. The catalog says what the system does today (a draft's `_Supersedes:_` no
+longer strikes the criterion it plans to replace), and `--shell` accepts WSL's bash.exe when you name it.
+35 MCP tools (was 34), 52 commands (was 51).
+
+### Added
+- **Project-defined tracks (track packs)** — beyond the six built-in tracks, a project defines its own domain rigor
+  (+a11y, +mobile, +dbmigration…) as a folder `.specs/tracks/<name>/`: `track.json` (JSON, comments allowed — `name` =
+  the folder, a case-sensitive `marker` such as `A11Y`, a localized `title`, classifier `signals` strong / weak / context,
+  the mandatory design `sections` with synonyms, loose words and guidance, an optional `steering` file) plus optional
+  markdown fragments — `requirements.md` (criteria), `tasks.md` (the task block, `{{ac1}}` / `{{acs}}` / `{{t1}}` /
+  `{{tests}}` naming the pack's criteria and tests as the feature numbers them), `test-plan.md` (rows), `checklist.md`,
+  `steering.md`; a `<lang>/` subfolder wins (pt-BR → pt → root). A valid pack is a marker track everywhere, through the
+  same registries as the built-in ones (now project-aware, scoped to the engine call like the project templates):
+  `spec_classify` (new optional `projectDir`) / `spec_create` / `spec_import` score its signals as literal words;
+  `spec_create` scaffolds its `#### [MARKER] <title> — Acceptance Criteria (EARS)` criteria after the US-1 ones, its
+  `## [MARKER] <section>` design sections with the `> **TODO**` sentinel, its task block, test rows (+tdd), checklist
+  items and steering file; `spec_add_track` adds / removes it (non-destructive); doctor fails `<name>-sections` and the
+  design approval is refused until every section is filled; trace_check, spec_status (`packSections`), next_action, the
+  roadmap, the design-save hook, the task brief, spec_export and project templates follow it; its `[bracketed]` slots
+  are template placeholders, its `[MARKER]` never is. A pack is data only (nothing runs; allowlisted file names only,
+  lstat + realpath — a symlink / junction out of `.specs/` is ignored; every size and count bounded) and a bad one is
+  reported and ignored as a whole. A feature whose saved track names a pack that is gone or invalid keeps it (with its
+  marker, `.state.json → packMarkers`) as an INACTIVE track and doctor warns `track-pack-missing`. New MCP tool
+  **`spec_tracks`** `{action: list | init | check, name?, lang?}` (35 tools), CLI `dev-spec tracks [list|init <name>|check]`
+  (check exits 1 on an error), command **`/spec-tracks`** (52 commands), guide `references/project-tracks.md`. `tracks`
+  is a reserved feature slug (a pre-1.15 feature of that name stays a feature); the PostToolUse hook and the pre-commit
+  check never lint a pack's fragments as a feature's spec. Pack sections are marker-bound (a heading counts only with the
+  pack's marker, or under one — a core `## Architecture` never satisfies a pack's section) and a name's lead (numbering,
+  an emoji, a dash) is ignored when matching, as in the heading; a slot holding a variable (`[the {{name}} screens]`)
+  still reads as a placeholder; packs and their placeholder corpus are cached across calls by their files' size / mtime
+  (an edit is picked up by the next call).
+
+### Changed (heads-up)
+- **Only a shipped feature's `_Supersedes:_` retires the older criterion** in the catalog (SPECS.md), the stakeholder
+  export and the traceability matrix — shipped = a finish recorded or the execution signed off, the release notes' rule.
+  A draft's declaration now reads "to be superseded by … (not shipped yet)" (JSON `supersedePending: true`, catalog
+  `totals.pending`, matrix `counts.supersedePending`) and the criterion stays current; a feature archived without ever
+  shipping declares nothing, and its own criteria no longer count as current; a shipped feature counts only the
+  declarations it shipped with (one a later change request adds waits until it ships again), and a retired criterion
+  names only its shipped declarers. The totals read "N current (P to be superseded), S superseded". 1.14 struck the
+  criterion as soon as any feature declared it.
+- **`--shell <path to WSL's bash.exe>` is used as given** (`done --run` / `finish --run`): running the checks inside a
+  Linux distribution is your choice when you name it, with a one-line note; a bare `--shell bash` still never resolves to
+  WSL (Git Bash, else `no-git-bash`), and a run WSL's relay fails is still could-not-run, nothing recorded. 1.14 refused
+  that path (`couldNotRun: "wsl-bash"`, no longer produced). `wsl.exe` (named or bare) is no shell — it rejects the
+  `-c` every run uses — and is refused (`couldNotRun: "wsl-exe"`); a quoted `--shell "C:\…\bash.exe"` loses its quotes.
+
+### Tests
+- `node mcp/test.js` 1256 assertions (was 1221), `node cli/test-cli.js` 402 (was 395): a full +a11y pack end to end
+  (classification, the scaffold in EN / PT / ES / pt-BR, the gates, trace, add / remove, a deleted and an invalidated pack,
+  twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook), one
+  regression per F4 review finding (R1–R10) and the CLI's `tracks` command; every existing assertion unchanged except the
+  exact tool / command counts; the catalog / export / matrix tests that exercise `_Supersedes:_` mark the declaring
+  feature shipped (plus the draft / shipped / abandoned cases), and the WSL shell tests follow the new rule.
+
 ## [1.14.0] — 2026-09-28
 
 Teams, stakeholders and evidence that holds at the end of a turn: two new tracks (`+sec`, `+privacy`), project

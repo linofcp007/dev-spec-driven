@@ -54,6 +54,9 @@ for (const f of files) {
   // Project templates are no feature's spec (dev-spec templates check) — unless .specs/templates/ is a pre-1.14 feature (.state.json).
   const tplAt = f.match(/^(.*?)\.specs\/templates\//);
   if (tplAt && !fs.existsSync(path.join(root, tplAt[1], ".specs", "templates", ".state.json"))) continue;
+  // Track packs (1.15) neither (dev-spec tracks check) — unless .specs/tracks/ is a pre-1.15 feature (.state.json).
+  const packAt = f.match(/^(.*?)\.specs\/tracks\//);
+  if (packAt && !fs.existsSync(path.join(root, packAt[1], ".specs", "tracks", ".state.json"))) continue;
   const base = path.basename(f).toLowerCase();
   const featureRel = path.posix.dirname(f); // <prefix>.specs/<feature>
   const feature = path.posix.basename(featureRel);

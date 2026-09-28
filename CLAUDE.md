@@ -19,7 +19,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
 skills/.../references/          deep library, read on demand
-commands/*.md                  51 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
+commands/*.md                  52 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
 evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
@@ -93,7 +93,16 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   items, steering stub) and its marker in `RE_STABLE_BRACKET`; the `RE_TRACK_RUN` / heading-lead regexes build themselves
   from the registries; update the MCP descriptions and CLI help by hand. `templateCorpus()` renders every set of at
   most two optional tracks plus all of them (quadratic beyond three tracks — verified equal to the full power set's
-  placeholder reports).
+  placeholder reports). A TEAM's own track needs none of this: it is a track pack (see Project-defined tracks, 1.15).
+- **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
+  `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
+  `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
+  track packs of the project the current engine call works in. The regexes built from the registries have pack-aware
+  twins (`trackRunRe()`, `headingLeadRe()` — cached per marker set; names / tokens are validated `[a-z0-9]` / `[A-Z0-9]`,
+  regex-safe). Deliberately built-in only: `templateCorpus()` / `templateTaskSet()` (process-wide caches — the packs'
+  blocks join the per-call corpus instead, `packCorpusSets()`) and the built-in rows of `spec_tracks list`. The exported
+  `VALID_TRACKS` / `OPTIONAL_TRACKS` / `TRACK_MARKER` / `trackSections` / `trackSignals` stay built-in (the CLI's classify
+  line reads the result's `confidence` keys instead).
 - **SEC / PRIVACY section tables.** `SEC_SECTIONS` never lists a bare "security" synonym (the core design's own
   "Security Considerations" is not a `[SEC]` section). `PRIVACY_SECTIONS` entries may carry `loose: [...]` — the synonyms
   that are ordinary design words (Processors, Retention, Conservação, Data inventory, Avaliação de impacto…):
@@ -114,7 +123,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node
-  `X[AI]` or prose used to switch +ai on).
+  `X[AI]` or prose used to switch +ai on). A saved name shaped like a pack's (`^[a-z][a-z0-9]{1,19}$`) the project lacks
+  now is kept in the list and dropped from the active tracks (1.15 — `track-pack-missing`).
 - **Track input goes through `parseTracks()`**: arrays or strings split on space/comma/`+`
   (`'tdd,saas'`, `'+saas +ai'`), case-insensitive; an unknown token is a localized error with a
   did-you-mean. That is why the MCP `tracks` schemas carry **no enum on purpose** — an enum would refuse
@@ -183,7 +193,7 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
 `spec_coverage` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` ·
 `spec_task_brief` · `spec_finish` · `spec_import` · `spec_append_tasks` · `spec_impact` ·
 `spec_metrics` · `spec_catalog` · `spec_drift` · `spec_upgrade` · `spec_templates` · `spec_export` ·
-`spec_changelog` · `spec_decide` (**34 total**; `mcp/test.js` asserts the exact count —
+`spec_changelog` · `spec_decide` · `spec_tracks` (**35 total**; `mcp/test.js` asserts the exact count —
 verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). All tools are pure-local file ops on
 `.specs/` (or a read-only codebase scan for brownfield / `trace --code` / import); none hit the network, run a command or
 call git. Scaffolders never overwrite an existing file; mutators edit only what they own (checkboxes, appended tasks and
@@ -379,8 +389,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `…/usr/bin/bash.exe`), `%ProgramFiles%` / `%ProgramW6432%` / `%ProgramFiles(x86)%` / `%LOCALAPPDATA%\Programs` +
   `\Git\bin\bash.exe`, then the first bash.exe on PATH that isn't WSL's. WSL's launcher (`isWslLauncher()`: a bash.exe /
   wsl.exe in System32, SysWOW64, Sysnative or WindowsApps — it runs the command inside a Linux distribution, or fails every
-  command with exit 1) is never used: named as `--shell <path>`, it is refused before anything runs (`couldNotRun:
-  "wsl-bash"`); a bare `bash` with no Git Bash found → `no-git-bash`.
+  command with exit 1) is never what a bare `bash` resolves to (none found → `no-git-bash`); named by its path (`--shell
+  C:\Windows\System32\bash.exe`) it is the user's choice (1.15 — 1.14 refused it as `wsl-bash`): used as given, flagged `wsl`,
+  with a one-line note (`runGate.wslBash`), and a run WSL's relay fails is could-not-run `wsl` (nothing recorded).
+  `wsl.exe` (named or bare) is no shell — Node runs `<shell> -c "<cmd>"` and wsl.exe rejects `-c` (exit 4294967295: a
+  bogus failed run or red proof) — refused before anything runs (`couldNotRun: "wsl-exe"`, `runGate.wslExe`); a quoted
+  path loses its quotes (spawn would miss the file).
   On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
@@ -397,7 +411,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
   an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
   whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
-  `_Expect: fail_` below); the shell resolution adds `wsl-bash` / `no-git-bash`. `finish --run` stays all-or-nothing: one
+  `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
   check that could not run records none.
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
@@ -608,7 +622,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   overwritten; once it exists, every roadmap refresh refreshes it too.
 - **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (same line, a sub-line or its table row) marks
   the older AC as replaced. `stripSupersedes()` runs before own-AC extraction (trace, acIndex), so the foreign
-  ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap).
+  ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap). **Only a
+  SHIPPED declaring feature retires the older AC** (1.15 — `featureShipped()`: a finish recorded, or the execution signed
+  off: the release notes' rule) in the catalog, the export and the matrix: a draft's declaration keeps `supersededBy` but
+  adds `supersedePending: true` — rendered "to be superseded by … (not shipped yet)" (catalog, export, the matrix's
+  markdown / CSV cell / `trace --matrix` notes), never struck, still current; `totals` {current, superseded (retired),
+  pending — a subset of current: "N current (P to be superseded), S superseded"}; the matrix `counts.supersedePending`. A
+  retired AC names its SHIPPED declarers only (never a draft that also plans it). A shipped feature counts only the
+  declarations it shipped with: `shippedSupersedeKeys()` — when requirements.md changed since the requirements snapshot
+  approved at or before the latest ship (a finish / an execution sign-off), a declaration that snapshot lacks (a change
+  request's edit) is pending until the feature ships again; no such snapshot (pre-1.13) → every declaration trusted. A
+  feature archived without ever shipping (abandoned) declares nothing, and its own ACs are not counted as current.
+  `supersededByIndex()` (the matrix: `.live`, `.liveBy`) and `catalogData()` (`supLiveBy`) apply the same rule.
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
   only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
@@ -731,7 +756,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   the engine writes under `templates/` (`forgetCached`), each file's parse cached by content (`TEMPLATE_PARSE_CACHE`). A
   slot holding a variable (`[Describe {{name}}]`) matches whatever the variable became through a LINEAR wildcard match
   (`templateWildcard`) — never a regex built from template text.
-- **Reserved slugs:** `RESERVED_SLUGS` = `steering`, `exports`, `templates` (`resolveFeature` refuses them for new
+- **Reserved slugs:** `RESERVED_SLUGS` = `steering`, `exports`, `templates`, `tracks` (1.15) (`resolveFeature` refuses them for new
   features). **Legacy exception** (`reservedSlug(name, root)`): a `templates/` or `exports/` folder holding a
   `.state.json` is a feature created before 1.14 — it stays a feature (listed, reachable, renameable) and is never read as
   templates (`templateFileList()` returns nothing; every `spec_templates` action refuses with `legacyFeature: true`). The
@@ -741,6 +766,103 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   across the trio, bug.md without a real Root Cause slot, unknown `{{variables}}`, chain templates with no slot at all,
   empty files, non-template names) → `{file, line?, code, severity, message}` + verdict pass | warn | fail; CLI exit 1 on
   an error.
+
+## Project-defined tracks (1.15) — `.specs/tracks/<name>/` track packs
+- **What a pack is:** `track.json` (JSON with `//` / `/* */` comments — `stripJsonComments()`, one linear pass) + optional
+  fragments `requirements.md` · `tasks.md` · `test-plan.md` · `checklist.md` · `steering.md` (`PACK_FRAGMENTS`), a `<lang>/`
+  subfolder's winning over the root's (`packFragment()`: lang → its family → root). A VALID pack is a MARKER track: every
+  registry reader sees it through the accessors (The track model). Guide: `references/project-tracks.md`.
+- **Loading:** `packRegistry()` → `loadTrackPacks(root)` for `TEMPLATE_SCOPE_ROOT` (specsRoot's per-call project; detectTracks
+  also calls `useTemplateScopeOf(dir)`), memoized in `PACK_MEMO`, dropped by `forgetCached` under `.specs/tracks/` (tracks
+  init), `invalidateReadCache` and every read-cache scope's start / end. No scope → no packs (a direct engine call outside
+  an exported function sees the built-in tracks only). `PACK_LOADING` makes every registry reader answer built-in-only
+  while the packs load (never a half-built registry). Registry: `{packs, names, byName, byToken, problems, entries, legacy,
+  corpus}` — packs in folder-name order; problems are `{file, severity, code, args, line?, pack?}`, localized only when
+  shown (`localizePackProblem`, `msg.trackPacks.problems[code]`), so the memo is language-neutral. **Cross-call caches**
+  (F4 review R9 — 20 packs × 4 languages cost ~100 ms per call): `packScan()` lists a pack's folder + `<lang>/` folders and
+  lstats each allowlisted file → `sig` (size / mtime / ctime / inode per entry); `PACK_CACHE` (per pack folder, bounded 64)
+  returns the validated result while the sig is unchanged — an edit is picked up by the next call; the pack folder's
+  realpath is checked every call. `PACK_CORPUS_CACHE` (bounded 16) keys the placeholder corpus by every valid pack's
+  name / token / sig. A project without `.specs/tracks/` pays one existsCached.
+- **Validation (`loadPack`) — any error ignores the pack as a whole:** name = folder, `RE_PACK_NAME` `^[a-z][a-z0-9]{1,19}$`,
+  never `packReservedName()` (VALID_TRACKS, TRACK_ALIASES keys, `PACK_RESERVED_WORDS`, Windows device names, PROTO_KEYS);
+  marker `RE_PACK_MARKER` `^[A-Z][A-Z0-9]{1,11}$` (bare or `[X]`), never `RE_PACK_MARKER_RESERVED` (built-in markers, US\d /
+  P\d / SHARED, TODO / TBD / TBC / FIXME…, AC / SC / EC / NFR / T prefixes), unique (the first pack by name keeps it —
+  `marker-duplicate` on the other); title / section names / syn: `packTextOk()` (2–80, one line, no `[ ] < >` or backtick —
+  they land in headings); section names never a PROTO_KEYS word (they key `sectionNames` lookups); guidance
+  `packGuidanceOk()` (one line, no `<!--`/`-->`, never a heading or fence); keywords `RE_PACK_KEYWORD` (letters / digits,
+  inner space - ' . ’, 2–60) — a regex-looking keyword is `signal-invalid`, and a valid one still reaches the classifier
+  only through `keywordRe` (escaped); steering: `RE_CUSTOM_STEERING` minus device / proto names. Bounds `PACK_LIMITS`
+  (20 packs, 32 KB track.json and per fragment — size read by lstat BEFORE the content, 20 sections / 20 syn / 50 keywords
+  per tier / 20 fragment items). Files: `packScan()` — lstat, a regular file (never a link), in a folder chain checked once
+  per pack (`.specs/tracks/` no link, the pack folder's realpath inside the real `.specs/`, a `<lang>/` Dirent no link — no
+  per-file realpath: it adds nothing for a regular file and was the loader's biggest cost); `readPackItem()` reads it after
+  the lstat size check; the pack folder itself is refused when it is a link (Dirent `isSymbolicLink`, which a Windows
+  junction is) or resolves outside. Sections: every name / synonym is keyed by `packSectionKey()` — lower-case, the
+  RE_HEADING_LEAD lead stripped (numbering, `Section N`, an emoji, a dash — what `headingMatches` strips from the heading;
+  F4 review R4; nothing left → `field-invalid`, a lead stripped → warn `section-name-lead`), and every synonym is
+  MARKER-BOUND (`loose` = all of them — F4 review R7: a core `## Architecture` never satisfies a pack's Architecture; a
+  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`).
+  Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
+  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
+  `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
+  and the file the count comes from — F4 review R10). Warnings only:
+  unknown keys / files / variables, an empty fragment (the default is used), a steering name a built-in track also uses.
+  Stable codes are in the guide and in `spec_tracks`' description.
+- **Rendering (EN / PT / ES / pt-BR — `msg.trackPacks`):** `packDesignBlock` (`## [MARKER] <name>` + `todoLine` +
+  guidance — `packSubstBasic()` fills its `{{title}}` / `{{marker}}` / `{{name}}` / `{{slug}}`; `trackDesignBlock(tr, lang,
+  vars)`), `packRequirementsBlock` (`#### [MARKER] <title> — Acceptance Criteria (EARS)`, numbered after the highest
+  US-1 AC of the text it joins; `insertPackRequirements()` puts it before the first REAL `#`/`##`/`###` heading after the
+  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task;
+  `_Requirements:_` added when a task has none — the pack's AC IDs per `trackAcIds`, else the track's `acPlaceholder`;
+  the DEFAULT task also gets `_Makes green:_` from `packPlanRows()`; a fragment line whose `{{tN}}` / `{{tests}}` names no
+  planned test is dropped), `packTestRowsBlock` (`## [MARKER] <Traceability Matrix>` + the built-in header, T-IDs after
+  the plan's own; null when the plan already cites a pack AC or requirements.md defines none), `packChecklistBlock`
+  (`- [ ] TOKEN: …`; given requirements.md, so `{{acN}}` resolves), `packSteeringStub`. `packSubst()` resolves `{{ac1}}…` `{{acs}}` `{{t1}}…` `{{tests}}` `{{title}}`
+  `{{marker}}` `{{name}}` `{{slug}}` with `RE_TEMPLATE_VAR` (linear).
+- **Where the blocks go:** `scaffoldText()` — a built-in scaffold gets ONLY its pack tracks' blocks (`withTrackBlocks(…,
+  {only})`; a feature without packs is byte-identical to 1.14); a project template gets every missing block (the 1.14
+  rule, packs included; checklist: packs only). createFeature also writes each pack's steering file (built-in tracks'
+  steering stays spec_init / add_track's). applyTracks (add_track): design sections, steering, task block — never
+  requirements (as the built-in tracks). `scaffoldTestPlan` leaves the pack's ACs out of its "fresh template?" comparison
+  and of its generic rows (the pack's own rows plan them). classification.md lists pack signals (i18n `signalTracks()`).
+  importSpec (F4 review R8): after writing the imported requirements.md it re-inserts each pack's criteria
+  (`insertPackRequirements`), adds the pack rows to the re-planned test plan (`withTrackBlocks(…, {only: packs})`) and
+  appends the pack task block (`withPackTasks` — imported tasks, or the kept scaffold with its stale pack block cut out).
+- **Gates & readers:** `activeSectionTracks()` (doctor `<name>-sections`, the design approval, design-save check,
+  roadmap attention), `statusFeature` `packSections {name: {marker, title, sections}}` + `missingPacks`, `checkPhaseIndex`
+  (a `-sections` id is a design check), the brief's and the RTM's track design sections (`["sec", "privacy",
+  ...packTracks()]`), import's design blocks, `fitTemplateTasks`, append_tasks' inactive-heading refusal, templates check.
+  A pack's task block is found by its MARKER in a tasks.md heading (`trackTaskHeadingIs()` — the built-in tracks keep
+  their template headings, cached in `TASK_HEADINGS`). Placeholders: `[MARKER]` is stable (`isPackMarkerBracket()` in
+  `scanBrackets`, the exact case-sensitive token — a lower-case `[role]` slot stays a slot beside a ROLE pack — and never
+  while the process-wide built-in corpus is built, `BUILTIN_CORPUS_BUILD`); the packs' texts in every language join the
+  corpus (`packCorpusSets()` → `projectTemplateHas` brackets / code / tasks — incl. the track's `acPlaceholder`), read
+  from their SOURCES (guidance, fragment items / rows, the i18n defaults — never whole rendered blocks) with `{{title}}` /
+  `{{marker}}` filled and the feature's `{{name}}` `{{slug}}` `{{acN}}` `{{acs}}` `{{tN}}` `{{tests}}` kept: such a key is a
+  linear wildcard (`RE_PACK_WILD_VAR` split → `wildcardMatch`, ≥ 3 literal characters — F4 review R2).
+- **Missing packs:** createFeature / applyTracks record `.state.json → packMarkers {name: "[TOKEN]"}` (`packMarkersFor`). A
+  saved non-built-in track is a pack name only when `savedPackName()` says so — a valid pack now, or in packMarkers, never a
+  `packReservedName` (F4 review R6: any other word — a typo, `security`, `gdpr` — makes the list unreadable → the files
+  decide, as in 1.14); such a missing one is kept by `savedTracks()` (normalizeTracks drops it; applyTracks / removeTracks
+  re-append `missingPackTracks()`). `detectTracks()` → `noteGhostPacks()` registers EVERY packMarkers entry that is no
+  valid pack now — whether or not the feature still lists it (F4 review R1: a pack turned off, then deleted, came back to
+  life) — in the per-call `GHOST_MARKERS`; `inactiveMarkerLines` / `inactiveTaskLines` drop those sections like a removed
+  track's — no gate, no placeholder — and `trackAcIds` keeps only the lines whose owner IS the asked track (F4 review R5:
+  ghost sections joined another track's criteria). Doctor warns `track-pack-missing` (absent vs invalid + its error codes). trace_check
+  reads whole files (as for a removed built-in track), so the pack's criteria and tasks still pair up there.
+- **`spec_tracks` / `dev-spec tracks`** (`trackPacks()`): list (built-in rows + every pack entry, valid or not), init
+  (`initTrackPack` — six files from `msg.trackPacks.init*`, create-only, the `inside()` link refusal of templates init;
+  the marker = the name in capitals, `TRACK`-suffixed when reserved, numbered when taken), check (the loader's problems +
+  EARS no-modal / vague on each fragment criterion; verdict; CLI exit 1 on an error). `tracks` is a RESERVED slug; a
+  `.specs/tracks/` holding a `.state.json` is a pre-1.15 feature (`reg.legacy`, every action refuses `legacyFeature`); the
+  PostToolUse hook and the pre-commit check skip `.specs/tracks/` (same exception).
+- **Known limits:** a pack's classifier keywords share `KW_RE` / `KW_LITERAL` with the built-in ones (bounded:
+  `KW_CACHE_MAX`); a slot or task line holding a variable is a wildcard (`[the {{name}} screens]` also recognises
+  `[the checkout screens]`); editing `.specs/tracks/*` does not refresh ROADMAP.md (the save hook skips pack files); a hook
+  is a fresh process — it pays one read of the packs (20 packs × 4 language folders ≈ 60 ms); ghost markers are per call and project-wide (a marker of a missing pack drops that heading in any
+  feature of the call — correct, since the pack is gone for the whole project); section names are localized per language
+  but `sectionState` reports the English name.
 
 ## Stakeholder export and release notes (1.14)
 - **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
@@ -1078,8 +1200,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
   never `path.join(specsRoot, slugify(name))`. An empty slug (non-Latin names, `...`, `undefined`)
   used to resolve to `.specs/` itself, so `spec_feature remove` deleted every spec (the v1.11
-  Critical). The resolver also rejects the reserved slugs (`steering`; since 1.14 `templates` / `exports` too, with the
-  pre-1.14-feature exception — see Project templates) and Windows device names (`nul`, `con`, `com1`…),
+  Critical). The resolver also rejects the reserved slugs (`steering`; since 1.14 `templates` / `exports` too, since 1.15
+  `tracks`, each with the pre-existing-feature exception — see Project templates) and Windows device names (`nul`, `con`, `com1`…),
   transliterates accents (`Autenticação` → `autenticacao`) and falls back to the pre-1.11 slug
   (`autentica-o`) so old folders are still found. `slugify(undefined)` is `""`, never `"undefined"`.
   `listFeatures` skips dot-folders and non-slug folders (reported as `ignored`).
@@ -1307,7 +1429,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
   requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings, design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
-  `.specs/templates/` (unless that folder is a pre-1.14 feature) and generated files. The Stop / SubagentStop hook
+  `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files. The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
@@ -1397,12 +1519,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1221 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1256 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 395 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 402 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
-Exact counts that change when a package adds a command, tool or template (51 command files, the tools/list length, the
+Exact counts that change when a package adds a command, tool or template (52 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change.
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
   `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim` and `node:24-alpine`:
@@ -1442,8 +1564,13 @@ template keys, the resource list) are asserted in place — update them in the s
 - New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
   prompt too (bump the exact command count in `mcp/test.js` and the README command lists). Never a Claude Code built-in
   name.
-- New track → see The track model (registries); new artifact → the resource allowlist, the template allowlist
+- New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
+  one → The track model (registries). New artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`) and `templateCorpus()` if it has slots.
+- A new reader of the track registries → the accessor functions (`allTracks()` / `optionalTracks()` / `markerTracks()` /
+  `trackMarker()` / `trackSectionTable()` / `trackSteeringFiles()` / `trackSignalTable()`), never the built-in constants —
+  those miss the project's track packs (only the process-wide template corpus and the built-in lists of `spec_tracks list`
+  read the constants on purpose).
 - New CLI switch (a flag that takes no value) → `spec.CLI_SWITCHES` in `mcp/lib/spec.js` (the CLI's `BOOL_FLAGS` and the
   approval hook's lexer both read it); a new value flag → the CLI's `VALUE_FLAGS`.
 - New hook → `hooks/hooks.json` (never `plugin.json` — see Conventions), silent and exit 0 on any error, the engine loaded

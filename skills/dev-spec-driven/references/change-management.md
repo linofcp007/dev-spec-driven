@@ -101,7 +101,10 @@ active and archived features alike.
 ## 6. The living catalog — `.specs/SPECS.md`
 
 `spec_catalog` (CLI `dev-spec catalog`) answers "what does the system do today?": every feature (active,
-complete/finished, archived) with its status and every AC ID with a one-line EARS text, superseded ones marked.
+complete/finished, archived) with its status and every AC ID with a one-line EARS text, superseded ones marked. Since
+1.15 only a SHIPPED feature's `_Supersedes:_` retires the older AC (struck through; a finish recorded or the execution
+signed off — the release notes' rule); a draft's reads "to be superseded by … (not shipped yet)" and the AC stays current;
+a feature archived without ever shipping declares nothing, and its own ACs are not counted as current.
 `finished` means what `spec_next_action` and `spec_finish` mean: a current finish baseline (no change request,
 re-approval or new `_Implements:_` file since), every artifact as approved (an edit not yet re-approved reads
 `complete`) and every tick verified — otherwise the feature reads `complete` until it is finished again.
@@ -244,8 +247,8 @@ agreed to approve those phases: a fast-forward is still the human's approval, re
 **Export (`/spec-export`).** `spec_export {name?, format?, write?}` (CLI `dev-spec export [feature] [--md] [--write]`)
 builds ONE self-contained, offline, printable document for people who don't read markdown folders:
 
-- **a feature**, in its language — summary, stories with their EARS criteria and stable IDs (a superseded criterion
-  struck through, a template one flagged), the other requirements sections, the design (a bugfix: `bug.md`), the test
+- **a feature**, in its language — summary, stories with their EARS criteria and stable IDs (a criterion a SHIPPED
+  feature superseded struck through, one a draft plans to supersede marked "to be superseded", a template one flagged), the other requirements sections, the design (a bugfix: `bug.md`), the test
   plan, every task with its done / verified status and reason, `decisions.md`, the approvals (who, when, forced,
   changed since, pending) and the open `[NEEDS CLARIFICATION]` markers;
 - **the project** (no `name`), in the project language — the roadmap summary and backlog, every active feature's

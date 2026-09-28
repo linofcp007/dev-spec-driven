@@ -48,7 +48,7 @@ point there). A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
-### The local MCP server (`spec-driven`) — 34 tools
+### The local MCP server (`spec-driven`) — 35 tools
 
 Pure Node core — **no `npm install`, no network, no cost.** Tools:
 
@@ -59,6 +59,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
 | `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered) |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
+| `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
 | `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run; each run stamped `observed`); the next task is the first open one whose `_Depends:_` are done; `batch` for parallel `[P]` tasks, `waves` for the execution waves of every open task |
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
@@ -74,7 +75,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_doctor` | One health-check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
 | `spec_clarify` | Surface requirement ambiguities/gaps before design |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
-| `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"); `write` → `.specs/SPECS.md` |
 | `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
@@ -206,6 +207,17 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### Unreleased (1.15)
+
+- **Project-defined tracks** (`/spec-tracks`) — beyond the six built-in tracks, a team defines its own (+a11y, +mobile,
+  +dbmigration…) as a folder: `.specs/tracks/<name>/track.json` (name, a case-sensitive marker such as `A11Y`, a title,
+  classifier signals, the mandatory design sections, an optional steering file) plus optional markdown fragments —
+  criteria, tasks, test rows, checklist items, the steering stub (a `<lang>/` subfolder wins). A valid pack is a marker
+  track everywhere: `spec_classify` picks it from its signals, `spec_create` / `add-track` scaffold its `#### [A11Y]`
+  criteria, `## [A11Y]` design sections, tasks and test rows, and doctor / the design approval refuse until its sections
+  are filled. It is data only (nothing runs; links out of `.specs/` are ignored); a bad pack is reported by `check` and
+  ignored. Guide: `skills/dev-spec-driven/references/project-tracks.md`.
+
 ### New in 1.14
 
 - **Six tracks** — `+sec` and `+privacy` compose with the others: their `[SEC]` / `[PRIVACY]` criteria, mandatory
@@ -323,7 +335,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (51)
+### Commands (52)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -333,7 +345,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`.
+`/spec-tour`. Unreleased (1.15): `/spec-tracks`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
@@ -400,7 +412,7 @@ a HIPAA apontam para aí). Uma alteração de texto é modo Vibe: sem cerimónia
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
 
-### O servidor MCP local (`spec-driven`) — 34 ferramentas
+### O servidor MCP local (`spec-driven`) — 35 ferramentas
 
 Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
@@ -411,6 +423,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
 | `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas) |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
+| `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
 | `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha; cada execução leva o carimbo `observed`); a próxima tarefa é a primeira aberta cujas `_Depends:_` estão feitas; `batch` para tarefas paralelas `[P]`, `waves` para as vagas de execução de todas as tarefas abertas |
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
@@ -426,7 +439,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS, placeholders, trace, secções, evidência, gates, steering) |
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
-| `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"); `write` → `.specs/SPECS.md` |
 | `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
@@ -562,6 +575,18 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
 
+### Por lançar (1.15)
+
+- **Tracks definidos pelo projeto** (`/spec-tracks`) — além dos seis tracks de origem, uma equipa define os seus (+a11y,
+  +mobile, +dbmigration…) como uma pasta: `.specs/tracks/<nome>/track.json` (nome, um marcador sensível a maiúsculas
+  como `A11Y`, um título, sinais para o classificador, as secções obrigatórias do design, um ficheiro de steering
+  opcional) mais fragmentos markdown opcionais — critérios, tarefas, linhas de teste, itens de checklist, o stub de
+  steering (uma subpasta `<lang>/` tem prioridade). Um pack válido é um track com marcador em todo o lado: o
+  `spec_classify` escolhe-o pelos seus sinais, o `spec_create` / `add-track` criam os seus critérios `#### [A11Y]`, as
+  secções `## [A11Y]` do design, as tarefas e as linhas de teste, e o doctor / a aprovação do design recusam até as
+  secções estarem preenchidas. São só dados (nada é executado; ligações para fora de `.specs/` são ignoradas); um pack
+  inválido é reportado pelo `check` e ignorado. Guia: `skills/dev-spec-driven/references/project-tracks.md`.
+
 ### Novidades da 1.14
 
 - **Seis tracks** — `+sec` e `+privacy` combinam-se com os outros: critérios `[SEC]` / `[PRIVACY]`, secções obrigatórias
@@ -688,7 +713,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (51)
+### Comandos (52)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -698,7 +723,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`.
+`/spec-tour`. Por lançar (1.15): `/spec-tracks`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
@@ -765,7 +790,7 @@ RGPD, el GDPR y la HIPAA apuntan ahí). Un cambio de texto es modo Vibe: sin cer
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
 
-### El servidor MCP local (`spec-driven`) — 34 herramientas
+### El servidor MCP local (`spec-driven`) — 35 herramientas
 
 Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
@@ -776,6 +801,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
+| `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
 | `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla; cada ejecución lleva el sello `observed`); la siguiente tarea es la primera abierta cuyas `_Depends:_` están hechas; `batch` para tareas paralelas `[P]`, `waves` para las oleadas de ejecución de todas las tareas abiertas |
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
@@ -791,7 +817,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS, placeholders, trace, secciones, evidencia, gates, steering) |
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
-| `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_`); `write` → `.specs/SPECS.md` |
+| `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"); `write` → `.specs/SPECS.md` |
 | `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
@@ -931,6 +957,18 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
+### Sin publicar (1.15)
+
+- **Tracks definidos por el proyecto** (`/spec-tracks`) — además de los seis tracks de serie, un equipo define los
+  suyos (+a11y, +mobile, +dbmigration…) como una carpeta: `.specs/tracks/<nombre>/track.json` (nombre, un marcador que
+  distingue mayúsculas como `A11Y`, un título, señales para el clasificador, las secciones obligatorias del diseño, un
+  archivo de steering opcional) más fragmentos markdown opcionales — criterios, tareas, filas de prueba, elementos de
+  checklist, el stub de steering (una subcarpeta `<lang>/` tiene prioridad). Un pack válido es un track con marcador en
+  todas partes: `spec_classify` lo elige por sus señales, `spec_create` / `add-track` crean sus criterios `#### [A11Y]`,
+  las secciones `## [A11Y]` del diseño, las tareas y las filas de prueba, y doctor / la aprobación del diseño se niegan
+  hasta que las secciones estén rellenadas. Son solo datos (nada se ejecuta; los enlaces fuera de `.specs/` se ignoran);
+  un pack no válido lo informa `check` y se ignora. Guía: `skills/dev-spec-driven/references/project-tracks.md`.
+
 ### Novedades de la 1.14
 
 - **Seis tracks** — `+sec` y `+privacy` se combinan con los demás: criterios `[SEC]` / `[PRIVACY]`, secciones
@@ -1057,7 +1095,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (51)
+### Comandos (52)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -1067,7 +1105,7 @@ todas partes, `/plugin disable` — ambos quitan también las skills de superpow
 Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`.
+`/spec-tour`. Sin publicar (1.15): `/spec-tracks`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
@@ -1120,12 +1158,12 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 51 slash commands (trilingual descriptions; also the MCP prompts)
+├── commands/                         ← 52 slash commands (trilingual descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (34 tools + prompts + resources, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (35 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
 │   ├── lib/i18n.js                   ← localized content (artifact + steering builders, messages)

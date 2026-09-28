@@ -11,7 +11,7 @@ People who don't read markdown folders (product, legal, clients) get ONE documen
 `{name?, format?, write?}` (CLI `dev-spec export [feature] [--md | --csv] [--write]`):
 
 - **With a feature name** — that feature, in the feature's language: summary; user stories with their EARS acceptance
-  criteria and stable IDs (a criterion a later feature superseded is struck through, a template one flagged); the other
+  criteria and stable IDs (a criterion a later SHIPPED feature superseded is struck through; one a draft plans to supersede reads "to be superseded"; a template one flagged); the other
   requirements sections (success criteria, edge cases, NFRs, out of scope…); the design sections (a bugfix: bug.md —
   reproduction, root cause, fix); the test plan; every task with its done / verified status (the verdict `spec_doctor`
   gives, with the reason); the **traceability matrix** (one row per AC / EC / NFR / SC: status, design sections, tasks,

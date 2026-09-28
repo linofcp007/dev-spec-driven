@@ -33,6 +33,7 @@ SECTIONS.push("frgb"); // 1.14 full review (Gb) — next_action, doctor, stop ga
 SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR
 SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
 SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
+SECTIONS.push("fftracks"); // 1.15 feature F4 — project-defined tracks (track packs)
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -1113,6 +1114,14 @@ ok(tr10.code === 0 && /verdict=pass/.test(tr10.out) && /⚠ _Supersedes:_ nope\/
   "trace prints a phantom _Supersedes:_ as a warning — not a gap, the exit code stays 0");
 
 // catalog: prints the markdown; --json = spec_catalog; --write → SPECS.md; a hand-written SPECS.md is never overwritten.
+// 1.15: only a SHIPPED feature's _Supersedes:_ retires an AC — billing-v2 carries an execution sign-off.
+const ship10 = (dir, slug) => {
+  const sp = path.join(dir, ".specs", slug, ".state.json");
+  const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+  st.approvals = { ...(st.approvals || {}), execution: { at: "2026-09-01T00:00:00.000Z", by: "test" } };
+  fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+};
+ship10(w10, "billing-v2");
 const cat10 = r10(["catalog"]);
 let catJ = null;
 try { catJ = JSON.parse(r10(["catalog", "--json"]).out); } catch { /* invalid JSON */ }
@@ -1290,6 +1299,7 @@ reqW10("billing", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store 
 reqW10("wrapped", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days\n   - _Supersedes: billing/US-1.AC-2,\n     billing/US-1.AC-3_\n");
 fs.writeFileSync(path.join(w10w, ".specs", "wrapped", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1_\n");
 const trW10 = run(["trace", "wrapped", "--project", w10w]);
+ship10(w10w, "wrapped"); // 1.15: a shipped declarer retires its targets
 const catWr10 = run(["catalog", "--project", w10w]).out;
 ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never closed/.test(trW10.out) && !/✗ traceability/.test(run(["doctor", "wrapped", "--project", w10w]).out) &&
   catWr10.includes("~~**US-1.AC-3** — WHEN z THE SYSTEM SHALL w~~ — superseded by `wrapped/US-1.AC-1`") && catWr10.includes("_(supersedes `billing/US-1.AC-2`, `billing/US-1.AC-3`)_"),
@@ -2863,21 +2873,28 @@ if (inSection("frga")) {
     "full review Ga6: append-tasks --makes-green (repeatable, as the plan spells the T-IDs) / --expect-fail / --size write the markers; a bad size, an unplanned T-ID, a non-boolean --expect-fail or a second --size writes nothing (got " +
     JSON.stringify([a6bad.out.slice(0, 120), a6ph.out.slice(0, 120), a6.out.slice(0, 200)]).slice(0, 500) + ")");
 
-  // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher — an explicit System32 bash.exe is refused, nothing run or recorded.
+  // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher. An explicit System32 bash.exe is the user's choice (1.15): it
+  // runs inside WSL — with no working distribution the relay fails and that is could-not-run (`wsl`), nothing recorded.
   if (process.platform === "win32") {
     const f9 = Sga.createFeature(gp, "Wsl", ["core"], "", undefined, "en");
-    wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: " + PASS + "_\n");
+    wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: exit 0_\n"); // a builtin: no node needed inside a WSL distribution
     const sysBash = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "bash.exe");
     const g9 = rga(gp, ["done", f9.slug, "1", "--run", "--shell", sysBash, "--json"]);
     const g9j = jsonGa(g9.stdout);
-    const g9none = !(stGa(f9).evidence || {})["1"]; // before the Git Bash run below records its pass
+    const g9x = jsonGa(rga(gp, ["done", f9.slug, "1", "--run", "--shell", path.join(path.dirname(sysBash), "wsl.exe"), "--json"]).stdout);
+    const g9none = !(stGa(f9).evidence || {})["1"] || !!(g9j && g9j.ok); // before the Git Bash run below records its pass
+    ok(g9x && g9x.ok === false && g9x.couldNotRun === "wsl-exe" && /wsl\.exe/.test(g9x.error),
+      "full review Ga9 (Windows): --shell <System32 wsl.exe> is no shell (it rejects -c) — refused before anything runs, nothing recorded (got " + JSON.stringify(g9x) + ")");
     const gitExec = spawnSync("git", ["--exec-path"], { encoding: "utf8" });
     const gitBash = Sga.resolveRunShell("bash", { gitExecPath: gitExec.status === 0 ? gitExec.stdout : null });
     const g9b = gitBash.shell ? rga(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"]) : null;
     const g9bj = g9b && jsonGa(g9b.stdout);
-    ok(g9.code === 1 && g9j && g9j.couldNotRun === "wsl-bash" && /is WSL's bash\.exe launcher/.test(g9j.error) && !/^\$ /m.test(g9.out) && g9none &&
-      (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
-      "full review Ga9 (Windows): --shell <System32 bash.exe> is refused before anything runs (couldNotRun wsl-bash); --shell bash runs under Git Bash when installed (got " +
+    // Either WSL ran it (a working distribution: a real pass is recorded) or its relay failed (could-not-run `wsl` / the shell
+    // didn't start: nothing recorded) — never a bogus failed run or red proof.
+    const wslRan = g9.code === 0 && g9j && g9j.ok === true;
+    const wslNot = g9.code === 1 && g9j && ["wsl", "shell-not-started"].includes(g9j.couldNotRun) && g9none;
+    ok((wslRan || wslNot) && (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
+      "full review Ga9 (Windows): --shell <System32 bash.exe> is used as given — it runs under WSL or, when WSL can't run it, is could-not-run with nothing recorded; --shell bash runs under Git Bash when installed (got " +
       JSON.stringify([g9.code, g9j, gitBash, g9b && g9b.out.slice(0, 200)]).slice(0, 600) + ")");
   } else ok(true, "full review Ga9: --shell <System32 bash.exe> refusal — Windows only (resolveRunShell is unit-tested in mcp/test.js)");
 
@@ -3374,6 +3391,76 @@ if (inSection("ffrtm")) {
     /trace <feature> \[--code\]/.test(doc) && /\[--matrix\]/.test(doc) && /\[--csv\] the traceability matrix as CSV/.test(doc) && /--matrix: \+ the requirements traceability matrix/.test(help) &&
     /--csv: the matrix as RFC 4180 CSV on stdout/.test(help) && /\.rtm\.csv/.test(help),
     "feature F5: a PT feature's matrix and CSV speak Portuguese (headers, statuses, task words; IDs English); the docblock and help document --matrix / --csv and the .rtm.csv export");
+}
+
+// 1.15 feature (F4) — project-defined tracks: `dev-spec tracks [list|init <name>|check]` and a pack used by classify / create /
+// status / doctor / add-track, as spec_tracks and the MCP tools do.
+if (inSection("fftracks")) {
+  const f4 = path.join(tmp, "f4-tracks");
+  const js = (x) => JSON.stringify(x);
+  const r = (args) => run([...args, "--project", f4]);
+  run(["init", "--lang", "en", "--project", f4]);
+  const i1 = r(["tracks", "init", "a11y"]);
+  const i2 = r(["tracks", "init", "a11y"]);
+  const iBad = r(["tracks", "init", "sec"]);
+  const iNo = r(["tracks", "init"]);
+  const pdir = path.join(f4, ".specs", "tracks", "a11y");
+  ok(i1.code === 0 && /Track pack \+a11y scaffolded \(6 file\(s\)\)/.test(i1.out) && /\+ \.specs\/tracks\/a11y\/track\.json/.test(i1.out) && fs.existsSync(path.join(pdir, "steering.md")) &&
+    i2.code === 0 && /Nothing written — every file of the \+a11y pack is already there/.test(i2.out) && iBad.code === 1 && /'sec' is reserved/.test(iBad.out) &&
+    iNo.code === 1 && /tracks init needs a name/.test(iNo.out),
+    "feature F4: tracks init scaffolds the pack's 6 files (never overwrites; a reserved or missing name exits 1) (got " + js(i1.out.slice(0, 200)) + ")");
+  // The team's real pack: signals, sections, fragments.
+  fs.writeFileSync(path.join(pdir, "track.json"), JSON.stringify({ name: "a11y", marker: "A11Y", title: { en: "Accessibility", pt: "Acessibilidade" },
+    signals: { strong: ["screen reader", "accessibility"], weak: ["keyboard"] }, sections: [{ name: "Keyboard Navigation" }, { name: "Screen Reader Support", guidance: "Landmarks and labels." }],
+    steering: "a11y.md" }, null, 2));
+  fs.writeFileSync(path.join(pdir, "requirements.md"), "- WHEN a user tabs through the page THE SYSTEM SHALL show a visible focus ring on every control\n");
+  fs.writeFileSync(path.join(pdir, "tasks.md"), "- [ ] Focus ring on every control\n  - _Requirements: {{ac1}}_\n");
+  fs.rmSync(path.join(pdir, "test-plan.md")); // the example's rows cite {{ac2}} — with one criterion left, check would refuse the pack
+  const ls = r(["tracks"]);
+  const ck = r(["tracks", "check"]);
+  let ckJ = {};
+  try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
+  ok(ls.code === 0 && /^Tracks — 6 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+    /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
+    "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
+  // classify / create / status / doctor with the pack.
+  const cl = r(["classify", "A settings page that works with a screen reader"]);
+  const cr = r(["create", "Settings", "a11y", "--summary", "Settings page"]);
+  const st = r(["status", "settings"]);
+  const dr = r(["doctor", "settings"]);
+  const reqf = path.join(f4, ".specs", "settings", "requirements.md");
+  const req = fs.existsSync(reqf) ? fs.readFileSync(reqf, "utf8") : "";
+  ok(/core \+a11y/.test(cl.out) && /a11y=medium/.test(cl.out) && /\+a11y: ON/.test(cl.out) && cr.code === 0 && /#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user tabs through the page/.test(req) &&
+    /\[A11Y\] sections: ◐ Keyboard Navigation \(unfilled\) · ◐ Screen Reader Support \(unfilled\)/.test(st.out) && dr.code === 1 && /a11y-sections/.test(dr.out) &&
+    fs.existsSync(path.join(f4, ".specs", "steering", "a11y.md")),
+    "feature F4: classify picks +a11y from the pack's signals; create a11y scaffolds its criteria and steering; status shows the [A11Y] sections; doctor fails a11y-sections (exit 1) (got " + js(cl.out.slice(0, 200)) + " / " + js(st.out.slice(0, 300)) + ")");
+  // add-track / --remove on another feature; a bad pack → check exits 1 and the pack is ignored (an unknown track).
+  r(["create", "Profile", "core", "--summary", "Profile"]);
+  const at = r(["add-track", "profile", "a11y"]);
+  const rm = r(["add-track", "profile", "a11y", "--remove"]);
+  fs.mkdirSync(path.join(f4, ".specs", "tracks", "broken"), { recursive: true });
+  fs.writeFileSync(path.join(f4, ".specs", "tracks", "broken", "track.json"), JSON.stringify({ name: "broken", marker: "PRIVACY", title: { en: "Broken" }, sections: [{ name: "Scope" }] }));
+  const ck2 = r(["tracks", "check"]);
+  const cr2 = r(["create", "Other", "broken"]);
+  ok(at.code === 0 && /\+a11y/.test(at.out) && /design\.md \(\+sections\)/.test(at.out) && rm.code === 0 && /\[A11Y\]/.test(rm.out) &&
+    ck2.code === 1 && /✗ \.specs\/tracks\/broken\/track\.json — marker \[PRIVACY\] is taken by dev-spec/.test(ck2.out) && cr2.code === 1 && /Unknown track/.test(cr2.out),
+    "feature F4: add-track a11y / --remove; a pack with a built-in marker → tracks check exits 1 naming it, and the pack is no track (got " + js(ck2.out.slice(0, 300)) + ")");
+  // A deleted pack: status names it, doctor warns track-pack-missing — never a crash.
+  fs.rmSync(pdir, { recursive: true, force: true });
+  const st2 = r(["status", "settings"]);
+  const dr2 = r(["doctor", "settings", "--json"]);
+  let d2 = null;
+  try { d2 = JSON.parse(dr2.out); } catch { /* stays null */ }
+  ok(st2.code === 0 && /track pack\(s\) not available: \+a11y/.test(st2.out) && d2 && d2.checks.some((c) => c.id === "track-pack-missing" && c.status === "warn") && !d2.checks.some((c) => c.id === "a11y-sections"),
+    "feature F4: a deleted pack — status names it, doctor warns track-pack-missing and requires none of its sections");
+  // Localized: tracks init --lang pt writes Portuguese comments and speaks Portuguese; the help documents the command.
+  const ip = r(["tracks", "init", "mobile", "--lang", "pt"]);
+  const help = run(["help"]).out;
+  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const mj = path.join(f4, ".specs", "tracks", "mobile", "track.json");
+  ok(ip.code === 0 && /Track pack \+mobile criado/.test(ip.out) && fs.existsSync(mj) && /um track definido pelo projeto/.test(fs.readFileSync(mj, "utf8")) &&
+    /tracks \[list\|init <name>\|check\]/.test(help) && /tracks \[list\|init <name>\|check\]/.test(doc) && r(["tracks", "bogus"]).code === 1,
+    "feature F4: tracks init --lang pt (Portuguese files and messages); help and the docblock document `tracks`; an unknown action exits 1");
 }
 
 // unknown command errors

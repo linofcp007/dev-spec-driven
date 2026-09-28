@@ -160,6 +160,10 @@ function handle(raw) {
     // (A FEATURE named templates created before 1.14 — its folder holds a .state.json — is still a feature.)
     const tplAt = fwd.match(/^(.*\/\.specs)\/templates\//i);
     if (tplAt && !fs.existsSync(path.join(tplAt[1], "templates", ".state.json"))) process.exit(0);
+    // Track packs (.specs/tracks/<name>/requirements.md …, 1.15) are no feature's spec either — `dev-spec tracks check` checks them.
+    // (A FEATURE named tracks created before 1.15 — its folder holds a .state.json — is still a feature.)
+    const packAt = fwd.match(/^(.*\/\.specs)\/tracks\//i);
+    if (packAt && !fs.existsSync(path.join(packAt[1], "tracks", ".state.json"))) process.exit(0);
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
     if (!isDevSpecProject(pdir)) process.exit(0);

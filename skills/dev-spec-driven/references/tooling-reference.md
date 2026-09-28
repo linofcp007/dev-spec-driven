@@ -3,7 +3,7 @@
 Read on demand from `SKILL.md`. The workflow itself lives in `SKILL.md`; this file holds the lookup
 tables.
 
-## MCP tools (`spec-driven` server — 34 tools)
+## MCP tools (`spec-driven` server — 35 tools)
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
@@ -15,6 +15,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`"on"` / `"off"` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands), `approvalRoles` (phase → roles), `evidence` (`"reported"` default / `"observed"` — only runs the harness saw, or the CLI made, verify a runnable `_Verify:_`) and `approvalGuard` (`"off"` / `"ask"` / `"deny"` — an agent's approval asks the user or is refused) — each stored in `roadmap.json → meta` and always reported back |
 | `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
+| `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
 | `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan or BMAD docs (path inside the project) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched |
 | `spec_list` | List all features with track set, phase, and task progress |
@@ -115,6 +116,7 @@ classify "<description>" [--name n]
 init [tracks...] [--lang] [--guard on|off|scope] [--stop-check on|off] [--check name="cmd" …] [--roles phase=role+role,… | none]
      [--evidence reported|observed] [--approval-guard off|ask|deny]
 steering <file> [--lang]                 templates [list|init|check] [artifact] [--lang]
+tracks [list|init <name>|check] [name] [--lang]
 create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
 import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]
@@ -143,7 +145,7 @@ prompts [name] [--args "…"]
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
 (`meta.checks`) and records them — the only CLI commands that execute anything from your spec. On Windows
-`--shell bash` is Git Bash (WSL's `bash.exe` launcher is refused); a run that could not happen (no shell, a signal,
+`--shell bash` is Git Bash, never WSL's `bash.exe` launcher (named by its path, WSL is used as given); a run that could not happen (no shell, a signal,
 `--timeout <seconds>` expired, output over 64 MB) records nothing. `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `done --run` / `finish --run` runs are stamped `observed: "cli"` (they count as observed under `init --evidence
@@ -182,6 +184,7 @@ project-root/
     ├── UPGRADE.md                # generated upgrade checklist (spec_upgrade apply) — tick its boxes as you go
     ├── exports/                  # generated stakeholder documents (spec_export write)
     ├── templates/                # the team's own scaffolds (spec_templates) — <artifact>.md, <lang>/, steering/
+    ├── tracks/                   # the team's own tracks (spec_tracks) — <name>/track.json + fragments, <lang>/
     ├── .gitignore                # ignores the transient files (.lock, .roadmap.lock, *.reclaim, a killed process's *.tmp, .removing-*/ tombstones) — commit it
     ├── steering/                 # shared project context (created per active tracks)
     │   ├── constitution.md       # core (always) — non-negotiable principles
@@ -258,7 +261,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (51 commands)
+## Command reference (52 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -267,6 +270,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard`, `--check`, `--roles`, `--stop-check` (uses `spec_init`) |
 | `/spec-guard` | setup | Guard mode on / off / scope: code edits ask while no feature has approved tasks (not Phase 4 test files, nor a spike's prototype) — scope: also outside the plan's files (uses `spec_init {guard}`) |
 | `/spec-templates` | setup | The team's own scaffolds in `.specs/templates/`: list / init / check (uses `spec_templates`) |
+| `/spec-tracks` | setup | The team's own tracks — packs in `.specs/tracks/<name>/`: list / init / check (uses `spec_tracks`) |
 | `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
 | `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
 | `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |

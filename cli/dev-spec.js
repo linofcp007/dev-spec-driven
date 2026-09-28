@@ -24,6 +24,7 @@
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
+ *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
@@ -60,7 +61,7 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
- *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
+ *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy or a track pack (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
@@ -330,7 +331,7 @@ function main() {
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
         const conf = spec.msg(r.lang).classify.conf;
-        console.log(T.tracks(r.label, spec.OPTIONAL_TRACKS.map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", ")));
+        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
       });
@@ -419,6 +420,8 @@ function main() {
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
         for (const tr of ["sec", "privacy"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
+        for (const p of Object.values(r.packSections || {})) console.log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs (1.15)
+        if (r.missingPacks) console.log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
     }
 
@@ -579,9 +582,10 @@ function main() {
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         const M = spec.msg(spec.featureLang(projectDir, pos[0]));
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash — Git Bash on
-        // Windows, never WSL's launcher: b5Shell). A shell that can't be used is refused before anything runs.
+        // Windows, never WSL's launcher unless named by its path: b5Shell). A shell that can't be found is refused before anything runs.
         const sh = b5Shell();
-        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash });
+        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash });
+        if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given — said once
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
         // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
         if (process.platform === "win32" && sh.shell === true) {
@@ -790,7 +794,7 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>... [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
       if (!r.ok) return fail(r);
@@ -1019,6 +1023,16 @@ function main() {
       return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
+    case "tracks": {
+      // dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es] — the project's track packs in .specs/tracks/
+      // (= spec_tracks {action, name, lang}). check exits 1 when a pack has an error (scriptable, like templates check).
+      if (pos.length > 2) usage("dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es]");
+      const r = spec.trackPacks(projectDir, pos[0], { name: pos[1], lang: flags.lang });
+      if (!r.ok) return fail(r);
+      if (r.action === "check" && r.errors) process.exitCode = 1;
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+    }
+
     case "export": {
       // dev-spec export [feature] [--md|--csv] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
       // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
@@ -1107,7 +1121,8 @@ function main() {
       const { checks } = spec.projectChecks(projectDir);
       if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
       const sh = b5Shell();
-      if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash };
+      if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash };
+      if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given
       if (process.platform === "win32" && sh.shell === true) {
         const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
         if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
@@ -1132,7 +1147,7 @@ function main() {
     }
     // full review Ga9: the shell of done --run / finish --run — --shell > DEV_SPEC_SHELL > the platform default, resolved by the
     // engine (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's
-    // bash.exe launcher refused). → spec.resolveRunShell's result.
+    // bash.exe launcher only when named by its path; wsl.exe refused — wsl-exe). → spec.resolveRunShell's result.
     function b5Shell() {
       intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 — refused (exit 1) before anything runs
       const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
@@ -1273,7 +1288,7 @@ function printMatrix(feature, mx, lang) {
   const rows = mx.rows.map((r) => {
     const notes = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
     if (r.template) notes.push(C.notes.template);
-    if (r.supersededBy.length) notes.push(C.notes.superseded(r.supersededBy.join(", ")));
+    if (r.supersededBy.length) notes.push(r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join(", ")) : C.notes.superseded(r.supersededBy.join(", "))); // 1.15: a draft's is pending
     if (r.approval && r.approval.changed === true) notes.push(C.notes.changed);
     return [r.id, R.status[r.status] || r.status, r.tasks.map(task).join(" ") || "—", r.tests.map(test).join(" ") || "—",
       r.decisions.map((d) => d.id).join(" ") || "—", (notes.length ? "[" + notes.join("; ") + "] " : "") + r.text];
@@ -1308,6 +1323,9 @@ function helpText() {
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
                                   edit; check validates them (exit 1 on an error)
+  tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
+                                  fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
+                                  one; check validates them (exit 1 on an error)
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
@@ -1360,7 +1378,8 @@ function helpText() {
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);
-                                  --remove turns a track off (non-destructive: files kept, listed as inactive)
+                                  --remove turns a track off (non-destructive: files kept, listed as inactive);
+                                  a project track pack (dev-spec tracks) is named the same way
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)
