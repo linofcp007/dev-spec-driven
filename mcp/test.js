@@ -10983,6 +10983,195 @@ function endRun() {
   // 1.14 feature (F2) — human approval guard.
 
   // 1.14 feature (F3) — task dependencies and waves.
+  {
+    const fdRoot = path.join(tmp, "proj-ff-deps");
+    const mkF = (name, lang = "en", kind) => {
+      const p = path.join(fdRoot, name);
+      S.initProject(p, ["core"], lang);
+      const f = S.createFeature(p, "Deps " + name, ["core"], "", undefined, lang, kind);
+      return { p, slug: f.slug, dir: f.dir };
+    };
+    const put = (x, file, text) => fs.writeFileSync(path.join(x.dir, file), text);
+    const get = (x, file) => fs.readFileSync(path.join(x.dir, file), "utf8");
+    const tl = (...lines) => "# Tasks\n\n" + lines.join("\n") + "\n";
+    const callP = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
+    const js = (v) => JSON.stringify(v);
+
+    // Regression guard: a tasks.md without any _Depends:_ answers exactly as before.
+    const a = mkF("plain");
+    put(a, "tasks.md", tl("## Story US-1 (P1)", "- [x] 1. [US1] Core", "  - _Implements: src/core.js_", "- [ ] 2. [US1][P] Parser", "  - _Implements: src/parser.js_",
+      "- [ ] 3. [US1][P] Printer", "  - _Implements: src/printer.js_", "- [ ] 4. [US1][P] Printer tweak", "  - _Implements: src/printer.js_",
+      "- [ ] 5. [US1] Wire", "  - _Implements: src/index.js_", "**Checkpoint:** US1 works"));
+    const aNext = await callP("spec_next_task", { name: a.slug, batch: true, projectDir: a.p });
+    const aWaves = await callP("spec_next_task", { name: a.slug, waves: true, projectDir: a.p });
+    const aDoc = S.specDoctor(a.p, a.slug);
+    const aDone = S.completeTask(a.p, a.slug, 2);
+    const aBrief = S.taskBrief(a.p, a.slug);
+    ok(Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch" && aNext.next.number === 2 && aNext.remaining === 4 && aNext.total === 5 &&
+      aNext.batch.map((b) => b.number).join() === "2,3" && js(aWaves.waves) === "[[2,3],[4],[5]]" && js(aWaves.cycles) === "[]" && js(aWaves.blocked) === "[]" &&
+      !aDoc.checks.some((c) => c.id === "task-deps") && aDone.ok && !("waitsOn" in aDone) && !("blocked" in aDone) && aDone.next.number === 3 &&
+      aBrief.task.number === 3 && !("dependsOn" in aBrief) && !/## Depends on/.test(aBrief.brief) && S.statusFeature(a.p, a.slug).tasks.next.number === 3,
+      "feature F3: a tasks.md without any _Depends:_ answers exactly as before — next = the first open task, the same result keys (no skipped / blocked), the [P] batch unchanged, no task-deps check, complete_task / brief / status unchanged; its waves follow tasks.md order (a [P] run together, split on a shared file, the task after the run behind all of it) (got " +
+      js([aNext, aWaves.waves]) + ")");
+
+    // next skips a task whose dependencies are open; complete_task on such a task warns, never refuses.
+    const b = mkF("skip");
+    put(b, "tasks.md", tl("- [ ] 1. Schema", "  - _Depends: 3_", "- [ ] 2. API", "  - _Depends: #1_", "- [ ] 3. Config"));
+    const bN1 = await callP("spec_next_task", { name: b.slug, projectDir: b.p });
+    const bEarly = await callP("spec_complete_task", { name: b.slug, number: 2, projectDir: b.p });
+    const bDone3 = S.completeTask(b.p, b.slug, 3);
+    const bN2 = S.nextTask(b.p, b.slug);
+    ok(bN1.next.number === 3 && js(bN1.skipped) === '[{"number":1,"waitsOn":[3]},{"number":2,"waitsOn":[1]}]' && !("blocked" in bN1) &&
+      bEarly.ok && bEarly.completed === 2 && js(bEarly.waitsOn) === "[1]" && /Task 2 was ticked while its dependencies #1 are still open/.test(bEarly.note) &&
+      /^- \[x\] 2\./m.test(get(b, "tasks.md")) && bDone3.ok && !("waitsOn" in bDone3) && bDone3.next.number === 1 && bN2.next.number === 1 && !("skipped" in bN2),
+      "feature F3: spec_next_task passes over a task whose _Depends:_ are open (#3 before #1 and #2 — `skipped` says what each waits on); complete_task on a task with an open dependency ticks it with waitsOn + a note (never refused); once #3 is done, #1 is next (got " +
+      js([bN1, bEarly.waitsOn, bEarly.note]) + ")");
+
+    // No open task can start: blocked (a cycle, a dependency naming no task, a task waiting on one of those) — never "all done".
+    const c = mkF("blocked");
+    put(c, "tasks.md", tl("- [x] 1. Base", "- [ ] 2. Left", "  - _Depends: 3_", "- [ ] 3. Right", "  - _Depends: 2_", "- [ ] 4. Later", "  - _Depends: 9_", "- [ ] 5. After", "  - _Depends: 4_"));
+    const cN = await callP("spec_next_task", { name: c.slug, waves: true, projectDir: c.p });
+    const cBrief = S.taskBrief(c.p, c.slug);
+    const cBrief4 = S.taskBrief(c.p, c.slug, 4);
+    ok(cN.next === null && cN.remaining === 4 && /^No open task can start — .*#2 waits on #3; #3 waits on #2; #4 waits on #9; #5 waits on #4\. .*task-deps/.test(cN.note) &&
+      js(cN.blocked) === '[{"number":2,"waitsOn":[3]},{"number":3,"waitsOn":[2]},{"number":4,"waitsOn":[9]},{"number":5,"waitsOn":[4]}]' &&
+      js(cN.waves) === "[]" && js(cN.cycles) === "[[2,3]]" && cBrief.ok && cBrief.task === null && cBrief.blocked.length === 4 && /No open task can start/.test(cBrief.note) &&
+      S.statusFeature(c.p, c.slug).tasks.next === null && js(cBrief4.dependsOn) === '[{"number":9,"status":"missing"}]' && /- #9 ✗ no such task/.test(cBrief4.brief),
+      "feature F3: when every open task waits on a dependency that can't finish (a cycle, a _Depends:_ naming no task, a task waiting on one of those) → next null + `blocked` [{number, waitsOn}] + a localized note — never 'all done'; waves [] with the cycle; the brief's default task is none (same list); status has no next (got " +
+      js([cN.note, cN.blocked, cN.cycles]) + ")");
+
+    // Waves: dependencies done or in earlier waves, no shared _Implements:_ file (anchor / ./ spellings, a folder and its files), a task
+    // without _Implements:_ alone; the [P] batch never takes a task whose dependency is open or in the batch.
+    const d = mkF("waves");
+    put(d, "tasks.md", tl("## Build", "- [ ] 1. Core", "  - _Implements: src/a.js_", "- [ ] 2. B one", "  - _Depends: 1_", "  - _Implements: src/b.js_",
+      "- [ ] 3. B two", "  - _Depends: #1_", "  - _Implements: ./src/b.js:12_", "- [ ] 4. Lib", "  - _Depends: 1_", "  - _Implements: lib/_",
+      "- [ ] 5. Lib util", "  - _Depends: 1_", "  - _Implements: lib/util.js_", "- [ ] 6. Join", "  - _Depends: 2, 3, 4, 5_", "  - _Implements: src/c.js_",
+      "- [ ] 7. Docs", "  - _Depends: 1_"));
+    const dW = await callP("spec_next_task", { name: d.slug, waves: true, projectDir: d.p });
+    const e = mkF("batch");
+    put(e, "tasks.md", tl("## S", "- [ ] 1. [P] One", "  - _Implements: a.js_", "- [ ] 2. [P] Two", "  - _Implements: b.js_", "- [ ] 3. [P] Three", "  - _Depends: 1_", "  - _Implements: c.js_",
+      "- [ ] 4. [P] Four", "  - _Implements: d.js_"));
+    const eB = S.nextTask(e.p, e.slug, { batch: true, max: 8, waves: true });
+    S.completeTask(e.p, e.slug, 1);
+    const eB2 = S.nextTask(e.p, e.slug, { batch: true, max: 8 });
+    ok(js(dW.waves) === "[[1],[2,4],[3,5],[6],[7]]" && js(dW.cycles) === "[]" && js(dW.blocked) === "[]" && dW.next.number === 1 &&
+      eB.batch.map((x) => x.number).join() === "1,2" && js(eB.waves) === "[[1,2,4],[3]]" && eB2.batch.map((x) => x.number).join() === "2,3,4",
+      "feature F3: waves — a wave's tasks have their dependencies done or in earlier waves and share no _Implements:_ file (src/b.js = ./src/b.js:12; lib/ overlaps lib/util.js), a task without _Implements:_ is a wave of its own; the [P] batch stops at a task waiting on an open dependency (one of the batch) and takes it once that is done (got " +
+      js([dW.waves, eB.batch.map((x) => x.number), eB.waves, eB2.batch.map((x) => x.number)]) + ")");
+
+    // Doctor task-deps (fail) and the tasks approval refused on it; once fixed, the approval passes and next_action implements the scheduled task.
+    const REQ = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n\n## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n";
+    const DESIGN = "# Design: x\n\n## Overview\nA nightly job and an endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n";
+    const g = mkF("gate");
+    put(g, "classification.md", get(g, "classification.md").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+    put(g, "requirements.md", REQ);
+    put(g, "design.md", DESIGN);
+    put(g, "tasks.md", tl("- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "  - _Depends: 2_", "- [ ] 2. [US1] Reader", "  - _Requirements: US-1.AC-1_", "  - _Depends: 1_",
+      "- [ ] 3. [US1] Export", "  - _Requirements: US-1.AC-1_", "  - _Depends: 9, 3, soon_"));
+    const gPre = ["classification", "requirements", "design"].map((ph) => S.approvePhase(g.p, g.slug, ph, "t"));
+    const gDeps = S.specDoctor(g.p, g.slug).checks.find((c) => c.id === "task-deps");
+    const gRefused = await callP("spec_approve", { name: g.slug, phase: "tasks", by: "t", projectDir: g.p });
+    put(g, "tasks.md", tl("- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "  - _Depends: 2_", "- [ ] 2. [US1] Reader", "  - _Requirements: US-1.AC-1_",
+      "- [ ] 3. [US1] Export", "  - _Requirements: US-1.AC-1_", "  - _Depends: 1, 2_"));
+    const gOk = S.approvePhase(g.p, g.slug, "tasks", "t");
+    const gDeps2 = S.specDoctor(g.p, g.slug).checks.find((c) => c.id === "task-deps");
+    const gNa = S.nextAction(g.p, g.slug);
+    ok(gPre.every((r) => r.ok) && gDeps && gDeps.status === "fail" &&
+      gDeps.detail === "task 3: _Depends:_ 'soon' is not a task number; task 3 depends on #9, which no active task carries; task 3 depends on itself; tasks waiting on each other (a cycle): #1, #2 — fix the _Depends:_ markers in tasks.md (numbers of tasks in the same tasks.md: `_Depends: 3, 5_`)" &&
+      gRefused.ok === false && gRefused.refused === true && gRefused.failing.includes("task-deps") && gOk.ok && gDeps2.status === "pass" &&
+      gDeps2.detail === "2 task(s) declare _Depends:_ — each names an active task, no cycle" && gNa.step === "implement" && /^Implement task #2: Reader/.test(gNa.recommendation),
+      "feature F3: doctor task-deps fails on a _Depends:_ value that is not a task number, a number no task carries, a self-dependency and a cycle — and the tasks approval is refused on it; fixed, it passes and next_action implements the next task by the dependency rule (#2, not #1) (got " +
+      js([gDeps && gDeps.detail, gRefused.failing, gOk.ok, gNa.step, gNa.recommendation]) + ")");
+
+    // The brief lists the task's dependencies and their status (PT too), kept with write:true.
+    const h = mkF("brief", "pt");
+    put(h, "tasks.md", tl("- [x] 1. Base", "- [ ] 2. Meio", "- [ ] 3. Topo", "  - _Depends: 1, 2_"));
+    const hB = S.taskBrief(h.p, h.slug, 3);
+    const hW = S.taskBrief(h.p, h.slug, 3, { write: true });
+    const dB = S.taskBrief(d.p, d.slug, 6);
+    ok(js(hB.dependsOn) === '[{"number":1,"status":"done"},{"number":2,"status":"open"}]' && /## Depende de\n- #1 ✓ feita — Base\n- #2 ○ por fazer — Meio\n\n⚠ Algumas ainda não estão concluídas/.test(hB.brief) &&
+      js(hW.dependsOn) === js(hB.dependsOn) && !("brief" in hW) && /## Depends on\n- #2 ○ open — B one\n- #3 ○ open — B two\n- #4 ○ open — Lib\n- #5 ○ open — Lib util\n\n⚠ Some of them are still open/.test(dB.brief),
+      "feature F3: the brief lists the task's _Depends:_ with each one's status (done / open / missing) and a warning while one is open — PT too; `dependsOn` is kept with write:true (got " + js([hB.dependsOn, hW.dependsOn]) + ")");
+
+    // spec_append_tasks {depends}: existing tasks or tasks of the same call; a phantom, a self-dependency, a cycle, a non-number → nothing written.
+    const ap = mkF("append");
+    put(ap, "requirements.md", REQ);
+    put(ap, "tasks.md", tl("## Build", "- [ ] 1. [US1] Writer", "  - _Requirements: US-1.AC-1_", "**Checkpoint:** built"));
+    const ap1 = await callP("spec_append_tasks", { name: ap.slug, tasks: [{ text: "Reader", depends: [1] }, { text: "Glue", depends: [1, 2] }], projectDir: ap.p });
+    const apText = get(ap, "tasks.md");
+    const apBad = await callP("spec_append_tasks", { name: ap.slug, tasks: [{ text: "X", depends: [9] }], projectDir: ap.p });
+    const apSelf = S.appendTasks(ap.p, ap.slug, [{ text: "Y", depends: "#4" }]);
+    const apCycle = S.appendTasks(ap.p, ap.slug, [{ text: "P", depends: [5] }, { text: "Q", depends: ["4"] }]);
+    const apType = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: ap.slug, tasks: [{ text: "Z", depends: ["x"] }], projectDir: ap.p } });
+    const apTok = S.appendTasks(ap.p, ap.slug, [{ text: "Z", depends: "soon" }]);
+    const apTyped = S.appendTasks(ap.p, ap.slug, [{ text: "Sneaky _Depends: 1_ in the text" }]);
+    ok(ap1.ok && ap1.appended.map((t) => t.number + ":" + t.depends.join("+")).join() === "2:1,3:1+2" && /- \[ \] 2\. Reader\n {2}- _Depends: 1_\n- \[ \] 3\. Glue\n {2}- _Depends: 1, 2_\n/.test(apText) &&
+      js(S.nextTask(ap.p, ap.slug, { waves: true }).waves) === "[[1],[2],[3]]" &&
+      apBad.ok === false && /Task 1: depends names no task: #9 — give the number of an active task, or of a task of this call \(numbered 4 here\)\. Nothing was written\./.test(apBad.error) && js(apBad.phantomDepends) === "[9]" &&
+      apSelf.ok === false && /Task 1 is numbered 4 here and would depend on itself/.test(apSelf.error) &&
+      apCycle.ok === false && /The dependencies would form a cycle: #4, #5\. Nothing was written\./.test(apCycle.error) && js(apCycle.cycles) === "[[4,5]]" &&
+      apType.result.isError === true && apTok.ok === false && /depends takes task numbers \(3 or #3\) \(got 'soon'\)/.test(apTok.error) &&
+      apTyped.ok === false && /_Depends:_ would not read back/.test(apTyped.error) && get(ap, "tasks.md") === apText,
+      "feature F3: spec_append_tasks {depends} writes _Depends:_ (an existing task, or a task of the same call by the number it gets) and the waves read it; a number naming no task (the error names the numbers the call takes), a self-dependency, a cycle, a non-number (schema or engine) or a _Depends:_ typed in the text writes nothing (got " +
+      js([ap1.appended, apBad.error, apSelf.error, apCycle.error, apTok.error, apTyped.error]) + ")");
+
+    // The bugfix gate keeps its precedence over the dependency warning (a refusal, nothing recorded).
+    const bg = mkF("bug", "en", "bugfix");
+    put(bg, "tasks.md", tl("- [ ] 1. Reproduce the bug", "- [ ] 2. Find the root cause and write it in bug.md → Root Cause", "- [ ] 3. Fix it", "  - _Depends: 2_"));
+    const bgR = S.completeTask(bg.p, bg.slug, 3);
+    ok(bgR.ok === false && bgR.gated === "root-cause" && !("waitsOn" in bgR) && /^- \[ \] 3\./m.test(get(bg, "tasks.md")),
+      "feature F3: the bugfix root-cause gate still refuses a later task — before any dependency warning (got " + js(bgR) + ")");
+
+    // The other readers of "the next task": the scope guard's likely task, a spike's next step (and its doctor).
+    S.initProject(g.p, ["core"], undefined, { guard: "scope" });
+    const gGuard = S.guardCheck(g.p, "src/new.js", g.p);
+    const sp = path.join(fdRoot, "spike");
+    S.initProject(sp, ["core"], "en");
+    const spF = S.createFeature(sp, "Deps probe", undefined, "Can the queue keep up?", undefined, "en", "spike");
+    fs.writeFileSync(path.join(spF.dir, "tasks.md"), tl("- [ ] 1. Measure", "  - _Depends: 2_", "- [ ] 2. Compare", "  - _Depends: 1_"));
+    const spNa = S.nextAction(sp, spF.slug);
+    const spDeps = S.specDoctor(sp, spF.slug).checks.find((x) => x.id === "task-deps");
+    ok(gGuard.decision === "ask" && gGuard.likely && gGuard.likely.number === 2 && gGuard.likely.via === "next" &&
+      spNa.step === "fix" && js(spNa.blocked) === '[{"number":1,"waitsOn":[2]},{"number":2,"waitsOn":[1]}]' && /^No open task can start/.test(spNa.recommendation) &&
+      spDeps && spDeps.status === "fail",
+      "feature F3: the scope guard names the next task by the dependency rule (#2, not #1); a spike whose tasks wait on each other gets next_action step 'fix' with `blocked` (never 'decide') and doctor task-deps (got " +
+      js([gGuard.likely, spNa.step, spNa.recommendation]) + ")");
+
+    // _Depends:_ in fenced code or an HTML comment is never the task's; `**Depends:** 2` yields no marker (malformed-markers warns).
+    const fz = mkF("fenced");
+    put(fz, "tasks.md", tl("- [ ] 1. Example task", "  ```md", "  - _Depends: 2_", "  ```", "  <!-- _Depends: 2_ -->", "- [ ] 2. Second", "  - **Depends:** 1"));
+    const fzBlocks = S.taskBlocks(get(fz, "tasks.md"));
+    const fzDoc = S.specDoctor(fz.p, fz.slug);
+    const fzN = S.nextTask(fz.p, fz.slug, { waves: true });
+    ok(fzBlocks.every((x) => !S.taskDependsSpec(x).declared) && fzN.next.number === 1 && js(fzN.waves) === "[[1],[2]]" && !fzDoc.checks.some((x) => x.id === "task-deps") &&
+      /#2 \(Depends:\)/.test((fzDoc.checks.find((x) => x.id === "malformed-markers") || {}).detail || ""),
+      "feature F3: a _Depends:_ inside fenced code or an HTML comment under a task is not the task's (next, waves, doctor ignore it); `**Depends:** 1` yields no marker and doctor's malformed-markers names it (got " +
+      js([fzN.waves, (fzDoc.checks.find((x) => x.id === "malformed-markers") || {}).detail]) + ")");
+
+    // Linear on adversarial input: a 60 000-number _Depends:_, 4 000 chained tasks closing one long cycle (iterative walks — no stack
+    // overflow), 4 000 open tasks in one [P] run sharing a file, a 120 000-character token run.
+    const t0 = Date.now();
+    const longSpec = S.taskDependsSpec({ text: "Big _Depends: " + Array.from({ length: 60000 }, (_, i) => i + 1).join(", ") + "_", body: [] });
+    const badSpec = S.taskDependsSpec({ text: "Bad _Depends: " + "x, ".repeat(60000) + "#_", body: [] });
+    const N = 4000;
+    const ring = [];
+    for (let i = 1; i <= N; i++) ring.push(`- [ ] ${i}. T${i}`, `  - _Depends: ${i === 1 ? N : i - 1}_`, `  - _Implements: src/f${i}.js_`);
+    const ringBlocks = S.taskBlocks(ring.join("\n"));
+    const ringW = S.taskWaves(ringBlocks, []);
+    const ringS = S.taskSchedule(ringBlocks);
+    const chainBlocks = S.taskBlocks(ring.join("\n").replace(`_Depends: ${N}_`, "_Depends: [none]_"));
+    const chainW = S.taskWaves(chainBlocks, []);
+    const same = [];
+    for (let i = 1; i <= N; i++) same.push(`- [ ] ${i}. [P] S${i}`, "  - _Implements: src/one.js_");
+    const sameW = S.taskWaves(S.taskBlocks(same.join("\n")), []);
+    const tokW = S.taskDependsSpec({ text: "_Depends: " + "9".repeat(120000) + "_", body: [] });
+    const elapsed = Date.now() - t0;
+    ok(longSpec.numbers.length === 60000 && js(badSpec.invalid) === '["x","#"]' && ringW.waves.length === 0 && ringW.cycles.length === 1 && ringW.cycles[0].length === N &&
+      ringW.blocked.length === N && ringS.next === null && chainW.waves.length === N && chainW.waves.every((w, k) => w.length === 1 && w[0] === k + 1) &&
+      sameW.waves.length === N && tokW.invalid.length === 1 && elapsed < 15000,
+      "feature F3: linear on adversarial input — a 60 000-number _Depends:_, a 4 000-task cycle and chain (iterative walks, no stack overflow), 4 000 [P] tasks sharing one file, a 120 000-digit token (" + elapsed + " ms)");
+  }
 
   // 1.14 feature (F5) — traceability matrix.
 

@@ -2741,7 +2741,7 @@ const MSG = {
     appendTasks: {
       heading: "Phase: Convergence",
       checkpoint: "the convergence tasks are done and verified — the spec and the code agree again.",
-      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
+      noTasks: "Give at least one task: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, depends?, story?, parallel? }].",
       noText: (i) => `Task ${i}: text is required.`,
       badStory: (i, v) => `Task ${i}: story must be US<n> (e.g. US1) or shared (got '${v}').`,
       badPath: (i, p) => `Task ${i}: _Implements:_ paths must be relative to the project root, without '..' (got '${p}').`,
@@ -2761,6 +2761,34 @@ const MSG = {
       badTestId: (i, v) => `Task ${i}: makesGreen takes planned test IDs (T-01, T-2 …) (got '${v}').`,
       phantomTests: (list) => `Unknown tests (not planned in test-plan.md): ${list}. Nothing was written — fix the T-IDs or plan the tests first.`,
       noTestPlan: (slug) => `makesGreen needs a test plan: .specs/${slug}/test-plan.md does not exist (add +tdd first). Nothing was written.`,
+    },
+
+    // 1.14 F3 — task dependencies (`_Depends: 3, 5_`, English-stable) and execution waves: doctor task-deps, the "no task can
+    // start" note (next_task / next_action / brief / complete_task), the early-tick warning, the brief's section,
+    // spec_append_tasks `depends`, the CLI's next --waves lines. Task numbers and #n stay as written.
+    taskDeps: {
+      doctorOk: (n) => `${n} task(s) declare _Depends:_ — each names an active task, no cycle`,
+      doctorFail: (list) => `${list} — fix the _Depends:_ markers in tasks.md (numbers of tasks in the same tasks.md: \`_Depends: 3, 5_\`)`,
+      invalid: (n, tok) => `task ${n}: _Depends:_ '${tok}' is not a task number`,
+      phantom: (n, d) => `task ${n} depends on #${d}, which no active task carries`,
+      self: (n) => `task ${n} depends on itself`,
+      cycle: (list) => `tasks waiting on each other (a cycle): ${list}`,
+      waitLine: (n, deps) => `#${n} waits on ${deps}`,
+      blocked: (list, slug) => `No open task can start — each waits on a dependency that is not done: ${list}. A cycle or a _Depends:_ naming no task never clears: fix the _Depends:_ markers in .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
+      tickedEarly: (n, list) => `Task ${n} was ticked while its dependencies ${list} are still open — recorded as asked (a tick records what happened); check that it didn't need their work, or complete them next.`,
+      briefHeading: "## Depends on",
+      briefStatus: { done: "done", open: "open", missing: "no such task" },
+      briefOpenNote: "⚠ Some of them are still open — this task was planned to start after them: report NEEDS_CONTEXT if it needs their output.",
+      badDepends: (i, v) => `Task ${i}: depends takes task numbers (3 or #3) (got '${v}').`,
+      selfDepends: (i, n) => `Task ${i} is numbered ${n} here and would depend on itself. Nothing was written.`,
+      phantomDepends: (i, list, first, last) => `Task ${i}: depends names no task: ${list} — give the number of an active task, or of a task of this call (numbered ${first === last ? first : first + "–" + last} here). Nothing was written.`,
+      cycleDepends: (list) => `The dependencies would form a cycle: ${list}. Nothing was written.`,
+      cliWaves: (n) => `Waves (${n}):`,
+      cliWave: (k, list) => `  ${k}. ${list}`,
+      cliNoWave: "  (no open task can start)",
+      cliCycles: (list) => `  ⚠ cycle: ${list}`,
+      cliBlocked: (list) => `  ⚠ blocked: ${list}`,
+      cliSkipped: (list) => `  waiting: ${list}`,
     },
 
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
@@ -4157,7 +4185,7 @@ _Outcome: [go | no-go | pivot]_
     appendTasks: {
       heading: "Fase: Convergência",
       checkpoint: "as tarefas de convergência estão concluídas e verificadas — a spec e o código voltam a coincidir.",
-      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
+      noTasks: "Indica pelo menos uma tarefa: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, depends?, story?, parallel? }].",
       noText: (i) => `Tarefa ${i}: o texto é obrigatório.`,
       badStory: (i, v) => `Tarefa ${i}: story tem de ser US<n> (ex.: US1) ou shared (recebido '${v}').`,
       badPath: (i, p) => `Tarefa ${i}: os caminhos de _Implements:_ têm de ser relativos à raiz do projeto, sem '..' (recebido '${p}').`,
@@ -4177,6 +4205,31 @@ _Outcome: [go | no-go | pivot]_
       badTestId: (i, v) => `Tarefa ${i}: makesGreen aceita IDs de testes planeados (T-01, T-2 …) (recebido '${v}').`,
       phantomTests: (list) => `Testes desconhecidos (não planeados em test-plan.md): ${list}. Nada foi escrito — corrige os T-IDs ou planeia primeiro os testes.`,
       noTestPlan: (slug) => `makesGreen precisa de um plano de testes: .specs/${slug}/test-plan.md não existe (adiciona primeiro o +tdd). Nada foi escrito.`,
+    },
+
+    taskDeps: {
+      doctorOk: (n) => `${n} tarefa(s) declaram _Depends:_ — cada uma nomeia uma tarefa ativa, sem ciclos`,
+      doctorFail: (list) => `${list} — corrige os marcadores _Depends:_ no tasks.md (números de tarefas do mesmo tasks.md: \`_Depends: 3, 5_\`)`,
+      invalid: (n, tok) => `tarefa ${n}: _Depends:_ '${tok}' não é um número de tarefa`,
+      phantom: (n, d) => `a tarefa ${n} depende da #${d}, que nenhuma tarefa ativa tem`,
+      self: (n) => `a tarefa ${n} depende de si mesma`,
+      cycle: (list) => `tarefas que esperam umas pelas outras (um ciclo): ${list}`,
+      waitLine: (n, deps) => `#${n} espera por ${deps}`,
+      blocked: (list, slug) => `Nenhuma tarefa por fazer pode começar — cada uma espera por uma dependência que não está feita: ${list}. Um ciclo ou um _Depends:_ que não nomeia nenhuma tarefa nunca se resolve: corrige os marcadores _Depends:_ em .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
+      tickedEarly: (n, list) => `A tarefa ${n} foi marcada com as dependências ${list} ainda não concluídas — ficou marcada como pedido (uma marcação reflete o que aconteceu); confirma que não precisava do trabalho delas, ou conclui-as a seguir.`,
+      briefHeading: "## Depende de",
+      briefStatus: { done: "feita", open: "por fazer", missing: "não existe" },
+      briefOpenNote: "⚠ Algumas ainda não estão concluídas — esta tarefa foi planeada para começar depois delas: responde NEEDS_CONTEXT se precisar do resultado delas.",
+      badDepends: (i, v) => `Tarefa ${i}: depends aceita números de tarefa (3 ou #3) (recebido '${v}').`,
+      selfDepends: (i, n) => `A tarefa ${i} tem aqui o número ${n} e dependeria de si mesma. Nada foi escrito.`,
+      phantomDepends: (i, list, first, last) => `Tarefa ${i}: depends não nomeia nenhuma tarefa: ${list} — indica o número de uma tarefa ativa, ou de uma tarefa desta chamada (aqui numeradas ${first === last ? first : first + "–" + last}). Nada foi escrito.`,
+      cycleDepends: (list) => `As dependências formariam um ciclo: ${list}. Nada foi escrito.`,
+      cliWaves: (n) => `Ondas (${n}):`,
+      cliWave: (k, list) => `  ${k}. ${list}`,
+      cliNoWave: "  (nenhuma tarefa por fazer pode começar)",
+      cliCycles: (list) => `  ⚠ ciclo: ${list}`,
+      cliBlocked: (list) => `  ⚠ bloqueadas: ${list}`,
+      cliSkipped: (list) => `  à espera: ${list}`,
     },
 
     impact: {
@@ -5503,7 +5556,7 @@ _Outcome: [go | no-go | pivot]_
     appendTasks: {
       heading: "Fase: Convergencia",
       checkpoint: "las tareas de convergencia están completadas y verificadas — la spec y el código vuelven a coincidir.",
-      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel? }].",
+      noTasks: "Indica al menos una tarea: tasks = [{ text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, depends?, story?, parallel? }].",
       noText: (i) => `Tarea ${i}: el texto es obligatorio.`,
       badStory: (i, v) => `Tarea ${i}: story debe ser US<n> (p. ej., US1) o shared (recibido '${v}').`,
       badPath: (i, p) => `Tarea ${i}: las rutas de _Implements:_ deben ser relativas a la raíz del proyecto, sin '..' (recibido '${p}').`,
@@ -5523,6 +5576,31 @@ _Outcome: [go | no-go | pivot]_
       badTestId: (i, v) => `Tarea ${i}: makesGreen admite IDs de pruebas planificadas (T-01, T-2 …) (recibido '${v}').`,
       phantomTests: (list) => `Pruebas desconocidas (no planificadas en test-plan.md): ${list}. No se ha escrito nada — corrige los T-IDs o planifica primero las pruebas.`,
       noTestPlan: (slug) => `makesGreen necesita un plan de pruebas: .specs/${slug}/test-plan.md no existe (añade primero +tdd). No se ha escrito nada.`,
+    },
+
+    taskDeps: {
+      doctorOk: (n) => `${n} tarea(s) declaran _Depends:_ — cada una nombra una tarea activa, sin ciclos`,
+      doctorFail: (list) => `${list} — corrige los marcadores _Depends:_ en tasks.md (números de tareas del mismo tasks.md: \`_Depends: 3, 5_\`)`,
+      invalid: (n, tok) => `tarea ${n}: _Depends:_ '${tok}' no es un número de tarea`,
+      phantom: (n, d) => `la tarea ${n} depende de la #${d}, que ninguna tarea activa tiene`,
+      self: (n) => `la tarea ${n} depende de sí misma`,
+      cycle: (list) => `tareas que se esperan entre sí (un ciclo): ${list}`,
+      waitLine: (n, deps) => `#${n} espera a ${deps}`,
+      blocked: (list, slug) => `Ninguna tarea pendiente puede empezar — cada una espera una dependencia que no está hecha: ${list}. Un ciclo o un _Depends:_ que no nombra ninguna tarea nunca se resuelve: corrige los marcadores _Depends:_ en .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
+      tickedEarly: (n, list) => `La tarea ${n} se marcó con sus dependencias ${list} aún pendientes — queda marcada como se pidió (una marca refleja lo que pasó); comprueba que no necesitaba su trabajo, o complétalas a continuación.`,
+      briefHeading: "## Depende de",
+      briefStatus: { done: "hecha", open: "pendiente", missing: "no existe" },
+      briefOpenNote: "⚠ Algunas siguen pendientes — esta tarea se planificó para empezar después de ellas: responde NEEDS_CONTEXT si necesita su resultado.",
+      badDepends: (i, v) => `Tarea ${i}: depends admite números de tarea (3 o #3) (recibido '${v}').`,
+      selfDepends: (i, n) => `La tarea ${i} lleva aquí el número ${n} y dependería de sí misma. No se ha escrito nada.`,
+      phantomDepends: (i, list, first, last) => `Tarea ${i}: depends no nombra ninguna tarea: ${list} — indica el número de una tarea activa, o de una tarea de esta llamada (aquí numeradas ${first === last ? first : first + "–" + last}). No se ha escrito nada.`,
+      cycleDepends: (list) => `Las dependencias formarían un ciclo: ${list}. No se ha escrito nada.`,
+      cliWaves: (n) => `Oleadas (${n}):`,
+      cliWave: (k, list) => `  ${k}. ${list}`,
+      cliNoWave: "  (ninguna tarea pendiente puede empezar)",
+      cliCycles: (list) => `  ⚠ ciclo: ${list}`,
+      cliBlocked: (list) => `  ⚠ bloqueadas: ${list}`,
+      cliSkipped: (list) => `  en espera: ${list}`,
     },
 
     impact: {
@@ -6539,6 +6617,12 @@ function renderBrief(d, lang) {
   if (d.inlineOnly) push("", t.inlineOnly);
 
   push("", t.task, `${task.number}. ${task.text}`, ...task.body.map((l) => "   " + l));
+  if ((d.dependsOn || []).length) { // 1.14 F3: the task's _Depends:_ and where each stands
+    const TD = MSG[normalizeLang(lang)].taskDeps;
+    const mark = { done: "✓", open: "○", missing: "✗" };
+    push("", TD.briefHeading, ...d.dependsOn.map((x) => `- #${x.number} ${mark[x.status]} ${TD.briefStatus[x.status]}${x.text ? " — " + x.text : ""}`));
+    if (d.dependsOn.some((x) => x.status !== "done")) push("", TD.briefOpenNote);
+  }
   if (d.stories.length) {
     push("", t.context);
     d.stories.forEach((s, i) => { if (i) push(""); push(`**${s[0]}**`, ...s.slice(1)); });
