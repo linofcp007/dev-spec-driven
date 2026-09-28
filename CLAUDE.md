@@ -392,6 +392,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   command with exit 1) is never what a bare `bash` resolves to (none found → `no-git-bash`); named by its path (`--shell
   C:\Windows\System32\bash.exe`) it is the user's choice (1.15 — 1.14 refused it as `wsl-bash`): used as given, flagged `wsl`,
   with a one-line note (`runGate.wslBash`), and a run WSL's relay fails is could-not-run `wsl` (nothing recorded).
+  `wsl.exe` (named or bare) is no shell — Node runs `<shell> -c "<cmd>"` and wsl.exe rejects `-c` (exit 4294967295: a
+  bogus failed run or red proof) — refused before anything runs (`couldNotRun: "wsl-exe"`, `runGate.wslExe`); a quoted
+  path loses its quotes (spawn would miss the file).
   On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
@@ -622,10 +625,15 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap). **Only a
   SHIPPED declaring feature retires the older AC** (1.15 — `featureShipped()`: a finish recorded, or the execution signed
   off: the release notes' rule) in the catalog, the export and the matrix: a draft's declaration keeps `supersededBy` but
-  adds `supersedePending: true` — rendered "to be superseded by … (not shipped yet)", never struck, still current;
-  `totals` {superseded (retired), pending}; the matrix `counts.supersedePending`. A feature archived without ever
-  shipping (abandoned) declares nothing, and its own ACs are not counted as current. `supersededByIndex()` (the matrix)
-  and `catalogData()` apply the same rule (`.live` / `supLive`: keys retired by a shipped feature).
+  adds `supersedePending: true` — rendered "to be superseded by … (not shipped yet)" (catalog, export, the matrix's
+  markdown / CSV cell / `trace --matrix` notes), never struck, still current; `totals` {current, superseded (retired),
+  pending — a subset of current: "N current (P to be superseded), S superseded"}; the matrix `counts.supersedePending`. A
+  retired AC names its SHIPPED declarers only (never a draft that also plans it). A shipped feature counts only the
+  declarations it shipped with: `shippedSupersedeKeys()` — when requirements.md changed since the requirements snapshot
+  approved at or before the latest ship (a finish / an execution sign-off), a declaration that snapshot lacks (a change
+  request's edit) is pending until the feature ships again; no such snapshot (pre-1.13) → every declaration trusted. A
+  feature archived without ever shipping (abandoned) declares nothing, and its own ACs are not counted as current.
+  `supersededByIndex()` (the matrix: `.live`, `.liveBy`) and `catalogData()` (`supLiveBy`) apply the same rule.
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
   only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
@@ -1511,9 +1519,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1254 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1256 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 401 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 402 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (52 command files, the tools/list length, the

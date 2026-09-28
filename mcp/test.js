@@ -101,10 +101,10 @@ function ok(cond, label) {
 }
 // 1.15: only a SHIPPED feature's _Supersedes:_ retires an AC in the catalog / export / matrix (a draft's is "to be
 // superseded"). The tests exercising the marker's reading mark the declaring feature shipped: an execution sign-off.
-function shipFeature(dir, slug) {
+function shipFeature(dir, slug, at) {
   const sp = path.join(dir, ".specs", slug, ".state.json");
   const st = JSON.parse(fs.readFileSync(sp, "utf8"));
-  st.approvals = { ...(st.approvals || {}), execution: { at: "2026-09-01T00:00:00.000Z", by: "test" } };
+  st.approvals = { ...(st.approvals || {}), execution: { at: at || "2026-09-01T00:00:00.000Z", by: "test" } };
   fs.writeFileSync(sp, JSON.stringify(st, null, 2));
 }
 
@@ -10167,7 +10167,10 @@ function endRun() {
     };
     ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
       // 1.15: an EXPLICIT path to WSL's launcher is the user's choice — used as given, flagged wsl (1.14 refused it)
-      r9.sys32Path.shell === wp(sys32, "bash.exe") && r9.sys32Path.wsl === true && r9.appsPath.wsl === true && r9.wslExe.wsl === true && !r9.sys32Path.error &&
+      r9.sys32Path.shell === wp(sys32, "bash.exe") && r9.sys32Path.wsl === true && r9.appsPath.wsl === true && !r9.sys32Path.error &&
+      // wsl.exe is no shell (it rejects -c): refused, named or bare; a quoted path loses its quotes
+      r9.wslExe.error === "wsl-exe" && S.resolveRunShell("wsl", { platform: "win32" }).error === "wsl-exe" &&
+      S.resolveRunShell('"' + wp(sys32, "bash.exe") + '"', { platform: "win32" }).shell === wp(sys32, "bash.exe") &&
       r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
       r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
       "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), never WSL's launcher (only WSL there → no-git-bash); an explicit WSL path is used as given (wsl: true); cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
@@ -12449,7 +12452,7 @@ function endRun() {
       by("US-1.AC-2").supersededBy && !by("US-1.AC-2").supersedePending && !by("US-1.AC-3").supersededBy &&
       cat.totals.superseded === 1 && cat.totals.pending === 1 && cat.totals.acs === 6 && cat.totals.current === 4 &&
       cat.markdown.includes("- **US-1.AC-1** — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft/US-1.AC-1` (not shipped yet)") &&
-      cat.markdown.includes("- ~~**US-1.AC-2** — WHEN b THE SYSTEM SHALL b~~ — superseded by `shipped/US-1.AC-1`") && /1 superseded, 1 to be superseded\*\*/.test(cat.markdown),
+      cat.markdown.includes("- ~~**US-1.AC-2** — WHEN b THE SYSTEM SHALL b~~ — superseded by `shipped/US-1.AC-1`") && /4 current \(1 to be superseded\), 1 superseded\*\*/.test(cat.markdown),
       "1.15 catalog: a draft's _Supersedes:_ marks the AC 'to be superseded' (not struck, still current); a shipped feature's retires it; an abandoned archived feature's does nothing and its own AC is not current (got " +
       JSON.stringify([base.map((a) => a.id + ":" + (a.supersededBy || []).join("|") + (a.supersedePending ? "(pending)" : "")), cat.totals]) + ")");
     const ex = S.exportSpecs(sp, { name: "base", format: "md" }).content || "";
@@ -12458,6 +12461,25 @@ function endRun() {
     ok(/US-1\.AC-1\*\* — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft\/US-1\.AC-1`/.test(ex) && /~~\*\*US-1\.AC-2\*\*/.test(ex) && !/~~\*\*US-1\.AC-1\*\*/.test(ex) &&
       mrow("US-1.AC-1").supersedePending === true && !mrow("US-1.AC-2").supersedePending && mx.counts.superseded === 1 && mx.counts.supersedePending === 1,
       "1.15 export + matrix: the same rule — a draft's supersession is 'to be superseded' (never struck), a shipped one's is (got " + JSON.stringify([mx.counts, (ex.match(/^.*US-1\.AC-[12]\*\*.*$/gm) || [])]) + ")");
+    // The CSV and the CLI table read a pending one apart; a retired AC also planned by a draft names the shipped declarer only.
+    reqOf("draft", "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL x _Supersedes: base/US-1.AC-1, base/US-1.AC-2_\n");
+    const csv = S.matrixCsv([S.traceMatrix(sp, "base")], "en");
+    const cat2 = S.catalog(sp).features.find((f) => f.feature === "base").acs.find((a) => a.id === "US-1.AC-2");
+    const cli = spawnSync(process.execPath, [path.join(__dirname, "..", "cli", "dev-spec.js"), "trace", "base", "--matrix", "--project", sp], { encoding: "utf8" }).stdout || "";
+    ok(/to be superseded by draft\/US-1\.AC-1 \(not shipped yet\)/.test(csv) && JSON.stringify(cat2.supersededBy) === '["shipped/US-1.AC-1"]' && !cat2.supersedePending &&
+      /to be superseded by draft\/US-1\.AC-1/.test(cli) && !/superseded by draft\/US-1\.AC-2/.test(cli),
+      "1.15: the matrix CSV and `trace --matrix` show a pending supersession apart; a retired AC names only its SHIPPED declarers, never a draft that also plans it (got " +
+      JSON.stringify([cat2, (csv.match(/superseded by [^\r\n,]*/g) || [])]) + ")");
+    // A declaration a change request adds AFTER the ship waits until the feature ships again (the requirements snapshot
+    // approved before the ship doesn't hold it).
+    const later = S.createFeature(sp, "Later", ["core"], "x", undefined, "en");
+    reqOf("later", "1. **US-1.AC-1** — WHEN l THE SYSTEM SHALL l\n");
+    S.approvePhase(sp, "later", "requirements", "t", { force: true }); // the snapshot the feature ships with (no _Supersedes:_)
+    shipFeature(sp, "later", new Date().toISOString()); // shipped AFTER that approval
+    reqOf("later", "1. **US-1.AC-1** — WHEN l THE SYSTEM SHALL l _Supersedes: base/US-1.AC-3_\n"); // a change request, after the ship
+    const ac3 = S.catalog(sp).features.find((f) => f.feature === "base").acs.find((a) => a.id === "US-1.AC-3");
+    ok(later.ok && ac3 && ac3.supersedePending === true && JSON.stringify(ac3.supersededBy) === '["later/US-1.AC-1"]',
+      "1.15: a _Supersedes:_ added to a shipped feature after it shipped (a change request) is 'to be superseded' until it ships again (got " + JSON.stringify(ac3) + ")");
   }
 
   // Release hygiene: the three version fields agree.

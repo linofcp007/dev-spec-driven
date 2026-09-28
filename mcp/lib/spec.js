@@ -6940,7 +6940,13 @@ function resolveRunShell(requested, opts = {}) {
   if (platform !== "win32") return { shell: req || true, cmd: false };
   if (!req) return { shell: true, cmd: true }; // Node's default there: %ComSpec% (cmd.exe)
   if (/^(?:.*[\\/])?cmd(?:\.exe)?$/i.test(req)) return { shell: req, cmd: true }; // --shell cmd / a ComSpec path: cmd.exe anyway
-  if (/[\\/]/.test(req)) return isWslLauncher(req) ? { shell: req, cmd: false, wsl: true } : { shell: req, cmd: false };
+  // wsl.exe is no shell: Node runs `<shell> -c "<cmd>"` and wsl.exe rejects -c (exit 4294967295 — a bogus failed run, or a
+  // fake red proof) — refused, a bare `wsl` too. Only WSL's bash.exe, named by its path, is used as given (1.15).
+  if (/^(?:.*[\\/])?wsl(?:\.exe)?$/i.test(req.replace(/^"|"$/g, ""))) return { error: "wsl-exe", path: req };
+  if (/[\\/]/.test(req)) {
+    const shell = req.replace(/^"(.*)"$/, "$1"); // a quoted path: the quotes are no part of it (spawn would miss the file)
+    return isWslLauncher(shell) ? { shell, cmd: false, wsl: true } : { shell, cmd: false };
+  }
   if (!/^bash(?:\.exe)?$/i.test(req)) return { shell: req, cmd: false }; // sh, pwsh, zsh…: as given
   const env = opts.env || process.env;
   const envOf = (k) => { const hit = Object.keys(env).find((x) => x.toLowerCase() === k.toLowerCase()); return hit ? String(env[hit] || "") : ""; };
@@ -13101,18 +13107,19 @@ function catalogData(projectDir) {
   // "<feature>/<AC>" that replaces them. 1.15: only a SHIPPED declaring feature (featureShipped) retires the AC; one still in
   // flight marks it "to be superseded" (supersedePending) — the catalog says what the system does today; one archived
   // without ever shipping (abandoned) declares nothing.
-  const supBy = new Map();
-  const supLive = new Set();
+  const supBy = new Map(); // key → every declarer (drafts included)
+  const supLiveBy = new Map(); // key → the SHIPPED declarers — a declaration added after the ship waits (shippedSupersedeKeys)
+  const push = (m, k, who) => { if (!m.has(k)) m.set(k, []); if (!m.get(k).includes(who)) m.get(k).push(who); };
   for (const s of srcs) {
     s.sup = resolveSupersedes(projectDir, s.dir, supersedesMarkers(s.reqRaw), cache).valid;
     s.shipped = featureShipped(s.state);
     if (s.archived && !s.shipped) continue;
+    const shippedKeys = s.shipped ? shippedSupersedeKeys(projectDir, s.dir, s.state, s.reqRaw, cache) : null;
     for (const v of s.sup) {
       const k = dirKey(v.dir) + "\n" + v.ac;
       const who = s.slug + (v.by ? "/" + v.by : "");
-      if (!supBy.has(k)) supBy.set(k, []);
-      if (!supBy.get(k).includes(who)) supBy.get(k).push(who);
-      if (s.shipped) supLive.add(k);
+      push(supBy, k, who);
+      if (s.shipped && (!shippedKeys || shippedKeys.has(k))) push(supLiveBy, k, who);
     }
   }
   const features = srcs.map((s) => {
@@ -13120,11 +13127,9 @@ function catalogData(projectDir) {
     const acs = [...acIndex(activeDesign(s.reqRaw, s.tracks)).values()].sort((a, b) => a.line - b.line).map((e) => {
       const o = { id: e.id, text: acOneLine(e.text, e.id) };
       if (placeholderReport(e.text).length) o.template = true;
-      const by = supBy.get(dirKey(s.dir) + "\n" + e.id);
-      if (by) {
-        o.supersededBy = by;
-        if (!supLive.has(dirKey(s.dir) + "\n" + e.id)) o.supersedePending = true;
-      }
+      const key = dirKey(s.dir) + "\n" + e.id;
+      if (supLiveBy.has(key)) o.supersededBy = supLiveBy.get(key); // retired: named by the shipped declarers only
+      else if (supBy.has(key)) { o.supersededBy = supBy.get(key); o.supersedePending = true; } // a draft's plan
       const mine = s.sup.filter((v) => v.by === e.id).map((v) => v.feature + "/" + v.ac);
       if (mine.length) o.supersedes = mine;
       return o;
@@ -13157,12 +13162,13 @@ function catalogData(projectDir) {
   const all = features.flatMap((f) => f.acs);
   const retired = (a) => a.supersededBy && !a.supersedePending;
   const superseded = all.filter(retired).length;
-  const pending = all.filter((a) => a.supersedePending).length;
   // Current = what the system does today: neither retired by a shipped feature nor a criterion of an abandoned feature
-  // (archived without ever shipping). A shipped feature archived to declutter still does what its criteria say.
+  // (archived without ever shipping). A shipped feature archived to declutter still does what its criteria say. `pending`
+  // (to be superseded) is a subset of current — the totals line reads "N current (P to be superseded), S superseded".
   const abandoned = new Set(srcs.filter((s) => s.archived && !s.shipped).map((s) => s.slug));
-  const gone = features.filter((f) => abandoned.has(f.feature)).flatMap((f) => f.acs).filter((a) => !retired(a)).length;
-  const totals = { features: features.length, acs: all.length, current: all.length - superseded - gone, superseded, pending };
+  const currentAcs = features.filter((f) => !abandoned.has(f.feature)).flatMap((f) => f.acs).filter((a) => !retired(a));
+  const pending = currentAcs.filter((a) => a.supersedePending).length;
+  const totals = { features: features.length, acs: all.length, current: currentAcs.length, superseded, pending };
   const data = { lang, features, totals };
   data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
   return data;
@@ -14467,21 +14473,40 @@ const acNums = (id) => (String(id).match(/\d+/g) || []).map(Number);
 function supersededByIndex(projectDir) {
   const out = new Map();
   out.live = new Set();
+  out.liveBy = new Map(); // key → the SHIPPED declarers only (a retired AC names those, never a draft's plan)
   const cache = new Map();
+  const push = (m, k, who) => { if (!m.has(k)) m.set(k, []); if (!m.get(k).includes(who)) m.get(k).push(who); };
   for (const s of featureDirs(projectDir)) {
     const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
     if (!raw || !/_Supersedes:/i.test(raw)) continue;
-    const shipped = featureShipped(stateFromFile(projectDir, statePath(s.dir)));
+    const state = stateFromFile(projectDir, statePath(s.dir));
+    const shipped = featureShipped(state);
     if (s.archived && !shipped) continue;
+    const shippedKeys = shipped ? shippedSupersedeKeys(projectDir, s.dir, state, raw, cache) : null;
     for (const v of resolveSupersedes(projectDir, s.dir, supersedesMarkers(raw), cache).valid) {
       const k = dirKey(v.dir) + "\n" + v.ac;
       const who = s.slug + (v.by ? "/" + v.by : "");
-      if (!out.has(k)) out.set(k, []);
-      if (!out.get(k).includes(who)) out.get(k).push(who);
-      if (shipped) out.live.add(k);
+      push(out, k, who);
+      if (shipped && (!shippedKeys || shippedKeys.has(k))) { out.live.add(k); push(out.liveBy, k, who); }
     }
   }
   return out;
+}
+// The _Supersedes:_ targets (dirKey + "\n" + AC) a SHIPPED feature actually shipped with — null when every current
+// declaration counts: requirements.md is unchanged since the requirements snapshot approved at or before its latest ship
+// (a finish or an execution sign-off), or there is no such snapshot (a pre-1.13 approval: trusted). A declaration a later
+// change request added is only "to be superseded" until the feature ships again (the release notes list it then).
+function shippedSupersedeKeys(projectDir, dir, state, reqRaw, cache) {
+  const t = (v) => timeOf(v) || 0;
+  const shipAt = Math.max(t(isObj(state.finished) ? state.finished.at : null), t(isRecord(state.approvals) && isRecord(state.approvals.execution) ? state.approvals.execution.at : null));
+  if (!shipAt) return null;
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === "requirements" && h.partial !== true &&
+    typeof h.snapshot === "string" && timeOf(h.at) != null && timeOf(h.at) <= shipAt) : [];
+  const rec = hist[hist.length - 1];
+  if (!rec) return null;
+  const text = historyText(dir, rec.snapshot);
+  if (text == null || textFingerprint(text, "requirements") === textFingerprint(reqRaw || "", "requirements")) return null;
+  return new Set(resolveSupersedes(projectDir, dir, supersedesMarkers(text), cache).valid.map((v) => dirKey(v.dir) + "\n" + v.ac));
 }
 // A feature that SHIPPED — a finish recorded, or its execution signed off (spec_changelog's rule). Only a shipped feature's
 // _Supersedes:_ retires the older criterion in the catalog, the export and the matrix (1.15): a draft's declaration is
@@ -14656,8 +14681,11 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       supersededBy: row.kind === "ac" ? (supBy.get(dirKey(dir) + "\n" + row.id) || []).slice() : [],
       approval: approval ? { at: approval.at, by: approval.by, forced: approval.forced, changed: rowChanged(row) } : null,
     };
-    // Declared only by features not shipped yet: "to be superseded", never retired (1.15 — supersededByIndex().live).
-    if (r.supersededBy.length && supBy.live && !supBy.live.has(dirKey(dir) + "\n" + row.id)) r.supersedePending = true;
+    // Declared only by features not shipped yet: "to be superseded", never retired (1.15 — supersededByIndex().live); a
+    // retired AC names its shipped declarers only.
+    const supKey = dirKey(dir) + "\n" + row.id;
+    if (r.supersededBy.length && supBy.live && !supBy.live.has(supKey)) r.supersedePending = true;
+    else if (r.supersededBy.length && supBy.liveBy && supBy.liveBy.has(supKey)) r.supersededBy = supBy.liveBy.get(supKey).slice();
     return r;
   });
   const counts = { rows: out.length, verified: 0, implemented: 0, planned: 0, untraced: 0, template: 0, superseded: 0, supersedePending: 0 };
@@ -14733,7 +14761,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         evidence: r.tasks.filter((t) => t.evidence).map((t) => rtmEvidenceWords(t, lang)).join("; "),
         decisions: r.decisions.map((d) => `${d.id} ${d.title}`).join("; "),
         supersedes: r.supersedes.join("; "),
-        supersededBy: r.supersededBy.join("; "),
+        supersededBy: r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join("; ")) : r.supersededBy.join("; "), // 1.15: pending reads apart
         approvedAt: r.approval ? r.approval.at || "" : "",
         approvedBy: r.approval ? (r.approval.by || "—") + (r.approval.forced ? ` (${R.forced})` : "") : "",
         changed: r.approval ? yn(r.approval.changed) : "",

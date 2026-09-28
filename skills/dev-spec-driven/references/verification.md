@@ -67,9 +67,10 @@ ask the user to run the test and paste the red output — don't write the fix on
   and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
   task, where the failing run is the proof and a passing one is refused). `--shell bash` (or
   `DEV_SPEC_SHELL`) picks the shell. On Windows `bash` means **Git Bash** (found through `git --exec-path`,
-  `%ProgramFiles%\Git` or a non-WSL `bash.exe` on PATH); WSL's launcher (the `bash.exe` / `wsl.exe` in System32 or
-  WindowsApps) runs the command inside a Linux distribution, so it is refused before anything runs — as is `--shell bash`
-  with no Git Bash installed (pass the full path of a `bash.exe` instead). On Windows the default shell is cmd.exe,
+  `%ProgramFiles%\Git` or a non-WSL `bash.exe` on PATH); a bare `bash` never resolves to WSL's launcher (the `bash.exe` in System32 or
+  WindowsApps, which runs the command inside a Linux distribution): name that one by its full path to run inside WSL on
+  purpose (a run WSL can't start records nothing); `wsl.exe` is no shell and is refused, and so is `--shell bash` with no
+  Git Bash installed (pass the full path of a `bash.exe` instead). On Windows the default shell is cmd.exe,
   which has no single quotes and never
   expands `$VAR` — `node -e 'process.exit(1)'` exits 0 there — so a `_Verify:_` in POSIX syntax is refused before
   anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. A failed run

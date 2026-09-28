@@ -584,7 +584,7 @@ function main() {
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash — Git Bash on
         // Windows, never WSL's launcher unless named by its path: b5Shell). A shell that can't be found is refused before anything runs.
         const sh = b5Shell();
-        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: M.runGate.noGitBash });
+        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash });
         if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given — said once
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
         // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
@@ -1121,7 +1121,7 @@ function main() {
       const { checks } = spec.projectChecks(projectDir);
       if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
       const sh = b5Shell();
-      if (sh.error) return { ok: false, couldNotRun: sh.error, error: M.runGate.noGitBash };
+      if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash };
       if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given
       if (process.platform === "win32" && sh.shell === true) {
         const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
@@ -1147,7 +1147,7 @@ function main() {
     }
     // full review Ga9: the shell of done --run / finish --run — --shell > DEV_SPEC_SHELL > the platform default, resolved by the
     // engine (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's
-    // bash.exe launcher refused). → spec.resolveRunShell's result.
+    // bash.exe launcher only when named by its path; wsl.exe refused — wsl-exe). → spec.resolveRunShell's result.
     function b5Shell() {
       intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 — refused (exit 1) before anything runs
       const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
@@ -1288,7 +1288,7 @@ function printMatrix(feature, mx, lang) {
   const rows = mx.rows.map((r) => {
     const notes = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
     if (r.template) notes.push(C.notes.template);
-    if (r.supersededBy.length) notes.push(C.notes.superseded(r.supersededBy.join(", ")));
+    if (r.supersededBy.length) notes.push(r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join(", ")) : C.notes.superseded(r.supersededBy.join(", "))); // 1.15: a draft's is pending
     if (r.approval && r.approval.changed === true) notes.push(C.notes.changed);
     return [r.id, R.status[r.status] || r.status, r.tasks.map(task).join(" ") || "—", r.tests.map(test).join(" ") || "—",
       r.decisions.map((d) => d.id).join(" ") || "—", (notes.length ? "[" + notes.join("; ") + "] " : "") + r.text];

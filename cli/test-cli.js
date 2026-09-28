@@ -2877,11 +2877,14 @@ if (inSection("frga")) {
   // runs inside WSL — with no working distribution the relay fails and that is could-not-run (`wsl`), nothing recorded.
   if (process.platform === "win32") {
     const f9 = Sga.createFeature(gp, "Wsl", ["core"], "", undefined, "en");
-    wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: " + PASS + "_\n");
+    wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: exit 0_\n"); // a builtin: no node needed inside a WSL distribution
     const sysBash = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "bash.exe");
     const g9 = rga(gp, ["done", f9.slug, "1", "--run", "--shell", sysBash, "--json"]);
     const g9j = jsonGa(g9.stdout);
-    const g9none = !(stGa(f9).evidence || {})["1"]; // before the Git Bash run below records its pass
+    const g9x = jsonGa(rga(gp, ["done", f9.slug, "1", "--run", "--shell", path.join(path.dirname(sysBash), "wsl.exe"), "--json"]).stdout);
+    const g9none = !(stGa(f9).evidence || {})["1"] || !!(g9j && g9j.ok); // before the Git Bash run below records its pass
+    ok(g9x && g9x.ok === false && g9x.couldNotRun === "wsl-exe" && /wsl\.exe/.test(g9x.error),
+      "full review Ga9 (Windows): --shell <System32 wsl.exe> is no shell (it rejects -c) — refused before anything runs, nothing recorded (got " + JSON.stringify(g9x) + ")");
     const gitExec = spawnSync("git", ["--exec-path"], { encoding: "utf8" });
     const gitBash = Sga.resolveRunShell("bash", { gitExecPath: gitExec.status === 0 ? gitExec.stdout : null });
     const g9b = gitBash.shell ? rga(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"]) : null;

@@ -43,15 +43,18 @@ longer strikes the criterion it plans to replace), and `--shell` accepts WSL's b
   export and the traceability matrix — shipped = a finish recorded or the execution signed off, the release notes' rule.
   A draft's declaration now reads "to be superseded by … (not shipped yet)" (JSON `supersedePending: true`, catalog
   `totals.pending`, matrix `counts.supersedePending`) and the criterion stays current; a feature archived without ever
-  shipping declares nothing, and its own criteria no longer count as current. 1.14 struck the criterion as soon as any
-  feature declared it.
+  shipping declares nothing, and its own criteria no longer count as current; a shipped feature counts only the
+  declarations it shipped with (one a later change request adds waits until it ships again), and a retired criterion
+  names only its shipped declarers. The totals read "N current (P to be superseded), S superseded". 1.14 struck the
+  criterion as soon as any feature declared it.
 - **`--shell <path to WSL's bash.exe>` is used as given** (`done --run` / `finish --run`): running the checks inside a
   Linux distribution is your choice when you name it, with a one-line note; a bare `--shell bash` still never resolves to
   WSL (Git Bash, else `no-git-bash`), and a run WSL's relay fails is still could-not-run, nothing recorded. 1.14 refused
-  that path (`couldNotRun: "wsl-bash"`, no longer produced).
+  that path (`couldNotRun: "wsl-bash"`, no longer produced). `wsl.exe` (named or bare) is no shell — it rejects the
+  `-c` every run uses — and is refused (`couldNotRun: "wsl-exe"`); a quoted `--shell "C:\…\bash.exe"` loses its quotes.
 
 ### Tests
-- `node mcp/test.js` 1254 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
+- `node mcp/test.js` 1256 assertions (was 1221), `node cli/test-cli.js` 402 (was 395): a full +a11y pack end to end
   (classification, the scaffold in EN / PT / ES / pt-BR, the gates, trace, add / remove, a deleted and an invalidated pack,
   twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook), one
   regression per F4 review finding (R1–R10) and the CLI's `tracks` command; every existing assertion unchanged except the
