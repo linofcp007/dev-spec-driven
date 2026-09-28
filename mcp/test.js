@@ -10982,6 +10982,157 @@ function endRun() {
 
   // 1.14 feature (F2) — human approval guard.
 
+  {
+    const CLI_PATH = "/clone/cli/dev-spec.js";
+    const D = (tool, input, level, lang) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input }, level, { lang, cli: CLI_PATH });
+    const kinds = (r) => (r.actions || []).map((a) => [a.kind, a.feature, a.phase || a.through || a.to, a.force ? "force" : ""].join(":")).join(",");
+    // The helper: spec_approve under every MCP server prefix (Claude Code's plugin form, a project server, any name) or bare.
+    const names = ["mcp__plugin_dev-spec-driven_spec-driven__spec_approve", "mcp__spec-driven__spec_approve", "mcp__spec_driven__spec_approve",
+      "mcp__my-spec-driven-copy__spec_approve", "mcp__dev-spec__spec_approve", "spec_approve"];
+    const notNames = ["mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "mcp__spec-driven__xspec_approve", "mcp____spec_approve_", "Write", "Edit", "Task"];
+    const inp = { name: "checkout", phase: "design" };
+    ok(names.every((n) => D(n, inp, "ask").decision === "ask" && D(n, inp, "deny").decision === "deny" && D(n, inp, "off").decision === "allow") &&
+      notNames.every((n) => D(n, inp, "deny").decision === "allow") && D(names[0], inp, "deny").why === "approval" && D(names[0], inp, "off").why === "off" &&
+      D(names[0], inp, "maybe").why === "off" && D("Write", { file_path: "x.js" }, "deny").why === "not-an-approval",
+      "feature F2: spec_approve is caught under every MCP server prefix (mcp__plugin_<plugin>_<server>__, mcp__spec-driven__, any name) and bare; other tools, look-alike names and level off pass (got " +
+      JSON.stringify(names.map((n) => D(n, inp, "ask").decision).concat(notNames.map((n) => D(n, inp, "deny").decision))) + ")");
+    // ask names the feature, phase, role, approver and — loudly — force; deny tells the agent to stop and gives the human's command.
+    const aF = D(names[0], { name: "checkout", phase: "design", role: "tech", by: "Ana", force: true }, "ask");
+    const dF = D(names[1], { name: "checkout", phase: "design", role: "tech", force: true }, "deny");
+    const dT = D(names[1], { name: "my feature", through: "tasks" }, "deny");
+    ok(/the agent wants to approve the design phase of 'checkout' as tech in the name of 'Ana' — FORCED \(--force\)/.test(aF.reason) && /⚠ FORCE: /.test(aF.reason) && aF.force === true && aF.userNote === undefined &&
+      /refused — approvals are the human's/.test(dF.reason) && /Stop and ask the user to run it themselves/.test(dF.reason) && /Do not retry it by another route/.test(dF.reason) &&
+      dF.command === '! node "/clone/cli/dev-spec.js" approve checkout design --role tech --force' && dF.reason.includes(dF.command) && dF.userNote.includes(dF.command) &&
+      /approve every phase of 'my feature' through tasks/.test(dT.reason) && dT.command === '! node "/clone/cli/dev-spec.js" approve "my feature" --through tasks' &&
+      !/FORCE/.test(D(names[1], inp, "ask").reason),
+      "feature F2: ask names feature, phase, role, approver and FORCE loudly; deny sends the agent back with the human's `! node <clone>/cli/dev-spec.js approve …` command (also in userNote); --through for a fast-forward (got " +
+      JSON.stringify([aF.reason.slice(0, 160), dF.command, dT.command]) + ")");
+    // spec_feature remove (confirm: true — a preview deletes nothing) and LOWERING the guard (spec_init) are approvals too.
+    ok(D("mcp__spec-driven__spec_feature", { action: "remove", name: "checkout", confirm: true }, "ask").decision === "ask" &&
+      D("mcp__spec-driven__spec_feature", { action: "Remove", name: "checkout", confirm: true }, "deny").command === '! node "/clone/cli/dev-spec.js" feature remove checkout --yes' &&
+      D("mcp__spec-driven__spec_feature", { action: "remove", name: "checkout" }, "deny").decision === "allow" &&
+      D("mcp__spec-driven__spec_feature", { action: "archive", name: "checkout" }, "deny").decision === "allow" &&
+      kinds(D("mcp__spec-driven__spec_init", { approvalGuard: "OFF" }, "deny")) === "guard-down::off:" && D("mcp__spec-driven__spec_init", { approvalGuard: "ask" }, "deny").decision === "deny" &&
+      D("mcp__spec-driven__spec_init", { approvalGuard: "deny" }, "ask").decision === "allow" && D("mcp__spec-driven__spec_init", { approvalGuard: "ask" }, "ask").decision === "allow" &&
+      D("mcp__spec-driven__spec_init", { tracks: ["tdd"] }, "deny").decision === "allow" && /lower the approval guard from deny to off/.test(D("mcp__spec-driven__spec_init", { approvalGuard: "off" }, "deny").reason),
+      "feature F2: spec_feature remove with confirm is guarded (a preview, archive are not); spec_init lowering the guard is guarded, raising it or leaving it is not");
+    // Bash / PowerShell: the CLI's approve in every shape — and never the word "approve" in unrelated text.
+    const bashYes = {
+      "dev-spec approve checkout requirements": "approve:checkout:requirements:",
+      "node cli/dev-spec.js approve checkout design": "approve:checkout:design:",
+      'node "C:/Users/x/CLAUDE SKILLS/dev-spec-driven/cli/dev-spec.js" approve checkout tasks --force': "approve:checkout:tasks:force",
+      "cd /repo && node ./cli/dev-spec.js --json approve 'my feature' requirements": "approve:my feature:requirements:",
+      [String.raw`npm test; node cli\dev-spec.js approve checkout requirements`]: "approve:checkout:requirements:",
+      'bash -c "node cli/dev-spec.js approve checkout requirements"': "approve:checkout:requirements:",
+      [String.raw`cmd /c "node C:\x\cli\dev-spec.js approve checkout design --force=yes"`]: "approve:checkout:design:force",
+      'pwsh -Command "& node cli/dev-spec.js approve a b"': "approve:a:b:",
+      "node cli/dev-spec.js --project /p approve checkout --through tasks": "approve:checkout:tasks:",
+      "echo ok && node cli/dev-spec.js approve checkout requirements --role=product": "approve:checkout:requirements:",
+      "SPEC_PROJECT_DIR=/p timeout 30 node cli/dev-spec.js approve checkout requirements": "approve:checkout:requirements:",
+      "x=$(node cli/dev-spec.js approve a b --force=false)": "approve:a:b:",
+      '! node "/clone/cli/dev-spec.js" approve checkout design --force': "approve:checkout:design:force",
+      "node cli/dev-spec.js feature remove checkout --yes": "remove:checkout::",
+      "node cli/dev-spec.js approve a b\nnode cli/dev-spec.js approve a c --force": "approve:a:b:,approve:a:c:force",
+    };
+    const bashNo = ['git commit -m "dev-spec approve the design"', 'echo "dev-spec approve checkout requirements"', "echo dev-spec approve x y",
+      'grep -rn "dev-spec approve" .', "node cli/dev-spec.js help approve", "node cli/dev-spec.js approve checkout design --help",
+      "node cli/dev-spec.js create approve", "node cli/dev-spec.js status checkout", "node cli/dev-spec.js feature remove checkout",
+      "node cli/dev-spec.js init --approval-guard deny", "npm run approve", "ls dev-spec-approve/"];
+    const yesGot = Object.keys(bashYes).map((c) => [D("Bash", { command: c }, "ask").decision, kinds(D("Bash", { command: c }, "ask"))]);
+    const noGot = bashNo.map((c) => D("Bash", { command: c }, "deny").decision);
+    ok(Object.values(bashYes).every((k, i) => yesGot[i][0] === "ask" && yesGot[i][1] === k) && noGot.every((d) => d === "allow") &&
+      D("PowerShell", { command: String.raw`& node "C:\x\cli\dev-spec.js" approve checkout requirements` }, "deny").decision === "deny" &&
+      kinds(D("Bash", { command: "node cli/dev-spec.js init --approval-guard=off" }, "deny")) === "guard-down::off:",
+      "feature F2: Bash / PowerShell running the CLI's approve (quotes, && / ; / newline chains, bash -c, cmd /c, pwsh -Command, $( ), env / timeout / ! prefixes, --force[=yes|false]) is caught; the word in a commit message, echo, grep, help, a preview is not (got " +
+      JSON.stringify([yesGot.filter((g, i) => g[0] !== "ask" || g[1] !== Object.values(bashYes)[i]), noGot]) + ")");
+    // Localized (the project's language) — EN / PT / pt-BR / ES; values from the agent's call never reach the command unquoted.
+    const loc = (lang, lvl) => D(names[1], { name: "checkout", phase: "design", force: true }, lvl, lang).reason;
+    const inj = D(names[1], { name: 'x"; rm -rf ~', phase: "$(evil)", role: "a`b`", projectDir: String.raw`C:\My Proj\p` }, "deny");
+    ok(/the agent wants to approve the design phase of 'checkout'/.test(loc("en", "ask")) && /o agente quer aprovar a fase design de 'checkout' — FORÇADA/.test(loc("pt", "ask")) &&
+      /confirma só se aprovares/.test(loc("pt", "ask")) && /confirme só se você aprovar/.test(loc("pt-BR", "ask")) && /Peça ao usuário/.test(loc("pt-BR", "deny")) &&
+      /el agente quiere aprobar la fase design de 'checkout' — FORZADA/.test(loc("es", "ask")) && /rechazado — las aprobaciones son de la persona/.test(loc("es", "deny")) &&
+      /recusado — as aprovações são da pessoa/.test(loc("pt", "deny")) &&
+      inj.command === '! node "/clone/cli/dev-spec.js" approve <feature> <phase> --role <role> --project "C:/My Proj/p"',
+      "feature F2: the reasons are localized (EN / PT / pt-BR / ES); an unsafe value from the call becomes a <placeholder> in the suggested command (got " + JSON.stringify(inj.command) + ")");
+
+    // The hook process (hooks/approval-hook.js): silent unless the project's meta.approvalGuard is ask / deny.
+    const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
+    const runHook = (input, env) => spawnSync(process.execPath, [hookJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 15000 });
+    const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+    const decided = (r) => { try { const h = JSON.parse(r.stdout).hookSpecificOutput; return h.hookEventName === "PreToolUse" && r.status === 0 ? h.permissionDecision + "|" + h.permissionDecisionReason : null; } catch { return null; } };
+    const silent = (r) => r.status === 0 && r.stdout === "" && !r.error;
+    const pAsk = path.join(tmp, "proj-f2-ask"), pDenyPt = path.join(tmp, "proj-f2-deny-pt"), pDenyEs = path.join(tmp, "proj-f2-deny-es"), pOff = path.join(tmp, "proj-f2-off"), pNone = path.join(tmp, "proj-f2-none");
+    const iAsk = S.initProject(pAsk, ["core"], "en", { approvalGuard: "ask" });
+    S.initProject(pDenyPt, ["core"], "pt", { approvalGuard: "deny" });
+    S.initProject(pDenyEs, ["core"], "es", { approvalGuard: "DENY" });
+    const iOff = S.initProject(pOff, ["core"], "en");
+    fs.mkdirSync(pNone, { recursive: true });
+    const approveCall = (cwd, input) => pre(cwd, "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", input || { name: "checkout", phase: "requirements", force: true });
+    const hAsk = runHook(approveCall(pAsk));
+    const hPt = runHook(approveCall(pDenyPt));
+    const hEs = runHook(pre(pDenyEs, "Bash", { command: "node cli/dev-spec.js approve pagos design" }));
+    let ptJson = {};
+    try { ptJson = JSON.parse(hPt.stdout); } catch { /* checked below */ }
+    ok(iAsk.approvalGuard === "ask" && iOff.approvalGuard === "off" && /^ask\|dev-spec approval guard: the agent wants to approve the requirements phase of 'checkout' — FORCED/.test(decided(hAsk) || "") &&
+      /^deny\|dev-spec approval guard: recusado — as aprovações são da pessoa/.test(decided(hPt) || "") && /cli\/dev-spec\.js" approve checkout requirements --force/.test(decided(hPt) || "") &&
+      /recusou o pedido de um agente/.test(ptJson.systemMessage || "") && /^deny\|dev-spec approval guard: rechazado/.test(decided(hEs) || "") &&
+      silent(runHook(approveCall(pOff))) && silent(runHook(approveCall(pNone))),
+      "feature F2: the hook answers ask (EN) / deny (PT, + a systemMessage with the command for the user) / deny (ES, a Bash `dev-spec approve`) as valid JSON; a project with the guard off or no .specs/ gets nothing (got " +
+      JSON.stringify([decided(hAsk), (decided(hPt) || "").slice(0, 60), (decided(hEs) || "").slice(0, 60), hAsk.stderr]) + ")");
+    // Which project: the one the call names (MCP projectDir / CLI --project), the session cwd, CLAUDE_PROJECT_DIR — the strictest wins.
+    const hNamed = runHook(pre(pOff, "mcp__spec-driven__spec_approve", { name: "x", phase: "design", projectDir: pDenyPt }));
+    const hFlag = runHook(pre(pOff, "Bash", { command: 'node cli/dev-spec.js approve x design --project "' + pAsk + '"' }));
+    const hEnv = runHook({ hook_event_name: "PreToolUse", tool_name: "spec_approve", tool_input: { name: "x", phase: "design" } }, { CLAUDE_PROJECT_DIR: pAsk });
+    const t0 = Date.now();
+    const hNet = runHook(pre(pOff, "mcp__spec-driven__spec_approve", { name: "x", phase: "design", projectDir: "//unreachable-host-f2.invalid/share/p" }));
+    ok(/^deny\|/.test(decided(hNamed) || "") && /^ask\|/.test(decided(hFlag) || "") && /^ask\|/.test(decided(hEnv) || "") && silent(hNet) && Date.now() - t0 < 10000,
+      "feature F2: the hook checks the project the call names (projectDir, --project) and the session's (cwd, CLAUDE_PROJECT_DIR) — the strictest level wins; a network projectDir is never read (got " +
+      JSON.stringify([decided(hNamed), decided(hFlag), decided(hEnv), hNet.stdout]) + ")");
+    // Never blocks on its own trouble: malformed / empty / huge stdin, a wrong shape, another event, a broken roadmap.json → exit 0, silent.
+    const pBroken = path.join(tmp, "proj-f2-broken");
+    fs.mkdirSync(path.join(pBroken, ".specs"), { recursive: true });
+    fs.writeFileSync(path.join(pBroken, ".specs", "roadmap.json"), '{"meta": {"approvalGuard": "deny"');
+    const odd = ["{not json", "", "[1,2]", "null", "42", JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: "node cli/dev-spec.js approve a b", cwd: pAsk }),
+      JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "spec_approve", tool_input: { name: "a", phase: "design" }, cwd: pAsk }),
+      JSON.stringify(pre(pAsk, "Bash", { command: "npm test && git status" })), JSON.stringify(pre(pAsk, "Bash", { command: 12 })),
+      JSON.stringify(approveCall(pBroken)), "x".repeat(3 * 1024 * 1024), JSON.stringify(pre(pAsk, "Bash", { command: "echo dev-spec " + "a ".repeat(400000) }))];
+    const oddGot = odd.map((s) => runHook(s));
+    ok(oddGot.every(silent) && !fs.readFileSync(hookJs, "utf8").includes(String.fromCharCode(0xfeff)),
+      "feature F2: malformed / empty / 3 MB stdin, a non-object payload or tool_input, another event, a command that runs no approval and a broken roadmap.json → exit 0, no output (got " +
+      JSON.stringify(oddGot.map((r) => [r.status, r.stdout.slice(0, 40)])) + ")");
+    // hooks.json: the guard stays first; the approval hook is a PreToolUse entry whose matcher (an anchored regex) covers the shell
+    // tools and the approve-shaped MCP tools only; every hook command names a script that exists.
+    const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
+    const apCfg = (hooksCfg.PreToolUse || []).find((e) => e.hooks && e.hooks.some((h) => /approval-hook\.js/.test(h.command))) || {};
+    let mre = null;
+    try { mre = new RegExp(apCfg.matcher); } catch { /* checked below */ }
+    const scripts = Object.values(hooksCfg).flat().flatMap((e) => e.hooks.map((h) => (/\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[\w.-]+\.js)/.exec(h.command) || [])[1]));
+    ok(mre && hooksCfg.PreToolUse[0].hooks[0].command.includes("guard-hook.js") && apCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js"' && apCfg.hooks[0].timeout === 10 &&
+      names.concat(["Bash", "PowerShell", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init"]).every((n) => mre.test(n)) &&
+      ["Write", "Edit", "BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash"].every((n) => !mre.test(n)) &&
+      scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
+      "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
+      JSON.stringify([apCfg.matcher, scripts]) + ")");
+
+    // spec_init over MCP: approvalGuard is a plain string enum (folded), always reported, refused when it is anything else.
+    const pMcp = path.join(tmp, "proj-f2-mcp");
+    const initSchema = ((await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_init") || {}).inputSchema || {};
+    const ag = (initSchema.properties || {}).approvalGuard || {};
+    const m1 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "DENY", projectDir: pMcp } });
+    const rmAfter1 = JSON.parse(fs.readFileSync(path.join(pMcp, ".specs", "roadmap.json"), "utf8")).meta.approvalGuard;
+    const m2 = await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pMcp } });
+    const m3 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "maybe", projectDir: pMcp } });
+    const m4 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: true, projectDir: pMcp } });
+    const m5 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "off", projectDir: pMcp, lang: "es" } });
+    const r1 = payload(m1), r2 = payload(m2), r5 = payload(m5);
+    ok(ag.type === "string" && JSON.stringify(ag.enum) === '["off","ask","deny"]' && r1.approvalGuard === "deny" && /^Approval guard DENY/.test(r1.approvalGuardNote) &&
+      rmAfter1 === "deny" && r2.approvalGuard === "deny" && r2.approvalGuardNote === undefined &&
+      m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote),
+      "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused (got " +
+      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote]) + ")");
+  }
+
   // 1.14 feature (F3) — task dependencies and waves.
 
   // 1.14 feature (F5) — traceability matrix.

@@ -10,6 +10,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

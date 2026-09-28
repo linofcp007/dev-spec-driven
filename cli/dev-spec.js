@@ -19,6 +19,7 @@
  *                                      --stop-check on|off → the end-of-turn evidence gate (roadmap.json meta.stopCheck, on by default);
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
+ *                                      --approval-guard off|ask|deny → an agent's approval asks the user / is refused (meta.approvalGuard)
  *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
@@ -153,6 +154,7 @@ VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|ev
 VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
 ["stop-check", "message", "agent"].forEach((k) => VALUE_FLAGS.add(k)); // 1.14 C1: init --stop-check on|off (= spec_init {stopCheck}); stop-check --message "…" --agent <type>
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
+VALUE_FLAGS.add("approval-guard"); // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
@@ -345,13 +347,19 @@ function main() {
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]));
       }
       const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
+      // 1.14 F2: --approval-guard off|ask|deny = spec_init {approvalGuard}; absent leaves the human approval guard as it is.
+      let approvalGuard;
+      if (flags["approval-guard"] !== undefined) {
+        approvalGuard = String(flags["approval-guard"]).trim().toLowerCase();
+        if (!spec.APPROVAL_GUARD_LEVELS.includes(approvalGuard)) die(spec.msg(flags.lang || spec.projectLang(projectDir)).approvalGuard.badValue(flags["approval-guard"]));
+      }
       // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
       let approvalRoles;
       if (flags.roles !== undefined) {
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
         if (approvalRoles.error) die(approvalRoles.error);
       }
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck });
+      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck, approvalGuard });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         console.log(cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || cliText(r.lang).nothingNew, r.skipped.join(", ")));
@@ -359,6 +367,7 @@ function main() {
         if (r.stopCheckNote) console.log("  " + r.stopCheckNote);
         if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
         if (r.rolesNote) console.log("  " + r.rolesNote);
+        if (r.approvalGuardNote) console.log("  " + r.approvalGuardNote);
       });
     }
 
@@ -1224,6 +1233,8 @@ function helpText() {
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
+                                  --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
+                                  its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)
   steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
@@ -1323,7 +1334,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --guard on|off|scope / --stop-check on|off (init)  --message "…" / --agent <type> (stop-check)
+         --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
