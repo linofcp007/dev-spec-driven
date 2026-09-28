@@ -1840,7 +1840,7 @@ const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (t
 const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
 // The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help"]);
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv"]); // the CLI's BOOL_FLAGS ARE this list
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "sudo", "env", "nohup", "time", "exec", "command", "call",
@@ -16247,6 +16247,7 @@ function clarify(projectDir, name) {
 }
 
 module.exports = {
+  CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
   VALID_TRACKS,
   PHASES,
   resolveProjectDir,

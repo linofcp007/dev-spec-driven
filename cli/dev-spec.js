@@ -188,14 +188,15 @@ const projectDir = spec.resolveProjectDir(flags.project);
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
-const BOOL_FLAGS = ["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force", "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail"];
-BOOL_FLAGS.push("matrix", "csv"); // 1.14 F5: trace <f> --matrix | --csv · export [f] --csv
+// ONE list, spec.CLI_SWITCHES (the approval hook parses `dev-spec approve …` with it): add a new switch THERE. It holds
+// --matrix / --csv (1.14 F5: trace <f> --matrix | --csv · export [f] --csv) and --help.
+const BOOL_FLAGS = [...spec.CLI_SWITCHES];
 const on = (k) => flags[k] === true;
 // A switch passed through to an engine option whose default depends on others (finish's includeBody, brief's includeBrief:
 // true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
 // is false, as spec_finish {includeBody: false} (on() ? true : undefined turned it into the default).
 const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
-BOOL_FLAGS.push("help"); // --help anywhere prints the help (`done big 2 --help` ticked the task)
+// --help (in BOOL_FLAGS) anywhere prints the help (`done big 2 --help` ticked the task)
 // An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so
 // `done big 2 --rnu` ticked the task with no evidence (exit 0). Known = VALUE_FLAGS ∪ BOOL_FLAGS, with a did-you-mean.
 // `evals` forwards its flags untouched to mcp/evals/run-evals.js, which checks its own (--dry-run, --max-items…).
