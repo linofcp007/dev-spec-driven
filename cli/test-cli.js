@@ -46,7 +46,7 @@ function exitFlushed(code) {
 // Every removal retries (maxRetries), and the parent sweeps this runner's OWN leftovers first: exactly the mkdtemp shape,
 // a real directory, untouched for 2 h.
 function rmTmpDir(dir) {
-  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch {}
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 100 }); } catch {}
 }
 function sweepStaleTmp() {
   let names = [];
