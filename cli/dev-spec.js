@@ -582,9 +582,10 @@ function main() {
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         const M = spec.msg(spec.featureLang(projectDir, pos[0]));
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash — Git Bash on
-        // Windows, never WSL's launcher: b5Shell). A shell that can't be used is refused before anything runs.
+        // Windows, never WSL's launcher unless named by its path: b5Shell). A shell that can't be found is refused before anything runs.
         const sh = b5Shell();
-        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash });
+        if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: M.runGate.noGitBash });
+        if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given — said once
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command
         // written for a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
         if (process.platform === "win32" && sh.shell === true) {
@@ -1120,7 +1121,8 @@ function main() {
       const { checks } = spec.projectChecks(projectDir);
       if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
       const sh = b5Shell();
-      if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-bash" ? M.runGate.wslBash(sh.path) : M.runGate.noGitBash };
+      if (sh.error) return { ok: false, couldNotRun: sh.error, error: M.runGate.noGitBash };
+      if (sh.wsl) (flags.json ? console.error : console.log)(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given
       if (process.platform === "win32" && sh.shell === true) {
         const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
         if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };

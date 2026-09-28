@@ -145,7 +145,7 @@ prompts [name] [--args "…"]
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
 (`meta.checks`) and records them — the only CLI commands that execute anything from your spec. On Windows
-`--shell bash` is Git Bash (WSL's `bash.exe` launcher is refused); a run that could not happen (no shell, a signal,
+`--shell bash` is Git Bash, never WSL's `bash.exe` launcher (named by its path, WSL is used as given); a run that could not happen (no shell, a signal,
 `--timeout <seconds>` expired, output over 64 MB) records nothing. `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `done --run` / `finish --run` runs are stamped `observed: "cli"` (they count as observed under `init --evidence

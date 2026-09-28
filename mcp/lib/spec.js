@@ -6923,10 +6923,12 @@ function windowsShellFailure(output, code) {
 // runs the command inside a Linux distribution or fails ("execvpe(/bin/bash) failed", exit 1 for every command — a passing
 // check recorded as failed, a bogus red run). Candidates, in order: git --exec-path's install (<git>/mingw64/libexec/git-core
 // → <git>/bin/bash.exe, then usr/bin), %ProgramFiles% / %ProgramW6432% / %ProgramFiles(x86)% / %LOCALAPPDATA%\Programs \Git\bin,
-// then the first bash.exe on PATH that is not WSL's (MSYS2, Cygwin). An explicit path to WSL's launcher is refused too. Pure:
-// the CLI passes what it knows (opts.gitExecPath — git's own output —, opts.env, opts.exists, opts.platform); the engine
-// never runs a command or git. → { shell: true | "<shell>", cmd: <cmd.exe runs it>, resolved?: true } | { error:
-// "wsl-bash", path } | { error: "no-git-bash" }
+// then the first bash.exe on PATH that is not WSL's (MSYS2, Cygwin). An EXPLICIT path is the user's choice and is used as
+// given — WSL's launcher too (running the checks inside a Linux distribution on purpose), flagged `wsl: true`; a run WSL's
+// relay fails is still could-not-run (couldNotRunOutput kind `wsl`: nothing recorded). 1.14 refused that path (`wsl-bash`).
+// Pure: the CLI passes what it knows (opts.gitExecPath — git's own output —, opts.env, opts.exists, opts.platform); the engine
+// never runs a command or git. → { shell: true | "<shell>", cmd: <cmd.exe runs it>, resolved?: true, wsl?: true } |
+// { error: "no-git-bash" }
 const RE_WSL_LAUNCHER_DIR = /[\\/](?:system32|syswow64|sysnative|windowsapps)[\\/][^\\/]*$/i;
 function isWslLauncher(p) {
   const s = String(p == null ? "" : p).trim().replace(/^"|"$/g, "");
@@ -6938,7 +6940,7 @@ function resolveRunShell(requested, opts = {}) {
   if (platform !== "win32") return { shell: req || true, cmd: false };
   if (!req) return { shell: true, cmd: true }; // Node's default there: %ComSpec% (cmd.exe)
   if (/^(?:.*[\\/])?cmd(?:\.exe)?$/i.test(req)) return { shell: req, cmd: true }; // --shell cmd / a ComSpec path: cmd.exe anyway
-  if (/[\\/]/.test(req)) return isWslLauncher(req) ? { error: "wsl-bash", path: req } : { shell: req, cmd: false };
+  if (/[\\/]/.test(req)) return isWslLauncher(req) ? { shell: req, cmd: false, wsl: true } : { shell: req, cmd: false };
   if (!/^bash(?:\.exe)?$/i.test(req)) return { shell: req, cmd: false }; // sh, pwsh, zsh…: as given
   const env = opts.env || process.env;
   const envOf = (k) => { const hit = Object.keys(env).find((x) => x.toLowerCase() === k.toLowerCase()); return hit ? String(env[hit] || "") : ""; };

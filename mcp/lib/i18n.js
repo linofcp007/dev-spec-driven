@@ -3624,7 +3624,7 @@ const MSG = {
         shell: (text) => `the shell could not start it: ${text}`,
         error: (code) => `the run could not start: ${code}`,
       },
-      wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — refused, nothing was run. Use Git Bash: --shell bash finds it (Git for Windows), or give the full path of a bash.exe.`,
+      wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — used as you asked; a run WSL can't start is not recorded. For a shell on this machine use Git Bash: --shell bash finds it (Git for Windows).`,
       noGitBash: "--shell bash: no Git Bash was found (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — a bash.exe in System32 or WindowsApps is WSL's launcher, which runs the command inside a Linux distribution, so it is never used. Nothing was run. Install Git for Windows, or pass --shell with the full path of a bash.exe.",
     },
     gitLog: {
@@ -5219,7 +5219,7 @@ _Outcome: [go | no-go | pivot]_
         shell: (text) => `a shell não o conseguiu iniciar: ${text}`,
         error: (code) => `a execução não conseguiu arrancar: ${code}`,
       },
-      wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — recusado, nada foi executado. Usa o Git Bash (o --shell bash encontra-o, com o Git for Windows) ou indica o caminho completo de um bash.exe.`,
+      wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — usado como pediste; uma execução que o WSL não consiga arrancar não é registada. A shell desta máquina é o Git Bash, que o --shell bash encontra (com o Git for Windows).`,
       noGitBash: "--shell bash: não foi encontrado nenhum Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — um bash.exe em System32 ou WindowsApps é o lançador do WSL, que corre o comando dentro de uma distribuição Linux, por isso nunca é usado. Nada foi executado. Instala o Git for Windows, ou indica em --shell o caminho completo de um bash.exe.",
     },
     gitLog: {
@@ -6794,7 +6794,7 @@ _Outcome: [go | no-go | pivot]_
         shell: (text) => `la shell no pudo iniciarlo: ${text}`,
         error: (code) => `la ejecución no pudo arrancar: ${code}`,
       },
-      wslBash: (p) => `--shell ${p} es el lanzador bash.exe de WSL: ejecuta el comando dentro de una distribución Linux (o falla con "execvpe(/bin/bash) failed"), no en una shell de esta máquina — rechazado, no se ejecutó nada. Usa Git Bash: --shell bash lo encuentra (Git for Windows), o indica la ruta completa de un bash.exe.`,
+      wslBash: (p) => `--shell ${p} es el lanzador bash.exe de WSL: ejecuta el comando dentro de una distribución Linux (o falla con "execvpe(/bin/bash) failed"), no en una shell de esta máquina — se usa como pediste; una ejecución que WSL no pueda arrancar no se registra. Para una shell de esta máquina usa Git Bash: --shell bash lo encuentra (Git for Windows).`,
       noGitBash: "--shell bash: no se encontró ningún Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — un bash.exe en System32 o WindowsApps es el lanzador de WSL, que ejecuta el comando dentro de una distribución Linux, así que nunca se usa. No se ejecutó nada. Instala Git for Windows, o indica en --shell la ruta completa de un bash.exe.",
     },
     gitLog: {

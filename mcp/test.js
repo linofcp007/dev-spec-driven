@@ -10149,10 +10149,11 @@ function endRun() {
       pwsh: S.resolveRunShell("pwsh", { platform: "win32" }), linuxBash: S.resolveRunShell("bash", { platform: "linux" }), linuxDef: S.resolveRunShell("", { platform: "linux" }),
     };
     ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
-      r9.sys32Path.error === "wsl-bash" && r9.appsPath.error === "wsl-bash" && r9.wslExe.error === "wsl-bash" &&
+      // 1.15: an EXPLICIT path to WSL's launcher is the user's choice — used as given, flagged wsl (1.14 refused it)
+      r9.sys32Path.shell === wp(sys32, "bash.exe") && r9.sys32Path.wsl === true && r9.appsPath.wsl === true && r9.wslExe.wsl === true && !r9.sys32Path.error &&
       r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
       r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
-      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), WSL's System32 / WindowsApps launcher is refused (no-git-bash / wsl-bash), cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
+      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), never WSL's launcher (only WSL there → no-git-bash); an explicit WSL path is used as given (wsl: true); cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
       JSON.stringify(r9).slice(0, 500) + ")");
   }
 

@@ -389,8 +389,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `…/usr/bin/bash.exe`), `%ProgramFiles%` / `%ProgramW6432%` / `%ProgramFiles(x86)%` / `%LOCALAPPDATA%\Programs` +
   `\Git\bin\bash.exe`, then the first bash.exe on PATH that isn't WSL's. WSL's launcher (`isWslLauncher()`: a bash.exe /
   wsl.exe in System32, SysWOW64, Sysnative or WindowsApps — it runs the command inside a Linux distribution, or fails every
-  command with exit 1) is never used: named as `--shell <path>`, it is refused before anything runs (`couldNotRun:
-  "wsl-bash"`); a bare `bash` with no Git Bash found → `no-git-bash`.
+  command with exit 1) is never what a bare `bash` resolves to (none found → `no-git-bash`); named by its path (`--shell
+  C:\Windows\System32\bash.exe`) it is the user's choice (1.15 — 1.14 refused it as `wsl-bash`): used as given, flagged `wsl`,
+  with a one-line note (`runGate.wslBash`), and a run WSL's relay fails is could-not-run `wsl` (nothing recorded).
   On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
@@ -407,7 +408,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
   an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
   whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
-  `_Expect: fail_` below); the shell resolution adds `wsl-bash` / `no-git-bash`. `finish --run` stays all-or-nothing: one
+  `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
   check that could not run records none.
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends

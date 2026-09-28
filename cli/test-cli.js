@@ -2864,7 +2864,8 @@ if (inSection("frga")) {
     "full review Ga6: append-tasks --makes-green (repeatable, as the plan spells the T-IDs) / --expect-fail / --size write the markers; a bad size, an unplanned T-ID, a non-boolean --expect-fail or a second --size writes nothing (got " +
     JSON.stringify([a6bad.out.slice(0, 120), a6ph.out.slice(0, 120), a6.out.slice(0, 200)]).slice(0, 500) + ")");
 
-  // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher — an explicit System32 bash.exe is refused, nothing run or recorded.
+  // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher. An explicit System32 bash.exe is the user's choice (1.15): it
+  // runs inside WSL — with no working distribution the relay fails and that is could-not-run (`wsl`), nothing recorded.
   if (process.platform === "win32") {
     const f9 = Sga.createFeature(gp, "Wsl", ["core"], "", undefined, "en");
     wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: " + PASS + "_\n");
@@ -2876,9 +2877,12 @@ if (inSection("frga")) {
     const gitBash = Sga.resolveRunShell("bash", { gitExecPath: gitExec.status === 0 ? gitExec.stdout : null });
     const g9b = gitBash.shell ? rga(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"]) : null;
     const g9bj = g9b && jsonGa(g9b.stdout);
-    ok(g9.code === 1 && g9j && g9j.couldNotRun === "wsl-bash" && /is WSL's bash\.exe launcher/.test(g9j.error) && !/^\$ /m.test(g9.out) && g9none &&
-      (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
-      "full review Ga9 (Windows): --shell <System32 bash.exe> is refused before anything runs (couldNotRun wsl-bash); --shell bash runs under Git Bash when installed (got " +
+    // Either WSL ran it (a working distribution: a real pass is recorded) or its relay failed (could-not-run `wsl` / the shell
+    // didn't start: nothing recorded) — never a bogus failed run or red proof.
+    const wslRan = g9.code === 0 && g9j && g9j.ok === true;
+    const wslNot = g9.code === 1 && g9j && ["wsl", "shell-not-started"].includes(g9j.couldNotRun) && g9none;
+    ok((wslRan || wslNot) && (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
+      "full review Ga9 (Windows): --shell <System32 bash.exe> is used as given — it runs under WSL or, when WSL can't run it, is could-not-run with nothing recorded; --shell bash runs under Git Bash when installed (got " +
       JSON.stringify([g9.code, g9j, gitBash, g9b && g9b.out.slice(0, 200)]).slice(0, 600) + ")");
   } else ok(true, "full review Ga9: --shell <System32 bash.exe> refusal — Windows only (resolveRunShell is unit-tested in mcp/test.js)");
 

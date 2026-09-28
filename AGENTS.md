@@ -146,7 +146,7 @@ next, `dev-spec next-action <feature>` names the single next step.
   implementing files changed reads `code-changed`) — run them and report them (MCP `spec_finish {evidence}`), or
   `dev-spec finish <f> --run`.
 - **`--run` and its shell.** `done --run` / `finish --run` use cmd.exe on Windows (`/bin/sh` elsewhere) unless `--shell`
-  (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash — WSL's `bash.exe` launcher is refused.
+  (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash, never WSL's `bash.exe` launcher (name that one by its path to run inside WSL).
   A run that could not happen (the shell didn't start, a signal, `--timeout <seconds>` expired, output over 64 MB)
   records nothing: the task stays open.
 - **No pipes in `_Verify:_`.** `npm test | tee log` exits with the last command's code, so a failure can read as
