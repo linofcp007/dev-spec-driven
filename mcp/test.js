@@ -13477,7 +13477,9 @@ function endRun() {
       ["C:\\work", vUnc + "\\a.js"], [vUnc, "C:\\work\\a.js"], ["\\\\?\\C:\\work", "\\\\?\\C:\\work\\a.js"]];
     const vIn = vPairs.map(([a, b]) => S.networkPathInside(a, b));
     ok(JSON.stringify(vIn) === JSON.stringify(["src\\a.js", "src\\a.js", "a.js", "a.js", "a.js", "", null, null, null, null, null, null]) &&
-      vH.every((h) => h.status === 0 && !h.err) && vH[0].stdout === "" && vAsk === "ask" && vH[2].stdout === "" && vH[3].stdout === "" &&
+      // On Linux / macOS `\\192.0.2.1\share\…` is no network path — a relative file name inside the project (no SMB): the scope
+      // guard may ask about it there, as for any unplanned file.
+      vH.every((h) => h.status === 0 && !h.err) && (process.platform !== "win32" || vH[0].stdout === "") && vAsk === "ask" && vH[2].stdout === "" && vH[3].stdout === "" &&
       (process.platform !== "win32" || vH.every((h) => h.ms < 10000)),
       "1.16 verify NEW-3: a network path the agent names is decided on its text — the guard hook allows a Write to \\\\192.0.2.1\\share\\… outside the project, an open task's absolute \\\\host _Implements:_ is never stat'ed at the scope level, the save hook skips a network .specs/ file outside the session's folders — each silent / exit 0, fast on Windows (" +
       vH.map((h) => h.ms + " ms").join(", ") + "); networkPathInside: same \\\\host\\share prefix (\\\\?\\UNC, //, case folded) only (got " + JSON.stringify([vIn, vH.map((h) => [h.status, h.err, h.stdout.slice(0, 60)])]) + ")");
