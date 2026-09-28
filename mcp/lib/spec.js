@@ -13276,7 +13276,7 @@ function renderRoadmapMd(projectDir, lang, data) {
     md += `\n## 🏁 ${MS.title}\n\n| ${MS.cols.join(" | ")} |\n|${MS.cols.map(() => "---").join("|")}|\n`;
     for (const m of rmv.milestones) {
       const feats = m.features.join(", ") + (m.archived ? ` (${MS.archivedLabel}: ${m.archived.join(", ")})` : "");
-      md += `| ${cell(m.name)} | ${m.date} | ${cell(feats || "—")} | ${m.done}/${m.total} | ${m.eta || "—"} | ${MILESTONE_ICON[m.status]} ${MS.status[m.status]} |\n`;
+      md += `| ${cell(m.name)} | ${cell(m.date)} | ${cell(feats || "—")} | ${m.done}/${m.total} | ${cell(m.eta || "—")} | ${MILESTONE_ICON[m.status]} ${MS.status[m.status]} |\n`; // every stored value through cell() (1.16 E review M2)
     }
   }
 
@@ -13322,8 +13322,8 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const F = i18n.msg(lang).forecast;
   const anyEta = rows.some((r) => r.f.forecast && r.f.forecast.eta);
   const MS = i18n.msg(lang).milestone; // 1.16 E3 — the milestones table (only when some exist)
-  const msRows = (rmv.milestones || []).map((m) => `<tr><td>${htmlEsc(m.name)}</td><td>${m.date}</td><td>${htmlEsc(m.features.join(", ") || "—")}${m.archived ? ` <span class="tracks">${htmlEsc(MS.archivedLabel)}: ${htmlEsc(m.archived.join(", "))}</span>` : ""}</td>` +
-    `<td>${m.done}/${m.total}</td><td class="eta">${m.eta || "—"}</td><td class="ms-${m.status}">${MILESTONE_ICON[m.status]} ${htmlEsc(MS.status[m.status])}</td></tr>`).join("\n");
+  const msRows = (rmv.milestones || []).map((m) => `<tr><td>${htmlEsc(m.name)}</td><td>${htmlEsc(m.date)}</td><td>${htmlEsc(m.features.join(", ") || "—")}${m.archived ? ` <span class="tracks">${htmlEsc(MS.archivedLabel)}: ${htmlEsc(m.archived.join(", "))}</span>` : ""}</td>` +
+    `<td>${m.done}/${m.total}</td><td class="eta">${htmlEsc(m.eta || "—")}</td><td class="ms-${m.status}">${MILESTONE_ICON[m.status]} ${htmlEsc(MS.status[m.status])}</td></tr>`).join("\n");
 
   const depList = rmv.features.filter((f) => f.dependsOn.length).map((f) => `<li><b>${htmlEsc(f.name)}</b> ← ${f.dependsOn.map((d) => `<span class="${f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ")}</li>`).join("\n");
   const attList = attention.map((a) => `<li><b>${htmlEsc(a.name)}</b> — ${htmlEsc(a.msg)}</li>`).join("\n");
@@ -15837,15 +15837,35 @@ function rtmProjectMarkdown(projectDir, lang, features) {
 // the split (a comma or a keyword inside "…" / `…` never cuts a clause). A PT / ES feature (pt-BR too) is written in
 // Gherkin's own dialect: `# language: pt` / `# language: es` + its keywords (GHERKIN_DIALECT — Gherkin's tokens, not
 // dev-spec prose). A spike (no acceptance criteria) has no Gherkin: named, it is refused; the project export skips it.
+// `keywords`: EVERY keyword of the dialect, as Gherkin's gherkin-languages.json lists them for en / pt / es (compared with
+// cucumber/gherkin main — 1.16 E review m6; step keywords without their trailing space, the "*" step aside) — the words
+// the description guard checks (a summary line starting with one of them gets the summary label in front); the other
+// fields are the ones the export writes.
 const GHERKIN_DIALECT = {
   en: { feature: "Feature", scenario: "Scenario", given: "Given", when: "When", then: "Then", and: "And",
-    blocks: ["Feature", "Background", "Scenario", "Example", "Scenario Outline", "Scenario Template", "Examples", "Scenarios", "Rule"] },
+    keywords: { feature: ["Feature", "Business Need", "Ability"], background: ["Background"], rule: ["Rule"], scenario: ["Example", "Scenario"],
+      scenarioOutline: ["Scenario Outline", "Scenario Template"], examples: ["Examples", "Scenarios"],
+      given: ["Given"], when: ["When"], then: ["Then"], and: ["And"], but: ["But"] } },
   pt: { feature: "Funcionalidade", scenario: "Cenário", given: "Dado", when: "Quando", then: "Então", and: "E",
-    blocks: ["Funcionalidade", "Característica", "Caracteristica", "Contexto", "Cenário de Fundo", "Cenario de Fundo", "Fundo", "Cenário", "Cenario", "Exemplo",
-      "Esquema do Cenário", "Esquema do Cenario", "Delineação do Cenário", "Delineacao do Cenario", "Exemplos", "Cenários", "Cenarios", "Regra"] },
+    keywords: { feature: ["Funcionalidade", "Característica", "Caracteristica"], background: ["Contexto", "Cenário de Fundo", "Cenario de Fundo", "Fundo"], rule: ["Regra"],
+      scenario: ["Exemplo", "Cenário", "Cenario"], scenarioOutline: ["Esquema do Cenário", "Esquema do Cenario", "Delineação do Cenário", "Delineacao do Cenario"],
+      examples: ["Exemplos", "Cenários", "Cenarios"], given: ["Dado", "Dada", "Dados", "Dadas"], when: ["Quando"], then: ["Então", "Entao"], and: ["E"], but: ["Mas"] } },
   es: { feature: "Característica", scenario: "Escenario", given: "Dado", when: "Cuando", then: "Entonces", and: "Y",
-    blocks: ["Característica", "Necesidad del negocio", "Requisito", "Antecedentes", "Escenario", "Ejemplo", "Esquema del escenario", "Ejemplos", "Regla"] },
+    keywords: { feature: ["Característica", "Necesidad del negocio", "Requisito"], background: ["Antecedentes"], rule: ["Regla", "Regla de negocio"],
+      scenario: ["Ejemplo", "Escenario"], scenarioOutline: ["Esquema del escenario"], examples: ["Ejemplos"],
+      given: ["Dado", "Dada", "Dados", "Dadas"], when: ["Cuando"], then: ["Entonces"], and: ["Y", "E"], but: ["Pero"] } },
 };
+const GHERKIN_BLOCK_KINDS = ["feature", "background", "rule", "scenario", "scenarioOutline", "examples"]; // "<keyword>:" lines
+const GHERKIN_STEP_KINDS = ["given", "when", "then", "and", "but"]; // "<keyword> " lines
+// Would this description line read as a Gherkin token in the dialect `D` (or English)? A tag, a comment, a table row, a doc
+// string, a "*" step, a block keyword + ':' or a step keyword + a space (any case — the guard errs on the safe side).
+function ghRiskyLine(s, D) {
+  if (/^[@#|*]|^"""|^```/.test(s)) return true;
+  const low = s.toLowerCase();
+  const ks = (kinds) => [D, GHERKIN_DIALECT.en].flatMap((d) => kinds.flatMap((k) => d.keywords[k]));
+  return ks(GHERKIN_BLOCK_KINDS).some((b) => low.startsWith(b.toLowerCase()) && /^\s*:/.test(s.slice(b.length))) ||
+    ks(GHERKIN_STEP_KINDS).some((w) => low.startsWith(w.toLowerCase()) && /^\s/.test(s.slice(w.length)));
+}
 // The EARS condition keywords (upper-case spelling) → the step they become; THEN / ENTÃO / ENTONCES only mark the response.
 const GHERKIN_COND = { WHEN: "when", QUANDO: "when", CUANDO: "when", WHILE: "given", ENQUANTO: "given", MIENTRAS: "given",
   IF: "given", SE: "given", SI: "given", WHERE: "given", ONDE: "given", DONDE: "given" };
@@ -15865,13 +15885,67 @@ function ghMask(s) {
   }
   return out;
 }
+// Markdown emphasis MARKUP out of a criterion (1.16 E review m5): a run of * or _ counts only when it pairs with a run of the
+// same character — an opener (followed by a non-space, not preceded by a letter or digit) before a closer (preceded by a
+// non-space, not followed by a letter or digit), CommonMark's flanking rules otherwise — and only its paired characters go
+// (** with ** first, then * with *; a pair never crosses another). Code spans (`…`, any backtick run up to the next run of
+// the same length) are opaque. Everything else is kept as written: `2**n`, `a_b_c`, `x * y`, `2*3*4`, an unpaired `**`.
+// One pass over the runs, each opener popped at most once — linear.
+function ghStripEmphasis(s) {
+  const n = s.length;
+  // code spans: each backtick run → the next run of the same length (computed right to left — linear)
+  const ticks = [];
+  for (let i = 0; i < n;) { if (s[i] !== "`") { i++; continue; } let j = i; while (s[j] === "`") j++; ticks.push({ at: i, end: j, len: j - i }); i = j; }
+  const codeEnd = new Map(); // a span's opening index → the index after its closing run
+  const nextSame = new Map();
+  const partner = new Array(ticks.length).fill(-1);
+  for (let k = ticks.length - 1; k >= 0; k--) { const p = nextSame.get(ticks[k].len); if (p != null) partner[k] = p; nextSame.set(ticks[k].len, k); }
+  for (let k = 0; k < ticks.length;) { if (partner[k] >= 0) { codeEnd.set(ticks[k].at, ticks[partner[k]].end); const p = partner[k]; while (k < ticks.length && ticks[k].at < ticks[p].end) k++; } else k++; }
+  const ws = (c) => c === undefined || /\s/u.test(c);
+  const punct = (c) => c !== undefined && /[\p{P}\p{S}]/u.test(c);
+  const word = (c) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+  const drop = new Uint8Array(n);
+  const stacks = { "*": [], _: [] };
+  for (let i = 0; i < n;) {
+    if (codeEnd.has(i)) { i = codeEnd.get(i); continue; }
+    const c = s[i];
+    if (c !== "*" && c !== "_") { i++; continue; }
+    let j = i;
+    while (s[j] === c) j++;
+    const before = s[i - 1], after = s[j];
+    const left = !ws(after) && (!punct(after) || ws(before) || punct(before));
+    const right = !ws(before) && (!punct(before) || ws(after) || punct(after));
+    const run = { at: i, lo: i, hi: j, len: j - i };
+    if (right && !word(after)) { // a closer: pair with the nearest opener of its character
+      const st = stacks[c];
+      while (run.len > 0 && st.length) {
+        const o = st[st.length - 1];
+        const use = o.len >= 2 && run.len >= 2 ? 2 : 1;
+        for (let k = o.hi - use; k < o.hi; k++) drop[k] = 1;
+        for (let k = run.lo; k < run.lo + use; k++) drop[k] = 1;
+        o.hi -= use; o.len -= use; run.lo += use; run.len -= use;
+        if (!o.len) st.pop();
+        const other = stacks[c === "*" ? "_" : "*"]; // no pair crosses this one
+        while (other.length && other[other.length - 1].at > o.at) other.pop();
+      }
+    }
+    if (run.len > 0 && left && !word(before)) stacks[c].push(run);
+    i = j;
+  }
+  let out = "";
+  for (let i = 0; i < n; i++) if (!drop[i]) out += s[i];
+  return out;
+}
 // The EARS keywords a feature's language reads: English ones in any feature, plus its own language's (an English criterion's
 // "SI units" or "SE region" is no condition).
 const GHERKIN_LANG_KEYWORDS = { pt: ["QUANDO", "ENQUANTO", "SE", "ONDE", "ENTÃO", "ENTAO"], es: ["CUANDO", "MIENTRAS", "SI", "DONDE", "ENTONCES"] };
 // One criterion's text (acOneLine, whole) → { steps: [{ kind: "given" | "when" | "then", text }], split }. lang (optional):
-// the feature's language — only English keywords and its own are read (every language's without it).
+// the feature's language — only English keywords and its own are read (every language's without it). Paired emphasis
+// markup is dropped first (ghStripEmphasis); every other character reaches a step — the EARS keywords the Gherkin ones
+// replace and the separators (spaces, commas) between clauses aside; characters before the first keyword ("(", "*") lead
+// its step.
 function earsSteps(raw, lang) {
-  const text = String(raw == null ? "" : raw).replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
+  const text = ghStripEmphasis(String(raw == null ? "" : raw).replace(/\s+/g, " ").trim()).replace(/\s+/g, " ").trim();
   const whole = { steps: [{ kind: "then", text }], split: false };
   if (!text) return whole;
   const m = ghMask(text);
@@ -15923,21 +15997,31 @@ function earsSteps(raw, lang) {
   }
   if (subj < 0) return whole;
   const steps = [];
+  // Characters before the first keyword — only brackets / emphasis leftovers may stand there — lead that keyword's step:
+  // "(WHEN the user pays) …" → When "(the user pays)" (they were dropped).
+  let lead = "";
+  const withLead = (t) => (!lead ? t : /\s$/.test(lead) ? lead.trim() + " " + t : lead.trim() + t);
+  let resp = text.slice(subj).replace(/^[\s,]+/, "").trim();
   if (!conds.length && !thenKw) {
     const ctx = text.slice(0, subj).replace(/[\s,]+$/, "").trim();
     if (ctx) steps.push({ kind: "given", text: ctx });
   } else {
-    const lead = m.slice(0, conds.length ? conds[0].at : thenKw.at);
-    if (lead.replace(/[\s([{*_~]/g, "")) return whole; // text before the first keyword
+    lead = text.slice(0, conds.length ? conds[0].at : thenKw.at);
+    if (ghMask(lead).replace(/[\s([{*_~]/g, "")) return whole; // text before the first keyword
     for (let i = 0; i < conds.length; i++) {
       const stop = i + 1 < conds.length ? conds[i + 1].at : thenKw ? thenKw.at : subj;
       const t = text.slice(conds[i].end, stop).replace(/^[\s,]+|[\s,]+$/g, "");
       if (!t) return whole;
-      steps.push({ kind: GHERKIN_COND[conds[i].word] || "given", text: t });
+      steps.push({ kind: GHERKIN_COND[conds[i].word] || "given", text: i ? t : withLead(t) });
     }
+    if (!conds.length && resp) resp = withLead(resp); // "(THEN THE SYSTEM SHALL …"
   }
-  const resp = text.slice(subj).replace(/^[\s,]+/, "").trim();
-  if (!resp || !RE_GH_MODAL.test(ghMask(resp))) return whole;
+  // The response must start with its subject (1.16 E review m4): "WHEN a payment fails, the cart, including discounts,
+  // SHALL be kept" has none after its last comma — cut there it read When "a payment fails, the cart, including
+  // discounts" + Then "SHALL be kept" — so the criterion stays one Then with its whole text.
+  const rmask = ghMask(resp);
+  const modalIn = rmask.search(RE_GH_MODAL);
+  if (!resp || modalIn < 0 || !/[\p{L}\p{N}]/u.test(resp.slice(0, modalIn))) return whole;
   const order = { given: 0, when: 1 }; // Given before When (Gherkin's order); each kind keeps the criterion's order
   steps.sort((a, b) => order[a.kind] - order[b.kind]);
   steps.push({ kind: "then", text: resp });
@@ -15975,11 +16059,10 @@ function gherkinFeature(projectDir, f, opts = {}) {
   lines.push(`${D.feature}: ${ghLine(titledSlug(specTitle(reqRaw, slug), slug))}`);
   const summary = sectionText(reqs, SUMMARY_SYN) || (state.kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null);
   if (summary) {
-    // A description line that reads like a Gherkin token (a tag, a comment, a table row, a doc string, a block keyword +
-    // ':') would change the file's structure: it gets the summary label in front — the words stay.
+    // A description line that reads like a Gherkin token (a tag, a comment, a table row, a doc string, any keyword of the
+    // dialect or English — ghRiskyLine) would change the file's structure: it gets the summary label in front — the words stay.
     const s = ghLine(summary);
-    const risky = /^[@#|]|^"""|^```/.test(s) || D.blocks.concat(GHERKIN_DIALECT.en.blocks).some((b) => s.toLowerCase().startsWith(b.toLowerCase()) && /^\s*:/.test(s.slice(b.length)));
-    lines.push("  " + (risky ? G.summaryLabel + ": " : "") + s);
+    lines.push("  " + (ghRiskyLine(s, D) ? G.summaryLabel + ": " : "") + s);
   }
   const skipped = { template: [], superseded: [] };
   const unsplit = [];
@@ -16089,12 +16172,17 @@ function trackerRecords(projectDir, f, lang, supBy) {
       status: status(st.filter((b) => b.done).length, st.length), labels: cap(base.concat(own.map((a) => a.id))) } });
   }
   const storyKey = new Map(stories.map((s) => [s.n, s.rec.key]));
+  // Each record's key is unique (1.16 E review m3): a task number used twice (doctor's duplicate-tasks) keeps it for its
+  // first task, the next ones get an occurrence suffix — `<slug>/#3`, `<slug>/#3 (2)` — never two work items with one ID.
+  const seen = new Map();
   const tasks = blocks.map((b) => {
     const n = b.story && /^US\d+$/i.test(b.story) ? b.story.replace(/\D/g, "") : null;
     const parent = n && storyKey.has(n) ? storyKey.get(n) : slug;
     const prose = taskProse(b);
     const size = taskSize(b);
-    return { key: `${slug}/#${b.number}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(withoutTaskMarkers(cleanTaskText(b.text))) || ghLine(b.text)}`,
+    const occ = (seen.get(String(b.number)) || 0) + 1;
+    seen.set(String(b.number), occ);
+    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(withoutTaskMarkers(cleanTaskText(b.text))) || ghLine(b.text)}`,
       description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
@@ -16112,12 +16200,14 @@ function trackerCsv(records, tracker, lang) {
   const cut = (s) => oneLiner(s, TRACKER_SUMMARY_MAX) || "";
   let out = BOM_CHAR;
   if (tracker === "jira") {
-    const ids = new Map(records.map((r, i) => [r.key, String(i + 1)]));
+    // Work item ID = the record's row number (unique whatever its key); a Parent names the FIRST record with that key.
+    const ids = new Map();
+    records.forEach((r, i) => { if (!ids.has(r.key)) ids.set(r.key, String(i + 1)); });
     const type = { feature: "Epic", story: "Story", subtask: "Sub-task", task: "Task" };
     const nLabels = Math.max(1, ...records.map((r) => r.labels.length));
     out += csvRecord(["Work item ID", "Work type", "Summary", "Description", "Status", "Parent", ...Array(nLabels).fill("Labels"), marker]);
-    for (const r of records) {
-      out += csvRecord([ids.get(r.key), type[r.type], cut(r.summary), r.description, S[r.status], r.parent ? ids.get(r.parent) : "",
+    for (const [i, r] of records.entries()) {
+      out += csvRecord([String(i + 1), type[r.type], cut(r.summary), r.description, S[r.status], r.parent ? ids.get(r.parent) || "" : "",
         ...Array.from({ length: nLabels }, (_, k) => r.labels[k] || ""), ""]);
     }
     return out;
@@ -16257,20 +16347,22 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
 // hand-written one) + meta.changelogAt, both under the roadmap lock; with nothing to report nothing is written or stamped.
 // 1.16 E3 — milestone: the notes of that milestone's features only (its features + the ones archived since it was set);
 // `since` then defaults to 'all' (the milestone's whole history — 'last' / a date still narrow it), and write goes to
-// .specs/RELEASE-NOTES.<milestone-slug>.md (AUTO-GENERATED, never over a hand-written one) WITHOUT stamping meta.changelogAt
-// (the project's own notes keep their 'last').
+// .specs/RELEASE-NOTES.<milestoneFileKey>.md (the slug, + a short hash when it loses part of the name; AUTO-GENERATED, never
+// over a hand-written one) WITHOUT stamping meta.changelogAt (the project's own notes keep their 'last').
 function changelog(projectDir, opts = {}) {
   const lang = projectLang(projectDir);
   const M = i18n.msg(lang);
   const N = M.releaseNotes;
   const root = specsRoot(projectDir);
   let ms = null;
+  let msFile = null;
   if (opts.milestone != null && String(opts.milestone).trim() !== "") {
     const found = findMilestone(projectDir, opts.milestone);
     if (!found.ok) return found;
     ms = found.milestone;
+    msFile = milestoneFileKey(ms.name, found.list);
   }
-  const fileName = ms ? `RELEASE-NOTES.${milestoneKey(ms.name)}.md` : "RELEASE-NOTES.md";
+  const fileName = ms ? `RELEASE-NOTES.${msFile}.md` : "RELEASE-NOTES.md";
   const file = path.join(root, fileName);
   const raw = opts.since == null ? "" : String(opts.since).trim();
   const key = raw.toLowerCase() || (ms ? "all" : "");
@@ -16319,11 +16411,13 @@ function changelog(projectDir, opts = {}) {
 // ---------------------------------------------------------------------------
 // 1.16 E3 — milestones: spec_milestone {action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
 // rm <name> | list]`, stored in roadmap.json → meta.milestones [{name, date, features, archived?}] (under the roadmap lock).
-// A name: letters, digits, spaces and . _ : # ( ) + - (≤ 60 characters, starting with a letter or a digit), unique by its
-// slug (milestoneKey — also the release notes' file name); a date: a real YYYY-MM-DD day; features: ≥ 1, each an existing
-// ACTIVE feature (resolved like dependsOn), ≤ MILESTONE_FEATURES_MAX; ≤ MILESTONE_MAX milestones. `add` of an existing name
-// updates it (date and features replaced — `updated: true`). A stored meta.milestones of the wrong shape is refused by the
-// mutators (never "repaired") and read as its valid entries by everyone else.
+// A name: letters (any script, with their marks), digits, spaces and . _ : # ( ) + - (≤ 60 characters, starting with a
+// letter or a digit), unique by its identity (milestoneKey — Unicode kept: "Sprint α" ≠ "Sprint β"); its release notes'
+// file name is milestoneFileKey's (the slug, + a short hash when the slug loses part of the name); a date: a real YYYY-MM-DD
+// day; features: ≥ 1, each an existing ACTIVE feature (resolved like dependsOn — a list's items split on commas only),
+// ≤ MILESTONE_FEATURES_MAX; ≤ MILESTONE_MAX milestones. `add` of an existing name updates it (date and features replaced,
+// the archived ones kept — `updated: true`). A stored meta.milestones of the wrong shape (or an entry add would refuse: a bad
+// name or date, a duplicate) is refused by the mutators (never "repaired") and read as its valid entries by everyone else.
 // A feature's lifecycle follows (pruneRoadmapRefsLocked, like dependsOn): rename → the new slug; remove → dropped; archive →
 // moved to the milestone's `archived` list (restore moves it back) — the milestone's release notes still cover it, its
 // status no longer counts it.
@@ -16339,33 +16433,65 @@ const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_milesto
 const MILESTONE_STATUSES = ["on-track", "at-risk", "late", "done"];
 const MILESTONE_MAX = 50;
 const MILESTONE_FEATURES_MAX = 200;
-const RE_MILESTONE_NAME = /^[\p{L}\p{N}][\p{L}\p{N} ._:#()+-]{0,59}$/u;
+const RE_MILESTONE_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} ._:#()+-]{0,59}$/u;
 const RE_ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-// A milestone's identity (and its release notes' file name): its slug, else (a name with no Latin letter or digit) its
-// lower-cased name with spaces as dashes.
-const milestoneKey = (name) => slugify(name) || String(name).trim().toLowerCase().replace(/\s+/g, "-").replace(/[^\p{L}\p{N}_.-]/gu, "");
+// A milestone's name as stored and validated: one line, whitespace runs folded, NFC (a decomposed "é" is the composed one).
+const milestoneName = (name) => (name == null ? "" : String(name)).normalize("NFC").replace(/\s+/g, " ").trim();
+// A milestone's IDENTITY (1.16 E review M1): its name, Unicode kept — NFKC, lower-case, the accents of LATIN letters folded
+// (Lançamento = lancamento, as the 1.16.0 slug key had it), runs of separators (whitespace _ - . : # ( )) as one '-'. Every
+// other letter, digit, mark and '+' counts: "Sprint α" ≠ "Sprint β", "Релиз 2026" ≠ "Бета 2026", "C" ≠ "C++" (the slug
+// key made each pair one milestone — adding the second silently replaced the first).
+function milestoneKey(name) {
+  return (name == null ? "" : String(name)).normalize("NFKC").toLowerCase().normalize("NFD")
+    .replace(/(?<=[a-z])\p{M}+/gu, "").normalize("NFC")
+    .replace(/[^\p{L}\p{N}\p{M}+\s_.:#()-]/gu, "").replace(/[\s_.:#()-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+// The release notes' file name part of a milestone (RELEASE-NOTES.<it>.md) — derived apart from its identity: its slug when
+// the slug says everything the key says (Latin letters, digits, separators — "Beta launch" → beta-launch, 1.16.0's file),
+// else the slug (or "milestone") + 8 hex characters of the key's sha1 ("Sprint α" → sprint-1a2b3c4d, "C++" → c-…); and when
+// another milestone of `list` would still share that file name, the hashed form.
+function milestoneFileKey(name, list) {
+  const key = milestoneKey(name);
+  const base = (n) => {
+    const k = milestoneKey(n);
+    const s = slugify(String(n).normalize("NFKC"));
+    return s && s === k ? s : `${s || "milestone"}-${sha1Hex(k).slice(0, 8)}`;
+  };
+  const mine = base(name);
+  const clash = (list || []).some((m) => milestoneKey(m.name) !== key && base(m.name) === mine);
+  return clash ? `${slugify(String(name).normalize("NFKC")) || "milestone"}-${sha1Hex(key).slice(0, 8)}` : mine;
+}
 const strList = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
+const slugList = (v) => strList(v) && v.every((x) => x !== "" && slugify(x) === x); // feature slugs, as add stores them
 // roadmap.json → meta.milestones → { list: [{ name, date, features, archived? }], invalid } (invalid: the stored value is
-// not a list of such entries — its valid ones are still listed).
+// not a list of such entries — its valid ones are still listed). An entry is valid only as `add` writes it (1.16 E review
+// M2 — a hand-edited roadmap.json reaches ROADMAP.md / .html): a name RE_MILESTONE_NAME accepts, a date that is a real
+// YYYY-MM-DD day, lists of feature slugs; a second entry with the same identity (milestoneKey) is invalid too.
 function milestoneStore(rm) {
   const raw = rm && isObj(rm.meta) ? rm.meta.milestones : undefined;
   if (raw === undefined) return { list: [], invalid: false };
   if (!Array.isArray(raw)) return { list: [], invalid: true };
   let invalid = false;
   const list = [];
+  const keys = new Set();
   for (const m of raw) {
-    if (!isObj(m) || typeof m.name !== "string" || typeof m.date !== "string" || !strList(m.features) || (m.archived !== undefined && !strList(m.archived))) { invalid = true; continue; }
+    if (!isObj(m) || typeof m.name !== "string" || !RE_MILESTONE_NAME.test(m.name) || typeof m.date !== "string" || !RE_ISO_DAY.test(m.date) || isoTime(m.date) == null ||
+      !slugList(m.features) || (m.archived !== undefined && !slugList(m.archived)) || keys.has(milestoneKey(m.name))) { invalid = true; continue; }
+    keys.add(milestoneKey(m.name));
     list.push({ name: m.name, date: m.date, features: m.features.slice(), ...(m.archived && m.archived.length ? { archived: m.archived.slice() } : {}) });
   }
   return { list, invalid };
 }
-// A milestone by name (its key: case, spaces and accents folded) → { ok, milestone } or a localized error naming the ones there.
+// A milestone by name (its identity, milestoneKey) → { ok, milestone, list } or a localized error naming the ones there; a
+// roadmap.json that doesn't parse is that error (never "no milestone").
 function findMilestone(projectDir, name) {
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
   const MS = i18n.msg(projectLang(projectDir)).milestone;
   const { list } = milestoneStore(readRoadmap(projectDir));
   const k = milestoneKey(name);
   const m = list.find((x) => milestoneKey(x.name) === k);
-  return m ? { ok: true, milestone: m } : { ok: false, error: MS.notFound(String(name).trim(), list.map((x) => x.name).join(", ") || "—") };
+  return m ? { ok: true, milestone: m, list } : { ok: false, error: MS.notFound(String(name).trim(), list.map((x) => x.name).join(", ") || "—") };
 }
 // The stored milestones with their status against the roadmap's features (roadmap() entries carrying `forecast`) → [{ name,
 // date, features, archived?, missing?, status, reason?, done, total, open, eta, unknownEta? }].
@@ -16431,9 +16557,13 @@ function milestone(projectDir, action, opts = {}) {
       ...(out.warning ? ["⚠ " + out.warning] : [])];
     return out;
   };
-  if (a === "list") return report({ ok: true, action: "list" });
+  if (a === "list") {
+    const bad = roadmapError(projectDir); // a roadmap.json that doesn't parse is an error, never "no milestones yet"
+    if (bad) return { ok: false, error: bad };
+    return report({ ok: true, action: "list" });
+  }
   if (!fs.existsSync(root)) return { ok: false, error: i18n.msg(lang).err.noSpecs(root) };
-  const name = opts.name == null ? "" : String(opts.name).replace(/\s+/g, " ").trim();
+  const name = milestoneName(opts.name);
   if (!name) return { ok: false, error: MS.nameRequired };
   const mutate = (fn) => {
     const r = withRoadmapLock(projectDir, () => {
@@ -16457,8 +16587,10 @@ function milestone(projectDir, action, opts = {}) {
     if (!RE_MILESTONE_NAME.test(name)) return { ok: false, error: MS.badName(name) };
     const date = opts.date == null ? "" : String(opts.date).trim();
     if (!RE_ISO_DAY.test(date) || isoTime(date) == null) return { ok: false, error: MS.badDate(date) };
-    const asked = (opts.features == null ? [] : Array.isArray(opts.features) ? opts.features : [opts.features])
-      .flatMap((x) => String(x == null ? "" : x).split(/[\s,]+/)).map((x) => x.trim()).filter(Boolean);
+    // A list's items are names (a feature called "User Login" is one) split on commas only; a single string — the engine's
+    // shorthand — on whitespace and commas too, as spec_depend reads it (1.16 E review m2).
+    const asked = (opts.features == null ? [] : Array.isArray(opts.features) ? opts.features.flatMap((x) => String(x == null ? "" : x).split(",")) : String(opts.features).split(/[\s,]+/))
+      .map((x) => x.trim()).filter(Boolean);
     if (!asked.length) return { ok: false, error: MS.noFeatures };
     const features = [];
     const unknown = [];
@@ -16472,9 +16604,13 @@ function milestone(projectDir, action, opts = {}) {
     return mutate((list) => {
       const i = list.findIndex((x) => milestoneKey(x.name) === milestoneKey(name));
       if (i < 0 && list.length >= MILESTONE_MAX) return { ok: false, error: MS.tooMany(MILESTONE_MAX) };
-      const entry = { name, date, features };
+      // An update keeps the features archived since the milestone was set (its release notes still cover them — 1.16 E
+      // review m1), minus any now listed as active again.
+      const archived = i >= 0 && list[i].archived ? list[i].archived.filter((s) => !features.includes(s)) : [];
+      const entry = { name, date, features, ...(archived.length ? { archived } : {}) };
       if (i >= 0) list[i] = entry; else list.push(entry);
-      return { ok: true, action: "add", updated: i >= 0, milestone: { ...entry, features: features.slice() }, message: (i >= 0 ? MS.updated : MS.added)(name, date, features.join(", ")) };
+      return { ok: true, action: "add", updated: i >= 0, milestone: { ...entry, features: features.slice(), ...(archived.length ? { archived: archived.slice() } : {}) },
+        message: (i >= 0 ? MS.updated : MS.added)(name, date, features.join(", ")) };
     });
   }
   return mutate((list) => { // rm / remove

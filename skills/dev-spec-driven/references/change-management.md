@@ -300,7 +300,8 @@ date|last|all>] [--write]`) builds release notes from the spec data alone — no
 is unset). `write: true` writes `.specs/RELEASE-NOTES.md` (AUTO-GENERATED; a hand-written one is never overwritten) and
 stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped. `milestone` (1.16, CLI `--milestone
 <name>`) scopes the notes to a milestone's features (its features and the ones archived since — see §15): `since` then
-defaults to `all`, and `write` goes to `.specs/RELEASE-NOTES.<milestone-slug>.md` without touching `meta.changelogAt`.
+defaults to `all`, and `write` goes to `.specs/RELEASE-NOTES.<milestone-slug>.md` (the slug plus a short hash when the
+slug loses part of the name — `Sprint α` → `sprint-<8 hex>`) without touching `meta.changelogAt`.
 
 **Gherkin (1.16 — `format: "gherkin"`, CLI `export [feature] --gherkin`).** One `.feature` per feature for a BDD
 runner (Cucumber, behave, SpecFlow…): the feature's title and summary, its active tracks as tags (`@SaaS` `@AI` `@SEC`
@@ -308,8 +309,12 @@ runner (Cucumber, behave, SpecFlow…): the feature's title and summary, its act
 plans for it (`@T-01`) and the marker of the track that defines it. The steps are the criterion's own EARS clauses —
 `WHILE` / `WHERE` / `IF` → `Given`, `WHEN` → `When`, the `SHALL` response → `Then`, verbatim (`THEN` only marks the
 response); a ubiquitous criterion is a `Then` (with a `Given` for a lead set off by a comma). A criterion whose
-clauses can't be split cleanly becomes ONE `Then` step with its whole text (listed in `unsplit`) — nothing is invented
-and no word is lost; quoted and code spans never split a clause. A template criterion and one a shipped feature
+clauses can't be split cleanly (a response with no subject before its `SHALL` included — "WHEN a payment fails, the
+cart, including discounts, SHALL be kept") becomes ONE `Then` step with its whole text (listed in `unsplit`) — nothing
+is invented and no character is lost; quoted and code spans never split a clause. Only PAIRED markdown emphasis
+(`**WHEN**`, `*WHEN*`, `_WHEN_`) is dropped as markup — `2**n`, `snake_case` and code spans stay as written — and a
+character before the first keyword (`(WHEN …`) leads its step. A summary line that starts like any Gherkin keyword of
+the dialect (or English) gets the summary label in front. A template criterion and one a shipped feature
 superseded are left out with a comment; one a draft plans to supersede is kept with a comment. PT / ES (and pt-BR)
 features are written in Gherkin's own dialect (`# language: pt` — Funcionalidade / Cenário / Dado / Quando / Então;
 `# language: es` — Característica / Escenario / Dado / Cuando / Entonces). `write` → `.specs/exports/<feature>.feature`;
@@ -321,7 +326,8 @@ feature; its intro and its criteria as the description) and per task (a child of
 else of the feature), parents first. Jira: `Work item ID` · `Work type` (Epic / Story / Sub-task / Task) · `Summary` ·
 `Description` · `Status` (To Do / In Progress / Done) · `Parent` (the parent's Work item ID) · `Labels` (repeated, one
 label per column). Linear: `ID` · `Title` · `Description` · `Status` (Todo / In Progress / Done) · `Estimate` (a task's
-`_Size:_` points) · `Labels` (comma-separated) · `Parent issue` (local keys). Labels: the feature slug, its tracks, its
+`_Size:_` points) · `Labels` (comma-separated) · `Parent issue` (local keys; a task number used twice gets an occurrence
+suffix — `checkout/#3 (2)` — so every record has its own ID). Labels: the feature slug, its tracks, its
 kind (bugfix / spike) and the AC IDs. The matrix CSV's rules apply (RFC 4180, the formula guard, a UTF-8 BOM); the
 AUTO-GENERATED marker is the LAST header cell — an empty column to leave unmapped in the import wizard, never a record
 that would become a work item. `write` → `.specs/exports/<feature>.<tracker>.csv` (the project: `project.<tracker>.csv`).
@@ -352,9 +358,12 @@ BOM are encoding, not content).
 
 `/spec-milestone` — `spec_milestone {action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
 <YYYY-MM-DD> <features…> | rm <name> | list]`) keeps named target dates for sets of features in `roadmap.json →
-meta.milestones` (under the roadmap lock). `add` needs a name (letters, digits, spaces, `. _ : # ( ) + -`, ≤ 60
-characters), a real `YYYY-MM-DD` day and existing active features; adding an existing name updates it. Each milestone is
-judged against the roadmap forecasts (the velocity of ticked tasks → each feature's ETA), with stable codes:
+meta.milestones` (under the roadmap lock). `add` needs a name (letters of any script, digits, spaces, `. _ : # ( ) + -`,
+≤ 60 characters), a real `YYYY-MM-DD` day and existing active features (a list's items are feature names — `User Login`
+is one — split on commas only); adding an existing name updates its date and features and keeps the ones archived since.
+Names are compared case-insensitively, with the accents of Latin letters and runs of spaces / `_ - . : # ( )` folded;
+every other character counts — `Sprint α` and `Sprint β`, `C` and `C++` are two milestones. Each milestone is judged
+against the roadmap forecasts (the velocity of ticked tasks → each feature's ETA), with stable codes:
 
 - `done` — every active feature is at 100%;
 - `late` — the date has passed and a feature is not done;
@@ -366,5 +375,6 @@ judged against the roadmap forecasts (the velocity of ticked tasks → each feat
 under "Needs attention"; `spec_roadmap` returns the same `milestones`. A feature's lifecycle follows like its
 dependencies: a rename renames it in its milestones, a remove drops it, an archive moves it to the milestone's
 `archived` list (its release notes still cover it; its status no longer counts it) and a restore moves it back. A
-`meta.milestones` of the wrong shape is refused by `add` / `rm` (fix it by hand) and read as its valid entries
-otherwise. Treat an ETA as an estimate, never a promise.
+`meta.milestones` of the wrong shape — or holding an entry `add` would refuse (a bad name, a date that is no real day, a
+second entry with the same name) — is refused by `add` / `rm` (fix it by hand) and read as its valid entries otherwise;
+a `roadmap.json` that doesn't parse is an error, never "no milestones". Treat an ETA as an estimate, never a promise.

@@ -1303,26 +1303,45 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `# language: en|pt|es` first (pt-BR → pt), then the AUTO-GENERATED marker as a `#` comment; Feature tags = the tracks
   (marker without brackets, else the name) + `@bugfix`; one Scenario per current AC tagged with its ID, T-IDs and track
   marker; template ACs and ACs a SHIPPED feature retired are left out with a comment, a draft's pending supersession is
-  kept with one. `earsSteps(raw, lang)` is THE EARS → steps splitter and never drops a word: WHILE / WHERE / IF → Given,
-  WHEN → When, the SHALL response → Then; quoted and code spans never split a clause; only English keywords plus the
-  feature's own language count ("SI units" is no condition); a criterion that can't be split cleanly is one `Then` with
-  its whole text (`unsplit`). Dialect keywords are Gherkin tokens, so they live in spec.js `GHERKIN_DIALECT`, not i18n. A
-  named spike is refused (`spike: true`); no name → one `.feature` per active feature (`documents`), written all-or-nothing.
+  kept with one. `earsSteps(raw, lang)` is THE EARS → steps splitter and never drops a character: WHILE / WHERE / IF →
+  Given, WHEN → When, the SHALL response → Then; quoted and code spans never split a clause; only English keywords plus the
+  feature's own language count ("SI units" is no condition); a criterion that can't be split cleanly — a response with no
+  subject before its modal included ("WHEN x, the cart, …, SHALL be kept", on the comma path too) — is one `Then` with its
+  whole text (`unsplit`). Markup: `ghStripEmphasis()` drops only PAIRED emphasis runs (`**WHEN**`, `*WHEN*`, `_WHEN_`;
+  flanking rules, an opener never after a letter / digit, a closer never before one; code spans opaque; linear) — `2**n`,
+  `a_b_c`, `2*3*4` stay; characters before the first keyword (`(WHEN …`) lead its step. A fuzz test (mcp/test.js "1.16 E
+  review m5") checks no character is lost. Dialect keywords are Gherkin tokens, so they live in spec.js `GHERKIN_DIALECT`,
+  not i18n — `keywords` holds EVERY en / pt / es keyword of gherkin-languages.json (compare with cucumber/gherkin when
+  adding a language; never vendor it), and `ghRiskyLine()` labels a summary line starting with any of them (block keyword +
+  ':', step keyword + space, '*', a tag / comment / table / doc string). A named spike is refused (`spike: true`); no name →
+  one `.feature` per active feature (`documents`), written all-or-nothing.
 - **Tracker CSV** — `trackerRecords()` / `trackerCsv()` (the F5 `csvCell` / `csvRecord`: RFC 4180, the formula guard, a
   BOM): Jira `Work item ID · Work type (Epic / Story / Sub-task / Task) · Summary · Description · Status · Parent · Labels…`
   (one label per repeated column), Linear `ID · Title · Description · Status · Estimate · Labels · Parent issue` (local keys
-  `<slug>`, `<slug>/US-n`, `<slug>/#n`); parents first. The AUTO-GENERATED marker is the LAST HEADER CELL (an empty column
-  to leave unmapped) — a trailing record would become a work item.
+  `<slug>`, `<slug>/US-n`, `<slug>/#n`; a duplicated task number's later occurrences `<slug>/#n (2)` — every key unique);
+  parents first. Jira's Work item ID is the record's row number; a Parent names the FIRST record with that key. The
+  AUTO-GENERATED marker is the LAST HEADER CELL (an empty column to leave unmapped) — a trailing record would become a
+  work item.
 - **Milestones** — `roadmap.json → meta.milestones [{name, date, features, archived?}]` (`spec_milestone` / `dev-spec
-  milestone` / /spec-milestone), under the roadmap lock; `milestoneStore()` sanitizes (a malformed list is refused by add /
-  rm and read as its valid entries otherwise); a name ≤ 60 characters, ≤ 50 milestones × 200 features; adding an existing
-  name (by slug) updates it. `milestoneStatuses()` (inside `roadmapExtras`) → stable codes `on-track` · `at-risk` (reasons
+  milestone` / /spec-milestone), under the roadmap lock; `milestoneStore()` sanitizes — an entry is valid only as add writes
+  it (a name `RE_MILESTONE_NAME` accepts — letters of any script with their marks —, a date `isoTime` accepts as a real
+  day, feature lists of slugs, one entry per identity; a hand-edited roadmap.json reaches ROADMAP.md / .html, where every
+  stored value still goes through `cell()` / `htmlEsc()`); a malformed list is refused by add / rm and read as its valid
+  entries otherwise, and `list` / `findMilestone` return `roadmapError()` for a roadmap.json that doesn't parse. A name ≤ 60
+  characters, ≤ 50 milestones × 200 features. IDENTITY = `milestoneKey()` — NFKC, lower-case, Latin accents folded,
+  separator runs (space _ - . : # ( )) as one '-', every other letter / digit / mark / '+' kept ("Sprint α" ≠ "Sprint β",
+  "C" ≠ "C++"; never the slug, which collapsed them); the FILE name is `milestoneFileKey()` — the slug when it equals the
+  key (1.16.0's names keep their file), else slug (or `milestone`) + 8 hex of the key's sha1, hashed too when another
+  milestone would share it. Features: a list's items split on commas only ("User Login" is one name), a single string on
+  whitespace too (spec_depend's resolution). Adding an existing name updates date + features and keeps its `archived` list
+  minus the slugs listed again. `milestoneStatuses()` (inside `roadmapExtras`) → stable codes `on-track` · `at-risk` (reasons
   `eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done` + `eta`, `unknownEta`, `done`, `total`; ROADMAP.md /
   .html get a table between Features and Dependencies and late / at-risk attention lines. `milestonesFollow(rm, slug,
   rename | archive | remove | restore)` runs from `pruneRoadmapRefsLocked` (4th argument `archived`; returns
   `milestonesUpdated`) and restore (`restored.milestones`): an archived feature moves to the milestone's `archived` list
   (its notes still cover it). `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
-  defaulting to `all`, written to `RELEASE-NOTES.<key>.md` without stamping `meta.changelogAt` (`changelogData(…, only)`).
+  defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
+  (`changelogData(…, only)`).
 - CLI: switches `revoke`, `print-config`, `gherkin` (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
   `tracker`, `milestone`.
 

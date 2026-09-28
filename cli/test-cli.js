@@ -3884,6 +3884,27 @@ if (inSection("p16e")) {
     clBad.code === 1 && /No milestone 'nope'/.test(clBad.out) &&
     [help, doc].every((t) => /milestone \[add <name> <YYYY-MM-DD> <features…> \| rm <name> \| list\]/.test(t) && /--gherkin/.test(t) && /--tracker jira\|linear/.test(t) && /--milestone <name>/.test(t)),
     "1.16 E3 (CLI): changelog --milestone <name> scopes the notes (→ RELEASE-NOTES.<milestone>.md, meta.changelogAt untouched); an unknown milestone exits 1; help and the docblock document milestone, --gherkin, --tracker, --milestone (got " + js(cl.stdout.slice(0, 200)) + ")");
+
+  // --- 1.16 E review (CLI) ---
+  SE.createFeature(ep, "User Login", ["core"], "", undefined, "en");
+  const rvA = run(["milestone", "add", "Sprint α", "2099-12-31", "User Login", "--project", ep]);
+  const rvB = run(["milestone", "add", "Sprint β", "2099-12-31", "invoices,User Login", "--project", ep]);
+  const rvL = run(["milestone", "list", "--project", ep]);
+  const rvFile = (n) => { const r = runOut(["changelog", "--milestone", n, "--json", "--project", ep]); try { return path.basename(JSON.parse(r.stdout).file); } catch { return ""; } };
+  const rvFiles = [rvFile("Sprint α"), rvFile("sprint β")];
+  ok(rvA.code === 0 && /^Milestone 'Sprint α' added — 2099-12-31: user-login\n/.test(rvA.out) && rvB.code === 0 && /^Milestone 'Sprint β' added — 2099-12-31: invoices, user-login\n/.test(rvB.out) &&
+    /\n  [^\n]*Sprint α — 2099-12-31 · [^\n]*user-login\n/.test(rvL.out) && /\n  [^\n]*Sprint β — 2099-12-31 · [^\n]*invoices, user-login\n/.test(rvL.out) &&
+    rvFiles.every((f) => /^RELEASE-NOTES\.sprint-[0-9a-f]{8}\.md$/.test(f)) && rvFiles[0] !== rvFiles[1],
+    "1.16 E review (CLI) M1 / m2: milestone add keeps 'Sprint α' and 'Sprint β' apart (each its own RELEASE-NOTES file); a quoted feature name with spaces ('User Login') resolves, a comma splits (got " + js([rvA.out, rvB.out, rvFiles]) + ")");
+  const bp = path.join(tmp, "p16e-broken");
+  SE.initProject(bp, ["core"], "en");
+  fs.writeFileSync(path.join(bp, ".specs", "roadmap.json"), "{ not json");
+  const brk = run(["milestone", "list", "--project", bp]);
+  const brkJ = runOut(["milestone", "--json", "--project", bp]);
+  let brkDoc = null;
+  try { brkDoc = JSON.parse(brkJ.stdout); } catch { /* stays null */ }
+  ok(brk.code === 1 && /roadmap\.json is not valid JSON/.test(brk.out) && !/No milestones yet/.test(brk.out) && brkJ.code === 1 && brkDoc && brkDoc.ok === false && /roadmap\.json/.test(brkDoc.error),
+    "1.16 E review (CLI) extra: milestone list on a roadmap.json that doesn't parse exits 1 with its error (--json: the {ok: false} result) — never 'No milestones yet' (got " + js([brk.code, brk.out]) + ")");
 }
 
 // unknown command errors
