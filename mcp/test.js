@@ -193,7 +193,7 @@ function endRun() {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 35, "tools/list returns 35 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 37, "tools/list returns 37 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -12483,6 +12483,333 @@ function endRun() {
   }
 
   // 1.16 package (U) — usability: undo, waivers, stop-check / log tools.
+
+  {
+    const uDir = (n) => path.join(tmp, "p16u-" + n);
+    const uW = (dir, rel, txt) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), txt); };
+    const uR = (dir, rel) => fs.readFileSync(path.join(dir, rel), "utf8");
+    const uSt = (dir) => JSON.parse(uR(dir, ".state.json"));
+    const uPut = (dir, st) => fs.writeFileSync(path.join(dir, ".state.json"), JSON.stringify(st, null, 2));
+    const js = (v) => JSON.stringify(v);
+    const uCall = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
+    const uRun = 'node -e "process.exit(0)"';
+    const CLI16 = path.join(__dirname, "..", "cli", "dev-spec.js");
+    const cli16 = (args, input) => { const r = spawnSync(process.execPath, [CLI16, ...args], { encoding: "utf8", input, env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }); return { out: r.stdout || "", err: r.stderr || "", code: r.status }; };
+    const uTasks = "# Tasks: login\n\n## Global Constraints\n- Node >= 18\n\n## Story US-1 (P1 — MVP)\n" +
+      "- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + uRun + "_\n" +
+      "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + uRun + "_\n**Checkpoint:** US-1 works.\n";
+    // A core feature whose whole planning chain is filled (the fast-forward through tasks passes every gate) — the Gb helper's.
+    const uFeature = (p, name, tasks) => {
+      const r = S.createFeature(p, name, ["core"], "", null, "en");
+      uW(r.dir, "classification.md", `# Classification: ${name}\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n`);
+      uW(r.dir, "requirements.md", `# Feature: ${name}\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n` +
+        "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+        "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+        "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+        "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+      uW(r.dir, "design.md", `# Design: ${name}\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n` +
+        "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+        "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+      uW(r.dir, "tasks.md", tasks || uTasks);
+      return r;
+    };
+
+    // ---- U1: undo a tick ----
+    const p1 = uDir("undo");
+    S.initProject(p1, ["core"], "en");
+    const f1 = uFeature(p1, "login");
+    S.approvePhase(p1, "login", null, "u", { through: "tasks" });
+    const BOM = String.fromCharCode(0xfeff);
+    const crlf1 = BOM + uTasks.replace(/\n/g, "\r\n"); // a BOM and CRLF line ends are encoding: kept byte for byte
+    uW(f1.dir, "tasks.md", crlf1);
+    const t1 = (await uCall("spec_complete_task", { name: "login", number: 1, evidence: { command: uRun, exitCode: 0 }, projectDir: p1 })).p;
+    const u1 = (await uCall("spec_complete_task", { name: "login", number: 1, undo: true, reason: "ticked  the wrong\ntask", projectDir: p1 })).p;
+    const st1 = uSt(f1.dir);
+    ok(t1.ok && t1.verified && u1.ok && u1.unticked === true && u1.evidenceStale === true && u1.done === 0 && u1.next.number === 1 && u1.reason === "ticked the wrong task" &&
+      uR(f1.dir, "tasks.md") === crlf1 && st1.evidence["1"].stale === true && st1.evidence["1"].staleBy === "undo" && !(st1.ticks && st1.ticks["1"]) &&
+      st1.unticks.length === 1 && st1.unticks[0].n === 1 && st1.unticks[0].reason === "ticked the wrong task" && !isNaN(Date.parse(st1.unticks[0].at)) &&
+      /Task 1 is open again \(unticked\)\. Its recorded evidence no longer counts — ticking it again needs a new run of its _Verify:_ command: dev-spec done login 1 --run\./.test(u1.note),
+      "1.16 U1: spec_complete_task {undo, reason} unticks the task — tasks.md byte-identical to before the tick (BOM + CRLF kept) —, marks its evidence stale (staleBy undo), drops ticks[1] and appends unticks [{n, at, reason}] (reason folded to one line) (got " +
+      js([u1, st1.unticks]) + ")");
+    const n1 = (await uCall("spec_complete_task", { name: "login", number: 1, evidence: { summary: "looked fine" }, projectDir: p1 })).p;
+    const doc1 = S.specDoctor(p1, "login").checks.find((c) => c.id === "verification") || {};
+    const fin1 = S.finishFeature(p1, "login");
+    const r1 = (await uCall("spec_complete_task", { name: "login", number: 1, evidence: { command: uRun, exitCode: 0 }, projectDir: p1 })).p;
+    ok(n1.ok && n1.verified === false && n1.unverifiedReason === "stale-evidence" && /Task 1: it was unticked after this evidence was recorded/.test(n1.note) &&
+      /#1 \(unticked since this evidence was recorded\)/.test(doc1.detail || "") && fin1.blockers.some((b) => /#1 \(unticked since this evidence was recorded\)/.test(b)) &&
+      r1.verified === true && !uSt(f1.dir).evidence["1"].stale && !uSt(f1.dir).evidence["1"].staleBy,
+      "1.16 U1: a re-tick after an undo needs a NEW run — a note leaves it unverified (stale-evidence, with its own 'unticked' wording in the note, doctor and finish); a passing run verifies it again (got " +
+      js([n1.note, doc1.detail]) + ")");
+    const a1 = (await uCall("spec_complete_task", { name: "login", number: 2, undo: true, projectDir: p1 })).p;
+    const e1 = await uCall("spec_complete_task", { name: "login", number: 1, undo: true, evidence: { command: uRun, exitCode: 0 }, projectDir: p1 });
+    const e2 = await uCall("spec_complete_task", { name: "login", number: 2, reason: "why", projectDir: p1 });
+    const e3 = await uCall("spec_complete_task", { name: "login", number: 9, undo: true, projectDir: p1 });
+    const e4 = await uCall("spec_complete_task", { name: "login", number: 1, undo: true, reason: "x".repeat(501), projectDir: p1 });
+    const e5 = await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "login", number: 1, undo: "yes", projectDir: p1 } });
+    ok(a1.ok && a1.alreadyOpen === true && a1.unticked === false && /Task 2 is not ticked — nothing to undo\./.test(a1.note) && uSt(f1.dir).unticks.length === 1 &&
+      e1.isError && /undo takes no evidence/.test(e1.p.error) && e2.isError && /reason goes with undo/.test(e2.p.error) && e3.isError && e4.isError && /at most 500 characters/.test(e4.p.error) &&
+      e5.result.isError === true && /- \[x\] 1\./.test(uR(f1.dir, "tasks.md")) && uSt(f1.dir).unticks.length === 1,
+      "1.16 U1: undoing an open task answers ok with a note and records nothing; undo with evidence, reason without undo, an unknown task, a reason over 500 characters and a non-boolean undo are refused — nothing changed (got " +
+      js([a1.note, e1.p.error, e2.p.error, e4.p.error]) + ")");
+    // Localized: a PT feature's undo note, an ES feature's.
+    const fPt = S.createFeature(p1, "Pagamentos", ["core"], "x", undefined, "pt");
+    const fEs = S.createFeature(p1, "Pagos", ["core"], "x", undefined, "es");
+    uW(fPt.dir, "tasks.md", "- [ ] 1. uma tarefa\n  - _Verify: " + uRun + "_\n");
+    uW(fEs.dir, "tasks.md", "- [ ] 1. una tarea\n");
+    S.completeTask(p1, fPt.slug, 1, { command: uRun, exitCode: 0 });
+    S.completeTask(p1, fEs.slug, 1);
+    const uPt = S.completeTask(p1, fPt.slug, 1, undefined, { undo: true });
+    const uEs = S.completeTask(p1, fEs.slug, 1, undefined, { undo: true });
+    const uEs2 = S.completeTask(p1, fEs.slug, 1, undefined, { undo: true });
+    ok(/^A tarefa 1 voltou a ficar aberta \(desmarcada\)\. A evidência registada deixou de contar — voltar a marcá-la exige uma nova execução/.test(uPt.note) &&
+      uEs.note === "La tarea 1 vuelve a estar abierta (desmarcada)." && uEs.evidenceStale === false && /nada que deshacer/.test(uEs2.note),
+      "1.16 U1: the undo notes are in the feature's language (PT with stale evidence, ES without a record, ES already open) (got " + js([uPt.note, uEs.note, uEs2.note]) + ")");
+
+    // Locks: six processes undoing six ticks of ONE feature at once — no lost update.
+    const p2 = uDir("undo-lock");
+    S.initProject(p2, ["core"], "en");
+    const f2 = S.createFeature(p2, "Many", ["core"], "x", undefined, "en");
+    uW(f2.dir, "tasks.md", Array.from({ length: 6 }, (_, i) => `- [ ] ${i + 1}. task ${i + 1}\n`).join(""));
+    for (let i = 1; i <= 6; i++) S.completeTask(p2, "many", i, { summary: "done by hand" });
+    const specJs = path.join(__dirname, "lib", "spec.js");
+    await Promise.all(Array.from({ length: 6 }, (_, i) => new Promise((resolve) => {
+      const k = spawn(process.execPath, ["-e", `require(${js(specJs)}).completeTask(${js(p2)}, "many", ${i + 1}, undefined, { undo: true, reason: "r${i + 1}" })`], { stdio: "ignore" });
+      k.on("close", resolve);
+      k.on("error", resolve);
+    })));
+    const st2 = uSt(f2.dir);
+    ok(!/- \[x\]/.test(uR(f2.dir, "tasks.md")) && st2.unticks.length === 6 && new Set(st2.unticks.map((u) => u.n)).size === 6 && Object.keys(st2.evidence).every((k) => st2.evidence[k].stale === true),
+      "1.16 U1: six processes undoing six ticks of one feature at once — under the feature lock no update is lost: every task open, six unticks records, six stale records (got " +
+      js([st2.unticks.map((u) => u.n), uR(f2.dir, "tasks.md")]) + ")");
+
+    // A finished, signed-off feature: undo reopens it (drift), and once re-ticked the finish baseline is stale (finish again).
+    const p3 = uDir("undo-finished");
+    S.initProject(p3, ["core"], "en");
+    uFeature(p3, "login");
+    S.approvePhase(p3, "login", null, "u", { through: "tasks" });
+    [1, 2].forEach((n) => S.completeTask(p3, "login", n, { command: uRun, exitCode: 0 }));
+    const fin3 = S.finishFeature(p3, "login", { write: true });
+    const ex3 = S.approvePhase(p3, "login", "execution", "u");
+    const u3 = S.completeTask(p3, "login", 2, undefined, { undo: true });
+    const dr3 = S.drift(p3, "login");
+    const na3 = S.nextAction(p3, "login");
+    S.completeTask(p3, "login", 2, { command: uRun, exitCode: 0 });
+    const dr3b = S.drift(p3, "login");
+    const na3b = S.nextAction(p3, "login");
+    ok(fin3.readyToFinish && ex3.ok && u3.ok && /finish it again \(\/spec-finish login\) and sign it off again \(\/approve login execution\)/.test(u3.note) &&
+      dr3.reopened.includes("login") && na3.step === "implement" &&
+      dr3b.verdict === "stale" && dr3b.stale[0].since.some((x) => x.kind === "untick" && x.task === 2) && /unticked since: #2/.test(dr3b.stale[0].why) &&
+      na3b.step === "finish" && na3b.staleBaseline && na3b.staleBaseline.since.some((x) => x.kind === "untick" && x.task === 2),
+      "1.16 U1: undoing a tick of a finished, signed-off feature reopens it (drift: reopened; next_action: implement); re-ticked, its finish baseline is stale (since: untick #2 — drift verdict stale, next_action finish) (got " +
+      js([dr3.reopened, na3.step, dr3b.verdict, dr3b.stale[0] && dr3b.stale[0].why, na3b.step]) + ")");
+
+    // Bugfix: an undo is never gated (it completes nothing); a spike's investigation task unticks like any other.
+    const p4 = uDir("undo-kinds");
+    S.initProject(p4, ["core"], "en");
+    const bf4 = S.createFeature(p4, "Login Loop", undefined, "users bounce back to /login", undefined, "en", "bugfix");
+    const rcTodo = "> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".";
+    const bug4 = uR(bf4.dir, "bug.md");
+    uW(bf4.dir, "tasks.md", "- [ ] 1. Reproduce the bug\n- [ ] 2. Write the root cause in bug.md → Root Cause\n- [ ] 3. Fix the handler\n  - _Verify: " + uRun + "_\n");
+    uW(bf4.dir, "bug.md", bug4.split(rcTodo).join("The refresh handler redirects before clearing the cookie (auth.js:88)."));
+    [1, 2].forEach((n) => S.completeTask(p4, "login-loop", n));
+    const tk4 = S.completeTask(p4, "login-loop", 3, { command: uRun, exitCode: 0 });
+    uW(bf4.dir, "bug.md", bug4); // Root Cause emptied again: a tick after the root-cause task is refused now
+    const un4 = S.completeTask(p4, "login-loop", 3, undefined, { undo: true, reason: "fix reverted" });
+    const re4 = S.completeTask(p4, "login-loop", 3, { command: uRun, exitCode: 0 });
+    const sp4 = S.createFeature(p4, "Cache spike", undefined, undefined, undefined, "en", "spike", { question: "Can Redis hold the sessions under 5 ms?" });
+    const spTasks = uR(sp4.dir, "tasks.md");
+    const spTick = S.completeTask(p4, sp4.slug, 1);
+    const spUn = S.completeTask(p4, sp4.slug, 1, undefined, { undo: true });
+    ok(bug4.includes(rcTodo) && tk4.ok && tk4.verified && un4.ok && un4.unticked && re4.ok === false && re4.gated === "root-cause" &&
+      spTick.ok && spUn.ok && spUn.unticked && uR(sp4.dir, "tasks.md") === spTasks && S.finishFeature(p4, sp4.slug).openTasks.includes(1),
+      "1.16 U1: a bugfix's fix task is unticked while bug.md → Root Cause is empty again (the root-cause gate refuses ticks, never an undo — the re-tick is gated); a spike's investigation task unticks and finish sees it open (got " +
+      js([un4.ok, re4.gated, spUn.unticked]) + ")");
+
+    // ---- U2: revoke an approval ----
+    const p6 = uDir("revoke");
+    S.initProject(p6, ["core"], "en");
+    const f6 = uFeature(p6, "login");
+    S.approvePhase(p6, "login", null, "u", { through: "tasks" });
+    const hist6 = () => fs.readdirSync(path.join(f6.dir, ".history")).length;
+    const h0 = hist6();
+    const rv6 = (await uCall("spec_approve", { name: "login", phase: "requirements", revoke: true, reason: "the scope changed", by: "ana", projectDir: p6 })).p;
+    const st6 = uSt(f6.dir);
+    const rec6 = st6.approvalHistory[st6.approvalHistory.length - 1];
+    const doc6 = S.specDoctor(p6, "login");
+    const na6 = S.nextAction(p6, "login");
+    const apLater = S.approvePhase(p6, "login", "design", "u");
+    const fin6 = S.finishFeature(p6, "login");
+    ok(rv6.ok && rv6.revoked === "requirements" && rv6.revokedApproval === true && js(rv6.laterApproved) === '["design","tasks"]' && !st6.approvals.requirements &&
+      st6.approvals.design && st6.approvals.tasks && rec6.revoked === true && rec6.phase === "requirements" && rec6.by === "ana" && rec6.reason === "the scope changed" &&
+      rec6.snapshot === undefined && typeof rec6.approvedAt === "string" && hist6() === h0 &&
+      /^Revoked the approval of 'requirements' for login — the phase is pending again .* Nothing cascades: the later phases stay approved \(design, tasks\)/.test(rv6.message) &&
+      doc6.pendingGates.includes("requirements") && na6.step === "approve" && /requirements/.test(na6.recommendation) &&
+      apLater.ok === false && apLater.failing.includes("phase-order") && fin6.pendingGates.includes("requirements") && !fin6.readyToFinish,
+      "1.16 U2: spec_approve {revoke, reason} removes the approval and appends {phase, at, by, revoked, reason, approvedAt} to approvalHistory (no snapshot); it never cascades (laterApproved stay approved) — the phase is pending again for doctor / next_action / finish, and a later phase's re-approval is refused on phase-order (got " +
+      js([rv6.message, na6.step, apLater.failing]) + ")");
+    const ra6 = S.approvePhase(p6, "login", "requirements", "u");
+    const m6 = S.metrics(p6, "login");
+    const im6 = S.impactReport(p6, "login", { phase: "requirements" });
+    const eR = [S.approvePhase(p6, "login", "eval-plan", "u", { revoke: true }), S.approvePhase(p6, "login", "design", "u", { revoke: true, force: true }),
+      S.approvePhase(p6, "login", null, "u", { revoke: true, through: "tasks" }), S.approvePhase(p6, "login", "design", "u", { revoke: true, expires: "30d" }),
+      S.approvePhase(p6, "login", null, "u", { revoke: true })];
+    ok(ra6.ok && ra6.snapshot && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === 1 && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
+      eR.every((r) => r.ok === false) && eR[0].notApproved === true && /nothing to revoke/.test(eR[0].error) && /revoke takes no force or expires/.test(eR[1].error) &&
+      /not through/.test(eR[2].error) && /revoke takes no force or expires/.test(eR[3].error) && /Name the phase whose approval to revoke/.test(eR[4].error) && uSt(f6.dir).approvals.design,
+      "1.16 U2: re-approving a revoked phase snapshots it again (metrics: revokedApprovals 1, rework counts approvals only; spec_impact diffs the new snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
+      js([m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
+    // Roles: a waiting sign-off is withdrawn (history record partial), then a completed approval by roles is revoked with its sign-offs.
+    const p7 = uDir("revoke-roles");
+    S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
+    const f7 = uFeature(p7, "login");
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p7, "login", ph, "u"));
+    const tech7 = S.approvePhase(p7, "login", "design", "u", { role: "tech" });
+    const w7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, reason: "signed the wrong draft" });
+    const st7a = uSt(f7.dir);
+    const rec7 = st7a.approvalHistory[st7a.approvalHistory.length - 1];
+    S.approvePhase(p7, "login", "design", "u", { role: "tech" });
+    const sec7 = S.approvePhase(p7, "login", "design", "u", { role: "security" });
+    const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true });
+    const st7b = uSt(f7.dir);
+    ok(tech7.ok && tech7.pending && w7.ok && w7.revokedApproval === false && js(w7.withdrawnSignOffs) === '["tech"]' && /Withdrew the role sign-off\(s\) waiting for 'design' of login: tech/.test(w7.message) &&
+      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' &&
+      sec7.ok && sec7.complete === true && v7.ok && v7.revokedApproval === true && !st7b.approvals.design && st7b.signoffs === undefined &&
+      S.specDoctor(p7, "login").pendingRoles.design && js(S.specDoctor(p7, "login").pendingRoles.design.missing) === '["tech","security"]',
+      "1.16 U2 + roles: revoking a phase that only waits for sign-offs withdraws them (history record revoked + partial, the roles listed); a completed approval by roles is revoked with them — every role signs again (got " +
+      js([w7, rec7, S.specDoctor(p7, "login").pendingRoles]) + ")");
+    // execution: its sign-off is asked for again; ES wording; the approval guard reads a revocation as one (never as an approval).
+    const p8 = uDir("revoke-exec");
+    S.initProject(p8, ["core"], "en");
+    uFeature(p8, "login");
+    S.approvePhase(p8, "login", null, "u", { through: "tasks" });
+    [1, 2].forEach((n) => S.completeTask(p8, "login", n, { command: uRun, exitCode: 0 }));
+    S.finishFeature(p8, "login", { write: true });
+    S.approvePhase(p8, "login", "execution", "u");
+    const na8a = S.nextAction(p8, "login");
+    const rv8 = S.approvePhase(p8, "login", "execution", "u", { revoke: true, reason: "QA found a regression" });
+    const na8b = S.nextAction(p8, "login");
+    const fEs8 = S.createFeature(p8, "Pagos", ["core"], "x", undefined, "es");
+    S.approvePhase(p8, fEs8.slug, "classification", "u", { force: true });
+    const rvEs = S.approvePhase(p8, fEs8.slug, "classification", "u", { revoke: true });
+    const g8 = S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", tool_input: { name: "login", phase: "design", revoke: true, reason: "no longer valid" } }, "deny", { cli: "/x/cli/dev-spec.js" });
+    ok(na8a.step === "finished" && /Nothing left to do here/.test(na8a.recommendation) && rv8.ok && rv8.revoked === "execution" && js(rv8.laterApproved) === "[]" &&
+      na8b.step === "finished" && /\/approve login execution/.test(na8b.recommendation) &&
+      /^Aprobación de 'classification' revocada en pagos — la fase vuelve a estar pendiente/.test(rvEs.message) &&
+      g8.decision === "deny" && g8.actions[0].revoke === true && /revoke the approval of the design phase of 'login'/.test(g8.reason) &&
+      g8.command === '! node "/x/cli/dev-spec.js" approve login design --revoke --reason "no longer valid"',
+      "1.16 U2: revoking the execution sign-off has next_action ask for it again; an ES feature's message is Spanish; the approval guard gates a revocation (deny) and hands the human an `approve … --revoke` line — never an approve line (got " +
+      js([na8b.recommendation, rvEs.message, g8.command]) + ")");
+
+    // ---- U3: waivers on a forced approval ----
+    const p9 = uDir("waiver");
+    S.initProject(p9, ["core"], "en");
+    const f9 = S.createFeature(p9, "Checkout", ["core"], "x", undefined, "en"); // a fresh scaffold: every gate fails on its placeholders
+    const w9 = (await uCall("spec_approve", { name: "checkout", phase: "classification", force: true, reason: "demo on Friday", expires: "30d", projectDir: p9 })).p;
+    const exp30 = new Date(Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 30 * 864e5).toISOString().slice(0, 10);
+    const st9 = uSt(f9.dir);
+    ok(w9.ok && w9.forced === true && js(w9.waiver) === js({ reason: "demo on Friday", expires: exp30 }) && js(st9.approvals.classification.waiver) === js(w9.waiver) &&
+      js(st9.approvalHistory[st9.approvalHistory.length - 1].waiver) === js(w9.waiver) && new RegExp("Waiver recorded: demo on Friday \\(expires " + exp30 + "\\)\\.$").test(w9.note) &&
+      !S.specDoctor(p9, "checkout").checks.some((c) => c.id === "waiver-expired"),
+      "1.16 U3: spec_approve {force, reason, expires: '30d'} records waiver {reason, expires: today + 30 d} on the approval and its history record, and says so; not expired → no waiver-expired (got " + js([w9.waiver, w9.note]) + ")");
+    const bad9 = [S.approvePhase(p9, "checkout", "requirements", "u", { reason: "no force" }), S.approvePhase(p9, "checkout", "requirements", "u", { expires: "30d" }),
+      S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "2020-01-01" }), S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "3651d" }),
+      S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "soon" }), S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "2027-02-30" }),
+      S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "0d" })];
+    const badMcp = await rpc("tools/call", { name: "spec_approve", arguments: { name: "checkout", phase: "requirements", force: true, expires: 30, projectDir: p9 } });
+    ok(bad9.every((r) => r.ok === false) && /go with force/.test(bad9[0].error) && /go with force/.test(bad9[1].error) &&
+      bad9.slice(2).every((r) => /expires must be an ISO date \(YYYY-MM-DD, today or later, at most 3650 days ahead\) or a number of days/.test(r.error)) &&
+      badMcp.result.isError === true && !uSt(f9.dir).approvals.requirements,
+      "1.16 U3: reason / expires without force, an expiry in the past, beyond 3650 days, unreadable, an impossible date or 0d, and a non-string expires (schema) are refused — nothing recorded (got " + js(bad9.map((r) => r.error)) + ")");
+    // Expired: doctor warns waiver-expired, ROADMAP.md flags it, spec_finish lists every forced approval (waivers, merge summary) and warns.
+    const s9 = uSt(f9.dir);
+    s9.approvals.classification.waiver.expires = "2020-01-01";
+    uPut(f9.dir, s9);
+    S.approvePhase(p9, "checkout", "requirements", "u", { force: true }); // a force without a reason stays allowed: no waiver, no new warning
+    const d9 = S.specDoctor(p9, "checkout").checks.find((c) => c.id === "waiver-expired");
+    S.roadmapReport(p9, { write: true });
+    const rm9 = uR(path.join(p9, ".specs"), "ROADMAP.md");
+    const fn9 = S.finishFeature(p9, "checkout", { includeBody: true });
+    ok(d9 && d9.status === "warn" && /^forced approvals whose waiver expired: classification \(expired 2020-01-01 — demo on Friday\) — /.test(d9.detail) && !/requirements \(expired/.test(d9.detail) &&
+      /classification \(waiver: demo on Friday, EXPIRED 2020-01-01\), requirements\n/.test(rm9) && uSt(f9.dir).approvals.requirements.waiver === undefined &&
+      fn9.waivers.length === 2 && fn9.waivers[0].expired === true && fn9.waivers[0].reason === "demo on Friday" && fn9.waivers[1].reason === undefined && fn9.waivers[1].expired === false &&
+      fn9.warnings.some((w) => /^waivers expired on forced approvals: classification \(expired 2020-01-01/.test(w)) &&
+      /## Waived gates \(forced approvals\)\n- classification — forced over: [^\n]*· reason: demo on Friday · EXPIRED 2020-01-01\n- requirements — forced over: [^\n]*· no reason recorded\n/.test(fn9.mergeSummary),
+      "1.16 U3: an expired waiver — doctor warns waiver-expired (stable id), ROADMAP.md shows the forced approval with its waiver flagged EXPIRED, spec_finish lists every forced approval (`waivers`, the merge summary's Waived gates) and warns; a force without a reason records no waiver (got " +
+      js([d9 && d9.detail, fn9.waivers, (rm9.match(/^.*--force.*$/m) || [])[0]]) + ")");
+    // A passing gate waives nothing; roles: the completed approval carries the forced sign-off's waiver; PT wording.
+    const p10 = uDir("waiver-more");
+    S.initProject(p10, ["core"], "en", { approvalRoles: { requirements: ["product", "qa"] } });
+    uFeature(p10, "login");
+    const ok10 = S.approvePhase(p10, "login", "classification", "u", { force: true, reason: "just in case" });
+    const f10 = S.createFeature(p10, "Search", ["core"], "x", undefined, "en");
+    S.approvePhase(p10, "search", "classification", "u", { force: true });
+    const pr10 = S.approvePhase(p10, "search", "requirements", "u", { force: true, role: "product", reason: "legal review pending", expires: "10d" });
+    const qa10 = S.approvePhase(p10, "search", "requirements", "u", { force: true, role: "qa" });
+    const a10 = uSt(f10.dir).approvals.requirements;
+    const fPt10 = S.createFeature(p10, "Pagamentos", ["core"], "x", undefined, "pt");
+    S.approvePhase(p10, fPt10.slug, "classification", "u", { force: true, reason: "demo" });
+    const sPt = uSt(fPt10.dir);
+    sPt.approvals.classification.waiver.expires = "2021-03-04";
+    uPut(fPt10.dir, sPt);
+    const dPt = S.specDoctor(p10, fPt10.slug).checks.find((c) => c.id === "waiver-expired") || {};
+    ok(ok10.ok && !ok10.forced && ok10.waiverIgnored === true && /nothing was waived/.test(ok10.note) && !uSt(path.join(p10, ".specs", "login")).approvals.classification.waiver &&
+      pr10.ok && pr10.pending && js(pr10.waiver) === js({ reason: "legal review pending", expires: new Date(Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 10 * 864e5).toISOString().slice(0, 10) }) &&
+      qa10.ok && qa10.complete === true && a10.forced === true && js(a10.waiver) === js(pr10.waiver) && a10.roles.product.waiver && !a10.roles.qa.waiver &&
+      /^aprovações forçadas cuja exceção expirou: classification \(expirou a 2021-03-04 — demo\)/.test(dPt.detail || ""),
+      "1.16 U3: a force whose gate passes waives nothing (waiverIgnored, nothing stored); with roles the completed approval carries the forced sign-off's waiver; doctor's waiver-expired is in the feature's language (PT) (got " +
+      js([ok10.note, a10.waiver, dPt.detail]) + ")");
+    const ga = S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: 'node cli/dev-spec.js approve login design --force --reason "demo day" --expires 30d' } }, "deny", { cli: "/x/cli/dev-spec.js" });
+    const gb = S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: `node cli/dev-spec.js approve login design --force --reason "it's late"` } }, "deny", { cli: "/x/cli/dev-spec.js" });
+    ok(ga.decision === "deny" && ga.force === true && ga.command === '! node "/x/cli/dev-spec.js" approve login design --force --reason "demo day" --expires 30d' &&
+      gb.command === '! node "/x/cli/dev-spec.js" approve login design --force --reason "<reason>"',
+      "1.16 U3: the approval guard's command for the human carries the waiver (--reason / --expires) — a reason that isn't plainly safe to paste becomes a <reason> placeholder (got " + js([ga.command, gb.command]) + ")");
+
+    // ---- U4: spec_stop_check and spec_log for MCP-only clients (the server never runs a command) ----
+    const tl16 = (await rpc("tools/list", {})).result.tools;
+    const stc = tl16.find((t) => t.name === "spec_stop_check") || {};
+    const lgt = tl16.find((t) => t.name === "spec_log") || {};
+    ok(js(stc.inputSchema && stc.inputSchema.required) === '["message"]' && js(lgt.inputSchema && lgt.inputSchema.required) === '["name","gitLog"]' &&
+      lgt.inputSchema.properties.max.type === "integer" && lgt.inputSchema.properties.max.minimum === 1 && !/\n/.test(stc.description + lgt.description) &&
+      /NEVER RUNS GIT/.test(lgt.description) && !/child_process/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")) && !/child_process/.test(fs.readFileSync(specJs, "utf8")),
+      "1.16 U4: tools/list advertises spec_stop_check {message, agent?} and spec_log {name, gitLog, max?} (single-line descriptions); neither server.js nor the engine loads child_process (got " + js([stc.inputSchema, lgt.inputSchema]) + ")");
+    const p12 = uDir("stop");
+    S.initProject(p12, ["core"], "en");
+    uFeature(p12, "login");
+    S.approvePhase(p12, "login", null, "u", { through: "tasks" });
+    S.completeTask(p12, "login", 1, { summary: "looked at it" }); // a note on a runnable _Verify:_: ticked, unverified
+    const claim = "All tasks are done and verified.";
+    const sc1 = (await uCall("spec_stop_check", { message: claim, projectDir: p12 })).p;
+    const sc1cli = cli16(["stop-check", "--message", claim, "--json", "--project", p12]);
+    const sc2 = (await uCall("spec_stop_check", { message: "Task 2 is done, but task 1 is not verified yet — I could not run the check here.", projectDir: p12 })).p;
+    const sc3 = (await uCall("spec_stop_check", { message: "Here is the diff for review.", projectDir: p12 })).p;
+    const sc4 = await rpc("tools/call", { name: "spec_stop_check", arguments: { projectDir: p12 } });
+    let sc1j = null;
+    try { sc1j = JSON.parse(sc1cli.out); } catch { /* stays null */ }
+    ok(sc1.ok && sc1.block === true && sc1.why === "unverified" && sc1.features[0].feature === "login" && sc1.features[0].unverified[0].number === 1 &&
+      /tasks are ticked without verification evidence/.test(sc1.reason) && sc1cli.code === 1 && js(sc1) === js(sc1j) &&
+      sc2.block === false && sc2.why === "admitted" && sc3.block === false && sc3.why === "no-claim" && sc4.result.isError === true && /Missing required argument\(s\): message/.test(sc4.result.content[0].text),
+      "1.16 U4: spec_stop_check sends a 'done' claim back while a recent tick is unverified (block, why unverified — the same JSON as `dev-spec stop-check --json`, exit 1); an honest admission and a message without a claim pass; message is required (got " +
+      js([sc1.why, sc2.why, sc3.why]) + ")");
+    const p13 = uDir("log");
+    S.initProject(p13, ["core"], "en");
+    uFeature(p13, "login");
+    const log13 = ["commit 1111111111111111111111111111111111111111", "Author: Ana <ana@example.com>", "Date:   2026-09-20T10:00:00+00:00", "", "    feat(login): show the error", "", "    Part of .specs/login/ task #2.", "", "src/login.js", "",
+      "commit 2222222222222222222222222222222222222222", "Author: Ana <ana@example.com>", "Date:   2026-09-19T10:00:00+00:00", "", "    feat(login): the handler", "", "    Part of .specs/login/ task #1.", "", "src/handler.js", "",
+      "commit 3333333333333333333333333333333333333333", "Author: Bo <bo@example.com>", "Date:   2026-09-18T10:00:00+00:00", "", "    chore: bump deps (task #1 of billing)", "", "package.json", ""].join("\n");
+    const lg1 = (await uCall("spec_log", { name: "login", gitLog: log13, projectDir: p13 })).p;
+    const lg2 = (await uCall("spec_log", { name: "login", gitLog: log13, max: 3, projectDir: p13 })).p;
+    const lgC1 = cli16(["log", "login", "-", "--json", "--project", p13], log13);
+    const lgC2 = cli16(["log", "login", "-", "--max", "3", "--json", "--project", p13], log13);
+    const lg3 = await rpc("tools/call", { name: "spec_log", arguments: { name: "login", projectDir: p13 } });
+    const lg4 = await uCall("spec_log", { name: "nope", gitLog: log13, projectDir: p13 });
+    let lgj1 = null, lgj2 = null;
+    try { lgj1 = JSON.parse(lgC1.out); lgj2 = JSON.parse(lgC2.out); } catch { /* stay null */ }
+    ok(lg1.ok && lg1.commits === 3 && lg1.citing === 2 && lg1.truncated === false && lg1.tasks[0].commits[0].short === "2222222" && lg1.tasks[1].commits[0].short === "1111111" &&
+      js(lg1.tasks[0].commits[0].via) === '["#1"]' && lg2.truncated === true && js(lg1) === js(lgj1) && js(lg2) === js(lgj2) && !fs.existsSync(path.join(p13, ".git")) &&
+      lg3.result.isError === true && /Missing required argument\(s\): gitLog/.test(lg3.result.content[0].text) && lg4.isError,
+      "1.16 U4: spec_log reads the git log TEXT the client passes (no repository needed — the server runs no git): commits per task, a foreign feature's '#1' ignored, `max` marks a full window (truncated) — the same JSON as `dev-spec log <f> - [--max N] --json`; gitLog is required (got " +
+      js([lg1.citing, lg1.tasks.map((t) => t.commits.map((c) => c.short)), lg2.truncated]) + ")");
+  }
 
   // 1.16 package (C) — Claude Code integration: status line, userConfig, annotations / completion, plan-mode bridge.
 

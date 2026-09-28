@@ -29,7 +29,10 @@ Feature: $ARGUMENTS
    (`spec_approve`) — its gate is this report's blockers, so it is refused while the feature isn't ready (only an
    explicit `force` records it, flagged as forced; `spec_metrics` reads `finished` from it or from the written finish). A written finish of a **ready** feature also records the **drift baseline** (a hash of every
    file its `_Implements:_` markers name) — `/spec-drift` compares against it later; re-run `finish --write` after
-   last-minute code changes so the baseline matches what ships.
+   last-minute code changes so the baseline matches what ships. Every **forced approval** is listed in the merge
+   summary ("Waived gates") with its failing checks and its waiver — the reason and expiry recorded with
+   `--force --reason "…" --expires …` (`waivers` in the result); an expired waiver is a warning: re-approve that
+   phase without force, or renew the waiver with the user.
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the
    summary as the commit message) **· 2. keep the branch as-is.** Integration is local by design: pull requests and
    CI are not part of this workflow (they cost money and aren't needed). Execute only

@@ -2488,6 +2488,7 @@ const MSG = {
       changes: "'changes' must be an array",
       finishChecks: "'finishChecks' must be an object",
       signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
+      unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
@@ -3066,6 +3067,7 @@ const MSG = {
           if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
           return `lower the approval guard from ${a.from} to ${a.to}`;
         }
+        if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");
         return (a.through ? `approve every phase of '${f}' through ${a.through}` : `approve the ${a.phase || "?"} phase of '${f}'`) +
           (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "") +
           (a.force ? " — FORCED (--force)" : "");
@@ -3539,6 +3541,47 @@ const MSG = {
         ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /spec-ff ${slug} --role <role> (CLI: dev-spec approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
+    },
+
+    // 1.16 U — undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
+    // `approve --revoke`) and the waiver a forced approval carries (reason / expires).
+    undo: {
+      unticked: (n, slug, runnable, stale) => `Task ${n} is open again (unticked).` +
+        (stale ? ` Its recorded evidence no longer counts — ticking it again needs ${runnable ? `a new run of its _Verify:_ command: dev-spec done ${slug} ${n} --run` : "new evidence"}.` : ""),
+      alreadyOpen: (n) => `Task ${n} is not ticked — nothing to undo.`,
+      reopened: (slug) => `'${slug}' was finished or signed off — once the task is done again, finish it again (/spec-finish ${slug}) and sign it off again (/approve ${slug} execution).`,
+      noEvidence: "undo takes no evidence — it only unticks the task (record the new run when you tick it again).",
+      reasonNeedsUndo: "reason goes with undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — a tick records evidence instead.",
+      badReason: (max) => `reason must be text (one line, at most ${max} characters).`,
+      staleNote: (n, slug, runnable) => `Task ${n}: it was unticked after this evidence was recorded — it stays unverified until ` +
+        (runnable ? `a new run is recorded: dev-spec done ${slug} ${n} --run` : "new evidence is recorded."),
+      label: "unticked since this evidence was recorded",
+      cliDone: (n, done, total) => `Task ${n} unticked. ${done}/${total}`,
+      cliAlready: (n, done, total) => `Task ${n} was not ticked. ${done}/${total}`,
+      driftWhy: (list) => `unticked since: ${list}`,
+      signOffWhy: (list) => `the untick of ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Revoked the approval of '${phase}' for ${slug} — the phase is pending again (doctor, next_action and spec_finish ask for it).`,
+      withdrawn: (phase, slug, roles) => `Withdrew the role sign-off(s) waiting for '${phase}' of ${slug}: ${roles} — nothing was approved yet.`,
+      signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
+      laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
+      notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
+      phaseRequired: "Name the phase whose approval to revoke.",
+      noThrough: "revoke takes one phase — not through (the fast-forward).",
+      noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
+    },
+    waiver: {
+      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later, at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
+      needsForce: "reason / expires describe a waiver — they go with force (reason also with revoke).",
+      notForced: "The gate passed — nothing was waived: the reason / expiry were not recorded.",
+      recorded: (reason, expires) => `Waiver recorded${reason ? `: ${reason}` : ""}${expires ? ` (expires ${expires})` : ""}.`,
+      doctor: (list, slug) => `forced approvals whose waiver expired: ${list} — fix the failing checks and re-approve without force (/approve ${slug} <phase>), or renew the waiver (/approve ${slug} <phase> --force --reason "…" --expires 30d)`,
+      expiredItem: (phase, expires, reason) => `${phase} (expired ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `waiver: ${reason}` : "waiver", expires ? (expired ? `EXPIRED ${expires}` : `until ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Waived gates (forced approvals)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forced over: ${failing || "—"} · ${reason ? `reason: ${reason}` : "no reason recorded"}${expires ? ` · ${expired ? "EXPIRED" : "expires"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `waivers expired on forced approvals: ${list} — re-approve those phases without force, or renew the waiver (dev-spec approve ${slug} <phase> --force --reason "…" --expires 30d)`,
     },
 
     // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (spec.js: forecastData, featureOverlaps).
@@ -4163,6 +4206,7 @@ _Outcome: [go | no-go | pivot]_
       changes: "'changes' tem de ser um array",
       finishChecks: "'finishChecks' tem de ser um objeto",
       signoffs: "'signoffs' tem de ser um objeto",
+      unticks: "'unticks' tem de ser um array",
     },
     depend: {
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
@@ -4686,6 +4730,7 @@ _Outcome: [go | no-go | pivot]_
           if (a.setting === "roadmap") return "alterar .specs/roadmap.json a partir da shell — escrevê-lo, movê-lo ou apagá-lo (é lá que estão o guarda de aprovações e os gates do projeto)";
           return `baixar o guarda de aprovações de ${a.from} para ${a.to}`;
         }
+        if (a.revoke) return `revogar a aprovação da fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "");
         return (a.through ? `aprovar todas as fases de '${f}' até ${a.through}` : `aprovar a fase ${a.phase || "?"} de '${f}'`) +
           (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "") +
           (a.force ? " — FORÇADA (--force)" : "");
@@ -5142,6 +5187,45 @@ _Outcome: [go | no-go | pivot]_
         ` — nada foi registado para '${phase}'. Volta a correr o avanço rápido com o papel com que validas: /spec-ff ${slug} --role <papel> (CLI: dev-spec approve ${slug} --through ${through} --role <papel>); o avanço rápido retoma em '${phase}'.`,
       ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
       batch: (n) => `  aprovações em lote (avanço rápido): ${n}`,
+    },
+
+    undo: {
+      unticked: (n, slug, runnable, stale) => `A tarefa ${n} voltou a ficar aberta (desmarcada).` +
+        (stale ? ` A evidência registada deixou de contar — voltar a marcá-la exige ${runnable ? `uma nova execução do seu comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nova evidência"}.` : ""),
+      alreadyOpen: (n) => `A tarefa ${n} não está marcada — nada a desfazer.`,
+      reopened: (slug) => `'${slug}' já estava concluída ou validada — quando a tarefa voltar a estar feita, conclui-a de novo (/spec-finish ${slug}) e volta a validar a execução (/approve ${slug} execution).`,
+      noEvidence: "undo não aceita evidência — só desmarca a tarefa (regista a nova execução quando a voltares a marcar).",
+      reasonNeedsUndo: "reason acompanha undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — ao marcar uma tarefa regista-se evidência.",
+      badReason: (max) => `reason tem de ser texto (uma linha, no máximo ${max} caracteres).`,
+      staleNote: (n, slug, runnable) => `Tarefa ${n}: foi desmarcada depois de esta evidência ser registada — continua não verificada até se registar ` +
+        (runnable ? `uma nova execução: dev-spec done ${slug} ${n} --run` : "nova evidência."),
+      label: "desmarcada depois de esta evidência ser registada",
+      cliDone: (n, done, total) => `Tarefa ${n} desmarcada. ${done}/${total}`,
+      cliAlready: (n, done, total) => `A tarefa ${n} não estava marcada. ${done}/${total}`,
+      driftWhy: (list) => `desmarcada(s) depois: ${list}`,
+      signOffWhy: (list) => `a desmarcação de ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Aprovação de '${phase}' revogada em ${slug} — a fase volta a estar pendente (o doctor, o next_action e o spec_finish pedem-na).`,
+      withdrawn: (phase, slug, roles) => `Retiradas as validações por papel à espera para '${phase}' de ${slug}: ${roles} — ainda nada estava aprovado.`,
+      signOffsToo: (roles) => `As validações por papel que estavam à espera também foram retiradas: ${roles}.`,
+      laterStay: (list, phase) => `Nada em cascata: as fases seguintes continuam aprovadas (${list}); aprovar outra fase é recusado (phase-order) até '${phase}' voltar a ser aprovada.`,
+      notApproved: (phase, slug) => `'${phase}' não está aprovada em ${slug} e nenhuma validação por papel está à espera — nada a revogar.`,
+      phaseRequired: "Indica a fase cuja aprovação queres revogar.",
+      noThrough: "revoke aceita uma só fase — não through (o avanço rápido).",
+      noForce: "revoke não aceita force nem expires — serve para retirar uma aprovação; reason diz porquê.",
+    },
+    waiver: {
+      badExpires: (v, max) => `expires tem de ser uma data ISO (AAAA-MM-DD, hoje ou depois, no máximo daqui a ${max} dias) ou um número de dias (30d, 1–${max}) — recebido: ${v}.`,
+      needsForce: "reason / expires descrevem uma exceção (waiver) — acompanham force (reason também acompanha revoke).",
+      notForced: "O gate passou — nada foi dispensado: o motivo / a validade não foram registados.",
+      recorded: (reason, expires) => `Exceção registada${reason ? `: ${reason}` : ""}${expires ? ` (válida até ${expires})` : ""}.`,
+      doctor: (list, slug) => `aprovações forçadas cuja exceção expirou: ${list} — corrige as verificações a falhar e volta a aprovar sem force (/approve ${slug} <fase>); para renovar a exceção: /approve ${slug} <fase> --force --reason "…" --expires 30d`,
+      expiredItem: (phase, expires, reason) => `${phase} (expirou a ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `exceção: ${reason}` : "exceção", expires ? (expired ? `EXPIROU a ${expires}` : `até ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Gates dispensados (aprovações forçadas)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forçada apesar de: ${failing || "—"} · ${reason ? `motivo: ${reason}` : "sem motivo registado"}${expires ? ` · ${expired ? "EXPIROU a" : "válida até"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `exceções expiradas em aprovações forçadas: ${list} — volta a aprovar essas fases sem force; para renovar a exceção: dev-spec approve ${slug} <fase> --force --reason "…" --expires 30d`,
     },
 
     forecast: {
@@ -5742,6 +5826,7 @@ _Outcome: [go | no-go | pivot]_
       changes: "'changes' debe ser un array",
       finishChecks: "'finishChecks' debe ser un objeto",
       signoffs: "'signoffs' debe ser un objeto",
+      unticks: "'unticks' debe ser un array",
     },
     depend: {
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
@@ -6265,6 +6350,7 @@ _Outcome: [go | no-go | pivot]_
           if (a.setting === "roadmap") return "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)";
           return `bajar la guardia de aprobaciones de ${a.from} a ${a.to}`;
         }
+        if (a.revoke) return `revocar la aprobación de la fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "");
         return (a.through ? `aprobar todas las fases de '${f}' hasta ${a.through}` : `aprobar la fase ${a.phase || "?"} de '${f}'`) +
           (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "") +
           (a.force ? " — FORZADA (--force)" : "");
@@ -6721,6 +6807,45 @@ _Outcome: [go | no-go | pivot]_
         ` — no se ha registrado nada para '${phase}'. Vuelve a ejecutar el avance rápido con el rol con el que validas: /spec-ff ${slug} --role <rol> (CLI: dev-spec approve ${slug} --through ${through} --role <rol>); se reanuda en '${phase}'.`,
       ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
       batch: (n) => `  aprobaciones en lote (avance rápido): ${n}`,
+    },
+
+    undo: {
+      unticked: (n, slug, runnable, stale) => `La tarea ${n} vuelve a estar abierta (desmarcada).` +
+        (stale ? ` Su evidencia registrada deja de contar — volver a marcarla exige ${runnable ? `una nueva ejecución de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nueva evidencia"}.` : ""),
+      alreadyOpen: (n) => `La tarea ${n} no está marcada — nada que deshacer.`,
+      reopened: (slug) => `'${slug}' ya estaba terminada o aprobada — cuando la tarea vuelva a estar hecha, termínala de nuevo (/spec-finish ${slug}) y vuelve a aprobar la ejecución (/approve ${slug} execution).`,
+      noEvidence: "undo no acepta evidencia — solo desmarca la tarea (registra la nueva ejecución cuando la vuelvas a marcar).",
+      reasonNeedsUndo: "reason acompaña a undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — al marcar una tarea se registra evidencia.",
+      badReason: (max) => `reason debe ser texto (una línea, como máximo ${max} caracteres).`,
+      staleNote: (n, slug, runnable) => `Tarea ${n}: se desmarcó después de registrar esta evidencia — sigue sin verificar hasta que se registre ` +
+        (runnable ? `una nueva ejecución: dev-spec done ${slug} ${n} --run` : "nueva evidencia."),
+      label: "desmarcada después de registrar esta evidencia",
+      cliDone: (n, done, total) => `Tarea ${n} desmarcada. ${done}/${total}`,
+      cliAlready: (n, done, total) => `La tarea ${n} no estaba marcada. ${done}/${total}`,
+      driftWhy: (list) => `desmarcada(s) después: ${list}`,
+      signOffWhy: (list) => `la desmarcación de ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Aprobación de '${phase}' revocada en ${slug} — la fase vuelve a estar pendiente (doctor, next_action y spec_finish la piden).`,
+      withdrawn: (phase, slug, roles) => `Retiradas las aprobaciones por rol en espera para '${phase}' de ${slug}: ${roles} — aún no había nada aprobado.`,
+      signOffsToo: (roles) => `También se retiraron las aprobaciones por rol que estaban en espera: ${roles}.`,
+      laterStay: (list, phase) => `Nada en cascada: las fases siguientes siguen aprobadas (${list}); aprobar otra fase se rechaza (phase-order) hasta que '${phase}' vuelva a aprobarse.`,
+      notApproved: (phase, slug) => `'${phase}' no está aprobada en ${slug} y ninguna aprobación por rol está en espera — nada que revocar.`,
+      phaseRequired: "Indica la fase cuya aprobación quieres revocar.",
+      noThrough: "revoke acepta una sola fase — no through (el avance rápido).",
+      noForce: "revoke no acepta force ni expires — elimina una aprobación; reason dice por qué.",
+    },
+    waiver: {
+      badExpires: (v, max) => `expires debe ser una fecha ISO (AAAA-MM-DD, hoy o después, como máximo dentro de ${max} días) o un número de días (30d, 1–${max}) — recibido: ${v}.`,
+      needsForce: "reason / expires describen una excepción (waiver) — van con force (reason también con revoke).",
+      notForced: "El gate pasó — no se eximió nada: el motivo / la caducidad no se registraron.",
+      recorded: (reason, expires) => `Excepción registrada${reason ? `: ${reason}` : ""}${expires ? ` (vence el ${expires})` : ""}.`,
+      doctor: (list, slug) => `aprobaciones forzadas cuya excepción caducó: ${list} — corrige las comprobaciones que fallan y vuelve a aprobar sin force (/approve ${slug} <fase>), o renueva la excepción (/approve ${slug} <fase> --force --reason "…" --expires 30d)`,
+      expiredItem: (phase, expires, reason) => `${phase} (caducó el ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `excepción: ${reason}` : "excepción", expires ? (expired ? `CADUCADA el ${expires}` : `hasta el ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Gates eximidos (aprobaciones forzadas)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forzada pese a: ${failing || "—"} · ${reason ? `motivo: ${reason}` : "sin motivo registrado"}${expires ? ` · ${expired ? "CADUCADA el" : "vence el"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `excepciones caducadas en aprobaciones forzadas: ${list} — vuelve a aprobar esas fases sin force, o renueva la excepción (dev-spec approve ${slug} <fase> --force --reason "…" --expires 30d)`,
     },
 
     forecast: {

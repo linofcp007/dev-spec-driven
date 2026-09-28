@@ -11,7 +11,8 @@ as if it were the approved one. Inspired by OpenSpec's deltas and BMAD's correct
 Every `spec_approve` (CLI `dev-spec approve`) does three things:
 
 - `.state.json → approvals[<phase>]` — the **latest** approval: `{at, by, fingerprint}` (plus `forced` and the
-  `failing` check ids when it was forced over failing checks). The fingerprint is a hash of the artifact's
+  `failing` check ids when it was forced over failing checks, and — 1.16 — its `waiver {reason, expires}` when the
+  force gave one: `--force --reason "…" --expires 30d`; doctor warns `waiver-expired` once the date passed). The fingerprint is a hash of the artifact's
   content (`tasks.md` with checkboxes normalized — ticking a task is progress, not a spec edit).
 - `.state.json → approvalHistory[]` — every approval ever made, in order (`{phase, at, by, fingerprint, snapshot,
   forced?, failing?}`), so re-approvals (rework) are countable.
@@ -22,6 +23,15 @@ Every `spec_approve` (CLI `dev-spec approve`) does three things:
 
 Approvals made before 1.13 have only a fingerprint (no snapshot): tools can tell *that* the artifact changed,
 not *what*. Re-approving the phase starts its history.
+
+**Revoking an approval** (1.16): `spec_approve {name, phase, revoke: true, reason}` (CLI `dev-spec approve <feature>
+<phase> --revoke --reason "…"`) removes `approvals[<phase>]` and the role sign-offs waiting for it, and appends
+`{phase, at, by, revoked: true, reason}` to `approvalHistory` — never a snapshot; the readers of the history as a list
+of approvals (snapshots, metrics' rework, the changelog) skip it. It **never cascades**: the later phases stay approved
+(`laterApproved`), the revoked one is pending again, and phase by phase still holds — approving another phase is
+refused (`phase-order`) until it is re-approved. `spec_metrics` counts `revokedApprovals` (and `untickedTasks`,
+`spec_complete_task {undo}`). A task unticked after a finish or an execution sign-off makes both stale (finish again,
+sign off again once it is done).
 
 ## 2. Noticing a change
 

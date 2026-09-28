@@ -3,7 +3,7 @@
 Read on demand from `SKILL.md`. The workflow itself lives in `SKILL.md`; this file holds the lookup
 tables.
 
-## MCP tools (`spec-driven` server — 35 tools)
+## MCP tools (`spec-driven` server — 37 tools)
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
@@ -25,15 +25,17 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC, `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
 | `spec_doctor` | One health-check → `readyToAdvance` (the checks are listed below) |
-| `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate |
+| `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate; with `force`, `reason` + `expires` (YYYY-MM-DD or `30d`) record the approval's `waiver` (doctor `waiver-expired` once it lapses, ROADMAP.md and the merge summary show it); `revoke: true` (+ `reason`) removes the phase's approval and its waiting role sign-offs — history record `revoked: true`, never a cascade (`laterApproved` stay approved; the phase is pending again) |
 | `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint |
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, its `_Depends:_` and where each stands, DoD); default = the next task by `spec_next_task`'s rule; `write: true` → `.specs/<feature>/.execution/` |
-| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused) |
+| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
 | `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`, `_Depends:_`; unknown AC IDs, unplanned T-IDs, or a `depends` naming no task / closing a cycle refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
+| `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report |
+| `spec_log` | Git-linked evidence from `gitLog` — the `git log --name-only --relative` text the client passes (the server never runs git): the commits citing each task + the +tdd red-first check (= `log <f> - --json`); `max` = the window it was read with |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
 | `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions; `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
 | `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv) |
@@ -75,7 +77,7 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom
   `_Affects:_`) · `decision-affects-approved` (a decision recorded after the approval of what it affects) ·
   `cross-feature-overlap` (another active feature's open tasks plan the same files) · spike `timebox` (past its date
-  with no decision).
+  with no decision) · `waiver-expired` (a forced approval still standing whose waiver's `expires` date has passed).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
   `tests` on +tdd / +ai once its plan exists, a phase still missing a role's sign-off), forced approvals with their
   failing checks, and what the next approval would refuse (`nextGate {phase, ready, failing, missingRoles}`).
@@ -124,7 +126,8 @@ list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code] [--matrix | --csv]
 next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [--include-brief]
 done <feature> <n> [--run [--shell bash] [--timeout <s>] | --evidence "…" --exit N --cmd "…"]
-approve <feature> <phase> [--by NAME] [--role ROLE] [--force]
+approve <feature> <phase> [--by NAME] [--role ROLE] [--force [--reason "…"] [--expires YYYY-MM-DD|Nd]]
+approve <feature> <phase> --revoke [--reason "…"]     undone <feature> <n> [--reason "…"]
 approve <feature> --through <phase> [--role ROLE] [--force]
 impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]
 decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects ids,…] [--supersedes D-n] [--discovery]
@@ -152,7 +155,8 @@ commit and whether the tree was dirty, when git is available); `finish --run` ru
 observed`). `next --waves` prints the execution waves (+ cycles, blocked tasks); `trace --matrix` prints the requirements
 traceability matrix as a table and `trace --csv` as CSV on stdout (data only — `export <f> --csv --write` writes the
 file with a BOM and the marker record; the exit code stays trace's). `stop-check` prints the Stop hook's decision for a
-closing message. `rules <tool>` prints a rule file with this
+closing message (MCP: `spec_stop_check`; `log`'s MCP twin is `spec_log`, fed the `git log` text). `undone` unticks a task —
+its evidence turns stale, so a re-tick needs a new run. `rules <tool>` prints a rule file with this
 clone's absolute paths, to paste into another project; `mcp-config <client>` prints a ready MCP config.
 
 ## Hooks (Claude Code, local — never block on their own errors)
@@ -286,7 +290,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/executeTask` | 6 | Implement: core / red-green-refactor / prompt-iteration per task; `--subagents` → implementer + reviewer per task (uses `spec_task_brief`) |
 | `/spec-converge` | 6 | Whole feature AC by AC vs the code (reviewer in converge mode) → approved follow-up tasks (uses `spec_append_tasks`) |
 | `/spec-doctor` | gate | Health-check a feature; returns readyToAdvance + gate status (uses `spec_doctor`); `--deep` adds the `spec-critic` semantic review |
-| `/approve` | gate | Record a phase approval — refused while its checks fail, `--force` records it as forced, `--role` signs as a role (uses `spec_approve`) |
+| `/approve` | gate | Record a phase approval — refused while its checks fail, `--force` records it as forced (`--reason` / `--expires` = its waiver), `--role` signs as a role, `--revoke` withdraws an approval (uses `spec_approve`) |
 | `/spec-ff` | gate | Fast-forward: approve every filled planning phase in order, each through its own gate (uses `spec_approve {through}`) |
 | `/next-action` | any | "You are here → do this next" + what changed since approval (uses `spec_next_action`) |
 | `/spec-impact` | change | What an edit after approval touches; `--reopen` with the user's OK; then re-approve (uses `spec_impact`) |
