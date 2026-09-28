@@ -1,6 +1,6 @@
 ---
 description: Change request — show what an edit made after an approval touches (ACs, sections, tasks, tests), optionally reopen the affected tasks, then re-approve. PT - pedido de alteração (impacto de uma edição depois da aprovação). ES - solicitud de cambio (impacto de una edición tras la aprobación).
-argument-hint: "[feature name] [requirements|design|test-plan|eval-plan|tasks] [--reopen]"
+argument-hint: "[feature name] [requirements|design|test-plan|eval-plan|tasks|steering] [--reopen]"
 ---
 
 Use the **dev-spec-driven** skill, change management (`references/change-management.md`).
@@ -38,6 +38,14 @@ Use this when an **approved** artifact was edited afterwards — `spec_doctor` w
    `spec_append_tasks`; the `retire` tasks and rows deleted or repointed), run `spec_doctor`, then **re-approve** each
    changed phase with `spec_approve` — each approval saves a new snapshot. Redo the reopened tasks with fresh evidence
    (`/executeTask`).
+
+**Steering amendments (phase `steering`).** When a steering file that governed an approval changed — doctor warns
+`steering-changed-since-approval`, next_action adds a re-review hint — call `spec_impact {phase: "steering"}` with no
+name (CLI `dev-spec impact --phase steering`) for every active feature whose requirements / design approval was made
+under an older version of constitution.md, a track's steering file or an `always` / matching `fileMatch` file (`features`
+with each approval and the files `modified` / `removed`; `untracked` lists approvals made before 1.16, which recorded no
+steering and are never flagged), or with a name for one feature. It is read-only (`reopen` is refused): re-review each
+approved artifact against the amended steering with the user, then re-approve it — the approval records the current steering.
 
 Never reopen on your own initiative, and never treat an approved spec that changed as still approved.
 Respond in the user's language (EN/PT/ES).

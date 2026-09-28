@@ -39,6 +39,14 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `duplicate-tasks`, `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),
+  `cross-feature-acs` (this feature's acceptance criteria read like another ACTIVE feature's — a near-duplicate — or may
+  contradict them — the same trigger with SHALL vs SHALL NOT, or different numbers; each pair names the other feature's
+  AC: merge or reword them, or declare `_Supersedes: <feature>/US-n.AC-m_` on the newer one; template criteria and
+  declared replacements never count), `steering-changed-since-approval` (a steering file that governed the requirements /
+  design approval — constitution, the tracks' files, `always` / matching `fileMatch` ones — changed or was removed since:
+  re-review — `/spec-impact` with phase `steering` lists every feature concerned — then re-approve; approvals made before
+  1.16 are never flagged), `glossary` (words `.specs/steering/glossary.md` says to avoid, used in `requirements.md` /
+  `design.md` — with the count; `/clarify` asks about each; no glossary → no check),
   `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai, a phase still
   missing a role's sign-off — the gate the next approval would fail, forced approvals), a bugfix's `reproduction`, a
   spike's `timebox`.

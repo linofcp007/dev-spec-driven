@@ -13,7 +13,12 @@ leftover template placeholders and TBDs (one question naming each `requirements.
 criteria / priorities / independent tests, missing edge-cases / non-functional / out-of-scope sections (a bugfix
 is never asked for non-functional requirements — its template has none by design), missing IF…THEN failure-path criteria, and track-specific gaps (tenant isolation and rate limits for +saas; output
 quality and cost for +ai; an access-denied criterion and the secrets handled for +sec; data subject rights and
-retention periods for +privacy). A removed track's criteria are ignored. Present the questions to the user, get
+retention periods for +privacy). A removed track's criteria are ignored. With a glossary
+(`.specs/steering/glossary.md` — `steering_scaffold {file: "glossary.md"}` / `dev-spec steering glossary.md` scaffolds it),
+every word it says to avoid (`_Avoid: client, user_`) that `requirements.md` / `design.md` use is a question naming
+`file:line` and the term to use (word-matched, case-insensitive, a plural counts; never inside code, comments or the
+glossary's own terms; the result also carries `glossary` [{word, term, count, locations}]) — replace the word, or amend
+the glossary. Present the questions to the user, get
 answers, and fold them into `requirements.md` before moving to design — edge cases, NFRs and success criteria
 keep their stable IDs (`EC-1`, `NFR-1`, `SC-001`) so tasks and tests can trace them. Then re-run `ears_validate`
 (issue codes: `no-modal`, `no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`). Respond in the

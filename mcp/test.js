@@ -7534,7 +7534,7 @@ function endRun() {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 27 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 28 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -7546,10 +7546,10 @@ function endRun() {
     const tplDir = path.join(pi, ".specs", "templates");
     ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
       i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 27 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      i3.created.length === 28 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
       fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
       S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 27, --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 28 (1.16: + steering/glossary.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -13115,6 +13115,252 @@ function endRun() {
   }
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
+
+  {
+    const js = (v) => JSON.stringify(v);
+    const call = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: !!(r.result && r.result.isError), p: r.result ? payload(r) : null }; };
+    const qDir = (n) => path.join(tmp, "proj-116-q-" + n);
+    const reqOf = (dir, slug, body, head) => fs.writeFileSync(path.join(dir, ".specs", slug, "requirements.md"), "# Feature: " + slug + "\n\n" + (head || "### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n") + body);
+    const steer = (dir, f, text) => fs.writeFileSync(path.join(dir, ".specs", "steering", f), text);
+    const approveAll = (dir, slug, phases) => phases.forEach((ph) => S.approvePhase(dir, slug, ph, "t", { force: true }));
+    const QIDS = ["glossary", "cross-feature-acs", "steering-changed-since-approval"];
+    const qChecks = (dir, slug) => (S.specDoctor(dir, slug).checks || []).filter((c) => QIDS.includes(c.id));
+
+    // --- Q1: steering amendments ---
+    const q1 = qDir("q1");
+    S.initProject(q1, ["core", "sec"], "en");
+    steer(q1, "constitution.md", "# Constitution\n\n1. Every write is idempotent.\n");
+    steer(q1, "api-rules.md", "---\ninclusion: fileMatch\nfileMatchPattern: \"src/api/**\"\n---\n# API rules\n- JSON only\n");
+    steer(q1, "notes.md", "# Notes (no front matter: never governing)\n- x\n");
+    const q1a = S.createFeature(q1, "Alpha", ["core", "sec"], "x", undefined, "en");
+    S.createFeature(q1, "Beta", ["core"], "x", undefined, "en");
+    S.createFeature(q1, "Legacy", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(q1a.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Build the API\n  - _Implements: src/api/users.js_\n");
+    for (const f of ["alpha", "beta", "legacy"]) approveAll(q1, f, ["classification", "requirements", "design"]);
+    // Legacy: approvals made before 1.16 carry no steering fingerprints (removed by hand here).
+    const lgPath = path.join(q1, ".specs", "legacy", ".state.json");
+    const lg = JSON.parse(fs.readFileSync(lgPath, "utf8"));
+    for (const ph of ["requirements", "design"]) delete lg.approvals[ph].steering;
+    lg.approvalHistory.forEach((h) => delete h.steering);
+    fs.writeFileSync(lgPath, JSON.stringify(lg, null, 2));
+    const stA = S.readState(q1, "alpha");
+    const hA = (stA.approvalHistory || []).filter((h) => h.phase === "design").pop() || {};
+    const naBefore = S.nextAction(q1, "alpha");
+    ok(js(Object.keys(stA.approvals.requirements.steering || {})) === js(["api-rules.md", "constitution.md", "security.md"]) &&
+      js(Object.keys(S.readState(q1, "beta").approvals.design.steering || {})) === js(["constitution.md"]) &&
+      hA.steering && hA.steering["constitution.md"] === stA.approvals.design.steering["constitution.md"] && stA.approvals.classification.steering === undefined &&
+      !qChecks(q1, "alpha").length && !naBefore.steeringChanged,
+      "1.16 Q1: a requirements / design approval records `steering` {file: fingerprint} — constitution.md, the active tracks' files (+sec: security.md), a fileMatch file matching the feature's _Implements:_ (api-rules.md for alpha only), never a file without front matter; the history record carries it; classification none; no warning while unchanged (got " +
+      js([Object.keys(stA.approvals.requirements.steering || {}), Object.keys(S.readState(q1, "beta").approvals.design.steering || {})]) + ")");
+    steer(q1, "constitution.md", "# Constitution\n\n1. Every write is idempotent.\n2. No PII in logs.\n");
+    fs.rmSync(path.join(q1, ".specs", "steering", "security.md"));
+    const dA = S.specDoctor(q1, "alpha");
+    const cA = dA.checks.find((c) => c.id === "steering-changed-since-approval") || {};
+    const naA = S.nextAction(q1, "alpha");
+    ok(cA.status === "warn" && /constitution\.md \(changed\), security\.md \(removed\)/.test(cA.detail) && /requirements \(approved \d{4}-\d\d-\d\d\)/.test(cA.detail) &&
+      /dev-spec impact alpha --phase steering/.test(cA.detail) && dA.verdict !== "pass" &&
+      js(dA.steeringChanged.map((c) => [c.phase, c.files.map((x) => x.file + ":" + x.change)])) === js([["requirements", ["constitution.md:modified", "security.md:removed"]], ["design", ["constitution.md:modified", "security.md:removed"]]]) &&
+      !dA.checks.some((c) => c.id === "steering-changed-since-approval" && c.status === "fail") &&
+      naA.step === naBefore.step && /Also: steering changed after the approval of requirements, design \(constitution\.md, security\.md\)/.test(naA.recommendation) && naA.steeringChanged.length === 2 &&
+      !qChecks(q1, "legacy").length,
+      "1.16 Q1: steering changed after approval → doctor warns steering-changed-since-approval (which files, changed / removed, which approvals; `steeringChanged` stable codes); next_action keeps its step and adds a re-review hint; a pre-1.16 approval (no fingerprints) is never warned about (got " + js([cA.detail, naA.step, naBefore.step]) + ")");
+    const imP = await call("spec_impact", { phase: "steering", projectDir: q1 });
+    const imB = S.impactReport(q1, "Beta", { phase: "STEERING" });
+    const imNo = await call("spec_impact", { projectDir: q1 });
+    const imRe = S.impactReport(q1, "alpha", { phase: "steering", reopen: true });
+    ok(!imP.isError && imP.p.ok && imP.p.scope === "project" && imP.p.changed === true && js(imP.p.features.map((f) => f.feature)) === js(["alpha", "beta"]) &&
+      js(imP.p.files) === js(["constitution.md", "security.md"]) && js(imP.p.untracked) === js([{ feature: "legacy", phases: ["requirements", "design"] }]) &&
+      imB.ok && imB.scope === "feature" && imB.feature === "beta" && imB.features.length === 1 && js(imB.features[0].approvals[0].files) === js([{ file: "constitution.md", change: "modified" }]) &&
+      /^Steering — beta: approved under an older version of steering/.test(S.impactLines(imB)[0]) &&
+      imNo.isError && /name required — only phase 'steering' works project-wide/.test(imNo.p.error) && imRe.ok === false && /reopen doesn't apply to phase 'steering'/.test(imRe.error),
+      "1.16 Q1: spec_impact {phase: 'steering'} without a name lists every active feature approved under changed steering (+ the pre-1.16 ones as untracked); with a name, that feature; no name for another phase and reopen are refused (got " + js([imP.p && imP.p.features, imNo.p]) + ")");
+    approveAll(q1, "alpha", ["requirements", "design"]);
+    const imAfter = S.impactReport(q1, undefined, { phase: "steering" });
+    ok(!qChecks(q1, "alpha").some((c) => c.id === "steering-changed-since-approval") && !S.nextAction(q1, "alpha").steeringChanged &&
+      js(imAfter.features.map((f) => f.feature)) === js(["beta"]) && js(Object.keys(S.readState(q1, "alpha").approvals.design.steering)) === js(["api-rules.md", "constitution.md"]),
+      "1.16 Q1: re-approving the phase records the current steering — the warning and the hint clear; the project view keeps the others (got " + js(imAfter.features) + ")");
+    // PT: the doctor detail and the impact lines speak the feature's language; CRLF / a BOM re-save is no amendment.
+    const q1pt = qDir("q1pt");
+    S.initProject(q1pt, ["core"], "pt");
+    steer(q1pt, "constitution.md", "# Constituição\n\n1. Toda a escrita é idempotente.\n");
+    S.createFeature(q1pt, "Faturas", ["core"], "x", undefined, "pt");
+    approveAll(q1pt, "faturas", ["classification", "requirements", "design"]);
+    steer(q1pt, "constitution.md", String.fromCharCode(0xfeff) + "# Constituição\r\n\r\n1. Toda a escrita é idempotente.\r\n");
+    const ptSame = qChecks(q1pt, "faturas").length;
+    steer(q1pt, "constitution.md", "# Constituição\n\n1. Toda a escrita é idempotente.\n2. Sem PII nos logs.\n");
+    const ptC = qChecks(q1pt, "faturas").find((c) => c.id === "steering-changed-since-approval") || {};
+    ok(ptSame === 0 && /^steering alterado depois da aprovação — requirements \(aprovado em \d{4}-\d\d-\d\d\): constitution\.md \(alterado\)/.test(ptC.detail || "") &&
+      /^Steering — 1 feature\(s\) ativa\(s\) aprovada\(s\)/.test(S.impactLines(S.impactReport(q1pt, null, { phase: "steering" }))[0]),
+      "1.16 Q1 (PT): a BOM / CRLF re-save is no amendment; a real edit warns in Portuguese, and the project-wide impact speaks the project language (got " + js(ptC.detail) + ")");
+
+    // --- Q2: cross-feature acceptance criteria ---
+    const q2 = qDir("q2");
+    S.initProject(q2, ["core"], "en");
+    ["Alpha", "Beta", "Gamma"].forEach((n) => S.createFeature(q2, n, ["core"], "x", undefined, "en"));
+    reqOf(q2, "alpha", "1. **US-1.AC-1** — WHEN a login fails 5 times THE SYSTEM SHALL lock the account for 15 minutes\n2. **US-1.AC-2** — WHEN a user signs up THE SYSTEM SHALL send a welcome email to the user\n" +
+      "3. **US-1.AC-3** — THE SYSTEM SHALL store the card number encrypted at rest\n4. **US-1.AC-4** — WHEN a user uploads a file THE SYSTEM SHALL reject files larger than 10 MB\n");
+    reqOf(q2, "beta", "1. **US-1.AC-1** — WHEN a login fails 3 times THE SYSTEM SHALL lock the account for 15 minutes\n2. **US-1.AC-2** — WHEN users sign up THE SYSTEM SHALL send a welcome email to each user\n" +
+      "3. **US-1.AC-3** — THE SYSTEM SHALL NOT store the card number encrypted at rest\n4. **US-1.AC-4** — WHEN a user uploads an avatar image THE SYSTEM SHALL reject files larger than 2 MB\n");
+    reqOf(q2, "gamma", "1. **US-1.AC-1** — WHEN the report is exported THE SYSTEM SHALL produce a CSV file\n");
+    const x2 = await call("spec_catalog", { projectDir: q2 });
+    const pr = (x2.p.crossAcs || { pairs: [] }).pairs.map((p) => [p.kind, p.reason, p.a.feature + "/" + p.a.id, p.b.feature + "/" + p.b.id]);
+    const dAl = qChecks(q2, "alpha").find((c) => c.id === "cross-feature-acs") || {};
+    const dBe = qChecks(q2, "beta").find((c) => c.id === "cross-feature-acs") || {};
+    ok(js(pr) === js([["conflict", "different-numbers", "alpha/US-1.AC-1", "beta/US-1.AC-1"], ["duplicate", "near-duplicate", "alpha/US-1.AC-2", "beta/US-1.AC-2"], ["conflict", "opposite-modal", "alpha/US-1.AC-3", "beta/US-1.AC-3"]]) &&
+      js(x2.p.crossAcs.pairs[0].numbers) === js({ a: ["5", "15"], b: ["3", "15"] }) && x2.p.crossAcs.truncated === false &&
+      /\n## ⚠ Possible duplicates \/ conflicts\n/.test(x2.p.markdown) && /- ≈ alpha\/US-1\.AC-2 ↔ beta\/US-1\.AC-2 \(near-duplicate: 100% alike\)/.test(x2.p.markdown) &&
+      /- ⚡ alpha\/US-1\.AC-3 ↔ beta\/US-1\.AC-3 \(possible conflict: SHALL vs SHALL NOT, 100% alike\)/.test(x2.p.markdown) &&
+      dAl.status === "warn" && /^3 criterion pair\(s\)/.test(dAl.detail) && /US-1\.AC-1 ↔ beta\/US-1\.AC-1 \(possible conflict: different numbers 5\/15 ↔ 3\/15/.test(dAl.detail) &&
+      /US-1\.AC-3 ↔ alpha\/US-1\.AC-3/.test(dBe.detail || "") && !qChecks(q2, "gamma").length,
+      "1.16 Q2 (EN): spec_catalog crossAcs — a different-numbers conflict, a near-duplicate (plural / 'each' folded), a SHALL vs SHALL NOT conflict; the upload pair with different triggers is none; SPECS.md section; doctor warns cross-feature-acs on both features naming the other's AC; gamma has none (got " + js(pr) + ")");
+    // PT / ES: accents folded, NÃO DEVE / NO DEBE, PT plural "-es"/"-s".
+    const q2pt = qDir("q2pt");
+    S.initProject(q2pt, ["core"], "pt");
+    ["Pagamentos", "Cartoes"].forEach((n) => S.createFeature(q2pt, n, ["core"], "x", undefined, "pt"));
+    const ptHead = "### US-1 (P1): História\n#### Critérios de Aceitação (EARS)\n";
+    reqOf(q2pt, "pagamentos", "1. **US-1.AC-1** — QUANDO um login falhar 5 vezes O SISTEMA DEVE bloquear a conta durante 15 minutos\n2. **US-1.AC-2** — O SISTEMA DEVE guardar o número do cartão cifrado em repouso\n", ptHead);
+    reqOf(q2pt, "cartoes", "1. **US-1.AC-1** — QUANDO um login falhar 3 vezes O SISTEMA DEVE bloquear a conta durante 15 minutos\n2. **US-1.AC-2** — O SISTEMA NÃO DEVE guardar o número do cartão cifrado em repouso\n", ptHead);
+    const q2es = qDir("q2es");
+    S.initProject(q2es, ["core"], "es");
+    ["Pedidos", "Envios"].forEach((n) => S.createFeature(q2es, n, ["core"], "x", undefined, "es"));
+    const esHead = "### US-1 (P1): Historia\n#### Criterios de Aceptación (EARS)\n";
+    reqOf(q2es, "pedidos", "1. **US-1.AC-1** — CUANDO un usuario confirme el pedido EL SISTEMA DEBE enviar un correo de confirmación al usuario\n2. **US-1.AC-2** — EL SISTEMA DEBE conservar las facturas durante 5 años\n", esHead);
+    reqOf(q2es, "envios", "1. **US-1.AC-1** — CUANDO un usuario confirme el pedido EL SISTEMA DEBE enviar un correo de confirmación al usuario\n2. **US-1.AC-2** — EL SISTEMA DEBE conservar las facturas durante 10 años\n", esHead);
+    const kinds = (dir) => S.crossFeatureAcs(dir).pairs.map((p) => p.kind + ":" + p.reason + ":" + p.a.id);
+    const ptDoc = qChecks(q2pt, "pagamentos").find((c) => c.id === "cross-feature-acs") || {};
+    const esDoc = qChecks(q2es, "envios").find((c) => c.id === "cross-feature-acs") || {};
+    ok(js(kinds(q2pt)) === js(["conflict:different-numbers:US-1.AC-1", "conflict:opposite-modal:US-1.AC-2"]) &&
+      js(kinds(q2es)) === js(["duplicate:near-duplicate:US-1.AC-1", "conflict:different-numbers:US-1.AC-2"]) &&
+      /^2 par\(es\) de critérios parecem-se com os de outra feature ativa/.test(ptDoc.detail || "") && /DEVE vs NÃO DEVE/.test(ptDoc.detail || "") &&
+      /^2 par\(es\) de criterios se parecen a los de otra función activa/.test(esDoc.detail || "") && /casi duplicado/.test(esDoc.detail || "") &&
+      /\n## ⚠ Possíveis duplicados \/ conflitos\n/.test(S.catalog(q2pt).markdown) && /\n## ⚠ Posibles duplicados \/ conflictos\n/.test(S.catalog(q2es).markdown),
+      "1.16 Q2 (PT / ES): QUANDO / CUANDO criteria compared with accents folded; NÃO DEVE vs DEVE and different numbers are conflicts, the same ES criterion a near-duplicate — doctor and SPECS.md in the language (got " + js([kinds(q2pt), kinds(q2es)]) + ")");
+    // Template criteria are never compared: three features of every track, in every language (+ a bugfix); two +ai / +saas
+    // features whose scaffolded criteria got their own numbers, or a light edit of the same template criterion.
+    const tplCounts = ["en", "pt", "es", "pt-BR"].map((l) => {
+      const d = qDir("q2tpl-" + l);
+      S.initProject(d, ["core"], l);
+      ["Alpha", "Beta", "Gamma"].forEach((n) => S.createFeature(d, n, ["core", "tdd", "saas", "ai", "sec", "privacy"], "x", undefined, l));
+      S.createFeature(d, "Bug One", ["core"], "x", undefined, l, "bugfix");
+      const x = S.crossFeatureAcs(d);
+      return x.criteria + "/" + x.pairs.length;
+    });
+    const q2f = qDir("q2filled");
+    S.initProject(q2f, ["core"], "en");
+    [["Alpha", "90", "0.05", "200", "invoices"], ["Beta", "80", "0.02", "300", "reports"]].forEach(([n, a, b, c, what]) => {
+      const cr = S.createFeature(q2f, n, ["core", "saas", "ai", "sec", "privacy"], "x", undefined, "en");
+      const fp = path.join(cr.dir, "requirements.md");
+      fs.writeFileSync(fp, fs.readFileSync(fp, "utf8").replace("[85]", a).replace("[0.03]", b).replace("[N]ms", c + "ms").replace("requests data,", "requests " + what + ","));
+    });
+    ok(js(tplCounts) === js(["0/0", "0/0", "0/0", "0/0"]) && S.crossFeatureAcs(q2f).pairs.length === 0,
+      "1.16 Q2: template criteria are never compared — untouched scaffolds of every track in EN / PT / ES / pt-BR, the bugfix's, +ai / +saas criteria with their numbers filled in, a light edit of the same template criterion (got " + js(tplCounts) + ")");
+    // _Supersedes:_: a pending declaration skips the pair; once the declarer ships the older criterion is retired (compared with nothing).
+    const q2s = qDir("q2sup");
+    S.initProject(q2s, ["core"], "en");
+    ["Old", "New", "Other"].forEach((n) => S.createFeature(q2s, n, ["core"], "x", undefined, "en"));
+    const lockAc = "WHEN a login fails 5 times THE SYSTEM SHALL lock the account for 15 minutes";
+    reqOf(q2s, "old", "1. **US-1.AC-1** — " + lockAc + "\n");
+    reqOf(q2s, "new", "1. **US-1.AC-1** — WHEN a login fails 3 times THE SYSTEM SHALL lock the account for 15 minutes _Supersedes: old/US-1.AC-1_\n");
+    reqOf(q2s, "other", "1. **US-1.AC-1** — WHEN a sign-up form is submitted THE SYSTEM SHALL validate the email address\n");
+    const supPending = S.crossFeatureAcs(q2s).pairs.length;
+    reqOf(q2s, "other", "1. **US-1.AC-1** — " + lockAc + "\n");
+    const withOther = S.crossFeatureAcs(q2s).pairs.map((p) => p.a.feature + "~" + p.b.feature + ":" + p.kind);
+    shipFeature(q2s, "new");
+    const afterShip = S.crossFeatureAcs(q2s).pairs.map((p) => p.a.feature + "~" + p.b.feature + ":" + p.kind);
+    ok(supPending === 0 && js(withOther) === js(["new~other:conflict", "old~other:duplicate"]) && js(afterShip) === js(["new~other:conflict"]) &&
+      !qChecks(q2s, "old").length,
+      "1.16 Q2: a criterion declaring _Supersedes:_ of another is never reported against it (pending); a third feature is still compared with both; once the declarer ships, the superseded criterion is retired and compared with nothing (got " + js([withOther, afterShip]) + ")");
+    // No false positive on the shipped examples and the eval fixtures (copies): no Q warning, no catalog pair.
+    const copies = [["demo", path.join(root, "examples", "demo-project"), null], ["specs-en", path.join(root, "evals", "fixtures", "specs-en"), ".specs"], ["specs-es", path.join(root, "evals", "fixtures", "specs-es"), ".specs"]];
+    const fpBad = [];
+    for (const [n, src, sub] of copies) {
+      const d = qDir("fp-" + n);
+      fs.cpSync(src, sub ? path.join(d, sub) : d, { recursive: true });
+      if (S.catalog(d).crossAcs.pairs.length) fpBad.push(n + ": catalog pairs");
+      for (const f of S.listFeatures(d).features || []) for (const c of qChecks(d, f.name)) if (c.status !== "pass") fpBad.push(n + "/" + f.name + ": " + c.id);
+    }
+    const fxRoot = path.join(tmp, "a3-eval-fixtures"); // the behavioural fixtures built above (when bash is here)
+    let fxSeen = 0;
+    for (const c of fs.existsSync(fxRoot) ? fs.readdirSync(fxRoot) : []) {
+      const d = path.join(fxRoot, c);
+      if (!fs.existsSync(path.join(d, ".specs"))) continue;
+      fxSeen++;
+      if (S.catalog(d).crossAcs.pairs.length) fpBad.push(c + ": catalog pairs");
+      for (const f of S.listFeatures(d).features || []) for (const q of qChecks(d, f.name)) if (q.status !== "pass") fpBad.push(c + "/" + f.name + ": " + q.id);
+    }
+    ok(!fpBad.length, "1.16 Q2 / Q1 / Q3: no new warning on copies of examples/demo-project, evals/fixtures/specs-en / specs-es and the " + fxSeen + " built behavioural fixture(s) with a .specs/ — no cross-feature pair, no steering amendment, no glossary (got " + js(fpBad) + ")");
+    // Bounded: 50 features × 20 criteria.
+    const q2t = qDir("q2time");
+    S.initProject(q2t, ["core"], "en");
+    const vocab = "account invoice payment report export order cart product price discount coupon shipment address refund review rating search filter page token session role permission audit backup schedule queue webhook email message notification upload download image video comment tag category inventory stock supplier warehouse tax currency locale theme profile avatar password".split(" ");
+    let seed = 7;
+    const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    for (let f = 0; f < 50; f++) {
+      const cr = S.createFeature(q2t, "Feature " + f, ["core"], "x", undefined, "en");
+      let body = "# Feature: f" + f + "\n\n### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n";
+      for (let i = 1; i <= 20; i++) {
+        const w = () => vocab[rnd(vocab.length)];
+        body += `${i}. **US-1.AC-${i}** — WHEN the ${w()} ${w()} is ${["created", "updated", "deleted", "viewed"][rnd(4)]} THE SYSTEM SHALL ${["store", "send", "show", "validate"][rnd(4)]} the ${w()} ${w()} within ${rnd(10) + 1} seconds\n`;
+      }
+      fs.writeFileSync(path.join(cr.dir, "requirements.md"), body);
+    }
+    let t0 = Date.now();
+    const xt = S.crossFeatureAcs(q2t);
+    const msAll = Date.now() - t0;
+    t0 = Date.now();
+    S.specDoctor(q2t, "feature-7");
+    const msDoc = Date.now() - t0;
+    ok(xt.criteria === 1000 && xt.pairs.length <= 200 && xt.comparisons <= 200000 && msAll < 5000 && msDoc < 8000,
+      "1.16 Q2: bounded — 50 features × 20 criteria compared through the inverted index (" + xt.comparisons + " comparisons, " + xt.pairs.length + " pair(s), truncated=" + xt.truncated + ") in " + msAll + " ms; one doctor " + msDoc + " ms");
+
+    // --- Q3: the glossary ---
+    const q3 = qDir("q3");
+    S.initProject(q3, ["core"], "en");
+    const inv = S.createFeature(q3, "Invoices", ["core"], "x", undefined, "en");
+    reqOf(q3, "invoices", "1. **US-1.AC-1** — WHEN a client pays THE SYSTEM SHALL email the receipt to the Customer\n2. **US-1.AC-2** — WHEN an end user opens a bill THE SYSTEM SHALL show it <!-- a user in a comment -->\n" +
+      "3. **US-1.AC-3** — THE SYSTEM SHALL keep `user_id` for the Customer _Supersedes: client-portal/US-1.AC-1_ and list its clients\n```\nuser client\n```\n");
+    fs.writeFileSync(path.join(inv.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Send invoices\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Tune the cache\n");
+    const cl0 = S.clarify(q3, "invoices"), br0 = S.taskBrief(q3, "invoices", 1);
+    const noGloss = !qChecks(q3, "invoices").some((c) => c.id === "glossary") && !cl0.glossary && !br0.glossary && !/## Glossary/.test(br0.brief) &&
+      !fs.existsSync(path.join(q3, ".specs", "steering", "glossary.md"));
+    const sc = await call("steering_scaffold", { file: "glossary.md", projectDir: q3 });
+    const stubOnly = S.glossaryEntries(path.join(q3, ".specs"));
+    const stubDoc = S.specDoctor(q3, "invoices").checks;
+    ok(noGloss && !sc.isError && sc.p.created === true && !sc.p.custom && /^# Glossary\n/.test(fs.readFileSync(sc.p.file, "utf8")) && /_Avoid: \[word\], \[word\]_/.test(fs.readFileSync(sc.p.file, "utf8")) &&
+      stubOnly.entries.length === 0 && !stubDoc.some((c) => c.id === "glossary") && /glossary\.md \(\d+\)/.test((stubDoc.find((c) => c.id === "steering") || {}).detail || "") &&
+      js(S.clarify(q3, "invoices").questions) === js(cl0.questions),
+      "1.16 Q3: no glossary → clarify, doctor and the brief are unchanged; spec_init never creates it; steering_scaffold glossary.md writes the EN stub (a known template, `_Avoid:_` marker) — its [Term] slot is no entry and steering names it as a template (got " + js(stubOnly.entries) + ")");
+    fs.writeFileSync(sc.p.file, "# Glossary\n\n- **Customer** — a person or company with a signed contract. _Avoid: client, user_\n- **End user** — a person who logs in.\n" +
+      "- **Invoice**: a bill sent to a Customer.\n  - _Avoid: bill, receipt_\n<!-- - **Ghost** — x. _Avoid: phantom_ -->\n```\n- **Code** — y. _Avoid: snippet_\n```\n");
+    const ents = S.glossaryEntries(path.join(q3, ".specs")).entries;
+    const cl1 = (await call("spec_clarify", { name: "invoices", projectDir: q3 })).p;
+    const gq = cl1.questions.filter((q) => /the glossary says/.test(q));
+    const gDoc = qChecks(q3, "invoices").find((c) => c.id === "glossary") || {};
+    ok(js(ents.map((e) => [e.term, e.definition, e.avoid])) === js([["Customer", "a person or company with a signed contract", ["client", "user"]], ["End user", "a person who logs in", []], ["Invoice", "a bill sent to a Customer", ["bill", "receipt"]]]) &&
+      js(cl1.glossary) === js([{ word: "client", term: "Customer", count: 2, locations: ["requirements.md:5", "requirements.md:7"] }, { word: "receipt", term: "Invoice", count: 1, locations: ["requirements.md:5"] }, { word: "bill", term: "Invoice", count: 1, locations: ["requirements.md:6"] }]) &&
+      gq.length === 3 && gq[0] === "requirements.md:5, requirements.md:7: 'client' — the glossary says Customer (a person or company with a signed contract). Use \"Customer\", or amend .specs/steering/glossary.md if 'client' means something else here." &&
+      gDoc.status === "warn" && /^4 use\(s\) of words the glossary says to avoid — 'client' → Customer \(requirements\.md:5, requirements\.md:7\)/.test(gDoc.detail),
+      "1.16 Q3: glossary entries (a sub-line's _Avoid:_, 'Term:' form; comments and fenced code hold none); spec_clarify asks about each avoided word (file:line, the term to use; `glossary` field) — never inside a comment, a code span, fenced code, a _Supersedes:_ tag or the term 'End user'; a plural counts; doctor warns glossary with the count (got " + js([cl1.glossary, gDoc.detail]) + ")");
+    const br1 = S.taskBrief(q3, "invoices", 1), br2 = S.taskBrief(q3, "invoices", 2), bw = S.taskBrief(q3, "invoices", 1, { write: true });
+    ok(js((br1.glossary || []).map((g) => g.term)) === js(["Customer", "Invoice"]) && /\n## Glossary \(terms this task uses\)\n/.test(br1.brief) &&
+      /\n- \*\*Customer\*\* — a person or company with a signed contract _\(avoid: client, user\)_\n/.test(br1.brief) && !br2.glossary && !/## Glossary/.test(br2.brief) &&
+      js(bw.refs.glossary) === js(["Customer", "Invoice"]) && bw.glossary === undefined,
+      "1.16 Q3: the brief quotes the glossary entries the task's text and criteria use (term, definition, words to avoid) — none for an unrelated task; write:true keeps refs.glossary only (got " + js(br1.glossary) + ")");
+    // PT: the stub, the questions and the doctor in Portuguese; the `_Avoid:_` marker stays English.
+    const q3pt = qDir("q3pt");
+    S.initProject(q3pt, ["core"], "pt");
+    S.createFeature(q3pt, "Faturas", ["core"], "x", undefined, "pt");
+    const scPt = S.scaffoldSteeringFile(q3pt, "glossary.md");
+    const ptStub = fs.readFileSync(scPt.file, "utf8");
+    fs.writeFileSync(scPt.file, "# Glossário\n\n- **Cliente** — pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_\n");
+    reqOf(q3pt, "faturas", "1. **US-1.AC-1** — QUANDO os compradores pagarem O SISTEMA DEVE emitir a fatura ao Cliente\n", "### US-1 (P1): História\n#### Critérios de Aceitação (EARS)\n");
+    const ptQ = S.clarify(q3pt, "faturas").questions.filter((q) => /o glossário diz/.test(q));
+    const ptG = qChecks(q3pt, "faturas").find((c) => c.id === "glossary") || {};
+    ok(/^# Glossário\n/.test(ptStub) && /_Avoid: \[palavra\], \[palavra\]_/.test(ptStub) &&
+      js(ptQ) === js(["requirements.md:5: 'comprador' — o glossário diz Cliente (pessoa ou empresa com contrato assinado). Usa \"Cliente\", ou corrige o .specs/steering/glossary.md se 'comprador' significar outra coisa aqui."]) &&
+      /^1 uso\(s\) de palavras que o glossário manda evitar/.test(ptG.detail || ""),
+      "1.16 Q3 (PT): the PT stub keeps `_Avoid:_`; 'compradores' (plural) is asked about in Portuguese and doctor warns glossary (got " + js([ptQ, ptG.detail]) + ")");
+  }
 
   // 1.16 package (E) — exports and planning: Gherkin, tracker CSV, milestones.
 

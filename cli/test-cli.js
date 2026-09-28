@@ -1782,7 +1782,7 @@ if (inSection("pa1")) { // 1.14 package A1 (CLI tests)
     "prompts --json: one prompt per commands/*.md with its description and `args` argument — the list MCP prompts/list sends (+ argumentHint)");
   const humanA1 = run(["prompts"]);
   ok(humanA1.code === 0 && new RegExp("^" + stemsA1.length + " prompt\\(s\\) — one per plugin command").test(humanA1.out) &&
-    /^ {2}spec-impact \[feature name\] \[requirements\|design\|test-plan\|eval-plan\|tasks\] \[--reopen\]$/m.test(humanA1.out) && /^ {2}coverage$/m.test(humanA1.out),
+    /^ {2}spec-impact \[feature name\] \[requirements\|design\|test-plan\|eval-plan\|tasks\|steering\] \[--reopen\]$/m.test(humanA1.out) && /^ {2}coverage$/m.test(humanA1.out),
     "prompts: a header, then each prompt with its argument hint and description");
 
   const getA1 = run(["prompts", "spec-impact", "--args", "login design"]);
@@ -1927,11 +1927,11 @@ if (inSection("pb1")) { // 1.14 package B1 (CLI tests) — `dev-spec templates [
   const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
   ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
     fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
-    inPt.code === 0 && /27 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    inPt.code === 0 && /28 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
     fs.existsSync(tpl("pt", "steering", "tech.md")),
-    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 27 into .specs/templates/pt/, reported in Portuguese");
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 28 (1.16: + steering/glossary.md) into .specs/templates/pt/, reported in Portuguese");
   const ckClean = run(["templates", "check", "--project", b1]);
-  ok(ckClean.code === 0 && /^28 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  ok(ckClean.code === 0 && /^29 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
   // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
   fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
   const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);
@@ -3680,6 +3680,72 @@ if (inSection("p16c")) { // 1.16 package C — the status line, the user's plugi
 }
 
 // 1.16 package (Q): if (inSection("p16q")) { … }
+if (inSection("p16q")) {
+  const SQ = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const js = (v) => JSON.stringify(v);
+  const q = path.join(tmp, "p16q-proj");
+  const r = (args) => run([...args, "--project", q]);
+  const reqOf = (slug, body) => fs.writeFileSync(path.join(q, ".specs", slug, "requirements.md"), "# Feature: " + slug + "\n\n### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n" + body);
+  const constitution = path.join(q, ".specs", "steering", "constitution.md");
+  SQ.initProject(q, ["core"], "en");
+  fs.writeFileSync(constitution, "# Constitution\n\n1. Every write is idempotent.\n");
+  ["Alpha", "Beta"].forEach((n) => SQ.createFeature(q, n, ["core"], "x", undefined, "en"));
+  reqOf("alpha", "1. **US-1.AC-1** — WHEN a login fails 5 times THE SYSTEM SHALL lock the account for 15 minutes\n2. **US-1.AC-2** — WHEN a client pays THE SYSTEM SHALL email the receipt\n");
+  reqOf("beta", "1. **US-1.AC-1** — WHEN a login fails 3 times THE SYSTEM SHALL lock the account for 15 minutes\n");
+  for (const f of ["alpha", "beta"]) for (const ph of ["classification", "requirements", "design"]) r(["approve", f, ph, "--force"]);
+
+  // Q1 — steering amendments: impact --phase steering (no feature = every active one), doctor, next-action.
+  fs.writeFileSync(constitution, "# Constitution\n\n1. Every write is idempotent.\n2. No PII in logs.\n");
+  const all = r(["impact", "--phase", "steering"]);
+  const one = r(["impact", "beta", "--phase", "steering", "--json"]);
+  let oneJ = null;
+  try { oneJ = JSON.parse(one.out); } catch { /* stays null */ }
+  const noName = r(["impact"]);
+  const reo = r(["impact", "alpha", "--phase", "steering", "--reopen"]);
+  ok(all.code === 0 && /^Steering — 2 active feature\(s\) approved under an older version of steering that changed since\n {2}alpha — requirements \(approved \d{4}-\d\d-\d\d\): constitution\.md \(changed\); design/.test(all.out) &&
+    /\n {2}beta — requirements/.test(all.out) && /\n {2}→ Re-review each against the amended steering, then re-approve \(\/approve alpha requirements\)/.test(all.out) &&
+    one.code === 0 && oneJ && js(oneJ) === js(SQ.impactReport(q, "beta", { phase: "steering" })) && oneJ.scope === "feature" && oneJ.features[0].approvals.length === 2 &&
+    noName.code === 1 && /usage: dev-spec impact <feature> .* · dev-spec impact \[feature\] --phase steering/.test(noName.out) &&
+    reo.code === 1 && /reopen doesn't apply to phase 'steering'/.test(reo.out),
+    "1.16 Q1 CLI: impact --phase steering lists every active feature approved under changed steering (exit 0); <f> --json = spec_impact's result; impact without a feature is a usage error, --reopen is refused (exit 1) (got " + js(all.out.slice(0, 300)) + ")");
+  const doc = r(["doctor", "alpha"]);
+  const na = r(["next-action", "alpha"]);
+  ok(/\n {2}▲ steering-changed-since-approval — steering changed after approval — requirements \(approved \d{4}-\d\d-\d\d\): constitution\.md \(changed\)/.test(doc.out) &&
+    /Also: steering changed after the approval of requirements, design \(constitution\.md\) — re-review against it and re-approve if it still holds \(dev-spec impact alpha --phase steering\)\./.test(na.out),
+    "1.16 Q1 CLI: doctor prints the steering-changed-since-approval warning; next-action adds the re-review hint (got " + js(na.out.slice(0, 400)) + ")");
+
+  // Q2 — cross-feature criteria: catalog section, doctor warning, --json = spec_catalog.
+  const cat = r(["catalog"]);
+  let catJ = null;
+  try { catJ = JSON.parse(r(["catalog", "--json"]).out); } catch { /* stays null */ }
+  const docB = r(["doctor", "beta"]);
+  ok(/\n## ⚠ Possible duplicates \/ conflicts\n/.test(cat.out) && /- ⚡ alpha\/US-1\.AC-1 ↔ beta\/US-1\.AC-1 \(possible conflict: different numbers 5\/15 ↔ 3\/15, 100% alike\)/.test(cat.out) &&
+    catJ && js(catJ.crossAcs) === js(SQ.catalog(q).crossAcs) && catJ.crossAcs.pairs.length === 1 &&
+    /\n {2}▲ cross-feature-acs — 1 criterion pair\(s\) read like another active feature's or may contradict them — US-1\.AC-1 ↔ alpha\/US-1\.AC-1/.test(docB.out),
+    "1.16 Q2 CLI: catalog prints the 'Possible duplicates / conflicts' section; --json carries crossAcs (= spec_catalog); doctor warns cross-feature-acs from the feature's side (got " + js(docB.out.match(/cross-feature-acs.*/) || "") + ")");
+
+  // Q3 — glossary: steering glossary.md (EN / PT), clarify's questions, the brief's section, doctor's count.
+  const sg = r(["steering", "glossary.md"]);
+  const gfile = path.join(q, ".specs", "steering", "glossary.md");
+  const stubOk = fs.existsSync(gfile) && /^# Glossary\n/.test(fs.readFileSync(gfile, "utf8"));
+  fs.writeFileSync(gfile, "# Glossary\n\n- **Customer** — a person or company with a signed contract. _Avoid: client, user_\n");
+  fs.writeFileSync(path.join(q, ".specs", "alpha", "tasks.md"), "# Tasks\n\n- [ ] 1. Charge the customer\n  - _Requirements: US-1.AC-2_\n");
+  const cl = r(["clarify", "alpha"]);
+  const br = r(["brief", "alpha", "1"]);
+  const dg = r(["doctor", "alpha"]);
+  const qp = path.join(tmp, "p16q-pt");
+  SQ.initProject(qp, ["core"], "pt");
+  const sgPt = run(["steering", "glossary.md", "--project", qp]);
+  ok(sg.code === 0 && stubOk && /\d+\. requirements\.md:6: 'client' — the glossary says Customer \(a person or company with a signed contract\)\. Use "Customer"/.test(cl.out) &&
+    /\n## Glossary \(terms this task uses\)\n.*\n- \*\*Customer\*\* — a person or company with a signed contract _\(avoid: client, user\)_\n/.test(br.out) &&
+    /\n {2}▲ glossary — 1 use\(s\) of words the glossary says to avoid — 'client' → Customer \(requirements\.md:6\)/.test(dg.out) &&
+    sgPt.code === 0 && /^# Glossário\n/.test(fs.readFileSync(path.join(qp, ".specs", "steering", "glossary.md"), "utf8")),
+    "1.16 Q3 CLI: steering glossary.md writes the stub (PT with --project in a PT project); clarify asks about the avoided word with file:line; brief quotes the entry; doctor warns glossary (got " + js([cl.out.slice(-300), dg.out.match(/glossary —.*/)]) + ")");
+  const help = run(["help"]).out;
+  const doc0 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  ok(/impact \[feature\] --phase steering/.test(help) && /impact \[feature\] --phase steering/.test(doc0) && /glossary\.md/.test(help) && /glossary\.md/.test(doc0),
+    "1.16 Q CLI: help and the docblock document `impact [feature] --phase steering` and the glossary.md steering template");
+}
 
 // 1.16 package (E): if (inSection("p16e")) { … }
 
