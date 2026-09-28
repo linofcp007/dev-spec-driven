@@ -99,6 +99,14 @@ function ok(cond, label) {
     console.log("  FAIL - " + label);
   }
 }
+// 1.15: only a SHIPPED feature's _Supersedes:_ retires an AC in the catalog / export / matrix (a draft's is "to be
+// superseded"). The tests exercising the marker's reading mark the declaring feature shipped: an execution sign-off.
+function shipFeature(dir, slug) {
+  const sp = path.join(dir, ".specs", slug, ".state.json");
+  const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+  st.approvals = { ...(st.approvals || {}), execution: { at: "2026-09-01T00:00:00.000Z", by: "test" } };
+  fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+}
 
 const child = spawn(process.execPath, [SERVER], {
   env: { ...process.env, SPEC_PROJECT_DIR: tmp },
@@ -4393,7 +4401,9 @@ function endRun() {
     ok(ap10.ok === false && /US-1\.AC-3/.test(ap10.error) && ms10.split("## Acceptance criteria\n")[1].split("\n\n")[0].split("\n").length === 2,
       "a superseded ID is another feature's AC: append_tasks refuses it as phantom, finish lists only this feature's 2 criteria");
 
-    // spec_catalog: the structure + markdown, superseded ACs struck through with the ID that replaces them.
+    // spec_catalog: the structure + markdown, superseded ACs struck through with the ID that replaces them — billing-v2
+    // SHIPPED (1.15: a draft's _Supersedes:_ is only "to be superseded"; see the full review 1.15 block).
+    shipFeature(w10, "billing-v2");
     const cat = await call10("spec_catalog", { projectDir: w10 });
     const cf = (n) => cat.p.features.find((f) => f.feature === n);
     const bAcs = cf("billing").acs;
@@ -4537,6 +4547,8 @@ function endRun() {
     req10(w10r, "account-lockout", "1. **US-1.AC-1** — IF five failed attempts occur THEN THE SYSTEM SHALL lock the account for 15 minutes _Supersedes: user-login/US-1.AC-3_\n\n" +
       "<!-- e.g. _Supersedes: user-login/US-1.AC-2_ -->\n");
     req10(w10r, "old-lockout", "1. **US-1.AC-1** — WHEN q THE SYSTEM SHALL r _Supersedes: `user-login/US-1.AC-2`, User Login/US-1.AC-1_\n");
+    shipFeature(w10r, "account-lockout"); // 1.15: shipped declarers retire (old-lockout shipped, then archived to declutter)
+    shipFeature(w10r, "old-lockout");
     S.manageFeature(w10r, "archive", "old-lockout");
     S.setDependency(w10r, "billing", ["auth"]);
     S.manageFeature(w10r, "archive", "auth");
@@ -4590,6 +4602,8 @@ function endRun() {
       trO10.totalAcs === 1 && trO10.supersedes.length === 0 && trO10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by).join() === "unterminated:billing/US-1.AC-7 and more:US-1.AC-1" &&
       /never closed/.test(S.supersedesWarnings(trO10, "en")[0]) && /nunca é fechado/.test(S.supersedesWarnings(trO10, "pt")[0]),
       "_Supersedes:_ followed by punctuation resolves (no spurious gap); a table-row marker's `by` is its row's AC; an unterminated marker is an `unterminated` warning and its ID is never an own AC");
+    shipFeature(w10x, "paren"); // 1.15: shipped declarers retire the targets
+    shipFeature(w10x, "table-row");
     const catX = S.catalog(w10x);
     const xAcs = (n) => catX.features.find((f) => f.feature === n).acs;
     ok(xAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:,US-1.AC-2:paren/US-1.AC-1,US-1.AC-3:table-row/US-1.AC-1,US-1.AC-4:paren/US-1.AC-2" &&
@@ -4615,6 +4629,8 @@ function endRun() {
       trW10.supersedes.map((s) => s.by + ">" + s.ref + "@" + s.line).join() === "US-1.AC-1>billing/US-1.AC-2@10,US-1.AC-1>billing/US-1.AC-3@10,US-1.AC-1>billing/US-1.AC-4@10" &&
       trOW10.totalAcs === 2 && trOW10.supersedes.length === 0 && trOW10.phantomSupersedes.map((p) => p.reason + ":" + p.ref + ":" + p.by + "@" + p.line).join() === "unterminated:billing/US-1.AC-2, billing/US-1.AC-3:US-1.AC-1@10",
       "a _Supersedes:_ marker wrapped onto its next line resolves whole (no gap, no phantom, doctor traceability passes); a wrapped marker that never closes is ONE `unterminated` warning and its continuation ID is never an own AC");
+    shipFeature(w10w, "wrapped"); // 1.15: shipped declarers retire the targets
+    shipFeature(w10w, "bold");
     const catW10 = S.catalog(w10w);
     const wAcs = (n) => catW10.features.find((f) => f.feature === n).acs;
     ok(wAcs("billing").map((a) => a.id + ":" + (a.supersededBy || []).join("|")).join() === "US-1.AC-1:bold/US-1.AC-1,US-1.AC-2:wrapped/US-1.AC-1,US-1.AC-3:wrapped/US-1.AC-1,US-1.AC-4:wrapped/US-1.AC-1,US-1.AC-5:bold/US-1.AC-2" &&
@@ -7660,6 +7676,7 @@ function endRun() {
     const xs = S.createFeature(xp, "SSO", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(xs.dir, "requirements.md"), "# Feature: SSO\n\n## Summary\nSign in with the company IdP.\n\n### US-1 (P1): IdP sign-in\n" +
       "1. **US-1.AC-1** — WHEN the shopper is declined by the IdP THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+    shipFeature(xp, "sso"); // 1.15: a shipped declarer retires checkout/US-1.AC-2 (a draft's would read "to be superseded")
 
     const h = S.exportSpecs(xp, { name: "checkout" });
     const html = h.content || "";
@@ -11760,6 +11777,7 @@ function endRun() {
     fs.appendFileSync(path.join(rf.dir, "requirements.md"), "- **NFR-2** — THE SYSTEM SHALL log every charge.\n"); // after the approval
     const sso = S.createFeature(rp, "SSO", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(sso.dir, "requirements.md"), "# Feature: SSO\n\n### US-1 (P1): IdP\n1. **US-1.AC-1** — WHEN the IdP declines THE SYSTEM SHALL keep the cart _Supersedes: checkout/US-1.AC-2_\n");
+    shipFeature(rp, "sso"); // 1.15: a shipped declarer retires the AC (a draft's is supersedePending)
 
     const mx = S.traceMatrix(rp, "checkout", { code: true });
     const row = (id) => mx.rows.find((r) => r.id === id) || {};
@@ -11773,7 +11791,7 @@ function endRun() {
     ok(st("US-1.AC-1") === "verified" && st("US-1.AC-2") === "implemented" && st("US-1.AC-3") === "untraced:no-task+no-test" && st("US-1.AC-4") === "untraced:no-test" &&
       st("US-2.AC-1") === "verified" && st("EC-1") === "implemented" && st("NFR-1") === "untraced:no-coverage" && st("NFR-2") === "untraced:no-coverage" &&
       st("SC-001") === "planned" && st("SC-002") === "untraced:no-coverage" &&
-      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1 }) &&
+      JSON.stringify(mx.counts) === JSON.stringify({ rows: 10, verified: 2, implemented: 2, planned: 1, untraced: 5, template: 1, superseded: 1, supersedePending: 0 }) &&
       JSON.stringify(S.RTM_STATUSES) === JSON.stringify(["verified", "implemented", "planned", "untraced"]),
       "feature F5: statuses — verified (every linked task done + verified; a task with no _Verify:_ counts), implemented (a note on a runnable _Verify:_), untraced with the trace gap (no-task / no-test / no-coverage — a fenced example citing US-1.AC-3 is no task), planned (SC-001 via T-03, its task open) (got " + mx.rows.map((r) => r.id + "=" + st(r.id)).join(" ") + ")");
     const t1 = row("US-1.AC-1").tasks[0] || {};
@@ -12409,6 +12427,37 @@ function endRun() {
     ok(/for pt features/.test(r10p.message || "") && /pt\/requirements\.md gives 1 criterion/.test(r10p.message || "") && r10p.file === ".specs/tracks/a11y/tasks.md" &&
       /## \[KBD\] Keyboard Map\n> \*\*TODO\*\*[^\n]*\nThe keyboard map of Search \(\[KBD\]\)\./.test(rd(path.join(r10c.dir, "design.md"))),
       "F4 review R10: fragment-ref names the language context and the file its count comes from; a section's guidance fills in {{name}} / {{marker}} (got " + js(r10p.message) + ")");
+  }
+
+  // 1.15 — only a SHIPPED feature's _Supersedes:_ retires the older criterion (catalog, export, matrix): a draft's is "to be
+  // superseded", and a feature archived without ever shipping declares nothing and does nothing today.
+  {
+    const sp = path.join(tmp, "proj-115-supersedes");
+    S.initProject(sp, ["core"], "en");
+    const reqOf = (slug, body) => fs.writeFileSync(path.join(sp, ".specs", slug, "requirements.md"), "# Feature: " + slug + "\n\n### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n" + body);
+    ["Base", "Draft", "Shipped", "Abandoned"].forEach((n) => S.createFeature(sp, n, ["core"], "x", undefined, "en"));
+    reqOf("base", "1. **US-1.AC-1** — WHEN a WHEN THE SYSTEM SHALL a\n2. **US-1.AC-2** — WHEN b THE SYSTEM SHALL b\n3. **US-1.AC-3** — WHEN c THE SYSTEM SHALL c\n");
+    reqOf("draft", "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL x _Supersedes: base/US-1.AC-1_\n");
+    reqOf("shipped", "1. **US-1.AC-1** — WHEN y THE SYSTEM SHALL y _Supersedes: base/US-1.AC-2_\n");
+    reqOf("abandoned", "1. **US-1.AC-1** — WHEN z THE SYSTEM SHALL z _Supersedes: base/US-1.AC-3_\n");
+    shipFeature(sp, "shipped");
+    S.manageFeature(sp, "archive", "abandoned"); // never shipped: declares nothing
+    const cat = S.catalog(sp);
+    const base = cat.features.find((f) => f.feature === "base").acs;
+    const by = (id) => base.find((a) => a.id === id) || {};
+    ok(by("US-1.AC-1").supersedePending === true && JSON.stringify(by("US-1.AC-1").supersededBy) === '["draft/US-1.AC-1"]' &&
+      by("US-1.AC-2").supersededBy && !by("US-1.AC-2").supersedePending && !by("US-1.AC-3").supersededBy &&
+      cat.totals.superseded === 1 && cat.totals.pending === 1 && cat.totals.acs === 6 && cat.totals.current === 4 &&
+      cat.markdown.includes("- **US-1.AC-1** — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft/US-1.AC-1` (not shipped yet)") &&
+      cat.markdown.includes("- ~~**US-1.AC-2** — WHEN b THE SYSTEM SHALL b~~ — superseded by `shipped/US-1.AC-1`") && /1 superseded, 1 to be superseded\*\*/.test(cat.markdown),
+      "1.15 catalog: a draft's _Supersedes:_ marks the AC 'to be superseded' (not struck, still current); a shipped feature's retires it; an abandoned archived feature's does nothing and its own AC is not current (got " +
+      JSON.stringify([base.map((a) => a.id + ":" + (a.supersededBy || []).join("|") + (a.supersedePending ? "(pending)" : "")), cat.totals]) + ")");
+    const ex = S.exportSpecs(sp, { name: "base", format: "md" }).content || "";
+    const mx = S.traceMatrix(sp, "base");
+    const mrow = (id) => mx.rows.find((r) => r.id === id) || {};
+    ok(/US-1\.AC-1\*\* — WHEN a WHEN THE SYSTEM SHALL a — to be superseded by `draft\/US-1\.AC-1`/.test(ex) && /~~\*\*US-1\.AC-2\*\*/.test(ex) && !/~~\*\*US-1\.AC-1\*\*/.test(ex) &&
+      mrow("US-1.AC-1").supersedePending === true && !mrow("US-1.AC-2").supersedePending && mx.counts.superseded === 1 && mx.counts.supersedePending === 1,
+      "1.15 export + matrix: the same rule — a draft's supersession is 'to be superseded' (never struck), a shipped one's is (got " + JSON.stringify([mx.counts, (ex.match(/^.*US-1\.AC-[12]\*\*.*$/gm) || [])]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

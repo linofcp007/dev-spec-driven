@@ -1114,6 +1114,14 @@ ok(tr10.code === 0 && /verdict=pass/.test(tr10.out) && /⚠ _Supersedes:_ nope\/
   "trace prints a phantom _Supersedes:_ as a warning — not a gap, the exit code stays 0");
 
 // catalog: prints the markdown; --json = spec_catalog; --write → SPECS.md; a hand-written SPECS.md is never overwritten.
+// 1.15: only a SHIPPED feature's _Supersedes:_ retires an AC — billing-v2 carries an execution sign-off.
+const ship10 = (dir, slug) => {
+  const sp = path.join(dir, ".specs", slug, ".state.json");
+  const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+  st.approvals = { ...(st.approvals || {}), execution: { at: "2026-09-01T00:00:00.000Z", by: "test" } };
+  fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+};
+ship10(w10, "billing-v2");
 const cat10 = r10(["catalog"]);
 let catJ = null;
 try { catJ = JSON.parse(r10(["catalog", "--json"]).out); } catch { /* invalid JSON */ }
@@ -1291,6 +1299,7 @@ reqW10("billing", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store 
 reqW10("wrapped", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days\n   - _Supersedes: billing/US-1.AC-2,\n     billing/US-1.AC-3_\n");
 fs.writeFileSync(path.join(w10w, ".specs", "wrapped", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1_\n");
 const trW10 = run(["trace", "wrapped", "--project", w10w]);
+ship10(w10w, "wrapped"); // 1.15: a shipped declarer retires its targets
 const catWr10 = run(["catalog", "--project", w10w]).out;
 ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never closed/.test(trW10.out) && !/✗ traceability/.test(run(["doctor", "wrapped", "--project", w10w]).out) &&
   catWr10.includes("~~**US-1.AC-3** — WHEN z THE SYSTEM SHALL w~~ — superseded by `wrapped/US-1.AC-1`") && catWr10.includes("_(supersedes `billing/US-1.AC-2`, `billing/US-1.AC-3`)_"),

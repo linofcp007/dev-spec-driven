@@ -3,7 +3,12 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [Unreleased]
+## [1.15.0] — 2026-09-28
+
+Your own tracks: a project defines its domain rigor (+a11y, +mobile, +compliance…) as a local track pack, and it
+behaves like a built-in track everywhere. The catalog says what the system does today (a draft's `_Supersedes:_` no
+longer strikes the criterion it plans to replace), and `--shell` accepts WSL's bash.exe when you name it.
+35 MCP tools (was 34), 52 commands (was 51).
 
 ### Added
 - **Project-defined tracks (track packs)** — beyond the six built-in tracks, a project defines its own domain rigor
@@ -33,12 +38,25 @@ this project versions the plugin as a whole.
   still reads as a placeholder; packs and their placeholder corpus are cached across calls by their files' size / mtime
   (an edit is picked up by the next call).
 
+### Changed (heads-up)
+- **Only a shipped feature's `_Supersedes:_` retires the older criterion** in the catalog (SPECS.md), the stakeholder
+  export and the traceability matrix — shipped = a finish recorded or the execution signed off, the release notes' rule.
+  A draft's declaration now reads "to be superseded by … (not shipped yet)" (JSON `supersedePending: true`, catalog
+  `totals.pending`, matrix `counts.supersedePending`) and the criterion stays current; a feature archived without ever
+  shipping declares nothing, and its own criteria no longer count as current. 1.14 struck the criterion as soon as any
+  feature declared it.
+- **`--shell <path to WSL's bash.exe>` is used as given** (`done --run` / `finish --run`): running the checks inside a
+  Linux distribution is your choice when you name it, with a one-line note; a bare `--shell bash` still never resolves to
+  WSL (Git Bash, else `no-git-bash`), and a run WSL's relay fails is still could-not-run, nothing recorded. 1.14 refused
+  that path (`couldNotRun: "wsl-bash"`, no longer produced).
+
 ### Tests
-- `node mcp/test.js` 1252 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
+- `node mcp/test.js` 1254 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
   (classification, the scaffold in EN / PT / ES / pt-BR, the gates, trace, add / remove, a deleted and an invalidated pack,
   twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook), one
   regression per F4 review finding (R1–R10) and the CLI's `tracks` command; every existing assertion unchanged except the
-  exact tool / command counts.
+  exact tool / command counts; the catalog / export / matrix tests that exercise `_Supersedes:_` mark the declaring
+  feature shipped (plus the draft / shipped / abandoned cases), and the WSL shell tests follow the new rule.
 
 ## [1.14.0] — 2026-09-28
 

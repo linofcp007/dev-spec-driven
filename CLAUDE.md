@@ -619,7 +619,13 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   overwritten; once it exists, every roadmap refresh refreshes it too.
 - **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (same line, a sub-line or its table row) marks
   the older AC as replaced. `stripSupersedes()` runs before own-AC extraction (trace, acIndex), so the foreign
-  ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap).
+  ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap). **Only a
+  SHIPPED declaring feature retires the older AC** (1.15 — `featureShipped()`: a finish recorded, or the execution signed
+  off: the release notes' rule) in the catalog, the export and the matrix: a draft's declaration keeps `supersededBy` but
+  adds `supersedePending: true` — rendered "to be superseded by … (not shipped yet)", never struck, still current;
+  `totals` {superseded (retired), pending}; the matrix `counts.supersedePending`. A feature archived without ever
+  shipping (abandoned) declares nothing, and its own ACs are not counted as current. `supersededByIndex()` (the matrix)
+  and `catalogData()` apply the same rule (`.live` / `supLive`: keys retired by a shipped feature).
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
   only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
@@ -1505,7 +1511,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1252 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1254 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 401 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

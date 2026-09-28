@@ -13098,15 +13098,21 @@ function catalogData(projectDir) {
     return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
   });
   // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
-  // "<feature>/<AC>" that replaces them.
+  // "<feature>/<AC>" that replaces them. 1.15: only a SHIPPED declaring feature (featureShipped) retires the AC; one still in
+  // flight marks it "to be superseded" (supersedePending) — the catalog says what the system does today; one archived
+  // without ever shipping (abandoned) declares nothing.
   const supBy = new Map();
+  const supLive = new Set();
   for (const s of srcs) {
     s.sup = resolveSupersedes(projectDir, s.dir, supersedesMarkers(s.reqRaw), cache).valid;
+    s.shipped = featureShipped(s.state);
+    if (s.archived && !s.shipped) continue;
     for (const v of s.sup) {
       const k = dirKey(v.dir) + "\n" + v.ac;
       const who = s.slug + (v.by ? "/" + v.by : "");
       if (!supBy.has(k)) supBy.set(k, []);
       if (!supBy.get(k).includes(who)) supBy.get(k).push(who);
+      if (s.shipped) supLive.add(k);
     }
   }
   const features = srcs.map((s) => {
@@ -13115,7 +13121,10 @@ function catalogData(projectDir) {
       const o = { id: e.id, text: acOneLine(e.text, e.id) };
       if (placeholderReport(e.text).length) o.template = true;
       const by = supBy.get(dirKey(s.dir) + "\n" + e.id);
-      if (by) o.supersededBy = by;
+      if (by) {
+        o.supersededBy = by;
+        if (!supLive.has(dirKey(s.dir) + "\n" + e.id)) o.supersedePending = true;
+      }
       const mine = s.sup.filter((v) => v.by === e.id).map((v) => v.feature + "/" + v.ac);
       if (mine.length) o.supersedes = mine;
       return o;
@@ -13146,8 +13155,14 @@ function catalogData(projectDir) {
     return f;
   });
   const all = features.flatMap((f) => f.acs);
-  const superseded = all.filter((a) => a.supersededBy).length;
-  const totals = { features: features.length, acs: all.length, current: all.length - superseded, superseded };
+  const retired = (a) => a.supersededBy && !a.supersedePending;
+  const superseded = all.filter(retired).length;
+  const pending = all.filter((a) => a.supersedePending).length;
+  // Current = what the system does today: neither retired by a shipped feature nor a criterion of an abandoned feature
+  // (archived without ever shipping). A shipped feature archived to declutter still does what its criteria say.
+  const abandoned = new Set(srcs.filter((s) => s.archived && !s.shipped).map((s) => s.slug));
+  const gone = features.filter((f) => abandoned.has(f.feature)).flatMap((f) => f.acs).filter((a) => !retired(a)).length;
+  const totals = { features: features.length, acs: all.length, current: all.length - superseded - gone, superseded, pending };
   const data = { lang, features, totals };
   data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
   return data;
@@ -13158,7 +13173,7 @@ function renderCatalogMd(data, lang, proj) {
   const icon = { finished: "✅", complete: "☑", active: "🟡", archived: "🗄" };
   const code = (s) => "`" + s + "`";
   const t = data.totals;
-  let md = `# ${C.title(proj)}\n\n<!-- ${C.autogen} -->\n\n> ${C.intro}\n\n${C.totals(t.features, t.acs, t.current, t.superseded)}\n`;
+  let md = `# ${C.title(proj)}\n\n<!-- ${C.autogen} -->\n\n> ${C.intro}\n\n${C.totals(t.features, t.acs, t.current, t.superseded, t.pending)}\n`;
   if (!data.features.length) md += `\n_${C.noFeatures}_\n`;
   for (const f of data.features) {
     const SP = i18n.msg(lang).spike; // 1.14 C2: a spike reads apart (its question + decision instead of ACs)
@@ -13175,7 +13190,8 @@ function renderCatalogMd(data, lang, proj) {
     if (!f.acs.length && !f.spike) md += `_${C.noAcs}_\n`;
     for (const a of f.acs) {
       const body = `**${a.id}** — ${a.text}`;
-      let line = a.supersededBy ? `- ~~${body}~~ — ${C.supersededBy(a.supersededBy.map(code).join(", "))}` : `- ${body}`;
+      let line = a.supersedePending ? `- ${body} — ${C.toBeSupersededBy(a.supersededBy.map(code).join(", "))}` // a draft's plan
+        : a.supersededBy ? `- ~~${body}~~ — ${C.supersededBy(a.supersededBy.map(code).join(", "))}` : `- ${body}`;
       if (a.supersedes) line += ` _(${C.supersedes(a.supersedes.map(code).join(", "))})_`;
       if (a.template) line += ` _(${C.template})_`;
       md += line + "\n";
@@ -14079,7 +14095,8 @@ const italic = (s) => `_${s}_`;
 function exportAcLine(a, mark, X) {
   const code = (s) => "`" + s + "`";
   const body = `**${a.id}** — ${acOneLine(a.text, a.id, Infinity)}`;
-  let line = mark && mark.supersededBy ? `- ~~${body}~~ — ${X.supersededBy(mark.supersededBy.map(code).join(", "))}` : `- ${body}`;
+  let line = mark && mark.supersedePending ? `- ${body} — ${X.toBeSupersededBy(mark.supersededBy.map(code).join(", "))}` // not shipped yet
+    : mark && mark.supersededBy ? `- ~~${body}~~ — ${X.supersededBy(mark.supersededBy.map(code).join(", "))}` : `- ${body}`;
   if (mark && mark.supersedes) line += ` _(${X.supersedes(mark.supersedes.map(code).join(", "))})_`;
   if (placeholderReport(a.text).length) line += ` _(${X.template})_`;
   return line;
@@ -14444,21 +14461,33 @@ const RTM_TEXT_MAX = 1000; // characters of a criterion's one line (the matrix i
 // "US-2.AC-10" → [2, 10] (the order an AC no criterion defines falls back to).
 const acNums = (id) => (String(id).match(/\d+/g) || []).map(Number);
 // Other features' _Supersedes:_ markers → Map(dirKey(target dir) + "\n" + AC → ["<feature>/<AC>" | "<feature>"]) — the
-// catalog's index, built once per call (the project export passes it to every feature).
+// catalog's rule, built once per call (the project export passes it to every feature). `.live` (a Set of the same keys):
+// retired by at least one SHIPPED feature (featureShipped); a key outside it is only "to be superseded" (1.15). A feature
+// archived without ever shipping (abandoned) declares nothing.
 function supersededByIndex(projectDir) {
   const out = new Map();
+  out.live = new Set();
   const cache = new Map();
   for (const s of featureDirs(projectDir)) {
     const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
     if (!raw || !/_Supersedes:/i.test(raw)) continue;
+    const shipped = featureShipped(stateFromFile(projectDir, statePath(s.dir)));
+    if (s.archived && !shipped) continue;
     for (const v of resolveSupersedes(projectDir, s.dir, supersedesMarkers(raw), cache).valid) {
       const k = dirKey(v.dir) + "\n" + v.ac;
       const who = s.slug + (v.by ? "/" + v.by : "");
       if (!out.has(k)) out.set(k, []);
       if (!out.get(k).includes(who)) out.get(k).push(who);
+      if (shipped) out.live.add(k);
     }
   }
   return out;
+}
+// A feature that SHIPPED — a finish recorded, or its execution signed off (spec_changelog's rule). Only a shipped feature's
+// _Supersedes:_ retires the older criterion in the catalog, the export and the matrix (1.15): a draft's declaration is
+// "to be superseded" — the catalog says what the system does today.
+function featureShipped(st) {
+  return isObj(st) && (isObj(st.finished) || (isRecord(st.approvals) && isRecord(st.approvals.execution)));
 }
 // The latest evidence record of a task, as the matrix shows it (null = nothing recorded for it).
 function rtmEvidence(rec) {
@@ -14627,13 +14656,15 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       supersededBy: row.kind === "ac" ? (supBy.get(dirKey(dir) + "\n" + row.id) || []).slice() : [],
       approval: approval ? { at: approval.at, by: approval.by, forced: approval.forced, changed: rowChanged(row) } : null,
     };
+    // Declared only by features not shipped yet: "to be superseded", never retired (1.15 — supersededByIndex().live).
+    if (r.supersededBy.length && supBy.live && !supBy.live.has(dirKey(dir) + "\n" + row.id)) r.supersedePending = true;
     return r;
   });
-  const counts = { rows: out.length, verified: 0, implemented: 0, planned: 0, untraced: 0, template: 0, superseded: 0 };
+  const counts = { rows: out.length, verified: 0, implemented: 0, planned: 0, untraced: 0, template: 0, superseded: 0, supersedePending: 0 };
   for (const r of out) {
     counts[r.status]++;
     if (r.template) counts.template++;
-    if (r.supersededBy.length) counts.superseded++;
+    if (r.supersededBy.length) counts[r.supersedePending ? "supersedePending" : "superseded"]++;
   }
   const res = { ok: true, feature: slug, lang, kind, tracks: trackLabel(tracks), approval, counts, rows: out };
   if (code) res.code = { scanned: code.scanned, truncated: code.truncated };
@@ -14730,14 +14761,14 @@ function rtmMarkdown(mx, lang) {
   lines.push("", `| ${cols.join(" | ")} |`, `|${cols.map(() => "---").join("|")}|`);
   for (const r of mx.rows) {
     const notes = [];
-    if (r.supersededBy.length) notes.push(R.supersededBy(r.supersededBy.map(code).join(", ")));
+    if (r.supersededBy.length) notes.push((r.supersedePending ? R.toBeSupersededBy : R.supersededBy)(r.supersededBy.map(code).join(", ")));
     if (r.supersedes.length) notes.push(i18n.msg(lang).stakeholderExport.supersedes(r.supersedes.map(code).join(", ")));
     if (r.template) notes.push(R.template);
     if (r.approval && r.approval.changed === true) notes.push(R.changedSince);
     const gaps = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
     const taskIcon = (t) => (!t.done ? "☐" : t.verified ? "✅" : "⚠");
     const cells = [
-      r.supersededBy.length ? `~~${r.id}~~` : r.id,
+      r.supersededBy.length && !r.supersedePending ? `~~${r.id}~~` : r.id,
       rtmCell(r.text) + (notes.length ? " " + italic("(" + rtmCell(notes.join("; ")) + ")") : ""),
       `${RTM_ICON[r.status]} ${R.status[r.status]}` + (gaps.length ? " — " + rtmCell(gaps.join("; ")) : ""),
       r.design.length ? rtmCell(r.design.join("; ")) : "—",
