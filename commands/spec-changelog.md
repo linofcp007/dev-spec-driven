@@ -1,13 +1,13 @@
 ---
 description: Release notes generated from the specs — Added (shipped features and their ACs), Changed (superseded ACs, change requests), Fixed (bugfixes with their root cause). PT - notas de versão a partir das specs. ES - notas de la versión a partir de las specs.
-argument-hint: "[--since <ISO date|last|all>] [--write]"
+argument-hint: "[--since <ISO date|last|all>] [--milestone <name>] [--write]"
 ---
 
 Use the **dev-spec-driven** skill, release notes.
 
 Args: $ARGUMENTS
 
-Call the `spec_changelog` MCP tool `{since?, write?}` (CLI `dev-spec changelog [--since <ISO date|last|all>] [--write]`).
+Call the `spec_changelog` MCP tool `{since?, milestone?, write?}` (CLI `dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]`).
 It builds human release notes from the spec data alone — no model, no git log:
 
 - **Added** — features that shipped since `since` (`spec_finish {write: true}` recorded their baseline, or their
@@ -27,5 +27,9 @@ project language; IDs stay English.
 - With `write: true` (`--write`) it writes **`.specs/RELEASE-NOTES.md`** (AUTO-GENERATED) and stamps
   `meta.changelogAt`, so the next run starts from there. With nothing to report nothing is written or stamped (`note`).
   A hand-written `RELEASE-NOTES.md` (no marker) is never overwritten — the result is an error; tell the user.
+
+**For one milestone** (`milestone`, `--milestone <name>` — see `/spec-milestone`): only that milestone's features (and
+the ones archived since it was set); `since` then defaults to `all`, and `write` goes to
+`.specs/RELEASE-NOTES.<milestone>.md` without touching `meta.changelogAt`. An unknown name is an error listing them.
 
 Use it when cutting a release, then merge locally as usual. Respond in the user's language (EN/PT/ES).

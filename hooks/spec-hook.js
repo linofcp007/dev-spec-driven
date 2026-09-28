@@ -155,6 +155,16 @@ function handle(raw) {
     if (fwd.includes("/.execution/")) process.exit(0);
     // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
     if (fwd.includes("/.specs/.removing-")) process.exit(0);
+    // A network file path (\\host\share\…, //host/share/…, \\?\UNC\…) names a host the agent chose: nothing below stats it unless
+    // it lies — as text — inside the session's own folder on that share (CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR / the payload's
+    // cwd, Claude Code's own), or that folder inside the file's project — a project living on a share keeps its checks
+    // (1.16 verify NEW-3; spec.networkPathInside reads no file).
+    if (spec.isNetworkPath(filePath)) {
+      const own = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, payload.cwd]
+        .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())).map((v) => v.trim());
+      const proj = findProjectDir(filePath);
+      if (!own.some((d) => spec.networkPathInside(d, filePath) != null || spec.networkPathInside(proj, d) != null)) process.exit(0);
+    }
     // Project templates (.specs/templates/[<lang>/]requirements.md …) are no feature's spec: never linted as one (a
     // .specs/templates/pt/design.md is not feature 'pt''s design) and no roadmap churn — `dev-spec templates check` checks them.
     // (A FEATURE named templates created before 1.14 — its folder holds a .state.json — is still a feature.)

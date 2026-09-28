@@ -2108,6 +2108,9 @@ const STEERING = {
       "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
     "privacy.md":
       "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
+    // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
+    "glossary.md":
+      "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
   },
   pt: {
     "constitution.md":
@@ -2132,6 +2135,8 @@ const STEERING = {
       "# Padrões de Segurança\n\n## Nível de Garantia\n- Nível OWASP ASVS alvo: [L1 | L2 | L3] — porquê: []\n\n## Modelação de Ameaças\n- Método: STRIDE por componente e fronteira de confiança, revisto a cada alteração de design.\n- Onde ficam os modelos de ameaças: no design.md de cada feature +sec → Modelo de Ameaças.\n\n## Autenticação e Autorização\n- Fornecedor de identidade / modelo de sessão: []\n- Modelo de autorização (RBAC / ABAC / verificação de titularidade), negar por omissão: []\n\n## Segredos e Criptografia\n- Cofre de segredos: [] — nunca no código, em configuração versionada, em logs ou em tickets.\n- Cifragem em repouso / em trânsito (versão de TLS, rotação de chaves): []\n\n## Regras de Código Seguro\n- Validar a entrada nas fronteiras de confiança; codificar a saída; só queries parametrizadas.\n- Nenhum segredo, token ou stack trace em respostas ou logs.\n\n## Testes de Segurança (locais)\n- SAST: [] · auditoria de dependências: [] · análise de segredos: [] · DAST (serviços expostos): []\n- Cada ameaça relevante tem um teste de caso de abuso.\n\n## Gestão de Vulnerabilidades\n- Prazos de correção por severidade (crítica / alta / média): [] · quem faz a triagem: []\n",
     "privacy.md":
       "# Padrões de Privacidade (RGPD)\n\n## Papéis\n- Responsável pelo tratamento: [] · EPD / contacto de privacidade: [] · autoridade de controlo: [ex.: CNPD]\n\n## Princípios (RGPD, art. 5.º)\n- Licitude, lealdade e transparência · limitação das finalidades · minimização dos dados · exatidão · limitação da conservação · integridade e confidencialidade · responsabilidade.\n\n## Registo das Atividades de Tratamento (art. 30.º)\n- Onde está o registo das atividades de tratamento: []\n\n## Fundamentos de Licitude em Uso (art. 6.º)\n- [atividade de tratamento → fundamento de licitude]\n\n## Prazos de Conservação\n| Categoria de dados | Prazo de conservação | Método de eliminação |\n|---|---|---|\n| | | |\n\n## Pedidos dos Titulares\n- Canal · verificação de identidade · prazo de um mês (art. 12.º, n.º 3) · responsável: []\n\n## Subcontratantes e Transferências\n- Subcontratantes aprovados (contratos do art. 28.º): [] · transferências para fora do EEE e a sua garantia: []\n\n## Proteção de Dados desde a Conceção (art. 25.º)\n- Por omissão: recolher o mínimo, pseudonimizar sempre que possível, sem dados pessoais nos logs.\n\n## Resposta a Violações de Dados\n- Notificar a autoridade de controlo no prazo de 72 horas (art. 33.º) · runbook: []\n",
+    "glossary.md":
+      "# Glossário\n\n<!-- A linguagem ubíqua do produto: uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
   },
   es: {
     "constitution.md":
@@ -2156,6 +2161,8 @@ const STEERING = {
       "# Estándares de Seguridad\n\n## Nivel de Garantía\n- Nivel OWASP ASVS objetivo: [L1 | L2 | L3] — por qué: []\n\n## Modelado de Amenazas\n- Método: STRIDE por componente y frontera de confianza, revisado en cada cambio de diseño.\n- Dónde viven los modelos de amenazas: en el design.md de cada función +sec → Modelo de Amenazas.\n\n## Autenticación y Autorización\n- Proveedor de identidad / modelo de sesión: []\n- Modelo de autorización (RBAC / ABAC / comprobación de propiedad), denegar por defecto: []\n\n## Secretos y Criptografía\n- Almacén de secretos: [] — nunca en el código, en configuración versionada, en logs ni en tickets.\n- Cifrado en reposo / en tránsito (versión de TLS, rotación de claves): []\n\n## Reglas de Código Seguro\n- Validar la entrada en las fronteras de confianza; codificar la salida; solo queries parametrizadas.\n- Ningún secreto, token ni stack trace en respuestas o logs.\n\n## Pruebas de Seguridad (locales)\n- SAST: [] · auditoría de dependencias: [] · análisis de secretos: [] · DAST (servicios expuestos): []\n- Cada amenaza relevante tiene una prueba de caso de abuso.\n\n## Gestión de Vulnerabilidades\n- Plazos de corrección por severidad (crítica / alta / media): [] · quién hace el triaje: []\n",
     "privacy.md":
       "# Estándares de Privacidad (RGPD)\n\n## Roles\n- Responsable del tratamiento: [] · DPD / contacto de privacidad: [] · autoridad de control: [p.ej., AEPD]\n\n## Principios (RGPD, art. 5)\n- Licitud, lealtad y transparencia · limitación de la finalidad · minimización de datos · exactitud · limitación del plazo de conservación · integridad y confidencialidad · responsabilidad proactiva.\n\n## Registro de Actividades de Tratamiento (art. 30)\n- Dónde está el registro de actividades de tratamiento: []\n\n## Bases Jurídicas en Uso (art. 6)\n- [actividad de tratamiento → base jurídica]\n\n## Plazos de Conservación\n| Categoría de datos | Plazo de conservación | Método de supresión |\n|---|---|---|\n| | | |\n\n## Solicitudes de los Interesados\n- Canal · verificación de identidad · plazo de un mes (art. 12.3) · responsable: []\n\n## Encargados y Transferencias\n- Encargados aprobados (contratos del art. 28): [] · transferencias fuera del EEE y su garantía: []\n\n## Protección de Datos desde el Diseño (art. 25)\n- Por defecto: recoger lo mínimo, seudonimizar siempre que sea posible, sin datos personales en los logs.\n\n## Respuesta a Brechas de Datos\n- Notificar a la autoridad de control en un plazo de 72 horas (art. 33) · runbook: []\n",
+    "glossary.md":
+      "# Glosario\n\n<!-- El lenguaje ubicuo del producto: una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
   },
 };
 
@@ -2488,6 +2495,7 @@ const MSG = {
       changes: "'changes' must be an array",
       finishChecks: "'finishChecks' must be an object",
       signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
+      unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
@@ -3066,6 +3074,7 @@ const MSG = {
           if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
           return `lower the approval guard from ${a.from} to ${a.to}`;
         }
+        if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");
         return (a.through ? `approve every phase of '${f}' through ${a.through}` : `approve the ${a.phase || "?"} phase of '${f}'`) +
           (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "") +
           (a.force ? " — FORCED (--force)" : "");
@@ -3193,6 +3202,60 @@ const MSG = {
         unknownArtifact: (a, list) => `Unknown artifact '${a}' — one of: ${list}.`,
         badSteering: (file) => `Invalid steering file name '${file}' — a .md file directly under .specs/steering/.`,
         notFound: (uri, detail) => `Resource not found: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
+
+    // 1.16 C — Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
+    // spec_import {text} and the MCP completion/complete errors. Phase names and step codes stay English-stable.
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tasks`,
+        unverified: (n) => `${n} unverified`,
+        next: (step) => `next: ${step}`,
+        none: "◆ dev-spec · no features yet — /spec",
+        steps: {
+          "re-review": (s) => `re-review ${s.files.join(", ")}`,
+          fill: (s) => `fill ${s.file}`,
+          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : `fix the ${s.phase} gate`),
+          approve: (s) => `approve ${s.phase}`,
+          tests: () => "write the tests, then approve them (Phase 4)",
+          tasks: () => "break it into tasks",
+          implement: (s) => `task ${s.task}`,
+          blocked: () => "unblock the tasks (_Depends:_)",
+          verify: (s) => (s.suite ? `run the project checks (${s.suite.join(", ")})` : `verify task ${s.task}`),
+          decide: (s) => (s.outcome ? "add the _Outcome:_ line to the decision" : "write the decision"),
+          promote: () => "go — spec the feature, archive the spike",
+          archive: () => "no-go — archive the spike",
+          pivot: () => "pivot — start a new spike",
+          finish: (s) => (s.again ? "/spec-finish again" : "/spec-finish"),
+          "sign-off": (s) => (s.again ? "approve execution again (sign-off)" : "approve execution (sign-off)"),
+          finished: () => "finished",
+        },
+        config: {
+          head: "Status line — add this to ~/.claude/settings.json (every project) or to a project's .claude/settings.local.json (this machine only — the path is this machine's, so never the committed .claude/settings.json):",
+          after: "It prints one line — the most active feature, its tasks, unverified ticks and the next step — and nothing outside a dev-spec project.",
+          cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-statusline again — the old copy is removed 14 days after an update.",
+          tryIt: (cmd) => `Try it: echo '{"cwd": "<your project>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: \"plan\", text: <the approved plan's markdown>} (CLI: dev-spec import plan - < plan.md). The plan file in ~/.claude/plans is outside the project, so pass its text. Skip it for a quick change; import only with the user's OK.",
+        byPath: (rel) => `dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Skip it for a quick change; import only with the user's OK.`,
+      },
+      importText: {
+        label: "(inline text)",
+        note: (tool, date) => `> Imported from ${tool} (inline text) on ${date}.`,
+        orText: "Or pass its markdown as `text` instead of `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < file.md).",
+        textOnly: (tool, list) => `\`text\` imports a single document — tool ${list}; '${tool}' reads a folder: pass its \`path\`.`,
+        pathAndText: "Pass either `path` or `text`, not both.",
+        empty: (tool) => `The ${tool} text is empty — nothing to import.`,
+      },
+      completion: {
+        badRequest: 'completion/complete needs `ref` ({type: "ref/prompt", name} or {type: "ref/resource", uri}) and `argument` {name, value} (strings).',
+        promptsOff: "This server serves no prompts (SPEC_MCP_PROMPTS=off) — nothing to complete.",
+        unknownTemplate: (uri, list) => `Unknown resource template '${uri}' — one of: ${list}.`,
+        unknownArgument: (name, list) => `Unknown argument '${name}' — one of: ${list}.`,
       },
     },
 
@@ -3502,6 +3565,64 @@ const MSG = {
       badSince: (v) => `since: '${v}' is not an ISO date (YYYY-MM-DD, or a full ISO timestamp), 'last' or 'all'.`,
       noLast: "No release notes were written yet (roadmap.json meta.changelogAt is unset) — every change is listed.",
     },
+    // 1.16 E1 — Gherkin export (spec_export {format: "gherkin"}): the comment lines of the .feature file — the Gherkin keywords
+    // are Gherkin's own dialect (spec.js GHERKIN_DIALECT), the steps the spec's EARS clauses.
+    gherkin: {
+      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"gherkin\"} (dev-spec export <feature> --gherkin).",
+      source: (rel) => `Source: ${rel} — one scenario per current acceptance criterion; EARS → Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL clause).`,
+      summaryLabel: "Summary",
+      template: (id) => `${id} — template, not written yet: left out`,
+      superseded: (id, by) => `${id} — superseded by ${by} (shipped): left out`,
+      unsplit: "EARS clauses not split cleanly — the whole criterion is one Then step",
+      noScenarios: "No current acceptance criterion yet.",
+      spike: (slug) => `'${slug}' is a spike — it has no acceptance criteria to export as Gherkin (spec_export {name: "${slug}"} without format gherkin exports its document).`,
+      wroteMany: (n, scenarios) => `✎ wrote ${n} .feature file(s) — ${scenarios} scenario(s)`,
+      noFeatures: "No active feature with acceptance criteria to export.",
+    },
+    // 1.16 E2 — tracker CSV (spec_export {format: "jira" | "linear"}): the text dev-spec adds to the work items; the column
+    // names are the importers' own (English — never translated).
+    trackerCsv: {
+      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand; leave this column unmapped. Regenerate: spec_export {format: \"jira\" | \"linear\"} (dev-spec export --tracker jira|linear).",
+      featureLine: (rel, tracks, phase, done, total) => `dev-spec feature ${rel} · tracks ${tracks} · phase: ${phase} · ${done}/${total} tasks done`,
+      acceptance: "Acceptance criteria:",
+      taskLine: (rel, n) => `dev-spec task #${n} — ${rel}`,
+      wrote: (file, n) => `✎ wrote ${file} — ${n} work item(s)`,
+    },
+    // 1.16 E3 — milestones (spec_milestone; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
+    // late · done), these are their labels.
+    milestone: {
+      title: "Milestones",
+      cols: ["Milestone", "Date", "Features", "Done", "ETA", "Status"],
+      status: { "on-track": "on track", "at-risk": "at risk", late: "late", done: "done" },
+      archivedLabel: "archived",
+      line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} feature(s) done · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (archived: ${archived})` : ""}`,
+      head: (n, today) => `${n} milestone(s) — today ${today}:`,
+      none: "No milestones yet — add one: dev-spec milestone add <name> <YYYY-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
+      added: (name, date, list) => `Milestone '${name}' added — ${date}: ${list}`,
+      updated: (name, date, list) => `Milestone '${name}' updated — ${date}: ${list}`,
+      removed: (name) => `Milestone '${name}' removed.`,
+      attention: {
+        late: (date, done, total, eta) => `milestone late — its date ${date} has passed with ${done}/${total} feature(s) done${eta ? ` (ETA ${eta})` : ""}`,
+        "eta-after-date": (date, eta) => `milestone at risk — the latest ETA of its features (${eta}) is after its date ${date}`,
+        "eta-unknown": (date, eta, list) => `milestone at risk — no ETA yet for ${list} (due ${date}): not enough velocity data, or no tasks yet`,
+        "no-features": (date) => `milestone at risk — it has no active feature left (due ${date})`,
+        invalid: (n, names, rel) => `${n} invalid entr${n === 1 ? "y" : "ies"} (${names}) in ${rel} — ignored: no status, and a feature's rename / archive / remove / restore doesn't follow in ${n === 1 ? "it" : "them"}; fix ${n === 1 ? "it" : "them"} by hand (a valid name, a real YYYY-MM-DD day, lists of feature slugs, one entry per name).`,
+        notList: (rel) => `${rel} → meta.milestones is not a list — no milestone is read, and a feature's rename / archive / remove / restore doesn't follow in it; fix it by hand.`,
+      },
+      nameRequired: "Name the milestone (name).",
+      badName: (v) => `invalid milestone name '${v}' — letters, digits, spaces and . _ : # ( ) + - (up to 60 characters, starting with a letter or a digit).`,
+      badDate: (v) => `date: '${v}' is not a day in YYYY-MM-DD form (e.g. 2026-10-31).`,
+      noFeatures: "Name at least one feature of the milestone (features).",
+      unknownFeatures: (list) => `Every milestone feature must be an existing active feature — not found: ${list}`,
+      tooMany: (max) => `at most ${max} milestones — remove one first (dev-spec milestone rm <name>).`,
+      tooManyFeatures: (max) => `at most ${max} features per milestone.`,
+      notFound: (name, list) => `No milestone '${name}' (milestones: ${list}).`,
+      badStored: (rel) => `${rel} → meta.milestones is not a list of {name, date, features} as milestone add writes them (a valid name, a real YYYY-MM-DD day, one entry per name) — fix it by hand; refusing to change it.`,
+      notesTitle: (title, name) => `${title} — ${name}`,
+      notesScope: (name, date, list) => `Milestone ${name} (${date}): ${list}`,
+      notesAutogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_changelog {milestone, write: true} (dev-spec changelog --milestone <name> --write).",
+      nothingToWrite: (file) => `Nothing to report for this milestone — ${file} was not written.`,
+    },
 
     // Team governance (approvals by role — roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through}).
     governance: {
@@ -3539,6 +3660,55 @@ const MSG = {
         ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /spec-ff ${slug} --role <role> (CLI: dev-spec approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
+    },
+
+    // 1.16 U — undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
+    // `approve --revoke`) and the waiver a forced approval carries (reason / expires).
+    undo: {
+      unticked: (n, slug, runnable, stale) => `Task ${n} is open again (unticked).` +
+        (stale ? ` Its recorded evidence no longer counts — ticking it again needs ${runnable ? `a new run of its _Verify:_ command: dev-spec done ${slug} ${n} --run` : "new evidence"}.` : ""),
+      alreadyOpen: (n) => `Task ${n} is not ticked — nothing to undo.`,
+      // 1.16 U review 1: an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
+      redKept: (n, slug, day) => `Its red run of ${day} (the _Expect: fail_ proof) is kept: ticking it again needs a new run of its _Verify:_ command — once the fix is in, a passing run counts as the fix going green: dev-spec done ${slug} ${n} --run.`,
+      // 1.16 U review 2: several ticked tasks share the number — refused
+      duplicateTicked: (n, list) => `Several ticked tasks share number ${n} (${list}) — undo can't tell which tick was the mistake. Renumber them first so each number is unique (doctor: duplicate-tasks), then undo the one ticked by mistake. Nothing was changed.`,
+      duplicateItem: (line, text) => `line ${line}: "${text}"`,
+      reopened: (slug) => `'${slug}' was finished or signed off — once the task is done again, finish it again (/spec-finish ${slug}) and sign it off again (/approve ${slug} execution).`,
+      noEvidence: "undo takes no evidence — it only unticks the task (record the new run when you tick it again).",
+      reasonNeedsUndo: "reason goes with undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — a tick records evidence instead.",
+      badReason: (max) => `reason must be text (one line, at most ${max} characters).`,
+      staleNote: (n, slug, runnable) => `Task ${n}: it was unticked after this evidence was recorded — it stays unverified until ` +
+        (runnable ? `a new run is recorded: dev-spec done ${slug} ${n} --run` : "new evidence is recorded."),
+      label: "unticked since this evidence was recorded",
+      cliDone: (n, done, total) => `Task ${n} unticked. ${done}/${total}`,
+      cliAlready: (n, done, total) => `Task ${n} was not ticked. ${done}/${total}`,
+      driftWhy: (list) => `unticked since: ${list}`,
+      signOffWhy: (list) => `the untick of ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Revoked the approval of '${phase}' for ${slug} — the phase is pending again (doctor, next_action and spec_finish ask for it).`,
+      withdrawn: (phase, slug, roles) => `Withdrew the role sign-off(s) waiting for '${phase}' of ${slug}: ${roles} — nothing was approved yet.`,
+      signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
+      laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
+      notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
+      phaseRequired: "Name the phase whose approval to revoke.",
+      noThrough: "revoke takes one phase — not through (the fast-forward).",
+      noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
+      // 1.16 U review 3: a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
+      driftWhy: (list) => `approval revoked: ${list} (approve it again before finishing again)`,
+      signOffWhy: (list) => `the revocation of ${list}`,
+    },
+    waiver: {
+      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later, at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
+      needsForce: "reason / expires describe a waiver — they go with force (reason also with revoke).",
+      notForced: "The gate passed — nothing was waived: the reason / expiry were not recorded.",
+      recorded: (reason, expires) => `Waiver recorded${reason ? `: ${reason}` : ""}${expires ? ` (expires ${expires})` : ""}.`,
+      doctor: (list, slug) => `forced approvals whose waiver expired: ${list} — fix the failing checks and re-approve without force (/approve ${slug} <phase>), or renew the waiver (/approve ${slug} <phase> --force --reason "…" --expires 30d)`,
+      expiredItem: (phase, expires, reason) => `${phase} (expired ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `waiver: ${reason}` : "waiver", expires ? (expired ? `EXPIRED ${expires}` : `until ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Waived gates (forced approvals)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forced over: ${failing || "—"} · ${reason ? `reason: ${reason}` : "no reason recorded"}${expires ? ` · ${expired ? "EXPIRED" : "expires"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `waivers expired on forced approvals: ${list} — re-approve those phases without force, or renew the waiver (dev-spec approve ${slug} <phase> --force --reason "…" --expires 30d)`,
     },
 
     // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (spec.js: forecastData, featureOverlaps).
@@ -4163,6 +4333,7 @@ _Outcome: [go | no-go | pivot]_
       changes: "'changes' tem de ser um array",
       finishChecks: "'finishChecks' tem de ser um objeto",
       signoffs: "'signoffs' tem de ser um objeto",
+      unticks: "'unticks' tem de ser um array",
     },
     depend: {
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
@@ -4686,6 +4857,7 @@ _Outcome: [go | no-go | pivot]_
           if (a.setting === "roadmap") return "alterar .specs/roadmap.json a partir da shell — escrevê-lo, movê-lo ou apagá-lo (é lá que estão o guarda de aprovações e os gates do projeto)";
           return `baixar o guarda de aprovações de ${a.from} para ${a.to}`;
         }
+        if (a.revoke) return `revogar a aprovação da fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "");
         return (a.through ? `aprovar todas as fases de '${f}' até ${a.through}` : `aprovar a fase ${a.phase || "?"} de '${f}'`) +
           (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "") +
           (a.force ? " — FORÇADA (--force)" : "");
@@ -4806,6 +4978,59 @@ _Outcome: [go | no-go | pivot]_
         unknownArtifact: (a, list) => `Artefacto desconhecido '${a}' — um de: ${list}.`,
         badSteering: (file) => `Nome de ficheiro de steering inválido '${file}' — um ficheiro .md diretamente em .specs/steering/.`,
         notFound: (uri, detail) => `Recurso não encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
+
+    // 1.16 C — integração com o Claude Code (status line, ponte do plan mode, spec_import {text}, completion/complete).
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tarefas`,
+        unverified: (n) => `${n} por verificar`,
+        next: (step) => `a seguir: ${step}`,
+        none: "◆ dev-spec · ainda sem features — /spec",
+        steps: {
+          "re-review": (s) => `rever ${s.files.join(", ")}`,
+          fill: (s) => `preencher ${s.file}`,
+          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : `corrigir o gate ${s.phase}`),
+          approve: (s) => `aprovar ${s.phase}`,
+          tests: () => "escrever os testes e depois aprová-los (Fase 4)",
+          tasks: () => "dividir em tarefas",
+          implement: (s) => `tarefa ${s.task}`,
+          blocked: () => "desbloquear as tarefas (_Depends:_)",
+          verify: (s) => (s.suite ? `executar as verificações do projeto (${s.suite.join(", ")})` : `verificar a tarefa ${s.task}`),
+          decide: (s) => (s.outcome ? "acrescentar a linha _Outcome:_ à decisão" : "escrever a decisão"),
+          promote: () => "go — criar a spec da feature, arquivar o spike",
+          archive: () => "no-go — arquivar o spike",
+          pivot: () => "pivot — começar um novo spike",
+          finish: (s) => (s.again ? "/spec-finish de novo" : "/spec-finish"),
+          "sign-off": (s) => (s.again ? "aprovar execution de novo (sign-off)" : "aprovar execution (sign-off)"),
+          finished: () => "concluída",
+        },
+        config: {
+          head: "Status line — acrescenta isto ao ~/.claude/settings.json (todos os projetos) ou ao .claude/settings.local.json de um projeto (só nesta máquina — o caminho é desta máquina, por isso nunca no .claude/settings.json versionado):",
+          after: "Resultado: uma linha — a feature mais ativa, as suas tarefas, as tarefas por verificar e o próximo passo — e nada fora de um projeto dev-spec.",
+          cacheNote: "Este caminho é uma cópia com versão na cache de plugins do Claude Code (…/plugins/cache/…): depois de atualizar o plugin, volta a correr /spec-statusline — a cópia antiga é apagada 14 dias após uma atualização.",
+          tryIt: (cmd) => `Experimenta: echo '{"cwd": "<pasta do projeto>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: \"plan\", text: <o markdown do plano aprovado>} (CLI: dev-spec import plan - < plan.md). O plano gravado em ~/.claude/plans está fora do projeto: importar o texto. Numa alteração rápida não é preciso; importar só com o OK do utilizador.",
+        byPath: (rel) => `dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Numa alteração rápida não é preciso; importar só com o OK do utilizador.`,
+      },
+      importText: {
+        label: "(texto)",
+        note: (tool, date) => `> Importado de ${tool} (texto) em ${date}.`,
+        orText: "Ou passa o markdown como `text` em vez de `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < plano.md).",
+        textOnly: (tool, list) => `\`text\` importa um único documento — ferramenta ${list}; '${tool}' lê uma pasta: indica o \`path\`.`,
+        pathAndText: "Indica `path` ou `text`, não os dois.",
+        empty: (tool) => `O texto ${tool} está vazio — nada para importar.`,
+      },
+      completion: {
+        badRequest: 'completion/complete precisa de `ref` ({type: "ref/prompt", name} ou {type: "ref/resource", uri}) e de `argument` {name, value} (texto).',
+        promptsOff: "Este servidor não serve prompts (SPEC_MCP_PROMPTS=off) — nada para completar.",
+        unknownTemplate: (uri, list) => `Template de recurso desconhecido '${uri}' — um de: ${list}.`,
+        unknownArgument: (name, list) => `Argumento desconhecido '${name}' — um de: ${list}.`,
       },
     },
 
@@ -5107,6 +5332,58 @@ _Outcome: [go | no-go | pivot]_
       badSince: (v) => `since: '${v}' não é uma data ISO (AAAA-MM-DD, ou um timestamp ISO completo), 'last' nem 'all'.`,
       noLast: "Ainda não foram escritas notas de versão (roadmap.json meta.changelogAt não está definido) — são listadas todas as alterações.",
     },
+    gherkin: {
+      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_export {format: \"gherkin\"} (dev-spec export <feature> --gherkin).",
+      source: (rel) => `Origem: ${rel} — um cenário por critério de aceitação em vigor; EARS → Dado (ENQUANTO / ONDE / SE) · Quando (QUANDO) · Então (a cláusula DEVE).`,
+      summaryLabel: "Resumo",
+      template: (id) => `${id} — template, ainda por escrever: deixado de fora`,
+      superseded: (id, by) => `${id} — substituído por ${by} (entregue): deixado de fora`,
+      unsplit: "cláusulas EARS sem separação limpa — o critério inteiro é um único passo Então",
+      noScenarios: "Ainda sem critérios de aceitação em vigor.",
+      spike: (slug) => `'${slug}' é um spike — não tem critérios de aceitação a exportar em Gherkin (spec_export {name: "${slug}"} sem o formato gherkin exporta o seu documento).`,
+      wroteMany: (n, scenarios) => `✎ gerados ${n} ficheiro(s) .feature — ${scenarios} cenário(s)`,
+      noFeatures: "Nenhuma feature ativa com critérios de aceitação a exportar.",
+    },
+    trackerCsv: {
+      autogen: "AUTO-GERADO por dev-spec — não editar à mão; deixa esta coluna sem mapeamento. Para regenerar: spec_export {format: \"jira\" | \"linear\"} (dev-spec export --tracker jira|linear).",
+      featureLine: (rel, tracks, phase, done, total) => `feature dev-spec ${rel} · tracks ${tracks} · fase: ${phase} · ${done}/${total} tasks feitas`,
+      acceptance: "Critérios de aceitação:",
+      taskLine: (rel, n) => `task dev-spec #${n} — ${rel}`,
+      wrote: (file, n) => `✎ gerado ${file} — ${n} item(s) de trabalho`,
+    },
+    milestone: {
+      title: "Marcos",
+      cols: ["Marco", "Data", "Features", "Feitas", "ETA", "Estado"],
+      status: { "on-track": "no prazo", "at-risk": "em risco", late: "atrasado", done: "concluído" },
+      archivedLabel: "arquivadas",
+      line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} feature(s) feitas · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (arquivadas: ${archived})` : ""}`,
+      head: (n, today) => `${n} marco(s) — hoje ${today}:`,
+      none: "Ainda sem marcos — adiciona um: dev-spec milestone add <nome> <AAAA-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
+      added: (name, date, list) => `Marco '${name}' adicionado — ${date}: ${list}`,
+      updated: (name, date, list) => `Marco '${name}' atualizado — ${date}: ${list}`,
+      removed: (name) => `Marco '${name}' removido.`,
+      attention: {
+        late: (date, done, total, eta) => `marco atrasado — a data ${date} já passou com ${done}/${total} feature(s) feitas${eta ? ` (ETA ${eta})` : ""}`,
+        "eta-after-date": (date, eta) => `marco em risco — o ETA mais tardio das suas features (${eta}) é posterior à data ${date}`,
+        "eta-unknown": (date, eta, list) => `marco em risco — ainda sem ETA para ${list} (data ${date}): dados de velocidade insuficientes, ou ainda sem tasks`,
+        "no-features": (date) => `marco em risco — já não tem nenhuma feature ativa (data ${date})`,
+        invalid: (n, names, rel) => `${n} entrada(s) inválida(s) (${names}) em ${rel} — ignoradas: sem estado, e renomear / arquivar / remover / restaurar uma feature não as atualiza; corrige-as à mão (um nome válido, um dia AAAA-MM-DD real, listas de slugs de features, uma entrada por nome).`,
+        notList: (rel) => `${rel} → meta.milestones não é uma lista — nenhum marco é lido, e renomear / arquivar / remover / restaurar uma feature não o atualiza; corrige-o à mão.`,
+      },
+      nameRequired: "Indica o nome do marco (name).",
+      badName: (v) => `nome de marco inválido '${v}' — letras, dígitos, espaços e . _ : # ( ) + - (até 60 caracteres, a começar por uma letra ou um dígito).`,
+      badDate: (v) => `date: '${v}' não é um dia no formato AAAA-MM-DD (p. ex. 2026-10-31).`,
+      noFeatures: "Indica pelo menos uma feature do marco (features).",
+      unknownFeatures: (list) => `Cada feature do marco tem de ser uma feature ativa existente — não encontrada(s): ${list}`,
+      tooMany: (max) => `no máximo ${max} marcos — remove um primeiro (dev-spec milestone rm <nome>).`,
+      tooManyFeatures: (max) => `no máximo ${max} features por marco.`,
+      notFound: (name, list) => `Não existe o marco '${name}' (marcos: ${list}).`,
+      badStored: (rel) => `${rel} → meta.milestones não é uma lista de {name, date, features} como o milestone add os escreve (um nome válido, um dia AAAA-MM-DD real, uma entrada por nome) — corrige-o à mão; recuso alterá-lo.`,
+      notesTitle: (title, name) => `${title} — ${name}`,
+      notesScope: (name, date, list) => `Marco ${name} (${date}): ${list}`,
+      notesAutogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_changelog {milestone, write: true} (dev-spec changelog --milestone <nome> --write).",
+      nothingToWrite: (file) => `Nada a reportar para este marco — ${file} não foi escrito.`,
+    },
 
     governance: {
       rolesShape: "approvalRoles tem de associar fases a listas de papéis, p. ex. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none remove-os)",
@@ -5142,6 +5419,50 @@ _Outcome: [go | no-go | pivot]_
         ` — nada foi registado para '${phase}'. Volta a correr o avanço rápido com o papel com que validas: /spec-ff ${slug} --role <papel> (CLI: dev-spec approve ${slug} --through ${through} --role <papel>); o avanço rápido retoma em '${phase}'.`,
       ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
       batch: (n) => `  aprovações em lote (avanço rápido): ${n}`,
+    },
+
+    undo: {
+      unticked: (n, slug, runnable, stale) => `A tarefa ${n} voltou a ficar aberta (desmarcada).` +
+        (stale ? ` A evidência registada deixou de contar — voltar a marcá-la exige ${runnable ? `uma nova execução do seu comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nova evidência"}.` : ""),
+      alreadyOpen: (n) => `A tarefa ${n} não está marcada — nada a desfazer.`,
+      redKept: (n, slug, day) => `A execução vermelha de ${day} (a prova do _Expect: fail_) mantém-se: voltar a marcá-la exige uma nova execução do seu comando _Verify:_ — com a correção feita, uma execução com sucesso conta como a correção que deixa o teste verde: dev-spec done ${slug} ${n} --run.`,
+      duplicateTicked: (n, list) => `Várias tarefas marcadas partilham o número ${n} (${list}) — o undo não consegue saber qual das marcações foi o engano. Renumera-as primeiro para que cada número seja único (doctor: duplicate-tasks); depois, desfaz a que foi marcada por engano. Nada foi alterado.`,
+      duplicateItem: (line, text) => `linha ${line}: "${text}"`,
+      reopened: (slug) => `'${slug}' já estava concluída ou validada — quando a tarefa voltar a estar feita, conclui-a de novo (/spec-finish ${slug}) e volta a validar a execução (/approve ${slug} execution).`,
+      noEvidence: "undo não aceita evidência — só desmarca a tarefa (regista a nova execução quando a voltares a marcar).",
+      reasonNeedsUndo: "reason acompanha undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — ao marcar uma tarefa regista-se evidência.",
+      badReason: (max) => `reason tem de ser texto (uma linha, no máximo ${max} caracteres).`,
+      staleNote: (n, slug, runnable) => `Tarefa ${n}: foi desmarcada depois de esta evidência ser registada — continua não verificada até se registar ` +
+        (runnable ? `uma nova execução: dev-spec done ${slug} ${n} --run` : "nova evidência."),
+      label: "desmarcada depois de esta evidência ser registada",
+      cliDone: (n, done, total) => `Tarefa ${n} desmarcada. ${done}/${total}`,
+      cliAlready: (n, done, total) => `A tarefa ${n} não estava marcada. ${done}/${total}`,
+      driftWhy: (list) => `desmarcada(s) depois: ${list}`,
+      signOffWhy: (list) => `a desmarcação de ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Aprovação de '${phase}' revogada em ${slug} — a fase volta a estar pendente (o doctor, o next_action e o spec_finish pedem-na).`,
+      withdrawn: (phase, slug, roles) => `Retiradas as validações por papel à espera para '${phase}' de ${slug}: ${roles} — ainda nada estava aprovado.`,
+      signOffsToo: (roles) => `As validações por papel que estavam à espera também foram retiradas: ${roles}.`,
+      laterStay: (list, phase) => `Nada em cascata: as fases seguintes continuam aprovadas (${list}); aprovar outra fase é recusado (phase-order) até '${phase}' voltar a ser aprovada.`,
+      notApproved: (phase, slug) => `'${phase}' não está aprovada em ${slug} e nenhuma validação por papel está à espera — nada a revogar.`,
+      phaseRequired: "Indica a fase cuja aprovação queres revogar.",
+      noThrough: "revoke aceita uma só fase — não through (o avanço rápido).",
+      noForce: "revoke não aceita force nem expires — serve para retirar uma aprovação; reason diz porquê.",
+      driftWhy: (list) => `aprovação revogada: ${list} (volta a aprová-la antes de voltar a fechar a feature)`,
+      signOffWhy: (list) => `a revogação de ${list}`,
+    },
+    waiver: {
+      badExpires: (v, max) => `expires tem de ser uma data ISO (AAAA-MM-DD, hoje ou depois, no máximo daqui a ${max} dias) ou um número de dias (30d, 1–${max}) — recebido: ${v}.`,
+      needsForce: "reason / expires descrevem uma exceção (waiver) — acompanham force (reason também acompanha revoke).",
+      notForced: "O gate passou — nada foi dispensado: o motivo / a validade não foram registados.",
+      recorded: (reason, expires) => `Exceção registada${reason ? `: ${reason}` : ""}${expires ? ` (válida até ${expires})` : ""}.`,
+      doctor: (list, slug) => `aprovações forçadas cuja exceção expirou: ${list} — corrige as verificações a falhar e volta a aprovar sem force (/approve ${slug} <fase>); para renovar a exceção: /approve ${slug} <fase> --force --reason "…" --expires 30d`,
+      expiredItem: (phase, expires, reason) => `${phase} (expirou a ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `exceção: ${reason}` : "exceção", expires ? (expired ? `EXPIROU a ${expires}` : `até ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Gates dispensados (aprovações forçadas)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forçada apesar de: ${failing || "—"} · ${reason ? `motivo: ${reason}` : "sem motivo registado"}${expires ? ` · ${expired ? "EXPIROU a" : "válida até"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `exceções expiradas em aprovações forçadas: ${list} — volta a aprovar essas fases sem force; para renovar a exceção: dev-spec approve ${slug} <fase> --force --reason "…" --expires 30d`,
     },
 
     forecast: {
@@ -5742,6 +6063,7 @@ _Outcome: [go | no-go | pivot]_
       changes: "'changes' debe ser un array",
       finishChecks: "'finishChecks' debe ser un objeto",
       signoffs: "'signoffs' debe ser un objeto",
+      unticks: "'unticks' debe ser un array",
     },
     depend: {
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
@@ -6265,6 +6587,7 @@ _Outcome: [go | no-go | pivot]_
           if (a.setting === "roadmap") return "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)";
           return `bajar la guardia de aprobaciones de ${a.from} a ${a.to}`;
         }
+        if (a.revoke) return `revocar la aprobación de la fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "");
         return (a.through ? `aprobar todas las fases de '${f}' hasta ${a.through}` : `aprobar la fase ${a.phase || "?"} de '${f}'`) +
           (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "") +
           (a.force ? " — FORZADA (--force)" : "");
@@ -6385,6 +6708,59 @@ _Outcome: [go | no-go | pivot]_
         unknownArtifact: (a, list) => `Artefacto desconocido '${a}' — uno de: ${list}.`,
         badSteering: (file) => `Nombre de archivo de steering no válido '${file}' — un archivo .md directamente en .specs/steering/.`,
         notFound: (uri, detail) => `Recurso no encontrado: ${uri}` + (detail ? ` — ${detail}` : ""),
+      },
+    },
+
+    // 1.16 C — integración con Claude Code (status line, puente del plan mode, spec_import {text}, completion/complete).
+    claudeCode: {
+      statusLine: {
+        head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
+        tasks: (done, total) => `${done}/${total} tareas`,
+        unverified: (n) => `${n} sin verificar`,
+        next: (step) => `siguiente: ${step}`,
+        none: "◆ dev-spec · aún no hay funciones — /spec",
+        steps: {
+          "re-review": (s) => `revisar ${s.files.join(", ")}`,
+          fill: (s) => `completar ${s.file}`,
+          fix: (s) => (s.file === "bug.md" ? "escribir la causa raíz en bug.md" : `corregir el gate ${s.phase}`),
+          approve: (s) => `aprobar ${s.phase}`,
+          tests: () => "escribir los tests y luego aprobarlos (Fase 4)",
+          tasks: () => "dividir en tareas",
+          implement: (s) => `tarea ${s.task}`,
+          blocked: () => "desbloquear las tareas (_Depends:_)",
+          verify: (s) => (s.suite ? `ejecutar las comprobaciones del proyecto (${s.suite.join(", ")})` : `verificar la tarea ${s.task}`),
+          decide: (s) => (s.outcome ? "añadir la línea _Outcome:_ a la decisión" : "escribir la decisión"),
+          promote: () => "go — crear la spec de la función, archivar el spike",
+          archive: () => "no-go — archivar el spike",
+          pivot: () => "pivot — empezar un spike nuevo",
+          finish: (s) => (s.again ? "/spec-finish de nuevo" : "/spec-finish"),
+          "sign-off": (s) => (s.again ? "aprobar execution de nuevo (sign-off)" : "aprobar execution (sign-off)"),
+          finished: () => "terminada",
+        },
+        config: {
+          head: "Status line — añade esto a ~/.claude/settings.json (todos los proyectos) o al .claude/settings.local.json de un proyecto (solo en esta máquina — la ruta es de esta máquina, así que nunca en el .claude/settings.json versionado):",
+          after: "Muestra una línea — la función más activa, sus tareas, las tareas sin verificar y el siguiente paso — y nada fuera de un proyecto dev-spec.",
+          cacheNote: "Esta ruta es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): tras actualizar el plugin, vuelve a ejecutar /spec-statusline — la copia antigua se borra 14 días después de una actualización.",
+          tryIt: (cmd) => `Pruébalo: echo '{"cwd": "<tu proyecto>"}' | ${cmd}`,
+        },
+      },
+      planBridge: {
+        byText: "dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: \"plan\", text: <el markdown del plan aprobado>} (CLI: dev-spec import plan - < plan.md). El fichero del plan en ~/.claude/plans está fuera del proyecto, así que pasa su texto. Para un cambio rápido, omítelo; importa solo con el OK del usuario.",
+        byPath: (rel) => `dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Para un cambio rápido, omítelo; importa solo con el OK del usuario.`,
+      },
+      importText: {
+        label: "(texto)",
+        note: (tool, date) => `> Importado de ${tool} (texto) el ${date}.`,
+        orText: "O pasa su markdown como `text` en lugar de `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < fichero.md).",
+        textOnly: (tool, list) => `\`text\` importa un único documento — herramienta ${list}; '${tool}' lee una carpeta: indica su \`path\`.`,
+        pathAndText: "Indica `path` o `text`, no ambos.",
+        empty: (tool) => `El texto ${tool} está vacío — nada que importar.`,
+      },
+      completion: {
+        badRequest: 'completion/complete necesita `ref` ({type: "ref/prompt", name} o {type: "ref/resource", uri}) y `argument` {name, value} (texto).',
+        promptsOff: "Este servidor no sirve prompts (SPEC_MCP_PROMPTS=off) — nada que completar.",
+        unknownTemplate: (uri, list) => `Plantilla de recurso desconocida '${uri}' — una de: ${list}.`,
+        unknownArgument: (name, list) => `Argumento desconocido '${name}' — uno de: ${list}.`,
       },
     },
 
@@ -6686,6 +7062,58 @@ _Outcome: [go | no-go | pivot]_
       badSince: (v) => `since: '${v}' no es una fecha ISO (AAAA-MM-DD, o una marca de tiempo ISO completa), 'last' ni 'all'.`,
       noLast: "Aún no se han escrito notas de la versión (roadmap.json meta.changelogAt no está definido) — se listan todos los cambios.",
     },
+    gherkin: {
+      autogen: "AUTO-GENERADO por dev-spec — no editar a mano. Para regenerar: spec_export {format: \"gherkin\"} (dev-spec export <feature> --gherkin).",
+      source: (rel) => `Origen: ${rel} — un escenario por criterio de aceptación vigente; EARS → Dado (MIENTRAS / DONDE / SI) · Cuando (CUANDO) · Entonces (la cláusula DEBE).`,
+      summaryLabel: "Resumen",
+      template: (id) => `${id} — plantilla, aún sin escribir: omitido`,
+      superseded: (id, by) => `${id} — reemplazado por ${by} (entregada): omitido`,
+      unsplit: "cláusulas EARS sin separación limpia — el criterio entero es un único paso Entonces",
+      noScenarios: "Aún sin criterios de aceptación vigentes.",
+      spike: (slug) => `'${slug}' es un spike — no tiene criterios de aceptación que exportar en Gherkin (spec_export {name: "${slug}"} sin el formato gherkin exporta su documento).`,
+      wroteMany: (n, scenarios) => `✎ generados ${n} archivo(s) .feature — ${scenarios} escenario(s)`,
+      noFeatures: "Ninguna función activa con criterios de aceptación que exportar.",
+    },
+    trackerCsv: {
+      autogen: "AUTO-GENERADO por dev-spec — no editar a mano; deja esta columna sin asignar. Para regenerar: spec_export {format: \"jira\" | \"linear\"} (dev-spec export --tracker jira|linear).",
+      featureLine: (rel, tracks, phase, done, total) => `función dev-spec ${rel} · tracks ${tracks} · fase: ${phase} · ${done}/${total} tareas hechas`,
+      acceptance: "Criterios de aceptación:",
+      taskLine: (rel, n) => `tarea dev-spec #${n} — ${rel}`,
+      wrote: (file, n) => `✎ generado ${file} — ${n} elemento(s) de trabajo`,
+    },
+    milestone: {
+      title: "Hitos",
+      cols: ["Hito", "Fecha", "Funciones", "Hechas", "ETA", "Estado"],
+      status: { "on-track": "a tiempo", "at-risk": "en riesgo", late: "retrasado", done: "completado" },
+      archivedLabel: "archivadas",
+      line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} función(es) hechas · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (archivadas: ${archived})` : ""}`,
+      head: (n, today) => `${n} hito(s) — hoy ${today}:`,
+      none: "Aún sin hitos — añade uno: dev-spec milestone add <nombre> <AAAA-MM-DD> <funciones…> (spec_milestone {action: \"add\", name, date, features}).",
+      added: (name, date, list) => `Hito '${name}' añadido — ${date}: ${list}`,
+      updated: (name, date, list) => `Hito '${name}' actualizado — ${date}: ${list}`,
+      removed: (name) => `Hito '${name}' eliminado.`,
+      attention: {
+        late: (date, done, total, eta) => `hito retrasado — su fecha ${date} ya pasó con ${done}/${total} función(es) hechas${eta ? ` (ETA ${eta})` : ""}`,
+        "eta-after-date": (date, eta) => `hito en riesgo — el ETA más tardío de sus funciones (${eta}) es posterior a su fecha ${date}`,
+        "eta-unknown": (date, eta, list) => `hito en riesgo — aún sin ETA para ${list} (fecha ${date}): datos de velocidad insuficientes, o aún sin tareas`,
+        "no-features": (date) => `hito en riesgo — ya no le queda ninguna función activa (fecha ${date})`,
+        invalid: (n, names, rel) => `${n} entrada(s) no válida(s) (${names}) en ${rel} — ignoradas: sin estado, y renombrar / archivar / eliminar / restaurar una función no las actualiza; corrígelas a mano (un nombre válido, un día AAAA-MM-DD real, listas de slugs de funciones, una entrada por nombre).`,
+        notList: (rel) => `${rel} → meta.milestones no es una lista — no se lee ningún hito, y renombrar / archivar / eliminar / restaurar una función no lo actualiza; corrígelo a mano.`,
+      },
+      nameRequired: "Indica el nombre del hito (name).",
+      badName: (v) => `nombre de hito no válido '${v}' — letras, dígitos, espacios y . _ : # ( ) + - (hasta 60 caracteres, empezando por una letra o un dígito).`,
+      badDate: (v) => `date: '${v}' no es un día en formato AAAA-MM-DD (p. ej. 2026-10-31).`,
+      noFeatures: "Indica al menos una función del hito (features).",
+      unknownFeatures: (list) => `Cada función del hito debe ser una función activa existente — no encontrada(s): ${list}`,
+      tooMany: (max) => `como máximo ${max} hitos — elimina uno primero (dev-spec milestone rm <nombre>).`,
+      tooManyFeatures: (max) => `como máximo ${max} funciones por hito.`,
+      notFound: (name, list) => `No existe el hito '${name}' (hitos: ${list}).`,
+      badStored: (rel) => `${rel} → meta.milestones no es una lista de {name, date, features} como los escribe milestone add (un nombre válido, un día AAAA-MM-DD real, una entrada por nombre) — corrígelo a mano; me niego a cambiarlo.`,
+      notesTitle: (title, name) => `${title} — ${name}`,
+      notesScope: (name, date, list) => `Hito ${name} (${date}): ${list}`,
+      notesAutogen: "AUTO-GENERADO por dev-spec — no editar a mano. Para regenerar: spec_changelog {milestone, write: true} (dev-spec changelog --milestone <nombre> --write).",
+      nothingToWrite: (file) => `Nada que informar para este hito — ${file} no se ha escrito.`,
+    },
 
     governance: {
       rolesShape: "approvalRoles debe asociar fases a listas de roles, p. ej. {\"requirements\": [\"product\"], \"design\": [\"tech\", \"security\"]} (CLI: --roles requirements=product,design=tech+security; --roles none los elimina)",
@@ -6721,6 +7149,50 @@ _Outcome: [go | no-go | pivot]_
         ` — no se ha registrado nada para '${phase}'. Vuelve a ejecutar el avance rápido con el rol con el que validas: /spec-ff ${slug} --role <rol> (CLI: dev-spec approve ${slug} --through ${through} --role <rol>); se reanuda en '${phase}'.`,
       ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
       batch: (n) => `  aprobaciones en lote (avance rápido): ${n}`,
+    },
+
+    undo: {
+      unticked: (n, slug, runnable, stale) => `La tarea ${n} vuelve a estar abierta (desmarcada).` +
+        (stale ? ` Su evidencia registrada deja de contar — volver a marcarla exige ${runnable ? `una nueva ejecución de su comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nueva evidencia"}.` : ""),
+      alreadyOpen: (n) => `La tarea ${n} no está marcada — nada que deshacer.`,
+      redKept: (n, slug, day) => `Su ejecución en rojo del ${day} (la prueba de _Expect: fail_) se mantiene: volver a marcarla exige una nueva ejecución de su comando _Verify:_ — con el arreglo hecho, una ejecución correcta cuenta como el arreglo que pone la prueba en verde: dev-spec done ${slug} ${n} --run.`,
+      duplicateTicked: (n, list) => `Varias tareas marcadas comparten el número ${n} (${list}) — undo no puede saber cuál de las marcas fue el error. Renuméralas primero para que cada número sea único (doctor: duplicate-tasks) y después deshaz la que se marcó por error. No se ha cambiado nada.`,
+      duplicateItem: (line, text) => `línea ${line}: "${text}"`,
+      reopened: (slug) => `'${slug}' ya estaba terminada o aprobada — cuando la tarea vuelva a estar hecha, termínala de nuevo (/spec-finish ${slug}) y vuelve a aprobar la ejecución (/approve ${slug} execution).`,
+      noEvidence: "undo no acepta evidencia — solo desmarca la tarea (registra la nueva ejecución cuando la vuelvas a marcar).",
+      reasonNeedsUndo: "reason acompaña a undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — al marcar una tarea se registra evidencia.",
+      badReason: (max) => `reason debe ser texto (una línea, como máximo ${max} caracteres).`,
+      staleNote: (n, slug, runnable) => `Tarea ${n}: se desmarcó después de registrar esta evidencia — sigue sin verificar hasta que se registre ` +
+        (runnable ? `una nueva ejecución: dev-spec done ${slug} ${n} --run` : "nueva evidencia."),
+      label: "desmarcada después de registrar esta evidencia",
+      cliDone: (n, done, total) => `Tarea ${n} desmarcada. ${done}/${total}`,
+      cliAlready: (n, done, total) => `La tarea ${n} no estaba marcada. ${done}/${total}`,
+      driftWhy: (list) => `desmarcada(s) después: ${list}`,
+      signOffWhy: (list) => `la desmarcación de ${list}`,
+    },
+    revoke: {
+      revoked: (phase, slug) => `Aprobación de '${phase}' revocada en ${slug} — la fase vuelve a estar pendiente (doctor, next_action y spec_finish la piden).`,
+      withdrawn: (phase, slug, roles) => `Retiradas las aprobaciones por rol en espera para '${phase}' de ${slug}: ${roles} — aún no había nada aprobado.`,
+      signOffsToo: (roles) => `También se retiraron las aprobaciones por rol que estaban en espera: ${roles}.`,
+      laterStay: (list, phase) => `Nada en cascada: las fases siguientes siguen aprobadas (${list}); aprobar otra fase se rechaza (phase-order) hasta que '${phase}' vuelva a aprobarse.`,
+      notApproved: (phase, slug) => `'${phase}' no está aprobada en ${slug} y ninguna aprobación por rol está en espera — nada que revocar.`,
+      phaseRequired: "Indica la fase cuya aprobación quieres revocar.",
+      noThrough: "revoke acepta una sola fase — no through (el avance rápido).",
+      noForce: "revoke no acepta force ni expires — elimina una aprobación; reason dice por qué.",
+      driftWhy: (list) => `aprobación revocada: ${list} (apruébala de nuevo antes de volver a cerrarla)`,
+      signOffWhy: (list) => `la revocación de ${list}`,
+    },
+    waiver: {
+      badExpires: (v, max) => `expires debe ser una fecha ISO (AAAA-MM-DD, hoy o después, como máximo dentro de ${max} días) o un número de días (30d, 1–${max}) — recibido: ${v}.`,
+      needsForce: "reason / expires describen una excepción (waiver) — van con force (reason también con revoke).",
+      notForced: "El gate pasó — no se eximió nada: el motivo / la caducidad no se registraron.",
+      recorded: (reason, expires) => `Excepción registrada${reason ? `: ${reason}` : ""}${expires ? ` (vence el ${expires})` : ""}.`,
+      doctor: (list, slug) => `aprobaciones forzadas cuya excepción caducó: ${list} — corrige las comprobaciones que fallan y vuelve a aprobar sin force (/approve ${slug} <fase>), o renueva la excepción (/approve ${slug} <fase> --force --reason "…" --expires 30d)`,
+      expiredItem: (phase, expires, reason) => `${phase} (caducó el ${expires}${reason ? ` — ${reason}` : ""})`,
+      roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `excepción: ${reason}` : "excepción", expires ? (expired ? `CADUCADA el ${expires}` : `hasta el ${expires}`) : null].filter(Boolean).join(", ")})`,
+      prHeading: "## Gates eximidos (aprobaciones forzadas)",
+      prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forzada pese a: ${failing || "—"} · ${reason ? `motivo: ${reason}` : "sin motivo registrado"}${expires ? ` · ${expired ? "CADUCADA el" : "vence el"} ${expires}` : ""}`,
+      finishWarn: (list, slug) => `excepciones caducadas en aprobaciones forzadas: ${list} — vuelve a aprobar esas fases sin force, o renueva la excepción (dev-spec approve ${slug} <fase> --force --reason "…" --expires 30d)`,
     },
 
     forecast: {
@@ -7045,6 +7517,108 @@ _Outcome: [go | no-go | pivot]_
 // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
 for (const l of BASE_LANGS) Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
 
+// 1.16 Q — spec quality: steering amendments (Q1), cross-feature acceptance criteria (Q2), the glossary (Q3). One group per
+// language, merged into MSG (pt-BR derives from pt's). Check ids, reason codes and file names stay English.
+const QUALITY_MSG = {
+  en: {
+    steeringChange: { modified: "changed", removed: "removed" },
+    steeringItem: (phase, day, files) => `${phase} (approved ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering changed after approval — ${items}: re-review against the amended steering, then re-approve (dev-spec impact ${slug} --phase steering; without a feature it lists every one concerned).`,
+    naSteering: (phases, files, slug) => `Also: steering changed after the approval of ${phases} (${files}) — re-review against it and re-approve if it still holds (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `name required — only phase 'steering' works project-wide (without a feature). Phases: ${phases}.`,
+    impactNoReopen: "reopen doesn't apply to phase 'steering' — nothing is unticked: re-review the features listed and re-approve their requirements / design.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: approved under an older version of steering that changed since` : `Steering — ${feature}: no approval was made under steering that changed since`)
+      : (n ? `Steering — ${n} active feature(s) approved under an older version of steering that changed since` : "Steering — no requirements / design approval was made under steering that changed since")),
+    impactUntracked: (list) => `approved before 1.16 (no steering fingerprints — never flagged): ${list}`,
+    impactUnreadable: (list) => `skipped — .state.json unreadable: ${list}`,
+    impactReReview: (slug, phase) => `Re-review each against the amended steering, then re-approve (/approve ${slug} ${phase}) — the approval records the current steering.`,
+    xacKind: { duplicate: "near-duplicate", conflict: "possible conflict" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `SHALL vs SHALL NOT, ${pct}% alike` : reason === "different-numbers" ? `different numbers ${nums}, ${pct}% alike` : `${pct}% alike`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} criterion pair(s) read like another active feature's or may contradict them — ${list}. Merge or reword them, or declare _Supersedes: <feature>/US-n.AC-m_ on the newer one.`,
+    xacMore: (n) => `… +${n} more`,
+    xacHeading: "Possible duplicates / conflicts",
+    xacIntro: "Acceptance criteria of different active features that read alike (near-duplicates) or may contradict each other (the same trigger with SHALL vs SHALL NOT, or different numbers) — a heuristic: merge or reword them, or declare _Supersedes:_ on the newer one.",
+    xacTruncated: "(bounded — not every criterion was compared)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — the glossary says ${term}${def ? ` (${def})` : ""}. Use "${term}", or amend .specs/steering/glossary.md if '${word}' means something else here.`,
+    glossaryMore: (n) => `… and ${n} more word(s) the glossary says to avoid — see spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} use(s) of words the glossary says to avoid — ${list} (spec_clarify asks about each)`,
+    glossaryOk: (n) => `no word the glossary says to avoid in requirements.md / design.md (${n} term(s))`,
+    glossaryTruncated: (read, total) => `glossary.md holds ${total} entries — only the first ${read} are read (split or trim it)`,
+    briefGlossaryHeading: "## Glossary (terms this task uses)",
+    briefGlossaryIntro: "Use these words exactly as defined (.specs/steering/glossary.md) — never the avoided ones:",
+    briefGlossaryAvoid: (list) => `avoid: ${list}`,
+    briefGlossaryOmitted: (list) => `More entries apply (size) — read them in .specs/steering/glossary.md: ${list}`,
+  },
+  pt: {
+    steeringChange: { modified: "alterado", removed: "removido" },
+    steeringItem: (phase, day, files) => `${phase} (aprovado em ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering alterado depois da aprovação — ${items}: revê à luz do steering alterado e volta a aprovar (dev-spec impact ${slug} --phase steering; sem feature lista todas as afetadas).`,
+    naSteering: (phases, files, slug) => `Nota: o steering mudou depois da aprovação de ${phases} (${files}) — revê à luz dele e volta a aprovar se continuar válido (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `nome em falta — só a fase 'steering' funciona para o projeto todo (sem feature). Fases: ${phases}.`,
+    impactNoReopen: "o reopen não se aplica à fase 'steering' — nada é desmarcado: revê as features listadas e volta a aprovar os requisitos / o design.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: aprovada com uma versão anterior de steering que mudou desde então` : `Steering — ${feature}: nenhuma aprovação foi feita com steering que mudou desde então`)
+      : (n ? `Steering — ${n} feature(s) ativa(s) aprovada(s) com uma versão anterior de steering que mudou desde então` : "Steering — nenhuma aprovação de requisitos / design foi feita com steering que mudou desde então")),
+    impactUntracked: (list) => `aprovadas antes da 1.16 (sem fingerprints do steering — nunca sinalizadas): ${list}`,
+    impactUnreadable: (list) => `ignoradas — .state.json ilegível: ${list}`,
+    impactReReview: (slug, phase) => `Revê cada uma à luz do steering alterado e volta a aprovar (/approve ${slug} ${phase}) — a aprovação regista o steering atual.`,
+    xacKind: { duplicate: "quase duplicado", conflict: "possível conflito" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `DEVE vs NÃO DEVE, ${pct}% semelhantes` : reason === "different-numbers" ? `números diferentes ${nums}, ${pct}% semelhantes` : `${pct}% semelhantes`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} par(es) de critérios parecem-se com os de outra feature ativa ou podem contradizê-los — ${list}. Junta-os ou muda um deles, ou declara _Supersedes: <feature>/US-n.AC-m_ no mais recente.`,
+    xacMore: (n) => `… +${n}`,
+    xacHeading: "Possíveis duplicados / conflitos",
+    xacIntro: "Critérios de aceitação de features ativas diferentes que se parecem (quase duplicados) ou podem contradizer-se (o mesmo gatilho com DEVE vs NÃO DEVE, ou números diferentes) — uma heurística: junta-os ou muda um deles, ou declara _Supersedes:_ no mais recente.",
+    xacTruncated: "(limitado — nem todos os critérios foram comparados)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — o glossário diz ${term}${def ? ` (${def})` : ""}. Usa "${term}", ou corrige o .specs/steering/glossary.md se '${word}' significar outra coisa aqui.`,
+    glossaryMore: (n) => `… e mais ${n} palavra(s) que o glossário manda evitar — ver spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} uso(s) de palavras que o glossário manda evitar — ${list} (o spec_clarify pergunta por cada uma)`,
+    glossaryOk: (n) => `nenhuma palavra que o glossário manda evitar no requirements.md / design.md (${n} termo(s))`,
+    glossaryTruncated: (read, total) => `o glossary.md tem ${total} entradas — só as primeiras ${read} são lidas (reduz o número de entradas)`,
+    briefGlossaryHeading: "## Glossário (termos que esta task usa)",
+    briefGlossaryIntro: "Usa estas palavras exatamente como estão definidas (.specs/steering/glossary.md) — nunca as que são para evitar:",
+    briefGlossaryAvoid: (list) => `evitar: ${list}`,
+    briefGlossaryOmitted: (list) => `Aplicam-se mais entradas (tamanho) — lê-as no .specs/steering/glossary.md: ${list}`,
+  },
+  es: {
+    steeringChange: { modified: "modificado", removed: "eliminado" },
+    steeringItem: (phase, day, files) => `${phase} (aprobado el ${day}): ${files}`,
+    steeringDoctor: (items, slug) => `steering modificado después de la aprobación — ${items}: revisa según el steering modificado y vuelve a aprobar (dev-spec impact ${slug} --phase steering; sin función lista todas las afectadas).`,
+    naSteering: (phases, files, slug) => `Nota: el steering cambió después de la aprobación de ${phases} (${files}) — revisa según él y vuelve a aprobar si sigue siendo válido (dev-spec impact ${slug} --phase steering).`,
+    impactNeedsName: (phases) => `falta el nombre — solo la fase 'steering' funciona para todo el proyecto (sin función). Fases: ${phases}.`,
+    impactNoReopen: "reopen no se aplica a la fase 'steering' — no se desmarca nada: revisa las funciones listadas y vuelve a aprobar sus requisitos / su diseño.",
+    impactHead: (n, feature) => (feature
+      ? (n ? `Steering — ${feature}: aprobada con una versión anterior de steering que cambió desde entonces` : `Steering — ${feature}: ninguna aprobación se hizo con steering que cambió desde entonces`)
+      : (n ? `Steering — ${n} función(es) activa(s) aprobada(s) con una versión anterior de steering que cambió desde entonces` : "Steering — ninguna aprobación de requisitos / diseño se hizo con steering que cambió desde entonces")),
+    impactUntracked: (list) => `aprobadas antes de la 1.16 (sin fingerprints del steering — nunca señaladas): ${list}`,
+    impactUnreadable: (list) => `omitidas — .state.json ilegible: ${list}`,
+    impactReReview: (slug, phase) => `Revisa cada una según el steering modificado y vuelve a aprobar (/approve ${slug} ${phase}) — la aprobación registra el steering actual.`,
+    xacKind: { duplicate: "casi duplicado", conflict: "posible conflicto" },
+    xacWhy: (reason, pct, nums) => (reason === "opposite-modal" ? `DEBE vs NO DEBE, ${pct}% parecidos` : reason === "different-numbers" ? `números distintos ${nums}, ${pct}% parecidos` : `${pct}% parecidos`),
+    xacItem: (mine, other, kind, why) => `${mine} ↔ ${other} (${kind}: ${why})`,
+    xacDoctor: (n, list) => `${n} par(es) de criterios se parecen a los de otra función activa o pueden contradecirlos — ${list}. Únelos o reescríbelos, o declara _Supersedes: <feature>/US-n.AC-m_ en el más reciente.`,
+    xacMore: (n) => `… +${n}`,
+    xacHeading: "Posibles duplicados / conflictos",
+    xacIntro: "Criterios de aceptación de funciones activas distintas que se parecen (casi duplicados) o pueden contradecirse (el mismo disparador con DEBE vs NO DEBE, o números distintos) — una heurística: únelos o reescríbelos, o declara _Supersedes:_ en el más reciente.",
+    xacTruncated: "(limitado — no se compararon todos los criterios)",
+    glossaryQuestion: (locs, word, term, def) => `${locs}: '${word}' — el glosario dice ${term}${def ? ` (${def})` : ""}. Usa "${term}", o corrige .specs/steering/glossary.md si '${word}' significa otra cosa aquí.`,
+    glossaryMore: (n) => `… y ${n} palabra(s) más que el glosario manda evitar — ver spec_doctor (glossary).`,
+    glossaryItem: (word, term, locs) => `'${word}' → ${term} (${locs})`,
+    glossaryDoctor: (n, list) => `${n} uso(s) de palabras que el glosario manda evitar — ${list} (spec_clarify pregunta por cada una)`,
+    glossaryOk: (n) => `ninguna palabra que el glosario manda evitar en requirements.md / design.md (${n} término(s))`,
+    glossaryTruncated: (read, total) => `glossary.md tiene ${total} entradas — solo se leen las primeras ${read} (divídelo o recórtalo)`,
+    briefGlossaryHeading: "## Glosario (términos que usa esta tarea)",
+    briefGlossaryIntro: "Usa estas palabras tal como están definidas (.specs/steering/glossary.md) — nunca las que hay que evitar:",
+    briefGlossaryAvoid: (list) => `evitar: ${list}`,
+    briefGlossaryOmitted: (list) => `Se aplican más entradas (tamaño) — léelas en .specs/steering/glossary.md: ${list}`,
+  },
+};
+for (const l of BASE_LANGS) MSG[l].quality = QUALITY_MSG[l];
+
 // ===========================================================================
 // Task brief (spec_task_brief) — the self-contained brief a fresh implementer reads first.
 // Labels and loop rules per language; renderBrief() owns the layout. IDs, `_Label:_` markers and
@@ -7276,6 +7850,13 @@ function renderBrief(d, lang) {
   push("", t.acs);
   if (d.acceptanceCriteria.length) d.acceptanceCriteria.forEach((a) => push("- " + a.text));
   else push(t.acsNone);
+  // 1.16 Q3: the glossary entries this task's text and criteria use (bounded) — the words to use, and the ones to avoid
+  if ((d.glossary || []).length) {
+    const Q = MSG[normalizeLang(lang)].quality;
+    push("", Q.briefGlossaryHeading, Q.briefGlossaryIntro);
+    d.glossary.forEach((g) => push(`- **${g.term}**${g.definition ? " — " + g.definition : ""}${g.avoid.length ? ` _(${Q.briefGlossaryAvoid(g.avoid.join(", "))})_` : ""}`));
+    if ((d.glossaryOmitted || []).length) push(Q.briefGlossaryOmitted(d.glossaryOmitted.join(", ")));
+  }
 
   if (d.tests.length) {
     push("", d.expectFail ? t.testsRed : t.tests); // full review Ga7: a red task writes the tests; it never makes them green

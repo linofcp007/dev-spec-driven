@@ -90,9 +90,12 @@ NEW feature (an existing slug is an error).
 | `bmad` | BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/` (v6: `_bmad-output/planning-artifacts/`), `docs/stories/*.md`, `docs/architecture.md` — or one story file | epic stories + story files (the file wins) → `US-1…US-n` in story order, their ACs → `US-n.AC-m`; `FR1` / `NFR1` → `FR-1` / `NFR-1`; Tasks / Subtasks → tasks tagged `[USn]` with `(AC: 1, 3)` → `_Requirements:_`; architecture + Technical Assumptions + Dev Notes → `design.md`; Status / Change Log named in a warning, not imported |
 
 **Claude Code plans live outside the project.** Plan mode saves them under `plansDirectory` — by default
-`~/.claude/plans` — so the import refuses that path (it must resolve inside the project): copy the plan file into
-the project first, or set `plansDirectory` to a folder inside it. A folder holding several plans is refused — name
-the file. A plan or ExecPlan names its feature from its title, BMAD from the PRD (one story file: the story's title).
+`~/.claude/plans` — so the import refuses that path (it must resolve inside the project). Import the plan's **text**
+instead (1.16): `spec_import {tool: "plan", text: <the plan's markdown>}` (also `execplan`), CLI `dev-spec import plan -
+< plan.md` or `--text "…"` — same mapping and guarantees, the note reads "Imported from plan (inline text)". In Claude
+Code the plugin's ExitPlanMode hook reminds the agent of it when the user approves a plan in a dev-spec project (one
+line of context; it never imports by itself — ask the user first). Or copy the plan file into the project, or set
+`plansDirectory` to a folder inside it. A folder holding several plans is refused — name the file. A plan or ExecPlan names its feature from its title, BMAD from the PRD (one story file: the story's title).
 A plan that is mostly architecture fits the design-first order (`spec_feature {action: "flow", name, flow:
 "design-first"}` — `references/design-first.md`).
 

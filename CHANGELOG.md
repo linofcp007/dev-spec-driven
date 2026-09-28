@@ -3,6 +3,91 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.16.0] — 2026-09-29
+
+Day-to-day comfort and reach: undo a tick, revoke an approval, say why a gate was forced and until when; a status line,
+MCP tool annotations and argument completion, a plan-mode bridge; specs that notice an amended constitution, criteria
+that duplicate or contradict another feature's, and a glossary; Gherkin and Jira / Linear exports, and milestones judged
+against the forecasts. 38 MCP tools (was 35), 54 commands (was 52).
+
+### Added — usability
+- **Undo a tick** — `spec_complete_task {undo: true, reason?}` / `dev-spec undone <feature> <n> [--reason "…"]`: the task
+  reopens (CRLF / BOM kept), its evidence turns stale (`staleBy: "undo"` — a re-tick needs a new run), `ticks[n]` is
+  dropped and the untick is logged in `.state.json → unticks` `[{n, at, reason?}]`; a finish or execution sign-off older
+  than an untick reads stale. Under the feature lock; never gated (the bugfix root-cause gate only refuses ticks).
+- **Revoke an approval** — `spec_approve {phase, revoke: true, reason?}` / `approve <feature> <phase> --revoke [--reason]`:
+  removes the phase's approval and its waiting role sign-offs, appends a history record `revoked: true` (no snapshot) and
+  never cascades — the phase is pending again, so a later phase can't be approved (`phase-order`) until it is re-approved.
+  The human approval guard treats a revoke as an approval action.
+- **Waivers** — `force` with `reason` and / or `expires` (`YYYY-MM-DD` or `30d`) records why a gate was forced and until
+  when (`waiver` on the approval, its history record and role sign-offs); doctor warns `waiver-expired` once it lapses,
+  ROADMAP.md shows each waiver and flags the expired ones, `spec_finish` returns `waivers` and its merge summary lists
+  "Waived gates". A force without a reason is still accepted.
+- **`spec_stop_check`** and **`spec_log`** — MCP tools for clients without a shell: the end-of-turn evidence gate's
+  decision for a closing message, and the commits citing each task from `git log` text the client supplies (the server
+  still never runs git or any command).
+
+### Added — Claude Code integration
+- **Status line** — `dev-spec statusline` reads Claude Code's status-line JSON on stdin and prints one line: the feature
+  with work under way, its tasks, unverified ticks and the next step, in the project language (nothing outside a dev-spec
+  project; exit 0 always; reads only `.specs/`). `/spec-statusline` installs it; `statusline --print-config` prints the
+  `settings.json` entry with this clone's absolute path.
+- **Your defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` (the language a NEW project gets),
+  `DEV_SPEC_STOP_CHECK` (the stop gate where a project leaves it unset) and `DEV_SPEC_GUARD_DEFAULT` (off / on / scope):
+  fallbacks only, a project's `roadmap.json` always wins. Put them in Claude Code's `settings.json` `env` block — it
+  reaches the hooks, the MCP server and the commands Claude runs alike. (No plugin `userConfig`: it would open a dialog on
+  every install and reach neither the CLI nor other MCP clients.)
+- **MCP tool annotations** (`readOnlyHint` / `destructiveHint` / `idempotentHint`, `openWorldHint: false` everywhere) and
+  **`completion/complete`** (feature slugs for prompt arguments that name a feature; the `specs://` template variables).
+- **Plan-mode bridge** — `spec_import {tool: "plan" | "execplan", text}` / `dev-spec import plan - | --text "…"` imports
+  a plan pasted inline (a Claude Code plan lives in `~/.claude/plans`, outside the project); the PostToolUse hook
+  `hooks/plan-hook.js` (ExitPlanMode) adds one line suggesting `/spec-import` of the approved plan in a dev-spec project.
+
+### Added — spec quality
+- **Steering amendments** — requirements and design approvals record the steering that governed them (constitution, the
+  active tracks' files, `inclusion: always` files, `fileMatch` files matching the feature's `_Implements:_`); doctor warns
+  `steering-changed-since-approval`, next_action adds a re-review hint, and `spec_impact {phase: "steering"}` /
+  `dev-spec impact [feature] --phase steering` lists every feature approved under an older version (read-only). Approvals
+  made before 1.16 are never flagged.
+- **Cross-feature criteria** — near-duplicate or likely conflicting acceptance criteria across active features (EN / PT /
+  ES; SHALL vs SHALL NOT, different numbers): doctor warns `cross-feature-acs`, `spec_catalog` returns `crossAcs` and
+  SPECS.md gets a "Possible duplicates / conflicts" section. Template criteria and declared `_Supersedes:_` pairs are
+  ignored; the comparison is bounded.
+- **Glossary** — `.specs/steering/glossary.md` (`steering_scaffold glossary.md`) with entries `- **Term** — definition.
+  _Avoid: a, b_`: clarify asks about every avoided word the requirements / design use, doctor warns `glossary`, briefs
+  quote the matching entries.
+
+### Added — exports and planning
+- **Gherkin** — `spec_export {format: "gherkin"}` / `export [feature] --gherkin`: a `.feature` per feature, one Scenario per
+  current acceptance criterion (tags: the AC ID, its planned T-IDs, its track marker), the EARS clauses as Given / When /
+  Then verbatim (a criterion that can't be split cleanly is one `Then`, listed in `unsplit`); PT / ES in Gherkin's own
+  dialects (`# language: pt` / `es`).
+- **Tracker CSV** — `format: "jira" | "linear"` / `export [feature] --tracker jira|linear`: the feature, its stories and
+  its tasks as a CSV for the tracker's own importer (nothing is sent anywhere), with the matrix CSV's rules (RFC 4180, the
+  formula guard, a BOM).
+- **Milestones** — `spec_milestone {action: add | rm | list}` / `dev-spec milestone` / `/spec-milestone`: named target
+  dates for sets of features (`meta.milestones`), judged against the forecast ETAs — `on-track` · `at-risk` · `late` ·
+  `done` — in ROADMAP.md (a table + "Needs attention") and `spec_roadmap`; they follow a feature's rename / archive /
+  restore / remove. `spec_changelog {milestone}` / `changelog --milestone` scopes the release notes to a milestone.
+
+### Changed
+- `spec_impact`'s `name` is optional in the MCP schema (phase `steering` only — every other phase still needs it).
+- `spec_templates` lists 28 templates (the glossary stub).
+
+### Fixed
+- **The guard hook never touches a network path an agent names** (`\\host\share\…` in a Write / Edit, or an absolute
+  `_Implements:_` path): inside / outside is decided on the text alone (a project that lives on a share stays guarded).
+  It used to stat and resolve it — an SMB connection to that host before the permission prompt, and a hang until the
+  hook timeout when the host was unreachable. The PostToolUse hook skips a network `.specs/` file outside the session.
+- The README labelled the shipped 1.15 section "Unreleased".
+
+### Tests
+- `node mcp/test.js` 1362 assertions (was 1256), `node cli/test-cli.js` 438 (was 402): every new tool, flag and
+  surface (MCP and CLI parity, EN / PT / ES), a status line ↔ next_action parity table over 27 project states, a seeded
+  fuzz of the EARS → Gherkin splitter (no character lost), the cross-feature detector on true and false pairs in three
+  languages, relative timings for the cached criteria table, and one regression per review finding of the four packages;
+  existing assertions unchanged except the exact tool / command / template counts and two status-line fixtures.
+
 ## [1.15.0] — 2026-09-28
 
 Your own tracks: a project defines its domain rigor (+a11y, +mobile, +compliance…) as a local track pack, and it

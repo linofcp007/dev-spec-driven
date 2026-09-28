@@ -38,7 +38,7 @@ The chosen tracks are stored with the feature (`.specs/<feature>/.state.json`); 
 Do the mechanical steps with the bundled engine instead of hand-editing files. Two equivalent ways:
 
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>` (or `dev-spec <command>` if on PATH).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 35 tools, plus one
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 38 tools, plus one
   prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
   `specs://` resources.
 
@@ -57,6 +57,7 @@ dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield] [
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
 dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan or BMAD docs → a NEW feature (IDs remapped)
+dev-spec import <plan|execplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -67,7 +68,10 @@ dev-spec next <feature> [--batch] [--waves]    # next task whose _Depends:_ are 
 dev-spec next-action <feature>                 # "you are here → do this next", phase by phase: re-review → fill → fix → approve (then the next phase) → implement → verify → finish
 dev-spec brief <feature> [n] [--write]         # self-contained brief for one task (ACs + tests resolved, scoped steering, DoD)
 dev-spec done <feature> <n> --run              # run the task's _Verify:_ command and record the evidence (failure → stays open; an _Expect: fail_ task: its failing run is the proof)
+dev-spec undone <feature> <n> [--reason "…"]  # untick a task ticked by mistake: its evidence turns stale, a re-tick needs a new run
 dev-spec approve <feature> <phase> [--force] [--role <role>]   # record an approval gate — refused while that phase's checks fail
+dev-spec approve <feature> <phase> --force --reason "…" --expires 30d   # a forced approval with its waiver (doctor warns waiver-expired once it lapses)
+dev-spec approve <feature> <phase> --revoke [--reason "…"]   # revoke an approval: the phase is pending again, later phases stay approved
 dev-spec approve <feature> --through tasks     # fast-forward: every filled phase in order, each through its own gate; stops at the first refusal
 dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]   # what an edit after approval touches; --reopen unticks affected done tasks (never a removed AC's: retire lists those)
 dev-spec append-tasks <feature> --task "…" [--req US-1.AC-2] [--implements path] [--verify "<cmd>"] [--makes-green T-01] [--expect-fail] [--size M] [--depends 3,5]   # converge: append a task (Phase: Convergence)
@@ -81,10 +85,13 @@ dev-spec feature <archive|restore|rename|remove> <name> [new-name] [--yes]   # l
 dev-spec feature flow <name> <requirements-first|design-first>   # the phase order (design-first: the design before the requirements)
 dev-spec catalog [--write]                     # living catalog of every feature's ACs (_Supersedes:_ marks replaced ones) → .specs/SPECS.md
 dev-spec export [feature] [--md|--csv] [--write]   # one offline, printable document (HTML / markdown) for stakeholders, or the traceability matrix as CSV → .specs/exports/
-dev-spec changelog [--since <date|last|all>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
+dev-spec export [feature] --gherkin [--write]  # BDD: one Gherkin .feature per feature — a scenario per current AC, its EARS clauses as Given / When / Then
+dev-spec export [feature] --tracker jira|linear [--write]   # a CSV for Jira's / Linear's importer (feature → stories → tasks; nothing is sent)
+dev-spec changelog [--since <date|last|all>] [--milestone <name>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
-dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features
+dev-spec roadmap                               # multi-feature roadmap: %, dependencies, cycles, ETA per feature, overlapping features, milestones
+dev-spec milestone [add "<name>" <YYYY-MM-DD> <features…> | rm "<name>" | list]   # target dates vs ETAs → on-track · at-risk · late · done
 dev-spec depend <feature> [deps...]            # show / set dependencies (rejects cycles); --add / --rm <dep>, --clear, --order N
 dev-spec backlog [add|rm|remove "<name>" ["note"]]    # planned-but-unspecced features (shown in ROADMAP.md)
 dev-spec scan [path]  /  dev-spec coverage     # brownfield: routes, tests, entrypoints, env var names, migrations + % of code named in _Implements:_
@@ -92,6 +99,7 @@ dev-spec evals <feature> [--dry-run]           # run local eval harness (+ai; yo
 dev-spec mcp-config [client]                   # print MCP config for your tool
 dev-spec rules <cursor|windsurf|copilot|gemini|agents>   # print that tool's rule file with this clone's absolute paths
 dev-spec prompts [name] [--args "…"]           # the plugin's commands as MCP prompts: list them, or print one rendered
+dev-spec statusline [--print-config]           # one status line (Claude Code's statusLine command reads its session JSON on stdin); --print-config: the settings entry
 ```
 
 ## The pipeline (Spec mode)
@@ -158,7 +166,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   changes nothing.
 - **Claims at the end of a turn.** Claude Code runs a Stop hook that sends a turn back when its closing message claims
   "done" / "verified" while recently ticked tasks lack passing evidence. Other tools have no such hook: run
-  `dev-spec stop-check --message "…"` yourself before claiming it.
+  `dev-spec stop-check --message "…"` yourself before claiming it (MCP-only: `spec_stop_check {message}`; `spec_log {name, gitLog}`
+  reads the `git log --name-only --relative` text you pass — the MCP server never runs git).
 - **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
   written, and the tasks after the root-cause task can't be completed before that.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders
@@ -176,6 +185,10 @@ next, `dev-spec next-action <feature>` names the single next step.
   it. `--reopen` unticks the affected done tasks and marks their evidence stale — never the tasks of a
   removed criterion: `retire` lists them (and their test rows) to delete or point at the criterion that
   replaces it; then re-review and re-approve.
+- **Steering amendments.** Requirements / design approvals record the steering that governed them; after editing
+  `constitution.md` or a track's steering file, `dev-spec impact --phase steering` lists every feature approved under the
+  old version (doctor: `steering-changed-since-approval`) — re-review each and re-approve. A glossary
+  (`dev-spec steering glossary.md`: `- **Customer** — … _Avoid: client, user_`) makes `clarify` ask about avoided words.
 - **Record decisions.** A design choice or a discovery made while implementing goes into the feature's decision log:
   `dev-spec decide <feature> --title "…" --decision "…" --affects US-1.AC-2,T-03` appends `D-n` to `decisions.md`
   (unknown references are refused). Briefs, the merge summary and the export show the entries; a decision recorded after
@@ -215,7 +228,8 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
-  inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — copy it in first).
+  inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — pass its text instead:
+  `dev-spec import plan - < plan.md`, or `--text "…"`).
 - **Spikes.** `dev-spec spike "<name>" --question "…" --timebox 3d` scaffolds `spike.md` + investigation tasks, with no
   requirements / design gates: investigate, then write the Decision (`_Outcome: go | no-go | pivot_` + the rationale).
   Go → spec the real feature; no-go → archive the spike. Prototype code stays outside `.specs/`.

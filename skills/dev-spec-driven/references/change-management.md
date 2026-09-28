@@ -4,14 +4,16 @@ Read on demand from `SKILL.md`. Specs change: a stakeholder rethinks a rule, imp
 later feature replaces an earlier behaviour, code drifts after the feature shipped. The engine never forbids a
 change — it makes every change **visible, diffable and re-approved**, so an edited spec is never silently shipped
 as if it were the approved one. Inspired by OpenSpec's deltas and BMAD's correct-course, done locally. Sections
-11–13 cover the decision log, approvals by role + fast-forward, and the stakeholder export + release notes.
+11–13 cover the decision log, approvals by role + fast-forward, and the stakeholder export + release notes; section 14
+the steering amendments (an approval made under a steering file that changed since); section 15 milestones.
 
 ## 1. Approval history and snapshots
 
 Every `spec_approve` (CLI `dev-spec approve`) does three things:
 
 - `.state.json → approvals[<phase>]` — the **latest** approval: `{at, by, fingerprint}` (plus `forced` and the
-  `failing` check ids when it was forced over failing checks). The fingerprint is a hash of the artifact's
+  `failing` check ids when it was forced over failing checks, and — 1.16 — its `waiver {reason, expires}` when the
+  force gave one: `--force --reason "…" --expires 30d`; doctor warns `waiver-expired` once the date passed). The fingerprint is a hash of the artifact's
   content (`tasks.md` with checkboxes normalized — ticking a task is progress, not a spec edit).
 - `.state.json → approvalHistory[]` — every approval ever made, in order (`{phase, at, by, fingerprint, snapshot,
   forced?, failing?}`), so re-approvals (rework) are countable.
@@ -22,6 +24,17 @@ Every `spec_approve` (CLI `dev-spec approve`) does three things:
 
 Approvals made before 1.13 have only a fingerprint (no snapshot): tools can tell *that* the artifact changed,
 not *what*. Re-approving the phase starts its history.
+
+**Revoking an approval** (1.16): `spec_approve {name, phase, revoke: true, reason}` (CLI `dev-spec approve <feature>
+<phase> --revoke --reason "…"`) removes `approvals[<phase>]` and the role sign-offs waiting for it, and appends
+`{phase, at, by, revoked: true, reason}` to `approvalHistory` — never a snapshot; the readers of the history as a list
+of approvals (snapshots, metrics' rework, the changelog) skip it. It **never cascades**: the later phases stay approved
+(`laterApproved`), the revoked one is pending again, and phase by phase still holds — approving another phase is
+refused (`phase-order`) until it is re-approved. `spec_metrics` counts `revokedApprovals` (and `untickedTasks`,
+`spec_complete_task {undo}`). A task unticked after a finish or an execution sign-off makes both stale (finish again,
+sign off again once it is done) — and so does a revocation of a planning phase: `spec_drift` reads the feature `stale`
+("approval revoked: …") and the catalog / SPECS.md read it complete, not finished, until the phase is re-approved and the
+feature finished again (revoking the `execution` sign-off only asks for that sign-off again).
 
 ## 2. Noticing a change
 
@@ -112,6 +125,25 @@ re-approval or new `_Implements:_` file since), every artifact as approved (an e
 hand-written `SPECS.md` is never overwritten. Once it exists, every mutator that refreshes the roadmap refreshes
 it too. Never hand-edit it.
 
+**Possible duplicates / conflicts (1.16).** The catalog also compares the ACTIVE features' criteria with each other
+(`crossAcs` {pairs, truncated}; a `## ⚠ Possible duplicates / conflicts` section in `SPECS.md` when there is a pair):
+a **near-duplicate** (`kind: duplicate`, reason `near-duplicate` — the trigger and the response EACH more than 80% alike,
+same polarity, the same numbers with the same units) or a likely **conflict** (`kind: conflict` — at least 70% of the words
+alike, the triggers at least 50% alike and the responses too, reason `opposite-modal`: SHALL vs SHALL NOT / DEVE vs NÃO DEVE
+/ DEBE vs NO DEBE, or `different-numbers`: "5 times" vs "3 times"). It is a deterministic heuristic — accents folded,
+EN/PT/ES stop words and EARS keywords out, a light plural fold, each number read with the word after it ("5 attempts" is
+not "5 minutes") — bounded by an inverted index over each criterion's rarest words and by caps (4000 criteria, 200 000
+comparisons, 200 pairs). The criterion is split at the modal ("THE SYSTEM SHALL" / "O SISTEMA DEVE" / "EL SISTEMA DEBE")
+into its trigger and its response: the polarity is the response's, so a negative in the condition ("IF the service cannot
+be reached", "can't log in", "no puede ser contactado") never flips it; a word negated in one trigger only ("is not
+verified" / "is verified", "non-admin" / "admin", "não está" / "está") makes the two complementary cases — never a pair.
+Each clause is compared in order (the shared words that keep their order, over the union): swapped roles or directions
+("a buyer rates a seller" / "a seller rates a buyer", "savings to checking" / "checking to savings") are no duplicate. Left out: template criteria (with their number slots filled in or not — two +sec features share their
+scaffolded `[SEC]` criteria), two light edits of the same template criterion, criteria of fewer than 3 words, bugfixes and
+spikes, criteria a SHIPPED feature superseded, and any pair where one criterion declares `_Supersedes:_` of the other
+(shipped or pending). `spec_doctor` warns `cross-feature-acs` on each feature of a pair, naming the other feature's AC. The
+fix: merge or reword the two, or — when the newer one replaces the older — declare `_Supersedes:_` on it (§5).
+
 ## 7. Drift since finish
 
 `spec_finish {write: true}` on a **ready** feature records a baseline in `.state.json → finished`: a
@@ -119,7 +151,8 @@ CRLF-normalized hash of every file its `_Implements:_` markers name (a folder ex
 inside the project). `spec_drift {name?}` (CLI `dev-spec drift [feature]`, exit 1 on drift or a stale baseline)
 reports per finished feature the files **changed**, **missing**, or **now present** since then; features without a
 baseline are listed as `unbaselined`, finished features whose tasks were reopened as `reopened`, and finished features
-that changed since the finish and are done again as `stale` (a change request or a re-approval after the finish —
+that changed since the finish and are done again as `stale` (a change request, a re-approval, an untick or a revocation
+after the finish —
 the converge pass's `spec_append_tasks`, a reopened change request — or, for an active feature, an `_Implements:_`
 file the baseline never recorded: the old baseline no longer covers them — their recorded files are still hashed, and
 one that drifted lists the feature as drifted too: a stale baseline never hides a changed file). An archived feature
@@ -271,4 +304,84 @@ date|last|all>] [--write]`) builds release notes from the spec data alone — no
 
 `since` defaults to `last` — `roadmap.json → meta.changelogAt`, stamped by the last written notes (everything while it
 is unset). `write: true` writes `.specs/RELEASE-NOTES.md` (AUTO-GENERATED; a hand-written one is never overwritten) and
-stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped.
+stamps `meta.changelogAt`; with nothing to report, nothing is written or stamped. `milestone` (1.16, CLI `--milestone
+<name>`) scopes the notes to a milestone's features (its features and the ones archived since — see §15): `since` then
+defaults to `all`, and `write` goes to `.specs/RELEASE-NOTES.<milestone-slug>.md` (the slug plus a short hash when the
+slug loses part of the name — `Sprint α` → `sprint-<8 hex>`) without touching `meta.changelogAt`.
+
+**Gherkin (1.16 — `format: "gherkin"`, CLI `export [feature] --gherkin`).** One `.feature` per feature for a BDD
+runner (Cucumber, behave, SpecFlow…): the feature's title and summary, its active tracks as tags (`@SaaS` `@AI` `@SEC`
+`@PRIVACY` `@tdd` …), and one `Scenario` per current acceptance criterion tagged `@US-n.AC-m`, the T-IDs the test plan
+plans for it (`@T-01`) and the marker of the track that defines it. The steps are the criterion's own EARS clauses —
+`WHILE` / `WHERE` / `IF` → `Given`, `WHEN` → `When`, the `SHALL` response → `Then`, verbatim (`THEN` only marks the
+response); a ubiquitous criterion is a `Then` (with a `Given` for a lead set off by a comma). A criterion whose
+clauses can't be split cleanly (a response with no subject before its `SHALL` included — "WHEN a payment fails, the
+cart, including discounts, SHALL be kept") becomes ONE `Then` step with its whole text (listed in `unsplit`) — nothing
+is invented and no character is lost; quoted and code spans never split a clause. Only PAIRED markdown emphasis
+(`**WHEN**`, `*WHEN*`, `_WHEN_`) is dropped as markup — `2**n`, `snake_case` and code spans stay as written — and a
+character before the first keyword (`(WHEN …`) leads its step. A summary line that starts like any Gherkin keyword of
+the dialect (or English) gets the summary label in front. A template criterion and one a shipped feature
+superseded are left out with a comment; one a draft plans to supersede is kept with a comment. PT / ES (and pt-BR)
+features are written in Gherkin's own dialect (`# language: pt` — Funcionalidade / Cenário / Dado / Quando / Então;
+`# language: es` — Característica / Escenario / Dado / Cuando / Entonces). `write` → `.specs/exports/<feature>.feature`;
+without a name, one file per active feature (spikes have no criteria and are skipped), all-or-nothing.
+
+**Tracker CSV (1.16 — `format: "jira"` / `"linear"`, CLI `export [feature] --tracker jira|linear`).** A CSV for the
+tracker's own importer — nothing is sent anywhere. One record per feature (the parent), per user story (a child of the
+feature; its intro and its criteria as the description) and per task (a child of its story through its `[USn]` tag,
+else of the feature), parents first. Jira: `Work item ID` · `Work type` (Epic / Story / Sub-task / Task) · `Summary` ·
+`Description` · `Status` (To Do / In Progress / Done) · `Parent` (the parent's Work item ID) · `Labels` (repeated, one
+label per column). Linear: `ID` · `Title` · `Description` · `Status` (Todo / In Progress / Done) · `Estimate` (a task's
+`_Size:_` points) · `Labels` (comma-separated) · `Parent issue` (local keys; a task number used twice gets an occurrence
+suffix — `checkout/#3 (2)` — so every record has its own ID). Labels: the feature slug, its tracks, its
+kind (bugfix / spike) and the AC IDs. The matrix CSV's rules apply (RFC 4180, the formula guard, a UTF-8 BOM); the
+AUTO-GENERATED marker is the LAST header cell — an empty column to leave unmapped in the import wizard, never a record
+that would become a work item. `write` → `.specs/exports/<feature>.<tracker>.csv` (the project: `project.<tracker>.csv`).
+
+## 14. Steering amendments
+
+The constitution and the track standards evolve too — and a spec approved under the old rule is not automatically
+approved under the new one. Every requirements / design approval (1.16) records `steering` {file: fingerprint} on
+`approvals[<phase>]` and its `approvalHistory` record: the steering that governed it — `constitution.md`, the active
+tracks' steering files (a track pack's too), every file whose front matter says `inclusion: always`, and every
+`fileMatch` file with its patterns (`steeringMatch` {file: [patterns]}) — requirements and design are approved before
+tasks.md names any file, so a `fileMatch` file counts only once the feature's CURRENT `_Implements:_` paths match it (its
+recorded patterns or its current ones). Only those few files are hashed (CRLF and a BOM are encoding, not content).
+
+- **Noticing it.** A recorded file that changed or was removed since → `spec_doctor` warns
+  `steering-changed-since-approval` (which files — `modified` / `removed` — and which approvals; `steeringChanged` in the
+  result), and `spec_next_action` adds a re-review hint to whatever its step is — never a step or a block of its own.
+- **The project view.** `spec_impact {phase: "steering"}` without a name (CLI `dev-spec impact --phase steering`) lists
+  every active feature approved under an older version of a steering file that changed since (`features` [{feature,
+  approvals: [{phase, approvedAt, files}]}], `files`, `changed`); with a name, that feature only. It is read-only —
+  `reopen` is refused: nothing to untick, the decision is a human re-review.
+- **Resolving it.** Re-review the approved requirements / design against the amended rule with the user; if they still
+  hold, re-approve them (the new approval records the current steering and the warning clears); if not, edit them —
+  the usual change request (`spec_impact --phase requirements|design`, reopen, re-approve).
+- **Older approvals.** An approval made before 1.16 recorded no steering: it is never flagged (`spec_impact` lists it
+  under `untracked`). Re-approving starts the tracking.
+
+## 15. Milestones
+
+`/spec-milestone` — `spec_milestone {action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
+<YYYY-MM-DD> <features…> | rm <name> | list]`) keeps named target dates for sets of features in `roadmap.json →
+meta.milestones` (under the roadmap lock). `add` needs a name (letters of any script, digits, spaces, `. _ : # ( ) + -`,
+≤ 60 characters), a real `YYYY-MM-DD` day and existing active features (a list's items are feature names — `User Login`
+is one — split on commas only); adding an existing name updates its date and features and keeps the ones archived since.
+Names are compared case-insensitively, with the accents of Latin letters and runs of spaces / `_ - . : # ( )` folded;
+every other character counts — `Sprint α` and `Sprint β`, `C` and `C++` are two milestones. Each milestone is judged
+against the roadmap forecasts (the velocity of ticked tasks → each feature's ETA), with stable codes:
+
+- `done` — every active feature is at 100%;
+- `late` — the date has passed and a feature is not done;
+- `at-risk` — `eta-after-date` (the latest ETA of its open features is after the date), `eta-unknown` (an open feature
+  has no ETA yet — not enough velocity data, no tasks, a dependency) or `no-features` (nothing left in it);
+- `on-track` — every open feature's ETA is on or before the date.
+
+`ROADMAP.md` / `.html` show a Milestones table (date, features, done, ETA, status) and list the late and at-risk ones
+under "Needs attention"; `spec_roadmap` returns the same `milestones`. A feature's lifecycle follows like its
+dependencies: a rename renames it in its milestones, a remove drops it, an archive moves it to the milestone's
+`archived` list (its release notes still cover it; its status no longer counts it) and a restore moves it back. A
+`meta.milestones` of the wrong shape — or holding an entry `add` would refuse (a bad name, a date that is no real day, a
+second entry with the same name) — is refused by `add` / `rm` (fix it by hand) and read as its valid entries otherwise;
+a `roadmap.json` that doesn't parse is an error, never "no milestones". Treat an ETA as an estimate, never a promise.

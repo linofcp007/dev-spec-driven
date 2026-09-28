@@ -2,11 +2,12 @@
 
 The methodology travels through **three portable layers**, so it works far beyond Claude Code:
 
-1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 35
+1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 38
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
    `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
-   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide` — and, unreleased (1.15), `spec_tracks` (project-defined tracks). They are plain local file operations, so
+   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide` — and, unreleased (1.15), `spec_tracks` (project-defined tracks) — and (1.16) `spec_stop_check` (the end-of-turn evidence gate for clients
+   without hooks) and `spec_log` (commits per task from the `git log` text the client passes — the server never runs git). They are plain local file operations, so
    they behave the same in every client. The server also offers **prompts** (one per plugin command) and read-only
    **resources** (the specs) — see [MCP prompts and resources](#mcp-prompts-and-resources).
 2. **Universal CLI** (`cli/dev-spec.js`) — the same engine from any terminal or tool, even without MCP.
@@ -74,16 +75,23 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 52 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
-SubagentStop evidence gate, the Bash observed-evidence log, plus the opt-in PreToolUse guard and approval guard) and the
-MCP server all load:
+Native — it's a plugin. Skills, the 54 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
+SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
+guard and approval guard) and the MCP server all load:
 
 ```bash
 claude --plugin-dir "<PLUGIN>"
 ```
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
-See [INSTALL.md](./INSTALL.md) for the persistent marketplace install.
+See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, your defaults (`DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`,
+`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
+`node "<PLUGIN>/cli/dev-spec.js" statusline --print-config` for the `settings.json` entry).
+
+The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /
+`{artifact}` / `{file}` variables of the `specs://` templates) and marks every tool with MCP `annotations`
+(`readOnlyHint` for the pure reads, `destructiveHint` only on `spec_feature`, `openWorldHint: false` everywhere) — any MCP
+client can use both.
 
 **Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
 review / branch-finishing skills overlap this plugin. `/spec-superpowers` writes (after you confirm) a marked

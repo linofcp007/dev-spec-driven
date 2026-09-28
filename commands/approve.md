@@ -1,6 +1,6 @@
 ---
 description: Record human approval of a phase gate for a feature (auditable, resumable). PT - aprova um gate de fase. ES - aprueba un gate de fase.
-argument-hint: "[feature name] [phase] [--role name] [--force]"
+argument-hint: "[feature name] [phase] [--role name] [--force [--reason text] [--expires date|30d]] [--revoke [--reason text]]"
 ---
 
 Use the **dev-spec-driven** skill approval gate.
@@ -38,6 +38,20 @@ seen: present it first (in a bugfix, the reproduction and the root cause in `bug
 when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —
 `spec_doctor`'s `approval-gates` check warns, the roadmap lists them, and `spec_metrics` counts them. A phase with
 no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even forced.
+With `force`, record the user's reason and, when they give one, an expiry: `reason` + `expires` (`YYYY-MM-DD`, today or
+later, or a number of days like `30d`) — CLI `--force --reason "…" --expires 30d` — are stored as the approval's
+**waiver** (`waiver {reason, expires}`, on the approval and its history record; only when the gate really fails —
+a passing gate waives nothing). Once the expiry passes while the approval still stands forced, `spec_doctor` warns
+`waiver-expired`; ROADMAP.md shows each forced approval with its waiver (an expired one flagged EXPIRED) and
+`/spec-finish` lists them in the merge summary. `reason` / `expires` without `force` are refused.
+
+**Revoke** an approval the user withdraws (given by mistake, or no longer true): `spec_approve {name, phase, revoke:
+true, reason}` (CLI `dev-spec approve <feature> <phase> --revoke --reason "…"`). It removes that phase's approval —
+and the role sign-offs waiting for it — and appends `{phase, at, by, revoked: true, reason}` to `approvalHistory` (no
+snapshot). It **never cascades**: later phases stay approved (`laterApproved`); the revoked phase is pending again, so
+doctor, next_action and finish ask for it, and approving another phase is refused (`phase-order`) until it is
+approved again. Revoking a phase that is not approved is an error; `execution` can be revoked too (its sign-off is
+then asked for again). Revoke only when the user asks — the approval guard gates it like an approval.
 
 **Approvals by role** (opt-in: `.specs/roadmap.json → meta.approvalRoles`, set with `spec_init {approvalRoles}` / CLI
 `dev-spec init --roles requirements=product,design=tech+security`): a phase listed there needs `role` (CLI

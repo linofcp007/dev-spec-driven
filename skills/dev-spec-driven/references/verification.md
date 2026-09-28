@@ -63,6 +63,15 @@ ask the user to run the test and paste the red output — don't write the fix on
   can't paper over it.
 - **Stale evidence.** `spec_impact --reopen` (the spec the run proved changed) marks a task's evidence stale, and a
   run recorded for an earlier `_Verify:_` command no longer proves the task: run the check again.
+- **Undoing a tick.** A task ticked by mistake (or whose work turned out incomplete) is unticked with
+  `spec_complete_task {name, number, undo: true, reason}` (CLI `dev-spec undone <feature> <n> --reason "…"`) — never by
+  editing the checkbox. Its evidence record is marked stale (`staleBy: "undo"`): ticking it again needs a NEW run
+  (`stale-evidence`, labelled "unticked since this evidence was recorded"); `ticks[n]` is dropped and `.state.json →
+  unticks` records `{n, at, reason}`. A finished or signed-off feature must then be finished and signed off again.
+  An `_Expect: fail_` task keeps its red run through the undo (`redKept: true` — the fix may already be in, so the red
+  run can't be made again): its re-tick's passing run counts as the fix going green — unless its `_Verify:_` was edited
+  meanwhile. When several ticked tasks share the number, undo refuses (`duplicateTicked`, naming them): renumber first
+  (doctor warns `duplicate-tasks`). `undone` takes no evidence (`--evidence` / `--exit` / `--cmd` / `--run` are refused).
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
   task, where the failing run is the proof and a passing one is refused). `--shell bash` (or
@@ -196,7 +205,8 @@ project checks). Interrupted and backgrounded runs are not logged.
 `dev-spec log <feature>` reads `git log` (read-only, local) and lists per task the commits that cite it — "task #N" with
 the feature name, as `/spec-commit` writes `Part of .specs/<feature>/ task #N.`, or its T- / AC IDs ("Makes T-01
 green") — and, on +tdd, a **red-first check**: an implementation committed before its test. Commit with the
-`/spec-commit` conventions and that history reads itself.
+`/spec-commit` conventions and that history reads itself. An MCP-only client uses `spec_log {name, gitLog}`: it passes
+the text of `git log --name-only --relative` it ran itself — the MCP server never runs git (or any command).
 
 ## The end-of-turn evidence gate (Claude Code)
 
@@ -235,7 +245,7 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 | `no-evidence` | Nothing recorded for this task | Run its `_Verify:_` and record the run |
 | `failed-run` | The latest recorded run exited non-zero (or, on an `_Expect: fail_` task, could not run) | Fix, re-run, record the passing run |
 | `manual-note-on-runnable-verify` | Only a note was given, but `_Verify:_` holds a command | Run the command; record `{command, exitCode}` |
-| `stale-evidence` | The record no longer proves this task: `spec_impact --reopen` marked it stale (the spec it proved changed), or it was recorded for an earlier `_Verify:_` command / another task that held the number | Run the check again on the current code |
+| `stale-evidence` | The record no longer proves this task: `spec_impact --reopen` marked it stale (the spec it proved changed), the task was unticked after it (`spec_complete_task {undo}`), or it was recorded for an earlier `_Verify:_` command / another task that held the number | Run the check again on the current code |
 | `duplicate-number` | Another task shares this number and the record isn't this task's | Renumber the tasks (doctor warns `duplicate-tasks`) |
 | `unexpected-pass` | The task is marked `_Expect: fail_`, but its latest run passed with no red run before it | Make the test fail for the right reason and record that run (or drop the marker) |
 | `unobserved` | Only with `meta.evidence: "observed"`: the run that proves it was reported, but the harness never saw it (nor did the CLI make it) | Run the command with the Bash tool in Claude Code and record it again, or `dev-spec done <feature> <n> --run` |

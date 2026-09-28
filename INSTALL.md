@@ -21,7 +21,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its 35 tools.
+- `/mcp` → you should see the **spec-driven** server connected with its 38 tools.
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -35,8 +35,8 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 52 commands, the 3 agents, the
-hooks and the `spec-driven` MCP server (35 tools) load for that session.
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 54 commands, the 3 agents, the
+hooks and the `spec-driven` MCP server (38 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
 > ```powershell
@@ -174,6 +174,46 @@ node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to dis
 
 `ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
 Both are guardrails, not a sandbox, and only Claude Code runs these hooks.
+
+**Plan-mode bridge (always on, one line of context).** A PostToolUse hook on `ExitPlanMode` (`hooks/plan-hook.js`): when
+you approve a plan in Claude Code's plan mode inside a dev-spec project, Claude is reminded that the plan can become a spec
+— `/spec-import` with the plan's text (`spec_import {tool: "plan", text}`, CLI `dev-spec import plan - < plan.md`), since
+plan mode keeps plans in `~/.claude/plans`, outside the project. It never imports by itself and is silent elsewhere.
+
+**Status line (opt-in).** `dev-spec statusline` prints one line for Claude Code's status bar — the feature with work under
+way, its tasks, unverified ticks and the next step (`◆ billing · 4/9 tasks · 1 unverified · next: approve tasks`), in the
+project language, and nothing outside a dev-spec project. `/spec-statusline` sets it up after you confirm; by hand:
+
+```powershell
+node "$plugin\cli\dev-spec.js" statusline --print-config   # prints the "statusLine" entry with this clone's absolute path
+```
+
+Put that entry in `~/.claude/settings.json` (every project) or a project's `.claude/settings.local.json` (the path is this
+machine's — keep it out of a committed `.claude/settings.json`). A plugin installed from a git marketplace lives in a
+versioned cache folder: run `/spec-statusline` again after an update. It reads `.specs/` (at Phase 4 also the few test files
+the test plan names — never a repo walk, never a network folder), names the same next step as `/next-action` (it doesn't
+check drift, so a finished feature reads "finished", not "clean"), exits 0 always and costs no tokens.
+
+**Your defaults (environment variables, 1.16).** Three optional settings for every project that doesn't set its own —
+each is a fallback; a project's `.specs/roadmap.json` always wins:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DEV_SPEC_DEFAULT_LANG` | unset (= en) | The language a NEW project gets when `/spec-init` or its first feature names none (`en`, `pt`, `pt-BR`, `es`) — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
+| `DEV_SPEC_STOP_CHECK` | on | `off` switches the end-of-turn evidence gate off for every project that doesn't set `meta.stopCheck` itself (`init --stop-check on\|off` pins a project). |
+| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-guard` pins a project). |
+
+In Claude Code put them in the `env` block of `~/.claude/settings.json` (you, every project) or a project's
+`.claude/settings.local.json` — Claude Code hands that block to the hooks, the MCP server and the commands Claude runs, so
+all three see the same values:
+
+```json
+{ "env": { "DEV_SPEC_DEFAULT_LANG": "pt", "DEV_SPEC_GUARD_DEFAULT": "scope" } }
+```
+
+Elsewhere set them in your shell or in the other tool's MCP config `env`. An empty or invalid value changes nothing.
+(The plugin declares no `userConfig`: that would open a configuration dialog on every install, and it would reach neither
+the CLI nor other MCP clients.)
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the

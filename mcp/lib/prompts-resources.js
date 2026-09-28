@@ -13,8 +13,11 @@
  * artifact names, features resolved through resolveFeature/existingFeature, no '..', no absolute path, no other
  * scheme, and never a symlink out of .specs/. The list is capped (RESOURCE_CAP; the result says so).
  *
- * mcp/server.js maps these results onto JSON-RPC (prompts/*, resources/*); the CLI (`dev-spec prompts`) reuses the
- * prompt half. Every sentence returned comes from i18n.js (msg(lang).promptsResources).
+ * COMPLETIONS (1.16): completion/complete — a feature-naming prompt argument → the active features' slugs; the specs://
+ * templates' {slug} / {artifact} / {file} → the names that exist. Bounded (100 values), every input validated.
+ *
+ * mcp/server.js maps these results onto JSON-RPC (prompts/*, resources/*, completion/complete); the CLI (`dev-spec prompts`)
+ * reuses the prompt half. Every sentence returned comes from i18n.js (msg(lang).promptsResources, msg(lang).claudeCode).
  */
 
 const fs = require("fs");
@@ -313,11 +316,83 @@ function readResource(projectDir, uri) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Completions (completion/complete, 1.16 C3)
+// ---------------------------------------------------------------------------
+
+const COMPLETION_MAX = 100; // values per answer (MCP: at most 100); `total` / `hasMore` say what was left out
+const COMPLETION_VALUE_MAX = 200; // characters of the typed value matched (a longer one matches nothing)
+// The variables of each resource template (resourceTemplates) — the only ref/resource URIs completed.
+const TEMPLATE_VARS = { "specs://feature/{slug}/{artifact}": ["slug", "artifact"], "specs://steering/{file}": ["file"] };
+// A prompt whose argument starts with a feature's name ("[feature name]", "[feature] …", "[feature name | …]") — never a new
+// feature's idea or description.
+const RE_FEATURE_ARG = /^\s*\[feature(?:\s+name)?(?=[\]\s|])(?!\s+(?:idea|description)\b)/i;
+// Ranked matches: the values starting with what was typed, then those containing it (case-insensitive), capped.
+function completionMatches(list, typed) {
+  const v = String(typed).toLowerCase();
+  if (v.length > COMPLETION_VALUE_MAX) return { values: [], total: 0, hasMore: false };
+  const pre = [], sub = [];
+  for (const x of [...new Set(list)]) {
+    const l = x.toLowerCase();
+    if (l.startsWith(v)) pre.push(x);
+    else if (v && l.includes(v)) sub.push(x);
+  }
+  const all = pre.concat(sub);
+  return { values: all.slice(0, COMPLETION_MAX), total: all.length, hasMore: all.length > COMPLETION_MAX };
+}
+// completion/complete → { ok: true, completion: { values, total, hasMore } } | { ok: false, error } (the server answers -32602).
+//   ref/prompt   — a prompt (commands/*.md) whose argument names a feature: its `args` value completes to the active features'
+//                  slugs while it is one word (a second word is not a feature: no values); any other prompt: no values;
+//   ref/resource — the templates: {slug} → the active features, {artifact} → the allowlisted artifacts of context.arguments.slug
+//                  (those it has; every allowlisted name without a usable slug), {file} → the steering files.
+// Every input is validated; an unknown prompt, template or argument name is an error. opts: { lang, prompts (false: the
+// server serves no prompts), commandsDir }.
+function complete(projectDir, params, opts = {}) {
+  const pdir = projectDir || spec.resolveProjectDir();
+  const lang = opts.lang || spec.projectLang(pdir);
+  const E = T(lang).err;
+  const C = spec.msg(lang).claudeCode.completion;
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const p = isObj(params) ? params : {};
+  const ref = isObj(p.ref) ? p.ref : null;
+  const arg = isObj(p.argument) ? p.argument : null;
+  if (!ref || typeof ref.type !== "string" || !arg || typeof arg.name !== "string" || (arg.value != null && typeof arg.value !== "string")) {
+    return { ok: false, error: C.badRequest };
+  }
+  const value = typeof arg.value === "string" ? arg.value : "";
+  const ctx = isObj(p.context) && isObj(p.context.arguments) ? p.context.arguments : {};
+  const ok = (list) => ({ ok: true, completion: completionMatches(list, value) });
+  const root = spec.specsRoot(pdir);
+  const slugs = () => featureFolders(root).map((f) => f.slug);
+  if (ref.type === "ref/prompt") {
+    if (opts.prompts === false) return { ok: false, error: C.promptsOff };
+    const prompts = listPrompts({ lang, commandsDir: opts.commandsDir });
+    const pr = typeof ref.name === "string" ? prompts.find((x) => x.name === ref.name) : null;
+    if (!pr) return { ok: false, error: E.unknownPrompt(clip(ref.name == null ? "" : ref.name), prompts.map((x) => x.name).join(", ")) };
+    if (arg.name !== "args") return { ok: false, error: C.unknownArgument(clip(arg.name), "args") };
+    return ok(RE_FEATURE_ARG.test(pr.argumentHint) && !/\s/.test(value) ? slugs() : []);
+  }
+  if (ref.type === "ref/resource") {
+    const vars = typeof ref.uri === "string" && Object.prototype.hasOwnProperty.call(TEMPLATE_VARS, ref.uri) ? TEMPLATE_VARS[ref.uri] : null;
+    if (!vars) return { ok: false, error: C.unknownTemplate(clip(ref.uri == null ? "" : ref.uri), Object.keys(TEMPLATE_VARS).join(", ")) };
+    if (!vars.includes(arg.name)) return { ok: false, error: C.unknownArgument(clip(arg.name), vars.join(", ")) };
+    if (arg.name === "slug") return ok(slugs());
+    if (arg.name === "file") { const inSpecs = specsGuard(root); return ok(inSpecs ? steeringFiles(root, inSpecs) : []); }
+    // {artifact}: the ones the named feature has (a listing of its folder), else every allowlisted name.
+    const f = typeof ctx.slug === "string" ? featureFolders(root).find((x) => x.slug === ctx.slug) : null;
+    if (!f) return ok(RESOURCE_ARTIFACTS);
+    const files = new Set(listDir(path.join(root, f.folder), true).filter((d) => d.isFile()).map((d) => d.name));
+    return ok(RESOURCE_ARTIFACTS.filter((a) => files.has(a)));
+  }
+  return { ok: false, error: C.badRequest };
+}
+
 module.exports = {
   PLUGIN_ROOT,
   COMMANDS_DIR,
   RESOURCE_ARTIFACTS,
   RESOURCE_CAP,
+  COMPLETION_MAX,
   parseFrontMatter,
   listPrompts,
   promptArgs,
@@ -326,4 +401,5 @@ module.exports = {
   resourceTemplates,
   parseResourceUri,
   readResource,
+  complete,
 };

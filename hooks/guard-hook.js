@@ -6,7 +6,8 @@
  *
  * Wired from hooks/hooks.json as PreToolUse (Write|Edit|MultiEdit|NotebookEdit). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
- * `dev-spec init --guard on`). When on, a code edit outside `.specs/` while no feature has approved, unfinished
+ * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
+ * code edit outside `.specs/` while no feature has approved, unfinished
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
  * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
  * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
@@ -16,6 +17,9 @@
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
  * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk.
+ * The edited file's path is the agent's: a network one (\\host\share\…) is never stat'ed or realpath'ed — inside / outside
+ * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named (1.16 verify NEW-3).
+ * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's.
  */
 
 const fs = require("fs");
@@ -31,13 +35,46 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
-// Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project.
+// The user's default (1.16 — the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
+// on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
+// the same variable.
+function userGuardDefault() {
+  for (const n of ["DEV_SPEC_GUARD_DEFAULT"]) {
+    const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
+    if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:on|true|yes|1|scope)$/i.test(v);
+  }
+  return false;
+}
+// A .specs/ dev-spec owns but without a roadmap.json (a project made before it): steering/ or a feature folder with its
+// .state.json — the engine's rule (spec.guardLevel), so neither a folder without .specs/ nor another tool's .specs/ gets the
+// user's default.
+function devSpecWithoutRoadmap(dir) {
+  const root = path.join(dir, ".specs");
+  try {
+    fs.lstatSync(path.join(root, "roadmap.json"));
+    return false; // it exists (readable or not): its meta decides
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") return false;
+  }
+  try {
+    if (!fs.statSync(root).isDirectory()) return false;
+    if (fs.existsSync(path.join(root, "steering"))) return true;
+    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() && !d.name.startsWith(".") && fs.existsSync(path.join(root, d.name, ".state.json")));
+  } catch {
+    return false;
+  }
+}
+// Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project. No roadmap.json in a dev-spec
+// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off.
 function guardOn(dir) {
+  if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
-    return !!j && typeof j === "object" && !Array.isArray(j) && !!j.meta && typeof j.meta === "object" && (j.meta.guard === true || j.meta.guard === "scope");
+    if (!j || typeof j !== "object" || Array.isArray(j)) return false;
+    const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
+    return meta.guard === true || meta.guard === "scope" || (meta.guard === undefined && userGuardDefault());
   } catch {
-    return false; // missing, unreadable or broken → the guard stays out of the way
+    return false; // missing (no user default), unreadable or broken → the guard stays out of the way
   }
 }
 

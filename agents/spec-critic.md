@@ -26,15 +26,15 @@ The controller gives you the feature folder (`.specs/<feature>/`), the artifact 
 tracks, and the latest `spec_doctor` result. Read the steering files (`.specs/steering/constitution.md`
 first; `security.md` / `privacy.md` on +sec / +privacy) and the artifacts the one under review depends on (design →
 requirements — or, on a design-first feature, requirements → the approved design; tasks → requirements + design +
-test plan), plus `decisions.md` when it exists.
+test plan), plus `decisions.md` and `.specs/steering/glossary.md` when they exist.
 
 ## What to check
 
 | Category | Look for |
 |---|---|
 | **Completeness** | Behaviour the feature obviously needs but no AC covers (error paths, empty/limit inputs, permissions, concurrency, the "unwanted" IF…THEN cases); placeholders or TBD that doctor missed. |
-| **Consistency** | ACs that contradict each other, the design, the constitution, or `Out of Scope`; numbers that disagree between sections. |
-| **Clarity** | Criteria two engineers would implement differently; undefined terms; unmeasurable targets ("fast", "secure"). |
+| **Consistency** | ACs that contradict each other, the design, the constitution, or `Out of Scope`; numbers that disagree between sections. Across features: the doctor's `cross-feature-acs` pairs (a criterion that reads like another active feature's, or may contradict it — SHALL vs SHALL NOT, different numbers): read both and say which is a real conflict, a duplicate to merge, or a replacement to declare with `_Supersedes:_` — the heuristic only points. After a steering amendment (`steering-changed-since-approval`): does the approved artifact still hold under the amended rule? |
+| **Clarity** | Criteria two engineers would implement differently; undefined terms; unmeasurable targets ("fast", "secure"); words the glossary says to avoid (the doctor's `glossary` check) or a domain term used with another meaning than its glossary entry. |
 | **Testability** | ACs no test could fail; test-plan rows that don't actually exercise the AC they claim to cover. |
 | **Scope** | More than one feature hiding in the spec (should be split); stories that aren't independently shippable. |
 | **YAGNI** | Requirements or design elements nobody asked for; "professional" extras without a user. |

@@ -21,7 +21,7 @@
  *                                      --check name="cmd" (repeatable; name= removes) → roadmap.json meta.checks)
  *                                      --roles requirements=product,design=tech+security → approvals by role, none clears)
  *                                      --approval-guard off|ask|deny → an agent's approval asks the user / is refused (meta.approvalGuard)
- *   steering <file> [--lang]            Create one steering file from its template, or a custom scoped one
+ *   steering <file> [--lang]            Create one steering file from its template (glossary.md: the terms to use / avoid), or a custom scoped one
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
@@ -45,14 +45,21 @@
  *                                      --waves: the execution waves of every open task (+ cycles, blocked tasks)
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
  *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
+ *   undone <feature> <n> [--reason "…"]  Untick task n (ticked by mistake): its evidence turns stale — a re-tick needs a new
+ *                                      run; recorded in .state.json unticks (= spec_complete_task {undo: true, reason})
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
  *                                      (--by = who approved; --force records it anyway, flagged as forced;
+ *                                      --reason "…" --expires YYYY-MM-DD|30d with --force = its waiver: why, until when;
  *                                      --role ROLE = the role you sign off for, when init --roles lists the phase)
+ *   approve <feature> <phase> --revoke [--reason "…"]  Revoke the phase's approval (and its waiting role sign-offs) —
+ *                                      it is pending again; never cascades to the later phases
  *   approve <feature> --through <phase> Fast-forward: approve every active phase up to <phase>, in order, each through its
  *                                      own gate — stops at the first refused one (/spec-ff)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
  *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
+ *   impact [feature] --phase steering  The features (all active ones without a name) whose requirements / design approval was
+ *                                      made under steering (constitution, track files…) that changed since — re-review, re-approve
  *   metrics [feature] [--write]        Lead times, rework, change requests, evidence pass rate, velocity (--write → retro.md)
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
@@ -66,7 +73,12 @@
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
  *                                      [--csv] the traceability matrix as CSV (UTF-8 BOM) → .specs/exports/<feature|project>.rtm.csv
- *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt)
+ *                                      [--gherkin] one Gherkin .feature per feature (a scenario per AC, EARS → Given/When/Then) → <feature>.feature
+ *                                      [--tracker jira|linear] a CSV for the tracker's importer (feature → stories → tasks) → <feature|project>.<tracker>.csv
+ *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt);
+ *                                      --milestone <name>: that milestone's features only → .specs/RELEASE-NOTES.<milestone>.md
+ *   milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]  Milestones in roadmap.json (meta.milestones): each one's
+ *                                      date vs the latest ETA of its features → on-track · at-risk · late · done (ROADMAP.md shows them)
  *   drift [feature]                    Implementing files changed/missing since finish (exit 1 on drift or a stale baseline)
  *   stop-check [--message "<text>"|-] [--agent <type>]  The Stop hook's evidence gate for a closing message: does it claim
  *                                      done / verified while a recently active feature has ticked tasks without evidence? (exit 1 = sent back)
@@ -80,6 +92,9 @@
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
  *   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
+ *   import <plan|execplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
+ *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
+ *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
  *   mcp-config [client]                Print ready MCP config (claude-desktop|claude-code|
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
@@ -91,10 +106,12 @@
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
  *        done: --run · --shell bash|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · --timeout <s> · log: --max N (default 1000)
+ *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
  *        --run: a command that could not run (missing shell, signal, --timeout, WSL's bash launcher) records nothing;
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
+ *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  */
 
@@ -155,7 +172,7 @@ function withTracksFlag(list) {
 ["task", "req", "implements", "verify", "story", "heading", "makes-green", "size"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("timeout"); // done --run / finish --run --timeout <seconds> (full review Ga10): a run past it is could-not-run, nothing recorded
 
-VALUE_FLAGS.add("phase"); // impact <f> --phase requirements|design|test-plan|eval-plan|tasks
+VALUE_FLAGS.add("phase"); // impact [f] --phase requirements|design|test-plan|eval-plan|tasks|steering (1.16: steering needs no feature)
 
 VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
 ["stop-check", "message", "agent"].forEach((k) => VALUE_FLAGS.add(k)); // 1.14 C1: init --stop-check on|off (= spec_init {stopCheck}); stop-check --message "…" --agent <type>
@@ -163,10 +180,13 @@ VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes)
 VALUE_FLAGS.add("approval-guard"); // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
 VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
+VALUE_FLAGS.add("tracker"); // 1.16 E2: export [f] --tracker jira|linear (= spec_export {format: "jira" | "linear"})
+VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_changelog {milestone})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
+["reason", "expires"].forEach((k) => VALUE_FLAGS.add(k)); // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires (= spec_complete_task {undo, reason}, spec_approve {revoke, reason, expires})
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -303,7 +323,68 @@ function mcpConfig(client) {
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+
+// ---- statusline (1.16 C1) ----------------------------------------------------
+// Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
+// update starts) with its session JSON on stdin, and shows what it prints — a non-zero exit or no output blanks the line. So
+// the render path never fails: no flag refusal, no usage error, bounded stdin, every error swallowed, exit 0 always, nothing
+// printed outside a dev-spec project. The project: the nearest dev-spec .specs/ at or above --project / workspace.current_dir /
+// cwd / workspace.project_dir of the payload (no payload — a terminal: --project / SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / the
+// working folder). The line is spec.statusLine's, cut to $COLUMNS; --json prints the whole result.
+const STATUS_STDIN_MAX = 1024 * 1024;
+function statusLineRender() {
+  let done = false;
+  let data = "";
+  process.stdout.on("error", () => process.exit(0)); // a reader gone (Claude Code cancelled this run): nothing left to show
+  const render = () => {
+    if (done) return;
+    done = true;
+    let r = { ok: true, found: false, line: "" };
+    try {
+      let payload = null;
+      try { payload = data.trim() ? JSON.parse(data) : null; } catch { payload = null; }
+      if (payload !== null && (typeof payload !== "object" || Array.isArray(payload))) payload = null;
+      const ws = payload && payload.workspace && typeof payload.workspace === "object" ? payload.workspace : {};
+      const given = typeof flags.project === "string" ? [flags.project] : [];
+      const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
+        : given.concat([process.env.SPEC_PROJECT_DIR, process.env.CLAUDE_PROJECT_DIR, process.cwd()]);
+      const pdir = spec.statusLineProject(cands);
+      const cols = parseInt(process.env.COLUMNS, 10);
+      if (pdir) r = spec.statusLine(pdir, { columns: Number.isSafeInteger(cols) && cols > 0 ? cols : undefined });
+    } catch {
+      r = { ok: true, found: false, line: "" }; // never a stack trace in the status line
+    }
+    const text = flags.json === true ? JSON.stringify(r) + "\n" : r.line ? r.line + "\n" : "";
+    try { process.stdout.write(text, () => process.exit(0)); } catch { process.exit(0); }
+  };
+  if (process.stdin.isTTY) return render();
+  try {
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { if (data.length < STATUS_STDIN_MAX) data += c; });
+    process.stdin.on("end", render);
+    process.stdin.on("error", render);
+  } catch {
+    return render();
+  }
+  setTimeout(render, 1500).unref(); // a caller that never closes stdin still gets its line
+}
+// `statusline --print-config`: the settings.json snippet with THIS clone's absolute path (never committed — like mcp-config).
+function statusLineConfig() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  const command = `node "${cli}" statusline`;
+  const cfg = { statusLine: { type: "command", command } };
+  if (flags.json) return console.log(JSON.stringify(cfg, null, 2));
+  const C = spec.msg(spec.projectLang(projectDir)).claudeCode.statusLine.config;
+  console.log(C.head);
+  console.log(JSON.stringify(cfg, null, 2));
+  console.log(C.after);
+  if (/\/plugins\/cache\//i.test(cli)) console.log(C.cacheNote);
+  console.log(C.tryIt(command));
+}
+
 function main() {
+  // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
+  if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
@@ -628,7 +709,7 @@ function main() {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
-      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, on("run") ? { ranBy: "cli" } : undefined);
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli" } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
@@ -639,16 +720,34 @@ function main() {
       });
     }
 
+    case "undone": {
+      // 1.16 U1 — dev-spec undone <feature> <n> [--reason "…"] = spec_complete_task {undo: true, reason}: untick a task ticked by
+      // mistake — its evidence turns stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it.
+      if (!pos[0] || pos[1] == null) usage("dev-spec undone <feature> <task-number> [--reason \"…\"]");
+      const M = spec.msg(spec.featureLang(projectDir, pos[0])); // human output in the feature's language
+      // 1.16 U review 5: done's evidence flags (--evidence / --exit / --cmd / --run) are refused, as spec_complete_task refuses
+      // {undo, evidence} — they were silently ignored (the user believed a run had been recorded). Nothing runs, nothing changes.
+      if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run")) return fail({ ok: false, error: M.undo.noEvidence });
+      const r = spec.completeTask(projectDir, pos[0], pos[1], undefined, { undo: true, reason: flags.reason });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => {
+        console.log((r.unticked ? M.undo.cliDone : M.undo.cliAlready)(r.number, r.done, r.total) + (r.next ? M.taskDone.next(r.next.number, r.next.text) : ""));
+        if (r.note) console.log("  " + (r.unticked ? "⚠ " : "") + r.note);
+      });
+    }
+
     case "approve": {
       // --through <phase> = the fast-forward (spec_approve {through}); --role <role> = the sign-off's role (spec_approve {role}).
       const through = typeof flags.through === "string" ? flags.through : undefined;
-      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force] [--by NAME] [--role ROLE] | dev-spec approve <feature> --through <phase>");
+      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
       const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined,
-        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}) });
+        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}),
+          reason: flags.reason, expires: flags.expires, revoke: on("revoke") }); // 1.16 U2 / U3 (= spec_approve {revoke, reason, expires})
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
       const GV = spec.msg(spec.featureLang(projectDir, r.feature)).governance;
       return out(r, (r) => {
+        if (r.revoked) return console.log(r.message); // 1.16 U2: what was revoked, and that nothing cascades
         if (r.through) { // the fast-forward: its summary, then one line per phase it reached
           console.log(r.message);
           (r.steps || []).forEach((s) => console.log("  " + (s.approved ? "✓" : "◐") + " " + s.phase + (s.role ? " [" + s.role + "]" : "") +
@@ -681,6 +780,18 @@ function main() {
         console.log(T.backlogHead(r.backlog.length));
         r.backlog.forEach((b) => console.log("  - " + b.name + (b.note ? " — " + b.note : "")));
       });
+    }
+
+    case "milestone":
+    case "milestones": {
+      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_milestone {action, name, date, features}):
+      // a name with spaces is quoted; the features may also be comma-separated. The action is case-folded, like the MCP enum.
+      const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase() || "list";
+      const syntax = "dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]";
+      if ((a0 === "list" && pos.length > 1) || ((a0 === "rm" || a0 === "remove") && pos.length !== 2)) usage(syntax);
+      const r = spec.milestone(projectDir, a0, a0 === "add" ? { name: pos[1], date: pos[2], features: pos.slice(3) } : { name: pos[1] });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
     case "roadmap": {
@@ -776,6 +887,7 @@ function main() {
       return out(r, (r) => {
         console.log(T.clarify(r.feature, r.tracks, T.word(r.verdict), r.gapCount));
         r.questions.forEach((q, i) => console.log("  " + (i + 1) + ". " + q));
+        if (r.glossaryNote) console.log("  ⚠ " + r.glossaryNote); // 1.16 Q review: a glossary read only in part says so
       });
     }
 
@@ -873,17 +985,31 @@ function main() {
     case "import": {
       // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      if (!pos[0] || !pos[1]) usage("dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy]");
-      const r = spec.importSpec(projectDir, pos[0], pos[1], { name: flags.name, lang: flags.lang, tracks: withTracksFlag(pos.slice(2)) });
-      if (!r.ok) return fail(r);
-      return out(r, (r) => {
-        const B = spec.msg(r.lang).importSpec;
-        console.log(B.done(r.toolName, r.source, r.feature, r.label, r.lang));
-        console.log("  " + r.files.join(", "));
-        const ids = Object.entries(r.mapping);
-        console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
-        r.warnings.forEach((w) => console.log("  ⚠ " + w));
-      });
+      // 1.16 C4: `import plan|execplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
+      // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy] · import <plan|execplan> - | --text \"<markdown>\"";
+      const fromStdin = pos[1] === "-";
+      const hasText = typeof flags.text === "string";
+      if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
+      // With --text the words after the tool are tracks; with - or a path, the words after it. A word after the tool that is no
+      // track list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not
+      // both" (as spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
+      const pathWithText = hasText && !!pos[1] && spec.parseTracks(pos[1]).unknown.length > 0;
+      const doImport = (text) => {
+        const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : pos[1], { name: flags.name, lang: flags.lang,
+          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text });
+        if (!r.ok) return fail(r);
+        return out(r, (r) => {
+          const B = spec.msg(r.lang).importSpec;
+          console.log(B.done(r.toolName, r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source, r.feature, r.label, r.lang));
+          console.log("  " + r.files.join(", "));
+          const ids = Object.entries(r.mapping);
+          console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          r.warnings.forEach((w) => console.log("  ⚠ " + w));
+        });
+      };
+      if (fromStdin) return readStdin((text) => doImport(text));
+      return doImport(hasText ? flags.text : undefined);
     }
 
     case "append-tasks": {
@@ -931,8 +1057,10 @@ function main() {
     }
 
     case "impact": {
-      // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact
-      if (!pos[0]) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]");
+      // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact;
+      // 1.16 Q1: `impact [feature] --phase steering` — the features approved under steering that changed since (no feature = all)
+      const steeringPhase = String(flags.phase == null ? "" : flags.phase).trim().toLowerCase() === "steering";
+      if (!pos[0] && !steeringPhase) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] · dev-spec impact [feature] --phase steering");
       const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: on("reopen") });
       if (!r.ok) return fail(r);
       return out(r, (r) => spec.impactLines(r).forEach((l) => console.log(l)));
@@ -1034,19 +1162,35 @@ function main() {
     }
 
     case "export": {
-      // dev-spec export [feature] [--md|--csv] [--write] — the stakeholder document (= spec_export {name, format, write}): printed on
-      // stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No feature = the whole project.
-      if (pos.length > 1 || [on("md"), on("html"), on("csv")].filter(Boolean).length > 1) usage("dev-spec export [feature] [--md|--csv] [--write]");
-      const r = spec.exportSpecs(projectDir, { name: pos[0], format: on("md") ? "md" : on("csv") ? "csv" : "html", write: on("write") });
+      // dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
+      // {name, format, write}): printed on stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No
+      // feature = the whole project (--gherkin: one .feature per feature). --tracker takes the tool's name (the MCP format).
+      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]";
+      const tracker = flags.tracker === undefined ? null : String(flags.tracker).trim().toLowerCase();
+      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
+      if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
+        const A = spec.msg(spec.projectLang(projectDir)).args;
+        die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))));
+      }
+      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : "html");
+      const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
       if (!r.ok) return fail(r);
-      const X = spec.msg(r.lang).stakeholderExport;
-      return out(r, (r) => (r.wrote ? console.log(X.wrote(r.file)) : process.stdout.write(r.content)));
+      const M = spec.msg(r.lang);
+      return out(r, (r) => {
+        if (r.format === "gherkin" && r.scope === "project") { // one .feature per feature: written, or each printed under its path
+          if (r.wrote) { r.files.forEach((f) => console.log(M.stakeholderExport.wrote(f))); return console.log(M.gherkin.wroteMany(r.files.length, r.scenarios)); }
+          if (!r.documents.length) return console.log(M.gherkin.noFeatures);
+          return r.documents.forEach((d, i) => process.stdout.write((i ? "\n" : "") + "# ── " + path.relative(projectDir, d.file).split(path.sep).join("/") + " ──\n" + d.content));
+        }
+        if (r.wrote) return console.log(tracker ? M.trackerCsv.wrote(r.file, r.records) : M.stakeholderExport.wrote(r.file));
+        process.stdout.write(r.content);
+      });
     }
     case "changelog": {
       // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_changelog): the
       // markdown on stdout (a note on stderr), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt (exit 1 on a refusal).
-      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--write]");
-      const r = spec.changelog(projectDir, { since: flags.since, write: on("write") });
+      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]");
+      const r = spec.changelog(projectDir, { since: flags.since, write: on("write"), milestone: flags.milestone });
       if (!r.ok) return fail(r);
       const N = spec.msg(r.lang).releaseNotes;
       return out(r, (r) => {
@@ -1071,7 +1215,7 @@ function main() {
         if (!r.ok) return fail(r);
         return out(r, (r) => r.lines.forEach((l) => console.log(l)));
       };
-      if (pos[1] === "-") return readStdin((text) => report(text, {}));
+      if (pos[1] === "-") return readStdin((text) => report(text, { max: intFlag("max") })); // --max: the window the piped log was read with (= spec_log {max})
       const text = b5Git(["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
         "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max]);
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
@@ -1257,6 +1401,9 @@ function main() {
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
+    case "statusline": // --print-config (the render path runs before the flag checks, in main)
+      return on("print-config") ? statusLineConfig() : statusLineRender();
+
     default:
       die(projectText().unknownCommand(cmd));
   }
@@ -1318,7 +1465,8 @@ function helpText() {
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
                                   its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)
-  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, …) — any other
+  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, glossary.md — the terms to
+                                  use and the words to avoid (_Avoid:_), …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)
   templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
@@ -1358,6 +1506,8 @@ function helpText() {
                                   Windows, never WSL's launcher; --timeout <s>; a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
                                   A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
                                   records the git commit (and whether the tree was dirty) when git is available
+  undone <feature> <n> [--reason "…"]   Untick task n (ticked by mistake, or its work turned out incomplete): its evidence turns
+                                  stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it
   finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary;
                                   --run [--shell bash|<path>] runs the project checks (meta.checks) and records them — with meta.checks
@@ -1368,13 +1518,19 @@ function helpText() {
                                   · --depends 3,5 (_Depends:_ — task numbers of this tasks.md; must exist, no cycle)
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
-                                  that role (required for a phase init --roles lists)
+                                  that role (required for a phase init --roles lists); with --force, --reason "…" and
+                                  --expires YYYY-MM-DD|30d record its waiver (doctor warns waiver-expired once it lapses)
+  approve <feature> <phase> --revoke [--reason "…"]   Revoke a phase approval (and the role sign-offs waiting for it): the
+                                  phase is pending again; later phases stay approved (never cascades)
   approve <feature> --through <phase>  Fast-forward (/spec-ff): approve every active phase up to <phase>, in order, each through its
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
                                   tasks, tests, design; --reopen unticks the affected done tasks and marks their evidence stale
                                   (never a removed criterion's tasks — retire lists them and their test rows to delete or repoint)
+  impact [feature] --phase steering   Every active feature (or the one named) whose requirements / design approval was made under
+                                  a steering file (constitution, the tracks' files, always / matching fileMatch ones) that changed
+                                  since — read-only; re-review, then re-approve (the approval records the current steering)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
   add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive, never overwrites);
@@ -1389,9 +1545,20 @@ function helpText() {
                                   offline HTML (light/dark, print-ready) or --md; --write → .specs/exports/<feature|project>.html|.md
                                   --csv: the traceability matrix for a spreadsheet (UTF-8 BOM, the AUTO-GENERATED marker as its
                                   last record) → --write: .specs/exports/<feature|project>.rtm.csv
+                                  --gherkin: a BDD .feature — one Scenario per current AC (tags @US-n.AC-m @T-xx @<track>), its EARS
+                                  clauses as Given (WHILE/WHERE/IF) · When (WHEN) · Then (SHALL), PT/ES in Gherkin's own dialect;
+                                  no feature = one file per feature → --write: .specs/exports/<feature>.feature
+                                  --tracker jira|linear: a CSV for the tracker's own importer (nothing is sent) — the feature as the
+                                  parent, its stories, its tasks under their [USn] story; labels = slug, tracks, AC IDs
+                                  → --write: .specs/exports/<feature|project>.<tracker>.csv
   changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
+                                  --milestone <name>: only that milestone's features (since: all by default) → --write:
+                                  .specs/RELEASE-NOTES.<milestone>.md (meta.changelogAt untouched)
+  milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]   Milestones (roadmap.json meta.milestones): a target date
+                                  for a set of features, judged against their ETAs — on-track · at-risk · late · done; add replaces
+                                  an existing one; rename / remove / archive of a feature follow; ROADMAP.md shows them
   drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
   stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
@@ -1413,8 +1580,13 @@ function helpText() {
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy
-                                  plan = Claude Code plan mode / Cursor .cursor/plans (copy a ~/.claude/plans file into the project first),
-                                  execplan = a Codex ExecPlan (PLANS.md), bmad = BMAD-METHOD docs (prd.md + docs/stories/)
+                                  plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
+                                  bmad = BMAD-METHOD docs (prd.md + docs/stories/)
+  import <plan|execplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
+                                  --text takes it inline — for a plan outside the project (Claude Code keeps plans in ~/.claude/plans)
+  statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
+                                  step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
+                                  --print-config prints the settings.json "statusLine" snippet with this clone's path
   evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
@@ -1426,9 +1598,11 @@ function helpText() {
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
+         --revoke / --reason "…" / --expires YYYY-MM-DD|Nd (approve)  --reason "…" (undone)
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
+         --text "<markdown>" (import plan|execplan)  --print-config (statusline)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).

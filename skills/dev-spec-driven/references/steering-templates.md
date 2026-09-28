@@ -24,10 +24,20 @@ steering files.
 | `ai-strategy.md` | `+ai` | when the AI track is used |
 | `security.md` | `+sec` | when the security track is used |
 | `privacy.md` | `+privacy` | when the privacy track is used |
+| `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
 
 At project start, create at least the four `core` files. Add the others the first time a
 feature pulls in that track. Fill them in once, revisit once a quarter. `spec_doctor`'s `steering` check warns,
 by name, about every steering file still holding template placeholders — a stub steers nothing.
+
+**Amending steering (1.16).** A requirements or design approval records a fingerprint of the steering that governed it —
+`constitution.md`, the active tracks' files (a track pack's too), every `inclusion: always` file and every `fileMatch` file
+(with its patterns — it counts for a feature once that feature's current `_Implements:_` paths match it, since requirements
+and design are approved before tasks.md names any file). Edit one of them later and `spec_doctor` warns
+`steering-changed-since-approval` on every feature approved under the older version, `spec_next_action` adds a re-review
+hint (never a block), and `spec_impact {phase: "steering"}` (CLI `dev-spec impact --phase steering`) lists them all.
+Re-review each against the amended rule and re-approve — the new approval records the current steering. Approvals made
+before 1.16 recorded nothing and are never flagged. See `references/change-management.md` §14.
 
 ## Scoped steering — front matter and custom files
 
@@ -462,6 +472,42 @@ How to fill each item: `references/security-track.md`.
 ```
 
 How to fill each item (not legal advice — the DPO or counsel decides): `references/privacy-track.md`.
+
+---
+
+## `glossary.md` (optional — the ubiquitous language)
+
+One entry per domain term: the word the specs use, what it means in this product, and the words **not** to use for it.
+Scaffold it with `steering_scaffold {file: "glossary.md"}` (CLI `dev-spec steering glossary.md`) — `spec_init` never
+creates it — in the project language (PT: `# Glossário`, ES: `# Glosario`).
+
+```markdown
+# Glossary
+
+- **Customer** — a person or company with a signed contract. _Avoid: client, user_
+- **End user** — a person who logs in to a Customer's account.
+- **Invoice**: a bill sent to a Customer for one billing period.
+  - _Avoid: bill, receipt_
+```
+
+- **Format.** A list item whose term is in bold (`**Term**` or `__Term__`), then the definition after `—`, `:` or `-`;
+  the `_Avoid: a, b_` marker on the same line, a sub-line of the item or an indented paragraph after a blank line (a loose
+  list). `_Avoid:_` is English-stable — a PT or ES glossary writes it the same way (`- **Cliente** — pessoa ou empresa com
+  contrato. _Avoid: comprador, consumidor_`). HTML comments and fenced code hold no entry; a `[bracketed]` term (the
+  stub's) is none either. Only the first 300 entries are read — past that, doctor warns and clarify says so
+  (`glossaryTruncated` {read, total}).
+- **`spec_clarify`** asks about every avoided word a feature's `requirements.md` / `design.md` use — word-matched,
+  case-insensitive, a plural `s` / `es` counts, `_client_` (underscore emphasis) too, never `client_id`; never inside a
+  code span, fenced code, an HTML comment or a `_Marker:_` tag, and never in the TEMPLATE's own text — the headings,
+  guidance lines, track criteria and slot examples the built-in, project and track-pack templates write (a slot you filled
+  in, or your own heading, is read); the glossary's own terms are masked first, so "End user" never reads as "user". Each
+  question names `file:line` and the term to use; the result carries `glossary` [{word, term, count, locations}].
+- **`spec_doctor`** warns `glossary` with the count (pass when none; no check without a glossary or an avoided word).
+- **`spec_task_brief`** quotes the entries whose term or avoided word the task's text or its criteria use (at most 8,
+  1500 characters) — the implementer names things the way the product does.
+
+Keep it to the terms that actually get confused. A word that legitimately means something else in one feature (a
+"user" of an admin console) is fine: answer the clarify question, or narrow the entry.
 
 ---
 

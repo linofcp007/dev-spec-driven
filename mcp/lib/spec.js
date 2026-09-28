@@ -475,10 +475,12 @@ function shapeError(lang, rel, problems) {
 // could see it (forgetCached); a created folder alone adds no file, so it leaves the globs alone.
 let READ_CACHE = null; // Map(key → text | null | boolean | Dirent[]), only while a withReadCache scope runs
 let GLOB_CACHE = null; // Map(key → { base, allowDir, result }) — globFiles results, same scope
+let XAC_MEMO = null; // 1.16 Q2: { root, table } — crossFeatureAcs' criteria table, same scope (dropped by any engine write)
 function withReadCache(fn) {
   if (READ_CACHE) return fn();
   READ_CACHE = new Map();
   GLOB_CACHE = new Map();
+  XAC_MEMO = null;
   TEMPLATE_SCOPE_ROOT = null; // the call's project (specsRoot) and its parsed templates live as long as the scope
   TEMPLATE_MEMO = null;
   PACK_MEMO = null; // … and its track packs (1.15)
@@ -488,6 +490,7 @@ function withReadCache(fn) {
   } finally {
     READ_CACHE = null;
     GLOB_CACHE = null;
+    XAC_MEMO = null;
     TEMPLATE_SCOPE_ROOT = null;
     TEMPLATE_MEMO = null;
     PACK_MEMO = null;
@@ -500,12 +503,25 @@ const DIR_KEY = "\u0000dir:";
 // A spec file whose CONTENT is copied out — decisions.md (appended and rewritten), the export's documents, the release notes —
 // must be a regular file whose real path stays inside the project's .specs/: a committed symlink out (decisions.md ->
 // ~/.ssh/id_rsa) is never followed (the specs:// resources refuse it the same way). Absent → true (nothing to follow).
+// Within a read-cache scope the verdict is memoized per file and the root's real path per root (1.16 Q review: the cross-feature
+// criteria and supersededByIndex read every requirements.md in one call — two real-path walks per file were a third of it).
+const CONTAINED_KEY = "\u0000contained:";
 function specsFileContained(projectDir, file) {
+  const k = READ_CACHE ? CONTAINED_KEY + readCacheKey(file) : null;
+  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
+  const v = specsFileContainedNow(projectDir, file);
+  if (k !== null) READ_CACHE.set(k, v);
+  return v;
+}
+function specsFileContainedNow(projectDir, file) {
   let st;
   try { st = fs.lstatSync(file); } catch { return true; }
   if (st.isSymbolicLink() || !st.isFile()) return false;
   try {
-    const realRoot = fs.realpathSync.native(specsRoot(projectDir));
+    const root = specsRoot(projectDir);
+    const rk = READ_CACHE ? CONTAINED_KEY + "root:" + readCacheKey(root) : null;
+    let realRoot = rk !== null ? READ_CACHE.get(rk) : undefined;
+    if (realRoot === undefined) { realRoot = fs.realpathSync.native(root); if (rk !== null) READ_CACHE.set(rk, realRoot); }
     const real = fs.realpathSync.native(file);
     return real !== realRoot && withinRoot(realRoot, real);
   } catch {
@@ -558,6 +574,8 @@ function forgetCached(file, opts = {}) {
   if (!READ_CACHE) return;
   let k = readCacheKey(file);
   READ_CACHE.delete(k);
+  READ_CACHE.delete(CONTAINED_KEY + k);
+  XAC_MEMO = null; // 1.16 Q2: any write may change a criterion, a state or a template — the cross-feature table is rebuilt
   // A write under .specs/templates/ (templates init) changes the project's template corpus.
   if (TEMPLATE_MEMO && (k === TEMPLATE_MEMO.tdirKey || k.startsWith(TEMPLATE_MEMO.tdirKey + path.sep))) TEMPLATE_MEMO = null;
   // … and a write under .specs/tracks/ (tracks init) changes the project's track packs (1.15).
@@ -588,6 +606,7 @@ function invalidateReadCache() {
   if (GLOB_CACHE) GLOB_CACHE.clear();
   TEMPLATE_MEMO = null;
   PACK_MEMO = null;
+  XAC_MEMO = null;
 }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
@@ -1080,7 +1099,8 @@ function guessLang(text, fallback) {
 function configuredLang(projectDir, lang) {
   if (lang) return lang;
   const l = (readRoadmap(projectDir).meta || {}).lang;
-  return typeof l === "string" && l.trim() ? normalizeLang(l) : undefined;
+  // 1.16 C2: a brand-new project without meta.lang reads it in the user's DEFAULT_LANG option, the language it is about to get.
+  return typeof l === "string" && l.trim() ? normalizeLang(l) : projectDir ? newProjectLang(projectDir) : undefined;
 }
 
 function isNegated(text, idx, kwLen, lang, cased) {
@@ -1375,6 +1395,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const steering = path.join(root, "steering");
   // Before anything is written: a project with no feature yet is brand-new (stamped with this engine's version below).
   const fresh = featureDirs(projectDir).length === 0;
+  // 1.16 C2: no lang given, a brand-new project without a language of its own → the user's DEFAULT_LANG option (seeded below
+  // into meta.lang like an explicit --lang, so the project keeps it on every machine).
+  const userLang = !lang && fresh ? newProjectLang(projectDir) : undefined;
+  if (userLang) lang = userLang;
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
   const guardValue = guardInput(opts.guard); // true | false | "scope" (1.14 C1) — anything else leaves the guard unchanged
@@ -1438,6 +1462,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     evidence: evidenceMode(projectDir), // 1.14 F1: the CURRENT evidence mode ("reported" | "observed"), whether or not this call changed it
   };
   if (Object.keys(templates).length) res.templates = templates;
+  // 1.16 C2: which of the reported values come from the user's DEV_SPEC_* defaults (the project sets none of them itself).
+  const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
+  if (Object.keys(fromUser).length) res.userDefaults = fromUser;
   if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
@@ -1859,7 +1886,10 @@ const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") rea
 const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at most this deep (deeper: read as a plain subshell)
 // The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves"]); // the CLI's BOOL_FLAGS ARE this list
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
+  "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
+CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
+CLI_SWITCHES.add("gherkin"); // 1.16 E1: export [f] --gherkin (= spec_export {format: "gherkin"})
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
@@ -2349,7 +2379,7 @@ function cliApprovalAction(args, level, meta) {
     const base = { source: "cli", project: approvalStr(fl.project) };
     if (cmd === "approve") {
       return [Object.assign({ kind: "approve", feature: approvalStr(pos[1]), phase: approvalStr(pos[2]), through: approvalStr(fl.through),
-        role: approvalStr(fl.role), by: approvalStr(fl.by), force: approvalTruthy(fl.force) }, base)];
+        role: approvalStr(fl.role), by: approvalStr(fl.by), force: approvalTruthy(fl.force) }, approvalExtras(approvalTruthy(fl.revoke), fl.reason, fl.expires), base)];
     }
     // `feature remove <name>` without --yes only previews what it would delete.
     if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return [Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base)];
@@ -2389,11 +2419,20 @@ function shellApprovalActions(command, level, depth, mode, meta) {
   }
   return out;
 }
+// 1.16 U: a revocation (revoke: true — the same gate as an approval: the approval record is the human's) and a waiver's reason /
+// expiry (carried into the command the human runs) → the extra fields of an "approve" action (none when absent).
+function approvalExtras(revoke, reason, expires) {
+  const out = {};
+  if (revoke) out.revoke = true;
+  if (approvalStr(reason)) out.reason = approvalStr(reason);
+  if (approvalStr(expires)) out.expires = approvalStr(expires);
+  return out;
+}
 function mcpApprovalAction(tool, ti, level, meta) {
   const base = { source: "mcp", project: approvalStr(ti.projectDir) };
   if (tool === "spec_approve") {
     return [Object.assign({ kind: "approve", feature: approvalStr(ti.name), phase: approvalStr(ti.phase), through: approvalStr(ti.through),
-      role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, base)];
+      role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, approvalExtras(ti.revoke === true, ti.reason, ti.expires), base)];
   }
   // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow aren't approvals.
   if (tool === "spec_feature") return String(approvalStr(ti.action) || "").toLowerCase() === "remove" && ti.confirm === true ? [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)] : [];
@@ -2427,7 +2466,11 @@ function approvalCommand(a, cli) {
     if (a.through) words.push("--through", word(a.through, "<phase>"));
     else words.push(word(a.phase, "<phase>"));
     if (a.role) words.push("--role", word(a.role, "<role>"));
-    if (a.force) words.push("--force");
+    if (a.revoke) words.push("--revoke"); // 1.16 U2: the human revokes — never an approve line in its place
+    else if (a.force) words.push("--force");
+    // 1.16 U3 / U2: the reason (a waiver's, a revocation's) and the expiry go in only when plainly safe to paste, else a placeholder
+    if (a.reason) words.push("--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
+    if (a.expires && !a.revoke) words.push("--expires", word(a.expires, "<YYYY-MM-DD>"));
   }
   const proj = a.project ? safe(a.project.replace(/\\/g, "/"),/^[\p{L}\p{N} _.@+,:/()~-]{1,400}$/u) : null;
   if (proj) words.push("--project", '"' + proj + '"');
@@ -2486,10 +2529,85 @@ const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
 
-// roadmap.json meta.guard → false | true | "scope" (anything else: off). hooks/guard-hook.js reads the same value raw.
+// 1.16 C2 — the user's defaults, the environment variables DEV_SPEC_<KEY>, read as FALLBACKS only: a project's own roadmap.json
+// meta always wins, and a variable that is unset, empty, unexpanded (`${X}`) or not a valid value changes nothing (today's
+// behaviour). Set in Claude Code's settings.json `env` block they reach the hooks, the MCP server and the CLI alike (and any
+// other tool's MCP config `env`, or a shell). Deliberately NOT plugin.json `userConfig`: it opens a configuration dialog on every
+// install / enable, and an older Claude Code that validates option fields strictly would refuse to load the plugin.
+// Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang), STOP_CHECK (the end-of-turn evidence gate while
+// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is unset). hooks/guard-hook.js and
+// hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
+function userOptionRaw(key) {
+  for (const name of ["DEV_SPEC_" + key]) {
+    const v = process.env[name];
+    const s = typeof v === "string" ? v.trim() : "";
+    if (s && !/^\$\{[^}]*\}$/.test(s)) return s;
+  }
+  return null;
+}
+const boolWord = (s) => (/^(?:true|on|yes|1)$/i.test(s) ? true : /^(?:false|off|no|0)$/i.test(s) ? false : undefined);
+// → { lang?, stopCheck?, guard? } — only the options that are set to a valid value.
+function userDefaults() {
+  const out = {};
+  const l = userOptionRaw("DEFAULT_LANG");
+  const c = l ? i18n.canonicalLang(l) : null;
+  if (c && i18n.LANGS.includes(c)) out.lang = c;
+  const s = userOptionRaw("STOP_CHECK");
+  if (s && boolWord(s) !== undefined) out.stopCheck = boolWord(s);
+  const g = userOptionRaw("GUARD_DEFAULT");
+  const gv = g ? (boolWord(g) !== undefined ? boolWord(g) : guardInput(g)) : undefined;
+  if (gv !== undefined) out.guard = gv;
+  return out;
+}
+// The user's default language for a NEW project: only while roadmap.json names no language (meta.lang) and the project has no
+// feature yet (active or archived) — an existing project keeps the language it was written in. → lang | undefined
+function newProjectLang(projectDir) {
+  const d = userDefaults().lang;
+  if (!d) return undefined;
+  const l = loadRoadmap(projectDir);
+  if (l.parseError) return undefined;
+  const cur = isObj(l.rm.meta) ? l.rm.meta.lang : undefined;
+  if (typeof cur === "string" && cur.trim()) return undefined;
+  return featureDirs(projectDir).length ? undefined : d;
+}
+// The settings of a project that its user's options decide right now (meta leaves them unset) — spec_init reports them as
+// `userDefaults` {lang?, stopCheck?, guard?}; opts.lang: the language this call seeded from the user's option.
+function userDefaultsApplied(projectDir, opts = {}) {
+  const d = userDefaults();
+  const l = loadRoadmap(projectDir);
+  const meta = l.parseError ? null : isObj(l.rm.meta) ? l.rm.meta : {}; // an unreadable roadmap.json: the options decide nothing
+  const out = {};
+  if (opts.lang) out.lang = opts.lang;
+  if (meta && d.stopCheck !== undefined && typeof meta.stopCheck !== "boolean") out.stopCheck = d.stopCheck;
+  if (meta && d.guard !== undefined && meta.guard === undefined) out.guard = d.guard;
+  return out;
+}
+// meta.lang := lang, under the roadmap lock, only while it is still unset (spec_create's first feature with the user's default).
+function seedProjectLang(projectDir, lang) {
+  return withRoadmapLock(projectDir, () => {
+    if (roadmapError(projectDir)) return false;
+    const rm = readRoadmap(projectDir);
+    rm.meta = isObj(rm.meta) ? rm.meta : {};
+    if (typeof rm.meta.lang === "string" && rm.meta.lang.trim()) return false;
+    rm.meta.lang = normalizeLang(lang);
+    writeRoadmap(projectDir, rm);
+    return true;
+  }, () => false);
+}
+
+// roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT (1.16 C2), else off.
+// The user's default applies to a dev-spec project only (isDevSpecDir): roadmap.json without meta.guard, or no roadmap.json in a
+// .specs/ dev-spec owns (steering/ or a feature folder with its .state.json — a project made before roadmap.json) — never a folder
+// without one, nor another tool's .specs/. A roadmap.json that exists but doesn't parse: off (the guard never acts on a file it
+// can't read). hooks/guard-hook.js reads the same values raw, with the same rule.
 function guardLevel(projectDir) {
   const l = loadRoadmap(projectDir);
-  const g = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
+  if (l.parseError) return false;
+  const g = isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
+  if (g === undefined) {
+    const d = userDefaults().guard;
+    return (d === true || d === "scope") && isDevSpecDir(path.resolve(projectDir)) ? d : false;
+  }
   return g === true ? true : g === "scope" ? "scope" : false;
 }
 // spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope" (strings case-insensitive);
@@ -2499,16 +2617,23 @@ function guardInput(v) {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
   return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
 }
-// roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`).
+// roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`);
+// not a boolean (unset) → the user's STOP_CHECK option (1.16 C2), else on. An unreadable roadmap.json: the user's option too, else
+// on (the gate itself never blocks on a file it can't read) — DEV_SPEC_STOP_CHECK=off was ignored while the file didn't parse.
 function stopCheckEnabled(projectDir) {
   const l = loadRoadmap(projectDir);
-  return !(!l.parseError && isObj(l.rm.meta) && l.rm.meta.stopCheck === false);
+  if (l.parseError) return userDefaults().stopCheck !== false;
+  const v = isObj(l.rm.meta) ? l.rm.meta.stopCheck : undefined;
+  if (typeof v === "boolean") return v;
+  return userDefaults().stopCheck !== false;
 }
-// Inside initProject's roadmap lock. ON is the default (absent = on): no write when the effective value doesn't change.
+// Inside initProject's roadmap lock. ON is the default (absent = on): no write when the effective value doesn't change — with or
+// without the user's STOP_CHECK option (an explicit on / off where that option decides pins it for the project).
 function setStopCheck(projectDir, on) {
   const rm = readRoadmap(projectDir);
   rm.meta = isObj(rm.meta) ? rm.meta : {};
-  if ((rm.meta.stopCheck !== false) === on) return;
+  if (rm.meta.stopCheck === on) return;
+  if (rm.meta.stopCheck === undefined && on === true && userDefaults().stopCheck !== false) return;
   rm.meta.stopCheck = on;
   writeRoadmap(projectDir, rm);
 }
@@ -2652,7 +2777,7 @@ function stopActivity(state) {
 // One unverified task as the reason lists it: "#3 (latest run failed)".
 function stopTaskLabel(d, lng) {
   const M = i18n.msg(lng);
-  const why = d.specChanged ? M.impact.staleSpec : M.evidenceGate.reason[d.reason] || d.reason;
+  const why = d.specChanged ? M.impact.staleSpec : d.unticked ? M.undo.label : M.evidenceGate.reason[d.reason] || d.reason;
   return "#" + d.number + ` (${why})`;
 }
 // The evidence gate at the end of a turn — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`. It sends the
@@ -2713,7 +2838,7 @@ function stopCheck(projectDir, opts = {}) {
   lines.push(S.plainly);
   return res(true, "unverified", {
     claims: cl.claims,
-    features: features.map((f) => ({ feature: f.feature, unverified: f.unverified.map((d) => ({ number: d.number, reason: d.reason, ...(d.specChanged ? { specChanged: true } : {}) })),
+    features: features.map((f) => ({ feature: f.feature, unverified: f.unverified.map((d) => ({ number: d.number, reason: d.reason, ...(d.specChanged ? { specChanged: true } : {}), ...(d.unticked ? { unticked: true } : {}) })),
       suite: f.suite.map((s) => ({ name: s.name, status: s.status })) })),
     reason: lines.join("\n"),
   });
@@ -2954,14 +3079,18 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // The first feature of a project that has none (active or archived) makes it a brand-new project: stamped with this
   // engine's version (meta.specVersion). A new feature in a legacy project stamps nothing — spec_upgrade does, after its audit.
   const fresh = !existed && featureDirs(projectDir).length === 0;
+  // 1.16 C2: the first feature of a project with no language of its own (meta.lang) and no explicit lang → the user's
+  // DEFAULT_LANG option, seeded into meta.lang too (finish, below) — computed before the folder exists (newProjectLang
+  // requires a project without features).
+  const userLang = fresh && !lang ? newProjectLang(projectDir) : undefined;
   ensureDir(dir);
   ensureLockIgnore(f.root); // .specs/.gitignore: the lock files are never committable
 
-  // Resolve the feature's language (explicit > project default > en) and persist it so later
-  // tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
+  // Resolve the feature's language (explicit > project default > the user's default for a new project > en) and persist it so
+  // later tools (doctor/clarify/next-action) and +track escalation stay in the same language. The track set is
   // persisted too — detectTracks reads it back instead of guessing from the files.
   const stored = readState(projectDir, slug).lang;
-  const lng = normalizeLang(stored || lang || projectLang(projectDir));
+  const lng = normalizeLang(stored || lang || userLang || projectLang(projectDir));
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
   // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
   const createdAt = new Date().toISOString();
@@ -2996,6 +3125,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     const fromBacklog = pruneBacklog(projectDir, slug);
     if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
     if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
+    if (userLang && !stored) { try { if (seedProjectLang(projectDir, lng)) res.userDefaults = { lang: lng }; } catch { /* best-effort */ } } // 1.16 C2
     maybeRefreshRoadmap(projectDir);
     const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
@@ -5256,8 +5386,11 @@ function taskNumber(v) {
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
 function completeTask(projectDir, name, number, evidence, opts = {}) {
+  if (opts && opts.undo === true) return untickTask(projectDir, name, number, { reason: opts.reason, evidence }); // 1.16 U1
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
+  // 1.16 U1: a reason explains an undo — a tick records evidence instead (refused, never silently dropped).
+  if (opts && opts.reason != null) return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).undo.reasonNeedsUndo };
   const file = path.join(f.dir, "tasks.md");
   const text = readIfExists(file);
   const E = errs(projectDir, f.slug);
@@ -5363,7 +5496,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.note = reason === "failed-run" ? EG.failedRun(n, entry.exitCode, f.slug, runnable)
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
-      : reason === "stale-evidence" ? (entry && entry.stale ? i18n.msg(lng).impact.staleNote(n, f.slug, runnable) : EG.staleEvidence(n, f.slug, runnable))
+      : reason === "stale-evidence" ? (entry && entry.stale ? (entry.staleBy === "undo" ? i18n.msg(lng).undo.staleNote(n, f.slug, runnable) : i18n.msg(lng).impact.staleNote(n, f.slug, runnable)) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
       // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
       : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
@@ -5400,6 +5533,95 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
   }
   return withObserved(res); // 1.14 F1: the observed stamp on every result
+}
+
+// 1.16 U1 — undo a tick: spec_complete_task {undo: true, reason?} / `dev-spec undone <feature> <n> [--reason "…"]` (both reach
+// it through completeTask, under the feature lock). The task goes back to open: the checkbox of the line it resolves to — the
+// TICKED task of that number (several ticked tasks sharing it → refused, duplicateTicked: which tick was the mistake is
+// unknowable), else the one resolveTask answers — is reset at
+// its checkbox column (CRLF / a BOM kept, tasks.md replaced atomically). In .state.json, written FIRST (a failure after it
+// leaves a ticked task whose evidence no longer counts — erring toward unverified, never a tick that keeps a stale proof):
+// its own evidence record is marked `stale: true` + `staleBy: "undo"` (a re-tick needs a new run, like spec_impact --reopen —
+// reason stale-evidence, with its own label; an _Expect: fail_ task's red run still counts as its red proof — redProof —, so
+// the pass after the fix re-ticks it: redKept), ticks[n] is dropped (forecasts: it is open again) unless another task of that
+// number stays ticked, and `unticks` gets {n, at, reason?} (changesSince reads it: a finish or an execution sign-off older than
+// an untick is asked for again). An open task → ok, nothing changed (alreadyOpen + a note). Never gated (the bugfix gate
+// refuses TICKS: unticking completes nothing). → { ok, feature, number, unticked, alreadyOpen?, evidenceStale, done, total, next, note }
+const UNDO_REASON_MAX = 500;
+// A one-line reason (revoke, undo, a waiver): whitespace runs folded, at most UNDO_REASON_MAX characters. → { value } | { error }
+function reasonInput(v, lng) {
+  if (v == null) return { value: null };
+  if (typeof v !== "string") return { error: i18n.msg(lng).undo.badReason(UNDO_REASON_MAX) };
+  const s = v.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
+  if (s.length > UNDO_REASON_MAX) return { error: i18n.msg(lng).undo.badReason(UNDO_REASON_MAX) };
+  return { value: s || null };
+}
+function untickTask(projectDir, name, number, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const U = i18n.msg(lng).undo;
+  const E = errs(projectDir, f.slug);
+  if (opts.evidence != null) return { ok: false, error: U.noEvidence };
+  const file = path.join(f.dir, "tasks.md");
+  const text = readIfExists(file);
+  if (text == null) return { ok: false, error: E.tasksMissing(f.slug) };
+  const n = taskNumber(number);
+  if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
+  const reason = reasonInput(opts.reason, lng);
+  if (reason.error) return { ok: false, error: reason.error };
+  const blocks = taskBlocks(text);
+  const same = blocks.filter((b) => b.number === n);
+  if (!same.length) return { ok: false, error: E.taskNotFound(n) };
+  // 1.16 U review 2: several TICKED tasks share the number — undo can't know which tick was the mistake (done ticks the first
+  // OPEN one, so "the first ticked" was usually the right tick of another task: its proof went stale). Refused, nothing
+  // changed; duplicateTicked + tasks [{number, line, text}] are stable. Renumber them first (doctor warns duplicate-tasks).
+  const ticked = same.filter((b) => b.done);
+  if (ticked.length > 1) {
+    return { ok: false, duplicateTicked: true, tasks: ticked.map((b) => ({ number: b.number, line: b.line + 1, text: b.text })),
+      error: U.duplicateTicked(n, ticked.map((b) => U.duplicateItem(b.line + 1, cleanTaskText(b.text).slice(0, 80))).join(", ")) };
+  }
+  const task = ticked[0] || resolveTask(blocks, n);
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const progress = (txt) => {
+    const tracks = detectTracks(f.dir);
+    const tasks = parseTasks(activeTasks(txt, tracks));
+    const next = taskSchedule(taskBlocks(activeTasks(txt, tracks) || "")).next;
+    return { done: tasks.filter((t) => t.done).length, total: tasks.length, next: next && { number: next.number, text: next.text } };
+  };
+  if (!task.done) return { ok: true, feature: f.slug, number: n, unticked: false, alreadyOpen: true, evidenceStale: false, ...progress(text), note: U.alreadyOpen(n) };
+  const key = String(n);
+  const dup = same.length > 1;
+  const rec = ownRecord(isObj(state.evidence) ? state.evidence[key] : undefined, task, dup); // this task's record, never the other "N."'s
+  const staled = isRecord(rec);
+  if (staled) { rec.stale = true; rec.staleBy = "undo"; } // mutates state.evidence in place
+  // ticks[n] (forecasts): dropped unless another task of that number stays ticked; a hand-broken ticks value is left alone.
+  if (isRecord(state.ticks) && own(state.ticks, key) && !same.some((b) => b !== task && b.done)) {
+    delete state.ticks[key];
+    if (!Object.keys(state.ticks).length) delete state.ticks;
+  }
+  const entry = { n, at: new Date().toISOString() };
+  if (reason.value) entry.reason = reason.value;
+  state.unticks = (Array.isArray(state.unticks) ? state.unticks : []).concat([entry]);
+  writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+  const lines = text.split("\n");
+  const raw = lines[task.line];
+  lines[task.line] = raw.slice(0, task.col) + " " + raw.slice(task.col + 1);
+  const updated = lines.join("\n");
+  writeFileAtomic(file, updated);
+  maybeRefreshRoadmap(projectDir);
+  const runnable = taskMarkers(task).verify.length > 0;
+  // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
+  // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
+  const red = staled && expectsFail(task) ? redProof(rec) : null;
+  const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
+  if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
+  if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));
+  const res = { ok: true, feature: f.slug, number: n, unticked: true, evidenceStale: staled, ...progress(updated), note: notes.join(" ") };
+  if (red) res.redKept = true;
+  if (reason.value) res.reason = reason.value;
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -6822,7 +7044,8 @@ function recordEvidence(prev, ev, at, stamp) {
     const claim = pRun && p.exitCode === 0 && !p.command; // v1.12 bare exit 0: the note replaces it
     const rec = stamped(pRun && !claim ? { ...p, note: ev.summary, noteAt: at } : { ...ev, at });
     if (stamp.verify) return rec; // a note never clears a stale run of a runnable _Verify:_ (only a new run does)
-    delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change
+    delete rec.stale; // no runnable _Verify:_: a new note IS the re-check after a spec change (or an undo)
+    delete rec.staleBy;
     return rec;
   }
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
@@ -6870,7 +7093,8 @@ function verificationStatus(projectDir, slug, dir) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
     const { reason } = taskVerification(evidence, b, dups.has(b.number), mode); // the rule every `verified` shares
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
-    if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) });
+    if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}),
+      ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) }); // 1.16 U1: unticked since the record
   }
   return { withVerify: withVerify.length, evidence, unverified: unverifiedDetail.map((d) => d.number), unverifiedDetail };
 }
@@ -7206,9 +7430,14 @@ function isRedRun(r) {
   return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !cantRunRecord(r);
 }
 // The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
-// stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more.
+// stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more. One an UNDO made stale (staleBy
+// "undo", 1.16 U review 1) keeps its red run: unticking changed neither the spec nor the test, and once the fix is in that red
+// run can't be made again — the task was stuck on unexpected-pass for good. The record itself still reads stale-evidence
+// (evidenceIssue checks `stale` first), so a re-tick needs a new run: a pass is then the fix going green (expectFailRun's
+// passAfterRed), and the red run is carried into the new record as `red`. Callers pass the task's OWN record (ownEvidence /
+// ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
 function redProof(e) {
-  if (!isRecord(e) || e.stale === true) return null;
+  if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
   return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
 }
 // evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
@@ -7812,7 +8041,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
 // "#1, #3 (latest run failed)" — localized reasons for doctor / spec_finish (no-evidence needs none).
 function unverifiedLabel(vs, lang) {
   const R = i18n.msg(lang).evidenceGate.reason;
-  const label = (d) => (d.specChanged ? i18n.msg(lang).impact.staleSpec : R[d.reason] || d.reason);
+  const label = (d) => (d.specChanged ? i18n.msg(lang).impact.staleSpec : d.unticked ? i18n.msg(lang).undo.label : R[d.reason] || d.reason);
   return vs.unverifiedDetail.map((d) => "#" + d.number + (d.reason === "no-evidence" ? "" : ` (${label(d)})`)).join(", ");
 }
 // stale-evidence because the spec changed (spec_impact --reopen marked this task's own record), not because the
@@ -7820,7 +8049,14 @@ function unverifiedLabel(vs, lang) {
 function specChangedSince(evidence, block, dup, reason) {
   if (reason !== "stale-evidence") return false;
   const own = ownEvidence(evidence, block, dup);
-  return isRecord(own) && own.stale === true;
+  return isRecord(own) && own.stale === true && own.staleBy !== "undo";
+}
+// 1.16 U1: stale-evidence because the task was unticked after this record (spec_complete_task {undo}: staleBy "undo") — the
+// same code, its own label (undo.label): a re-tick needs a new run.
+function untickedSince(evidence, block, dup, reason) {
+  if (reason !== "stale-evidence") return false;
+  const own = ownEvidence(evidence, block, dup);
+  return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
 // +ai prompt work (touches prompts/, or an _Affects evals:_ task about a prompt) stays with the controller.
@@ -7968,6 +8204,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
   const dec = briefDecisions(dir, acIds, testIds, blockText); // 1.14 C2: decisions.md entries citing the task's IDs (bounded)
+  // 1.16 Q3: the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
+  const gloss = briefGlossary(root, [blockText, ...acceptanceCriteria.map((a) => a.text)].join("\n"));
 
   // Which loop the implementer follows; +ai prompt work stays with the controller (evals cost money,
   // accept/revert is a judgment call).
@@ -8034,6 +8272,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     stories,
     bug,
     acceptanceCriteria,
+    glossary: gloss.items,
+    glossaryOmitted: gloss.omitted,
     tests: testRows,
     evals: mk["affects evals"],
     metrics: mk["emits metrics"],
@@ -8096,6 +8336,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
+  if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
+  if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -8105,7 +8347,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // texts, test rows, design sections, steering, bug.md). includeBrief:true returns everything, brief included.
     res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
     if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // 1.14 C2: the IDs only (their text is in the brief)
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions"]) delete res[k];
+    if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // 1.16 Q3: the terms only (the entries are in the brief)
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary"]) delete res[k];
   }
   return res;
 }
@@ -8170,7 +8413,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const scan = tracks.includes("tdd") && extractTestIds(planIdText(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
   const tr = traceCheck(projectDir, slug, { ...(scan ? { code: true, scan } : {}), globCap: opts.globCap });
   const warnings = tr.ok ? traceWarningLines(tr, lng, [...TRACE_SECONDARY_KINDS, "plannedNotInCode"]) : [];
-  const doc = specDoctor(projectDir, slug, { scan });
+  const doc = specDoctor(projectDir, slug, { scan, lean: true }); // lean: finish reads the failing checks (never the cross-feature warn)
   const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
   const blocks = taskBlocks(tasksText);
   const open = blocks.filter((b) => !b.done).map((b) => b.number);
@@ -8194,6 +8437,11 @@ function finishFeature(projectDir, name, opts = {}) {
   // doctor's outside-code-artifacts warn, repeated here as a warning (never a blocker).
   const ocWarn = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "outside-code-artifacts") : null;
   if (ocWarn) warnings.push(ocWarn.detail);
+  // 1.16 U3: the forced approvals (each a waived gate, with its waiver when one was recorded) — the merge summary lists them,
+  // an expired waiver is a warning (never a blocker; doctor warns waiver-expired).
+  const forcedList = forcedApprovalList(state.approvals, tracks);
+  const expiredW = forcedList.filter((x) => x.waiver && x.waiver.expired);
+  if (expiredW.length) warnings.push(i18n.msg(lng).waiver.finishWarn(expiredW.map((x) => i18n.msg(lng).waiver.expiredItem(x.phase, x.waiver.expires, x.waiver.reason)).join(", "), slug));
   const leftovers = chainArtifacts(dir, tracks, kind).map((a) => artifactReport(dir, a.file, tracks)).filter((r) => r.state === "placeholder");
   const rootCauseMissing = kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN);
 
@@ -8261,6 +8509,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
   const decLines = decisionSummaryLines(dir, lng); // 1.14 C2: decisions.md
   if (decLines.length) body.push(...decLines, "");
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // 1.16 U3: the waived gates
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
   const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE]
     .filter((x) => fs.existsSync(path.join(dir, x)));
@@ -8299,6 +8548,7 @@ function finishFeature(projectDir, name, opts = {}) {
     wrote: write,
   };
   if (baseline) res.baseline = baseline;
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3: [{phase, failing, reason?, expires?, expired}]
   if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // 1.14 B3: the roles each pending phase waits for
@@ -8334,7 +8584,7 @@ function stateFromFile(projectDir, file) {
     if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
   }
   // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
-  for (const key of ["approvalHistory", "changes"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; }
+  for (const key of ["approvalHistory", "changes", "unticks"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; } // unticks: 1.16 U1 (undone ticks)
   s.approvals = s.approvals || {};
   if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
   return s;
@@ -8379,6 +8629,7 @@ const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "b
 // (doctor's approval-gates and the roadmap keep showing it). A phase with no artifact to sign off (eval-plan
 // without +ai, test-plan without +tdd, a missing file) is an error even with force: there is nothing to approve.
 function approvePhase(projectDir, name, phase, by, opts = {}) {
+  if (opts.revoke === true) return revokeApproval(projectDir, name, phase, by, opts); // 1.16 U2: spec_approve {revoke} / approve --revoke
   if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // 1.14 B3: the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -8388,6 +8639,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const lng = featureLang(projectDir, f.slug);
+  // 1.16 U3: the waiver a forced approval carries (reason / expires) — validated before anything else; either one without force is refused.
+  const wv = waiverInput(opts, lng);
+  if (wv.error) return { ok: false, error: wv.error };
   if (state.kind === "spike" && p !== "execution") return { ok: false, spike: true, error: i18n.msg(lng).spike.noGate(p, f.slug) }; // 1.14 C2
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
@@ -8423,6 +8677,14 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
+  if (failing.length && wv.waiver) entry.waiver = wv.waiver; // 1.16 U3: why the gate was forced, and until when
+  // 1.16 Q1: the steering that governed a requirements / design approval (constitution, the tracks' files, always / matching
+  // fileMatch files) — doctor warns steering-changed-since-approval once one of them changes.
+  if (STEERING_GOVERNED.includes(p)) {
+    const sf = steeringFingerprints(f.root, f.dir, tracks, { match: true });
+    entry.steering = sf.steering;
+    if (Object.keys(sf.steeringMatch).length) entry.steeringMatch = sf.steeringMatch; // fileMatch files: counted while _Implements:_ match
+  }
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -8430,13 +8692,14 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // A feature upgraded mid-flight: the approvals made before the history are seeded first as `legacy` records (no
   // snapshot), so metrics keep counting them (forced ones too) after their phase is re-approved and they're replaced.
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
-  const legacy = Object.entries(state.approvals).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isRecord(h) && h.phase === ph && h.partial !== true))
-    .map(([ph, a]) => legacyRecord(ph, a))
-    .sort((x, y) => (timeOf(x.at) || 0) - (timeOf(y.at) || 0));
+  const legacy = legacySeeds(state.approvals, hist);
   const record = { phase: p, at: entry.at, by: entry.by };
   if (entry.file) record.file = entry.file;
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   if (entry.forced) { record.forced = true; record.failing = failing; }
+  if (entry.waiver) record.waiver = entry.waiver;
+  if (entry.steering) record.steering = entry.steering; // 1.16 Q1
+  if (entry.steeringMatch) record.steeringMatch = entry.steeringMatch;
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -8456,6 +8719,145 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (failing.length) Object.assign(res, { forced: true, failing, checks: gate.checks, note: G.approveForced(failing.join(", ")) });
   if (entry.role) res.role = entry.role;
   if (so) roleSignOffResult(res, so, p, lng);
+  // 1.16 U3: the waiver recorded with a forced approval (or sign-off) — or, when the gate passed, that nothing was waived.
+  const W = i18n.msg(lng).waiver;
+  if (failing.length && wv.waiver) Object.assign(res, { waiver: wv.waiver, note: [res.note, W.recorded(wv.waiver.reason, wv.waiver.expires)].filter(Boolean).join(" ") });
+  else if (wv.waiver) Object.assign(res, { waiverIgnored: true, note: [res.note, W.notForced].filter(Boolean).join(" ") });
+  if (so && so.complete && entry.waiver) res.waiver = entry.waiver; // the completing sign-off: the waiver the approval carries
+  return res;
+}
+
+// 1.16 U3 — the waiver a forced approval carries: spec_approve {force: true, reason?, expires?} / `approve <f> <phase> --force
+// --reason "…" --expires 2026-12-31|30d`. reason: one line (reasonInput, ≤ 500 characters); expires: an ISO date (today or later)
+// or a number of days (Nd), at most WAIVER_MAX_DAYS ahead, stored as YYYY-MM-DD (UTC). Either without force is refused (a
+// waiver is what a force records); a force without them stays allowed (no waiver). Recorded as `waiver {reason?, expires?}` on
+// the approval and its history record only when the approval IS forced (a passing gate waives nothing: waiverIgnored + a note).
+// A waiver expires once today (UTC) is past `expires` (valid through that day). → { waiver: null | {reason?, expires?} } | { error }
+const WAIVER_MAX_DAYS = 3650;
+function waiverInput(opts, lng) {
+  const W = i18n.msg(lng).waiver;
+  const r = reasonInput(opts.reason, lng);
+  if (r.error) return { error: r.error };
+  let expires = null;
+  if (opts.expires != null && !(typeof opts.expires === "string" && !opts.expires.trim())) {
+    const bad = { error: W.badExpires(JSON.stringify(opts.expires), WAIVER_MAX_DAYS) };
+    if (typeof opts.expires !== "string") return bad;
+    const v = opts.expires.trim();
+    const t0 = Date.parse(todayIso() + "T00:00:00Z");
+    const day = (k) => new Date(t0 + k * 864e5).toISOString().slice(0, 10);
+    const m = v.match(/^(\d{1,4})\s*d$/i);
+    if (m) {
+      const k = parseInt(m[1], 10);
+      if (k < 1 || k > WAIVER_MAX_DAYS) return bad;
+      expires = day(k);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(v) && validIsoDay(v) && v >= day(0) && v <= day(WAIVER_MAX_DAYS)) expires = v;
+    else return bad;
+  }
+  if ((r.value || expires) && opts.force !== true) return { error: W.needsForce };
+  if (!r.value && !expires) return { waiver: null };
+  return { waiver: Object.assign({}, r.value ? { reason: r.value } : {}, expires ? { expires } : {}) };
+}
+// A stored waiver → { reason, expires, expired } (null when it holds neither); expired: today (UTC) is past its `expires`.
+function waiverView(w) {
+  if (!isRecord(w)) return null;
+  const reason = typeof w.reason === "string" && w.reason.trim() ? w.reason.trim() : null;
+  const expires = typeof w.expires === "string" && /^\d{4}-\d{2}-\d{2}$/.test(w.expires) ? w.expires : null;
+  if (!reason && !expires) return null;
+  return { reason, expires, expired: !!expires && expires < todayIso() };
+}
+// The forced approvals of the ACTIVE phases, in PHASES order → [{phase, failing: [ids], waiver: {reason, expires, expired} | null}]
+// — doctor's waiver-expired, the roadmap's forced line, spec_finish's merge summary / `waivers` / expired warning.
+function forcedApprovalList(approvals, tracks) {
+  const a = isObj(approvals) ? approvals : {};
+  return PHASES.filter((ph) => phaseActive(ph, tracks) && isRecord(a[ph]) && a[ph].forced === true)
+    .map((ph) => ({ phase: ph, failing: Array.isArray(a[ph].failing) ? a[ph].failing.filter((x) => typeof x === "string") : [], waiver: waiverView(a[ph].waiver) }));
+}
+// spec_finish's merge summary: "## Waived gates (forced approvals)" and one line per forced approval (its failing checks, the
+// waiver's reason and expiry — "no reason recorded" for a force without one).
+function waiverSummaryLines(list, lng) {
+  const W = i18n.msg(lng).waiver;
+  return [W.prHeading, ...list.map((x) => W.prLine(x.phase, x.failing.join(", "), x.waiver && x.waiver.reason, x.waiver && x.waiver.expires, !!(x.waiver && x.waiver.expired)))];
+}
+// spec_finish's `waivers` (stable): [{phase, failing, reason?, expires?, expired}] — every forced approval, the waiver's fields when recorded.
+function waiverResult(list) {
+  return list.map((x) => Object.assign({ phase: x.phase, failing: x.failing }, x.waiver && x.waiver.reason ? { reason: x.waiver.reason } : {},
+    x.waiver && x.waiver.expires ? { expires: x.waiver.expires } : {}, { expired: !!(x.waiver && x.waiver.expired) }));
+}
+// doctor's waiver-expired (stable id, a warn): the forced approvals still standing whose waiver expired → the check, or null.
+function waiverExpiredCheck(approvals, tracks, slug, lng) {
+  const W = i18n.msg(lng).waiver;
+  const list = forcedApprovalList(approvals, tracks).filter((x) => x.waiver && x.waiver.expired);
+  return list.length ? { id: "waiver-expired", status: "warn", detail: W.doctor(list.map((x) => W.expiredItem(x.phase, x.waiver.expires, x.waiver.reason)).join(", "), slug) } : null;
+}
+// Of several sign-offs' waivers, the one the completed approval carries: the earliest expiry (the strictest), else the first one.
+function strictestWaiver(list) {
+  const ws = list.filter((w) => waiverView(w));
+  if (!ws.length) return null;
+  const dated = ws.filter((w) => waiverView(w).expires).sort((x, y) => (x.expires < y.expires ? -1 : x.expires > y.expires ? 1 : 0));
+  return dated[0] || ws[0];
+}
+// The approvals not in approvalHistory yet (made before the history, or by an older engine) → their `legacy` records, oldest first
+// — seeded before a new approval's (approvePhase) or a revocation's (revokeApproval) record.
+function legacySeeds(approvals, hist) {
+  return Object.entries(isObj(approvals) ? approvals : {}).filter(([ph, a]) => isRecord(a) && !hist.some((h) => isApprovalRecord(h) && h.phase === ph))
+    .map(([ph, a]) => legacyRecord(ph, a))
+    .sort((x, y) => (timeOf(x.at) || 0) - (timeOf(y.at) || 0));
+}
+
+// 1.16 U2 — revoke an approval: spec_approve {name, phase, revoke: true, reason?} / `approve <f> <phase> --revoke [--reason "…"]`
+// (under the feature lock, through approvePhase). approvals[phase] is removed, and so are the role sign-offs waiting for it
+// (signoffs[phase]); approvalHistory gets {phase, at, by, revoked: true, reason?, role?, roles? (the sign-offs withdrawn),
+// approvedAt?, wasForced?, partial? (only waiting sign-offs were withdrawn — nothing had been approved)} — never a snapshot, and
+// every reader of the history as a list of APPROVALS skips it (isApprovalRecord). Approvals made before the history are seeded as
+// `legacy` records first (approvePhase's rule), so the revoked approval itself stays in the history. NEVER cascades: the later
+// phases stay approved (`laterApproved`); the revoked one is pending again, so doctor / next_action / spec_finish ask for it and
+// approving another phase is refused on phase-order until it is approved again. A phase neither approved nor waiting for a
+// sign-off → error (notApproved); `execution` included (its sign-off is asked for again). force / expires / through are refused.
+function revokeApproval(projectDir, name, phase, by, opts) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const lng = featureLang(projectDir, f.slug);
+  const R = i18n.msg(lng).revoke;
+  if (opts.through != null) return { ok: false, error: R.noThrough };
+  if (opts.force === true || opts.expires != null) return { ok: false, error: R.noForce };
+  if (phase == null || String(phase).trim() === "") return { ok: false, error: R.phaseRequired };
+  const p = String(phase).toLowerCase().trim();
+  if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
+  const reason = reasonInput(opts.reason, lng);
+  if (reason.error) return { ok: false, error: reason.error };
+  const role = opts.role == null || String(opts.role).trim() === "" ? null : normRole(opts.role);
+  if (role != null && !RE_ROLE.test(role)) return { ok: false, badRole: true, error: i18n.msg(lng).governance.badRole(String(opts.role)) };
+  const state = readState(projectDir, f.slug);
+  if (state.invalid) return { ok: false, error: state.invalid };
+  const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
+  const waiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
+  if (!appr && !waiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
+  const legacy = legacySeeds(state.approvals, hist);
+  const record = { phase: p, at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user", revoked: true };
+  if (reason.value) record.reason = reason.value;
+  if (role) record.role = role;
+  if (appr) {
+    if (appr.at) record.approvedAt = appr.at;
+    if (appr.forced === true) record.wasForced = true;
+  } else record.partial = true; // only waiting sign-offs were withdrawn: nothing had been approved
+  if (waiting.length) record.roles = waiting;
+  state.approvalHistory = hist.concat(legacy, [record]);
+  delete state.approvals[p];
+  dropRoleSignOffs(state, p);
+  if (state.lastApprovedPhase === p) {
+    const rest = Object.entries(state.approvals).filter(([, a]) => isRecord(a)).sort((x, y) => (timeOf(x[1].at) || 0) - (timeOf(y[1].at) || 0));
+    if (rest.length) state.lastApprovedPhase = rest[rest.length - 1][0];
+    else delete state.lastApprovedPhase;
+  }
+  writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+  maybeRefreshRoadmap(projectDir);
+  const order = phaseOrder(featureFlow(f.dir, state.kind || "feature"));
+  const later = order.slice(order.indexOf(p) + 1).filter((ph) => isRecord(state.approvals[ph]));
+  const message = appr ? [R.revoked(p, f.slug), waiting.length ? R.signOffsToo(waiting.join(", ")) : null, later.length ? R.laterStay(later.join(", "), p) : null].filter(Boolean).join(" ")
+    : R.withdrawn(p, f.slug, waiting.join(", "));
+  const res = { ok: true, feature: f.slug, revoked: p, revokedApproval: !!appr, withdrawnSignOffs: waiting, laterApproved: later, approvals: state.approvals, message };
+  if (reason.value) res.reason = reason.value;
   return res;
 }
 
@@ -8613,6 +9015,7 @@ function recordRoleSignOff(state, phase, entry, required, record) {
   const rec = { by: entry.by, at: entry.at };
   for (const k of ["fingerprint", "designFingerprint"]) if (entry[k]) rec[k] = entry[k];
   if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
+  if (entry.waiver) rec.waiver = entry.waiver; // 1.16 U3: a forced sign-off's waiver
   if (entry.batch) rec.batch = true;
   const signoffs = isObj(state.signoffs) ? state.signoffs : {};
   const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
@@ -8629,6 +9032,9 @@ function recordRoleSignOff(state, phase, entry, required, record) {
     const ids = [...new Set(forced.flatMap((x) => (Array.isArray(x.failing) ? x.failing : [])))];
     entry.forced = true; entry.failing = ids;
     record.forced = true; record.failing = ids;
+    // 1.16 U3: the approval carries a waiver when a forced sign-off that counts gave one (its own, else the strictest).
+    if (!entry.waiver) { const w = strictestWaiver(forced.map((x) => x.waiver)); if (w) entry.waiver = w; }
+    if (entry.waiver) record.waiver = entry.waiver;
   }
   record.roles = required.slice();
   delete signoffs[phase];
@@ -8783,6 +9189,8 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const E = i18n.msg(lng).governance;
   const G = i18n.msg(lng).gates;
   if (phase != null && String(phase).trim() !== "") return { ok: false, error: E.ffBoth };
+  const wv = waiverInput(opts, lng); // 1.16 U3: with force, each forced phase of the run records the same waiver
+  if (wv.error) return { ok: false, error: wv.error };
   const t = String(opts.through || "").toLowerCase().trim();
   if (t === "execution") return { ok: false, error: E.ffExecution };
   if (!PHASES.includes(t)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(opts.through, PHASES.filter((p) => p !== "execution").join(", ")) };
@@ -8797,11 +9205,12 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const approved = [], steps = [];
   let approvals = state.approvals;
   for (const ph of chain) {
-    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true });
+    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires });
     if (r.approvals) approvals = r.approvals;
     const step = { phase: ph, approved: !!r.ok && r.complete !== false };
     if (r.role) step.role = r.role;
     if (r.forced) Object.assign(step, { forced: true, failing: r.failing });
+    if (r.waiver) step.waiver = r.waiver; // 1.16 U3
     if (step.approved) { approved.push(ph); steps.push(step); continue; }
     const list = approved.join(", ");
     if (r.ok) { // signed off by role — the phase waits for the other roles, and the later ones can't pass phase-order before it
@@ -8844,6 +9253,9 @@ const shortDigest = (s) => require("crypto").createHash("sha1").update(normWs(s)
 
 // The approvalHistory record of an approval made before the history existed (no snapshot) — what approvePhase seeds before
 // its own record, and what spec_upgrade {apply} seeds (it may then add the snapshot, when the fingerprint still matches).
+// A history record that IS an approval — not a role's partial sign-off (1.14 B3), not a revocation (1.16 U2): every reader of
+// approvalHistory as a list of approvals (snapshots, metrics, the legacy seeding, shipped supersessions, the changelog, upgrade).
+const isApprovalRecord = (h) => isRecord(h) && h.partial !== true && h.revoked !== true;
 function legacyRecord(ph, a) {
   return Object.assign({ phase: ph, at: a.at, by: a.by }, a.file ? { file: a.file } : {}, a.fingerprint ? { fingerprint: a.fingerprint } : {},
     a.forced === true ? { forced: true, failing: Array.isArray(a.failing) ? a.failing : [] } : {}, { legacy: true });
@@ -8871,7 +9283,7 @@ function historyText(dir, rel) {
 // The snapshot of the phase's LATEST approval → { rel, text, at, record } — null when that approval has none (made
 // before 1.13, or by an older engine after a 1.13 one), or the file is gone / points outside the feature's .history.
 function latestSnapshot(dir, state, phase) {
-  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === phase && h.partial !== true) : []; // partial: a role sign-off (1.14)
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isApprovalRecord(h) && h.phase === phase) : []; // not a partial role sign-off (1.14), nor a revocation (1.16)
   const last = hist[hist.length - 1];
   if (!last || typeof last.snapshot !== "string") return null;
   const appr = isRecord(state.approvals) ? state.approvals[phase] : null;
@@ -8977,13 +9389,17 @@ function activeTaskBlocks(tasksText, tracks) {
 // change request in .state.json `changes` — it never edits requirements.md or design.md. Idempotent: a change already
 // recorded against the same snapshot reopens nothing again.
 function impactReport(projectDir, name, opts = {}) {
+  // 1.16 Q1: phase 'steering' — the features approved under steering that changed since (project-wide without a name).
+  const ph0 = opts.phase == null ? "" : String(opts.phase).toLowerCase().trim();
+  if (ph0 === "steering") return steeringImpact(projectDir, name, opts);
+  if (name == null || String(name).trim() === "") return { ok: false, error: i18n.msg(projectLang(projectDir)).quality.impactNeedsName([...IMPACT_PHASES, "steering"].join(", ")) };
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const I = i18n.msg(lng).impact;
   const phase = opts.phase == null || String(opts.phase).trim() === "" ? "requirements" : String(opts.phase).toLowerCase().trim();
-  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), IMPACT_PHASES.join(", ")) };
+  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), [...IMPACT_PHASES, "steering"].join(", ")) };
   const reopen = opts.reopen === true;
   if (reopen && phase === "tasks") return { ok: false, error: I.reopenTasks };
   const state = readState(projectDir, slug);
@@ -9050,7 +9466,7 @@ function impactReport(projectDir, name, opts = {}) {
   const taskView = (b) => {
     const { reason, nothingToVerify } = taskVerification(evidence, b, dups.has(b.number), mode);
     return { number: b.number, text: b.text, done: b.done, evidence: reason || "verified", ...(nothingToVerify ? { nothingToVerify: true } : {}),
-      ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}) };
+      ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}), ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) };
   };
   const citing = (ids) => blocks.filter((b) => {
     const mk = taskMarkers(b);
@@ -9181,7 +9597,7 @@ function impactReport(projectDir, name, opts = {}) {
   }
   for (const b of toReopen) {
     const rec = ownRecord(evidence[String(b.number)], b, dups.has(b.number)); // this task's record, never the other "N."'s
-    if (isRecord(rec)) rec.stale = true; // mutates state.evidence in place
+    if (isRecord(rec)) { rec.stale = true; delete rec.staleBy; } // mutates state.evidence in place (a spec change — not an undo, 1.16 U1)
   }
   const keys = (list, k) => list.map((x) => x[k]);
   const idKey = byId ? "id" : "section";
@@ -9197,10 +9613,11 @@ function impactReport(projectDir, name, opts = {}) {
 
 // Human-readable spec_impact (CLI), in the feature's language.
 function impactLines(r) {
+  if (r.phase === "steering") return steeringImpactLines(r); // 1.16 Q1
   const I = i18n.msg(r.lang).impact;
   const R = i18n.msg(r.lang).evidenceGate.reason;
   const cut = (s, n = 90) => { const t = normWs(s); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
-  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.nothingToVerify ? I.nothingToVerify : t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : R[t.evidence] || t.evidence}`;
+  const task = (t) => `#${t.number} [${t.done ? "x" : " "}] ${t.nothingToVerify ? I.nothingToVerify : t.evidence === "verified" ? I.verified : t.specChanged ? I.staleSpec : t.unticked ? i18n.msg(r.lang).undo.label : R[t.evidence] || t.evidence}`;
   if (r.baseline === "fingerprint-only" || r.baseline === "none") {
     const out = [(r.baseline === "none" ? I.headNone : I.headFp)(r.feature, r.phase, r.changed), "  " + r.hint];
     if (r.note) out.push("  " + r.note);
@@ -9237,6 +9654,837 @@ function impactLines(r) {
 }
 
 // ---------------------------------------------------------------------------
+// 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
+// ---------------------------------------------------------------------------
+
+// --- Q1: steering amendments ---
+// A requirements / design approval records `steering` {file: fingerprint} (on approvals[phase] and its history record): the
+// steering files that governed it — constitution.md, the active tracks' steering files (a track pack's too), every file whose
+// front matter says `inclusion: always`, and every `fileMatch` file with its patterns (`steeringMatch` {file: [patterns]}) — such
+// a file counts only while an _Implements:_ path of the feature's CURRENT active tasks matches it (1.16 Q review: requirements
+// and design are approved before tasks.md names any file). Only those few files are hashed (fingerprintText: BOM / CRLF are encoding), never the tree. A recorded file
+// that changed or was removed since → doctor warns steering-changed-since-approval, next_action adds a re-review hint (never a
+// block), spec_impact {phase: "steering"} lists every active feature concerned. Re-approving the phase records the current
+// steering. An approval made before 1.16 (no `steering`) is never flagged — spec_impact lists it as `untracked`.
+const STEERING_GOVERNED = ["requirements", "design"];
+// A recorded steering name: one .md file straight under .specs/steering/ (a hand-edited state never reads elsewhere).
+const safeSteeringName = (n) => typeof n === "string" && /^[^\\/:*?"<>|\u0000-\u001f]{1,120}\.md$/i.test(n) && !n.startsWith(".") && !n.includes("..");
+// → [{ file, patterns? }]. EVERY fileMatch file is recorded, with its patterns (1.16 Q review: requirements / design are approved
+// while tasks.md is still the template — no _Implements:_ yet — so matching at approval time recorded none of them);
+// steeringChanges counts one only while the feature's CURRENT _Implements:_ paths match its patterns.
+const STEERING_MAX_PATTERNS = 20;
+function governingSteering(root, dir, tracks) {
+  const sdir = path.join(root, "steering");
+  const names = safeReaddir(sdir).filter(safeSteeringName).sort();
+  if (!names.length) return [];
+  const always = new Set(["constitution.md", ...optionalTracks().filter((t) => tracks.includes(t)).flatMap((t) => trackSteeringFiles(t))]);
+  const out = [];
+  for (const n of names) {
+    const text = readIfExists(path.join(sdir, n));
+    if (text == null) continue; // a folder named *.md, an unreadable file
+    if (always.has(n)) { out.push({ file: n }); continue; }
+    const fm = steeringFrontMatter(text);
+    if (!fm.frontMatter) continue; // no front matter: not in the governing set (the brief's rule for non-default files)
+    if (fm.inclusion === "always") out.push({ file: n });
+    else if (fm.inclusion === "fileMatch" && fm.patterns.length) out.push({ file: n, patterns: fm.patterns.slice(0, STEERING_MAX_PATTERNS) });
+  }
+  return out;
+}
+// Does one of these _Implements:_ paths match one of these fileMatch patterns?
+const steeringTargetsMatch = (targets, patterns) => targets.some((t) => patterns.some((p) => typeof p === "string" && (steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/"))));
+// The project-relative _Implements:_ paths of a feature's active tasks (template slots and absolute paths left out).
+function featureImplementsTargets(dir, tracks) {
+  const out = new Set();
+  for (const b of taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")) {
+    for (const r of taskMarkers(b).implements) {
+      const p = implementsRel(r);
+      if (p && !path.isAbsolute(p) && !/^\[.*\]$/.test(p)) out.add(p);
+    }
+  }
+  return [...out];
+}
+// → { <file>: fingerprint } of the governing steering files ({} when there is none — still a 1.16 approval). opts.match: also
+// → { steering, steeringMatch: { <fileMatch file>: [patterns] } } (what approvePhase records).
+function steeringFingerprints(root, dir, tracks, opts = {}) {
+  const out = {}, match = {};
+  for (const g of governingSteering(root, dir, tracks)) {
+    const raw = readIfExists(path.join(root, "steering", g.file));
+    if (raw == null) continue;
+    out[g.file] = textFingerprint(raw, "steering");
+    if (g.patterns) match[g.file] = g.patterns;
+  }
+  return opts.match ? { steering: out, steeringMatch: match } : out;
+}
+// The recorded steering of the requirements / design approvals that no longer matches → [{ phase, approvedAt, files: [{ file,
+// change: "modified" | "removed" }] }] (stable codes). Approvals without `steering` (before 1.16) are skipped. A file the
+// approval recorded as fileMatch (`steeringMatch`) counts only while the feature's CURRENT _Implements:_ paths (dir, tracks)
+// match its recorded patterns or, when it is still a fileMatch file, its current ones; an approval recorded before that
+// (no `steeringMatch`) counts every file it recorded.
+function steeringChanges(root, approvals, dir, tracks) {
+  const out = [];
+  if (!isObj(approvals)) return out;
+  let targets = null; // the feature's _Implements:_ paths — read once, only for a fileMatch file that changed
+  for (const p of STEERING_GOVERNED) {
+    const a = approvals[p];
+    if (!isRecord(a) || !isObj(a.steering)) continue;
+    const match = isObj(a.steeringMatch) ? a.steeringMatch : {};
+    const files = [];
+    for (const [file, fp] of Object.entries(a.steering)) {
+      if (!safeSteeringName(file) || typeof fp !== "string") continue;
+      const raw = readIfExists(path.join(root, "steering", file));
+      const change = raw == null ? "removed" : !fingerprintMatches(raw, "steering", fp) ? "modified" : null;
+      if (!change) continue;
+      const now = raw == null || !Array.isArray(match[file]) ? null : steeringFrontMatter(raw);
+      if (Array.isArray(match[file]) && dir && !(now && now.inclusion === "always")) { // turned `always`: it governs every feature now
+        if (targets === null) targets = featureImplementsTargets(dir, tracks || ["core"]);
+        const patterns = match[file].concat(now && now.inclusion === "fileMatch" ? now.patterns : []);
+        if (!steeringTargetsMatch(targets, patterns)) continue; // a fileMatch file this feature's files don't match: not its steering
+      }
+      files.push({ file, change });
+    }
+    if (files.length) out.push({ phase: p, approvedAt: typeof a.at === "string" ? a.at : null, files });
+  }
+  return out;
+}
+// "requirements (approved 2026-09-01): constitution.md (changed); design (…): …" — doctor's and the CLI's wording.
+function steeringChangeText(changes, lng) {
+  const Q = i18n.msg(lng).quality;
+  return changes.map((c) => Q.steeringItem(c.phase, day(c.approvedAt) || "?", c.files.map((x) => `${x.file} (${Q.steeringChange[x.change] || x.change})`).join(", "))).join("; ");
+}
+// spec_impact {phase: "steering", name?} / `dev-spec impact [feature] --phase steering`: the active features (or the one named)
+// whose requirements / design approval was made under an older version of a steering file that changed since. Read-only:
+// nothing is reopened (reopen is refused). → { phase, lang, scope: project | feature, feature?, changed, files, features:
+// [{ feature, approvals: [{ phase, approvedAt, files }] }], untracked: [{ feature, phases }] (approved before 1.16), unreadable? }
+function steeringImpact(projectDir, name, opts = {}) {
+  const named = name != null && String(name).trim() !== "";
+  let feats, lng, slug = null;
+  if (named) {
+    const f = existingFeature(projectDir, name);
+    if (!f.ok) return { ok: false, error: f.error };
+    feats = [{ slug: f.slug, dir: f.dir }];
+    slug = f.slug;
+    lng = featureLang(projectDir, f.slug);
+  } else {
+    feats = featureDirs(projectDir).filter((s) => !s.archived);
+    lng = projectLang(projectDir);
+  }
+  const Q = i18n.msg(lng).quality;
+  if (opts.reopen === true) return { ok: false, error: Q.impactNoReopen };
+  const root = specsRoot(projectDir);
+  const features = [], untracked = [], unreadable = [];
+  const files = new Set();
+  for (const s of feats) {
+    const st = stateFromFile(projectDir, statePath(s.dir));
+    if (st.invalid) { unreadable.push(s.slug); continue; }
+    const approvals = isObj(st.approvals) ? st.approvals : {};
+    const legacy = STEERING_GOVERNED.filter((p) => isRecord(approvals[p]) && !isObj(approvals[p].steering));
+    if (legacy.length) untracked.push({ feature: s.slug, phases: legacy });
+    const changes = steeringChanges(root, approvals, s.dir, detectTracks(s.dir));
+    if (!changes.length) continue;
+    features.push({ feature: s.slug, approvals: changes });
+    for (const c of changes) for (const x of c.files) files.add(x.file);
+  }
+  const res = { ok: true, phase: "steering", lang: lng, scope: named ? "feature" : "project" };
+  if (slug) res.feature = slug;
+  Object.assign(res, { changed: features.length > 0, files: [...files].sort(), features, untracked });
+  if (unreadable.length) res.unreadable = unreadable;
+  if (features.length) res.hint = Q.impactReReview(features[0].feature, features[0].approvals[0].phase);
+  return res;
+}
+function steeringImpactLines(r) {
+  const Q = i18n.msg(r.lang).quality;
+  const out = [Q.impactHead(r.features.length, r.scope === "feature" ? r.feature : null)];
+  for (const f of r.features) out.push(`  ${f.feature} — ${steeringChangeText(f.approvals, r.lang)}`);
+  if (r.untracked.length) out.push("  " + Q.impactUntracked(r.untracked.map((u) => `${u.feature} (${u.phases.join(", ")})`).join(", ")));
+  if (r.unreadable && r.unreadable.length) out.push("  " + Q.impactUnreadable(r.unreadable.join(", ")));
+  if (r.hint) out.push("  → " + r.hint);
+  return out;
+}
+
+// --- Q2: cross-feature acceptance criteria — near-duplicates and likely conflicts ---
+// A deterministic heuristic over the ACTIVE plain features' criteria (bugfixes restate the behaviour they restore; spikes have
+// none; archived features are out). Each criterion is normalized (acShape): _Supersedes:_ markers and IDs dropped, accents
+// folded, lower-cased, EN/PT/ES stop words and EARS keywords out, a light plural fold → its content words, split at the modal
+// into the TRIGGER (the words before "THE SYSTEM SHALL" / "O SISTEMA DEVE" / "EL SISTEMA DEBE", else before the first modal)
+// and the RESPONSE (the modal on — a NÃO / NO / NUNCA right before it included); each clause keeps its words in document order.
+// The polarity is the RESPONSE's (SHALL NOT / NÃO DEVE / NO DEBE / never / cannot …, RE_XAC_NEG on the response only): a
+// negative in the trigger ("IF the service cannot be reached", "can't log in", "no puede ser contactado") never flips it. A
+// negative in the trigger (not / no — EN / ES — / never / cannot / n't / non- / without, não / nunca / jamais / sem / nenhum,
+// nunca / jamás / sin / ningún) marks the next content word ("!verified"): a word negated in one trigger only makes the two
+// conditions complementary ("is not verified" / "is verified", "non-admin" / "admin") — such a pair is never reported. The
+// numbers apart, each with the word after it (1,000 = 1000; 0,5 = 0.5; "5 attempts" ≠ "5 minutes"; "10%" ≠ "10 EUR").
+// A clause's similarity is ORDER-aware: the shared words that keep their relative order (the longest common subsequence) over
+// the union — equal to Jaccard when nothing moved, lower when roles or directions swap ("buyer rates seller" / "seller rates
+// buyer", "savings to checking" / "checking to savings"). A pair of criteria of two different features (candidates: the whole
+// words ≥ XAC_CONFLICT alike, Jaccard) is
+//   duplicate (near-duplicate)       — the triggers AND the responses each MORE than XAC_DUPLICATE alike (or both without a
+//                                      trigger), same polarity, the same numbers with the same units;
+//   conflict  (opposite-modal)       — the triggers ≥ XAC_TRIGGER alike (or both without one), the responses ≥ XAC_RESPONSE,
+//                                      one SHALL, the other SHALL NOT;
+//   conflict  (different-numbers)    — the same, same polarity, both with numbers and not the same ones.
+// Left out: template criteria (a slot left, or the words of a built-in / track-pack / project template criterion whatever its
+// numbers — two +sec features share their scaffolded [SEC] criteria, two +ai ones their "at least N% of the golden set"), a pair
+// of light edits of the SAME template criterion (both ≥ XAC_DUPLICATE alike to it), criteria with fewer than XAC_MIN_WORDS
+// words, criteria retired by a shipped feature's _Supersedes:_, and a pair where one declares _Supersedes:_ of the other
+// (shipped or pending). Bounded: candidates
+// come from an inverted index over each criterion's rarest words (the all-pairs prefix filter — exact for the similarity
+// threshold, never O(n²) over a big catalog), capped at XAC_MAX_CRITERIA criteria, XAC_MAX_COMPARISONS comparisons and
+// XAC_MAX_PAIRS pairs (`truncated`). Surfaces: doctor warn cross-feature-acs, spec_catalog `crossAcs` + a SPECS.md section.
+const XAC_DUPLICATE = 0.8; // strictly more, per clause: one word of five differing (4/5 = 0.8) is no duplicate
+const XAC_CONFLICT = 0.7;
+const XAC_TRIGGER = 0.5;
+const XAC_RESPONSE = 0.5; // a conflict's responses: the same action, the polarity or the numbers opposed
+const XAC_MIN_WORDS = 3;
+const XAC_MAX_CRITERIA = 4000;
+const XAC_MAX_COMPARISONS = 200000;
+const XAC_MAX_PAIRS = 200;
+const XAC_STOP = new Set((
+  // EN
+  "a an the and or nor of to in on at for from by with as is are was were be been being it its this that these those which who whom whose " +
+  "when while if then where whenever shall must should will would may might can could not never no any all each every some such than into onto " +
+  "over under within without between after before during per via about up down out system systems also only both either neither so do does " +
+  "has have had there their them they " +
+  // PT (accents folded)
+  "o os um uma uns umas de do da dos das em na nos nas num numa por para com sem e ou que se entao quando enquanto onde sistema deve devera " +
+  "devem deverao nao nunca ao aos pelo pela pelos pelas seu sua seus suas este esta estes estas esse essa esses essas isso isto qualquer cada " +
+  "todo toda todos todas caso sempre ja pode podera puder possa ser sao foi " +
+  // ES (accents folded)
+  "el la los las un unos unas del al con sin y si entonces cuando mientras donde debe debera deben deberan su sus estos ese esos eso esto " +
+  "cualquier lo le les sea es son fue siempre ya puede podra pueda"
+).split(/\s+/).filter(Boolean));
+const XAC_MODALS = "shall|must|deve|devera|devem|deverao|debe|debera|deben|deberan";
+// The response's start: "the system shall" / "o sistema (não) deve" / "el sistema (no) debe" (group 1 = the negator + modal),
+// else the first modal with the negator right before it.
+const RE_XAC_SYS_MODAL = new RegExp("(?<![\\p{L}\\p{N}])(?:system|sistema)\\s+((?:(?:nao|no|nunca|jamais|jamas)\\s+)?(?:" + XAC_MODALS + ")(?![\\p{L}\\p{N}]))", "u");
+const RE_XAC_MODAL = new RegExp("(?<![\\p{L}\\p{N}])(?:(?:nao|no|nunca|jamais|jamas)\\s+)?(?:" + XAC_MODALS + ")(?![\\p{L}\\p{N}])", "u");
+// A trigger's negators (accents folded): the next content word is read negated. "no" only in EN / ES (PT "no" is em + o).
+const XAC_TRIGGER_NEG = new Set("not never nor without nao nunca jamais jamas sem nenhum nenhuma sin ningun ninguna ninguno".split(" "));
+// "can't" / "doesn't" / "isn't", "cannot", "non-admin" → " not " (trigger only: the response's own polarity reads them raw).
+const RE_XAC_NT = /(?<![\p{L}\p{N}])(?:can|won|don|doesn|didn|isn|aren|wasn|weren|hasn|haven|hadn|couldn|shouldn|wouldn|mustn|shan|needn|mightn|ain)['’]t(?![\p{L}\p{N}])/gu;
+const RE_XAC_CANNOT = /(?<![\p{L}\p{N}])(?:cannot|non-(?=\p{L}))/gu;
+const RE_XAC_NEG = new RegExp([
+  "(?:shall|must|should|will|may|can)\\s+(?:not|never)",
+  "(?:shan't|mustn't|won't|cannot|can't)",
+  "(?:nao|nunca|jamais)\\s+(?:deve|devera|devem|deverao|pode|podera)",
+  "(?:deve|devera|devem|deverao|debe|debera|deben|deberan)\\s+(?:nunca|jamais|jamas)",
+  "(?:no|nunca|jamas)\\s+(?:debe|debera|deben|deberan|puede|podra)",
+].map((s) => "(?<![\\p{L}\\p{N}])" + s + "(?![\\p{L}\\p{N}])").join("|"), "u");
+const RE_XAC_IDS = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+|FR-\d+|T-\d+)(?!\d)/g;
+// "1,000" / "1.000" (thousands) → 1000; "0,5" → 0.5; "15" → 15.
+function xacNumber(s) {
+  const parts = s.split(/[.,]/);
+  if (parts.length > 1 && parts.slice(1).every((p) => p.length === 3)) return String(Number(parts.join("")));
+  if (parts.length === 1) return String(Number(s));
+  return String(Number(parts.slice(0, -1).join("") + "." + parts[parts.length - 1]));
+}
+// A light plural fold: EN drops a final "s" (not "ss" / "us" / "is"); PT / ES also "-es" after r, l, n, z, d ("valores" →
+// "valor", "notificaciones" → "notificacion").
+function xacStem(w, base) {
+  if (w.length <= 3) return w;
+  if (base !== "en" && w.length > 5 && /[rlnzd]es$/.test(w)) return w.slice(0, -2);
+  return /(?:ss|us|is)$/.test(w) || !w.endsWith("s") ? w : w.slice(0, -1);
+}
+// A clause's content words in document order, each once (its first occurrence). neg: a trigger — its negators mark the next
+// content word ("!verified"); "no" counts only outside Portuguese (em + o).
+function xacWords(text, base, neg) {
+  const out = [], seen = new Set();
+  let pending = false;
+  for (const t of text.match(/\p{L}+/gu) || []) {
+    if (neg && (XAC_TRIGGER_NEG.has(t) || (t === "no" && base !== "pt"))) { pending = true; continue; }
+    if (t.length < 2 || XAC_STOP.has(t)) continue;
+    const w = (pending ? "!" : "") + xacStem(t, base);
+    pending = false;
+    if (!seen.has(w)) { seen.add(w); out.push(w); }
+  }
+  return out;
+}
+// The numbers, each with the word right after it ("5 attempt", "15 minute", "10 %"; a stop word is no unit) → [key], in order.
+const RE_XAC_NUM = /(\p{N}+(?:[.,]\p{N}+)*)(?:\s*(%|\p{L}+))?/gu;
+function xacNumbers(low, base) {
+  const out = [];
+  for (const m of low.matchAll(RE_XAC_NUM)) {
+    const u = m[2] && (m[2] === "%" || (m[2].length > 1 && !XAC_STOP.has(m[2]))) ? (m[2] === "%" ? "%" : xacStem(m[2], base)) : "";
+    out.push({ n: xacNumber(m[1]), u });
+  }
+  return out;
+}
+// One criterion → { words: Set, list: [sorted words], trig: [words in order], resp: [words in order], trigNeg: bool,
+// nums: [numbers in document order], numKey: "n unit|…" (sorted), neg: the response's polarity }.
+function acShape(text, lang) {
+  const base = i18n.baseLang(normalizeLang(lang));
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY)\]/g, " ")
+    .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  const sys = low.match(RE_XAC_SYS_MODAL);
+  const m = sys ? null : low.match(RE_XAC_MODAL);
+  const at = sys ? sys.index + sys[0].length - sys[1].length : m ? m.index : 0;
+  const resp = low.slice(at);
+  const trig = xacWords(low.slice(0, at).replace(RE_XAC_NT, " not ").replace(RE_XAC_CANNOT, " not "), base, true);
+  const respWords = xacWords(resp, base, false);
+  const words = new Set([...trig, ...respWords]);
+  const nums = xacNumbers(low, base);
+  return { words, list: [...words].sort(), trig, resp: respWords, nums: nums.map((x) => x.n),
+    numKey: nums.map((x) => x.n + (x.u ? " " + x.u : "")).sort().join("|"), neg: RE_XAC_NEG.test(resp) };
+}
+// Two clauses' ORDER-aware similarity: the shared words kept in the same relative order (the longest common subsequence — of
+// two orderings of one set, the longest increasing run of positions: O(k log k)) over the union. Both empty → 1, one → 0.
+function xacClauseSim(a, b) {
+  if (!a.length && !b.length) return 1;
+  if (!a.length || !b.length) return 0;
+  const inB = new Map(b.map((w, i) => [w, i]));
+  const tails = [];
+  let shared = 0;
+  for (const w of a) {
+    const x = inB.get(w);
+    if (x === undefined) continue;
+    shared++;
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (tails[mid] < x) lo = mid + 1; else hi = mid; }
+    tails[lo] = x;
+  }
+  return tails.length / (a.length + b.length - shared);
+}
+// Complementary conditions: a word one trigger negates and the other does not ("!verified" / "verified").
+function xacOpposed(a, b) {
+  const has = (s, w) => s.includes(w);
+  return a.some((w) => (w[0] === "!" ? has(b, w.slice(1)) : has(b, "!" + w)));
+}
+// A criterion's skeleton: its words and polarity, the numbers aside — a template criterion with its [85] / $[0.03] slots filled
+// in ("at least 90% of the golden eval set") is still that template's boilerplate, in every feature that has the track.
+const acSkeleton = (s) => s.list.join(" ") + "|" + (s.neg ? 1 : 0);
+// A template-criteria table → { skel: Set, shapes: [shape] } (shapes: one per skeleton).
+function templateShapeTable(texts) {
+  const skel = new Set(), shapes = [];
+  for (const [text, l] of texts) {
+    for (const e of acIndex(text || "").values()) {
+      if (e.text.includes("{{")) continue; // a {{variable}} differs per feature
+      const s = acShape(e.text, l);
+      const k = acSkeleton(s);
+      if (!s.list.length || skel.has(k)) continue;
+      skel.add(k);
+      shapes.push(s);
+    }
+  }
+  return { skel, shapes };
+}
+// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide.
+let XAC_TEMPLATES = null;
+function builtinTemplateAcs() {
+  if (XAC_TEMPLATES) return XAC_TEMPLATES;
+  const texts = [];
+  for (const l of i18n.LANGS) {
+    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
+      try { texts.push([fn(), l]); } catch { /* a builder's trouble never breaks the check */ }
+    }
+  }
+  return (XAC_TEMPLATES = templateShapeTable(texts));
+}
+// …and the project's own (this call's): its track packs' criteria and its requirements templates (.specs/templates/).
+function projectTemplateAcs(projectDir) {
+  const texts = [];
+  for (const tr of packTracks()) {
+    const pack = packOf(tr);
+    if (pack) for (const l of i18n.LANGS) { try { texts.push([packRequirementsBlock(pack, l, "", {}), l]); } catch { /* ignore */ } }
+  }
+  for (const key of ["requirements", "bug-requirements"]) for (const l of i18n.LANGS) {
+    try { const o = templateOverride(projectDir, key, l); if (o) texts.push([o.text, l]); } catch { /* ignore */ }
+  }
+  return templateShapeTable(texts);
+}
+const jaccard = (a, b) => {
+  if (!a.size && !b.size) return 1;
+  let n = 0;
+  for (const w of a) if (b.has(w)) n++;
+  return n / (a.size + b.size - n);
+};
+// The criteria crossFeatureAcs compares, with the prefix-filter index over them → { crit, index, truncated }. Built once per
+// engine call (the read-cache scope: doctor runs once per feature in spec_upgrade — rebuilding it every time cost seconds on
+// 50 features); any engine write in the call drops it (forgetCached / invalidateReadCache). ACROSS calls (every doctor /
+// next_action runs it): each feature's kind / language / tracks are cached by its .state.json file signature (lstat: size,
+// times, inode) and the project's context (track packs, templates, project language), its compared criteria by its
+// requirements.md signature too — XAC_FEATURE_CACHE, the PACK_CACHE pattern, bounded — and the whole table (index included,
+// and the pairs computed from it: table.results) is reused while no signature changed and no feature declares _Supersedes:_
+// (XAC_TABLE_CACHE). A feature whose tracks are inferred from its files (no saved list, pre-1.13) or that recorded track-pack
+// markers (ghost markers are per call) is never cached; the other features' rows and the table are keyed by the call's
+// ghost-marker set too (1.16 verify NEW-2). Cached rows were built after readContained's containment check; the
+// signature carries the inode.
+const XAC_FEATURE_CACHE = new Map(); // readCacheKey(feature dir) → { stateSig, ctx, kind, lang, tracks, reqSig, ghosts, rows, hasSup } | { archived, reqSig, hasSup }
+const XAC_FEATURE_CACHE_MAX = 5000;
+let XAC_TABLE_CACHE = null; // { key, table }
+// A file modified in the last XAC_RACY_MS is "racily clean" (git's rule): a same-size rewrite within the file system's time
+// resolution would keep its signature — such a file gets a signature that never matches (recomputed until it settles).
+const XAC_RACY_MS = 2000;
+let xacRacy = 0;
+const xacStatSig = (file) => {
+  try {
+    const st = fs.lstatSync(file);
+    if (Math.abs(Date.now() - st.mtimeMs) < XAC_RACY_MS) return "racy:" + ++xacRacy;
+    return [st.isSymbolicLink() ? "l" : st.isFile() ? "f" : "o", st.dev, st.ino, st.size, st.mtimeMs, st.ctimeMs].join(":");
+  } catch { return "-"; }
+};
+// The project context a feature's rows depend on: its valid track packs (their scan signatures) and its template files.
+function xacContextSig(projectDir) {
+  const reg = packRegistry();
+  return reg.packs.map((p) => p.name + "|" + p.token + "|" + (p.sig || "")).join(",") + "\n" +
+    templateFileList(projectDir).map((f) => f.rel + "=" + xacStatSig(f.abs)).join(",");
+}
+// One feature's compared criteria (template criteria, slots, short ones left out) → { rows: [{ id, key, text, shape, near }],
+// hasSup }. tmplOf() gives the template criteria (built on first use).
+function xacFeatureRows(projectDir, s, state, tracks, tmplOf) {
+  const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
+  if (!raw) return { rows: [], hasSup: false };
+  const lng = typeof state.lang === "string" ? state.lang : projectLang(projectDir);
+  const rows = [];
+  for (const e of acIndex(activeDesign(raw, tracks)).values()) {
+    // a slot left: nothing written to compare (a placeholder is a bracket or the TODO sentinel — none, nothing to look up)
+    if ((e.text.includes("[") || e.text.includes("TODO")) && placeholderReport(e.text).length) continue;
+    const shape = acShape(e.text, lng);
+    if (shape.list.length < XAC_MIN_WORDS) continue;
+    const tmpl = tmplOf();
+    if (tmpl.skel.has(acSkeleton(shape))) continue; // a template criterion (its number slots filled in or not)
+    // The template criteria it is a light edit of: two criteria near the SAME one are that template's boilerplate, not a pair.
+    const n = shape.words.size;
+    const near = [];
+    tmpl.shapes.forEach((t, ti) => {
+      if (t.neg === shape.neg && t.words.size >= n * XAC_DUPLICATE && t.words.size * XAC_DUPLICATE <= n && jaccard(t.words, shape.words) >= XAC_DUPLICATE) near.push(ti);
+    });
+    rows.push({ id: e.id, key: dirKey(s.dir) + "\n" + e.id, raw: e.text, shape, near }); // its one line: only when paired (xacText)
+  }
+  return { rows, hasSup: /_Supersedes:/i.test(raw) };
+}
+function xacTable(projectDir) {
+  const root = dirKey(specsRoot(projectDir));
+  if (READ_CACHE && XAC_MEMO && XAC_MEMO.root === root) return XAC_MEMO.table;
+  let tmpl = null; // the template criteria (built-in + this project's), read on the first criterion
+  const tmplOf = () => {
+    if (!tmpl) { const b = builtinTemplateAcs(), p = projectTemplateAcs(projectDir); tmpl = { skel: new Set([...b.skel, ...p.skel]), shapes: b.shapes.concat(p.shapes) }; }
+    return tmpl;
+  };
+  const ctx = xacContextSig(projectDir) + "\n" + normalizeLang(projectLang(projectDir));
+  const putCache = (ck, e) => { if (XAC_FEATURE_CACHE.size >= XAC_FEATURE_CACHE_MAX) XAC_FEATURE_CACHE.clear(); XAC_FEATURE_CACHE.set(ck, e); };
+  // Pass 1: the active plain features — kind, language and tracks from the cache while .state.json is unchanged, else read
+  // (detectTracks also notes the ghost markers of missing packs; a feature that recorded packMarkers is never cached).
+  const feats = [];
+  let anySup = false;
+  for (const s of featureDirs(projectDir)) {
+    const reqFile = path.join(s.dir, "requirements.md"), ck = readCacheKey(s.dir);
+    const reqSig = xacStatSig(reqFile), hit = XAC_FEATURE_CACHE.get(ck);
+    if (s.archived) { // an archived feature only matters for its _Supersedes:_ (supersededByIndex)
+      let hasSup;
+      if (hit && hit.archived && hit.reqSig === reqSig) hasSup = hit.hasSup;
+      else {
+        const raw = readContained(projectDir, reqFile);
+        hasSup = !!raw && /_Supersedes:/i.test(raw);
+        putCache(ck, { archived: true, reqSig, hasSup });
+      }
+      anySup = anySup || hasSup;
+      continue;
+    }
+    const stateSig = xacStatSig(statePath(s.dir));
+    if (hit && !hit.archived && hit.stateSig === stateSig && hit.ctx === ctx) {
+      if (hit.kind !== "feature") continue;
+      feats.push({ s, ck, reqSig, stateSig, hit, lang: hit.lang, tracks: hit.tracks, cacheable: true });
+      continue;
+    }
+    const state = stateFromFile(projectDir, statePath(s.dir));
+    const kind = state.kind || "feature";
+    const cacheable = !!savedTracks(state) && !(isObj(state.packMarkers) && Object.keys(state.packMarkers).length) && !state.invalid;
+    const tracks = kind === "feature" ? detectTracks(s.dir) : null;
+    const lang = typeof state.lang === "string" ? state.lang : null;
+    if (cacheable) putCache(ck, { stateSig, ctx, kind, lang, tracks, reqSig: null, rows: null, hasSup: false });
+    if (kind === "feature") feats.push({ s, ck, reqSig, stateSig, hit: cacheable ? XAC_FEATURE_CACHE.get(ck) : null, lang, tracks, cacheable });
+  }
+  // The ghost markers of this call (missing packs a feature's packMarkers still name — noted by detectTracks in pass 1, per call):
+  // they make a heading inactive in EVERY feature's requirements.md, so a feature's cached rows and the cached table hold only
+  // for the same set (1.16 verify NEW-2: a removed feature took the last ghost of a deleted pack with it, and a long-lived
+  // process kept the rows computed with its [MARKER] sections dropped — a fresh process reported the conflict).
+  const ghosts = ghostMarkers().map(([n, m]) => n + "=" + m).sort().join(",");
+  // Pass 2: each feature's rows — from the cache while its requirements.md and the ghost markers are unchanged too.
+  const perFeature = feats.map((f) => {
+    if (f.hit && f.hit.rows && f.hit.reqSig === f.reqSig && f.hit.ghosts === ghosts) { anySup = anySup || f.hit.hasSup; return { f, rows: f.hit.rows }; }
+    const r = xacFeatureRows(projectDir, f.s, { lang: f.lang }, f.tracks, tmplOf);
+    if (f.hit) Object.assign(f.hit, { reqSig: f.reqSig, ghosts, rows: r.rows, hasSup: r.hasSup });
+    anySup = anySup || r.hasSup;
+    return { f, rows: r.rows };
+  });
+  // The whole table from the last call, while nothing changed (no _Supersedes:_ anywhere — its retirements read other states).
+  const tableKey = anySup || feats.some((f) => !f.cacheable) ? null : root + "\n" + ctx + "\nghosts:" + ghosts + "\n" + feats.map((f) => f.ck + "|" + f.reqSig + "|" + f.stateSig).join("\n");
+  if (tableKey && XAC_TABLE_CACHE && XAC_TABLE_CACHE.key === tableKey) {
+    if (READ_CACHE) XAC_MEMO = { root, table: XAC_TABLE_CACHE.table };
+    return XAC_TABLE_CACHE.table;
+  }
+  const sup = anySup ? supersededByIndex(projectDir) : null;
+  const crit = [];
+  let truncated = false;
+  outerFeat: for (const { f, rows } of perFeature) {
+    for (const r of rows) {
+      if (sup && sup.live.has(r.key)) continue; // retired by a shipped feature: not what the system does today
+      if (crit.length >= XAC_MAX_CRITERIA) { truncated = true; break outerFeat; }
+      crit.push({ feature: f.s.slug, id: r.id, row: r, shape: r.shape, near: r.near, declared: (sup && sup.get(r.key)) || [] });
+    }
+  }
+  // The prefix filter: words ordered rarest first (document frequency, then the word); a criterion is indexed by its first
+  // |w| - ⌈t·|w|⌉ + 1 words — two criteria at least t alike always share one of them (exact, never a missed pair).
+  const df = new Map();
+  for (const c of crit) for (const w of c.shape.list) df.set(w, (df.get(w) || 0) + 1);
+  const rank = (a, b) => df.get(a) - df.get(b) || (a < b ? -1 : a > b ? 1 : 0);
+  const index = new Map();
+  crit.forEach((c, i) => {
+    const toks = c.shape.list.slice().sort(rank);
+    c.prefix = toks.slice(0, toks.length - Math.ceil(XAC_CONFLICT * toks.length) + 1);
+    for (const w of c.prefix) { const post = index.get(w); if (post) post.push(i); else index.set(w, [i]); }
+  });
+  const table = { crit, index, truncated };
+  if (READ_CACHE) XAC_MEMO = { root, table };
+  XAC_TABLE_CACHE = tableKey ? { key: tableKey, table } : null;
+  return table;
+}
+// spec_catalog's / doctor's pairs. opts.only (a slug): only the pairs involving that feature. → { pairs: [{ kind, reason,
+// similarity, a: { feature, id, text }, b, numbers? }] (a = the criterion listed first: feature folder order, then its
+// criteria in order), criteria, comparisons, truncated }
+function crossFeatureAcs(projectDir, opts = {}) {
+  const table = xacTable(projectDir);
+  // The pairs depend on the table alone: a table reused across calls (nothing changed) answers from its own memo.
+  const mk = opts.only ? "only:" + opts.only : "*";
+  if (!table.results) table.results = new Map();
+  const memo = table.results.get(mk);
+  if (memo) return { ...memo, pairs: memo.pairs.slice() };
+  const res = crossFeatureAcsOf(table, opts);
+  if (table.results.size >= 256) table.results.clear();
+  table.results.set(mk, res);
+  return { ...res, pairs: res.pairs.slice() };
+}
+function crossFeatureAcsOf(table, opts) {
+  const { crit, index, truncated: cut } = table;
+  let truncated = cut;
+  // A declared replacement (either way) is never a duplicate or a conflict: "<slug>/<AC>" (or "<slug>" — a marker outside a criterion).
+  const declares = (x, y) => y.declared.includes(x.feature + "/" + x.id) || y.declared.includes(x.feature);
+  const pairs = [];
+  let comparisons = 0;
+  outer: for (let i = 0; i < crit.length; i++) {
+    const c = crit[i];
+    if (opts.only && c.feature !== opts.only) continue; // only that feature's criteria look up their candidates
+    const seen = new Set();
+    for (const w of c.prefix) {
+      for (const j of index.get(w)) {
+        // every unordered pair once: without `only` from its later criterion; with it, from the feature's side
+        if (seen.has(j) || (!opts.only && j >= i)) continue;
+        seen.add(j);
+        const d = crit[j];
+        if (d.feature === c.feature) continue;
+        if (++comparisons > XAC_MAX_COMPARISONS) { truncated = true; break outer; }
+        const p = j < i ? comparePair(d, c, declares) : comparePair(c, d, declares);
+        if (!p) continue;
+        pairs.push(p);
+        if (pairs.length >= XAC_MAX_PAIRS) { truncated = true; break outer; }
+      }
+    }
+  }
+  return { pairs, criteria: crit.length, comparisons: Math.min(comparisons, XAC_MAX_COMPARISONS), truncated };
+}
+function comparePair(a, b, declares) {
+  const A = a.shape, B = b.shape;
+  const sim = jaccard(A.words, B.words);
+  if (sim < XAC_CONFLICT || declares(a, b) || declares(b, a) || a.near.some((t) => b.near.includes(t))) return null;
+  // Complementary conditions ("is not verified" / "is verified", "non-admin" / "admin"): each covers the other's case — never
+  // a duplicate, never a conflict.
+  if (xacOpposed(A.trig, B.trig)) return null;
+  const side = (x) => ({ feature: x.feature, id: x.id, text: x.row.text || (x.row.text = acOneLine(x.row.raw, x.id)) });
+  const base = { similarity: Math.round(sim * 100) / 100, a: side(a), b: side(b) };
+  const trigSim = xacClauseSim(A.trig, B.trig), respSim = xacClauseSim(A.resp, B.resp);
+  const alike = trigSim >= XAC_TRIGGER && respSim >= XAC_RESPONSE;
+  const numsDiffer = A.nums.length > 0 && B.nums.length > 0 && A.numKey !== B.numKey;
+  if (A.neg !== B.neg && alike) return { kind: "conflict", reason: "opposite-modal", ...base };
+  if (A.neg === B.neg && numsDiffer && alike) return { kind: "conflict", reason: "different-numbers", ...base, numbers: { a: A.nums, b: B.nums } };
+  if (trigSim > XAC_DUPLICATE && respSim > XAC_DUPLICATE && A.neg === B.neg && A.numKey === B.numKey) return { kind: "duplicate", reason: "near-duplicate", ...base };
+  return null;
+}
+// One pair as a line, from `slug`'s side when given ("US-1.AC-2 ↔ billing/US-1.AC-3 (near-duplicate: 86% alike)"), else both qualified.
+function crossAcItem(p, slug, lng) {
+  const Q = i18n.msg(lng).quality;
+  const flip = slug != null && p.a.feature !== slug;
+  const [me, other] = flip ? [p.b, p.a] : [p.a, p.b];
+  const nums = p.numbers ? (flip ? [p.numbers.b, p.numbers.a] : [p.numbers.a, p.numbers.b]).map((x) => x.join("/")).join(" ↔ ") : "";
+  return Q.xacItem(slug != null ? me.id : me.feature + "/" + me.id, other.feature + "/" + other.id, Q.xacKind[p.kind] || p.kind, Q.xacWhy(p.reason, Math.round(p.similarity * 100), nums));
+}
+// spec_doctor's cross-feature-acs detail for `slug` (its pairs only; at most 6 shown).
+function crossAcDoctorDetail(pairs, slug, lng) {
+  const Q = i18n.msg(lng).quality;
+  const items = pairs.slice(0, 6).map((p) => crossAcItem(p, slug, lng));
+  if (pairs.length > 6) items.push(Q.xacMore(pairs.length - 6));
+  return Q.xacDoctor(pairs.length, items.join("; "));
+}
+// SPECS.md's section (only when there is a pair): one line per pair, both sides qualified.
+function renderCrossAcsMd(x, lang) {
+  if (!x || !x.pairs.length) return "";
+  const Q = i18n.msg(lang).quality;
+  const icon = { duplicate: "≈", conflict: "⚡" };
+  let md = `\n## ⚠ ${Q.xacHeading}\n\n> ${Q.xacIntro}${x.truncated ? " " + Q.xacTruncated : ""}\n\n`;
+  for (const p of x.pairs) md += `- ${icon[p.kind] || "•"} ${crossAcItem(p, null, lang)}\n`;
+  return md;
+}
+
+// --- Q3: the glossary (.specs/steering/glossary.md) ---
+// One entry per list item: `- **Customer** — a person or company with a signed contract. _Avoid: client, user_` (a sub-line of
+// the item may carry the `_Avoid:_` marker — English-stable in every language). HTML comments and fenced code never hold an
+// entry; a [placeholder] term (the stub) is no entry. spec_clarify asks about every avoided word found in the feature's
+// requirements.md / design.md (word-matched, case-insensitive, a plural "s" / "es" allowed, outside code spans, fenced code,
+// comments and _Marker:_ tags; the glossary's own terms masked first, so "End user" never reads as "user"), doctor warns
+// `glossary` with the count, spec_task_brief quotes the entries its task's text and criteria use (bounded). No glossary →
+// nothing changes.
+const GLOSSARY_FILE = "glossary.md";
+const GLOSSARY_MAX_ENTRIES = 300;
+const GLOSSARY_MAX_AVOID = 20;
+const GLOSSARY_MAX_HITS = 200; // locations recorded per call
+const GLOSSARY_BRIEF_MAX = 8;
+const GLOSSARY_BRIEF_CHARS = 1500;
+const RE_GLOSSARY_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\*\*|__)([^*_\n]{1,120}?)(?:\*\*|__)(.*)$/;
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const foldTerm = (s) => String(s).toLowerCase().replace(/\s+/g, " ").trim();
+// → { file, entries: [{ term, definition, avoid: [words] }], total, truncated } | null (no glossary.md). total: the entries the
+// file holds; past GLOSSARY_MAX_ENTRIES only the first ones are read (truncated — doctor and clarify say so).
+function glossaryEntries(root) {
+  const file = path.join(root, "steering", GLOSSARY_FILE);
+  const raw = readIfExists(file);
+  if (raw == null) return null;
+  const entries = [];
+  let cur = null, total = 0;
+  const flush = () => {
+    if (cur) { const e = glossaryEntry(cur); if (e) { total++; if (entries.length < GLOSSARY_MAX_ENTRIES) entries.push(e); } }
+    cur = null;
+  };
+  for (const l of scanTaskLines(steeringFrontMatter(raw).body)) {
+    if (l.code) { flush(); continue; }
+    const vis = l.vis.slice(0, 2000);
+    const m = vis.match(RE_GLOSSARY_ITEM);
+    if (m) { flush(); cur = { indent: m[1].length, term: m[2], rest: [m[3]], blank: false }; continue; }
+    if (!cur) continue;
+    if (!vis.trim()) { cur.blank = true; continue; } // a loose list: an indented paragraph after the blank line still belongs to the item
+    if (/^\s*#/.test(vis)) { flush(); continue; }
+    const indent = vis.match(/^\s*/)[0].length;
+    if (cur.blank && indent <= cur.indent) { flush(); continue; } // after a blank line, only an indented paragraph continues it
+    // a sub-line (its own bullet dropped) or a lazy continuation of the item
+    if (indent > cur.indent || !RE_LIST_ITEM.test(vis)) cur.rest.push(vis.trim().replace(RE_LIST_ITEM, ""));
+    else flush();
+  }
+  flush();
+  return { file, entries, total, truncated: total > entries.length };
+}
+function glossaryEntry(cur) {
+  const term = cur.term.trim().replace(/[:：]\s*$/, "").trim();
+  if (!term || /^\[.*\]$/.test(term) || isGenericSlot(term)) return null;
+  const avoid = [];
+  const seen = new Set([foldTerm(term)]);
+  const rest = cur.rest.join(" ").replace(/_Avoid:[ \t]*([^_]*)_/gi, (m, list) => {
+    for (const w0 of list.split(/[,;]/)) {
+      const w = w0.trim().replace(/^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g, "").trim();
+      if (!w || w.length > 60 || /^\[.*\]$/.test(w) || !/\p{L}/u.test(w) || seen.has(foldTerm(w)) || avoid.length >= GLOSSARY_MAX_AVOID) continue;
+      seen.add(foldTerm(w));
+      avoid.push(w);
+    }
+    return " ";
+  });
+  const def = rest.replace(/^\s*[—–:-]+\s*/, "").replace(/\s+/g, " ").trim().replace(/[.;,]\s*$/, "");
+  return { term, definition: !def || /^\[[^\]]*\]$/.test(def) ? "" : def, avoid };
+}
+const RE_WORD_BEFORE = "(?<![\\p{L}\\p{N}_])", RE_WORD_AFTER = "(?![\\p{L}\\p{N}_])";
+// One case-insensitive regex for a word list (longest first; a plural "s" / "es" allowed; spaces match any whitespace).
+const wordListRe = (words, capture) => new RegExp(RE_WORD_BEFORE + (capture ? "(" : "(?:") + words.slice().sort((a, b) => b.length - a.length)
+  .map((w) => escRe(w).replace(/\s+/g, "\\s+")).join("|") + ")(?:e?s)?" + RE_WORD_AFTER, "giu");
+// --- the template text a glossary check never reads (1.16 Q review) ---
+// A fresh scaffold is the tool's words, not the user's: "## User Stories", "As a [role]…", the tracks' template criteria ("a
+// user of tenant A…"), a slot's own example ("[e.g., 90% of users…]"). Every visible line the templates write — the built-in
+// ones (templateCorpus, in the feature's language; pt-BR through toPtBr), the project's (.specs/templates/) and its track packs'
+// requirements / design blocks — becomes a line PATTERN: its key (whitespace folded, lower-cased, every number "#") with each
+// top-level [bracket] group and {{variable}} a wildcard. A feature's line that IS a pattern is template text; only what fills
+// its wildcards is the user's (a slot filled in, "[Title]" → "Client uploads a file"). A template heading also matches
+// without its parenthetical ("## User Stories"). Lookup: exact keys in a Set; wildcard patterns by their first / last 8
+// literal characters (a pattern with fewer than 4 literal characters hides nothing and is dropped); the match is linear.
+const GLOSS_TEMPLATE_LINES = new Map(); // lang → { exact, head, tail, loose } — built-in, process-wide
+const glossLineKey = (s) => String(s).replace(/\s+/g, " ").trim().toLowerCase().replace(/\p{N}+(?:[.,]\p{N}+)*/gu, "#");
+// A key → { segs: its literal segments around the wildcards (one segment = no wildcard), slots: each wildcard's own template
+// text (an untouched slot is no user text) }, or null (unbalanced brackets: exact only).
+function glossPatternSegs(key) {
+  const segs = [], slots = [];
+  let cur = "", depth = 0, wild = false;
+  const openWild = () => { if (wild && cur === "") return; segs.push(cur); cur = ""; slots.push(""); wild = true; };
+  for (let i = 0; i < key.length; i++) {
+    const c = key[i];
+    if (c === "[") { if (depth === 0) openWild(); depth++; slots[slots.length - 1] += c; continue; }
+    if (depth > 0) { if (c === "]") depth--; slots[slots.length - 1] += c; continue; }
+    if (c === "{" && key[i + 1] === "{") {
+      const j = key.indexOf("}}", i + 2);
+      if (j !== -1) { openWild(); slots[slots.length - 1] += key.slice(i, j + 2); i = j + 1; continue; }
+    }
+    cur += c;
+    wild = false;
+  }
+  if (depth > 0) return null;
+  segs.push(cur);
+  return { segs, slots };
+}
+// The visible lines of a template text (comments and fenced code are never a feature's visible text either).
+const glossVisibleLines = (text) => scanTaskLines(String(text || "")).filter((l) => !l.code).map((l) => l.vis);
+function glossAddLines(set, text) {
+  for (const vis of Array.isArray(text) ? text : glossVisibleLines(text)) {
+    const key = glossLineKey(vis);
+    if (!key) continue;
+    const add = (pt, k) => {
+      if (!pt || pt.segs.length === 1) { set.exact.add(k); return; }
+      const sg = pt.segs;
+      const lit = sg.join("").length;
+      const id = sg.join("\u0000") + "\u0001" + pt.slots.join("\u0000");
+      if (lit < 4 || set.seen.has(id)) return; // the corpus repeats most lines
+      set.seen.add(id);
+      const p = { segs: sg, slots: pt.slots, lit };
+      const put = (m, x) => { const a = m.get(x); if (a) a.push(p); else m.set(x, [p]); };
+      if (sg[0].length >= 8) put(set.head, sg[0].slice(0, 8));
+      else if (sg[sg.length - 1].length >= 8) put(set.tail, sg[sg.length - 1].slice(-8));
+      else set.loose.push(p);
+    };
+    add(glossPatternSegs(key), key);
+    const paren = key.startsWith("#") ? key.indexOf(" (") : -1; // "## user stories (prioritized — …)" → "## user stories"
+    if (paren > 1) add(glossPatternSegs(key.slice(0, paren)), key.slice(0, paren));
+  }
+}
+const glossNewSet = () => ({ exact: new Set(), head: new Map(), tail: new Map(), loose: [], seen: new Set() });
+function glossBuiltinLines(lang) {
+  const l = normalizeLang(lang);
+  if (GLOSS_TEMPLATE_LINES.has(l)) return GLOSS_TEMPLATE_LINES.get(l);
+  const set = glossNewSet();
+  const base = i18n.baseLang(l);
+  // The texts a requirements.md / design.md is scaffolded from: every track combination (templateCorpus' set), the track
+  // blocks spec_add_track appends, the bugfix's requirements and bug report.
+  const texts = [];
+  const put = (fn) => { try { const t = fn(); if (typeof t === "string") texts.push(t); } catch { /* a builder's trouble never breaks the check */ } };
+  const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS].map((x) => ["core", ...x]);
+  for (const tracks of combos) {
+    const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "" };
+    put(() => i18n.requirements(a, base));
+    put(() => i18n.design(a, base));
+  }
+  for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
+  put(() => i18n.bugRequirements({ name: "x" }, base));
+  put(() => i18n.bugReport({ name: "x" }, base));
+  const lines = new Set();
+  for (const t of new Set(texts)) for (const v of glossVisibleLines(t)) lines.add(v);
+  glossAddLines(set, l === base ? [...lines] : [...lines].map((x) => i18n.toPtBr(x))); // pt-BR: the pt lines, each once
+  GLOSS_TEMPLATE_LINES.set(l, set);
+  return set;
+}
+// The project's own: its templates (.specs/templates/) and its track packs' requirements / design blocks (this call's).
+function glossProjectLines(projectDir, lang) {
+  const set = glossNewSet();
+  let any = false;
+  for (const f of templateFileList(projectDir)) {
+    if (!f.key) continue;
+    const text = readTemplateFile(f.abs, projectDir);
+    if (text != null) { glossAddLines(set, text); any = true; }
+  }
+  for (const tr of packTracks()) {
+    const pack = packOf(tr);
+    if (!pack) continue;
+    try { glossAddLines(set, packRequirementsBlock(pack, lang, "", {})); glossAddLines(set, packDesignBlock(pack, lang, {})); any = true; } catch { /* ignore */ }
+  }
+  return any ? set : null;
+}
+// A wildcard pattern against a line key → the texts its wildcards cover (a wildcard may be empty), or null. Linear.
+function glossSpans(segs, s) {
+  const first = segs[0], last = segs[segs.length - 1];
+  if (s.length < first.length + last.length || !s.startsWith(first) || !s.endsWith(last)) return null;
+  const end = s.length - last.length;
+  let pos = first.length;
+  const spans = [];
+  for (let i = 1; i < segs.length - 1; i++) {
+    const at = s.indexOf(segs[i], pos);
+    if (at === -1 || at + segs[i].length > end) return null;
+    spans.push(s.slice(pos, at));
+    pos = at + segs[i].length;
+  }
+  if (pos > end) return null;
+  spans.push(s.slice(pos, end));
+  return spans;
+}
+// A line → the parts the user wrote: [line] (no template line), [] (a template line untouched), or its filled wildcards.
+function glossUserParts(line, sets) {
+  const key = glossLineKey(line);
+  if (!key) return [];
+  let best = null;
+  for (const set of sets) {
+    if (set.exact.has(key)) return [];
+    const cands = [].concat(set.head.get(key.slice(0, 8)) || [], set.tail.get(key.slice(-8)) || [], set.loose);
+    for (const p of cands) {
+      if (best && p.lit <= best.lit) continue;
+      const spans = glossSpans(p.segs, key);
+      if (spans) best = { lit: p.lit, spans: spans.filter((x, k) => x !== p.slots[k]) }; // an untouched slot: the template's words
+    }
+  }
+  return best ? best.spans.filter((x) => /\p{L}/u.test(x)) : [line];
+}
+// The avoided words the feature's requirements.md / design.md use → [{ word, term, definition, avoid, count, locations:
+// ["requirements.md:12", …] (≤ 5 each) }] in first-seen order. Template text is never read (glossUserParts), nor a template
+// slot, a code span, a _Marker:_ tag or a glossary term; `_client_` (underscore emphasis) is the word client (snake_case isn't).
+// opts: { projectDir, lang } (the template lines of that language and project; without them, the built-in EN ones).
+function glossaryHits(dir, gl, opts = {}) {
+  const withAvoid = gl ? gl.entries.filter((e) => e.avoid.length) : [];
+  if (!withAvoid.length) return [];
+  const byWord = new Map();
+  for (const e of withAvoid) for (const w of e.avoid) if (!byWord.has(foldTerm(w))) byWord.set(foldTerm(w), { word: w, entry: e });
+  const reAvoid = wordListRe([...byWord.values()].map((x) => x.word), true);
+  const reTerm = wordListRe(gl.entries.map((e) => e.term), false);
+  const blank = (m) => " ".repeat(m.length);
+  const lang = normalizeLang(opts.lang || "en");
+  let sets = null; // built on the first line that holds an avoided word (most lines hold none)
+  const setsOf = () => sets || (sets = [glossBuiltinLines(lang), opts.projectDir ? glossProjectLines(opts.projectDir, lang) : null].filter(Boolean));
+  // A part's own template slots blanked ("[e.g., 90% of users…]" is the template's example, not the user's words).
+  const slotless = (s) => (s.includes("[") ? bracketPlaceholders(s, new Set()).reduce((a, p) => a.split(p).join(" ".repeat(p.length)), s) : s);
+  const hits = new Map();
+  let total = 0;
+  for (const file of ["requirements.md", "design.md"]) {
+    const text = readIfExists(path.join(dir, file));
+    if (text == null) continue;
+    scanTaskLines(text).forEach((l, i) => {
+      if (l.code || total >= GLOSSARY_MAX_HITS) return;
+      const line = l.vis.slice(0, 4000);
+      reAvoid.lastIndex = 0;
+      const any = reAvoid.test(line.replace(/_/g, " ")); // an avoided word on the line at all (underscores as spaces: `_client_` too)
+      reAvoid.lastIndex = 0; // matchAll below copies lastIndex
+      if (!any) return;
+      for (const part of glossUserParts(line, setsOf())) {
+        // A template line's filled slot comes lower-cased (its key): a _marker:_ tag is then matched in any case.
+        const v = slotless(part).replace(/`[^`\n]*`/g, blank).replace(part === line ? /_[A-Z][A-Za-z ]{1,30}:[^_\n]*_/g : /_[A-Za-z][A-Za-z ]{1,30}:[^_\n]*_/g, blank)
+          .replace(/(?<![\p{L}\p{N}_])_{1,2}(?=[\p{L}\p{N}])/gu, " ").replace(/(?<=[\p{L}\p{N}])_{1,2}(?![\p{L}\p{N}_])/gu, " ") // _client_ → client
+          .replace(reTerm, blank);
+        for (const m of v.matchAll(reAvoid)) {
+          const x = byWord.get(foldTerm(m[1]));
+          if (!x) continue;
+          const k = foldTerm(x.word);
+          const h = hits.get(k) || { word: x.word, term: x.entry.term, definition: x.entry.definition, avoid: x.entry.avoid, count: 0, locations: [] };
+          h.count++;
+          total++;
+          const loc = `${file}:${i + 1}`;
+          if (h.locations.length < 5 && !h.locations.includes(loc)) h.locations.push(loc);
+          hits.set(k, h);
+        }
+      }
+    });
+  }
+  return [...hits.values()];
+}
+// The glossary entries a text uses (a term or an avoided word, word-matched) — the task brief's, bounded by count and size.
+function briefGlossary(root, text) {
+  const gl = glossaryEntries(root);
+  if (!gl || !gl.entries.length) return { items: [], omitted: [] };
+  const items = [], omitted = [];
+  let budget = GLOSSARY_BRIEF_CHARS;
+  for (const e of gl.entries) {
+    if (!wordListRe([e.term, ...e.avoid], false).test(text)) continue;
+    const size = e.term.length + e.definition.length + e.avoid.join(", ").length + 20;
+    if (items.length < GLOSSARY_BRIEF_MAX && size <= budget) { items.push(e); budget -= size; } else omitted.push(e.term);
+  }
+  return { items, omitted };
+}
+
+// ---------------------------------------------------------------------------
 // Metrics & retrospective (1.13) — derived only from .state.json, .history/ and the artifacts (local, no cost).
 // Legacy state never throws: what can't be derived is null.
 // ---------------------------------------------------------------------------
@@ -9260,7 +10508,7 @@ function featureMetrics(projectDir, slug, dir) {
   // made: approvals/rework unknown (null). A missing history is an empty one (createFeature doesn't seed the key).
   const lost = !!state.invalid && !Array.isArray(state.approvalHistory);
   // A role sign-off that didn't complete its phase (`partial`, 1.14 B3) is no approval: not counted, never a lead time.
-  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && typeof h.phase === "string" && h.partial !== true);
+  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isApprovalRecord(h) && typeof h.phase === "string"); // + no revocation (1.16 U2)
   // Approvals made before the change history (a feature upgraded mid-flight): the `legacy` records approvePhase seeds,
   // and approved phases with no history entry at all (not re-approved since). Each is counted once (its latest
   // approval — earlier ones were overwritten), so their rework is unknown: `rework` is then a lower bound.
@@ -9349,6 +10597,9 @@ function featureMetrics(projectDir, slug, dir) {
     approvalsTotal: history ? history.length + unseeded.length : null,
     rework, reworkByPhase, reworkLowerBound: rework != null && legacyPhases.length > 0, legacyPhases, forcedApprovals,
     batchApprovals: history ? history.filter((h) => h.batch === true).length : null, // 1.14 B3: approvals made by a fast-forward
+    // 1.16 U: approvals revoked (spec_approve {revoke} — a withdrawn role sign-off is none) and ticks undone (spec_complete_task {undo})
+    revokedApprovals: lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && h.revoked === true && h.partial !== true).length,
+    untickedTasks: Array.isArray(state.unticks) ? state.unticks.length : 0,
     changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
     evidence: { runs, passing, passRate: runs ? round1((passing / runs) * 100) : null },
     tasks: { done, total: active.length },
@@ -9471,12 +10722,17 @@ function metricsLines(r) {
 // ---------------------------------------------------------------------------
 
 // Drop a feature slug from roadmap.json: its own entry and any dependsOn that referenced it.
-function pruneRoadmapRefs(projectDir, slug, renameTo) {
-  return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo), (b) => { throw new Error(roadmapBusyResult(projectDir, b).error); });
+// archived (1.16 E3): an archive — the feature moves to its milestones' `archived` list instead of leaving them (a remove
+// drops it; a rename renames it). → milestonesFollow's { changed, invalid }.
+function pruneRoadmapRefs(projectDir, slug, renameTo, archived) {
+  return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived), (b) => { throw new Error(roadmapBusyResult(projectDir, b).error); });
 }
-function pruneRoadmapRefsLocked(projectDir, slug, renameTo) {
+// A lifecycle result's milestone fields: milestonesUpdated (the names changed) and milestonesInvalid ({ count, names, notList? }
+// — stored entries left as they are, 1.16 verify NEW-1).
+const milestoneResult = (ms) => ({ ...(ms && ms.changed.length ? { milestonesUpdated: ms.changed } : {}), ...(ms && ms.invalid ? { milestonesInvalid: ms.invalid } : {}) });
+function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
   const rm = readRoadmap(projectDir);
-  if (!rm || !rm.features) return;
+  if (!rm || !rm.features) return { changed: [], invalid: null };
   if (renameTo) {
     if (rm.features[slug]) { rm.features[renameTo] = rm.features[slug]; delete rm.features[slug]; }
   } else {
@@ -9487,7 +10743,9 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo) {
     if (!Array.isArray(dep)) continue;
     rm.features[k].dependsOn = renameTo ? dep.map((d) => (d === slug ? renameTo : d)) : dep.filter((d) => d !== slug);
   }
+  const milestones = milestonesFollow(rm, slug, renameTo ? "rename" : archived ? "archive" : "remove", renameTo); // 1.16 E3
   writeRoadmap(projectDir, rm);
+  return milestones;
 }
 
 // remove / archive / rename / restore: the folder's lock (withMoveLock), then the roadmap lock around the move and the
@@ -9530,8 +10788,8 @@ function removeFeatureLocked(projectDir, name) {
   const inUse = moveDirOrBusy(projectDir, slug, dir, tomb); // the folder (and its .lock, ours) leaves the feature path at once
   if (inUse) return inUse;
   try { fs.rmSync(tomb, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); } catch { /* left as a tombstone: swept later */ }
-  pruneRoadmapRefs(projectDir, slug);
-  return { ok: true, action: "remove", feature: slug };
+  const ms = pruneRoadmapRefs(projectDir, slug);
+  return { ok: true, action: "remove", feature: slug, ...milestoneResult(ms) }; // 1.16 E3: dropped from its milestones
 }
 
 function archiveFeature(projectDir, name) {
@@ -9568,8 +10826,9 @@ function archiveFeatureLocked(projectDir, name, moved) {
   if (inUse) return inUse;
   moved(dest); // the lock went with the folder: released there once the archive is done
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
-  pruneRoadmapRefs(projectDir, slug); // archived features leave the active roadmap
+  const ms = pruneRoadmapRefs(projectDir, slug, undefined, true); // archived features leave the active roadmap (milestones: → archived)
   const res = { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug), dependentsPruned: record.dependents.map((d) => d.feature) };
+  Object.assign(res, milestoneResult(ms)); // 1.16 E3
   if (res.dependentsPruned.length) {
     const list = res.dependentsPruned.join(", ");
     if (percent < 100) res.incompleteDependency = true; // stable: those features now read as unblocked, the work isn't done
@@ -9606,10 +10865,11 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const inUse = moveDirOrBusy(projectDir, oldSlug, oldDir, newDir);
   if (inUse) return inUse;
   moved(newDir); // the lock went with the folder: released there once the rename is done
-  pruneRoadmapRefs(projectDir, oldSlug, newSlug);
+  const ms = pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
+  Object.assign(res, milestoneResult(ms)); // 1.16 E3
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));
   const notes = [];
@@ -10414,7 +11674,7 @@ function nextAction(projectDir, name, opts = {}) {
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
   const phase = detectPhase(dir, tracks);
-  const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name);
+  const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name, { lean: true }); // lean: the verdict and the failing checks only
   const st = readState(projectDir, name);
   const approvals = st.approvals || {};
   // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
@@ -10633,6 +11893,13 @@ function nextAction(projectDir, name, opts = {}) {
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
+  // 1.16 Q1: steering amended after the requirements / design approval — a re-review hint added to whatever the step is, never a
+  // step (or a block) of its own; re-approving the phase records the current steering.
+  if (Array.isArray(doc.steeringChanged) && doc.steeringChanged.length) {
+    res.steeringChanged = doc.steeringChanged;
+    res.recommendation += " " + fm.quality.naSteering(doc.steeringChanged.map((c) => c.phase).join(", "),
+      [...new Set(doc.steeringChanged.flatMap((c) => c.files.map((x) => x.file)))].join(", "), slug);
+  }
   if (flow === "design-first") { // C3: stable `flow`; the order is named while the design / requirements gates are the open ones
     res.flow = flow;
     if (["fill", "fix", "approve"].includes(step) && (pending === "design" || pending === "requirements")) res.recommendation += " " + fm.flow.nextNote(flowOrderText(dir, tracks, flow));
@@ -10768,6 +12035,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
+Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -11634,7 +12902,9 @@ const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|
 // The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
 const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
 
-// opts.scan: a scanTestCode() result to reuse for the tests-in-code check (spec_finish walks the project once).
+// opts.scan: a scanTestCode() result to reuse for the tests-in-code check (spec_finish walks the project once). opts.lean: the
+// caller reads only the failing checks and the verdict — the warn-only cross-feature-acs check is skipped once the verdict is
+// already warn / fail (1.16 Q review).
 function specDoctor(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -11658,6 +12928,18 @@ function specDoctor(projectDir, name, opts = {}) {
   const steeringIssues = [missingSteering.length ? m.steeringMissing(missingSteering.join(", ")) : null,
     stubSteering.length ? fm.scopedSteering.placeholders(stubSteering.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
   add("steering", steeringIssues.length ? "warn" : "pass", steeringIssues.join("; ") || m.steeringOk);
+  // 1.16 Q3 — the glossary (.specs/steering/glossary.md): words it says to avoid used in requirements.md / design.md — a warn
+  // with the count (spec_clarify asks about each). Only when the glossary lists an avoided word: no glossary, no check.
+  const gloss = glossaryEntries(root);
+  if (gloss && (gloss.truncated || gloss.entries.some((e) => e.avoid.length))) {
+    const Q = fm.quality;
+    const gh = glossaryHits(dir, gloss, { projectDir, lang: lng });
+    const items = gh.slice(0, 6).map((h) => Q.glossaryItem(h.word, h.term, h.locations.join(", ")));
+    if (gh.length > 6) items.push(Q.xacMore(gh.length - 6));
+    // Past GLOSSARY_MAX_ENTRIES the rest of the glossary is never read — said, never silent (a warn).
+    const cut = gloss.truncated ? Q.glossaryTruncated(gloss.entries.length, gloss.total) : null;
+    add("glossary", gh.length || cut ? "warn" : "pass", [gh.length ? Q.glossaryDoctor(gh.reduce((a, h) => a + h.count, 0), items.join("; ")) : cut ? null : Q.glossaryOk(gloss.entries.length), cut].filter(Boolean).join("; "));
+  }
 
   // Requirements + EARS
   const reqs = readIfExists(path.join(dir, "requirements.md"));
@@ -11821,6 +13103,11 @@ function specDoctor(projectDir, name, opts = {}) {
   // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
   const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
   if (overlapPairs.length) add("cross-feature-overlap", "warn", overlapDoctorDetail(overlapPairs, slug, lng));
+  // 1.16 Q2 — cross-feature acceptance criteria: this feature's criteria that read like another active feature's (near-duplicate)
+  // or may contradict them (same trigger, SHALL vs SHALL NOT or different numbers) — a warn, only when there is a pair. Computed
+  // last and put back here (xacAt): a caller that reads only the failing checks and the verdict (opts.lean — next_action's and
+  // spec_finish's own doctor) skips it once another check already warns or fails — the verdict can't change.
+  const xacAt = checks.length;
 
   // Brownfield: an integration plan that is still the template (only when the feature has one).
   const planFile = path.join(dir, "integration-plan.md");
@@ -11864,6 +13151,10 @@ function specDoctor(projectDir, name, opts = {}) {
     add("changed-since-approval", "warn", impactPhases.length
       ? fm.impact.doctorChanged(changedArts.join(", "), slug, impactPhases) : fm.impact.doctorChangedPlain(changedArts.join(", "), slug));
   }
+  // 1.16 Q1 — a steering file that governed the requirements / design approval changed (or was removed) since: re-review, then
+  // re-approve (which records the current steering). A warn; approvals made before 1.16 (no steering fingerprints) never.
+  const steeringChanged = steeringChanges(root, approvals, dir, tracks);
+  if (steeringChanged.length) add("steering-changed-since-approval", "warn", fm.quality.steeringDoctor(steeringChangeText(steeringChanged, lng), slug));
   add("approval-gates", shownPending.length || forcedGates.length || rv.notes.length ? "warn" : "pass",
     [shownPending.length ? m.gatesPending(shownPending.map(rv.label).join(", ")) : null,
       nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
@@ -11871,7 +13162,13 @@ function specDoctor(projectDir, name, opts = {}) {
       ...rv.notes]
       .filter(Boolean).join("; ") || m.gatesOk);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
+  const wExp = waiverExpiredCheck(approvals, tracks, slug, lng); // 1.16 U3: a forced approval whose waiver expired
+  if (wExp) add(wExp.id, wExp.status, wExp.detail);
   const gatesOk = pendingGates.length === 0;
+  if (kind === "feature" && !(opts.lean && checks.some((c) => c.status !== "pass"))) {
+    const xac = crossFeatureAcs(projectDir, { only: slug }).pairs;
+    if (xac.length) checks.splice(xacAt, 0, { id: "cross-feature-acs", status: "warn", detail: crossAcDoctorDetail(xac, slug, lng) });
+  }
 
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
@@ -11895,6 +13192,7 @@ function specDoctor(projectDir, name, opts = {}) {
   // needs roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (rv.any) Object.assign(res, { pendingRoles: rv.pending, unsignedRoles: rv.unsigned });
   if (featureFlow(dir, kind) === "design-first") res.flow = "design-first"; // C3 (only then: the default flow's result is unchanged)
+  if (steeringChanged.length) res.steeringChanged = steeringChanged; // 1.16 Q1 (stable): [{phase, approvedAt, files: [{file, change}]}]
   return res;
 }
 
@@ -12268,10 +13566,12 @@ function roadmapData(projectDir, opts = {}) {
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
+    // 1.16 U3: the waivers of those forced approvals (reason, expiry, expired) — the attention line shows them
+    const waivers = Object.fromEntries(forced.map((p) => [p, waiverView(approvals[p].waiver)]).filter(([, w]) => w));
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
     const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
     const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
-    return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, overlaps, roleWait, spikeTimebox };
+    return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, waivers, overlaps, roleWait, spikeTimebox };
   });
   return { rmv, rows, tasksDone, tasksTotal };
 }
@@ -12289,7 +13589,8 @@ function buildAttention(rows, t, lang) {
     } else if (r.designTodo) a.push({ name: r.f.name, msg: t.designTodo });
     if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
     if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
-    if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.join(", ")}` });
+    // a forced approval with its waiver (1.16 U3): "design (waiver: <reason>, until 2026-12-31)" — an expired one reads EXPIRED
+    if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.map((p) => (r.waivers && r.waivers[p] ? fm.waiver.roadmapItem(p, r.waivers[p].reason, r.waivers[p].expires, r.waivers[p].expired) : p)).join(", ")}` });
     if (r.roleWait && r.roleWait.length) a.push({ name: r.f.name, msg: fm.governance.roadmapAwaiting(r.roleWait.map((w) => `${w.phase} (${w.missing.join(", ")})`).join(", ")) }); // 1.14 B3
     // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
     // reasons doctor and spec_finish give (unverifiedLabel; no-evidence needs no label), in the roadmap's language.
@@ -12319,7 +13620,7 @@ function renderRoadmapMd(projectDir, lang, data) {
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
-  const attention = buildAttention(rows, t, lang);
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
   const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
@@ -12347,6 +13648,15 @@ function renderRoadmapMd(projectDir, lang, data) {
     if (rows.some((r) => r.f.forecast && r.f.forecast.eta)) md += `\n${F.etaNote(Math.round(FORECAST_SPREAD * 100))}\n`;
   }
 
+  if ((rmv.milestones || []).length) { // 1.16 E3 — each milestone: its date vs the latest ETA of its open features
+    const MS = i18n.msg(lang).milestone;
+    md += `\n## 🏁 ${MS.title}\n\n| ${MS.cols.join(" | ")} |\n|${MS.cols.map(() => "---").join("|")}|\n`;
+    for (const m of rmv.milestones) {
+      const feats = m.features.join(", ") + (m.archived ? ` (${MS.archivedLabel}: ${m.archived.join(", ")})` : "");
+      md += `| ${cell(m.name)} | ${cell(m.date)} | ${cell(feats || "—")} | ${m.done}/${m.total} | ${cell(m.eta || "—")} | ${MILESTONE_ICON[m.status]} ${MS.status[m.status]} |\n`; // every stored value through cell() (1.16 E review M2)
+    }
+  }
+
   md += `\n## ${t.deps}\n\n`;
   const edges = rmv.features.flatMap((f) => f.dependsOn.map((d) => `  ${mid(d)}["${d}"] --> ${mid(f.name)}["${f.name}"]`));
   md += edges.length ? "```mermaid\ngraph LR\n" + [...new Set(edges)].join("\n") + "\n```\n" : `_${t.noDeps}_\n`;
@@ -12366,7 +13676,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const langAttr = normalizeLang(lang); // en | pt | es | pt-BR — a valid BCP 47 tag
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
-  const attention = buildAttention(rows, t, lang);
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
@@ -12388,6 +13698,9 @@ function renderRoadmapHtml(projectDir, lang, data) {
     .join("\n");
   const F = i18n.msg(lang).forecast;
   const anyEta = rows.some((r) => r.f.forecast && r.f.forecast.eta);
+  const MS = i18n.msg(lang).milestone; // 1.16 E3 — the milestones table (only when some exist)
+  const msRows = (rmv.milestones || []).map((m) => `<tr><td>${htmlEsc(m.name)}</td><td>${htmlEsc(m.date)}</td><td>${htmlEsc(m.features.join(", ") || "—")}${m.archived ? ` <span class="tracks">${htmlEsc(MS.archivedLabel)}: ${htmlEsc(m.archived.join(", "))}</span>` : ""}</td>` +
+    `<td>${m.done}/${m.total}</td><td class="eta">${htmlEsc(m.eta || "—")}</td><td class="ms-${m.status}">${MILESTONE_ICON[m.status]} ${htmlEsc(MS.status[m.status])}</td></tr>`).join("\n");
 
   const depList = rmv.features.filter((f) => f.dependsOn.length).map((f) => `<li><b>${htmlEsc(f.name)}</b> ← ${f.dependsOn.map((d) => `<span class="${f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ")}</li>`).join("\n");
   const attList = attention.map((a) => `<li><b>${htmlEsc(a.name)}</b> — ${htmlEsc(a.msg)}</li>`).join("\n");
@@ -12429,7 +13742,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border)} th
 tr:last-child td{border-bottom:none} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
 .pct{white-space:nowrap} .pct .bar{display:inline-block;width:54px;height:6px;border-radius:999px;background:var(--bg3);vertical-align:middle;margin-right:7px;overflow:hidden}
 .pct .bar>span{display:block;height:100%;background:var(--brand)} .next{color:var(--muted)} .eta{white-space:nowrap}
-.met{color:var(--c-done)} .unmet{color:var(--c-block)}
+.met{color:var(--c-done)} .unmet{color:var(--c-block)} .ms-late{color:var(--c-block)} .ms-at-risk{color:var(--c-prog)} .ms-done{color:var(--c-done)}
 ul{list-style:none;padding:0;margin:0} li{padding:5px 0;border-bottom:1px solid var(--border)} li:last-child{border:none}
 footer{margin-top:36px;color:var(--muted);font-size:.78rem;border-top:1px solid var(--border);padding-top:12px}
 </style>
@@ -12460,7 +13773,7 @@ ${!rmv.features.length ? `<p class="sub">${t.noFeatures}</p>` : !nextUp.length ?
 <h2>${t.features}</h2>
 ${rows.length ? `<table><thead><tr><th></th><th>${t.colFeature}</th><th>${t.colTracks}</th><th>${t.colPhase}</th><th>%</th><th>${t.colTasks}</th><th>${t.colDeps}</th><th>${t.colNext}</th><th>${htmlEsc(F.colEta)}</th></tr></thead><tbody>${featRows}</tbody></table>` : `<p class="sub">${htmlEsc(t.none)}</p>`}${anyEta ? `\n<p class="sub">${htmlEsc(F.etaNote(Math.round(FORECAST_SPREAD * 100)))}</p>` : ""}
 
-<h2>${t.deps}</h2>
+${msRows ? `<h2>🏁 ${htmlEsc(MS.title)}</h2>\n<table><thead><tr>${MS.cols.map((c) => `<th>${htmlEsc(c)}</th>`).join("")}</tr></thead><tbody>${msRows}</tbody></table>\n\n` : ""}<h2>${t.deps}</h2>
 ${depList ? `<ul>${depList}</ul>` : `<p class="sub">${t.noDeps}</p>`}
 
 <h2>⚠ ${t.needs}</h2>
@@ -12750,6 +14063,9 @@ function roadmapExtras(projectDir, rmv, opts = {}) {
   const fc = forecastData(projectDir, rmv.features, { now: opts.now, cycle: rmv.cycle });
   rmv.velocity = fc.velocity;
   for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
+  rmv.milestones = milestoneStatuses(projectDir, rmv.features, (opts.now != null && timeOf(opts.now)) || Date.now()); // 1.16 E3
+  const msBad = milestoneInvalidInfo(readRoadmap(projectDir)); // 1.16 verify NEW-1: stored entries no status is computed for
+  if (msBad) rmv.milestonesInvalid = msBad;
   const ov = featureOverlaps(projectDir, rmv.features);
   rmv.overlaps = ov.pairs;
   if (ov.truncated) rmv.overlapsTruncated = true;
@@ -12776,6 +14092,8 @@ function roadmapTailLines(r, lang) {
   const out = [];
   if (r.velocity && r.velocity.completed > 0) out.push(velocityText(r.velocity, lang));
   if ((r.features || []).some((f) => f.forecast && f.forecast.eta)) out.push(F.etaNote(Math.round(FORECAST_SPREAD * 100)));
+  if ((r.milestones || []).length) out.push(`🏁 ${i18n.msg(lang).milestone.title}:`, ...r.milestones.map((m) => "  " + milestoneLine(m, lang))); // 1.16 E3
+  if (r.milestonesInvalid) out.push("⚠ " + milestoneAttention([], lang, r.milestonesInvalid)[0].msg); // 1.16 verify NEW-1
   const ov = r.overlaps || [];
   if (ov.length) {
     out.push(F.overlap.cliHead(ov.length));
@@ -13143,10 +14461,13 @@ function catalogData(projectDir) {
     // unapproved criterion edit is not "what the system does today"), a ticked task's latest run failed / its _Verify:_
     // never ran (verificationStatus), or it changed since the finish (staleFinish: a change request or re-approval, then —
     // the cheap checks first, only for a feature still finished — an _Implements:_ file the baseline never recorded, the
-    // bounded walk next_action and drift do).
+    // bounded walk next_action and drift do). 1.16 U review 3: nor while a gate is pending (pendingGateList — a revoked approval,
+    // a phase that became due after the finish: next_action asks for the approval, spec_finish refuses) — existence checks only.
     if (fin && !s.archived && s.phase === "complete") {
-      const cs = changedSinceApproval(s.dir, isObj(s.state.approvals) ? s.state.approvals : {}, s.tracks, s.state.kind, { detail: true });
-      if (cs.changed.some((x) => !cs.byDate.includes(x)) || verificationStatus(projectDir, s.slug, s.dir).unverified.length ||
+      const appr = isObj(s.state.approvals) ? s.state.approvals : {};
+      const cs = changedSinceApproval(s.dir, appr, s.tracks, s.state.kind, { detail: true });
+      if (pendingGateList(s.dir, s.tracks, s.state.kind || "feature", appr).length ||
+        cs.changed.some((x) => !cs.byDate.includes(x)) || verificationStatus(projectDir, s.slug, s.dir).unverified.length ||
         staleFinish(projectDir, s.state, "", { newFiles: false }) ||
         staleFinish(projectDir, s.state, activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", s.tracks))) fin = null;
     }
@@ -13170,6 +14491,8 @@ function catalogData(projectDir) {
   const pending = currentAcs.filter((a) => a.supersedePending).length;
   const totals = { features: features.length, acs: all.length, current: currentAcs.length, superseded, pending };
   const data = { lang, features, totals };
+  const xac = crossFeatureAcs(projectDir); // 1.16 Q2: near-duplicate / conflicting criteria across the active features
+  data.crossAcs = { pairs: xac.pairs, truncated: xac.truncated };
   data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
   return data;
 }
@@ -13203,7 +14526,7 @@ function renderCatalogMd(data, lang, proj) {
       md += line + "\n";
     }
   }
-  return md;
+  return md + renderCrossAcsMd(data.crossAcs, lang); // 1.16 Q2 (only when there is a pair)
 }
 // spec_catalog {write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing). Writing never
 // replaces a same-named file dev-spec didn't generate (the roadmap's guard) — the result is then an error.
@@ -13211,7 +14534,7 @@ function catalog(projectDir, opts = {}) {
   const root = specsRoot(projectDir);
   const file = path.join(root, "SPECS.md");
   const data = catalogData(projectDir);
-  const res = { ok: true, file, lang: data.lang, totals: data.totals, features: data.features, wrote: false };
+  const res = { ok: true, file, lang: data.lang, totals: data.totals, features: data.features, crossAcs: data.crossAcs, wrote: false };
   if (opts.write) {
     const E = i18n.msg(data.lang).err;
     if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
@@ -13768,6 +15091,8 @@ function spikeDoctor(projectDir, f) {
   const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
   if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
+  const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
+  if (wExp) add(wExp.id, wExp.status, wExp.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
@@ -13838,6 +15163,8 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const dec = decisionSummaryLines(dir, lng);
   if (dec.length) body.push(...dec, "");
   if (blocks.length) body.push(F.prTasks, ...blocks.map((b) => `- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}`), "");
+  const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // 1.16 U3: a forced execution sign-off
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
   body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
   body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";
@@ -13856,6 +15183,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
     blockers, warnings: [], openTasks: open, unverified: [], pendingGates: [], changedSinceApproval: [], placeholders: [], checks: SP.finish.checks.slice(),
     outcome: s.outcome, mergeTitle, paths: { summary: summaryPath }, wrote: write };
   if (baseline) res.baseline = baseline;
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3
   if (recordedChecks) res.recordedChecks = recordedChecks;
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
@@ -13867,7 +15195,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
 
 // .specs/exports/ holds spec_export's documents: a reserved name (RESERVED_SLUGS), never a feature folder.
 const EXPORT_DIR = "exports";
-const EXPORT_FORMATS = ["html", "md", "csv"]; // csv (1.14 F5): the requirements traceability matrix
+const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear"]; // csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear
 const SUMMARY_SYN = ["summary", "resumo", "resumen"];
 const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de sucesso", "criterios de éxito", "criterios de exito"];
 
@@ -14190,7 +15518,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
 
   // Tasks — done / open, and the verification verdict doctor and spec_finish give (with the localized reason).
   const vs = verificationStatus(projectDir, slug, dir);
-  const why = new Map(vs.unverifiedDetail.map((d) => [d.number, d.specChanged ? M.impact.staleSpec : M.evidenceGate.reason[d.reason] || d.reason]));
+  const why = new Map(vs.unverifiedDetail.map((d) => [d.number, d.specChanged ? M.impact.staleSpec : d.unticked ? M.undo.label : M.evidenceGate.reason[d.reason] || d.reason]));
   const taskRows = tasks.map((t) => {
     const v = !t.done ? X.verification.open : why.has(t.number) ? X.verification.unverified(why.get(t.number)) : t.nothingToVerify ? X.verification.nothing : X.verification.verified;
     return `| ${t.number} | ${mdCell(cleanTaskText(t.text))} | ${t.done ? X.taskStatus.done : X.taskStatus.open} | ${mdCell(v)} |`;
@@ -14401,29 +15729,36 @@ function exportSpecs(projectDir, opts = {}) {
     return { ok: false, error: A.invalid(A.item("format", A.oneOf(EXPORT_FORMATS.join(", ")), JSON.stringify(String(opts.format)))) };
   }
   const root = specsRoot(projectDir);
+  if (fmt === "gherkin") return exportGherkin(projectDir, opts, pl);
   let doc;
   let base;
+  const tracker = TRACKERS.includes(fmt); // 1.16 E2 — one CSV for the tool's importer
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
     if (!f.ok) return { ok: false, error: f.error };
     const fl = featureLang(projectDir, f.slug);
     doc = fmt === "csv" ? { lang: fl, scope: "feature", feature: f.slug, content: matrixCsv([buildTraceMatrix(projectDir, f)], fl, { document: true }) }
-      : exportFeatureDoc(projectDir, f, fl, catalogData(projectDir));
+      : tracker ? { lang: fl, scope: "feature", feature: f.slug, records: trackerRecords(projectDir, f, fl) }
+        : exportFeatureDoc(projectDir, f, fl, catalogData(projectDir));
     base = f.slug === "project" ? "project.feature" : f.slug;
   } else {
     if (!fs.existsSync(root)) return { ok: false, error: i18n.msg(pl).err.noSpecs(root) };
-    if (fmt === "csv") {
+    if (fmt === "csv" || tracker) {
       const active = featureDirs(projectDir).filter((x) => !x.archived);
       const supBy = supersededByIndex(projectDir);
-      doc = { lang: pl, scope: "project", features: active.map((x) => x.slug), content: matrixCsv(active.map((x) => buildTraceMatrix(projectDir, x, { supBy })), pl, { document: true }) };
+      doc = { lang: pl, scope: "project", features: active.map((x) => x.slug) };
+      if (tracker) doc.records = active.flatMap((x) => trackerRecords(projectDir, x, pl, supBy));
+      else doc.content = matrixCsv(active.map((x) => buildTraceMatrix(projectDir, x, { supBy })), pl, { document: true });
     } else doc = exportProjectDoc(projectDir, pl, catalogData(projectDir));
     base = "project";
   }
-  const content = fmt === "csv" ? doc.content : fmt === "html" ? exportHtml(doc) : exportMd(doc);
-  const ext = fmt === "csv" ? "rtm.csv" : fmt;
+  if (tracker) doc.content = trackerCsv(doc.records, fmt, doc.lang);
+  const content = fmt === "csv" || tracker ? doc.content : fmt === "html" ? exportHtml(doc) : exportMd(doc);
+  const ext = fmt === "csv" ? "rtm.csv" : tracker ? fmt + ".csv" : fmt;
   const file = path.join(root, EXPORT_DIR, base + "." + ext);
   const res = { ok: true, scope: doc.scope, format: fmt, lang: doc.lang, file, wrote: false };
   if (doc.scope === "feature") res.feature = doc.feature; else res.features = doc.features;
+  if (tracker) res.records = doc.records.length; // work items: features + stories + tasks
   if (!opts.write) { res.content = content; return res; }
   const exDir = path.dirname(file);
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
@@ -14431,6 +15766,48 @@ function exportSpecs(projectDir, opts = {}) {
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
   writeFileAtomic(file, content);
   return { ...res, wrote: true, bytes: Buffer.byteLength(content, "utf8") };
+}
+// spec_export {format: "gherkin"} (1.16 E1): a feature → .specs/exports/<slug>.feature ({content | wrote, file, bytes,
+// scenarios, skipped, unsplit}); no name → one .feature per active feature (spikes skipped) as `documents` [{feature, lang,
+// file, scenarios, skipped, unsplit, content | bytes}] — Gherkin holds one Feature per file. A write is all-or-nothing: a
+// same-named file dev-spec did not generate refuses the whole export (named), nothing written.
+function exportGherkin(projectDir, opts, pl) {
+  const root = specsRoot(projectDir);
+  const one = (f, supBy) => {
+    const g = gherkinFeature(projectDir, f, { supBy });
+    if (g.error) return g;
+    return { feature: f.slug, lang: g.lang, file: path.join(root, EXPORT_DIR, gherkinBase(f.slug)), scenarios: g.scenarios, skipped: g.skipped, unsplit: g.unsplit, content: g.content };
+  };
+  let docs;
+  let res;
+  if (opts.name != null && String(opts.name).trim() !== "") {
+    const f = existingFeature(projectDir, opts.name);
+    if (!f.ok) return { ok: false, error: f.error };
+    const d = one(f);
+    if (d.error) return { ok: false, error: d.error, spike: true, feature: f.slug };
+    docs = [d];
+    res = { ok: true, scope: "feature", format: "gherkin", lang: d.lang, file: d.file, wrote: false, feature: d.feature, scenarios: d.scenarios, skipped: d.skipped, unsplit: d.unsplit };
+  } else {
+    if (!fs.existsSync(root)) return { ok: false, error: i18n.msg(pl).err.noSpecs(root) };
+    const supBy = supersededByIndex(projectDir);
+    docs = featureDirs(projectDir).filter((x) => !x.archived).map((x) => one(x, supBy)).filter((d) => !d.error);
+    res = { ok: true, scope: "project", format: "gherkin", lang: pl, wrote: false, features: docs.map((d) => d.feature), scenarios: docs.reduce((s, d) => s + d.scenarios, 0) };
+  }
+  const lang = res.lang;
+  if (!opts.write) {
+    if (res.scope === "feature") res.content = docs[0].content;
+    else res.documents = docs.map(({ feature, lang: l, file, scenarios, skipped, unsplit, content }) => ({ feature, lang: l, file, scenarios, skipped, unsplit, content }));
+    return res;
+  }
+  const exDir = path.join(root, EXPORT_DIR);
+  if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
+  const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
+  if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + path.basename(hand.file)) };
+  for (const d of docs) writeFileAtomic(d.file, d.content);
+  const bytes = (d) => Buffer.byteLength(d.content, "utf8");
+  if (res.scope === "feature") return { ...res, wrote: true, bytes: bytes(docs[0]) };
+  return { ...res, wrote: docs.length > 0, files: docs.map((d) => d.file),
+    documents: docs.map(({ feature, lang: l, file, scenarios, skipped, unsplit }, i) => ({ feature, lang: l, file, scenarios, skipped, unsplit, bytes: bytes(docs[i]) })) };
 }
 
 // ---------------------------------------------------------------------------
@@ -14500,7 +15877,7 @@ function shippedSupersedeKeys(projectDir, dir, state, reqRaw, cache) {
   const t = (v) => timeOf(v) || 0;
   const shipAt = Math.max(t(isObj(state.finished) ? state.finished.at : null), t(isRecord(state.approvals) && isRecord(state.approvals.execution) ? state.approvals.execution.at : null));
   if (!shipAt) return null;
-  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isRecord(h) && h.phase === "requirements" && h.partial !== true &&
+  const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory.filter((h) => isApprovalRecord(h) && h.phase === "requirements" &&
     typeof h.snapshot === "string" && timeOf(h.at) != null && timeOf(h.at) <= shipAt) : [];
   const rec = hist[hist.length - 1];
   if (!rec) return null;
@@ -14823,6 +16200,403 @@ function rtmProjectMarkdown(projectDir, lang, features) {
   return [italic(R.projectLegend), "", `| ${R.projectCols.join(" | ")} |`, `|${R.projectCols.map(() => "---").join("|")}|`, ...rows].join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// 1.16 E1 — Gherkin export: spec_export {format: "gherkin"} · `dev-spec export [f] --gherkin` → .specs/exports/<slug>.feature
+// ---------------------------------------------------------------------------
+//
+// One `Feature:` per feature (its title; the summary as the description; the active tracks as tags — a track's marker, else
+// its name: @SaaS @AI @SEC @PRIVACY @tdd …), one `Scenario:` per CURRENT acceptance criterion in document order, tagged
+// with its AC ID, the T-IDs the test plan plans for it (the matrix's reading) and the marker of the track that defines it.
+// Left out, each with a comment saying so: a template criterion (not written yet) and one a SHIPPED feature superseded
+// (1.15's rule — it no longer describes the system); one a draft plans to supersede is kept, with a comment. The steps
+// ARE the EARS clauses, never invented behaviour: WHILE / WHERE / IF (ENQUANTO / ONDE / SE · MIENTRAS / DONDE / SI) →
+// Given, WHEN (QUANDO / CUANDO) → When, the response (its subject + SHALL / DEVE / DEBE …) → Then, verbatim; text before the
+// response with no EARS keyword (a ubiquitous criterion's context) → Given. A criterion whose clauses can't be split
+// cleanly (no modal, text before the first keyword, a condition after THEN, an empty clause, no subject before the modal)
+// becomes ONE Then step with its whole text (listed in `unsplit`) — never a lost word. Quoted and code spans are opaque to
+// the split (a comma or a keyword inside "…" / `…` never cuts a clause). A PT / ES feature (pt-BR too) is written in
+// Gherkin's own dialect: `# language: pt` / `# language: es` + its keywords (GHERKIN_DIALECT — Gherkin's tokens, not
+// dev-spec prose). A spike (no acceptance criteria) has no Gherkin: named, it is refused; the project export skips it.
+// `keywords`: EVERY keyword of the dialect, as Gherkin's gherkin-languages.json lists them for en / pt / es (compared with
+// cucumber/gherkin main — 1.16 E review m6; step keywords without their trailing space, the "*" step aside) — the words
+// the description guard checks (a summary line starting with one of them gets the summary label in front); the other
+// fields are the ones the export writes.
+const GHERKIN_DIALECT = {
+  en: { feature: "Feature", scenario: "Scenario", given: "Given", when: "When", then: "Then", and: "And",
+    keywords: { feature: ["Feature", "Business Need", "Ability"], background: ["Background"], rule: ["Rule"], scenario: ["Example", "Scenario"],
+      scenarioOutline: ["Scenario Outline", "Scenario Template"], examples: ["Examples", "Scenarios"],
+      given: ["Given"], when: ["When"], then: ["Then"], and: ["And"], but: ["But"] } },
+  pt: { feature: "Funcionalidade", scenario: "Cenário", given: "Dado", when: "Quando", then: "Então", and: "E",
+    keywords: { feature: ["Funcionalidade", "Característica", "Caracteristica"], background: ["Contexto", "Cenário de Fundo", "Cenario de Fundo", "Fundo"], rule: ["Regra"],
+      scenario: ["Exemplo", "Cenário", "Cenario"], scenarioOutline: ["Esquema do Cenário", "Esquema do Cenario", "Delineação do Cenário", "Delineacao do Cenario"],
+      examples: ["Exemplos", "Cenários", "Cenarios"], given: ["Dado", "Dada", "Dados", "Dadas"], when: ["Quando"], then: ["Então", "Entao"], and: ["E"], but: ["Mas"] } },
+  es: { feature: "Característica", scenario: "Escenario", given: "Dado", when: "Cuando", then: "Entonces", and: "Y",
+    keywords: { feature: ["Característica", "Necesidad del negocio", "Requisito"], background: ["Antecedentes"], rule: ["Regla", "Regla de negocio"],
+      scenario: ["Ejemplo", "Escenario"], scenarioOutline: ["Esquema del escenario"], examples: ["Ejemplos"],
+      given: ["Dado", "Dada", "Dados", "Dadas"], when: ["Cuando"], then: ["Entonces"], and: ["Y", "E"], but: ["Pero"] } },
+};
+const GHERKIN_BLOCK_KINDS = ["feature", "background", "rule", "scenario", "scenarioOutline", "examples"]; // "<keyword>:" lines
+const GHERKIN_STEP_KINDS = ["given", "when", "then", "and", "but"]; // "<keyword> " lines
+// Would this description line read as a Gherkin token in the dialect `D` (or English)? A tag, a comment, a table row, a doc
+// string, a "*" step, a block keyword + ':' or a step keyword + a space (any case — the guard errs on the safe side).
+function ghRiskyLine(s, D) {
+  if (/^[@#|*]|^"""|^```/.test(s)) return true;
+  const low = s.toLowerCase();
+  const ks = (kinds) => [D, GHERKIN_DIALECT.en].flatMap((d) => kinds.flatMap((k) => d.keywords[k]));
+  return ks(GHERKIN_BLOCK_KINDS).some((b) => low.startsWith(b.toLowerCase()) && /^\s*:/.test(s.slice(b.length))) ||
+    ks(GHERKIN_STEP_KINDS).some((w) => low.startsWith(w.toLowerCase()) && /^\s/.test(s.slice(w.length)));
+}
+// The EARS condition keywords (upper-case spelling) → the step they become; THEN / ENTÃO / ENTONCES only mark the response.
+const GHERKIN_COND = { WHEN: "when", QUANDO: "when", CUANDO: "when", WHILE: "given", ENQUANTO: "given", MIENTRAS: "given",
+  IF: "given", SE: "given", SI: "given", WHERE: "given", ONDE: "given", DONDE: "given" };
+const GHERKIN_THEN = new Set(["THEN", "ENTÃO", "ENTAO", "ENTONCES"]);
+const RE_GH_KEYWORD = new RegExp(B + "(when|while|if|where|then|quando|enquanto|se|onde|então|entao|cuando|mientras|si|donde|entonces)" + E, "giu");
+const RE_GH_MODAL = new RegExp(B + "(shall|dever[áa]|deve|devem|dever[ãa]o|deber[áa]|debe|deben|deber[áa]n)" + E, "iu");
+const RE_GH_DET = new RegExp(B + "(the|o|a|os|as|el|la|los|las)\\s", "giu");
+// Quoted ("…" “…” «…») and code (`…`) spans masked out (same length) — what the split reads; the text itself is kept.
+function ghMask(s) {
+  const close = { '"': '"', "“": "”", "«": "»", "`": "`" };
+  let out = "";
+  for (let i = 0; i < s.length;) {
+    const c = close[s[i]];
+    const j = c ? s.indexOf(c, i + 1) : -1;
+    if (j > i) { out += s[i] + "\u0001".repeat(j - i - 1) + c; i = j + 1; continue; }
+    out += s[i++];
+  }
+  return out;
+}
+// Markdown emphasis MARKUP out of a criterion (1.16 E review m5): a run of * or _ counts only when it pairs with a run of the
+// same character — an opener (followed by a non-space, not preceded by a letter or digit) before a closer (preceded by a
+// non-space, not followed by a letter or digit), CommonMark's flanking rules otherwise — and only its paired characters go
+// (** with ** first, then * with *; a pair never crosses another). Code spans (`…`, any backtick run up to the next run of
+// the same length) are opaque. Everything else is kept as written: `2**n`, `a_b_c`, `x * y`, `2*3*4`, an unpaired `**`.
+// One pass over the runs, each opener popped at most once — linear.
+function ghStripEmphasis(s) {
+  const n = s.length;
+  // code spans: each backtick run → the next run of the same length (computed right to left — linear)
+  const ticks = [];
+  for (let i = 0; i < n;) { if (s[i] !== "`") { i++; continue; } let j = i; while (s[j] === "`") j++; ticks.push({ at: i, end: j, len: j - i }); i = j; }
+  const codeEnd = new Map(); // a span's opening index → the index after its closing run
+  const nextSame = new Map();
+  const partner = new Array(ticks.length).fill(-1);
+  for (let k = ticks.length - 1; k >= 0; k--) { const p = nextSame.get(ticks[k].len); if (p != null) partner[k] = p; nextSame.set(ticks[k].len, k); }
+  for (let k = 0; k < ticks.length;) { if (partner[k] >= 0) { codeEnd.set(ticks[k].at, ticks[partner[k]].end); const p = partner[k]; while (k < ticks.length && ticks[k].at < ticks[p].end) k++; } else k++; }
+  const ws = (c) => c === undefined || /\s/u.test(c);
+  const punct = (c) => c !== undefined && /[\p{P}\p{S}]/u.test(c);
+  const word = (c) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+  const drop = new Uint8Array(n);
+  const stacks = { "*": [], _: [] };
+  for (let i = 0; i < n;) {
+    if (codeEnd.has(i)) { i = codeEnd.get(i); continue; }
+    const c = s[i];
+    if (c !== "*" && c !== "_") { i++; continue; }
+    let j = i;
+    while (s[j] === c) j++;
+    const before = s[i - 1], after = s[j];
+    const left = !ws(after) && (!punct(after) || ws(before) || punct(before));
+    const right = !ws(before) && (!punct(before) || ws(after) || punct(after));
+    const run = { at: i, lo: i, hi: j, len: j - i };
+    if (right && !word(after)) { // a closer: pair with the nearest opener of its character
+      const st = stacks[c];
+      while (run.len > 0 && st.length) {
+        const o = st[st.length - 1];
+        const use = o.len >= 2 && run.len >= 2 ? 2 : 1;
+        for (let k = o.hi - use; k < o.hi; k++) drop[k] = 1;
+        for (let k = run.lo; k < run.lo + use; k++) drop[k] = 1;
+        o.hi -= use; o.len -= use; run.lo += use; run.len -= use;
+        if (!o.len) st.pop();
+        const other = stacks[c === "*" ? "_" : "*"]; // no pair crosses this one
+        while (other.length && other[other.length - 1].at > o.at) other.pop();
+      }
+    }
+    if (run.len > 0 && left && !word(before)) stacks[c].push(run);
+    i = j;
+  }
+  let out = "";
+  for (let i = 0; i < n; i++) if (!drop[i]) out += s[i];
+  return out;
+}
+// The EARS keywords a feature's language reads: English ones in any feature, plus its own language's (an English criterion's
+// "SI units" or "SE region" is no condition).
+const GHERKIN_LANG_KEYWORDS = { pt: ["QUANDO", "ENQUANTO", "SE", "ONDE", "ENTÃO", "ENTAO"], es: ["CUANDO", "MIENTRAS", "SI", "DONDE", "ENTONCES"] };
+// One criterion's text (acOneLine, whole) → { steps: [{ kind: "given" | "when" | "then", text }], split }. lang (optional):
+// the feature's language — only English keywords and its own are read (every language's without it). Paired emphasis
+// markup is dropped first (ghStripEmphasis); every other character reaches a step — the EARS keywords the Gherkin ones
+// replace and the separators (spaces, commas) between clauses aside; characters before the first keyword ("(", "*") lead
+// its step.
+function earsSteps(raw, lang) {
+  const text = ghStripEmphasis(String(raw == null ? "" : raw).replace(/\s+/g, " ").trim()).replace(/\s+/g, " ").trim();
+  const whole = { steps: [{ kind: "then", text }], split: false };
+  if (!text) return whole;
+  const m = ghMask(text);
+  const mod = m.match(RE_GH_MODAL);
+  if (!mod) return whole;
+  const modalAt = mod.index;
+  const allowed = lang ? new Set(["WHEN", "WHILE", "IF", "WHERE", "THEN"].concat(GHERKIN_LANG_KEYWORDS[i18n.baseLang(lang)] || [])) : null;
+  // The EARS keywords before the modal: any case at the very start or right after a comma (se / si only in capitals there —
+  // ordinary PT / ES words), anywhere in capitals.
+  const kws = [];
+  const lead0 = m.search(/[^\s([{*_~]/);
+  RE_GH_KEYWORD.lastIndex = 0;
+  for (let k; (k = RE_GH_KEYWORD.exec(m)) && k.index < modalAt;) {
+    const w = k[1];
+    const up = w.toUpperCase();
+    if (allowed && !allowed.has(up)) continue;
+    const atStart = k.index === lead0;
+    const afterComma = /,\s*$/.test(m.slice(Math.max(0, k.index - 64), k.index));
+    if (w === up || atStart || (afterComma && !/^(se|si)$/i.test(w))) kws.push({ at: k.index, end: k.index + w.length, word: up, then: GHERKIN_THEN.has(up) });
+  }
+  const thenKw = kws.filter((k) => k.then).pop();
+  const conds = kws.filter((k) => !k.then);
+  if (thenKw && conds.some((c) => c.at > thenKw.at)) return whole; // a condition after THEN: no clean reading
+  const from = conds.length ? conds[conds.length - 1].end : 0;
+  let subj = -1;
+  if (thenKw) subj = thenKw.end;
+  else {
+    const region = m.slice(from, modalAt);
+    const comma = region.lastIndexOf(",");
+    if (comma >= 0) subj = from + comma + 1;
+    else if (!conds.length) subj = 0; // a ubiquitous criterion: its context is a lead set off by a comma, else there is none
+    else {
+      // The subject: the upper-case run right before an upper-case modal ("THE SYSTEM SHALL") — its first determiner —,
+      // else the last determiner before the modal ("the system shall", "o sistema deve"); neither → no clean split.
+      let runStart = modalAt;
+      if (mod[1] === mod[1].toUpperCase()) {
+        const trimmed = region.replace(/\s+$/, "");
+        const words = trimmed.split(" ");
+        let end = trimmed.length;
+        for (let w = words.length - 1; w >= 0 && words[w] && words[w] === words[w].toUpperCase() && /\p{Lu}/u.test(words[w]); w--) {
+          runStart = from + end - words[w].length;
+          end -= words[w].length + 1;
+        }
+      }
+      const dets = [...region.matchAll(RE_GH_DET)].map((d) => from + d.index);
+      const inRun = dets.find((d) => d >= runStart);
+      subj = inRun != null ? inRun : dets.length ? dets[dets.length - 1] : -1;
+    }
+  }
+  if (subj < 0) return whole;
+  const steps = [];
+  // Characters before the first keyword — only brackets / emphasis leftovers may stand there — lead that keyword's step:
+  // "(WHEN the user pays) …" → When "(the user pays)" (they were dropped).
+  let lead = "";
+  const withLead = (t) => (!lead ? t : /\s$/.test(lead) ? lead.trim() + " " + t : lead.trim() + t);
+  let resp = text.slice(subj).replace(/^[\s,]+/, "").trim();
+  if (!conds.length && !thenKw) {
+    const ctx = text.slice(0, subj).replace(/[\s,]+$/, "").trim();
+    if (ctx) steps.push({ kind: "given", text: ctx });
+  } else {
+    lead = text.slice(0, conds.length ? conds[0].at : thenKw.at);
+    if (ghMask(lead).replace(/[\s([{*_~]/g, "")) return whole; // text before the first keyword
+    for (let i = 0; i < conds.length; i++) {
+      const stop = i + 1 < conds.length ? conds[i + 1].at : thenKw ? thenKw.at : subj;
+      const t = text.slice(conds[i].end, stop).replace(/^[\s,]+|[\s,]+$/g, "");
+      if (!t) return whole;
+      steps.push({ kind: GHERKIN_COND[conds[i].word] || "given", text: i ? t : withLead(t) });
+    }
+    if (!conds.length && resp) resp = withLead(resp); // "(THEN THE SYSTEM SHALL …"
+  }
+  // The response must start with its subject (1.16 E review m4): "WHEN a payment fails, the cart, including discounts,
+  // SHALL be kept" has none after its last comma — cut there it read When "a payment fails, the cart, including
+  // discounts" + Then "SHALL be kept" — so the criterion stays one Then with its whole text.
+  const rmask = ghMask(resp);
+  const modalIn = rmask.search(RE_GH_MODAL);
+  if (!resp || modalIn < 0 || !/[\p{L}\p{N}]/u.test(resp.slice(0, modalIn))) return whole;
+  const order = { given: 0, when: 1 }; // Given before When (Gherkin's order); each kind keeps the criterion's order
+  steps.sort((a, b) => order[a.kind] - order[b.kind]);
+  steps.push({ kind: "then", text: resp });
+  return { steps, split: true };
+}
+// A Gherkin comment / free-text line: one line, whatever the spec wrote.
+const ghLine = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+// A track as a tag: its marker without the brackets ([SaaS] → @SaaS), else its name (@tdd).
+const ghTag = (tr) => "@" + String(trackMarker(tr) || tr).replace(/^\[|\]$/g, "");
+// The Feature's tags: each active optional track (+ @bugfix for a bugfix).
+function gherkinFeatureTags(tracks, kind) {
+  const tags = tracks.filter((t) => t !== "core").map((t) => ghTag(t));
+  if (kind === "bugfix") tags.push("@bugfix");
+  return tags;
+}
+// One feature ({ slug, dir }) → { content, scenarios, skipped: { template, superseded }, unsplit, lang } — a spike →
+// { error, spike: true }. opts.supBy: a supersededByIndex() to reuse (the project export).
+function gherkinFeature(projectDir, f, opts = {}) {
+  const { slug, dir } = f;
+  const lang = featureLang(projectDir, slug);
+  const G = i18n.msg(lang).gherkin;
+  const X = i18n.msg(lang).stakeholderExport;
+  const state = stateFromFile(projectDir, statePath(dir));
+  if (state.kind === "spike") return { error: G.spike(slug), spike: true, lang };
+  const D = GHERKIN_DIALECT[i18n.baseLang(lang)] || GHERKIN_DIALECT.en;
+  const tracks = detectTracks(dir);
+  const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const reqs = activeDesign(reqRaw, tracks);
+  const idx = requirementIndex(reqs);
+  const mx = buildTraceMatrix(projectDir, f, { supBy: opts.supBy });
+  const byTrack = markerTracks().filter((tr) => tracks.includes(tr)).map((tr) => ({ tag: ghTag(tr), acs: trackAcIds(reqs, tr) }));
+  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/requirements.md")}`];
+  const ftags = gherkinFeatureTags(tracks, state.kind);
+  if (ftags.length) lines.push(ftags.join(" "));
+  lines.push(`${D.feature}: ${ghLine(titledSlug(specTitle(reqRaw, slug), slug))}`);
+  const summary = sectionText(reqs, SUMMARY_SYN) || (state.kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null);
+  if (summary) {
+    // A description line that reads like a Gherkin token (a tag, a comment, a table row, a doc string, any keyword of the
+    // dialect or English — ghRiskyLine) would change the file's structure: it gets the summary label in front — the words stay.
+    const s = ghLine(summary);
+    lines.push("  " + (ghRiskyLine(s, D) ? G.summaryLabel + ": " : "") + s);
+  }
+  const skipped = { template: [], superseded: [] };
+  const unsplit = [];
+  let scenarios = 0;
+  let story = null;
+  for (const r of mx.rows) {
+    if (r.kind !== "ac") continue;
+    const n = r.id.match(/^US-(\d+)/)[1];
+    if (n !== story) {
+      story = n;
+      const ctx = storyContext(reqs, n);
+      lines.push("", `  # ${ghLine(ctx ? ctx[0] : "US-" + n)}`);
+    }
+    if (r.template) { skipped.template.push(r.id); lines.push("", `  # ${G.template(r.id)}`); continue; }
+    if (r.supersededBy.length && !r.supersedePending) { skipped.superseded.push(r.id); lines.push("", `  # ${G.superseded(r.id, r.supersededBy.join(", "))}`); continue; }
+    const e = idx.get(r.id);
+    const full = acOneLine(e ? e.text : r.text, r.id, Infinity);
+    const sp = earsSteps(full, lang);
+    if (!sp.split) unsplit.push(r.id);
+    lines.push("");
+    if (r.supersedePending) lines.push(`  # ${X.toBeSupersededBy(r.supersededBy.join(", "))}`);
+    if (!sp.split) lines.push(`  # ${G.unsplit}`);
+    const tags = ["@" + r.id, ...r.tests.map((t) => "@" + t.id), ...byTrack.filter((t) => t.acs.has(r.id)).map((t) => t.tag)];
+    lines.push("  " + [...new Set(tags)].join(" "));
+    lines.push(`  ${D.scenario}: ${r.id} — ${ghLine(oneLiner(sp.steps[sp.steps.length - 1].text, 100) || full)}`);
+    let prev = null;
+    for (const st of sp.steps) {
+      lines.push(`    ${st.kind === prev ? D.and : D[st.kind]} ${st.text}`);
+      prev = st.kind;
+    }
+    scenarios++;
+  }
+  if (!scenarios) lines.push("", `  # ${G.noScenarios}`);
+  return { content: lines.join("\n") + "\n", scenarios, skipped, unsplit, lang };
+}
+// .specs/exports/<slug>.feature — the same name in the feature and the project export (a feature slugged 'project':
+// project.feature.feature, as the other formats keep a feature off the project's file).
+const gherkinBase = (slug) => (slug === "project" ? "project.feature" : slug) + ".feature";
+
+// ---------------------------------------------------------------------------
+// 1.16 E2 — tracker CSV: spec_export {format: "jira" | "linear"} · `dev-spec export [f] --tracker jira|linear` →
+// .specs/exports/<slug>.<tracker>.csv (the project: project.<tracker>.csv — every active feature). Nothing is sent anywhere:
+// the file is for the tool's own CSV importer. One record per feature (the parent), per user story (a child of its
+// feature) and per task (a child of its story through its [USn] tag, else of the feature) — parents before their children.
+// Column names are the importers' documented ones:
+//   jira    Work item ID · Work type · Summary · Description · Status · Parent · Labels (repeated, one label per column)
+//           — Jira Cloud "Import data from a CSV file": Summary is the only required field; the hierarchy is "Work item
+//           ID" + "Work type" + "Parent" (the parent's Work item ID, parents first); several labels = several Labels columns.
+//           Work types Epic (the feature) · Story · Sub-task (a story's task) · Task (a feature-level task); Status To Do ·
+//           In Progress · Done (existing workflow statuses).
+//   linear  ID · Title · Description · Status · Estimate · Labels · Parent issue — Linear's CSV (its export / CLI importer:
+//           Title, Description, Status, Estimate, Labels comma-separated; ID and Parent issue carry the hierarchy as local
+//           keys <slug>, <slug>/US-n, <slug>/#n). Status Todo · In Progress · Done; Estimate = a task's _Size:_ points
+//           (1/2/3/5/8 — Linear's scale), empty when unsized.
+// Labels: the feature slug, its active optional tracks, its kind when not a plain feature (bugfix / spike), and the AC IDs
+// (a story's own criteria, a task's cited ones). The F5 CSV rules: csvCell (RFC 4180 quoting, the formula guard), CRLF,
+// a UTF-8 BOM; the AUTO-GENERATED marker is the LAST header cell (its column stays empty) — never a trailing record,
+// which an importer would turn into a work item.
+const TRACKERS = ["jira", "linear"];
+const TRACKER_LABELS_MAX = 30; // labels per record (a story citing more ACs keeps the first ones)
+const TRACKER_SUMMARY_MAX = 250; // Jira's Summary holds at most 255 characters
+const TRACKER_STATUS = { jira: { open: "To Do", doing: "In Progress", done: "Done" }, linear: { open: "Todo", doing: "In Progress", done: "Done" } };
+// One feature → its records { key, parent, type, summary, description, status, labels, estimate? } (parents first).
+function trackerRecords(projectDir, f, lang, supBy) {
+  const { slug, dir } = f;
+  const T = i18n.msg(lang).trackerCsv;
+  const X = i18n.msg(lang).stakeholderExport;
+  const tracks = detectTracks(dir);
+  const state = stateFromFile(projectDir, statePath(dir));
+  const kind = state.kind === "bugfix" || state.kind === "spike" ? state.kind : "feature";
+  const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const reqs = activeDesign(reqRaw, tracks);
+  const blocks = taskBlocks(activeTasks(readContained(projectDir, path.join(dir, "tasks.md")) || "", tracks) || "");
+  const base = [slug, ...tracks.filter((t) => t !== "core")].concat(kind === "feature" ? [] : [kind]);
+  const cap = (list) => [...new Set(list)].slice(0, TRACKER_LABELS_MAX);
+  const status = (done, total) => (total && done === total ? "done" : done ? "doing" : "open");
+  const done = blocks.filter((b) => b.done).length;
+  const phase = detectPhase(dir, tracks);
+  const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null) ||
+    (kind === "spike" ? spikeInfo(dir).question : null);
+  const title = specTitle(reqRaw || (kind === "spike" ? readContained(projectDir, path.join(dir, SPIKE_FILE)) || "" : ""), slug);
+  const feature = { key: slug, parent: null, type: "feature", summary: titledSlug(title, slug),
+    description: [summary, T.featureLine(".specs/" + slug + "/", trackLabel(tracks), (i18n.msg(lang).phaseNames || {})[phase] || phase, done, blocks.length)].filter(Boolean).join("\n\n"),
+    status: phase === "complete" ? "done" : status(done, blocks.length), labels: cap(base) };
+  // The stories: heading order, then first-AC order (the export's); each with its intro and its criteria, whole.
+  const marks = supBy || supersededByIndex(projectDir);
+  const acs = [...acIndex(reqs).values()].sort((a, b) => a.line - b.line);
+  const order = [];
+  const lines = stripHtmlComments(reqs).split(/\r?\n/);
+  for (const k of headingIndex(lines)) { const m = lines[k].match(/^#{1,6}\s+US-(\d+)(?!\d)/); if (m && !order.includes(m[1])) order.push(m[1]); }
+  for (const a of acs) { const n = a.id.match(/^US-(\d+)/)[1]; if (!order.includes(n)) order.push(n); }
+  const stories = [];
+  for (const n of kind === "spike" ? [] : order) {
+    const ctx = storyContext(reqs, n);
+    const intro = [];
+    for (const l of ctx ? ctx.slice(1) : []) { if (RE_LIST_ITEM.test(l) || /^\|/.test(l)) break; intro.push(l); }
+    const own = acs.filter((a) => a.id.startsWith(`US-${n}.`));
+    const acLines = own.map((a) => {
+      const k = dirKey(dir) + "\n" + a.id;
+      const by = marks.get(k);
+      const note = !by ? "" : " — " + (marks.live && !marks.live.has(k) ? X.toBeSupersededBy(by.join(", ")) : X.supersededBy(((marks.liveBy && marks.liveBy.get(k)) || by).join(", ")));
+      return `- ${a.id} — ${acOneLine(a.text, a.id, Infinity)}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
+    });
+    const st = blocks.filter((b) => b.story && b.story.toUpperCase() === "US" + n);
+    stories.push({ n, rec: { key: `${slug}/US-${n}`, parent: slug, type: "story", summary: ghLine(ctx ? ctx[0] : `US-${n}`),
+      description: [intro.join("\n"), acLines.length ? T.acceptance + "\n" + acLines.join("\n") : ""].filter(Boolean).join("\n\n"),
+      status: status(st.filter((b) => b.done).length, st.length), labels: cap(base.concat(own.map((a) => a.id))) } });
+  }
+  const storyKey = new Map(stories.map((s) => [s.n, s.rec.key]));
+  // Each record's key is unique (1.16 E review m3): a task number used twice (doctor's duplicate-tasks) keeps it for its
+  // first task, the next ones get an occurrence suffix — `<slug>/#3`, `<slug>/#3 (2)` — never two work items with one ID.
+  const seen = new Map();
+  const tasks = blocks.map((b) => {
+    const n = b.story && /^US\d+$/i.test(b.story) ? b.story.replace(/\D/g, "") : null;
+    const parent = n && storyKey.has(n) ? storyKey.get(n) : slug;
+    const prose = taskProse(b);
+    const size = taskSize(b);
+    const occ = (seen.get(String(b.number)) || 0) + 1;
+    seen.set(String(b.number), occ);
+    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(withoutTaskMarkers(cleanTaskText(b.text))) || ghLine(b.text)}`,
+      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
+      status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
+  });
+  // Each story's tasks right after it, then the feature-level ones — parents always before their children.
+  const out = [feature];
+  for (const s of stories) out.push(s.rec, ...tasks.filter((t) => t.parent === s.rec.key));
+  out.push(...tasks.filter((t) => t.parent === slug));
+  return out;
+}
+// records (every feature's, in order) → the CSV document text for `tracker` (a BOM first; the marker the last header cell).
+function trackerCsv(records, tracker, lang) {
+  const T = i18n.msg(lang).trackerCsv;
+  const S = TRACKER_STATUS[tracker];
+  const marker = "# " + T.autogen;
+  const cut = (s) => oneLiner(s, TRACKER_SUMMARY_MAX) || "";
+  let out = BOM_CHAR;
+  if (tracker === "jira") {
+    // Work item ID = the record's row number (unique whatever its key); a Parent names the FIRST record with that key.
+    const ids = new Map();
+    records.forEach((r, i) => { if (!ids.has(r.key)) ids.set(r.key, String(i + 1)); });
+    const type = { feature: "Epic", story: "Story", subtask: "Sub-task", task: "Task" };
+    const nLabels = Math.max(1, ...records.map((r) => r.labels.length));
+    out += csvRecord(["Work item ID", "Work type", "Summary", "Description", "Status", "Parent", ...Array(nLabels).fill("Labels"), marker]);
+    for (const [i, r] of records.entries()) {
+      out += csvRecord([String(i + 1), type[r.type], cut(r.summary), r.description, S[r.status], r.parent ? ids.get(r.parent) || "" : "",
+        ...Array.from({ length: nLabels }, (_, k) => r.labels[k] || ""), ""]);
+    }
+    return out;
+  }
+  out += csvRecord(["ID", "Title", "Description", "Status", "Estimate", "Labels", "Parent issue", marker]);
+  for (const r of records) out += csvRecord([r.key, cut(r.summary), r.description, S[r.status], r.estimate == null ? "" : r.estimate, r.labels.join(", "), r.parent || "", ""]);
+  return out;
+}
+
 // --- release notes (spec_changelog) ---
 
 // An ISO date (YYYY-MM-DD = that day, 00:00 UTC) or timestamp → ms, or null. A day that doesn't exist (2026-02-30) is
@@ -14857,7 +16631,8 @@ function releaseAcs(reqs) {
 // What shipped since `since` (ms, or null = everything). A feature ships when spec_finish {write} records its baseline or its
 // execution sign-off is approved; one that already shipped before `since` (a finish, a sign-off or an execution approval in
 // its history at or before it) is not new — its change requests speak for it instead.
-function changelogData(projectDir, since) {
+// only (1.16 E3): a Set of feature slugs — a milestone's (its features and the ones archived since) — the notes are scoped to.
+function changelogData(projectDir, since, only) {
   const inWin = (t) => t != null && (since == null || t > since);
   const cache = new Map();
   const added = [];
@@ -14865,7 +16640,7 @@ function changelogData(projectDir, since) {
   const superseded = [];
   const changeRequests = [];
   const shipped = new Set();
-  const srcs = featureDirs(projectDir).map((s) => ({ ...s, st: stateFromFile(projectDir, statePath(s.dir)) }));
+  const srcs = featureDirs(projectDir).filter((s) => !only || only.has(s.slug)).map((s) => ({ ...s, st: stateFromFile(projectDir, statePath(s.dir)) }));
   for (const s of srcs) {
     const st = s.st;
     if (st.kind === "spike") continue; // 1.14 C2: a spike ships nothing (its decision is not a release note)
@@ -14877,7 +16652,7 @@ function changelogData(projectDir, since) {
     const firstFin = isObj(st.finished) ? timeOf(st.finished.firstAt) : null; // a re-finished feature shipped at its first finish
     const before = since != null && ([fin, firstFin, exe].some((t) => t != null && t <= since) ||
       // a role's partial sign-off approves nothing (the phase waits for every role) — only a completed one shipped it
-      hist.some((h) => isRecord(h) && h.phase === "execution" && h.partial !== true && timeOf(h.at) != null && timeOf(h.at) <= since));
+      hist.some((h) => isApprovalRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since)); // a revocation (1.16) shipped nothing either
     if (before) continue;
     shipped.add(s.dir);
     const at = Math.max(...events);
@@ -14922,12 +16697,14 @@ function changelogData(projectDir, since) {
   const byAt = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
   return { added: added.sort(byAt), fixed: fixed.sort(byAt), changed: { superseded: superseded.sort(byAt), changeRequests: changeRequests.sort(byAt) } };
 }
-function renderReleaseNotes(d, lang, proj, scope, now) {
+function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   const M = i18n.msg(lang);
   const N = M.releaseNotes;
   const code = (s) => "`" + s + "`";
   const name = (e) => (slugify(e.title) === e.feature ? e.title : `${e.title} (${code(e.feature)})`);
-  let md = `# ${N.title(proj)}\n\n<!-- ${N.autogen} -->\n\n_${scope} · ${N.generated(day(now))}_\n\n## ${N.added}\n\n`;
+  const title = ms ? M.milestone.notesTitle(N.title(proj), ms.name) : N.title(proj); // 1.16 E3: a milestone's notes
+  const scopeLine = ms ? M.milestone.notesScope(ms.name, ms.date, ms.features.concat(ms.archived || []).join(", ")) + " · " + scope : scope;
+  let md = `# ${title}\n\n<!-- ${ms ? M.milestone.notesAutogen : N.autogen} -->\n\n_${scopeLine} · ${N.generated(day(now))}_\n\n## ${N.added}\n\n`;
   if (!d.added.length) md += italic(N.none) + "\n\n";
   for (const a of d.added) {
     md += `### ${name(a)}\n\n` + (a.summary ? a.summary + "\n\n" : "");
@@ -14948,14 +16725,27 @@ function renderReleaseNotes(d, lang, proj, scope, now) {
 // data, in the project language. since: an ISO date / timestamp, 'last' (the default: roadmap.json meta.changelogAt, stamped by
 // the last written notes — everything while unset) or 'all'. write: .specs/RELEASE-NOTES.md (AUTO-GENERATED, never over a
 // hand-written one) + meta.changelogAt, both under the roadmap lock; with nothing to report nothing is written or stamped.
+// 1.16 E3 — milestone: the notes of that milestone's features only (its features + the ones archived since it was set);
+// `since` then defaults to 'all' (the milestone's whole history — 'last' / a date still narrow it), and write goes to
+// .specs/RELEASE-NOTES.<milestoneFileKey>.md (the slug, + a short hash when it loses part of the name; AUTO-GENERATED, never
+// over a hand-written one) WITHOUT stamping meta.changelogAt (the project's own notes keep their 'last').
 function changelog(projectDir, opts = {}) {
   const lang = projectLang(projectDir);
   const M = i18n.msg(lang);
   const N = M.releaseNotes;
   const root = specsRoot(projectDir);
-  const file = path.join(root, "RELEASE-NOTES.md");
+  let ms = null;
+  let msFile = null;
+  if (opts.milestone != null && String(opts.milestone).trim() !== "") {
+    const found = findMilestone(projectDir, opts.milestone);
+    if (!found.ok) return found;
+    ms = found.milestone;
+    msFile = milestoneFileKey(ms.name, found.list);
+  }
+  const fileName = ms ? `RELEASE-NOTES.${msFile}.md` : "RELEASE-NOTES.md";
+  const file = path.join(root, fileName);
   const raw = opts.since == null ? "" : String(opts.since).trim();
-  const key = raw.toLowerCase();
+  const key = raw.toLowerCase() || (ms ? "all" : "");
   let since = null;
   let sinceSource = "all";
   let note = null;
@@ -14971,21 +16761,23 @@ function changelog(projectDir, opts = {}) {
     sinceSource = "date";
   }
   const now = new Date().toISOString();
-  const d = changelogData(projectDir, since);
+  const d = changelogData(projectDir, since, ms ? new Set(ms.features.concat(ms.archived || [])) : null);
   const sinceIso = since == null ? null : new Date(since).toISOString();
   const scope = sinceSource === "last" ? N.sinceLast(utcStamp(sinceIso)) : sinceSource === "date" ? N.sinceDate(utcStamp(sinceIso)) : N.all;
-  const markdown = renderReleaseNotes(d, lang, path.basename(path.resolve(projectDir)), scope, now);
+  const markdown = renderReleaseNotes(d, lang, path.basename(path.resolve(projectDir)), scope, now, ms);
   const counts = { added: d.added.length, changed: d.changed.superseded.length + d.changed.changeRequests.length, fixed: d.fixed.length };
   const res = { ok: true, lang, since: sinceIso, sinceSource, generatedAt: now, added: d.added, changed: d.changed, fixed: d.fixed, counts, file, wrote: false };
+  if (ms) res.milestone = { name: ms.name, date: ms.date, features: ms.features.slice(), ...(ms.archived ? { archived: ms.archived.slice() } : {}) };
   if (note) res.note = note;
   if (!opts.write) return { ...res, markdown };
   if (!fs.existsSync(root)) return { ...res, ok: false, error: M.err.noSpecs(root) };
-  if (!counts.added && !counts.changed && !counts.fixed) return { ...res, note: N.nothingToWrite(".specs/RELEASE-NOTES.md") };
+  if (!counts.added && !counts.changed && !counts.fixed) return { ...res, note: (ms ? M.milestone.nothingToWrite : N.nothingToWrite)(".specs/" + fileName) };
   const w = withRoadmapLock(projectDir, () => {
     const bad = roadmapError(projectDir);
     if (bad) return { ok: false, error: bad };
-    if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, error: M.err.notGenerated("RELEASE-NOTES.md") };
+    if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, error: M.err.notGenerated(fileName) };
     writeFileAtomic(file, markdown);
+    if (ms) return { ok: true }; // a milestone's notes leave the project's meta.changelogAt alone
     const rm = readRoadmap(projectDir);
     rm.meta = rm.meta || {};
     rm.meta.changelogAt = now;
@@ -14993,7 +16785,264 @@ function changelog(projectDir, opts = {}) {
     return { ok: true };
   });
   if (!w.ok) return { ...res, ...w };
-  return { ...res, wrote: true, changelogAt: now };
+  return { ...res, wrote: true, ...(ms ? {} : { changelogAt: now }) };
+}
+
+// ---------------------------------------------------------------------------
+// 1.16 E3 — milestones: spec_milestone {action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
+// rm <name> | list]`, stored in roadmap.json → meta.milestones [{name, date, features, archived?}] (under the roadmap lock).
+// A name: letters (any script, with their marks), digits, spaces and . _ : # ( ) + - (≤ 60 characters, starting with a
+// letter or a digit), unique by its identity (milestoneKey — Unicode kept: "Sprint α" ≠ "Sprint β"); its release notes'
+// file name is milestoneFileKey's (the slug, + a short hash when the slug loses part of the name); a date: a real YYYY-MM-DD
+// day; features: ≥ 1, each an existing ACTIVE feature (resolved like dependsOn — a list's items split on commas only),
+// ≤ MILESTONE_FEATURES_MAX; ≤ MILESTONE_MAX milestones. `add` of an existing name updates it (date and features replaced,
+// the archived ones kept — `updated: true`). A stored meta.milestones of the wrong shape (or an entry add would refuse: a bad
+// name or date, a duplicate) is refused by the mutators (never "repaired") and read as its valid entries by everyone else.
+// A feature's lifecycle follows (pruneRoadmapRefsLocked, like dependsOn): rename → the new slug; remove → dropped; archive →
+// moved to the milestone's `archived` list (restore moves it back) — the milestone's release notes still cover it, its
+// status no longer counts it.
+// Status (stable codes; milestoneStatuses — over roadmap()'s features and their forecasts, "today" = opts.now's UTC day):
+//   done      every active feature at 100% (or only archived ones left)
+//   late      the date has passed (today > date) and a feature is not done
+//   at-risk   reason eta-after-date — the latest ETA of its open features is after the date; eta-unknown — an open
+//             feature has no ETA (not enough data, no tasks yet, a dependency …); no-features — nothing active or archived
+//   on-track  every open feature has an ETA on or before the date
+// ROADMAP.md / .html show a Milestones table when any exists, and "Needs attention" lists the at-risk / late ones.
+// ---------------------------------------------------------------------------
+const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_milestone enum (server.js reads it from here)
+const MILESTONE_STATUSES = ["on-track", "at-risk", "late", "done"];
+const MILESTONE_MAX = 50;
+const MILESTONE_FEATURES_MAX = 200;
+const RE_MILESTONE_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} ._:#()+-]{0,59}$/u;
+const RE_ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+// A milestone's name as stored and validated: one line, whitespace runs folded, NFC (a decomposed "é" is the composed one).
+const milestoneName = (name) => (name == null ? "" : String(name)).normalize("NFC").replace(/\s+/g, " ").trim();
+// A milestone's IDENTITY (1.16 E review M1): its name, Unicode kept — NFKC, lower-case, the accents of LATIN letters folded
+// (Lançamento = lancamento, as the 1.16.0 slug key had it), runs of separators (whitespace _ - . : # ( )) as one '-'. Every
+// other letter, digit, mark and '+' counts: "Sprint α" ≠ "Sprint β", "Релиз 2026" ≠ "Бета 2026", "C" ≠ "C++" (the slug
+// key made each pair one milestone — adding the second silently replaced the first).
+function milestoneKey(name) {
+  return (name == null ? "" : String(name)).normalize("NFKC").toLowerCase().normalize("NFD")
+    .replace(/(?<=[a-z])\p{M}+/gu, "").normalize("NFC")
+    .replace(/[^\p{L}\p{N}\p{M}+\s_.:#()-]/gu, "").replace(/[\s_.:#()-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+// The release notes' file name part of a milestone (RELEASE-NOTES.<it>.md) — derived apart from its identity: its slug when
+// the slug says everything the key says (Latin letters, digits, separators — "Beta launch" → beta-launch, 1.16.0's file),
+// else the slug (or "milestone") + 8 hex characters of the key's sha1 ("Sprint α" → sprint-1a2b3c4d, "C++" → c-…); and when
+// another milestone of `list` would still share that file name, the hashed form.
+function milestoneFileKey(name, list) {
+  const key = milestoneKey(name);
+  const base = (n) => {
+    const k = milestoneKey(n);
+    const s = slugify(String(n).normalize("NFKC"));
+    return s && s === k ? s : `${s || "milestone"}-${sha1Hex(k).slice(0, 8)}`;
+  };
+  const mine = base(name);
+  const clash = (list || []).some((m) => milestoneKey(m.name) !== key && base(m.name) === mine);
+  return clash ? `${slugify(String(name).normalize("NFKC")) || "milestone"}-${sha1Hex(key).slice(0, 8)}` : mine;
+}
+const strList = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
+const slugList = (v) => strList(v) && v.every((x) => x !== "" && slugify(x) === x); // feature slugs, as add stores them
+// roadmap.json → meta.milestones → { list: [{ name, date, features, archived? }], invalid } (invalid: the stored value is
+// not a list of such entries — its valid ones are still listed). An entry is valid only as `add` writes it (1.16 E review
+// M2 — a hand-edited roadmap.json reaches ROADMAP.md / .html): a name RE_MILESTONE_NAME accepts, a date that is a real
+// YYYY-MM-DD day, lists of feature slugs; a second entry with the same identity (milestoneKey) is invalid too.
+// Also → `valid` (per stored entry: true | false — milestonesFollow edits the valid ones in place) and `bad` (null, or
+// { count, names, notList? } — milestoneInvalidInfo: what ROADMAP.md's "Needs attention" and the lifecycle results report).
+function milestoneStore(rm) {
+  const raw = rm && isObj(rm.meta) ? rm.meta.milestones : undefined;
+  if (raw === undefined) return { list: [], invalid: false, valid: [], bad: null };
+  if (!Array.isArray(raw)) return { list: [], invalid: true, valid: [], bad: { count: 1, names: [], notList: true } };
+  const list = [], valid = [], names = [];
+  const keys = new Set();
+  raw.forEach((m, i) => {
+    if (!isObj(m) || typeof m.name !== "string" || !RE_MILESTONE_NAME.test(m.name) || typeof m.date !== "string" || !RE_ISO_DAY.test(m.date) || isoTime(m.date) == null ||
+      !slugList(m.features) || (m.archived !== undefined && !slugList(m.archived)) || keys.has(milestoneKey(m.name))) {
+      valid.push(false);
+      // shown by its name when the name itself is one add accepts (a date typo), else by its position in the list
+      names.push(isObj(m) && typeof m.name === "string" && RE_MILESTONE_NAME.test(m.name) ? m.name : "#" + (i + 1));
+      return;
+    }
+    keys.add(milestoneKey(m.name));
+    valid.push(true);
+    list.push({ name: m.name, date: m.date, features: m.features.slice(), ...(m.archived && m.archived.length ? { archived: m.archived.slice() } : {}) });
+  });
+  return { list, invalid: names.length > 0, valid, bad: names.length ? { count: names.length, names } : null };
+}
+// The invalid part of meta.milestones → null | { count, names, notList? } (1.16 verify NEW-1): spec_roadmap's
+// `milestonesInvalid`, a "Needs attention" line of ROADMAP.md / .html and the CLI roadmap, and the lifecycle results.
+function milestoneInvalidInfo(rm) {
+  const b = milestoneStore(rm).bad;
+  return b ? { ...b, names: b.names.slice() } : null;
+}
+// A milestone by name (its identity, milestoneKey) → { ok, milestone, list } or a localized error naming the ones there; a
+// roadmap.json that doesn't parse is that error (never "no milestone").
+function findMilestone(projectDir, name) {
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
+  const MS = i18n.msg(projectLang(projectDir)).milestone;
+  const { list } = milestoneStore(readRoadmap(projectDir));
+  const k = milestoneKey(name);
+  const m = list.find((x) => milestoneKey(x.name) === k);
+  return m ? { ok: true, milestone: m, list } : { ok: false, error: MS.notFound(String(name).trim(), list.map((x) => x.name).join(", ") || "—") };
+}
+// The stored milestones with their status against the roadmap's features (roadmap() entries carrying `forecast`) → [{ name,
+// date, features, archived?, missing?, status, reason?, done, total, open, eta, unknownEta? }].
+function milestoneStatuses(projectDir, feats, now) {
+  const { list } = milestoneStore(readRoadmap(projectDir));
+  const today = fcIso(fcDay(now));
+  const by = new Map(feats.map((f) => [f.name, f]));
+  return list.map((m) => {
+    const active = m.features.filter((s) => by.has(s));
+    const open = active.filter((s) => by.get(s).percent < 100);
+    const eta = (s) => (by.get(s).forecast && by.get(s).forecast.eta) || null;
+    const unknown = open.filter((s) => !eta(s));
+    const latest = open.length && !unknown.length ? open.map(eta).sort().pop() : null;
+    const o = { name: m.name, date: m.date, features: m.features.slice() };
+    if (m.archived) o.archived = m.archived.slice();
+    const missing = m.features.filter((s) => !by.has(s));
+    if (missing.length) o.missing = missing; // a hand-edited entry naming no active feature
+    if (!active.length && !(m.archived || []).length) Object.assign(o, { status: "at-risk", reason: "no-features" });
+    else if (!open.length) o.status = "done";
+    else if (m.date < today) o.status = "late";
+    else if (unknown.length) Object.assign(o, { status: "at-risk", reason: "eta-unknown" });
+    else if (latest > m.date) Object.assign(o, { status: "at-risk", reason: "eta-after-date" });
+    else o.status = "on-track";
+    Object.assign(o, { done: active.length - open.length, total: active.length, open, eta: latest });
+    if (unknown.length) o.unknownEta = unknown;
+    return o;
+  });
+}
+// The milestone lines of "Needs attention" (ROADMAP.md / .html): the late and at-risk ones, then the invalid stored entries
+// (invalid: milestoneInvalidInfo — they have no status, and a feature's rename / archive / remove / restore skips them).
+function milestoneAttention(milestones, lang, invalid) {
+  const MS = i18n.msg(lang).milestone;
+  const out = (milestones || []).filter((m) => m.status === "late" || m.status === "at-risk").map((m) => ({ name: "🏁 " + m.name,
+    msg: m.status === "late" ? MS.attention.late(m.date, m.done, m.total, m.eta) : MS.attention[m.reason](m.date, m.eta, (m.unknownEta || []).join(", ")) }));
+  if (invalid) out.push({ name: "🏁 meta.milestones", msg: invalid.notList ? MS.attention.notList(".specs/roadmap.json") : MS.attention.invalid(invalid.count, invalid.names.join(", "), ".specs/roadmap.json") });
+  return out;
+}
+const MILESTONE_ICON = { "on-track": "🟢", "at-risk": "⚠", late: "⛔", done: "✅" };
+// One milestone as a line (CLI `milestone list` / `roadmap`).
+function milestoneLine(m, lang) {
+  const MS = i18n.msg(lang).milestone;
+  return `${MILESTONE_ICON[m.status] || ""} ${MS.line(m.name, m.date, m.done, m.total, m.eta, MS.status[m.status] || m.status, m.features.join(", "), (m.archived || []).join(", "))}`.trim();
+}
+// The data behind every milestone surface: roadmap() + its forecasts (opts.now: "today").
+function milestonesNow(projectDir, opts = {}) {
+  const now = (opts.now != null && timeOf(opts.now)) || Date.now();
+  const rmv = roadmap(projectDir);
+  const fc = forecastData(projectDir, rmv.features, { now, cycle: rmv.cycle });
+  for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
+  return { today: fcIso(fcDay(now)), milestones: milestoneStatuses(projectDir, rmv.features, now) };
+}
+// spec_milestone {action?, name?, date?, features?} (opts.now: "today", tests).
+function milestone(projectDir, action, opts = {}) {
+  const lang = projectLang(projectDir);
+  const MS = i18n.msg(lang).milestone;
+  const A = i18n.msg(lang).args;
+  const a = String(action == null ? "" : action).trim().toLowerCase() || "list";
+  if (!MILESTONE_ACTIONS.includes(a)) return { ok: false, error: A.invalid(A.item("action", A.oneOf(MILESTONE_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
+  const root = specsRoot(projectDir);
+  const report = (res) => {
+    const d = milestonesNow(projectDir, opts);
+    const out = { ...res, today: d.today, milestones: d.milestones };
+    const store = milestoneStore(readRoadmap(projectDir));
+    if (store.invalid) out.warning = MS.badStored(".specs/roadmap.json");
+    out.lines = [...(res.message ? [res.message] : []), ...(d.milestones.length ? [MS.head(d.milestones.length, d.today), ...d.milestones.map((m) => "  " + milestoneLine(m, lang))] : [MS.none]),
+      ...(out.warning ? ["⚠ " + out.warning] : [])];
+    return out;
+  };
+  if (a === "list") {
+    const bad = roadmapError(projectDir); // a roadmap.json that doesn't parse is an error, never "no milestones yet"
+    if (bad) return { ok: false, error: bad };
+    return report({ ok: true, action: "list" });
+  }
+  if (!fs.existsSync(root)) return { ok: false, error: i18n.msg(lang).err.noSpecs(root) };
+  const name = milestoneName(opts.name);
+  if (!name) return { ok: false, error: MS.nameRequired };
+  const mutate = (fn) => {
+    const r = withRoadmapLock(projectDir, () => {
+      const bad = roadmapError(projectDir);
+      if (bad) return { ok: false, error: bad };
+      const rm = readRoadmap(projectDir);
+      const store = milestoneStore(rm);
+      if (store.invalid) return { ok: false, error: MS.badStored(".specs/roadmap.json") };
+      const r2 = fn(store.list);
+      if (!r2.ok) return r2;
+      rm.meta = rm.meta || {};
+      if (store.list.length) rm.meta.milestones = store.list; else delete rm.meta.milestones;
+      writeRoadmap(projectDir, rm);
+      return r2;
+    });
+    if (!r.ok) return r;
+    maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
+    return report(r);
+  };
+  if (a === "add") {
+    if (!RE_MILESTONE_NAME.test(name)) return { ok: false, error: MS.badName(name) };
+    const date = opts.date == null ? "" : String(opts.date).trim();
+    if (!RE_ISO_DAY.test(date) || isoTime(date) == null) return { ok: false, error: MS.badDate(date) };
+    // A list's items are names (a feature called "User Login" is one) split on commas only; a single string — the engine's
+    // shorthand — on whitespace and commas too, as spec_depend reads it (1.16 E review m2).
+    const asked = (opts.features == null ? [] : Array.isArray(opts.features) ? opts.features.flatMap((x) => String(x == null ? "" : x).split(",")) : String(opts.features).split(/[\s,]+/))
+      .map((x) => x.trim()).filter(Boolean);
+    if (!asked.length) return { ok: false, error: MS.noFeatures };
+    const features = [];
+    const unknown = [];
+    for (const x of asked) {
+      const f = existingFeature(projectDir, x);
+      if (!f.ok) unknown.push(x);
+      else if (!features.includes(f.slug)) features.push(f.slug);
+    }
+    if (unknown.length) return { ok: false, error: MS.unknownFeatures(unknown.join(", ")) };
+    if (features.length > MILESTONE_FEATURES_MAX) return { ok: false, error: MS.tooManyFeatures(MILESTONE_FEATURES_MAX) };
+    return mutate((list) => {
+      const i = list.findIndex((x) => milestoneKey(x.name) === milestoneKey(name));
+      if (i < 0 && list.length >= MILESTONE_MAX) return { ok: false, error: MS.tooMany(MILESTONE_MAX) };
+      // An update keeps the features archived since the milestone was set (its release notes still cover them — 1.16 E
+      // review m1), minus any now listed as active again.
+      const archived = i >= 0 && list[i].archived ? list[i].archived.filter((s) => !features.includes(s)) : [];
+      const entry = { name, date, features, ...(archived.length ? { archived } : {}) };
+      if (i >= 0) list[i] = entry; else list.push(entry);
+      return { ok: true, action: "add", updated: i >= 0, milestone: { ...entry, features: features.slice(), ...(archived.length ? { archived: archived.slice() } : {}) },
+        message: (i >= 0 ? MS.updated : MS.added)(name, date, features.join(", ")) };
+    });
+  }
+  return mutate((list) => { // rm / remove
+    const i = list.findIndex((x) => milestoneKey(x.name) === milestoneKey(name));
+    if (i < 0) return { ok: false, error: MS.notFound(name, list.map((x) => x.name).join(", ") || "—") };
+    const [gone] = list.splice(i, 1);
+    return { ok: true, action: "rm", removed: gone.name, message: MS.removed(gone.name) };
+  });
+}
+// A feature's lifecycle in meta.milestones (pruneRoadmapRefsLocked / restore, under the roadmap lock): rename → the new slug
+// (active lists only), archive → moved to `archived`, remove → dropped, restore → back from `archived`. Every VALID stored
+// entry is edited in place; an invalid one (a hand-edit typo — 1.16 verify NEW-1: one bad date used to stop every entry from
+// following) is left exactly as it is, and so is a meta.milestones that is no list. → { changed: the names of the milestones
+// changed, invalid: milestoneInvalidInfo | null }.
+function milestonesFollow(rm, slug, how, to) {
+  const store = milestoneStore(rm);
+  const changed = [];
+  const raw = store.valid.length ? rm.meta.milestones : [];
+  raw.forEach((m, i) => {
+    if (!store.valid[i]) return;
+    const arch = m.archived || [];
+    let hit = false;
+    if (how === "restore") {
+      if (arch.includes(slug)) { hit = true; m.archived = arch.filter((s) => s !== slug); if (!m.features.includes(slug)) m.features = m.features.concat(slug); }
+    } else if (m.features.includes(slug)) {
+      hit = true;
+      if (how === "rename") m.features = [...new Set(m.features.map((s) => (s === slug ? to : s)))];
+      else {
+        m.features = m.features.filter((s) => s !== slug);
+        if (how === "archive" && !arch.includes(slug)) m.archived = arch.concat(slug);
+      }
+    }
+    if (hit && m.archived && !m.archived.length) delete m.archived;
+    if (hit) changed.push(m.name);
+  });
+  return { changed, invalid: store.bad ? { ...store.bad, names: store.bad.names.slice() } : null };
 }
 
 // --- archive record → restore ---
@@ -15133,8 +17182,16 @@ function restoreFeatureLocked(projectDir, name, moved) {
     delete st.archived;
     writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
   }
+  let msInvalid = null;
+  { // 1.16 E3: back into the milestones that kept it as archived (under the roadmap lock, like the edges above)
+    const rmm = readRoadmap(projectDir);
+    const ms = milestonesFollow(rmm, slug, "restore");
+    if (ms.changed.length) { writeRoadmap(projectDir, rmm); restored.milestones = ms.changed; }
+    msInvalid = ms.invalid; // invalid stored entries were left as they are (1.16 verify NEW-1)
+  }
   const fromBacklog = pruneBacklog(projectDir, slug); // the feature has a folder again, like createFeature
   const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
+  if (msInvalid) res.milestonesInvalid = msInvalid;
   if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
   const skipLine = (s) => s.kind === "record" ? R.skipRecord(s.field, R.reason[s.reason] || s.reason)
     : (s.kind === "dependsOn" ? R.skipDependsOn : R.skipDependent)(s.feature, R.reason[s.reason] || s.reason);
@@ -15236,7 +17293,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
 // the catalog kept calling it finished. tasksText: the ACTIVE tasks (what a finish records). opts.newFiles === false skips
 // the _Implements:_ walk (state only): SessionStart's bounded drift check and the catalog, refreshed after every mutation.
 // → null (no baseline, or still current) | { finishedAt, since: [{ kind: "change-request", n, at } | { kind: "approval",
-// phase, at }], newFiles: [rel …] }
+// phase, at } | { kind: "untick", task, at } (1.16 U1) | { kind: "revoke", phase, at } (1.16 U review 3)], newFiles: [rel …] }
 function staleFinish(projectDir, st, tasksText, opts = {}) {
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return null;
@@ -15263,7 +17320,25 @@ function changesSince(st, t, except) {
     const at = phase !== except && isRecord(a) ? timeOf(a.at) : null;
     if (at != null && at > t) out.push({ kind: "approval", phase, at: a.at });
   }
+  // 1.16 U1: a task unticked after t (spec_complete_task {undo}) — the work was reopened: a finish or a sign-off older than it no
+  // longer speaks for the feature once the task is done again.
+  for (const u of Array.isArray(st.unticks) ? st.unticks : []) {
+    const at = isRecord(u) && Number.isSafeInteger(u.n) ? timeOf(u.at) : null;
+    if (at != null && at > t) out.push({ kind: "untick", task: u.n, at: u.at });
+  }
+  // 1.16 U review 3: an approval revoked after t (spec_approve {revoke}) — the phase is pending again, so a finish or a sign-off
+  // older than it no longer speaks for the feature (the catalog kept calling it finished, drift said clean). Only a revocation
+  // that removed an approval (a `partial` one withdrew waiting sign-offs: nothing was approved) and never of `except`.
+  for (const h of Array.isArray(st.approvalHistory) ? st.approvalHistory : []) {
+    const at = isRecord(h) && h.revoked === true && h.partial !== true && typeof h.phase === "string" && h.phase !== except ? timeOf(h.at) : null;
+    if (at != null && at > t) out.push({ kind: "revoke", phase: h.phase, at: h.at });
+  }
   return out;
+}
+// The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
+function revokedSinceList(since) {
+  const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));
+  return [...new Set(since.filter((x) => x.kind === "revoke" && !back.has(x.phase)).map((x) => x.phase))];
 }
 // The execution sign-off predates a change (a change request or a re-approval of another phase after it): it signed
 // off a different feature — next_action asks for it again.
@@ -15281,6 +17356,10 @@ function signOffWhyText(st, lang) {
   if (phases.length) parts.push(W.approvals(phases.join(", ")));
   const crs = since.filter((x) => x.kind === "change-request").map((x) => "#" + x.n);
   if (crs.length) parts.push(W.changeRequests(crs.join(", ")));
+  const un = [...new Set(since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
+  if (un.length) parts.push(i18n.msg(lang).undo.signOffWhy(un.join(", ")));
+  const rv = revokedSinceList(since); // 1.16 U review 3
+  if (rv.length) parts.push(i18n.msg(lang).revoke.signOffWhy(rv.join(", ")));
   return parts.join(W.join);
 }
 // "change request #2, tasks re-approved, 1 implementing file not in the baseline (src/a.js)" — localized.
@@ -15292,6 +17371,10 @@ function staleFinishText(stale, lang) {
   const phases = [...new Set(stale.since.filter((x) => x.kind === "approval").map((x) => x.phase))];
   if (phases.length) parts.push(W.approvals(phases.join(", ")));
   if (stale.newFiles.length) parts.push(W.newFiles(stale.newFiles.length, stale.newFiles.slice(0, 5).join(", ") + (stale.newFiles.length > 5 ? ", …" : "")));
+  const un = [...new Set(stale.since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
+  if (un.length) parts.push(i18n.msg(lang).undo.driftWhy(un.join(", ")));
+  const rv = revokedSinceList(stale.since); // 1.16 U review 3
+  if (rv.length) parts.push(i18n.msg(lang).revoke.driftWhy(rv.join(", ")));
   return parts.join("; ");
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now
@@ -15476,7 +17559,7 @@ function missingIgnoreLines(specsDir) {
 // The last approvalHistory record of a phase (null when none).
 function lastRecord(hist, phase) {
   let r = null;
-  for (const h of hist) if (isRecord(h) && h.phase === phase && h.partial !== true) r = h; // a partial role sign-off (1.14) approved nothing
+  for (const h of hist) if (isApprovalRecord(h) && h.phase === phase) r = h; // a partial role sign-off (1.14) or a revocation (1.16) approved nothing
   return r;
 }
 
@@ -15600,7 +17683,7 @@ function upgradeFeature(projectDir, s, ctx) {
     doctor: { verdict: doc.verdict, failing: fails.map((c) => ({ id: c.id, detail: shortDetail(c.detail) })), warnings: warns.map((c) => c.id) },
     pendingGates: doc.pendingGates, changedSinceApproval: changed, legacyApprovals,
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
-    unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {})),
+    unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
     review, reviewArtifacts, drift,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,
@@ -16551,6 +18634,7 @@ function coverage(projectDir) {
 
 const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD" }; // C3: + plan · execplan · bmad
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const TEXT_IMPORT_TOOLS = ["plan", "execplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function isInsideDir(root, p) {
@@ -16577,11 +18661,36 @@ function realPathLoose(p) {
   }
   return null;
 }
+// A network path in its plain UNC spelling (`\\?\UNC\host\share\…` and `\\.\UNC\…` → `\\host\share\…`), for a text comparison.
+function plainUnc(p) {
+  const s = String(p);
+  const m = /^[\\/]{2}[?.][\\/]UNC[\\/]/i.exec(s);
+  return m ? "\\\\" + s.slice(m[0].length) : s;
+}
+// Is network path p inside network folder root — decided on the TEXT alone, never a stat or realpath (1.16 verify NEW-3)?
+// Both are read as Windows paths (a UNC path is one): `\\?\UNC\` = `\\`, / = \, `..` resolved, case folded (SMB host and share
+// names are case-insensitive). A local root or p → false. → the relative path ("" for root itself) | null.
+function networkPathInside(root, p) {
+  if (typeof root !== "string" || typeof p !== "string" || !isNetworkPath(root) || !isNetworkPath(p)) return null;
+  const W = path.win32;
+  const r = W.resolve(plainUnc(root)), q = W.resolve(plainUnc(p));
+  if (!isNetworkPath(r) || !isNetworkPath(q)) return null;
+  const rl = r.toLowerCase().replace(/\\+$/, ""), ql = q.toLowerCase();
+  return ql === rl || ql.startsWith(rl + "\\") ? W.relative(r, q) : null;
+}
 // p spelled under root when it lies inside root — as text, or through an alias of either (an 8.3 short name
 // `C:\Users\ADMINI~1\…`, a junction, a symlink); null when it is outside. The text comparison answers first; the real
 // paths are read only when it says "outside" (the guard hook calls this on every edit). Never throws.
+// A NETWORK path on either side (isNetworkPath — an agent's Write to `\\host\share\a.js`, an absolute `_Implements:_`) is decided
+// on the text alone (1.16 verify NEW-3): a realpath / stat of it opens an SMB connection to the host it names before the permission
+// prompt — hanging on an unreachable host, and on Windows sending the user's NTLM credentials. Inside only under the same
+// `\\host\share\…` prefix as root (a project living on a share stays guarded), the `\\?\UNC\` spelling read as the plain one.
 function insideDirAlias(root, p) {
   if (isInsideDir(root, p)) return p;
+  if (isNetworkPath(root) || isNetworkPath(p)) {
+    const rel = networkPathInside(root, p);
+    return rel == null ? null : rel ? path.join(root, rel) : root;
+  }
   try {
     const rr = realPathLoose(root), rp = realPathLoose(p);
     if (rr && rp && isInsideDir(rr, rp)) return path.join(root, path.relative(rr, rp));
@@ -17950,43 +20059,67 @@ function parseBmad(dir, read0, W, src) {
 const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad };
 
 function importSpec(projectDir, tool, source, opts = {}) {
-  const lang0 = normalizeLang(opts.lang || projectLang(projectDir));
+  // The language of the import's own text (warnings, design.md's Decisions heading…): explicit, else the project's configured one,
+  // else — a brand-new project (1.16 C2) — the user's DEV_SPEC_DEFAULT_LANG, spec_create's resolution (configuredLang).
+  const lang0 = normalizeLang(opts.lang || configuredLang(projectDir) || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
   // Exact names only — the values spec_import's schema enum allows, so the CLI accepts exactly what MCP does
   // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
   const t = typeof tool === "string" && own(IMPORT_TOOLS, tool) ? tool : null;
   if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
-  if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired };
+  // 1.16 C4 — the plan-mode bridge: `text` imports a single-document source (a plan / an ExecPlan) from its markdown, no file
+  // needed — Claude Code keeps plans in plansDirectory (~/.claude/plans by default, outside the project), so the plan the user
+  // approved is passed as text. Same parser, same mapping, same guarantees; nothing is read from disk for it.
+  const C = i18n.msg(lang0).claudeCode.importText;
+  const inline = opts.text != null;
+  if (inline) {
+    if (typeof opts.text !== "string") { const A = i18n.msg(lang0).args; return { ok: false, error: A.invalid(A.item("text", A.type.string, String(JSON.stringify(opts.text)).slice(0, 60))) }; }
+    if (!TEXT_IMPORT_TOOLS.includes(t)) return { ok: false, error: C.textOnly(t, TEXT_IMPORT_TOOLS.join(", ")) };
+    if (source != null && String(source).trim()) return { ok: false, error: C.pathAndText };
+    if (!stripHtmlComments(opts.text).split(BOM_CHAR).join("").trim()) return { ok: false, error: C.empty(IMPORT_TOOLS[t]) };
+  } else if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired + (TEXT_IMPORT_TOOLS.includes(t) ? " " + C.orText : "") };
   const root = path.resolve(projectDir);
-  const abs = path.resolve(root, String(source).trim());
-  const shown = String(source).trim();
-  // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
-  // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3).
-  const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir : "") });
-  if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
-  if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
-  let realRoot, realSrc;
-  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
-  if (!isInsideDir(realRoot, realSrc)) return outside();
-  const isFileSrc = !fs.statSync(realSrc).isDirectory();
-  const dir = isFileSrc ? path.dirname(realSrc) : realSrc;
-  const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const readWarnings = [];
-  const read = (file) => {
-    try {
-      if (!fs.existsSync(file)) return null;
-      const real = fs.realpathSync.native(file);
-      if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
-      if (!fs.statSync(real).isFile()) return null;
-      return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
-    } catch { return null; }
-  };
+  let realRoot, realSrc, isFileSrc, dir, rel, read;
+  if (inline) {
+    try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
+    realSrc = path.join(realRoot, t + ".md"); // a virtual file — its stem is the parsers' fallback feature name (the title wins)
+    isFileSrc = true;
+    dir = realRoot;
+    rel = C.label;
+    const doc = opts.text.slice(0, IMPORT_MAX_BYTES).replace(new RegExp("^" + BOM_CHAR), "");
+    read = (file) => (file === realSrc ? doc : null);
+  } else {
+    const abs = path.resolve(root, String(source).trim());
+    const shown = String(source).trim();
+    // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
+    // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and that its text
+    // can be imported instead (1.16 C4).
+    const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") });
+    if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
+    if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
+    try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
+    if (!isInsideDir(realRoot, realSrc)) return outside();
+    isFileSrc = !fs.statSync(realSrc).isDirectory();
+    dir = isFileSrc ? path.dirname(realSrc) : realSrc;
+    rel = toPosix(path.relative(realRoot, dir)) || ".";
+    read = (file) => {
+      try {
+        if (!fs.existsSync(file)) return null;
+        const real = fs.realpathSync.native(file);
+        if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
+        if (!fs.statSync(real).isFile()) return null;
+        return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+      } catch { return null; }
+    };
+  } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
   const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot });
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
-  const srcRel = model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel; // C3: a single-document source shows its file
+  // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
+  const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
   const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
   const f = resolveFeature(projectDir, name);
@@ -18005,7 +20138,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
-  const note = L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
+  const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], new Date().toISOString().slice(0, 10))
+    : L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
@@ -18140,6 +20274,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
     tool: t,
     toolName: IMPORT_TOOLS[t],
     source: srcRel, // C3: the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
+    ...(inline ? { inline: true } : {}), // 1.16 C4: imported from text (spec_import {text}) — source is null
+    ...(cr.userDefaults ? { userDefaults: cr.userDefaults } : {}), // 1.16 C2: the language a new project took from DEV_SPEC_DEFAULT_LANG
     tracks: cr.tracks,
     label: cr.label,
     lang: lng,
@@ -18148,6 +20284,269 @@ function importSpec(projectDir, tool, source, opts = {}) {
     mapping,
     warnings,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 1.16 C — Claude Code integration: the status line (`dev-spec statusline`) and the plan-mode bridge (hooks/plan-hook.js).
+// The user's DEV_SPEC_* defaults (userDefaults) live beside guardLevel / stopCheckEnabled, which read them.
+// ---------------------------------------------------------------------------
+
+const STATUS_MAX_FEATURES = 200; // feature folders a status line reads, at most (sorted by name)
+const STATUS_MAX_UP = 40; // folders walked up from a status line's cwd looking for a dev-spec .specs/
+const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's gate, at most (statusTestsGate)
+// Approve-gate checks the doctor only WARNS about (spec_doctor: success-criteria, priorities, reproduction, constitution-check) —
+// a forced approval failing only these is no `fix` for next_action, so none for the status line either.
+const STATUS_DOCTOR_WARNS = new Set(["success-criteria", "priorities", "reproduction", "constitution-check"]);
+// A network path — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — opens an SMB/WebDAV connection to
+// whatever host it names (on Windows the redirector sends the user's NTLM credentials) and, the engine being synchronous, blocks
+// until an unreachable host times out (a status line hung 7 minutes on a payload cwd `\\192.0.2.1\share`). The MCP server
+// refuses such a projectDir before any fs call; the status line and hooks/plan-hook.js skip such a candidate folder. Local:
+// the extended/device forms of a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`).
+// Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. (A drive letter mapped to a share can't be
+// told apart without I/O.)
+function isNetworkPath(p) {
+  const s = String(p).trim();
+  if (!/^[\\/]{2}/.test(s)) return false;
+  let rest = s.slice(2);
+  if (/^[?.][\\/]/.test(rest)) {
+    rest = rest.slice(2);
+    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
+    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
+    rest = rest.slice(4);
+  }
+  const host = rest.split(/[\\/]/)[0].toLowerCase();
+  return host !== "wsl$" && host !== "wsl.localhost";
+}
+// A folder whose .specs/ dev-spec owns: roadmap.json, steering/, or a feature folder with its .state.json (the hooks' rule).
+function isDevSpecDir(dir) {
+  const root = path.join(dir, ".specs");
+  if (!isDirSafe(root)) return false;
+  if (fs.existsSync(path.join(root, "roadmap.json")) || isDirSafe(path.join(root, "steering"))) return true;
+  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
+}
+// The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
+// dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`, a network
+// path — isNetworkPath, skipped before any fs call) are skipped.
+// → the project folder | null
+function statusLineProject(candidates) {
+  const seen = new Set();
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
+    let dir = path.resolve(c.trim());
+    for (let i = 0; i < STATUS_MAX_UP; i++) {
+      const key = FOLD_CASE ? dir.toLowerCase() : dir;
+      if (seen.has(key)) break;
+      seen.add(key);
+      if (isDevSpecDir(dir)) return dir;
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+  return null;
+}
+// The latest activity of a feature for the status line (ms): what the engine recorded (ticks, evidence, approvals, creation,
+// finish) and the dates of .state.json / tasks.md — a status line shows what is being worked on, so a file date counts here.
+function statusActivity(dir, st) {
+  let best = stopActivity(st) || 0;
+  const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t > best) best = t; };
+  see(st.createdAt);
+  if (isObj(st.approvals)) Object.values(st.approvals).forEach((a) => isObj(a) && see(a.at));
+  if (isObj(st.finished)) see(st.finished.at);
+  for (const f of [statePath(dir), path.join(dir, "tasks.md")]) {
+    try { const m = fs.statSync(f).mtimeMs; if (m > best) best = m; } catch { /* absent */ }
+  }
+  return best;
+}
+// Phase 4's gate for the status line, kept cheap (approvalChecks' `tests` case runs trace_check's code scan — a walk of the
+// whole project): +ai's eval-sets check is the gate's own (one read of evals/golden.json); +tdd's tests-in-code is answered only
+// when it can be proven without the walk — no planned T-ID (the gate refuses: noPlannedTests), or every planned T-ID found in a
+// test FILE its own plan row names (read directly: at most STATUS_TEST_FILES files, inside the project, never through a hidden or
+// ignored folder the scan skips, never a link) or checked outside test code. Anything else is unknown. → "pass" | "fail" | "unknown"
+function statusTestsGate(pdir, dir, tracks) {
+  const tdd = tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md"));
+  const ai = tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"));
+  if (ai) {
+    const golden = readJson(path.join(dir, "evals", "golden.json"));
+    const items = golden.data && Array.isArray(golden.data.items) ? golden.data.items : null;
+    const sample = items && JSON.stringify(golden.data) === JSON.stringify(JSON.parse(SAMPLE_GOLDEN));
+    if (!(items && items.length) || sample) return "fail";
+  }
+  if (!tdd) return "pass";
+  const planText = planIdText(readIfExists(path.join(dir, "test-plan.md")) || "");
+  const planned = [...new Set([...extractTestIds(planText)].map((id) => tKey(id.slice(2))))];
+  if (!planned.length) return "fail";
+  const { scopes, outside } = planFileScopes(planText);
+  const root = path.resolve(pdir);
+  const read = new Map(); // project-relative file → the T-ID keys it names (null: not a file the scan would read)
+  const keysOf = (p) => {
+    const rel = toPosix(p).replace(/^\.\/+/, "");
+    if (read.has(rel)) return read.get(rel);
+    let keys = null;
+    const abs = path.resolve(root, rel);
+    const segs = toPosix(path.relative(root, abs)).split("/");
+    if (read.size < STATUS_TEST_FILES && withinRoot(root, abs) && !segs.slice(0, -1).some((s) => s.startsWith(".") || SCAN_IGNORE.has(s)) &&
+      !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
+      try {
+        if (fs.lstatSync(abs).isFile()) {
+          keys = new Set();
+          for (const m of fs.readFileSync(abs, "utf8").slice(0, SCAN_READ_BYTES).matchAll(RE_CODE_TID)) keys.add(tKey(m[1] || m[2] || m[3]));
+        }
+      } catch { keys = null; }
+    }
+    read.set(rel, keys);
+    return keys;
+  };
+  for (const k of planned) {
+    if (outside.has(k)) continue;
+    const files = (scopes.get(k) || []).filter((p) => !p.endsWith("/") && path.posix.extname(p));
+    if (!files.some((p) => { const ks = keysOf(p); return !!ks && ks.has(k); })) return "unknown";
+  }
+  return "pass";
+}
+// The step the status line names — spec_next_action's order, kept cheap (a status line runs after every assistant message; it
+// never runs the doctor, trace_check's code scan or the drift hash):
+//   spike: fill spike.md (its question) → the next investigation task → blocked (none can start) → decide (the decision, then its
+//     _Outcome:_ line) → promote (go) · archive (no-go) · pivot — next_action's own spike steps;
+//   re-review (an artifact changed since its approval, as far as the first pending phase) → the first unapproved phase: fill its
+//     artifact / fix (its approve gate's checks) / approve — Phase 4 (tests) through statusTestsGate: approve · fix · tests (not
+//     known cheaply: write the tests, then approve them);
+//   every phase approved: a FORCED approval whose gate still fails (approvalChecks re-run for the forced phases — next_action's
+//     doctor step for a forced approval), or a bugfix whose bug.md → Root Cause is still empty (the doctor's root-cause failure; the
+//     bugfix gate refuses every task after the one that writes it) → fix;
+//   tasks: none → tasks · the next startable one → implement · none startable → blocked;
+//   every task done: a tick not verified → verify · no finish baseline → finish · a baseline older than a change (staleFinish,
+//     state only — the _Implements:_ walk skipped) → finish (again) · a project check without a passing run since the last task
+//     activity (suiteStatus without the code hash) → verify · the execution sign-off missing or older than a change → sign-off ·
+//     else finished — the drift of the recorded files is NOT checked (next_action's `drift`), so the line never says "clean".
+// → { step, … } with stable step codes: re-review · fill · fix · approve · tests · tasks · implement · blocked · verify · decide ·
+// promote · archive · pivot · finish · sign-off · finished. The parity with spec_next_action's `step` (mcp/test.js "1.16 C review"):
+// blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and any end state
+// (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
+function statusNext(pdir, f, kind, lng, unverified) {
+  const st = f.st;
+  const approvals = isObj(st.approvals) ? st.approvals : {};
+  const open = f.blocks.filter((b) => !b.done);
+  if (kind === "spike") {
+    const si = spikeInfo(f.dir);
+    if (!si.questionFilled) return { step: "fill", file: SPIKE_FILE };
+    const nx = taskSchedule(f.blocks).next;
+    if (nx) return { step: "implement", task: nx.number };
+    if (open.length) return { step: "blocked" };
+    if (!si.decisionFilled) return { step: "decide" };
+    if (!si.outcome) return { step: "decide", outcome: true };
+    return { step: si.outcome === "go" ? "promote" : si.outcome === "no-go" ? "archive" : "pivot", outcome: si.outcome };
+  }
+  const walk = gateWalk(f.dir, f.tracks, kind);
+  const pending = walk.find((ph) => !approvals[ph]) || null;
+  const phaseOfFile = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === "design.md" ? "design" : null);
+  const changed = changedSinceApproval(f.dir, approvals, f.tracks, kind)
+    .filter((file) => { if (!pending) return true; const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); });
+  if (changed.length) return { step: "re-review", files: changed };
+  if (pending) {
+    const art = gateArtifacts(f.dir, f.tracks, kind, pending).map((file) => artifactReport(f.dir, file, f.tracks)).find((r) => r.state !== "filled");
+    if (art) return { step: "fill", file: art.file, phase: pending };
+    if (pending === "tests") {
+      const g = statusTestsGate(pdir, f.dir, f.tracks);
+      return g === "pass" ? { step: "approve", phase: "tests" } : g === "fail" ? { step: "fix", phase: "tests" } : { step: "tests" };
+    }
+    const g = approvalChecks(pdir, f.slug, f.dir, pending, f.tracks, kind, lng);
+    return g.checks.length ? { step: "fix", phase: pending, failing: g.checks.map((c) => c.id) } : { step: "approve", phase: pending };
+  }
+  // Every phase approved. A forced approval (force: true — recorded with the checks it failed) is re-checked: while its gate still
+  // fails on a check the DOCTOR fails too, next_action's doctor step says fix (never Phase 4's: its tests-in-code is a doctor
+  // warning, and its gate scans the code). The gate is stricter than the doctor on a few checks (STATUS_DOCTOR_WARNS), and its
+  // clarifications count design.md's markers where the doctor reads requirements.md's only.
+  for (const ph of walk) {
+    if (ph === "tests" || !isRecord(approvals[ph]) || approvals[ph].forced !== true) continue;
+    const failing = approvalChecks(pdir, f.slug, f.dir, ph, f.tracks, kind, lng).checks.map((c) => c.id).filter((id) => !STATUS_DOCTOR_WARNS.has(id) &&
+      (id !== "clarifications" || clarificationMarkers(readIfExists(path.join(f.dir, "requirements.md")) || "").length > 0));
+    if (failing.length) return { step: "fix", phase: ph, failing, ...(failing.includes("root-cause") ? { file: "bug.md" } : {}) };
+  }
+  // A bugfix: no fix before its root cause — bug.md → Root Cause empty fails the doctor (root-cause) and the bugfix gate refuses
+  // every task after the one that writes it (one read of bug.md).
+  if (kind === "bugfix" && !bugSectionFilled(readIfExists(path.join(f.dir, "bug.md")), ROOT_CAUSE_SYN)) {
+    return { step: "fix", phase: "design", failing: ["root-cause"], file: "bug.md" };
+  }
+  if (!f.blocks.length) return { step: "tasks" };
+  if (open.length) {
+    const nx = taskSchedule(f.blocks).next;
+    return nx ? { step: "implement", task: nx.number } : { step: "blocked" };
+  }
+  if (unverified.length) return { step: "verify", task: unverified[0] };
+  const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
+  if (!fin) return { step: "finish" };
+  if (staleFinish(pdir, st, "", { newFiles: false })) return { step: "finish", again: true };
+  const suite = suiteStatus(pdir, st, null).missing; // no `dir`: the code-changed hash is skipped (state and roadmap.json only)
+  if (suite.length) return { step: "verify", suite: suite.map((i) => i.name) };
+  if (!isRecord(approvals.execution)) return { step: "sign-off" };
+  if (executionSignOffStale(st)) return { step: "sign-off", again: true };
+  return { step: "finished" };
+}
+// `dev-spec statusline` — ONE short line about the project for Claude Code's status line (settings.json "statusLine"), e.g.
+// "◆ billing · 4/9 tasks · 1 unverified · next: approve tasks", in the project language. The feature shown: the most recently
+// active one with work under way (some tasks done, some open), else the most recently active one. Read-only and bounded: each
+// active feature's .state.json + tasks.md (at most STATUS_MAX_FEATURES), then the chosen feature's evidence and the step
+// statusNext names. opts: { columns } — the line is cut to that width. → { ok, found, project, lang, feature, kind, tasks,
+// unverified, next, features, line }; found false (line "") when there is no .specs/.
+function statusLine(projectDir, opts = {}) {
+  const pdir = path.resolve(projectDir);
+  const root = specsRoot(pdir);
+  if (!isDirSafe(root)) return { ok: true, found: false, project: pdir, line: "" };
+  const lng = projectLang(pdir);
+  const SL = i18n.msg(lng).claudeCode.statusLine;
+  const rows = [];
+  for (const n of safeReaddir(root).filter((x) => isFeatureFolder(x, root)).sort().slice(0, STATUS_MAX_FEATURES)) {
+    const dir = path.join(root, n);
+    if (!isDirSafe(dir)) continue;
+    const j = readJson(statePath(dir));
+    const st = isObj(j.data) ? j.data : {};
+    const tracks = detectTracks(dir);
+    const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
+    const done = blocks.filter((b) => b.done).length;
+    rows.push({ slug: n, dir, st, tracks, blocks, done, total: blocks.length, at: statusActivity(dir, st) });
+  }
+  const clip = (s) => {
+    const cols = Number.isSafeInteger(opts.columns) && opts.columns >= 20 ? opts.columns : 0;
+    const cps = [...s];
+    return cols && cps.length > cols ? cps.slice(0, cols - 1).join("") + "…" : s;
+  };
+  if (!rows.length) return { ok: true, found: true, project: pdir, lang: lng, feature: null, features: 0, line: clip(SL.none) };
+  const executing = rows.filter((r) => r.done > 0 && r.done < r.total);
+  const f = (executing.length ? executing : rows).slice().sort((a, b) => b.at - a.at || (a.slug < b.slug ? -1 : 1))[0];
+  const kind = typeof f.st.kind === "string" ? f.st.kind : "feature";
+  const unverified = f.done ? verificationStatus(pdir, f.slug, f.dir).unverified : [];
+  let next = null;
+  try { next = statusNext(pdir, f, kind, lng, unverified); } catch { next = null; } // a status line never fails on one feature's files
+  const stepText = next && own(SL.steps, next.step) ? SL.steps[next.step](next) : null;
+  const parts = [SL.head(f.slug, kind)];
+  if (f.total) parts.push(SL.tasks(f.done, f.total));
+  if (unverified.length) parts.push(SL.unverified(unverified.length));
+  if (stepText) parts.push(SL.next(stepText));
+  return { ok: true, found: true, project: pdir, lang: lng, feature: f.slug, kind, tasks: { done: f.done, total: f.total },
+    unverified: unverified.length, next, features: rows.length, line: clip(parts.join(" · ")) };
+}
+
+// The plan-mode bridge (hooks/plan-hook.js, PostToolUse on ExitPlanMode): the plan the user just approved can become a spec —
+// one line of context for the agent suggesting /spec-import (spec_import {tool: "plan", text} — or {path} when the plan file
+// is inside the project). The payload shape is read defensively (tool_input.plan, a planFilePath / filePath in the input or the
+// response); nothing is read from disk. → { hint, lang, planFile, inProject, hasText } | null (not an ExitPlanMode payload)
+function planBridge(projectDir, payload) {
+  if (!isObj(payload) || (payload.tool_name || payload.toolName) !== "ExitPlanMode") return null;
+  const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
+  const tr = isObj(payload.tool_response) ? payload.tool_response : isObj(payload.toolResponse) ? payload.toolResponse : {};
+  const usable = (v) => typeof v === "string" && v.trim() && v.length <= 4096 && !/[\u0000-\u001f]/.test(v);
+  const hasText = [ti.plan, tr.plan].some((v) => typeof v === "string" && v.trim() !== "");
+  const file = [ti.planFilePath, ti.plan_file_path, tr.planFilePath, tr.plan_file_path, tr.filePath].find(usable) || null;
+  const pdir = path.resolve(projectDir);
+  const lng = projectLang(pdir);
+  const P = i18n.msg(lng).claudeCode.planBridge;
+  let rel = null;
+  if (file) {
+    const abs = path.resolve(pdir, file.trim());
+    if (isInsideDir(pdir, abs) && !toPosix(path.relative(pdir, abs)).split("/").includes(".specs")) rel = toPosix(path.relative(pdir, abs));
+  }
+  return { hint: rel ? P.byPath(rel) : P.byText, lang: lng, planFile: file, inProject: !!rel, hasText };
 }
 
 // ---------------------------------------------------------------------------
@@ -18223,8 +20622,19 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
+  // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
+  // pointing at doctor). No glossary → nothing asked.
+  const gl = glossaryEntries(f.root);
+  const gh = glossaryHits(dir, gl, { projectDir, lang: featureLang(projectDir, name) });
+  const Q = fm.quality;
+  gh.slice(0, 10).forEach((h) => add(Q.glossaryQuestion(h.locations.join(", "), h.word, h.term, h.definition)));
+  if (gh.length > 10) add(Q.glossaryMore(gh.length - 10));
 
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
+  const res = { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
+  if (gh.length) res.glossary = gh.map((h) => ({ word: h.word, term: h.term, count: h.count, locations: h.locations })); // 1.16 Q3 (stable)
+  // Past GLOSSARY_MAX_ENTRIES entries the rest is never read: said (stable counts + the localized note), never silent.
+  if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
+  return res;
 }
 
 module.exports = {
@@ -18321,6 +20731,13 @@ module.exports = {
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
 
   importSpec,
+  // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
+  statusLine,
+  statusLineProject,
+  isNetworkPath,
+  networkPathInside, // 1.16 verify NEW-3: the guard's (and the save hook's) text-only rule for a network path
+  planBridge,
+  userDefaults,
   isTestFile,
   implementsTargets,
 
@@ -18378,6 +20795,13 @@ module.exports = {
   matrixCsv, // traceMatrix results → RFC 4180 CSV (`trace --csv`; opts.document: + BOM and the AUTO-GENERATED record — spec_export csv)
   csvCell, // one CSV field: quoted when it must be, a leading = + - @ / tab / CR neutralized with an apostrophe
   RTM_STATUSES, // the matrix's row status codes, best first
+  earsSteps, // 1.16 E1 — one EARS criterion → its Gherkin steps [{kind: given|when|then, text}] + split (false: one Then, the whole text)
+  EXPORT_FORMATS: Object.freeze(EXPORT_FORMATS.slice()), // the spec_export `format` enum (server.js reads it from here)
+  TRACKERS: Object.freeze(TRACKERS.slice()), // 1.16 E2 — the tracker CSV formats (export --tracker)
+  milestone, // 1.16 E3 — spec_milestone / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)
+  MILESTONE_ACTIONS, // the spec_milestone `action` enum (rm and its alias remove)
+  MILESTONE_STATUSES: Object.freeze(MILESTONE_STATUSES.slice()), // on-track · at-risk · late · done
+  milestoneLine, // one milestone (with its status) as a localized line — CLI
 
   approvalRolesOf, // roadmap.json meta.approvalRoles, sanitized ({} = single approvals) — team governance (approvals by role)
   parseApprovalRolesText, // `init --roles requirements=product,design=tech+security` → the object spec_init {approvalRoles} takes
@@ -18385,6 +20809,9 @@ module.exports = {
   roadmapData, // the ROADMAP.* computation (+ opts.now for the forecasts)
   forecastData, // velocity + per-feature ETA (roadmap() features; opts.now fixes "today")
   featureOverlaps, // cross-feature file overlap pairs (roadmap attention, doctor, SessionStart)
+  crossFeatureAcs, // 1.16 Q2: near-duplicate / conflicting acceptance criteria across the active features ({only}: one feature's pairs)
+  glossaryEntries, // 1.16 Q3: .specs/steering/glossary.md → { file, entries: [{ term, definition, avoid }] } | null (takes the .specs root)
+  steeringFingerprints, // 1.16 Q1: (specsRoot, featureDir, tracks) → { file: fingerprint } of the steering a requirements / design approval records (opts.match: + steeringMatch, the fileMatch files' patterns)
   taskSize, // a task block's _Size:_ (XS|S|M|L|XL) or null
   SIZE_POINTS, // XS=1 S=2 M=3 L=5 XL=8
   etaText, // "2026-10-05 (10-03…10-08)" for a forecast (CLI: cli=true)

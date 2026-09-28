@@ -19,7 +19,7 @@
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
- * `dev-spec init --stop-check off`), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
+ * `dev-spec init --stop-check off`; 1.16: while it is unset, the user's DEV_SPEC_STOP_CHECK=off), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
  * internal error exits 0 silently. Bounded: the message's tail, each feature's .state.json / tasks.md, one report file.
  */
 
@@ -56,13 +56,25 @@ function isDevSpecProject(dir) {
   }
 }
 
-// roadmap.json meta.stopCheck === false → off. Read raw: the engine is loaded only when the gate may have something to say.
+// The user's default (1.16 — the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
+// off. The engine (spec.stopCheckEnabled) reads the same.
+function userStopCheckOff() {
+  for (const n of ["DEV_SPEC_STOP_CHECK"]) {
+    const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
+    if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:false|off|no|0)$/i.test(v);
+  }
+  return false;
+}
+// roadmap.json meta.stopCheck === false → off; not a boolean (unset) → the user's option; missing, unreadable or broken → the
+// user's option too (spec.stopCheckEnabled's rule — DEV_SPEC_STOP_CHECK=off used to be ignored while the file didn't parse).
+// Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
-    return !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" && j.meta.stopCheck === false;
+    const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
+    return meta.stopCheck === false || (typeof meta.stopCheck !== "boolean" && userStopCheckOff());
   } catch {
-    return false; // missing or broken roadmap.json: the engine decides (it never blocks on a file it can't read)
+    return userStopCheckOff(); // missing or broken roadmap.json: the user's option, else the engine decides (it never blocks on a file it can't read)
   }
 }
 

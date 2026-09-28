@@ -33,6 +33,11 @@ code and output summary — evidence before claims (`references/verification.md`
   `pipeMasked`; drop the pipe or `set -o pipefail`.
 CLI: `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` and records the result (with the git commit);
 a run that could not happen (no shell, a signal, `--timeout <seconds>`) records nothing.
+Ticked the wrong task, or its work turned out incomplete? **Undo the tick** — never edit the checkbox by hand:
+`spec_complete_task {name, number, undo: true, reason}` (CLI `dev-spec undone <feature> <n> --reason "…"`). The task
+is open again, its evidence turns stale (a re-tick needs a NEW run — `stale-evidence`, labelled unticked), and
+`.state.json → unticks` records it; a finished or signed-off feature must be finished and signed off again once the
+task is done.
 
 **Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
 bare, not with a note, never with an exit code nobody saw. Name the command and ask the user to run it and paste the

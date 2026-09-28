@@ -43,7 +43,7 @@ no API key.
    # clients: claude-code | claude-desktop | cursor | windsurf | vscode | gemini | codex | generic | all
    ```
 
-4. **Reload the MCP client.** The server advertises **35 tools** over stdio — `spec_init`,
+4. **Reload the MCP client.** The server advertises **38 tools** over stdio — `spec_init`,
    `spec_classify`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`, `spec_roadmap`,
    and more — for spec-driven development (EARS requirements → design → traceable tasks →
    approval-gated execution). It also offers MCP **prompts** (one per plugin command, for clients that show them as
@@ -52,7 +52,8 @@ no API key.
 
 5. **(Optional) Give the agent the workflow.** `node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js rules agents`
    prints `AGENTS.md` with absolute paths — paste it into the client's rules or custom instructions. Tools without
-   Claude Code hooks should run `dev-spec stop-check --message "…"` before claiming a task is done (it is in there).
+   Claude Code hooks should run `dev-spec stop-check --message "…"` (or the MCP tool `spec_stop_check`) before claiming a
+   task is done (it is in there).
 
 ## Notes
 
