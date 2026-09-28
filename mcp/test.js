@@ -11000,10 +11000,10 @@ function endRun() {
     // hooks.json: PostToolUse (matcher Bash) and PostToolUseFailure (matcher Bash) run hooks/observe-hook.js, beside spec-hook's entry.
     const hc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const obsCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"';
-    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "Bash" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10);
+    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10); // + PowerShell (review R5)
     ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(e.hooks[0].command)) &&
       !fs.readFileSync(obsJs, "utf8").includes(String.fromCharCode(0xfeff)),
-      "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher Bash, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
+      "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher ^(Bash|PowerShell)$, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
 
     // Both payload shapes: PostToolUse with exit_code (or none → 0), PostToolUseFailure with `error` ("exit code 3", else 1).
     const h1 = obsHook(pO, bash(pO, "node t1.js", { tool_response: { stdout: "ok", stderr: "", interrupted: false, exit_code: 0 } }));
@@ -11746,6 +11746,77 @@ function endRun() {
     const t1 = row && row.tasks.find((t) => t.number === 1);
     ok(t1 && t1.verified === false && t1.reason === "unobserved" && t1.evidence && t1.evidence.observed === false && row.status !== "verified",
       "features F1 × F5: under meta.evidence 'observed' the matrix reads a reported-only run as unobserved (the gates' verdict) and shows the observed stamp (got " + JSON.stringify(t1) + ")");
+  }
+
+  // 1.14 feature review (F1 / F3 / F5) — one regression per finding of the independent review of the merged features.
+  {
+    const hookJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const runHook = (projectEnv, input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: projectEnv, SPEC_PROJECT_DIR: "" } });
+    const post = (cwd, tool, command, resp, event) => ({ session_id: "s-rv", cwd, hook_event_name: event || "PostToolUse", tool_name: tool,
+      tool_input: { command }, tool_response: resp });
+    const logLines = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    // R1: an unparseable roadmap.json keeps meta.evidence "observed" (fail closed).
+    const r1 = path.join(tmp, "proj-frv-r1");
+    S.initProject(r1, ["core"], "en", { evidence: "observed" });
+    fs.appendFileSync(path.join(r1, ".specs", "roadmap.json"), "x");
+    ok(S.evidenceMode(r1) === "observed", "feature review R1: a roadmap.json that no longer parses keeps evidence mode 'observed' (got " + S.evidenceMode(r1) + ")");
+    // R2: a red proof recorded before the switch to "observed" is grandfathered once the fix's passing run is observed / CLI-made.
+    const r2 = path.join(tmp, "proj-frv-r2");
+    S.initProject(r2, ["core"], "en");
+    const c2 = S.createFeature(r2, "Red", ["core"], "x", undefined, "en");
+    const V2 = 'node -e "process.exit(0)"';
+    fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Write T-01 red\n  - _Verify: " + V2 + "_\n  - _Expect: fail_\n");
+    S.completeTask(r2, "red", 1, { command: V2, exitCode: 1 }); // the red run, reported (not observed), BEFORE the switch
+    const until2 = Date.now() + 5; while (Date.now() < until2) { /* the switch is later than the red run */ }
+    S.initProject(r2, ["core"], "en", { evidence: "observed" });
+    const before2 = S.completeTask(r2, "red", 1, { command: V2, exitCode: 0 }); // the fix's green run — reported only
+    const after2 = S.completeTask(r2, "red", 1, { command: V2, exitCode: 0 }, { ranBy: "cli" }); // as done --run makes it
+    ok(before2.verified === false && before2.unverifiedReason === "unobserved" && /RED run/.test(before2.note || "") && after2.verified === true,
+      "feature review R2: in observed mode an _Expect: fail_ red proof recorded before the switch counts once the green run is observed (CLI) — and the unobserved note asks for an observed RED run, never the green --run loop (got " +
+      JSON.stringify([before2.unverifiedReason, (before2.note || "").slice(0, 80), after2.verified, after2.unverifiedReason]) + ")");
+    // R4 / R5 / R6: the observe hook logs a worktree subagent's run in the main project too; a PowerShell run only with an explicit
+    // exit code; the " && " join of a task's commands passes the pre-filter.
+    const main4 = path.join(tmp, "proj-frv-r4main"), wt4 = path.join(tmp, "proj-frv-r4wt");
+    for (const d of [main4, wt4]) {
+      S.initProject(d, ["core"], "en");
+      const c = S.createFeature(d, "Obs", ["core"], "x", undefined, "en");
+      fs.writeFileSync(path.join(c.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Two checks\n  - _Verify: node a.js_\n  - _Verify: node b.js_\n- [ ] 2. [US1] One\n  - _Verify: node c.js_\n");
+    }
+    runHook(main4, post(wt4, "Bash", "node c.js", { stdout: "", stderr: "", exit_code: 0 }));
+    const mainDir = path.join(main4, ".specs", "obs"), wtDir = path.join(wt4, ".specs", "obs");
+    const r4 = [logLines(mainDir).some((e) => e.command === "node c.js"), logLines(wtDir).some((e) => e.command === "node c.js")];
+    runHook(main4, post(main4, "PowerShell", "node a.js && node b.js", { output: "ok" })); // no explicit exit code: never logged
+    const r5a = logLines(mainDir).some((e) => e.command === "node a.js && node b.js");
+    runHook(main4, post(main4, "PowerShell", "node a.js && node b.js", { stdout: "", exit_code: 0 })); // explicit: logged (R5 + R6)
+    const r56 = logLines(mainDir).filter((e) => e.command === "node a.js && node b.js");
+    ok(r4[0] && r4[1] && !r5a && r56.length === 1 && r56[0].exitCode === 0,
+      "feature review R4/R5/R6: a run in a worktree copy is logged in the main project too; a PowerShell run is logged only with an explicit exit code; the && join of a task's commands passes the pre-filter (got " +
+      JSON.stringify([r4, r5a, r56.length]) + ")");
+    // R7: ROADMAP.md shows a feature whose open tasks can't start (a _Depends:_ cycle) as blocked, with an attention line.
+    const r7 = path.join(tmp, "proj-frv-r7");
+    S.initProject(r7, ["core"], "en");
+    const c7 = S.createFeature(r7, "Cyc", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c7.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Depends: 2_\n- [ ] 2. [US1] B\n  - _Depends: 1_\n");
+    S.roadmapReport(r7, { write: true });
+    const md7 = fs.readFileSync(path.join(r7, ".specs", "ROADMAP.md"), "utf8");
+    ok(/\| \[cyc\][^\n]*\| blocked \|/.test(md7) && /no open task can start \(task dependencies\): #1 waits on #2; #2 waits on #1/.test(md7) && !/cyc\*\* \(core\) — ready/.test(md7),
+      "feature review R7: a tasks.md whose open tasks wait on each other reads blocked in ROADMAP.md, never ready (got " + JSON.stringify((md7.match(/^.*cyc.*$/gm) || []).slice(0, 3)) + ")");
+    // R8: prose "(depends: the schema from task 1)" is no malformed marker; a bold "**Depends:** 1" still is.
+    const r8 = path.join(tmp, "proj-frv-r8");
+    S.initProject(r8, ["core"], "en");
+    const c8 = S.createFeature(r8, "Prose", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(c8.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Schema\n- [ ] 2. [US1] Wire the API (depends: the schema from task 1)\n- [ ] 3. [US1] Other **Depends:** 1\n");
+    const mm8 = S.specDoctor(r8, "prose").checks.find((x) => x.id === "malformed-markers");
+    ok(mm8 && mm8.status === "warn" && /#3 \(Depends:\)/.test(mm8.detail) && !/#2/.test(mm8.detail) && /_Depends: 3_/.test(mm8.detail),
+      "feature review R8: 'depends:' in prose is no marker look-alike; '**Depends:** 1' is, and the hint shows _Depends: 3_ (got " + JSON.stringify(mm8 && mm8.detail) + ")");
+    // R11: a scaffold's untouched EC / NFR / SC rows are no matrix gap (trace_check warns about none).
+    const r11 = path.join(tmp, "proj-frv-r11");
+    S.initProject(r11, ["core"], "en");
+    S.createFeature(r11, "Tpl", ["core"], "x", undefined, "en");
+    const sec11 = S.traceMatrix(r11, "tpl").rows.filter((r) => r.kind !== "ac");
+    ok(sec11.length > 0 && sec11.every((r) => r.template === true && r.gaps.length === 0 && r.status !== "untraced") && S.traceCheck(r11, "tpl").warnings.length === 0,
+      "feature review R11: template EC/NFR/SC rows carry no gap and are not untraced, as trace_check says nothing about them (got " + JSON.stringify(sec11.map((r) => r.id + ":" + r.status)) + ")");
   }
 
   // Release hygiene: the three version fields agree.

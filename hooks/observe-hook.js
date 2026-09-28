@@ -4,7 +4,8 @@
 /**
  * dev-spec-driven — harness-observed evidence (zero-dependency). "Evidence before claims", seen where the command runs.
  *
- * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash (https://code.claude.com/docs/en/hooks).
+ * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash|PowerShell (https://code.claude.com/docs/en/hooks) —
+ * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented).
  * spec_complete_task / spec_finish {evidence} record the {command, exitCode} an agent REPORTS; in Claude Code the harness
  * sees every Bash run, so this hook logs the runs that matter — a task's runnable _Verify:_ command (or the " && " join of a
  * task's commands) or a project check (roadmap.json meta.checks) — and the engine then stamps each reported run
@@ -66,9 +67,11 @@ function isDevSpecProject(dir) {
   }
 }
 
-// The project: the nearest folder holding .specs/ at or above the session's cwd, else the project dir Claude Code (or the
-// user) exported — the first that is dev-spec's.
-function projectDirOf(payload) {
+// The projects a run belongs to: the nearest folder holding .specs/ at or above the session's cwd AND the project dir Claude
+// Code (or the user) exported — every distinct one that is dev-spec's. A subagent working in a git worktree of the project
+// (parallel execution, waves) runs in the worktree's copy, whose git-ignored log is never merged back: the run is logged in
+// the main project too (feature review R4).
+function projectDirsOf(payload) {
   const cands = [];
   if (typeof payload.cwd === "string" && payload.cwd.trim()) {
     let d = path.resolve(payload.cwd);
@@ -82,7 +85,9 @@ function projectDirOf(payload) {
   for (const v of [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]) {
     if (typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())) cands.push(path.resolve(v));
   }
-  return cands.find(isDevSpecProject) || null;
+  const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? d.toLowerCase() : d);
+  const seen = new Set();
+  return cands.filter((d) => !seen.has(key(d)) && seen.add(key(d)) && isDevSpecProject(d));
 }
 
 function toCode(v) {
@@ -91,7 +96,8 @@ function toCode(v) {
   return null;
 }
 // → the run's exit code, or null when this was no completed run (interrupted, or sent to the background) or its code is unknown.
-function exitCodeOf(payload, failure) {
+// strict (the PowerShell tool, whose response shape is not documented): only an explicit exit code counts — never a default.
+function exitCodeOf(payload, failure, strict) {
   const input = payload.tool_input && typeof payload.tool_input === "object" ? payload.tool_input : {};
   const resp = payload.tool_response;
   const r = resp && typeof resp === "object" && !Array.isArray(resp) ? resp : {};
@@ -105,6 +111,7 @@ function exitCodeOf(payload, failure) {
   const text = typeof resp === "string" ? resp : typeof r.text === "string" ? r.text : typeof r.output === "string" ? r.output : "";
   const lead = /^\s*Exit code:?\s*(-?\d{1,9})\b/i.exec(text.slice(0, 200));
   if (lead) return nonZero(parseInt(lead[1], 10));
+  if (strict && !failure) return null; // unknown: logging 0 would turn a failed run into an observed pass
   // A non-zero exit the Bash tool read as no error (grep's "No matches found"): the code itself is unknown — no run logged.
   if (typeof r.returnCodeInterpretation === "string" && r.returnCodeInterpretation.trim()) return null;
   if (!failure) return r.is_error === true || r.isError === true ? 1 : 0;
@@ -132,6 +139,7 @@ function stripCdPrefix(cmd, pdir, cwd) {
 // engine loaded (it parses the tasks for real and skips archived features).
 function mentioned(pdir, key) {
   const root = path.join(pdir, ".specs");
+  const parts = key.split(" && ").map((x) => x.trim()).filter(Boolean);
   try {
     let raw = fs.readFileSync(path.join(root, "roadmap.json"), "utf8");
     if (raw.startsWith(BOM)) raw = raw.slice(1);
@@ -149,7 +157,9 @@ function mentioned(pdir, key) {
     const file = path.join(root, d.name, "tasks.md");
     try {
       if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
-      if (flat(fs.readFileSync(file, "utf8")).includes(key)) return true;
+      const text = flat(fs.readFileSync(file, "utf8"));
+      // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
+      if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
     } catch { /* no tasks.md */ }
   }
   return false;
@@ -166,29 +176,31 @@ function main(raw) {
     return finish();
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  if (payload.tool_name !== "Bash") return finish();
+  // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit — review R5).
+  if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
+  const strict = payload.tool_name === "PowerShell";
   const event = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
   if (event && event !== "PostToolUse" && event !== "PostToolUseFailure") return finish();
   const failure = event === "PostToolUseFailure" || (!event && typeof payload.error === "string");
   const input = payload.tool_input;
   const command = input && typeof input === "object" && typeof input.command === "string" ? input.command.trim() : "";
   if (!command || command.length > MAX_COMMAND) return finish();
-  const exitCode = exitCodeOf(payload, failure);
+  const exitCode = exitCodeOf(payload, failure, strict);
   if (exitCode == null) return finish();
 
-  const pdir = projectDirOf(payload);
-  if (!pdir) return finish();
-  const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
-  const key = flat(stripCdPrefix(command, pdir, cwd));
-  if (!key || !mentioned(pdir, key)) return finish();
-
-  const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  spec.observeRun(pdir, {
-    command: key,
-    exitCode,
-    event: event || (failure ? "PostToolUseFailure" : "PostToolUse"),
-    session: typeof payload.session_id === "string" ? payload.session_id : undefined,
-  });
+  let spec = null;
+  for (const pdir of projectDirsOf(payload)) {
+    const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
+    const key = flat(stripCdPrefix(command, pdir, cwd));
+    if (!key || !mentioned(pdir, key)) continue;
+    spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    spec.observeRun(pdir, {
+      command: key,
+      exitCode,
+      event: event || (failure ? "PostToolUseFailure" : "PostToolUse"),
+      session: typeof payload.session_id === "string" ? payload.session_id : undefined,
+    });
+  }
   return finish();
 }
 

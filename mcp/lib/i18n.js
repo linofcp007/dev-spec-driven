@@ -2415,6 +2415,7 @@ const MSG = {
       off: "Evidence mode REPORTED — the runs an agent reports verify as given (roadmap.json meta.evidence); each record still says whether the harness observed it.",
       badValue: (v) => `--evidence takes reported or observed (got '${v}').`,
       badInput: (v) => `evidence must be "reported" or "observed" (got '${v}').`,
+      unobservedRedNote: (n, slug) => `Task ${n} is marked _Expect: fail_: its proof is the RED run, and the harness never saw it — this project verifies only observed runs (roadmap.json meta.evidence: observed). Re-make the red run where it is observed: set the fix aside (git stash), run the _Verify:_ command with the Bash tool in Claude Code or with dev-spec done ${slug} ${n} --run (it must fail), then restore the fix and record its passing run.`,
       unobservedNote: (n, slug) => `Task ${n}: the run was recorded, but the harness never saw it — this project verifies a _Verify:_ command only by an observed run (roadmap.json meta.evidence: observed). Run the command with the Bash tool in Claude Code and record it again, or let the CLI run it: dev-spec done ${slug} ${n} --run`,
       neverObserved: "No run was ever observed in this project: only Claude Code with the dev-spec-driven plugin records them (hooks/observe-hook.js) — an MCP-only client has no hook, so record the runs with dev-spec done <feature> <n> --run (or switch back: dev-spec init --evidence reported).",
       naHint: "This project verifies only runs the harness saw (roadmap.json meta.evidence: observed): run the command with the Bash tool in Claude Code, or through the CLI (--run).",
@@ -2784,6 +2785,7 @@ const MSG = {
       phantom: (n, d) => `task ${n} depends on #${d}, which no active task carries`,
       self: (n) => `task ${n} depends on itself`,
       cycle: (list) => `tasks waiting on each other (a cycle): ${list}`,
+      roadmapBlocked: (list) => `no open task can start (task dependencies): ${list}`,
       waitLine: (n, deps) => `#${n} waits on ${deps}`,
       blocked: (list, slug) => `No open task can start — each waits on a dependency that is not done: ${list}. A cycle or a _Depends:_ naming no task never clears: fix the _Depends:_ markers in .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
       tickedEarly: (n, list) => `Task ${n} was ticked while its dependencies ${list} are still open — recorded as asked (a tick records what happened); check that it didn't need their work, or complete them next.`,
@@ -3193,7 +3195,7 @@ const MSG = {
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
     markerSyntax: {
-      doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ (italics, the value inside).`,
+      doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
     // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).
@@ -3953,6 +3955,7 @@ _Outcome: [go | no-go | pivot]_
       off: "Modo de evidência REPORTADO — as execuções que um agente reporta verificam tal como são dadas (roadmap.json meta.evidence); cada registo continua a dizer se o harness a observou.",
       badValue: (v) => `--evidence aceita reported ou observed (recebido '${v}').`,
       badInput: (v) => `evidence tem de ser "reported" ou "observed" (recebido '${v}').`,
+      unobservedRedNote: (n, slug) => `A tarefa ${n} está marcada _Expect: fail_: a sua prova é a execução VERMELHA, e o harness nunca a viu — este projeto só verifica execuções observadas (roadmap.json meta.evidence: observed). Refaz a execução vermelha onde seja observada: põe a correção de lado (git stash), corre o comando _Verify:_ com a ferramenta Bash no Claude Code ou com dev-spec done ${slug} ${n} --run (tem de falhar), depois repõe a correção e regista a execução bem-sucedida.`,
       unobservedNote: (n, slug) => `Tarefa ${n}: a execução ficou registada, mas o harness nunca a viu — este projeto só verifica um comando _Verify:_ com uma execução observada (roadmap.json meta.evidence: observed). Corre o comando com a ferramenta Bash no Claude Code e volta a registá-lo, ou deixa a CLI corrê-lo: dev-spec done ${slug} ${n} --run`,
       neverObserved: "Nenhuma execução foi alguma vez observada neste projeto: só o Claude Code com o plugin dev-spec-driven as guarda (hooks/observe-hook.js) — um cliente só MCP não tem hook: regista as execuções com dev-spec done <feature> <n> --run (ou volta atrás: dev-spec init --evidence reported).",
       naHint: "Este projeto só verifica execuções que o harness viu (roadmap.json meta.evidence: observed): corre o comando com a ferramenta Bash no Claude Code, ou pela CLI (--run).",
@@ -4302,6 +4305,7 @@ _Outcome: [go | no-go | pivot]_
       phantom: (n, d) => `a tarefa ${n} depende da #${d}, que nenhuma tarefa ativa tem`,
       self: (n) => `a tarefa ${n} depende de si mesma`,
       cycle: (list) => `tarefas que esperam umas pelas outras (um ciclo): ${list}`,
+      roadmapBlocked: (list) => `nenhuma tarefa aberta pode começar (dependências entre tarefas): ${list}`,
       waitLine: (n, deps) => `#${n} espera por ${deps}`,
       blocked: (list, slug) => `Nenhuma tarefa por fazer pode começar — cada uma espera por uma dependência que não está feita: ${list}. Um ciclo ou um _Depends:_ que não nomeia nenhuma tarefa nunca se resolve: corrige os marcadores _Depends:_ em .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
       tickedEarly: (n, list) => `A tarefa ${n} foi marcada com as dependências ${list} ainda não concluídas — ficou marcada como pedido (uma marcação reflete o que aconteceu); confirma que não precisava do trabalho delas, ou conclui-as a seguir.`,
@@ -4670,7 +4674,7 @@ _Outcome: [go | no-go | pivot]_
     },
 
     markerSyntax: {
-      doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ (em itálico, com o valor lá dentro).`,
+      doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
     },
     outsideCode: {
       doctor: (list) => `testes planeados fora do código de testes apontam para um artefacto que ainda é um modelo: ${list} — preenche-o (a execução de carga real, o conjunto de avaliação da própria feature) antes de considerar esses testes verificados.`,
@@ -5396,6 +5400,7 @@ _Outcome: [go | no-go | pivot]_
       off: "Modo de evidencia REPORTADO — las ejecuciones que un agente reporta verifican tal como se dan (roadmap.json meta.evidence); cada registro sigue diciendo si el harness la observó.",
       badValue: (v) => `--evidence admite reported u observed (recibido '${v}').`,
       badInput: (v) => `evidence debe ser "reported" u "observed" (recibido '${v}').`,
+      unobservedRedNote: (n, slug) => `La tarea ${n} está marcada _Expect: fail_: su prueba es la ejecución en ROJO, y el harness nunca la vio — este proyecto solo verifica ejecuciones observadas (roadmap.json meta.evidence: observed). Repite la ejecución en rojo donde se observe: aparta la corrección (git stash), ejecuta el comando _Verify:_ con la herramienta Bash en Claude Code o con dev-spec done ${slug} ${n} --run (debe fallar), después restaura la corrección y registra su ejecución correcta.`,
       unobservedNote: (n, slug) => `Tarea ${n}: la ejecución quedó registrada, pero el harness nunca la vio — este proyecto solo verifica un comando _Verify:_ con una ejecución observada (roadmap.json meta.evidence: observed). Ejecuta el comando con la herramienta Bash en Claude Code y vuelve a registrarlo, o deja que la CLI lo ejecute: dev-spec done ${slug} ${n} --run`,
       neverObserved: "Nunca se observó ninguna ejecución en este proyecto: solo Claude Code con el plugin dev-spec-driven las guarda (hooks/observe-hook.js) — un cliente solo MCP no tiene hook, así que registra las ejecuciones con dev-spec done <función> <n> --run (o vuelve atrás: dev-spec init --evidence reported).",
       naHint: "Este proyecto solo verifica ejecuciones que el harness vio (roadmap.json meta.evidence: observed): ejecuta el comando con la herramienta Bash en Claude Code, o por la CLI (--run).",
@@ -5745,6 +5750,7 @@ _Outcome: [go | no-go | pivot]_
       phantom: (n, d) => `la tarea ${n} depende de la #${d}, que ninguna tarea activa tiene`,
       self: (n) => `la tarea ${n} depende de sí misma`,
       cycle: (list) => `tareas que se esperan entre sí (un ciclo): ${list}`,
+      roadmapBlocked: (list) => `ninguna tarea abierta puede empezar (dependencias entre tareas): ${list}`,
       waitLine: (n, deps) => `#${n} espera a ${deps}`,
       blocked: (list, slug) => `Ninguna tarea pendiente puede empezar — cada una espera una dependencia que no está hecha: ${list}. Un ciclo o un _Depends:_ que no nombra ninguna tarea nunca se resuelve: corrige los marcadores _Depends:_ en .specs/${slug}/tasks.md (/spec-doctor ${slug} → task-deps).`,
       tickedEarly: (n, list) => `La tarea ${n} se marcó con sus dependencias ${list} aún pendientes — queda marcada como se pidió (una marca refleja lo que pasó); comprueba que no necesitaba su trabajo, o complétalas a continuación.`,
@@ -6113,7 +6119,7 @@ _Outcome: [go | no-go | pivot]_
     },
 
     markerSyntax: {
-      doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ (en cursiva, con el valor dentro).`,
+      doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ / _Depends: 3_ (en cursiva, con el valor dentro).`,
     },
     outsideCode: {
       doctor: (list) => `pruebas planificadas fuera del código de pruebas apuntan a un artefacto que aún es una plantilla: ${list} — rellénalo (la ejecución de carga real, el conjunto de evaluación propio de la función) antes de darlas por verificadas.`,
