@@ -13146,10 +13146,11 @@ function endRun() {
     const hA = (stA.approvalHistory || []).filter((h) => h.phase === "design").pop() || {};
     const naBefore = S.nextAction(q1, "alpha");
     ok(js(Object.keys(stA.approvals.requirements.steering || {})) === js(["api-rules.md", "constitution.md", "security.md"]) &&
-      js(Object.keys(S.readState(q1, "beta").approvals.design.steering || {})) === js(["constitution.md"]) &&
+      js(Object.keys(S.readState(q1, "beta").approvals.design.steering || {})) === js(["api-rules.md", "constitution.md"]) &&
+      js(S.readState(q1, "beta").approvals.design.steeringMatch) === js({ "api-rules.md": ["src/api/**"] }) && js(hA.steeringMatch) === js({ "api-rules.md": ["src/api/**"] }) &&
       hA.steering && hA.steering["constitution.md"] === stA.approvals.design.steering["constitution.md"] && stA.approvals.classification.steering === undefined &&
       !qChecks(q1, "alpha").length && !naBefore.steeringChanged,
-      "1.16 Q1: a requirements / design approval records `steering` {file: fingerprint} — constitution.md, the active tracks' files (+sec: security.md), a fileMatch file matching the feature's _Implements:_ (api-rules.md for alpha only), never a file without front matter; the history record carries it; classification none; no warning while unchanged (got " +
+      "1.16 Q1: a requirements / design approval records `steering` {file: fingerprint} — constitution.md, the active tracks' files (+sec: security.md), every fileMatch file with its patterns (`steeringMatch` — counted while the feature's _Implements:_ match it), never a file without front matter; the history record carries it; classification none; no warning while unchanged (got " +
       js([Object.keys(stA.approvals.requirements.steering || {}), Object.keys(S.readState(q1, "beta").approvals.design.steering || {})]) + ")");
     steer(q1, "constitution.md", "# Constitution\n\n1. Every write is idempotent.\n2. No PII in logs.\n");
     fs.rmSync(path.join(q1, ".specs", "steering", "security.md"));
@@ -13359,6 +13360,141 @@ function endRun() {
       js(ptQ) === js(["requirements.md:5: 'comprador' — o glossário diz Cliente (pessoa ou empresa com contrato assinado). Usa \"Cliente\", ou corrige o .specs/steering/glossary.md se 'comprador' significar outra coisa aqui."]) &&
       /^1 uso\(s\) de palavras que o glossário manda evitar/.test(ptG.detail || ""),
       "1.16 Q3 (PT): the PT stub keeps `_Avoid:_`; 'compradores' (plural) is asked about in Portuguese and doctor warns glossary (got " + js([ptQ, ptG.detail]) + ")");
+
+    // --- 1.16 Q review ---
+    // Two features, one criterion each → the cross-feature verdict ("none" | "<kind>:<reason>").
+    let pairN = 0;
+    const pairOf = (lang, a, b) => {
+      const d = qDir("rv-pair-" + ++pairN);
+      S.initProject(d, ["core"], lang);
+      const head = { en: undefined, pt: "### US-1 (P1): História\n#### Critérios de Aceitação (EARS)\n", es: "### US-1 (P1): Historia\n#### Criterios de Aceptación (EARS)\n" }[lang];
+      ["Alpha", "Beta"].forEach((n, i) => { S.createFeature(d, n, ["core"], "x", undefined, lang); reqOf(d, n.toLowerCase(), "1. **US-1.AC-1** — " + [a, b][i] + "\n", head); });
+      const p = S.crossFeatureAcs(d).pairs;
+      return p.length ? p.map((x) => x.kind + ":" + x.reason).join(",") : "none";
+    };
+    // Review 1: a negative in the TRIGGER never flips the response's polarity; opposite conditions are never a pair.
+    const rv1 = [
+      pairOf("en", "IF the payment service cannot be reached THEN THE SYSTEM SHALL retry the charge", "IF the payment service cannot be reached THEN THE SYSTEM SHALL NOT retry the charge"),
+      pairOf("en", "WHEN a user can't log in THE SYSTEM SHALL email a reset link", "WHEN a user can't log in THE SYSTEM SHALL NOT email a reset link"),
+      pairOf("pt", "SE o serviço de pagamento não puder ser contactado ENTÃO O SISTEMA DEVE repetir a cobrança", "SE o serviço de pagamento não puder ser contactado ENTÃO O SISTEMA NÃO DEVE repetir a cobrança"),
+      pairOf("es", "SI el servicio de pago no puede ser contactado ENTONCES EL SISTEMA DEBE reintentar el cobro", "SI el servicio de pago no puede ser contactado ENTONCES EL SISTEMA NO DEBE reintentar el cobro"),
+      pairOf("en", "WHEN the email address is not verified THE SYSTEM SHALL send a reminder every 3 days", "WHEN the email address is verified THE SYSTEM SHALL send a reminder every 7 days"),
+      pairOf("en", "WHEN the email address is not verified THE SYSTEM SHALL block the checkout", "WHEN the email address is verified THE SYSTEM SHALL block the checkout"),
+      pairOf("en", "WHEN an admin deletes a project THE SYSTEM SHALL remove every file of the project", "WHEN a non-admin deletes a project THE SYSTEM SHALL remove every file of the project"),
+      pairOf("pt", "QUANDO o utilizador não está verificado O SISTEMA DEVE bloquear o pagamento", "QUANDO o utilizador está verificado O SISTEMA DEVE bloquear o pagamento"),
+      pairOf("es", "CUANDO el usuario no está verificado EL SISTEMA DEBE bloquear el pago", "CUANDO el usuario está verificado EL SISTEMA DEBE bloquear el pago"),
+      pairOf("en", "WHEN a user is banned THE SYSTEM SHALL ensure the user cannot post comments", "WHEN a user is banned THE SYSTEM SHALL ensure the user can post comments"),
+    ];
+    ok(js(rv1) === js(["conflict:opposite-modal", "conflict:opposite-modal", "conflict:opposite-modal", "conflict:opposite-modal", "none", "none", "none", "none", "none", "conflict:opposite-modal"]),
+      "1.16 Q review 1: the polarity is the RESPONSE's — 'cannot be reached' / 'can't log in' / 'não puder' / 'no puede' in the trigger never hide SHALL vs SHALL NOT (EN / PT / ES); a word negated in one trigger only (not verified / verified, non-admin / admin, não está / está, no está / está) is a complementary condition — no duplicate, no different-numbers conflict; 'cannot' in the response still flips it (got " + js(rv1) + ")");
+
+    // Review 2: a fresh scaffold (every track, EN / PT / ES / pt-BR) with the stub's own example entry and avoided words its
+    // template text uses warns about nothing; a slot the user filled in and the user's own heading are still read.
+    const rv2 = ["en", "pt", "es", "pt-BR"].map((l) => {
+      const d = qDir("rv2-" + l);
+      S.initProject(d, ["core"], l);
+      S.createFeature(d, "Alpha", ["core", "tdd", "saas", "ai", "sec", "privacy"], "x", undefined, l);
+      const g = S.scaffoldSteeringFile(d, "glossary.md");
+      const stub = fs.readFileSync(g.file, "utf8");
+      const example = (stub.match(/- \*\*(?:Customer|Cliente)\*\*[^\n]*_Avoid:[^\n]*_/) || [""])[0];
+      fs.writeFileSync(g.file, stub + "\n" + example + "\n- **Account** — x. _Avoid: user, users, utilizador, usuario, usuário, story, história, historia, tenant, inquilino_\n");
+      const c = S.clarify(d, "alpha");
+      const gd = qChecks(d, "alpha").find((x) => x.id === "glossary") || {};
+      return l + ":" + (example ? "ex" : "no-ex") + ":" + gd.status + ":" + (c.glossary ? c.glossary.map((h) => h.word).join("/") : "-");
+    });
+    const d2 = qDir("rv2-en");
+    const rq2 = path.join(d2, ".specs", "alpha", "requirements.md");
+    fs.writeFileSync(rq2, fs.readFileSync(rq2, "utf8").replace(/^### US-1 \(P1 — MVP\): \[Story Title\]$/m, "### US-1 (P1 — MVP): Tenant onboarding for each user").replace("## Out of Scope", "## Story notes"));
+    const rv2b = (S.clarify(d2, "alpha").glossary || []).map((h) => h.word + "@" + h.locations.join("|"));
+    ok(js(rv2) === js(["en:ex:pass:-", "pt:ex:pass:-", "es:ex:pass:-", "pt-BR:ex:pass:-"]) && rv2b.length === 3 && rv2b.every((x) => /@requirements\.md:\d+$/.test(x)) && rv2b.some((x) => /^story@/.test(x)),
+      "1.16 Q review 2: the glossary never reads template text — a fresh scaffold of every track in EN / PT / ES / pt-BR with the stub's example entry and avoided words its headings, track criteria and slot examples use gives no glossary warning; a filled slot ('Tenant onboarding for each user') and the user's own heading ('Story notes') are read (got " + js([rv2, rv2b]) + ")");
+
+    // Review 3: a fileMatch file is recorded at approval even before tasks.md names a file, and counts once the feature's
+    // CURRENT _Implements:_ match it — never for a feature whose files don't.
+    const q3r = qDir("rv3");
+    S.initProject(q3r, ["core"], "en");
+    steer(q3r, "api-rules.md", "---\ninclusion: fileMatch\nfileMatchPattern: \"src/api/**\"\n---\n# API rules\n- JSON only\n");
+    ["Api", "Export"].forEach((n) => S.createFeature(q3r, n, ["core"], "x", undefined, "en"));
+    for (const f of ["api", "export"]) approveAll(q3r, f, ["classification", "requirements"]); // tasks.md is still the template
+    fs.writeFileSync(path.join(q3r, ".specs", "api", "tasks.md"), "# Tasks\n\n- [ ] 1. Build the API\n  - _Implements: src/api/users.js_\n");
+    fs.writeFileSync(path.join(q3r, ".specs", "export", "tasks.md"), "# Tasks\n\n- [ ] 1. Export CSV\n  - _Implements: src/export/csv.js_\n");
+    const recorded = Object.keys(S.readState(q3r, "api").approvals.requirements.steering || {});
+    steer(q3r, "api-rules.md", "---\ninclusion: fileMatch\nfileMatchPattern: \"src/api/**\"\n---\n# API rules\n- JSON only\n- Pagination by cursor\n");
+    const w3 = (f) => (qChecks(q3r, f).find((c) => c.id === "steering-changed-since-approval") || {}).detail || "";
+    const w3api = w3("api"), w3exp = w3("export");
+    const im3 = S.impactReport(q3r, undefined, { phase: "steering" }).features.map((f) => f.feature);
+    // An approval recorded before steeringMatch existed counts every file it recorded (the old rule recorded matching ones only).
+    const ep = path.join(q3r, ".specs", "export", ".state.json");
+    const est = JSON.parse(fs.readFileSync(ep, "utf8"));
+    delete est.approvals.requirements.steeringMatch;
+    fs.writeFileSync(ep, JSON.stringify(est, null, 2));
+    ok(js(recorded) === js(["api-rules.md", "constitution.md"]) && /api-rules\.md \(changed\)/.test(w3api) && w3exp === "" && js(im3) === js(["api"]) &&
+      /api-rules\.md \(changed\)/.test(w3("export")),
+      "1.16 Q review 3: a fileMatch steering file is fingerprinted at the requirements approval although tasks.md named no file yet; once the feature's tasks implement src/api/… its change warns there — not in the feature implementing src/export/…; a record without steeringMatch keeps the old rule (got " + js([recorded, w3api, w3exp, im3]) + ")");
+
+    // Review 4: roles, directions and number order matter; one differing word of five is no duplicate; the true positives hold.
+    const rv4 = [
+      pairOf("en", "WHEN a buyer rates a seller THE SYSTEM SHALL record the rating", "WHEN a seller rates a buyer THE SYSTEM SHALL record the rating"),
+      pairOf("en", "WHEN the admin resets a password THE SYSTEM SHALL email the user", "WHEN the user resets a password THE SYSTEM SHALL email the admin"),
+      pairOf("en", "WHEN a user transfers money from savings to checking THE SYSTEM SHALL charge no fee", "WHEN a user transfers money from checking to savings THE SYSTEM SHALL charge no fee"),
+      pairOf("en", "WHEN a user fails 5 attempts THE SYSTEM SHALL lock the account for 15 minutes", "WHEN a user fails 15 attempts THE SYSTEM SHALL lock the account for 5 minutes"),
+      pairOf("en", "WHEN a guest opens the dashboard THE SYSTEM SHALL show the chart", "WHEN a guest opens the dashboard THE SYSTEM SHALL show the table"),
+      pairOf("en", "WHEN a user resets the password THE SYSTEM SHALL send a reset link by email within 1 minute", "WHEN a user resets their password THE SYSTEM SHALL send a reset link by email within 1 minute"),
+      pairOf("en", "WHEN an order total exceeds 1,000 EUR THE SYSTEM SHALL require a manager approval", "WHEN an order total exceeds 1000 EUR THE SYSTEM SHALL require a manager approval"),
+      pairOf("en", "WHEN a user logs in THE SYSTEM SHALL record the login time in the audit log", "WHEN a user logs out THE SYSTEM SHALL record the logout time in the audit log"),
+      pairOf("en", "WHEN a guest opens the dashboard THE SYSTEM SHALL show the revenue chart", "WHEN a guest opens the dashboard THE SYSTEM SHALL NOT show the revenue chart"),
+    ];
+    ok(js(rv4) === js(["none", "none", "none", "conflict:different-numbers", "none", "duplicate:near-duplicate", "duplicate:near-duplicate", "none", "conflict:opposite-modal"]),
+      "1.16 Q review 4: clause- and order-aware — buyer/seller swapped, admin/user swapped across trigger and response, savings→checking vs checking→savings are no duplicate; '5 attempts … 15 minutes' vs '15 attempts … 5 minutes' is a different-numbers conflict (numbers paired with their unit); one word of five differing (0.8) is no duplicate (strictly more than 0.8 per clause); the true duplicate, 1,000 = 1000, login/logout none and SHALL vs SHALL NOT stay (got " + js(rv4) + ")");
+
+    // Review 5: the cross-feature table is cached across calls (file signatures) — a warm call is much cheaper than a cold one,
+    // an edit is picked up at once, and next_action (whose own doctor may skip the warn-only check) keeps doctor's verdict.
+    // Rewritten (a new signature: the cold call), then dated a minute back — a file modified in the last 2 s is never trusted.
+    const past = new Date(Date.now() - 60000);
+    const touchAll = () => {
+      for (let f = 0; f < 50; f++) {
+        const fp = path.join(q2t, ".specs", "feature-" + f, "requirements.md");
+        fs.writeFileSync(fp, fs.readFileSync(fp, "utf8") + "\n");
+        for (const x of [fp, path.join(q2t, ".specs", "feature-" + f, ".state.json")]) fs.utimesSync(x, past, past);
+      }
+    };
+    touchAll();
+    t0 = Date.now();
+    const xCold = S.crossFeatureAcs(q2t);
+    const msCold = Date.now() - t0;
+    const warm = [];
+    for (let i = 0; i < 3; i++) { t0 = Date.now(); S.crossFeatureAcs(q2t); warm.push(Date.now() - t0); }
+    const msWarm = Math.min(...warm);
+    const f7 = path.join(q2t, ".specs", "feature-7", "requirements.md"), f8 = path.join(q2t, ".specs", "feature-8", "requirements.md");
+    const f7raw = fs.readFileSync(f7, "utf8");
+    fs.writeFileSync(f7, f7raw + "21. **US-1.AC-21** — WHEN a webhook delivery fails twice THE SYSTEM SHALL pause the webhook subscription\n");
+    fs.writeFileSync(f8, fs.readFileSync(f8, "utf8") + "21. **US-1.AC-21** — WHEN a webhook delivery fails twice THE SYSTEM SHALL NOT pause the webhook subscription\n");
+    const added = S.crossFeatureAcs(q2t).pairs.filter((p) => p.a.id === "US-1.AC-21" && p.b.id === "US-1.AC-21").map((p) => p.a.feature + "~" + p.b.feature + ":" + p.kind);
+    fs.writeFileSync(f7, f7raw);
+    const gone = S.crossFeatureAcs(q2t).pairs.filter((p) => p.a.id === "US-1.AC-21" || p.b.id === "US-1.AC-21").length;
+    const dv = S.specDoctor(q2, "alpha"), nv = S.nextAction(q2, "alpha");
+    ok(msWarm * 2 <= msCold + 10 && js(S.crossFeatureAcs(q2t).pairs.length) === js(xCold.pairs.length) && msWarm < 3000 && js(added) === js(["feature-7~feature-8:conflict"]) && gone === 0 &&
+      dv.checks.some((c) => c.id === "cross-feature-acs") && nv.verdict === dv.verdict,
+      "1.16 Q review 5: cross-call cache — 50 features × 20 criteria: cold " + msCold + " ms, warm " + msWarm + " ms (warm ≤ half); an edited requirements.md is re-read at once (a new conflict appears, then disappears); doctor still reports cross-feature-acs and next_action's verdict equals doctor's (got " + js([added, gone, nv.verdict, dv.verdict]) + ")");
+
+    // Review 6: glossary parsing — `_client_` is the word client (snake_case isn't), a loose list's indented _Avoid:_ paragraph
+    // belongs to its entry, and a glossary past 300 entries says so (doctor warn + clarify's glossaryTruncated).
+    const q6 = qDir("rv6");
+    S.initProject(q6, ["core"], "en");
+    S.createFeature(q6, "Invoices", ["core"], "x", undefined, "en");
+    reqOf(q6, "invoices", "1. **US-1.AC-1** — WHEN the _client_ uploads a file THE SYSTEM SHALL store it in the __org__ bucket\n2. **US-1.AC-2** — THE SYSTEM SHALL keep client_id and org_name unchanged\n");
+    steer(q6, "glossary.md", "# Glossary\n\n- **Customer** — a person with a contract. _Avoid: client_\n- **Workspace** — the tenant's container.\n\n  _Avoid: org_\n\n- **Invoice** — a bill.\n");
+    const e6 = S.glossaryEntries(path.join(q6, ".specs")).entries.map((e) => e.term + ":" + e.avoid.join("/"));
+    const g6 = (S.clarify(q6, "invoices").glossary || []).map((h) => h.word + "@" + h.locations.join("|"));
+    let many = "# Glossary\n\n";
+    for (let i = 0; i < 305; i++) many += `- **Term${i}** — definition ${i}. _Avoid: zzword${i}_\n`;
+    steer(q6, "glossary.md", many);
+    const c6 = S.clarify(q6, "invoices"), d6 = qChecks(q6, "invoices").find((c) => c.id === "glossary") || {};
+    const g6e = S.glossaryEntries(path.join(q6, ".specs"));
+    ok(js(e6) === js(["Customer:client", "Workspace:org", "Invoice:"]) && js(g6) === js(["client@requirements.md:5", "org@requirements.md:5"]) &&
+      g6e.entries.length === 300 && g6e.total === 305 && g6e.truncated === true && js(c6.glossaryTruncated) === js({ read: 300, total: 305 }) &&
+      /only the first 300 are read/.test(c6.glossaryNote || "") && d6.status === "warn" && /glossary\.md holds 305 entries — only the first 300 are read/.test(d6.detail || ""),
+      "1.16 Q review 6: `_client_` / `__org__` (underscore emphasis) are read, client_id / org_name are not; a loose list's indented `_Avoid:_` paragraph after a blank line belongs to its entry; 305 entries → the first 300 read, doctor warns and clarify reports glossaryTruncated {read, total} (got " + js([e6, g6, c6.glossaryTruncated, d6.detail]) + ")");
   }
 
   // 1.16 package (E) — exports and planning: Gherkin, tracker CSV, milestones.

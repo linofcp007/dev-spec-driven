@@ -31,8 +31,9 @@ feature pulls in that track. Fill them in once, revisit once a quarter. `spec_do
 by name, about every steering file still holding template placeholders — a stub steers nothing.
 
 **Amending steering (1.16).** A requirements or design approval records a fingerprint of the steering that governed it —
-`constitution.md`, the active tracks' files (a track pack's too), every `inclusion: always` file and each `fileMatch` file
-whose pattern matches the feature's `_Implements:_` paths. Edit one of them later and `spec_doctor` warns
+`constitution.md`, the active tracks' files (a track pack's too), every `inclusion: always` file and every `fileMatch` file
+(with its patterns — it counts for a feature once that feature's current `_Implements:_` paths match it, since requirements
+and design are approved before tasks.md names any file). Edit one of them later and `spec_doctor` warns
 `steering-changed-since-approval` on every feature approved under the older version, `spec_next_action` adds a re-review
 hint (never a block), and `spec_impact {phase: "steering"}` (CLI `dev-spec impact --phase steering`) lists them all.
 Re-review each against the amended rule and re-approve — the new approval records the current steering. Approvals made
@@ -490,13 +491,17 @@ creates it — in the project language (PT: `# Glossário`, ES: `# Glosario`).
 ```
 
 - **Format.** A list item whose term is in bold (`**Term**` or `__Term__`), then the definition after `—`, `:` or `-`;
-  the `_Avoid: a, b_` marker on the same line or a sub-line of the item. `_Avoid:_` is English-stable — a PT or ES glossary
-  writes it the same way (`- **Cliente** — pessoa ou empresa com contrato. _Avoid: comprador, consumidor_`). HTML comments
-  and fenced code hold no entry; a `[bracketed]` term (the stub's) is none either.
+  the `_Avoid: a, b_` marker on the same line, a sub-line of the item or an indented paragraph after a blank line (a loose
+  list). `_Avoid:_` is English-stable — a PT or ES glossary writes it the same way (`- **Cliente** — pessoa ou empresa com
+  contrato. _Avoid: comprador, consumidor_`). HTML comments and fenced code hold no entry; a `[bracketed]` term (the
+  stub's) is none either. Only the first 300 entries are read — past that, doctor warns and clarify says so
+  (`glossaryTruncated` {read, total}).
 - **`spec_clarify`** asks about every avoided word a feature's `requirements.md` / `design.md` use — word-matched,
-  case-insensitive, a plural `s` / `es` counts; never inside a code span, fenced code, an HTML comment or a `_Marker:_`
-  tag; the glossary's own terms are masked first, so "End user" never reads as "user". Each question names `file:line`
-  and the term to use; the result carries `glossary` [{word, term, count, locations}].
+  case-insensitive, a plural `s` / `es` counts, `_client_` (underscore emphasis) too, never `client_id`; never inside a
+  code span, fenced code, an HTML comment or a `_Marker:_` tag, and never in the TEMPLATE's own text — the headings,
+  guidance lines, track criteria and slot examples the built-in, project and track-pack templates write (a slot you filled
+  in, or your own heading, is read); the glossary's own terms are masked first, so "End user" never reads as "user". Each
+  question names `file:line` and the term to use; the result carries `glossary` [{word, term, count, locations}].
 - **`spec_doctor`** warns `glossary` with the count (pass when none; no check without a glossary or an avoided word).
 - **`spec_task_brief`** quotes the entries whose term or avoided word the task's text or its criteria use (at most 8,
   1500 characters) — the implementer names things the way the product does.
