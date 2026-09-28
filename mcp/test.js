@@ -10978,6 +10978,14 @@ function endRun() {
     ok(r9 && r9.error && r9.error.code === -32700, "full review R9: a JSON-RPC response with id null gets no reply (got " + JSON.stringify(r9 && r9.error) + ")");
   }
 
+  // 1.14 feature (F1) — harness-observed evidence.
+
+  // 1.14 feature (F2) — human approval guard.
+
+  // 1.14 feature (F3) — task dependencies and waves.
+
+  // 1.14 feature (F5) — traceability matrix.
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

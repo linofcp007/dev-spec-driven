@@ -32,6 +32,7 @@ SECTIONS.push("frs"); // 1.14 full review (S) — CLI surfaces and hooks
 SECTIONS.push("frgb"); // 1.14 full review (Gb) — next_action, doctor, stop gate, guard
 SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section synonyms, i18n / pt-BR
 SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
+SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this suite's own parent) takes writes
@@ -3073,6 +3074,14 @@ if (inSection("frs")) {
 }
 
 // 1.14 full review (D) — CLI help and docs.
+
+// 1.14 feature (F1) — harness-observed evidence: if (inSection("ffobs")) { … }
+
+// 1.14 feature (F2) — human approval guard: if (inSection("ffgate")) { … }
+
+// 1.14 feature (F3) — task dependencies and waves: if (inSection("ffdeps")) { … }
+
+// 1.14 feature (F5) — traceability matrix: if (inSection("ffrtm")) { … }
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
