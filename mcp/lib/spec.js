@@ -1199,7 +1199,9 @@ function classify(description, opts = {}) {
   const raw = [opts.name, description].filter((s) => s != null && String(s).trim()).map(String).join(". ");
   const cased = " " + splitWordPairs(raw) + " ";
   const text = cased.toLowerCase();
-  const lang = opts.lang ? normalizeLang(opts.lang) : guessLang(text, opts.fallbackLang);
+  // No explicit lang: the text's own language, the project's configured one (opts.projectDir → meta.lang) only as the fallback
+  // when the text is inconclusive — the same rule for spec_classify, create and import (full review R4).
+  const lang = opts.lang ? normalizeLang(opts.lang) : guessLang(text, opts.fallbackLang || (opts.projectDir ? configuredLang(opts.projectDir) : undefined));
   const C = i18n.msg(lang).classify;
   // Accented/unaccented twins ("sessão"/"sessao") match the same word: one span counts once per track.
   const perTrack = (mk) => Object.fromEntries(OPTIONAL_TRACKS.map((t) => [t, mk()]));
@@ -1690,7 +1692,8 @@ function guardEnabled(projectDir) {
 //          Windows batch, SQL, Kotlin script, CUDA, Fortran, shaders, code-bearing templates…;
 //          notebooks count as code — NotebookEdit only edits them. Docs, config, markup and styles are not code) ·
 //          some non-archived feature has an approved tasks phase and open
-//          tasks (a FORCED approval still counts, with a `note` saying so) · an active spike — undecided or with open tasks —
+//          tasks (a FORCED approval still counts, with a `note` saying so) · an active spike — undecided or with open tasks, its
+//          timebox not passed; never at the scope level once tasks are approved —
 //          (why "spike": its prototype work; a spike has no tasks gate, so it is never "awaiting approval") · a TEST file while
 //          a feature has an approved test plan and is unfinished (why "tests-phase": Phase 4 writes the failing tests before
 //          the tasks can be approved);
@@ -1727,8 +1730,10 @@ function guardCheck(projectDir, filePath, cwd) {
     const unfinished = !tasks.length || tasks.some((t) => !t.done);
     // A spike has no tasks gate (question → investigate → decide): while it is undecided or has open investigation tasks its
     // prototype work is covered — never listed as "awaiting approval" (approve refuses a spike's tasks phase).
+    // Not once its timebox has passed undecided: an abandoned spike must not switch the guard off for the whole project.
     if (isObj(st) && st.kind === "spike") {
-      if (tasks.some((t) => !t.done) || !spikeInfo(dir).decisionFilled) spikes.push(name);
+      const si = spikeInfo(dir);
+      if ((tasks.some((t) => !t.done) || !si.decisionFilled) && !si.timeboxPassed) spikes.push(name);
       continue;
     }
     // Phase 4 (+tdd): an approved test plan, the feature not finished — the failing tests are written BEFORE the tasks can be
@@ -1744,9 +1749,8 @@ function guardCheck(projectDir, filePath, cwd) {
   }
   // scope: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
   if (level === "scope" && (covering.length || forced.length)) {
-    const d = scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
-    // Out of the plan, but an active spike's prototype work (no _Implements:_ to plan it in) is still covered.
-    return d.decision === "ask" && spikes.length ? allow("spike", { level: "scope", covering: spikes, spikes }) : d;
+    // A spike never overrides the approved features' plan here: scope's point is that code outside it asks.
+    return scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
   }
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
@@ -1868,9 +1872,14 @@ function stopPatterns() {
 }
 // Where the clause holding position `i` starts: after the last line / sentence break, or a colon or a dash ("No problem — task
 // 2 is done": the "no" belongs to another clause). → the index of the break (−1: the text's start)
+// Only the few words before i matter (STOP_WINDOW / 4): the look-back is bounded, so every hit costs O(1) — slicing the whole
+// text before each hit made a long message of admissions quadratic (20 KB of "was 2 failing": half a second).
+const STOP_CLAUSE_SPAN = 400;
 function stopClauseStart(text, i) {
-  const before = text.slice(0, i);
-  return Math.max(...["\n", ".", "!", "?", ";", ":", "—", "–", " - "].map((c) => before.lastIndexOf(c)));
+  const lo = Math.max(0, i - STOP_CLAUSE_SPAN);
+  const before = text.slice(lo, i);
+  const k = Math.max(...["\n", ".", "!", "?", ";", ":", "—", "–", " - "].map((c) => before.lastIndexOf(c)));
+  return k < 0 ? lo - 1 : lo + k;
 }
 // ES "no" before a verb, a clitic or "todo" is a negation ("no está terminado", "no se ha completado", "no todo está hecho");
 // PT "no" (em + o) comes before a noun ("a correção no módulo").
@@ -1891,15 +1900,16 @@ function stopNegates(words, i, langs, lang) {
   return true;
 }
 // Does a failure the message names (an admission at [start, end)) describe what was already FIXED — "I fixed the 2 failing
-// tests", "Previously 4 tests failed", "the 3 failures from yesterday are fixed"? A fixed-word (i18n stopGate.fixed) among the 4
-// words before it in its clause, or the 4 words after it before the clause ends — unless a negator stands before that word
-// ("I haven't fixed the 2 failing tests", "2 failing tests are not fixed yet").
+// tests", "Previously 4 tests failed", "the 3 failures from yesterday are fixed"? A fixed-word (i18n stopGate.fixed: fixing
+// verbs and "previously" — never an auxiliary like "was" / "had", which any honest "2 tests failed and I was unable to fix
+// them" holds) among the 4 words before it in its clause, or the 4 words after it before the clause ends — and no negator
+// anywhere in that window ("I haven't fixed the 2 failing tests", "the 3 failing tests were not fixed").
 function stopPastFailure(text, start, end, wordsOf) {
   const P = stopPatterns();
   const neg = (w) => P.negators.has(w) || /n['’]t$/.test(w);
   const before = wordsOf(text.slice(stopClauseStart(text, start) + 1, start)).slice(-4).map((w) => w.toLowerCase());
-  const after = wordsOf((text.slice(end).match(/^[^\n.!?;:,—–]*/) || [""])[0]).slice(0, 4).map((w) => w.toLowerCase());
-  const fixedIn = (ws) => { const k = ws.findIndex((w) => P.fixed.has(w)); return k >= 0 && !ws.slice(0, k).some(neg); };
+  const after = wordsOf((text.slice(end, end + STOP_CLAUSE_SPAN).match(/^[^\n.!?;:,—–]*/) || [""])[0]).slice(0, 4).map((w) => w.toLowerCase());
+  const fixedIn = (ws) => ws.some((w) => P.fixed.has(w)) && !ws.some(neg);
   return fixedIn(before) || fixedIn(after);
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
@@ -1940,7 +1950,7 @@ function stopClaims(message) {
     // from their subject on).
     const words = wordsOf(text.slice(stopClauseStart(text, h.start) + 1, h.start)).slice(-STOP_WINDOW).concat(wordsOf(h.text).slice(0, 1)).map((w) => w.toLowerCase());
     if (words.some((w, i) => stopNegates(words, i, langsAt.get(h.start), lang))) continue;
-    const tail = text.slice(h.end).match(/^[^\n.!?]*([.!?]?)/);
+    const tail = text.slice(h.end, h.end + 2000).match(/^[^\n.!?]*([.!?]?)/); // bounded: a sentence ends well before that
     if (tail && tail[1] === "?") continue; // a question claims nothing
     if (found.length < 10) found.push(h.text.trim());
   }
@@ -2261,7 +2271,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // The summary's classification (the tracks of a new feature, the signals classification.md lists), read in the feature's
   // language: the explicit one, else the project's configured one (full review Pb2 — spec_create / create used to classify
   // with the explicit lang only; they now leave it to the engine, so both surfaces read it the same way).
-  const clsR = cls || (bugfix || spike ? null : classify(summary || "", { name, lang: existed ? featureLang(projectDir, slug) : configuredLang(projectDir, lang) }));
+  const clsR = cls || (bugfix || spike ? null : classify(summary || "", existed ? { name, lang: featureLang(projectDir, slug) } : { name, lang, projectDir }));
   const t = spike ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to)
     : existed ? VALID_TRACKS.filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
     : bugfix ? VALID_TRACKS.filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
@@ -3560,6 +3570,24 @@ function criterionBlocks(text, opts = {}) {
 
   const all = text.split(/\r?\n/);
   const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
+  // acUnits: a table row, heading or paragraph line led by an AC ID is a REFERENCE — never a criterion to lint — when a list
+  // item defines that ID anywhere, or an earlier unit already did ("US-1.AC-2 depends on the IdP's error codes." in Notes, a
+  // "| US-1.AC-1 | P1 |" coverage table); outside an acceptance-criteria context it defines one only when it reads like one
+  // (a modal verb or a capitalised EARS keyword). (Full review R5 — Pa2 linted those references and refused valid specs.)
+  const leadId = (s) => { const m = s.match(/(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/); return m ? m[0] : null; };
+  const listDefined = new Set();
+  if (acUnits) all.forEach((raw, i) => {
+    const c = cl[i];
+    if (!c.hidden && !c.fence && RE_LIST_DEFINES_AC.test(c.vis.trim())) listDefined.add(leadId(c.vis.trim()));
+  });
+  const unitDefined = new Set();
+  const definesHere = (s, sect) => {
+    const id = leadId(s);
+    if (!id || listDefined.has(id) || unitDefined.has(id)) return false;
+    if (sect && !RE_AC_HEADING.test(sect) && !RE_MODAL.test(s) && !RE_EARS_CAPS.test(s)) return false;
+    unitDefined.add(id);
+    return true;
+  };
   all.forEach((raw, i) => {
     const ln = i + 1;
     const c = cl[i];
@@ -3579,7 +3607,7 @@ function criterionBlocks(text, opts = {}) {
       while (stack.length && stack[stack.length - 1].level >= hd[1].length) stack.pop();
       stack.push({ level: hd[1].length, text: hd[2].trim() });
       section = stack.map((h) => h.text).join(" / ");
-      if (acUnits && RE_LEAD_DEFINES_AC.test(hd[2].trim())) {
+      if (acUnits && RE_LEAD_DEFINES_AC.test(hd[2].trim()) && definesHere(hd[2].trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
         flush();
         cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd[2].trim()], definesAc: true, heading: true };
         return;
@@ -3588,7 +3616,8 @@ function criterionBlocks(text, opts = {}) {
     if (acUnits && /^\s*\|/.test(line)) {
       flush();
       const cells = tableCells(line);
-      if (cells.some((x) => RE_CELL_AC.test(x)) && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line))) { // earsValidate's AC context
+      const idCell = cells.find((x) => RE_CELL_AC.test(x));
+      if (idCell && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line)) && definesHere(idCell, null)) { // earsValidate's AC context; a reference is no criterion
         blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
       }
       return;
@@ -3616,7 +3645,7 @@ function criterionBlocks(text, opts = {}) {
       if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) cur.definesAc = true;
       return;
     }
-    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed)) {
+    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed) && definesHere(trimmed, section)) {
       // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
       flush();
       cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
@@ -4277,11 +4306,14 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   // archived) names in its File column is that feature's: it never counts for this plan's T-IDs unless this plan names
   // that file too. A folder (`test/`) claims nothing — it scopes, it doesn't own. Without it a new feature whose rows say
   // File `test/` passed the Phase 4 gate, doctor and trace --code on another feature's test/shortener.test.js.
-  const claimed = otherPlanTestFiles(projectDir, dir);
+  // Ownership is claimed by the EXACT project-relative path only — pathNames' suffix match made another plan's
+  // `tests/test_api.py` own services/beta/tests/test_api.py and hid a monorepo feature's own tests.
+  const fold = (s) => { const t = String(s).replace(/^\.\//, "").replace(/\/+$/, ""); return FOLD_CASE ? t.toLowerCase() : t; };
+  const claimed = new Set(otherPlanTestFiles(projectDir, dir).map(fold));
   const foreignMemo = new Map();
   const foreign = (rel) => {
-    if (!claimed.length) return false;
-    if (!foreignMemo.has(rel)) foreignMemo.set(rel, claimed.some((p) => pathNames(rel, p)) && ![...ownFiles].some((p) => pathNames(rel, p)));
+    if (!claimed.size) return false;
+    if (!foreignMemo.has(rel)) foreignMemo.set(rel, claimed.has(fold(rel)) && ![...ownFiles].some((p) => pathNames(rel, p)));
     return foreignMemo.get(rel);
   };
   const counts = (rel) => mine(rel) && !foreign(rel);
@@ -4605,31 +4637,47 @@ const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emi
 const RE_TASK_MARKER_OPEN = new RegExp("(?:_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
 const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
+// A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
+// before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
+// command, `(_Verify: npm test_), _Implements: a.js_` still closes at "test_)" (full review R7 — Pa1 cut the first at "a_;").
 function taskMarkerSpans(line) {
   const s = String(line == null ? "" : line);
   const out = [];
   if (!s.includes(":")) return out;
-  let closers = null; // per delimiter: the indices of the `_` / `*` that can close a marker, ascending
-  const cursor = { _: 0, "*": 0 };
   const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
+  const opens = [];
   let m;
-  while ((m = re.exec(s)) !== null) {
-    if (!closers) {
-      closers = { _: [], "*": [] };
-      const ok = new Array(s.length + 1).fill(false); // ok[i]: from i, closing punctuation then whitespace or the end
-      ok[s.length] = true;
-      for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
-      for (let j = 0; j < s.length; j++) if ((s[j] === "_" || s[j] === "*") && ok[j + 1]) closers[s[j]].push(j);
-    }
-    const d = s[m.index];
-    const v = m.index + m[0].length;
-    const list = closers[d];
-    let p = cursor[d];
-    while (p < list.length && list[p] <= v) p++; // the value holds one character at least
-    cursor[d] = p;
-    if (p >= list.length) continue;
-    out.push({ key: m[1].toLowerCase(), value: s.slice(v, list[p]), start: m.index, end: list[p] + 1 });
-    re.lastIndex = list[p] + 1;
+  while ((m = re.exec(s)) !== null) opens.push({ index: m.index, len: m[0].length, key: m[1] });
+  if (!opens.length) return out;
+  // Per delimiter, the indices of the `_` / `*` that can close a marker, ascending: plain, or before punctuation.
+  const ok = new Array(s.length + 1).fill(false); // ok[i]: from i, closing punctuation then whitespace or the end
+  ok[s.length] = true;
+  for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
+  const plain = { _: [], "*": [] }, punct = { _: [], "*": [] };
+  for (let j = 0; j < s.length; j++) {
+    if ((s[j] === "_" || s[j] === "*") && ok[j + 1]) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
+  }
+  const cursor = { plain: { _: 0, "*": 0 }, punct: { _: 0, "*": 0 } };
+  const next = (lists, kind, d, v) => { // the first closer after v (the value holds one character at least); cursors only move on
+    const list = lists[d];
+    let p = cursor[kind][d];
+    while (p < list.length && list[p] <= v) p++;
+    cursor[kind][d] = p;
+    return p < list.length ? list[p] : -1;
+  };
+  let at = 0;
+  for (let k = 0; k < opens.length; k++) {
+    const o = opens[k];
+    if (o.index < at) continue; // inside the previous marker's value
+    const d = s[o.index];
+    const v = o.index + o.len;
+    let limit = s.length;
+    for (let q = k + 1; q < opens.length; q++) if (opens[q].index > v) { limit = opens[q].index; break; }
+    const pc = next(plain, "plain", d, v), uc = next(punct, "punct", d, v);
+    const close = pc >= 0 && pc < limit ? pc : uc >= 0 && uc < limit ? uc : pc;
+    if (close < 0) continue;
+    out.push({ key: o.key.toLowerCase(), value: s.slice(v, close), start: o.index, end: close + 1 });
+    at = close + 1;
   }
   return out;
 }
@@ -5155,10 +5203,16 @@ const CANT_RUN_OUTPUT = [
 ];
 // → null | { kind: "wsl" | "spawn" | "test", text: "<the matched text, ≤ 160 chars>" }. NUL bytes are dropped first (the WSL
 // launcher writes UTF-16).
+// Output that shows tests RAN and an assertion failed ("not ok 1", AssertionError, pytest's "E   assert", jest's
+// "Expected:" / expect(…)): a genuine red run, even when its message quotes a runner phrase ("expected: Cannot find module
+// 'foo-plugin'") — the `test` kind never applies to it (full review R6).
+const RE_ASSERTION_RAN = /^[ \t]*not ok \d|\bAssertionError\b|^[ \t]*E[ \t]{2,}assert\b|\bexpect\(|^[ \t]*(?:Expected|Received):/m;
 function couldNotRunOutput(output) {
   const s = String(output == null ? "" : output).slice(0, 200000).replace(/\u0000/g, "");
   if (!s.trim()) return null;
+  const ran = RE_ASSERTION_RAN.test(s);
   for (const [kind, re] of CANT_RUN_OUTPUT) {
+    if (kind === "test" && ran) continue;
     const m = s.match(re);
     if (m) return { kind, text: m[0].trim().replace(/\s+/g, " ").slice(0, 160) };
   }

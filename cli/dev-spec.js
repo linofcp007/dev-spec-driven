@@ -315,7 +315,7 @@ function main() {
 
     case "classify": {
       if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es]');
-      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang }); // same args as spec_classify
+      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir }); // same args as spec_classify
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
         const conf = spec.msg(r.lang).classify.conf;
@@ -558,6 +558,8 @@ function main() {
           // over the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an
           // _Expect: fail_ task was then ticked on a red run that never happened; a passing check recorded as failed).
           if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
+          // A crash is a failed check, but no red test (not failing "for the right reason"): refused, nothing recorded.
+          if (x.crashed && b.expect === "fail") return fail({ ok: false, couldNotRun: "signal", error: M.runGate.taskRefused(cmd, M.runGate.why.signal(x.crashed)) });
           const code = x.code;
           if (code !== 0) {
             // B5: an _Expect: fail_ task needs a run that FAILS — but cmd.exe failing to run the line at all (a path it can't
@@ -1098,6 +1100,7 @@ function main() {
     // so nothing may be recorded for it: shell-not-started (spawn error: a missing or unusable shell) · timeout (--timeout) ·
     // output-too-large (over 64 MB) · signal (killed) · run-error (any other spawn error) · wsl (WSL's launcher answered).
     function b5Exec(command, sh, M) {
+      const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: b5Exec is hoisted above any outer const
       const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
       let run;
       try {
@@ -1117,6 +1120,11 @@ function main() {
           : ["ENOENT", "EACCES", "ENOEXEC", "EPERM", "EISDIR", "ENOTDIR", "UNKNOWN"].includes(ec) ? { code: "shell-not-started", why: W.spawn(shellName, ec) }
           : { code: "run-error", why: W.error(ec || String(run.error.message || "?").slice(0, 120)) };
       } else if (run.status == null) {
+        // The check itself CRASHED (a shell that execs its last command reports the crash as the signal): it ran and failed —
+        // a failed run (128 + the signal number, the shells' convention), never "could not run", or a crashing re-check would
+        // leave a ticked task verified (full review R6). Its caller refuses it as a red test. Any other signal: killed.
+        const signo = CRASH_SIGNALS.includes(run.signal) ? (require("os").constants.signals || {})[run.signal] : null;
+        if (signo) return { code: 128 + signo, output, summary, cantRun: null, crashed: run.signal };
         cantRun = { code: "signal", why: W.signal(run.signal || "?") };
       } else if (run.status !== 0) {
         const o = spec.couldNotRunOutput(output);

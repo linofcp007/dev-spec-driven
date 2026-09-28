@@ -388,7 +388,7 @@ function runTool(name, args) {
     case "spec_init": // guard → meta.guard; checks → meta.checks; approvalRoles → meta.approvalRoles; stopCheck → meta.stopCheck (undefined leaves each unchanged; = `init --guard / --check / --roles / --stop-check`)
       return spec.initProject(pdir, args.tracks, args.lang, { guard: args.guard, checks: args.checks, approvalRoles: args.approvalRoles, stopCheck: args.stopCheck });
     case "spec_classify":
-      return spec.classify(args.description, { name: args.name, lang: args.lang });
+      return spec.classify(args.description, { name: args.name, lang: args.lang, projectDir: pdir }); // meta.lang: the fallback when the text is inconclusive
     case "spec_create": {
       // No tracks → the engine keeps an existing feature's tracks, or classifies a new one in the feature's language — the explicit
       // lang, else the project's (same as the CLI: the engine classifies, never the surface — full review Pb2).
@@ -664,6 +664,9 @@ function handle(msg) {
   const { id, method, params } = msg;
   // A notification is a message WITHOUT an id member: it never gets a response — and never runs anything.
   if (!hasOwn(msg, "id")) return;
+  // A JSON-RPC RESPONSE (result / error, no method) is never answered — whatever its id: a client's error response to a
+  // request it couldn't parse carries id null (checked before the id rule, full review R9).
+  if (typeof method !== "string" && (hasOwn(msg, "result") || hasOwn(msg, "error"))) return;
   // MCP: a request id is a string or an integer, never null. `id: null` used to be read as a notification and dropped (the
   // client waited forever), and an object / array / boolean / fractional id was echoed back. Invalid Request — with id
   // null, as JSON-RPC answers a request whose id can't be used.

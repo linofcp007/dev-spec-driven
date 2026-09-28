@@ -360,7 +360,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   every task marker (taskMarkers, trace_check, implementsRefs, `_Size:_`, the templates check): a value ends at the
   closing `_` — or `*`: `*Verify: …*` is the same marker — followed by whitespace, the end of the line, or closing
   punctuation (`.,;:!?)]`) then whitespace / end, so `(_Verify: npm test_)` and `_Implements: a.ts_;` are markers (they
-  were silently dropped: nothing to verify, a verified tick). Doctor warns `malformed-markers` for text on a task line that
+  were silently dropped: nothing to verify, a verified tick) — but a plain closer (followed by whitespace / the end) before
+  the next marker opener, else the end of the line, wins over a punctuation one: `_Verify: python -c "import a_; print(1)"_`
+  keeps its whole command. Doctor warns `malformed-markers` for text on a task line that
   looks like a marker but yields none (`**Verify:**`, a bare `Verify:`). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
   `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). The shell is `resolveRunShell()`'s
@@ -382,7 +384,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
   a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
   error ENOENT / EACCES / ENOEXEC / EPERM / EISDIR / ENOTDIR / UNKNOWN) · `run-error` (any other spawn error) · `signal` (no
-  exit status) · `output-too-large` (over the 64 MB buffer) · `timeout` (`--timeout <seconds>`, an integer ≥ 1 validated
+  exit status — killed; a CRASH of the check itself, SIGSEGV / SIGABRT / SIGBUS / SIGFPE / SIGILL, is a failed run with exit
+  128 + the signal number instead, and on an `_Expect: fail_` task no red test) · `output-too-large` (over the 64 MB buffer) · `timeout` (`--timeout <seconds>`, an integer ≥ 1 validated
   before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
   an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
   whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
@@ -446,7 +449,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   literal runner phrases, linear, NULs dropped — kind `test`: node's "Could not find '…'", "Cannot find module",
   ERR_MODULE_NOT_FOUND, python "can't open file" / ModuleNotFoundError, pytest "file or directory not found" / "no tests
   ran", jest "No tests found", vitest / mocha "No test files found", npm "Missing script" / ENOENT, make "No rule to make
-  target"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error) — `spec_complete_task` refuses and records a run whose
+  target"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind never applies to output that shows an
+  assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest "E   assert", expect(…), "Expected:" — a red run
+  whose message quotes "Cannot find module" is still red) — `spec_complete_task` refuses and records a run whose
   `summary` shows it (`couldNotRun: "output"`), `done --run` refuses it with nothing recorded, and `cantRunRecord()` keeps
   an older record of either kind from being a red proof (`isRedRun()`). On an `_Expect: fail_` task under `done --run`, a
   line cmd.exe itself could not run (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded whenever
@@ -584,8 +589,9 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). Two exceptions,
   at both levels: a TEST file while some non-archived feature has an approved test plan and is unfinished (why
   `tests-phase` — Phase 4 writes the failing tests before tasks can be approved), and any code edit while an ACTIVE spike
-  (undecided, or with open tasks) exists (why `spike`, field `spikes` — prototype work; a spike has no tasks gate, so it
-  is never listed as "awaiting approval"). A
+  (undecided, or with open tasks, its timebox not passed) exists (why `spike`, field `spikes` — prototype work; a spike has
+  no tasks gate, so it is never listed as "awaiting approval"; at the `scope` level a spike never overrides the approved
+  features' plan). A
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
   normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
   Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
@@ -763,8 +769,12 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   condition sits up to 3 words before it in its sentence ("not done", "once the tests pass", words ending in `n't` /
   `'ll`, or the claim's own first word — "Nothing is done"), nor when its sentence is a question. An ADMISSION anywhere
   ("task 3 is not verified", "2 failing", "2 are failing") means the honest answer is never sent back — unless a `fixed`
-  word sits within 4 words of it in its clause, not itself negated (`stopPastFailure()`: "I fixed the 2 failing tests",
-  "previously 4 failed"; "I haven't fixed the 2 failing tests" stays an admission). The negator window is cut at
+  word — a fixing verb or "previously", never an auxiliary ("was", "had", PT "havia", ES "había": "2 tests failed and I
+  was unable to fix them" is an honest admission) — sits within 4 words of it in its clause with no negator anywhere in
+  that window (`stopPastFailure()`: "I fixed the 2 failing tests", "previously 4 failed"; "I haven't fixed the 2 failing
+  tests", "the 3 failing tests were not fixed" stay admissions). The look-back and the question tail are bounded
+  (`STOP_CLAUSE_SPAN`) — slicing the whole text per hit was quadratic. A noun + done claim ("Feature complete") must end
+  its clause ("the implementation done so far" claims nothing). The negator window is cut at
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
   clitic, never in guessed-PT text — em+o; "se" — PT "if" — only for a PT claim, never in guessed-ES text nor before a
   Spanish auxiliary or preterite). Claims include "All tasks
@@ -994,7 +1004,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
   for this feature's T-IDs (T-IDs restart at T-01 in every feature: a new feature's Phase 4 gate passed on another
-  feature's tests). A folder token (`test/`) scopes rows but claims no file.
+  feature's tests). A folder token (`test/`) scopes rows but claims no file, and a claim is the EXACT project-relative path (a suffix match
+  made `tests/test_api.py` own a monorepo package's `services/beta/tests/test_api.py`).
   A T-ID whose EVERY row names only non-code artifacts in its File column (`load-test.md`, `evals/*.json`, a
   `.feature` — any extension outside `GUARD_CODE_EXT`) is run outside test code: `plannedOutsideCode`, never
   `plannedNotInCode`, so neither doctor, finish nor the Phase 4 gate expects it in a test file (the scaffold's own
@@ -1016,7 +1027,10 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). Every unit
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
-  heading, or carrying a modal — elsewhere it is a summary table). Doctor's `ears` FAILS (and the requirements approval
+  heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list
+  item defines that ID anywhere or an earlier unit already did (a Notes line "US-1.AC-2 depends on …", a coverage table),
+  and outside an acceptance-criteria context a line or heading defines one only when it carries a modal verb or a
+  capitalised EARS keyword. Doctor's `ears` FAILS (and the requirements approval
   is refused) when requirements.md defines AC IDs but no criterion was linted (`earsUnlinted()`, `earsNoCriteria`). The
   requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
   without a modal is an EARS error there too.
@@ -1117,7 +1131,8 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   `protocolVersion` when supported (`SUPPORTED_PROTOCOLS`), else answers with the latest; default `2024-11-05`.
   A message without an `id` member is a notification: never a reply (and never runs a tool). An `id` must be a string or
   an integer — null, an object, an array, a boolean or a fraction gets -32600 (id null); an id without a string `method`
-  gets -32600, except a client's JSON-RPC response (`result` / `error`), which is ignored. A JSON-RPC batch gets ONE array
+  gets -32600, except a client's JSON-RPC response (`result` / `error`, no method), which is ignored whatever its id (checked
+  before the id rule — a client's error reply carries id null). A JSON-RPC batch gets ONE array
   reply; `null`/malformed input gets -32600/-32700; an unknown method -32601; an unknown tool (or `tools/call` without a
   name) -32602, localized (`args.unknownTool` / `args.noTool`); prompts/resources use -32602 / -32002 (see Capabilities).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
@@ -1135,9 +1150,11 @@ must fail first) and definition of done (`redRules` in place of the loop's green
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.
   The guess decides how `no` is read — a negator in EN/ES, the contraction *em+o* in PT ("aplicado no
   checkout"; also after a lowercase participle, never after a capitalised name like "Canada"). An
-  explicit `lang` overrides the guess for negation too; spec_create / create classify a new feature with the explicit lang,
-  else roadmap.json `meta.lang` (`configuredLang()` — never the 'en' default), and spec_import with the source's own
-  language, else meta.lang when the text is inconclusive (`guessLang(text, fallback)`). One matched span counts once per track. Prose pairs like
+  explicit `lang` overrides the guess for negation too. Without one, every surface — spec_classify / classify, spec_create /
+  create (a new feature), spec_import — reads the text in its OWN language, with roadmap.json `meta.lang` only as the
+  fallback when the text is inconclusive (`classify(…, {projectDir})` → `configuredLang()` → `guessLang(text, fallback)`;
+  never the 'en' default): forcing meta.lang read "no checkout" in a PT summary as an English negation in an EN project,
+  and create disagreed with the classify the human confirms. One matched span counts once per track. Prose pairs like
   `login/signup` are split before matching; path-like tokens (`src/rag.ts`) are not. PT/ES plurals
   (`-ções`, `-ciones`, first word of a phrase) are generated by `pluralize()`.
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
@@ -1168,7 +1185,7 @@ must fail first) and definition of done (`redRules` in place of the loop's green
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1146 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1155 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 372 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

@@ -10898,6 +10898,86 @@ function endRun() {
       "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — CLAUDE.md no longer says done --run records nothing for it");
   }
 
+  // 1.14 full review (R) — regressions the independent review of the merged fixes found: one assertion each.
+  {
+    // R1: an auxiliary ("was", "había", "havia") never turns an honest failure into history; "not fixed" stays an admission;
+    // the noun + done claim must end its clause.
+    const adm = (m) => S.stopClaims(m).admitted;
+    const honest = ["Task 1 is done. 2 tests failed and I was unable to fix them.", "Task 3 is done, but the build was slow and 2 tests failed.",
+      "The 3 failing tests were not fixed.", "La tarea 3 está hecha. Había 2 pruebas fallando.", "A tarefa 3 está feita. Havia 2 testes a falhar."];
+    const noClaim = ["The implementation done so far covers task 1.", "Here is the task done list for today."];
+    ok(honest.every(adm) && !adm("Done! I fixed the 2 failing tests and everything works now.") && noClaim.every((m) => !S.stopClaims(m).claim) &&
+      S.stopClaims("Feature complete.").claim,
+      "full review R1: 'was' / 'havia' / 'había' near a failure keep it an admission, a negator anywhere keeps it too; 'the implementation done so far' is no claim (got " +
+      JSON.stringify([honest.map(adm), noClaim.map((m) => S.stopClaims(m).claim)]) + ")");
+    // R10: the admission / claim scans are linear (bounded look-back and tail).
+    const tR10 = Date.now();
+    S.stopClaims("was 2 failing. ".repeat(1400));
+    S.stopClaims("all done ".repeat(2300));
+    const dR10 = Date.now() - tR10;
+    ok(dR10 < 1500, "full review R10: 20 KB of admissions or claims scans in bounded time (got " + dR10 + " ms)");
+    // R2: another plan's File cell owns only its EXACT path — a monorepo package's same-named test file stays this feature's.
+    const r2 = path.join(tmp, "proj-review-r2");
+    S.initProject(r2, ["tdd"], "en");
+    for (const [n, file] of [["Alpha", "tests/test_api.py"], ["Beta", "services/beta/tests/"]]) {
+      const c = S.createFeature(r2, n, ["core", "tdd"], "x", undefined, "en");
+      fs.writeFileSync(path.join(c.dir, "test-plan.md"), "# Test plan\n\n| ID | Covers | Kind | File |\n|---|---|---|---|\n| T-01 | US-1.AC-1 | example | `" + file + "` |\n");
+    }
+    fs.mkdirSync(path.join(r2, "services", "beta", "tests"), { recursive: true });
+    fs.writeFileSync(path.join(r2, "services", "beta", "tests", "test_api.py"), "def test_T01_beta():\n    assert True\n");
+    const tr2 = S.traceCheck(r2, "beta", { code: true }).code;
+    ok(tr2 && (tr2.testsInCode["T-01"] || []).some((f) => /services\/beta\/tests\/test_api\.py$/.test(f)) && !tr2.plannedNotInCode.includes("T-01"),
+      "full review R2: alpha's File `tests/test_api.py` doesn't own services/beta/tests/test_api.py — beta's own T-01 is found (got " + JSON.stringify(tr2 && [tr2.testsInCode, tr2.plannedNotInCode]) + ")");
+    // R3: a spike whose timebox passed undecided covers nothing; at the scope level a spike never overrides approved plans.
+    const r3 = path.join(tmp, "proj-review-r3");
+    S.initProject(r3, ["core"], "en", { guard: "on" });
+    S.createFeature(r3, "Old spike", undefined, "", undefined, "en", "spike", { question: "Q?", timebox: "2020-01-01" });
+    const g3old = S.guardCheck(r3, "src/app.js", r3);
+    S.createFeature(r3, "New spike", undefined, "", undefined, "en", "spike", { question: "Q?", timebox: "3d" });
+    const g3new = S.guardCheck(r3, "src/app.js", r3);
+    S.initProject(r3, ["core"], "en", { guard: "scope" });
+    const b3 = S.createFeature(r3, "Billing", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(b3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Bill\n  - _Implements: src/billing.js_\n");
+    S.approvePhase(r3, "billing", "tasks", "t", { force: true });
+    const g3scope = S.guardCheck(r3, "src/app.js", r3);
+    ok(g3old.decision === "ask" && g3new.decision === "allow" && g3new.why === "spike" && g3scope.decision === "ask",
+      "full review R3: a spike past its timebox covers nothing, an active one covers prototype edits, and at scope level it never overrides an approved plan (got " +
+      JSON.stringify([g3old.decision, g3new.why, g3scope.decision + ":" + g3scope.why]) + ")");
+    // R4: create classifies like spec_classify — the text's own language first, meta.lang only when it is inconclusive.
+    const r4en = path.join(tmp, "proj-review-r4en"), r4pt = path.join(tmp, "proj-review-r4pt");
+    S.initProject(r4en, [], "en");
+    S.initProject(r4pt, [], "pt");
+    const c4en = S.createFeature(r4en, "desconto", undefined, "Aplicar o desconto no checkout com testes de regressão");
+    const k4pt = S.classify("Corrigir o cálculo do IVA no checkout", { projectDir: r4pt });
+    const c4pt = S.createFeature(r4pt, "IVA", undefined, "Corrigir o cálculo do IVA no checkout");
+    ok(c4en.tracks.includes("tdd") && k4pt.tracks.includes("tdd") && JSON.stringify(k4pt.tracks) === JSON.stringify(c4pt.tracks),
+      "full review R4: a PT summary in an EN project is read as PT ('no' = em+o), and create agrees with classify in a PT project (got " +
+      JSON.stringify([c4en.tracks, k4pt.tracks, c4pt.tracks]) + ")");
+    // R5: an AC ID a list item defines is a reference elsewhere (Notes, a coverage table) — never a criterion to lint.
+    const req5 = "# F\n\n## User Stories\n\n### US-1 (P1): Login\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user logs in THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL show an error\n";
+    const e5a = S.earsValidate(req5 + "\n## Notes\nUS-1.AC-2 depends on the identity provider's error codes.\n", "en");
+    const e5b = S.earsValidate(req5 + "\n| AC | Priority |\n|---|---|\n| US-1.AC-1 | P1 |\n", "en");
+    const e5c = S.earsValidate("# F\n\n### Acceptance Criteria\n| ID | Criterion |\n|---|---|\n| US-1.AC-1 | Checkout is quick |\n", "en");
+    ok(e5a.summary.criteriaDetected === 2 && !e5a.issues.some((i) => i.severity === "error") && e5b.summary.criteriaDetected === 2 && !e5b.issues.some((i) => i.severity === "error") &&
+      e5c.issues.some((i) => i.code === "no-modal"),
+      "full review R5: a Notes line or a coverage table naming a defined AC is a reference, not a criterion; a table that IS the definition is still linted (got " +
+      JSON.stringify([e5a.summary.criteriaDetected, e5a.issues.map((i) => i.code), e5b.summary.criteriaDetected, e5c.issues.map((i) => i.code)]) + ")");
+    // R6: a genuine red run whose assertion quotes a runner phrase is not "could not run".
+    ok(S.couldNotRunOutput("not ok 1 - T-01 loads plugins\n  AssertionError: expected: Cannot find module 'foo-plugin' actual: undefined") === null &&
+      S.couldNotRunOutput("Error: Cannot find module '/x/test/a.js'\nRequire stack:\n- /x") !== null,
+      "full review R6: an assertion failure quoting 'Cannot find module' is a red run; the runner's own missing-module error still reads could-not-run");
+    // R7: a punctuation closer never cuts a value that closes plainly later on the line.
+    const v7 = (line) => S.taskMarkers({ text: line, body: [] }).verify[0];
+    ok(v7('x _Verify: python -c "import a_; print(1)"_') === 'python -c "import a_; print(1)"' && v7("x _Verify: npm test -- --grep='route_: 200'_") === "npm test -- --grep='route_: 200'" &&
+      v7("Wire (_Verify: npm test_).") === "npm test" && S.taskMarkers({ text: "(_Verify: npm test_), _Implements: a.js_", body: [] }).implements[0] === "a.js",
+      "full review R7: `_` + punctuation closes a marker only when no plain closer follows before the next marker (got " +
+      JSON.stringify([v7('x _Verify: python -c "import a_; print(1)"_'), v7("x _Verify: npm test -- --grep='route_: 200'_"), v7("Wire (_Verify: npm test_).")]) + ")");
+    // R9: a client's JSON-RPC response with id null is never answered (the next reply is the malformed line's -32700).
+    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "client could not parse" } }) + "\n");
+    const r9 = await rawOnce("{not json");
+    ok(r9 && r9.error && r9.error.code === -32700, "full review R9: a JSON-RPC response with id null gets no reply (got " + JSON.stringify(r9 && r9.error) + ")");
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

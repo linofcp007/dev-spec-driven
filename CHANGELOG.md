@@ -152,7 +152,8 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
 ### Fixed — full review before release (seven parallel reviewers, a dogfood run; every fix has a regression test)
 - **Evidence that never ran is no evidence.** `done --run` / `finish --run` turned a shell that could not start, a
   signal, output over 64 MB or (new) a `--timeout` into "exit 1" — a bogus red proof for an `_Expect: fail_` task, a
-  failed run for any other. They now refuse and record nothing (stable `couldNotRun` code). On Windows `--shell bash`
+  failed run for any other. They now refuse and record nothing (stable `couldNotRun` code); a check that crashes (SIGSEGV…) is still a
+  failed run. On Windows `--shell bash`
   reached the WSL launcher (`System32\bash.exe`) before Git Bash — every command "failed"; a bare `bash` now resolves to
   Git Bash and the WSL launcher is refused. A red run whose output shows the test never ran (missing test file or
   module, nothing collected) is refused on `_Expect: fail_` tasks — a bugfix shipped with no regression test that way.
@@ -175,7 +176,7 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   done", "Feature complete" and ✅ are claims; "I fixed the 2 failing tests" is not an admission; a spike is never held
   to project checks; the spec-implementer's report needs exit 0 on a must-pass task.
 - **Guard**: test files are allowed while a feature's approved test plan is being written (Phase 4), prototype edits
-  while a spike is active (it has no tasks gate to approve), and an 8.3 short name, junction or symlink of the project
+  while a spike is active within its timebox (it has no tasks gate to approve; never over an approved plan at `scope`), and an 8.3 short name, junction or symlink of the project
   is inside it.
 - **MCP server**: framing splits on `\n` only — `readline` also split on U+2028 / U+2029 (legal inside JSON strings,
   common in pasted text), so the request was never answered; replies escape them. `id: null` / non-scalar ids get
@@ -186,8 +187,8 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   dependency on a feature that is archived too; `spec_decide` closes a code fence left open at the end of
   decisions.md (the entry was unreadable and its D-n reused); append never reuses a removed task's tick time; backlog
   names and notes are one line and can't name an existing feature; `backlog remove` = `rm`.
-- **Import and classification**: Kiro specs in PT/ES import their stories; a feature is classified in the project's
-  language (a PT summary read "no checkout" as a negation); a plan's "Approach" section no longer duplicates its steps;
+- **Import and classification**: Kiro specs in PT/ES import their stories; classification reads a summary in its own
+  language, the project's only as a fallback, the same on every surface (a PT summary read "no checkout" as a negation); a plan's "Approach" section no longer duplicates its steps;
   an ID-less import no longer gets the template's test rows; PT/ES encryption verbs are +sec signals; section headings
   accept pt-BR (LGPD) names, emoji and "Threat Modeling".
 - **Quality**: pt-BR wording (tem que, se mantém, RIPD, Operadores…) and pt-BR templates fall back to `templates/pt/`;
@@ -233,7 +234,7 @@ BMAD, a design-first flow, MCP prompts and resources, a guided tour, Brazilian P
   `spec_append_tasks` takes `makesGreen`, `expectFail` and `size` (CLI `--makes-green`, `--expect-fail`, `--size`);
   `spec_backlog` takes `remove` (= `rm`).
 ### Tests
-- `node mcp/test.js` 1146 assertions (was 766), `node cli/test-cli.js` 372 (was 257); the README tool tables are
+- `node mcp/test.js` 1155 assertions (was 766), `node cli/test-cli.js` 372 (was 257); the README tool tables are
   checked against all 34 live tools in EN/PT/ES again, and both suites also run in Linux containers
   (`npm run test:docker`).
 
