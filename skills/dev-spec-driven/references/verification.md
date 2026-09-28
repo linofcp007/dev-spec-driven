@@ -163,7 +163,8 @@ Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite"
 ## Evidence the harness observed (Claude Code)
 
 A reported run is what the agent SAYS it ran. In Claude Code the plugin's `hooks/observe-hook.js` (PostToolUse and
-PostToolUseFailure on the **Bash** tool — PowerShell runs are not observed) logs every Bash run of a task's runnable
+PostToolUseFailure on the **Bash** tool, and on the PowerShell tool when its response carries an explicit exit code) logs
+every such run of a task's runnable
 `_Verify:_` command (or the `&&` join of a task's commands) or of a project check, with its exit code, to a
 git-ignored, size-bounded log (`.specs/<feature>/.execution/observed.jsonl`, `.specs/.execution/observed.jsonl` for
 project checks). Interrupted and backgrounded runs are not logged.

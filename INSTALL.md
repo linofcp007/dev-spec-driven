@@ -154,7 +154,7 @@ node "$plugin\cli\dev-spec.js" init --guard scope # stricter: once tasks are app
 The setting lives in `.specs/roadmap.json` (`meta.guard`). Only Claude Code runs the hook; other tools
 store the setting but don't enforce it.
 
-**Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, Bash tool)
+**Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, the Bash tool — and PowerShell when it reports an exit code)
 silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
 so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
 harness saw (or that `dev-spec done --run` made):
