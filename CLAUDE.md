@@ -1287,17 +1287,30 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 ## Spec quality (1.16 Q)
 - **Steering amendments** — `approvePhase` records `steering` {file: sha1} on a requirements / design approval and its
   history record (`STEERING_GOVERNED`; `governingSteering()` = constitution.md + the active tracks' steering files (a track
-  pack's too) + `inclusion: always` files + `fileMatch` files matching the feature's `_Implements:_`; `steeringFingerprints()`
-  — CRLF / BOM are encoding). `steeringChanges()` → stable codes `modified` | `removed`. Doctor warns
+  pack's too) + `inclusion: always` files + EVERY `fileMatch` file, its patterns recorded in `steeringMatch` {file:
+  [patterns]} — requirements / design are approved while tasks.md is still the template; `steeringFingerprints()` — CRLF /
+  BOM are encoding). `steeringChanges(root, approvals, dir, tracks)` → stable codes `modified` | `removed`; a `steeringMatch`
+  file counts only while the feature's CURRENT `_Implements:_` match its recorded or current patterns (a record without
+  `steeringMatch` counts every file it holds). Doctor warns
   `steering-changed-since-approval` (+ `steeringChanged` [{phase, approvedAt, files}]); next_action appends
   `quality.naSteering` to its step — never a step of its own. `spec_impact {phase: "steering"}` → `steeringImpact()`: name
   optional (the MCP schema has no `required`; the engine refuses a missing name for every other phase), read-only (`reopen`
   refused), `untracked` = approvals without `steering` (pre-1.16 — never flagged).
 - **Cross-feature criteria** — `crossFeatureAcs(projectDir, {only})` over `xacTable()` (memoized per read-cache scope in
-  `XAC_MEMO`, dropped by forgetCached / invalidateReadCache): active plain features only (no bugfix / spike). A criterion's
-  shape = accents folded, lower-cased, `XAC_STOP` (EN/PT/ES stop words + EARS keywords) out, `xacStem`, numbers apart
-  (1,000 = 1000; 0,5 = 0.5), polarity by `RE_XAC_NEG` (SHALL NOT / NÃO DEVE / NO DEBE / never), trigger = the words before
-  the modal. `near-duplicate`: similarity ≥ 0.8, same polarity, same numbers; conflict: ≥ 0.7 with triggers ≥ 0.5 alike —
+  `XAC_MEMO`, dropped by forgetCached / invalidateReadCache; ACROSS calls `XAC_FEATURE_CACHE` — per feature kind / lang /
+  tracks by the .state.json lstat signature + the context (packs, template files, project lang), its rows by the
+  requirements.md signature too; `XAC_TABLE_CACHE` = the whole table + `table.results` (the pairs) while nothing changed and
+  no `_Supersedes:_` exists; a file modified < 2 s ago is never trusted (`XAC_RACY_MS`, git's racy-clean rule); features with
+  inferred tracks or `packMarkers` are never cached). `specsFileContained` is memoized per scope (`CONTAINED_KEY`). Doctor's
+  check runs last (spliced back in place); `opts.lean` (next_action's and finish's own doctor) skips it once another check
+  warns / fails — the verdict can't change. A criterion's shape (`acShape`) = accents folded, lower-cased, `XAC_STOP` (EN/PT/ES
+  stop words + EARS keywords) out, `xacStem`, split at the modal (`RE_XAC_SYS_MODAL` "system/sistema (não/no) SHALL/DEVE/DEBE",
+  else `RE_XAC_MODAL` — the negator before it belongs to the response) into `trig` / `resp` word sequences (document order,
+  deduped); polarity = `RE_XAC_NEG` on the RESPONSE only; trigger negators (`XAC_TRIGGER_NEG`, "no" outside PT, n't / cannot /
+  non- rewritten to "not") mark the next content word "!w" — `xacOpposed()` (w vs !w) = complementary conditions, never a
+  pair; numbers with the word after them (`numKey`, "5 attempt"; `nums` in document order for display). Clause similarity
+  `xacClauseSim()` = LCS (LIS over positions) / union — order-aware. `near-duplicate`: trig AND resp each > 0.8 (strict), same
+  polarity, same numKey; conflict: word Jaccard ≥ 0.7 (the index gate), trig ≥ 0.5 and resp ≥ 0.5 (`XAC_RESPONSE`) —
   `opposite-modal` | `different-numbers`. Never compared: a criterion with a template slot left or < 3 words, any
   built-in / track-pack / project template criterion's words (`builtinTemplateAcs()`, `projectTemplateAcs()`, and two light
   edits of one), criteria retired by a shipped `_Supersedes:_`, declared pairs (pending ones too). Candidates from a
@@ -1305,10 +1318,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `cross-feature-acs` (names the other feature's AC), `spec_catalog.crossAcs` {pairs, truncated}, a SPECS.md section when
   a pair exists, agents/spec-critic.md.
 - **Glossary** — the steering stub `glossary.md` (steering_scaffold; init never creates it): `- **Term** — definition.
-  _Avoid: a, b_` (`_Avoid:_` English-stable, same line or a sub-line). `glossaryEntries()` / `glossaryHits()` (terms masked
-  before the avoided words are searched — "End user" never reads as "user"; code, comments and `_Marker:_` tags skipped;
-  ≤ 300 entries × 20 words, ≤ 200 hits) / `briefGlossary()` (≤ 8 entries / 1500 characters; `refs.glossary` with write).
-  Clarify asks one question per avoided word with file:line (≤ 10) + `glossary`; doctor `glossary` (warn with the count).
+  _Avoid: a, b_` (`_Avoid:_` English-stable, same line, a sub-line or an indented paragraph after a blank line).
+  `glossaryEntries()` (→ `total`, `truncated` past 300: doctor warns `quality.glossaryTruncated`, clarify returns
+  `glossaryTruncated` {read, total} + `glossaryNote`) / `glossaryHits(dir, gl, {projectDir, lang})` (terms masked before the
+  avoided words are searched — "End user" never reads as "user"; code, comments and `_Marker:_` tags skipped; `_client_`
+  underscore emphasis read, snake_case not; ≤ 20 words per entry, ≤ 200 hits) never reads TEMPLATE text: `glossUserParts()`
+  matches each line against line patterns of the templates (`glossBuiltinLines(lang)` — requirements / design of every
+  track combination, track design blocks, bugfix texts; pt-BR via `toPtBr` per distinct line; process-wide — plus
+  `glossProjectLines()`: .specs/templates/ files and the packs' requirements / design blocks): key = whitespace folded,
+  lower-cased, numbers "#"; top-level `[…]` / `{{…}}` = wildcards (an untouched slot is skipped, a filled one read); a
+  template heading also matches without its " (…)"; exact keys in a Set, wildcard patterns indexed by 8 head / tail
+  characters. Template placeholders left in a read part are blanked. `briefGlossary()` (≤ 8 entries / 1500 characters;
+  `refs.glossary` with write). Clarify asks one question per avoided word with file:line (≤ 10) + `glossary`; doctor
+  `glossary` (warn with the count).
 - Messages: `i18n.msg(l).quality` (QUALITY_MSG). CHECK_PHASE: glossary 1, cross-feature-acs 1,
   steering-changed-since-approval 2.
 

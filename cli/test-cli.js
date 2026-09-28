@@ -3821,6 +3821,16 @@ if (inSection("p16q")) {
   const doc0 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   ok(/impact \[feature\] --phase steering/.test(help) && /impact \[feature\] --phase steering/.test(doc0) && /glossary\.md/.test(help) && /glossary\.md/.test(doc0),
     "1.16 Q CLI: help and the docblock document `impact [feature] --phase steering` and the glossary.md steering template");
+  // 1.16 Q review 6: a glossary past 300 entries says so — clarify prints the note, --json carries glossaryTruncated.
+  let big = "# Glossary\n\n- **Customer** — a person or company with a signed contract. _Avoid: client, user_\n";
+  for (let i = 0; i < 304; i++) big += `- **Term${i}** — definition ${i}. _Avoid: zzword${i}_\n`;
+  fs.writeFileSync(gfile, big);
+  const clBig = r(["clarify", "alpha"]);
+  let clBigJ = null;
+  try { clBigJ = JSON.parse(r(["clarify", "alpha", "--json"]).out); } catch { /* stays null */ }
+  ok(/\n {2}⚠ glossary\.md holds 305 entries — only the first 300 are read/.test(clBig.out) && /'client' — the glossary says Customer/.test(clBig.out) &&
+    clBigJ && js(clBigJ.glossaryTruncated) === js({ read: 300, total: 305 }),
+    "1.16 Q review 6 CLI: clarify prints the glossary-truncated note (the first 300 of 305 entries read) and --json carries glossaryTruncated (got " + js(clBig.out.slice(-240)) + ")");
 }
 
 // 1.16 package (E): if (inSection("p16e")) { … }

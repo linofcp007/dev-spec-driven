@@ -887,6 +887,7 @@ function main() {
       return out(r, (r) => {
         console.log(T.clarify(r.feature, r.tracks, T.word(r.verdict), r.gapCount));
         r.questions.forEach((q, i) => console.log("  " + (i + 1) + ". " + q));
+        if (r.glossaryNote) console.log("  ⚠ " + r.glossaryNote); // 1.16 Q review: a glossary read only in part says so
       });
     }
 

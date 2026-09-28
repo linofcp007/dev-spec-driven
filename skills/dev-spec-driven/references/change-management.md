@@ -127,12 +127,18 @@ it too. Never hand-edit it.
 
 **Possible duplicates / conflicts (1.16).** The catalog also compares the ACTIVE features' criteria with each other
 (`crossAcs` {pairs, truncated}; a `## ⚠ Possible duplicates / conflicts` section in `SPECS.md` when there is a pair):
-a **near-duplicate** (`kind: duplicate`, reason `near-duplicate` — at least 80% of the words alike, same polarity, same
-numbers) or a likely **conflict** (`kind: conflict` — at least 70% alike with the same trigger, reason `opposite-modal`:
-SHALL vs SHALL NOT / DEVE vs NÃO DEVE / DEBE vs NO DEBE, or `different-numbers`: "5 times" vs "3 times"). It is a
-deterministic heuristic — accents folded, EN/PT/ES stop words and EARS keywords out, a light plural fold, numbers compared
-apart — bounded by an inverted index over each criterion's rarest words and by caps (4000 criteria, 200 000 comparisons,
-200 pairs). Left out: template criteria (with their number slots filled in or not — two +sec features share their
+a **near-duplicate** (`kind: duplicate`, reason `near-duplicate` — the trigger and the response EACH more than 80% alike,
+same polarity, the same numbers with the same units) or a likely **conflict** (`kind: conflict` — at least 70% of the words
+alike, the triggers at least 50% alike and the responses too, reason `opposite-modal`: SHALL vs SHALL NOT / DEVE vs NÃO DEVE
+/ DEBE vs NO DEBE, or `different-numbers`: "5 times" vs "3 times"). It is a deterministic heuristic — accents folded,
+EN/PT/ES stop words and EARS keywords out, a light plural fold, each number read with the word after it ("5 attempts" is
+not "5 minutes") — bounded by an inverted index over each criterion's rarest words and by caps (4000 criteria, 200 000
+comparisons, 200 pairs). The criterion is split at the modal ("THE SYSTEM SHALL" / "O SISTEMA DEVE" / "EL SISTEMA DEBE")
+into its trigger and its response: the polarity is the response's, so a negative in the condition ("IF the service cannot
+be reached", "can't log in", "no puede ser contactado") never flips it; a word negated in one trigger only ("is not
+verified" / "is verified", "non-admin" / "admin", "não está" / "está") makes the two complementary cases — never a pair.
+Each clause is compared in order (the shared words that keep their order, over the union): swapped roles or directions
+("a buyer rates a seller" / "a seller rates a buyer", "savings to checking" / "checking to savings") are no duplicate. Left out: template criteria (with their number slots filled in or not — two +sec features share their
 scaffolded `[SEC]` criteria), two light edits of the same template criterion, criteria of fewer than 3 words, bugfixes and
 spikes, criteria a SHIPPED feature superseded, and any pair where one criterion declares `_Supersedes:_` of the other
 (shipped or pending). `spec_doctor` warns `cross-feature-acs` on each feature of a pair, naming the other feature's AC. The
@@ -337,9 +343,10 @@ that would become a work item. `write` → `.specs/exports/<feature>.<tracker>.c
 The constitution and the track standards evolve too — and a spec approved under the old rule is not automatically
 approved under the new one. Every requirements / design approval (1.16) records `steering` {file: fingerprint} on
 `approvals[<phase>]` and its `approvalHistory` record: the steering that governed it — `constitution.md`, the active
-tracks' steering files (a track pack's too), every file whose front matter says `inclusion: always`, and each
-`fileMatch` file whose pattern matches the feature's `_Implements:_` paths. Only those few files are hashed (CRLF and a
-BOM are encoding, not content).
+tracks' steering files (a track pack's too), every file whose front matter says `inclusion: always`, and every
+`fileMatch` file with its patterns (`steeringMatch` {file: [patterns]}) — requirements and design are approved before
+tasks.md names any file, so a `fileMatch` file counts only once the feature's CURRENT `_Implements:_` paths match it (its
+recorded patterns or its current ones). Only those few files are hashed (CRLF and a BOM are encoding, not content).
 
 - **Noticing it.** A recorded file that changed or was removed since → `spec_doctor` warns
   `steering-changed-since-approval` (which files — `modified` / `removed` — and which approvals; `steeringChanged` in the
