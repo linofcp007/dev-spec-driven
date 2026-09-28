@@ -678,7 +678,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
   normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
   Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
-  symlink to the project is inside — read only when the text comparison says outside; errors fall back to it).
+  symlink to the project is inside — read only when the text comparison says outside; errors fall back to it). Never for a
+  NETWORK path on either side (`isNetworkPath` — the agent's Write target, an absolute `_Implements:_`; 1.16 verify NEW-3):
+  its realpath opened an SMB connection to the host the agent named before the permission prompt (a hang, NTLM on Windows);
+  `networkPathInside()` decides on the text — inside only under root's own `\\host\share\…` prefix (`\\?\UNC\` = `\\`, case
+  folded), so a project on a share stays guarded. The save hook (spec-hook) skips a network `.specs/` file outside the session's
+  folders the same way. The session's own folders (payload `cwd`, CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR) are Claude Code's /
+  the user's, not the agent's: the stop / observe / spec / guard hooks keep using a network cwd (a project on a share keeps
+  its hooks; the observe hook's walk up stops at the share root), never realpath'ed by a hook.
   **It never blocks on its own errors:** a malformed payload, a broken roadmap.json or any exception exits 0.
   1.14 adds the stricter `"scope"` level (see End-of-turn evidence gate and scope guard); a phase still waiting for a
   role's sign-off is not an approved tasks phase.
@@ -1301,7 +1308,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   tracks by the .state.json lstat signature + the context (packs, template files, project lang), its rows by the
   requirements.md signature too; `XAC_TABLE_CACHE` = the whole table + `table.results` (the pairs) while nothing changed and
   no `_Supersedes:_` exists; a file modified < 2 s ago is never trusted (`XAC_RACY_MS`, git's racy-clean rule); features with
-  inferred tracks or `packMarkers` are never cached). `specsFileContained` is memoized per scope (`CONTAINED_KEY`). Doctor's
+  inferred tracks or `packMarkers` are never cached; the others' rows and the table are keyed by the call's sorted ghost-marker
+  set too — a removed feature took a deleted pack's last ghost with it, 1.16 verify NEW-2). `specsFileContained` is memoized per scope (`CONTAINED_KEY`). Doctor's
   check runs last (spliced back in place); `opts.lean` (next_action's and finish's own doctor) skips it once another check
   warns / fails — the verdict can't change. A criterion's shape (`acShape`) = accents folded, lower-cased, `XAC_STOP` (EN/PT/ES
   stop words + EARS keywords) out, `xacStem`, split at the modal (`RE_XAC_SYS_MODAL` "system/sistema (não/no) SHALL/DEVE/DEBE",
@@ -1374,9 +1382,13 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   minus the slugs listed again. `milestoneStatuses()` (inside `roadmapExtras`) → stable codes `on-track` · `at-risk` (reasons
   `eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done` + `eta`, `unknownEta`, `done`, `total`; ROADMAP.md /
   .html get a table between Features and Dependencies and late / at-risk attention lines. `milestonesFollow(rm, slug,
-  rename | archive | remove | restore)` runs from `pruneRoadmapRefsLocked` (4th argument `archived`; returns
+  rename | archive | remove | restore)` runs from `pruneRoadmapRefsLocked` (4th argument `archived`; the results carry
   `milestonesUpdated`) and restore (`restored.milestones`): an archived feature moves to the milestone's `archived` list
-  (its notes still cover it). `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
+  (its notes still cover it). It edits every VALID stored entry in place (`milestoneStore().valid`) and leaves an invalid one
+  (or a meta.milestones that is no list) exactly as it is — one hand-edit typo used to stop every entry from following (1.16
+  verify NEW-1); the results then carry `milestonesInvalid` {count, names — the entry's name when add would accept it, else
+  `#<position>` —, notList?}, and so do spec_roadmap (`milestoneInvalidInfo()`), a "Needs attention" line of ROADMAP.md / .html
+  (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
   defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
   (`changelogData(…, only)`).
 - CLI: switches `revoke`, `print-config`, `gherkin` (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
@@ -1705,7 +1717,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1358 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1362 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 438 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

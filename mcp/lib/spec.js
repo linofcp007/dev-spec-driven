@@ -10004,9 +10004,10 @@ const jaccard = (a, b) => {
 // requirements.md signature too — XAC_FEATURE_CACHE, the PACK_CACHE pattern, bounded — and the whole table (index included,
 // and the pairs computed from it: table.results) is reused while no signature changed and no feature declares _Supersedes:_
 // (XAC_TABLE_CACHE). A feature whose tracks are inferred from its files (no saved list, pre-1.13) or that recorded track-pack
-// markers (ghost markers are per call) is never cached. Cached rows were built after readContained's containment check; the
+// markers (ghost markers are per call) is never cached; the other features' rows and the table are keyed by the call's
+// ghost-marker set too (1.16 verify NEW-2). Cached rows were built after readContained's containment check; the
 // signature carries the inode.
-const XAC_FEATURE_CACHE = new Map(); // readCacheKey(feature dir) → { stateSig, ctx, kind, lang, tracks, reqSig, rows, hasSup } | { archived, reqSig, hasSup }
+const XAC_FEATURE_CACHE = new Map(); // readCacheKey(feature dir) → { stateSig, ctx, kind, lang, tracks, reqSig, ghosts, rows, hasSup } | { archived, reqSig, hasSup }
 const XAC_FEATURE_CACHE_MAX = 5000;
 let XAC_TABLE_CACHE = null; // { key, table }
 // A file modified in the last XAC_RACY_MS is "racily clean" (git's rule): a same-size rewrite within the file system's time
@@ -10092,16 +10093,21 @@ function xacTable(projectDir) {
     if (cacheable) putCache(ck, { stateSig, ctx, kind, lang, tracks, reqSig: null, rows: null, hasSup: false });
     if (kind === "feature") feats.push({ s, ck, reqSig, stateSig, hit: cacheable ? XAC_FEATURE_CACHE.get(ck) : null, lang, tracks, cacheable });
   }
-  // Pass 2: each feature's rows — from the cache while its requirements.md is unchanged too.
+  // The ghost markers of this call (missing packs a feature's packMarkers still name — noted by detectTracks in pass 1, per call):
+  // they make a heading inactive in EVERY feature's requirements.md, so a feature's cached rows and the cached table hold only
+  // for the same set (1.16 verify NEW-2: a removed feature took the last ghost of a deleted pack with it, and a long-lived
+  // process kept the rows computed with its [MARKER] sections dropped — a fresh process reported the conflict).
+  const ghosts = ghostMarkers().map(([n, m]) => n + "=" + m).sort().join(",");
+  // Pass 2: each feature's rows — from the cache while its requirements.md and the ghost markers are unchanged too.
   const perFeature = feats.map((f) => {
-    if (f.hit && f.hit.rows && f.hit.reqSig === f.reqSig) { anySup = anySup || f.hit.hasSup; return { f, rows: f.hit.rows }; }
+    if (f.hit && f.hit.rows && f.hit.reqSig === f.reqSig && f.hit.ghosts === ghosts) { anySup = anySup || f.hit.hasSup; return { f, rows: f.hit.rows }; }
     const r = xacFeatureRows(projectDir, f.s, { lang: f.lang }, f.tracks, tmplOf);
-    if (f.hit) Object.assign(f.hit, { reqSig: f.reqSig, rows: r.rows, hasSup: r.hasSup });
+    if (f.hit) Object.assign(f.hit, { reqSig: f.reqSig, ghosts, rows: r.rows, hasSup: r.hasSup });
     anySup = anySup || r.hasSup;
     return { f, rows: r.rows };
   });
   // The whole table from the last call, while nothing changed (no _Supersedes:_ anywhere — its retirements read other states).
-  const tableKey = anySup || feats.some((f) => !f.cacheable) ? null : root + "\n" + ctx + "\n" + feats.map((f) => f.ck + "|" + f.reqSig + "|" + f.stateSig).join("\n");
+  const tableKey = anySup || feats.some((f) => !f.cacheable) ? null : root + "\n" + ctx + "\nghosts:" + ghosts + "\n" + feats.map((f) => f.ck + "|" + f.reqSig + "|" + f.stateSig).join("\n");
   if (tableKey && XAC_TABLE_CACHE && XAC_TABLE_CACHE.key === tableKey) {
     if (READ_CACHE) XAC_MEMO = { root, table: XAC_TABLE_CACHE.table };
     return XAC_TABLE_CACHE.table;
@@ -10717,13 +10723,16 @@ function metricsLines(r) {
 
 // Drop a feature slug from roadmap.json: its own entry and any dependsOn that referenced it.
 // archived (1.16 E3): an archive — the feature moves to its milestones' `archived` list instead of leaving them (a remove
-// drops it; a rename renames it). → the names of the milestones changed.
+// drops it; a rename renames it). → milestonesFollow's { changed, invalid }.
 function pruneRoadmapRefs(projectDir, slug, renameTo, archived) {
   return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived), (b) => { throw new Error(roadmapBusyResult(projectDir, b).error); });
 }
+// A lifecycle result's milestone fields: milestonesUpdated (the names changed) and milestonesInvalid ({ count, names, notList? }
+// — stored entries left as they are, 1.16 verify NEW-1).
+const milestoneResult = (ms) => ({ ...(ms && ms.changed.length ? { milestonesUpdated: ms.changed } : {}), ...(ms && ms.invalid ? { milestonesInvalid: ms.invalid } : {}) });
 function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
   const rm = readRoadmap(projectDir);
-  if (!rm || !rm.features) return [];
+  if (!rm || !rm.features) return { changed: [], invalid: null };
   if (renameTo) {
     if (rm.features[slug]) { rm.features[renameTo] = rm.features[slug]; delete rm.features[slug]; }
   } else {
@@ -10780,7 +10789,7 @@ function removeFeatureLocked(projectDir, name) {
   if (inUse) return inUse;
   try { fs.rmSync(tomb, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); } catch { /* left as a tombstone: swept later */ }
   const ms = pruneRoadmapRefs(projectDir, slug);
-  return { ok: true, action: "remove", feature: slug, ...(ms && ms.length ? { milestonesUpdated: ms } : {}) }; // 1.16 E3: dropped from its milestones
+  return { ok: true, action: "remove", feature: slug, ...milestoneResult(ms) }; // 1.16 E3: dropped from its milestones
 }
 
 function archiveFeature(projectDir, name) {
@@ -10819,7 +10828,7 @@ function archiveFeatureLocked(projectDir, name, moved) {
   writeFileAtomic(statePath(dest), JSON.stringify({ ...state, archived: record }, null, 2));
   const ms = pruneRoadmapRefs(projectDir, slug, undefined, true); // archived features leave the active roadmap (milestones: → archived)
   const res = { ok: true, action: "archive", feature: slug, dest: path.join("_archive", slug), dependentsPruned: record.dependents.map((d) => d.feature) };
-  if (ms && ms.length) res.milestonesUpdated = ms; // 1.16 E3
+  Object.assign(res, milestoneResult(ms)); // 1.16 E3
   if (res.dependentsPruned.length) {
     const list = res.dependentsPruned.join(", ");
     if (percent < 100) res.incompleteDependency = true; // stable: those features now read as unblocked, the work isn't done
@@ -10860,7 +10869,7 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
-  if (ms && ms.length) res.milestonesUpdated = ms; // 1.16 E3
+  Object.assign(res, milestoneResult(ms)); // 1.16 E3
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));
   const notes = [];
@@ -13611,7 +13620,7 @@ function renderRoadmapMd(projectDir, lang, data) {
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
-  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang)); // + late / at-risk milestones (1.16 E3)
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
   const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
@@ -13667,7 +13676,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const langAttr = normalizeLang(lang); // en | pt | es | pt-BR — a valid BCP 47 tag
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
-  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang)); // + late / at-risk milestones (1.16 E3)
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
@@ -14055,6 +14064,8 @@ function roadmapExtras(projectDir, rmv, opts = {}) {
   rmv.velocity = fc.velocity;
   for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
   rmv.milestones = milestoneStatuses(projectDir, rmv.features, (opts.now != null && timeOf(opts.now)) || Date.now()); // 1.16 E3
+  const msBad = milestoneInvalidInfo(readRoadmap(projectDir)); // 1.16 verify NEW-1: stored entries no status is computed for
+  if (msBad) rmv.milestonesInvalid = msBad;
   const ov = featureOverlaps(projectDir, rmv.features);
   rmv.overlaps = ov.pairs;
   if (ov.truncated) rmv.overlapsTruncated = true;
@@ -14082,6 +14093,7 @@ function roadmapTailLines(r, lang) {
   if (r.velocity && r.velocity.completed > 0) out.push(velocityText(r.velocity, lang));
   if ((r.features || []).some((f) => f.forecast && f.forecast.eta)) out.push(F.etaNote(Math.round(FORECAST_SPREAD * 100)));
   if ((r.milestones || []).length) out.push(`🏁 ${i18n.msg(lang).milestone.title}:`, ...r.milestones.map((m) => "  " + milestoneLine(m, lang))); // 1.16 E3
+  if (r.milestonesInvalid) out.push("⚠ " + milestoneAttention([], lang, r.milestonesInvalid)[0].msg); // 1.16 verify NEW-1
   const ov = r.overlaps || [];
   if (ov.length) {
     out.push(F.overlap.cliHead(ov.length));
@@ -16835,20 +16847,33 @@ const slugList = (v) => strList(v) && v.every((x) => x !== "" && slugify(x) === 
 // not a list of such entries — its valid ones are still listed). An entry is valid only as `add` writes it (1.16 E review
 // M2 — a hand-edited roadmap.json reaches ROADMAP.md / .html): a name RE_MILESTONE_NAME accepts, a date that is a real
 // YYYY-MM-DD day, lists of feature slugs; a second entry with the same identity (milestoneKey) is invalid too.
+// Also → `valid` (per stored entry: true | false — milestonesFollow edits the valid ones in place) and `bad` (null, or
+// { count, names, notList? } — milestoneInvalidInfo: what ROADMAP.md's "Needs attention" and the lifecycle results report).
 function milestoneStore(rm) {
   const raw = rm && isObj(rm.meta) ? rm.meta.milestones : undefined;
-  if (raw === undefined) return { list: [], invalid: false };
-  if (!Array.isArray(raw)) return { list: [], invalid: true };
-  let invalid = false;
-  const list = [];
+  if (raw === undefined) return { list: [], invalid: false, valid: [], bad: null };
+  if (!Array.isArray(raw)) return { list: [], invalid: true, valid: [], bad: { count: 1, names: [], notList: true } };
+  const list = [], valid = [], names = [];
   const keys = new Set();
-  for (const m of raw) {
+  raw.forEach((m, i) => {
     if (!isObj(m) || typeof m.name !== "string" || !RE_MILESTONE_NAME.test(m.name) || typeof m.date !== "string" || !RE_ISO_DAY.test(m.date) || isoTime(m.date) == null ||
-      !slugList(m.features) || (m.archived !== undefined && !slugList(m.archived)) || keys.has(milestoneKey(m.name))) { invalid = true; continue; }
+      !slugList(m.features) || (m.archived !== undefined && !slugList(m.archived)) || keys.has(milestoneKey(m.name))) {
+      valid.push(false);
+      // shown by its name when the name itself is one add accepts (a date typo), else by its position in the list
+      names.push(isObj(m) && typeof m.name === "string" && RE_MILESTONE_NAME.test(m.name) ? m.name : "#" + (i + 1));
+      return;
+    }
     keys.add(milestoneKey(m.name));
+    valid.push(true);
     list.push({ name: m.name, date: m.date, features: m.features.slice(), ...(m.archived && m.archived.length ? { archived: m.archived.slice() } : {}) });
-  }
-  return { list, invalid };
+  });
+  return { list, invalid: names.length > 0, valid, bad: names.length ? { count: names.length, names } : null };
+}
+// The invalid part of meta.milestones → null | { count, names, notList? } (1.16 verify NEW-1): spec_roadmap's
+// `milestonesInvalid`, a "Needs attention" line of ROADMAP.md / .html and the CLI roadmap, and the lifecycle results.
+function milestoneInvalidInfo(rm) {
+  const b = milestoneStore(rm).bad;
+  return b ? { ...b, names: b.names.slice() } : null;
 }
 // A milestone by name (its identity, milestoneKey) → { ok, milestone, list } or a localized error naming the ones there; a
 // roadmap.json that doesn't parse is that error (never "no milestone").
@@ -16888,11 +16913,14 @@ function milestoneStatuses(projectDir, feats, now) {
     return o;
   });
 }
-// The milestone lines of "Needs attention" (ROADMAP.md / .html): the late and at-risk ones.
-function milestoneAttention(milestones, lang) {
+// The milestone lines of "Needs attention" (ROADMAP.md / .html): the late and at-risk ones, then the invalid stored entries
+// (invalid: milestoneInvalidInfo — they have no status, and a feature's rename / archive / remove / restore skips them).
+function milestoneAttention(milestones, lang, invalid) {
   const MS = i18n.msg(lang).milestone;
-  return (milestones || []).filter((m) => m.status === "late" || m.status === "at-risk").map((m) => ({ name: "🏁 " + m.name,
+  const out = (milestones || []).filter((m) => m.status === "late" || m.status === "at-risk").map((m) => ({ name: "🏁 " + m.name,
     msg: m.status === "late" ? MS.attention.late(m.date, m.done, m.total, m.eta) : MS.attention[m.reason](m.date, m.eta, (m.unknownEta || []).join(", ")) }));
+  if (invalid) out.push({ name: "🏁 meta.milestones", msg: invalid.notList ? MS.attention.notList(".specs/roadmap.json") : MS.attention.invalid(invalid.count, invalid.names.join(", "), ".specs/roadmap.json") });
+  return out;
 }
 const MILESTONE_ICON = { "on-track": "🟢", "at-risk": "⚠", late: "⛔", done: "✅" };
 // One milestone as a line (CLI `milestone list` / `roadmap`).
@@ -16989,17 +17017,20 @@ function milestone(projectDir, action, opts = {}) {
   });
 }
 // A feature's lifecycle in meta.milestones (pruneRoadmapRefsLocked / restore, under the roadmap lock): rename → the new slug
-// (active lists only), archive → moved to `archived`, remove → dropped, restore → back from `archived`. A malformed
-// meta.milestones is left exactly as it is. → the names of the milestones changed.
+// (active lists only), archive → moved to `archived`, remove → dropped, restore → back from `archived`. Every VALID stored
+// entry is edited in place; an invalid one (a hand-edit typo — 1.16 verify NEW-1: one bad date used to stop every entry from
+// following) is left exactly as it is, and so is a meta.milestones that is no list. → { changed: the names of the milestones
+// changed, invalid: milestoneInvalidInfo | null }.
 function milestonesFollow(rm, slug, how, to) {
   const store = milestoneStore(rm);
-  if (store.invalid || !store.list.length) return [];
   const changed = [];
-  for (const m of store.list) {
+  const raw = store.valid.length ? rm.meta.milestones : [];
+  raw.forEach((m, i) => {
+    if (!store.valid[i]) return;
     const arch = m.archived || [];
     let hit = false;
     if (how === "restore") {
-      if (arch.includes(slug)) { hit = true; m.archived = arch.filter((s) => s !== slug); if (!m.features.includes(slug)) m.features.push(slug); }
+      if (arch.includes(slug)) { hit = true; m.archived = arch.filter((s) => s !== slug); if (!m.features.includes(slug)) m.features = m.features.concat(slug); }
     } else if (m.features.includes(slug)) {
       hit = true;
       if (how === "rename") m.features = [...new Set(m.features.map((s) => (s === slug ? to : s)))];
@@ -17008,11 +17039,10 @@ function milestonesFollow(rm, slug, how, to) {
         if (how === "archive" && !arch.includes(slug)) m.archived = arch.concat(slug);
       }
     }
-    if (m.archived && !m.archived.length) delete m.archived;
+    if (hit && m.archived && !m.archived.length) delete m.archived;
     if (hit) changed.push(m.name);
-  }
-  if (changed.length) rm.meta.milestones = store.list;
-  return changed;
+  });
+  return { changed, invalid: store.bad ? { ...store.bad, names: store.bad.names.slice() } : null };
 }
 
 // --- archive record → restore ---
@@ -17152,13 +17182,16 @@ function restoreFeatureLocked(projectDir, name, moved) {
     delete st.archived;
     writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
   }
+  let msInvalid = null;
   { // 1.16 E3: back into the milestones that kept it as archived (under the roadmap lock, like the edges above)
     const rmm = readRoadmap(projectDir);
     const ms = milestonesFollow(rmm, slug, "restore");
-    if (ms.length) { writeRoadmap(projectDir, rmm); restored.milestones = ms; }
+    if (ms.changed.length) { writeRoadmap(projectDir, rmm); restored.milestones = ms.changed; }
+    msInvalid = ms.invalid; // invalid stored entries were left as they are (1.16 verify NEW-1)
   }
   const fromBacklog = pruneBacklog(projectDir, slug); // the feature has a folder again, like createFeature
   const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
+  if (msInvalid) res.milestonesInvalid = msInvalid;
   if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
   const skipLine = (s) => s.kind === "record" ? R.skipRecord(s.field, R.reason[s.reason] || s.reason)
     : (s.kind === "dependsOn" ? R.skipDependsOn : R.skipDependent)(s.feature, R.reason[s.reason] || s.reason);
@@ -18628,11 +18661,36 @@ function realPathLoose(p) {
   }
   return null;
 }
+// A network path in its plain UNC spelling (`\\?\UNC\host\share\…` and `\\.\UNC\…` → `\\host\share\…`), for a text comparison.
+function plainUnc(p) {
+  const s = String(p);
+  const m = /^[\\/]{2}[?.][\\/]UNC[\\/]/i.exec(s);
+  return m ? "\\\\" + s.slice(m[0].length) : s;
+}
+// Is network path p inside network folder root — decided on the TEXT alone, never a stat or realpath (1.16 verify NEW-3)?
+// Both are read as Windows paths (a UNC path is one): `\\?\UNC\` = `\\`, / = \, `..` resolved, case folded (SMB host and share
+// names are case-insensitive). A local root or p → false. → the relative path ("" for root itself) | null.
+function networkPathInside(root, p) {
+  if (typeof root !== "string" || typeof p !== "string" || !isNetworkPath(root) || !isNetworkPath(p)) return null;
+  const W = path.win32;
+  const r = W.resolve(plainUnc(root)), q = W.resolve(plainUnc(p));
+  if (!isNetworkPath(r) || !isNetworkPath(q)) return null;
+  const rl = r.toLowerCase().replace(/\\+$/, ""), ql = q.toLowerCase();
+  return ql === rl || ql.startsWith(rl + "\\") ? W.relative(r, q) : null;
+}
 // p spelled under root when it lies inside root — as text, or through an alias of either (an 8.3 short name
 // `C:\Users\ADMINI~1\…`, a junction, a symlink); null when it is outside. The text comparison answers first; the real
 // paths are read only when it says "outside" (the guard hook calls this on every edit). Never throws.
+// A NETWORK path on either side (isNetworkPath — an agent's Write to `\\host\share\a.js`, an absolute `_Implements:_`) is decided
+// on the text alone (1.16 verify NEW-3): a realpath / stat of it opens an SMB connection to the host it names before the permission
+// prompt — hanging on an unreachable host, and on Windows sending the user's NTLM credentials. Inside only under the same
+// `\\host\share\…` prefix as root (a project living on a share stays guarded), the `\\?\UNC\` spelling read as the plain one.
 function insideDirAlias(root, p) {
   if (isInsideDir(root, p)) return p;
+  if (isNetworkPath(root) || isNetworkPath(p)) {
+    const rel = networkPathInside(root, p);
+    return rel == null ? null : rel ? path.join(root, rel) : root;
+  }
   try {
     const rr = realPathLoose(root), rp = realPathLoose(p);
     if (rr && rp && isInsideDir(rr, rp)) return path.join(root, path.relative(rr, rp));
@@ -20677,6 +20735,7 @@ module.exports = {
   statusLine,
   statusLineProject,
   isNetworkPath,
+  networkPathInside, // 1.16 verify NEW-3: the guard's (and the save hook's) text-only rule for a network path
   planBridge,
   userDefaults,
   isTestFile,
