@@ -13645,6 +13645,141 @@ function endRun() {
     ok(ptm.ok && /^Marco 'Lançamento' adicionado — 2026-01-01: faturas$/.test(ptm.lines[0]) && /⛔ Lançamento — 2026-01-01 · 0\/1 feature\(s\) feitas · ETA — · atrasado/.test(ptm.lines[2]) &&
       ptmd.includes("## 🏁 Marcos\n\n| Marco | Data | Features | Feitas | ETA | Estado |") && ptmd.includes("- **🏁 Lançamento** — marco atrasado"),
       "1.16 E3: a PT project — milestone lines, the Marcos table and the attention line in Portuguese; the status codes stay English (got " + js(ptm.lines) + ")");
+
+    // --- 1.16 E review — one regression per finding ---
+    const rv = path.join(tmp, "proj-116e-review");
+    S.initProject(rv, ["core"], "en");
+    for (const n of ["Alpha", "Beta", "User Login"]) S.createFeature(rv, n, ["core"], "x", undefined, "en");
+    const rvRm = path.join(rv, ".specs", "roadmap.json");
+    // M1 — a milestone's identity keeps Unicode (the slug collapsed "Sprint α" / "Sprint β", "Релиз 2026" / "Бета 2026",
+    // "C" / "C++" into one — adding the second silently replaced the first); the release notes' file is derived apart.
+    const m1Names = ["Sprint α", "Sprint β", "Релиз 2026", "Бета 2026", "C", "C++", "Beta launch", "Lançamento"];
+    const m1Adds = m1Names.map((n) => S.milestone(rv, "add", { name: n, date: "2099-12-01", features: ["alpha"] }));
+    const m1Again = [S.milestone(rv, "add", { name: "SPRINT  α", date: "2099-12-02", features: ["alpha"] }), S.milestone(rv, "add", { name: "lancamento", date: "2099-12-02", features: ["alpha"] })];
+    const m1Files = m1Names.map((n) => path.basename(S.changelog(rv, { milestone: n }).file || ""));
+    const m1Rm = S.milestone(rv, "rm", { name: "sprint β" });
+    const m1Left = S.readRoadmap(rv).meta.milestones.map((m) => m.name);
+    ok(m1Adds.every((r) => r.ok && r.updated === false) && m1Again.every((r) => r.ok && r.updated === true) &&
+      /^RELEASE-NOTES\.sprint-[0-9a-f]{8}\.md$/.test(m1Files[0]) && /^RELEASE-NOTES\.sprint-[0-9a-f]{8}\.md$/.test(m1Files[1]) && /^RELEASE-NOTES\.2026-[0-9a-f]{8}\.md$/.test(m1Files[2]) &&
+      m1Files[4] === "RELEASE-NOTES.c.md" && /^RELEASE-NOTES\.c-[0-9a-f]{8}\.md$/.test(m1Files[5]) && m1Files[6] === "RELEASE-NOTES.beta-launch.md" && m1Files[7] === "RELEASE-NOTES.lancamento.md" &&
+      new Set(m1Files).size === m1Files.length && m1Rm.ok && m1Rm.removed === "Sprint β" &&
+      js(m1Left) === js(["SPRINT α", "Релиз 2026", "Бета 2026", "C", "C++", "Beta launch", "lancamento"]),
+      "1.16 E review M1: milestones are compared by a Unicode-preserving key (case, Latin accents and separators folded) — 'Sprint α' ≠ 'Sprint β', 'Релиз 2026' ≠ 'Бета 2026', 'C' ≠ 'C++'; each gets its own RELEASE-NOTES file (slug + a short hash when the slug loses part of the name; 'Beta launch' keeps beta-launch) (got " + js([m1Adds.map((r) => r.updated), m1Files, m1Left]) + ")");
+    // M2 — a hand-edited entry never reaches ROADMAP.md / .html raw: a bad name or date (or feature list) makes it invalid;
+    // what is rendered goes through cell() / htmlEsc().
+    const rvGood = rdf(rvRm);
+    const evil = JSON.parse(rvGood);
+    evil.meta.milestones = [{ name: "<img src=x onerror=alert(1)>", date: "2099-01-01", features: ["alpha"] }, { name: "Evil date", date: "2027-01-01<script>alert(1)</script>", features: ["alpha"] },
+      { name: "Pipe", date: "2027-01-01 | x\n## injected", features: ["alpha"] }, { name: "No day", date: "2027-02-30", features: ["alpha"] },
+      { name: "Bad feature", date: "2099-01-01", features: ["alpha<b>"] }, { name: "Fine", date: "2099-01-01", features: ["alpha"] }, { name: "fine", date: "2099-02-01", features: ["beta"] }];
+    fs.writeFileSync(rvRm, JSON.stringify(evil, null, 2));
+    const m2R = S.roadmapReport(rv, { write: true, html: true });
+    const m2Html = rdf(path.join(rv, ".specs", "ROADMAP.html"));
+    const m2Md = rdf(path.join(rv, ".specs", "ROADMAP.md"));
+    const m2List = S.milestone(rv, "list");
+    const m2Add = S.milestone(rv, "add", { name: "New", date: "2099-01-01", features: ["alpha"] });
+    ok(m2R.ok && js(m2R.milestones.map((m) => m.name)) === js(["Fine"]) && !/<script>alert|<img src/.test(m2Html) && !/^## injected/m.test(m2Md) && !/2027-02-30|alpha<b>/.test(m2Md) &&
+      m2Md.includes("| Fine | 2099-01-01 | alpha |") && m2Html.includes("<td>Fine</td><td>2099-01-01</td>") && m2List.ok && /meta\.milestones/.test(m2List.warning) &&
+      m2Add.ok === false && /meta\.milestones is not a list/.test(m2Add.error) && JSON.parse(rdf(rvRm)).meta.milestones.length === 7,
+      "1.16 E review M2: a hand-edited meta.milestones entry with a bad name, a date that is no real day, a non-slug feature or a duplicate name is invalid — never rendered raw in ROADMAP.md / .html; list warns, add refuses (got " + js([m2R.milestones && m2R.milestones.map((m) => m.name), m2List.warning, m2Add.error]) + ")");
+    fs.writeFileSync(rvRm, rvGood);
+    // m1 — `add` over an existing milestone (the only way to change its date) keeps its archived features, minus any listed again.
+    S.milestone(rv, "add", { name: "Q4", date: "2099-10-01", features: ["alpha", "beta"] });
+    S.manageFeature(rv, "archive", "alpha");
+    const mm1 = S.milestone(rv, "add", { name: "q4", date: "2099-11-15", features: ["beta"] });
+    const mm1Notes = S.changelog(rv, { milestone: "Q4" });
+    const mm1Rst = S.manageFeature(rv, "restore", "alpha");
+    const mm1After = S.readRoadmap(rv).meta.milestones.find((m) => m.name === "q4") || {};
+    const mm1Again = S.milestone(rv, "add", { name: "Q4", date: "2099-11-20", features: ["alpha", "beta"] });
+    ok(mm1.ok && mm1.updated && js(mm1.milestone) === js({ name: "q4", date: "2099-11-15", features: ["beta"], archived: ["alpha"] }) && js(mm1Notes.milestone && mm1Notes.milestone.archived) === js(["alpha"]) &&
+      mm1Rst.ok && js(mm1After.features) === js(["beta", "alpha"]) && !("archived" in mm1After) && mm1Again.ok && !("archived" in mm1Again.milestone),
+      "1.16 E review m1: add over an existing milestone keeps its `archived` list (its notes still cover them; restore brings them back), minus the features listed again (got " + js([mm1.milestone, mm1After]) + ")");
+    // m2 — feature names with spaces: a list's items split on commas only (the engine's single-string form on whitespace too).
+    const mm2 = S.milestone(rv, "add", { name: "Login", date: "2099-12-01", features: ["User Login", "beta"] });
+    const mm2b = S.milestone(rv, "add", { name: "Login 2", date: "2099-12-01", features: ["User Login, beta"] });
+    const mm2c = S.milestone(rv, "add", { name: "Login 3", date: "2099-12-01", features: "alpha beta" });
+    const mm2m = payload(await call("spec_milestone", { action: "add", name: "Login 4", date: "2099-12-01", features: ["User Login"], projectDir: rv }));
+    ok(mm2.ok && js(mm2.milestone.features) === js(["user-login", "beta"]) && mm2b.ok && js(mm2b.milestone.features) === js(["user-login", "beta"]) &&
+      mm2c.ok && js(mm2c.milestone.features) === js(["alpha", "beta"]) && mm2m.ok && js(mm2m.milestone.features) === js(["user-login"]),
+      "1.16 E review m2: milestone features named with spaces ('User Login') resolve like spec_depend — a list's items split on commas only (got " + js([mm2.error, mm2b.error, mm2m.error]) + ")");
+    // m3 — a duplicated task number never gives two work items one ID (Jira Work item ID, Linear ID).
+    fs.writeFileSync(path.join(rv, ".specs", "beta", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] First _Requirements: US-1.AC-1_\n- [ ] 1. [US1] Duplicate one _Requirements: US-1.AC-1_\n- [ ] 2. Feature-level\n");
+    const m3j = parseCsv(S.exportSpecs(rv, { name: "beta", format: "jira" }).content || "");
+    const m3l = parseCsv(S.exportSpecs(rv, { name: "beta", format: "linear" }).content || "");
+    const m3jIds = m3j.slice(1).map((r) => r[0]);
+    const m3us1 = m3j.slice(1).find((r) => r[1] === "Story" && /^US-1 /.test(r[2])) || [];
+    ok(m3jIds.length === 6 && js(m3jIds) === js(m3jIds.map((_, i) => String(i + 1))) &&
+      m3j.slice(1).filter((r) => r[1] === "Sub-task").length === 2 && m3j.slice(1).filter((r) => r[1] === "Sub-task").every((r) => r[5] === m3us1[0]) &&
+      js(m3l.slice(1).map((r) => r[0]).filter((k) => /#/.test(k))) === js(["beta/#1", "beta/#1 (2)", "beta/#2"]) && new Set(m3l.slice(1).map((r) => r[0])).size === m3l.length - 1,
+      "1.16 E review m3: duplicate task numbers → unique Jira Work item IDs (the row number) and Linear IDs (an occurrence suffix: beta/#1 (2)); Parents point at the first match (got " + js([m3jIds, m3l.slice(1).map((r) => r[0])]) + ")");
+    // m4 — a response with no subject before the modal is no clean split: one Then with the whole text (EN and PT).
+    const m4en = S.earsSteps("WHEN a payment fails, the cart, including discounts, SHALL be kept.", "en");
+    const m4pt = S.earsSteps("QUANDO um pagamento falha, o carrinho, incluindo descontos, DEVE ser mantido.", "pt");
+    const m4ok = S.earsSteps("WHEN a payment fails, THE SYSTEM SHALL keep the cart.", "en");
+    ok(m4en.split === false && js(m4en.steps) === js([{ kind: "then", text: "WHEN a payment fails, the cart, including discounts, SHALL be kept." }]) &&
+      m4pt.split === false && js(m4pt.steps) === js([{ kind: "then", text: "QUANDO um pagamento falha, o carrinho, incluindo descontos, DEVE ser mantido." }]) &&
+      S.earsSteps("In safe mode, SHALL refuse writes", "en").split === false && S.earsSteps("IF x THEN SHALL y", "en").split === false &&
+      m4ok.split && js(m4ok.steps.map((s) => s.text)) === js(["a payment fails", "THE SYSTEM SHALL keep the cart."]),
+      "1.16 E review m4: 'WHEN a payment fails, the cart, including discounts, SHALL be kept.' (and its PT twin) is one Then with its whole text — never Then 'SHALL be kept.' (got " + js([m4en, m4pt.steps]) + ")");
+    // m5 — only PAIRED emphasis is markup; nothing else is ever dropped (a fuzz over generated criteria with markup, code
+    // spans, quotes, lead brackets and literal stars / underscores: the steps hold exactly the criterion's characters, the
+    // EARS keywords, the markup and the separators aside).
+    const m5 = (t) => S.earsSteps(t, "en").steps.map((s) => s.kind + ":" + s.text);
+    const m5cases = [m5("THE SYSTEM SHALL compute 2**n values"), m5("*WHEN* the user pays THE SYSTEM SHALL charge"), m5("(WHEN the user pays) THE SYSTEM SHALL charge"),
+      m5("_WHEN_ the user pays, THE SYSTEM SHALL charge"), m5("WHEN a_b_c changes THE SYSTEM SHALL recompute 2*3*4 and `x**y`"), m5("**WHEN** the user pays **THE SYSTEM SHALL** charge __now__")];
+    let seed = 1160500;
+    const rnd = (n) => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) % n; };
+    const pick = (a) => a[rnd(a.length)];
+    const fzWords = ["the", "user", "a", "cart", "paid", "is", "o", "sistema", "el", "SI", "units", "2**n", "a_b_c", "x * y", "2*3*4", "(", ")", "100%", "\"x, WHEN y\"", "`a, WHEN b`", "`c*d*e`", "snake_case", "—", "when", "if", "se"];
+    const fzKws = ["WHEN", "WHILE", "IF", "WHERE", "THEN", "QUANDO", "SE", "ENQUANTO", "ONDE", "ENTÃO", "CUANDO", "SI", "MIENTRAS", "DONDE", "ENTONCES"];
+    const fzModals = ["THE SYSTEM SHALL", "the system shall", "O SISTEMA DEVE", "EL SISTEMA DEBE", "SHALL", "the cart SHALL"];
+    const fzWrap = [(k) => [k, k], (k) => ["**" + k + "**", k], (k) => ["*" + k + "*", k], (k) => ["_" + k + "_", k], (k) => ["__" + k + "__", k], (k) => ["(" + k, "(" + k]];
+    const fzKw = /(?<![\p{L}\p{N}_])(when|while|if|where|then|quando|enquanto|se|onde|então|entao|cuando|mientras|si|donde|entonces)(?![\p{L}\p{N}_])/giu;
+    const fzNorm = (s) => [...s.replace(fzKw, " ").replace(/[\s,]+/g, "")].sort().join("");
+    const fzJoin = (a) => a.join(" ").replace(/ ,/g, ",").replace(/\s+/g, " ").trim();
+    const m5lost = [];
+    let m5split = 0;
+    for (let it = 0; it < 1500; it++) {
+      const marked = [], plain = [];
+      for (let i = 0, n = 2 + rnd(10); i < n; i++) {
+        const r = rnd(10);
+        const pair = r < 3 ? pick(fzWrap)(pick(fzKws)) : r < 4 ? pick(fzWrap.slice(0, 5))(pick(["user", "cart", "the"])) : [pick(r < 5 ? fzModals : fzWords), null];
+        marked.push(pair[0]); plain.push(pair[1] == null ? pair[0] : pair[1]);
+        if (!rnd(5)) { marked.push(","); plain.push(","); }
+      }
+      const tail = [pick(fzModals), "keep", pick(fzWords)];
+      const mt = fzJoin(marked.concat(tail)), pt = fzJoin(plain.concat(tail));
+      const r = S.earsSteps(mt, pick(["en", "pt", "es", "pt-BR", undefined]));
+      const got = r.steps.map((x) => x.text).join(" ");
+      if (r.split) m5split++;
+      if (r.split ? fzNorm(got) !== fzNorm(pt) || r.steps.some((x) => !x.text.trim()) : r.steps.length !== 1 || got !== pt) m5lost.push(mt);
+    }
+    ok(js(m5cases) === js([["then:THE SYSTEM SHALL compute 2**n values"], ["when:the user pays", "then:THE SYSTEM SHALL charge"], ["when:(the user pays)", "then:THE SYSTEM SHALL charge"],
+      ["when:the user pays", "then:THE SYSTEM SHALL charge"], ["when:a_b_c changes", "then:THE SYSTEM SHALL recompute 2*3*4 and `x**y`"], ["when:the user pays", "then:THE SYSTEM SHALL charge now"]]) &&
+      !m5lost.length && m5split > 300,
+      "1.16 E review m5: emphasis — `2**n` / a_b_c / 2*3*4 / code spans kept, *WHEN* and _WHEN_ read as the keyword, a lead '(' kept; fuzz: no character lost over 1500 generated criteria (" + m5split + " split; lost in: " + js(m5lost.slice(0, 3)) + ", got " + js(m5cases) + ")");
+    // m6 — every Gherkin keyword of the dialect (gherkin-languages.json: 'Regla de negocio', 'Business Need', 'Ability', the
+    // step keywords …) at the start of the summary gets the summary label in front — never a Rule / Feature / step line.
+    const m6 = (lang, name, summary) => {
+      const f = S.createFeature(rv, name, ["core"], "x", undefined, lang);
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), `# ${name}\n\n## ${lang === "es" ? "Resumen" : lang === "pt" ? "Resumo" : "Summary"}\n${summary}\n\n## User Stories\n\n### US-1 (P1): X\n1. **US-1.AC-1** — WHEN x happens THE SYSTEM SHALL do y\n`);
+      return (S.exportSpecs(rv, { name, format: "gherkin" }).content || "").split("\n").find((l) => l.startsWith("  ") && l.includes(summary)) || "";
+    };
+    const m6lines = [m6("es", "Pago rv", "Regla de negocio: pagar el carrito."), m6("en", "Need rv", "Business Need: pay in one step."), m6("en", "Ability rv", "Ability: to pay."),
+      m6("pt", "Dadas rv", "Dadas as regras do carrinho, pagar."), m6("es", "Pero rv", "Pero sin tarjeta."), m6("en", "Plain rv", "Customers pay in one step.")];
+    ok(js(m6lines) === js(["  Resumen: Regla de negocio: pagar el carrito.", "  Summary: Business Need: pay in one step.", "  Summary: Ability: to pay.",
+      "  Resumo: Dadas as regras do carrinho, pagar.", "  Resumen: Pero sin tarjeta.", "  Customers pay in one step."]),
+      "1.16 E review m6: a summary starting with any Gherkin keyword of the dialect or English (Regla de negocio:, Business Need:, Ability:, Dadas, Pero …) is labelled — never read as a Rule / Feature / step (got " + js(m6lines) + ")");
+    // extra — `milestone list` (and changelog {milestone}) on a roadmap.json that doesn't parse: the roadmap error, never "No milestones yet".
+    const rvKeep = rdf(rvRm);
+    fs.writeFileSync(rvRm, "{ not json");
+    const exList = S.milestone(rv, "list");
+    const exNotes = S.changelog(rv, { milestone: "Q4" });
+    const exMcp = await call("spec_milestone", { projectDir: rv });
+    fs.writeFileSync(rvRm, rvKeep);
+    ok(exList.ok === false && /roadmap\.json/.test(exList.error) && !exList.lines && exNotes.ok === false && /roadmap\.json/.test(exNotes.error) && !/No milestone/.test(exNotes.error) &&
+      exMcp.result.isError === true && /roadmap\.json/.test(payload(exMcp).error),
+      "1.16 E review extra: milestone list / changelog {milestone} on a broken roadmap.json return its error (MCP isError) — never 'No milestones yet' (got " + js([exList, exNotes.error]) + ")");
   }
 
   // Release hygiene: the three version fields agree.
