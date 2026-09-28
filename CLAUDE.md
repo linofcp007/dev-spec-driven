@@ -763,7 +763,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   an exported function sees the built-in tracks only). `PACK_LOADING` makes every registry reader answer built-in-only
   while the packs load (never a half-built registry). Registry: `{packs, names, byName, byToken, problems, entries, legacy,
   corpus}` — packs in folder-name order; problems are `{file, severity, code, args, line?, pack?}`, localized only when
-  shown (`localizePackProblem`, `msg.trackPacks.problems[code]`), so the memo is language-neutral.
+  shown (`localizePackProblem`, `msg.trackPacks.problems[code]`), so the memo is language-neutral. **Cross-call caches**
+  (F4 review R9 — 20 packs × 4 languages cost ~100 ms per call): `packScan()` lists a pack's folder + `<lang>/` folders and
+  lstats each allowlisted file → `sig` (size / mtime / ctime / inode per entry); `PACK_CACHE` (per pack folder, bounded 64)
+  returns the validated result while the sig is unchanged — an edit is picked up by the next call; the pack folder's
+  realpath is checked every call. `PACK_CORPUS_CACHE` (bounded 16) keys the placeholder corpus by every valid pack's
+  name / token / sig. A project without `.specs/tracks/` pays one existsCached.
 - **Validation (`loadPack`) — any error ignores the pack as a whole:** name = folder, `RE_PACK_NAME` `^[a-z][a-z0-9]{1,19}$`,
   never `packReservedName()` (VALID_TRACKS, TRACK_ALIASES keys, `PACK_RESERVED_WORDS`, Windows device names, PROTO_KEYS);
   marker `RE_PACK_MARKER` `^[A-Z][A-Z0-9]{1,11}$` (bare or `[X]`), never `RE_PACK_MARKER_RESERVED` (built-in markers, US\d /
@@ -774,29 +779,41 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   inner space - ' . ’, 2–60) — a regex-looking keyword is `signal-invalid`, and a valid one still reaches the classifier
   only through `keywordRe` (escaped); steering: `RE_CUSTOM_STEERING` minus device / proto names. Bounds `PACK_LIMITS`
   (20 packs, 32 KB track.json and per fragment — size read by lstat BEFORE the content, 20 sections / 20 syn / 50 keywords
-  per tier / 20 fragment items). Files: `readPackFile()` — lstat, a regular file (never a link), real path inside the
-  real `.specs/`; the pack folder itself is refused when it is a link (Dirent `isSymbolicLink`, which a Windows junction
-  is) or resolves outside. Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
+  per tier / 20 fragment items). Files: `packScan()` — lstat, a regular file (never a link), in a folder chain checked once
+  per pack (`.specs/tracks/` no link, the pack folder's realpath inside the real `.specs/`, a `<lang>/` Dirent no link — no
+  per-file realpath: it adds nothing for a regular file and was the loader's biggest cost); `readPackItem()` reads it after
+  the lstat size check; the pack folder itself is refused when it is a link (Dirent `isSymbolicLink`, which a Windows
+  junction is) or resolves outside. Sections: every name / synonym is keyed by `packSectionKey()` — lower-case, the
+  RE_HEADING_LEAD lead stripped (numbering, `Section N`, an emoji, a dash — what `headingMatches` strips from the heading;
+  F4 review R4; nothing left → `field-invalid`, a lead stripped → warn `section-name-lead`), and every synonym is
+  MARKER-BOUND (`loose` = all of them — F4 review R7: a core `## Architecture` never satisfies a pack's Architecture; a
+  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`).
+  Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
   indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
-  `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref`. Warnings only:
+  `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
+  and the file the count comes from — F4 review R10). Warnings only:
   unknown keys / files / variables, an empty fragment (the default is used), a steering name a built-in track also uses.
   Stable codes are in the guide and in `spec_tracks`' description.
 - **Rendering (EN / PT / ES / pt-BR — `msg.trackPacks`):** `packDesignBlock` (`## [MARKER] <name>` + `todoLine` +
-  guidance), `packRequirementsBlock` (`#### [MARKER] <title> — Acceptance Criteria (EARS)`, numbered after the highest
-  US-1 AC of the text it joins; `insertPackRequirements()` puts it before the first `#`/`##`/`###` heading after the last
-  US-1 criterion, else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task;
+  guidance — `packSubstBasic()` fills its `{{title}}` / `{{marker}}` / `{{name}}` / `{{slug}}`; `trackDesignBlock(tr, lang,
+  vars)`), `packRequirementsBlock` (`#### [MARKER] <title> — Acceptance Criteria (EARS)`, numbered after the highest
+  US-1 AC of the text it joins; `insertPackRequirements()` puts it before the first REAL `#`/`##`/`###` heading after the
+  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task;
   `_Requirements:_` added when a task has none — the pack's AC IDs per `trackAcIds`, else the track's `acPlaceholder`;
   the DEFAULT task also gets `_Makes green:_` from `packPlanRows()`; a fragment line whose `{{tN}}` / `{{tests}}` names no
   planned test is dropped), `packTestRowsBlock` (`## [MARKER] <Traceability Matrix>` + the built-in header, T-IDs after
   the plan's own; null when the plan already cites a pack AC or requirements.md defines none), `packChecklistBlock`
-  (`- [ ] TOKEN: …`), `packSteeringStub`. `packSubst()` resolves `{{ac1}}…` `{{acs}}` `{{t1}}…` `{{tests}}` `{{title}}`
+  (`- [ ] TOKEN: …`; given requirements.md, so `{{acN}}` resolves), `packSteeringStub`. `packSubst()` resolves `{{ac1}}…` `{{acs}}` `{{t1}}…` `{{tests}}` `{{title}}`
   `{{marker}}` `{{name}}` `{{slug}}` with `RE_TEMPLATE_VAR` (linear).
 - **Where the blocks go:** `scaffoldText()` — a built-in scaffold gets ONLY its pack tracks' blocks (`withTrackBlocks(…,
   {only})`; a feature without packs is byte-identical to 1.14); a project template gets every missing block (the 1.14
   rule, packs included; checklist: packs only). createFeature also writes each pack's steering file (built-in tracks'
   steering stays spec_init / add_track's). applyTracks (add_track): design sections, steering, task block — never
-  requirements (as the built-in tracks). `scaffoldTestPlan` leaves the pack's ACs out of its "fresh template?" comparison.
-  classification.md lists pack signals (i18n `signalTracks()`).
+  requirements (as the built-in tracks). `scaffoldTestPlan` leaves the pack's ACs out of its "fresh template?" comparison
+  and of its generic rows (the pack's own rows plan them). classification.md lists pack signals (i18n `signalTracks()`).
+  importSpec (F4 review R8): after writing the imported requirements.md it re-inserts each pack's criteria
+  (`insertPackRequirements`), adds the pack rows to the re-planned test plan (`withTrackBlocks(…, {only: packs})`) and
+  appends the pack task block (`withPackTasks` — imported tasks, or the kept scaffold with its stale pack block cut out).
 - **Gates & readers:** `activeSectionTracks()` (doctor `<name>-sections`, the design approval, design-save check,
   roadmap attention), `statusFeature` `packSections {name: {marker, title, sections}}` + `missingPacks`, `checkPhaseIndex`
   (a `-sections` id is a design check), the brief's and the RTM's track design sections (`["sec", "privacy",
@@ -804,13 +821,20 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   A pack's task block is found by its MARKER in a tasks.md heading (`trackTaskHeadingIs()` — the built-in tracks keep
   their template headings, cached in `TASK_HEADINGS`). Placeholders: `[MARKER]` is stable (`isPackMarkerBracket()` in
   `scanBrackets`, the exact case-sensitive token — a lower-case `[role]` slot stays a slot beside a ROLE pack — and never
-  while the process-wide built-in corpus is built, `BUILTIN_CORPUS_BUILD`); the packs' rendered blocks in every language join the per-call
-  corpus (`packCorpusSets()` → `projectTemplateHas` brackets / code / tasks — incl. the track's `acPlaceholder`).
-- **Missing packs:** a saved track shaped like a pack name that is no valid pack is kept by `savedTracks()` (normalizeTracks
-  drops it; applyTracks / removeTracks re-append `missingPackTracks()` when they rewrite `tracks`). createFeature / applyTracks
-  record `.state.json → packMarkers {name: "[TOKEN]"}` (`packMarkersFor`); `detectTracks()` → `noteGhostPacks()` fills the
-  per-call `GHOST_MARKERS` from them, and `inactiveMarkerLines` / `inactiveTaskLines` drop those sections like a removed
-  track's — no gate, no placeholder. Doctor warns `track-pack-missing` (absent vs invalid + its error codes). trace_check
+  while the process-wide built-in corpus is built, `BUILTIN_CORPUS_BUILD`); the packs' texts in every language join the
+  corpus (`packCorpusSets()` → `projectTemplateHas` brackets / code / tasks — incl. the track's `acPlaceholder`), read
+  from their SOURCES (guidance, fragment items / rows, the i18n defaults — never whole rendered blocks) with `{{title}}` /
+  `{{marker}}` filled and the feature's `{{name}}` `{{slug}}` `{{acN}}` `{{acs}}` `{{tN}}` `{{tests}}` kept: such a key is a
+  linear wildcard (`RE_PACK_WILD_VAR` split → `wildcardMatch`, ≥ 3 literal characters — F4 review R2).
+- **Missing packs:** createFeature / applyTracks record `.state.json → packMarkers {name: "[TOKEN]"}` (`packMarkersFor`). A
+  saved non-built-in track is a pack name only when `savedPackName()` says so — a valid pack now, or in packMarkers, never a
+  `packReservedName` (F4 review R6: any other word — a typo, `security`, `gdpr` — makes the list unreadable → the files
+  decide, as in 1.14); such a missing one is kept by `savedTracks()` (normalizeTracks drops it; applyTracks / removeTracks
+  re-append `missingPackTracks()`). `detectTracks()` → `noteGhostPacks()` registers EVERY packMarkers entry that is no
+  valid pack now — whether or not the feature still lists it (F4 review R1: a pack turned off, then deleted, came back to
+  life) — in the per-call `GHOST_MARKERS`; `inactiveMarkerLines` / `inactiveTaskLines` drop those sections like a removed
+  track's — no gate, no placeholder — and `trackAcIds` keeps only the lines whose owner IS the asked track (F4 review R5:
+  ghost sections joined another track's criteria). Doctor warns `track-pack-missing` (absent vs invalid + its error codes). trace_check
   reads whole files (as for a removed built-in track), so the pack's criteria and tasks still pair up there.
 - **`spec_tracks` / `dev-spec tracks`** (`trackPacks()`): list (built-in rows + every pack entry, valid or not), init
   (`initTrackPack` — six files from `msg.trackPacks.init*`, create-only, the `inside()` link refusal of templates init;
@@ -819,7 +843,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `.specs/tracks/` holding a `.state.json` is a pre-1.15 feature (`reg.legacy`, every action refuses `legacyFeature`); the
   PostToolUse hook and the pre-commit check skip `.specs/tracks/` (same exception).
 - **Known limits:** a pack's classifier keywords share `KW_RE` / `KW_LITERAL` with the built-in ones (bounded:
-  `KW_CACHE_MAX`); ghost markers are per call and project-wide (a marker of a missing pack drops that heading in any
+  `KW_CACHE_MAX`); a slot or task line holding a variable is a wildcard (`[the {{name}} screens]` also recognises
+  `[the checkout screens]`); editing `.specs/tracks/*` does not refresh ROADMAP.md (the save hook skips pack files); a hook
+  is a fresh process — it pays one read of the packs (20 packs × 4 language folders ≈ 60 ms); ghost markers are per call and project-wide (a marker of a missing pack drops that heading in any
   feature of the call — correct, since the pack is gone for the whole project); section names are localized per language
   but `sectionState` reports the English name.
 
@@ -1478,7 +1504,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1242 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1252 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 401 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep

@@ -32,7 +32,7 @@ by `check` and ignored. `dev-spec tracks init a11y` scaffolds all of it, comment
 | `title` | `{ "en": "…", "pt"?: "…", "es"?: "…", "pt-BR"?: "…" }` (a plain string = its English). 2–80 characters, one line, no `[ ] < >` or backtick. Shown in the headings. |
 | `description` | Optional, one line, ≤ 300 characters (listed by `list`). |
 | `signals` | Optional `{ "strong"?: [...], "weak"?: [...], "context"?: [...] }` — classifier keywords, ≤ 50 per tier, 2–60 characters of letters / digits with inner spaces, `-`, `'`, `.`. |
-| `sections` | 1–20 mandatory design sections: `{ "name": "…" or {en, pt?, es?}, "syn"?: [...], "loose"?: [...], "guidance"?: "…" or {en, pt?, es?} }`. Names are unique; `syn` are other headings that count (any language, ≤ 20); `loose` are ordinary words that count only on a `[MARKER]` heading or under one (the `[PRIVACY]` rule); `guidance` is one line (≤ 600 characters) written under the `> **TODO**` sentinel. |
+| `sections` | 1–20 mandatory design sections: `{ "name": "…" or {en, pt?, es?}, "syn"?: [...], "loose"?: [...], "guidance"?: "…" or {en, pt?, es?} }`. Names are unique; `syn` are other headings that count (any language, ≤ 20); `guidance` is one line (≤ 600 characters) written under the `> **TODO**` sentinel — its `{{title}}` / `{{marker}}` / `{{name}}` / `{{slug}}` are filled in. **Every pack section is marker-bound:** a heading counts only when it carries the pack's marker (`## [A11Y] Contrast`) or sits under one that does (`## [A11Y] Visuals` → `### Contrast`) — so a section named like a core design heading (`Architecture`, `Testing Strategy`…) is never satisfied by the core section (`check` warns `section-core-name`). `loose` is accepted for symmetry with the built-in tables; for a pack every synonym already behaves as one. A name's lead — numbering (`2 `, `1.2 `), `Section 3`, an emoji, a dash — is ignored when matching, exactly as in the heading (`check` warns `section-name-lead`); nothing left after it is an error. |
 | `steering` | Optional — the steering file the track brings (`a11y.md`: lower-case, digits, `-`, `.md`). |
 
 Unknown keys are warnings (ignored). **A pack with any error is ignored as a whole — never half-applied.**
@@ -49,14 +49,18 @@ Plain markdown; HTML comments and fenced code are ignored.
   `_Requirements:_` cites all the pack's criteria.
 - **test-plan.md** — table rows with the built-in plan's six cells (`Test ID | Layer | Kind | Description | Covers | File`);
   the Test ID is renumbered after the plan's own, under `## [A11Y] Traceability Matrix`. None → one row per criterion.
-- **checklist.md** — items, written as `- [ ] A11Y: …` in the feature's checklist.md.
+- **checklist.md** — items, written as `- [ ] A11Y: …` in the feature's checklist.md (`{{acN}}` resolves there too).
 - **steering.md** — the stub of the pack's `steering` file.
 
 Variables: `{{ac1}}`, `{{ac2}}`… = the pack's criteria as the feature numbers them, `{{acs}}` = all of them;
 `{{t1}}`… / `{{tests}}` = their planned tests (a line naming none — a feature without +tdd — is left out); `{{title}}`,
-`{{marker}}`, and the feature's `{{name}}` / `{{slug}}`. `{{ac3}}` with two criteria is an error (`fragment-ref`).
-`[Bracketed]` slots are template placeholders until a feature fills them (the gates refuse them like any template
-text); the `[A11Y]` marker never is one.
+`{{marker}}`, and the feature's `{{name}}` / `{{slug}}`. `{{ac3}}` with two criteria is an error (`fragment-ref`) — judged
+per language context: a root `tasks.md` read by pt features counts `pt/requirements.md`'s criteria, and the message names
+both. `[Bracketed]` slots are template placeholders until a feature fills them (the gates refuse them like any template
+text) — also when they hold a variable: `[the {{name}} screens]` still reads as a slot once it became
+`[the Login screens]` (a linear wildcard over at least 3 literal characters, the project templates' rule; a slot that is
+nothing but a variable is not recognised). A task line with a variable is template text the same way ("Keyboard audit
+of {{name}}" matches any "Keyboard audit of …"). The `[A11Y]` marker never is a slot.
 
 ## Example — +a11y
 
@@ -125,7 +129,10 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
   keyword like `(a+)+$` is refused by `check`. A keyword in capitals is an acronym, matched case-sensitively. Confirm
   the track set with the human, as always.
 - **Scaffolding.** `spec_create` / `spec_import` write the criteria, the design sections, the task block, the test rows
-  (+tdd), the checklist items and the steering file; `spec_add_track` on an existing feature adds the design sections,
+  (+tdd), the checklist items and the steering file — `spec_import` puts the pack's criteria back after the imported
+  US-1 criteria (the import replaces requirements.md), plans them with the pack's rows and appends the task block citing
+  them; the criteria go after the last US-1 criterion, before the next REAL heading (a heading inside an HTML comment or
+  fenced code never counts); `spec_add_track` on an existing feature adds the design sections,
   the task block (citing the track's criterion slot — write the criteria yourself, as for a built-in track) and the
   steering file. A project template (`.specs/templates/`) still gets the pack's blocks unless it already carries the
   marker. Everything is create-only / append-only.
@@ -138,8 +145,13 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
 - **Removal.** `spec_add_track {remove: true}` is non-destructive: the `[A11Y]` sections, criteria and task block stay
   on disk, inactive, and count again when the track is re-added.
 - **A pack that disappears** (folder deleted, or now invalid): features that saved +a11y keep it in `.state.json`
-  (with its marker), the track is **inactive** — its sections, criteria and task block are no gate and no
-  placeholder — and doctor warns `track-pack-missing`, naming why. Nothing crashes; restoring the pack reactivates it.
+  (with its marker, `packMarkers`), the track is **inactive** — its sections, criteria and task block are no gate and no
+  placeholder — and doctor warns `track-pack-missing`, naming why. Nothing crashes; restoring the pack reactivates it. A
+  feature that had turned +a11y OFF before the pack went keeps those parts inactive too (no warning — it no longer uses
+  the track), and another track's criteria or task block never absorb them.
+- **Saved track lists.** A feature's `.state.json → tracks` names a pack when it is a valid pack now or recorded in its
+  `packMarkers`; any other unknown word there (a typo, `security`, `gdpr`) makes the list unreadable and the tracks are
+  inferred from the files, as before 1.15 — never a phantom missing pack.
 
 ## check — stable codes
 
@@ -149,6 +161,8 @@ Errors (the pack is ignored): `json-missing` · `json-invalid` · `too-big` (tra
 `field-invalid` · `marker-invalid` · `marker-reserved` · `marker-duplicate` · `signal-invalid` · `too-many` (keywords,
 sections, synonyms, fragment items — each bounded) · `section-duplicate` · `steering-invalid` · `fragment-row` ·
 `fragment-ref` · `too-many-packs` (over 20). Warnings: `unknown-key` · `unknown-file` · `unknown-variable` ·
+`section-name-lead` (a section name's numbering / emoji / dash is ignored when matching) · `section-core-name` (a
+section named like a core design heading — only its marked heading counts) ·
 `fragment-empty` (the built-in default is used) · `steering-shared` (the file is also a built-in steering file) ·
 `ears-no-modal` / `ears-vague` (a fragment criterion EARS would flag). The CLI exits 1 on an error.
 
@@ -156,10 +170,19 @@ sections, synonyms, fragment items — each bounded) · `section-duplicate` · `
 
 A pack is **data only**: nothing in it is run or evaluated; its keywords reach the classifier escaped (a literal,
 linear match); its name and marker are validated to a closed alphabet before any pattern sees them; only the
-allowlisted file names are read, each a regular file whose real path stays inside `.specs/` (lstat + realpath — a
-symlink or junction out is ignored); every size and count is bounded. No network. `tracks` is a reserved feature
+allowlisted file names are read, each a regular file (lstat — never a link) in a folder chain checked once per pack
+(`.specs/tracks/` is no link, the pack folder's real path is inside `.specs/`, a `<lang>/` folder is no link) — a symlink
+or junction out is ignored; every size and count is bounded. No network. `tracks` is a reserved feature
 slug — a folder `.specs/tracks/` holding a `.state.json` is a feature created before 1.15: it stays that feature and
 is never read as packs (every `spec_tracks` action refuses with `legacyFeature: true`).
+
+## Performance
+
+A project without `.specs/tracks/` pays one existence check per engine call. With packs, each call lists the pack
+folders and lstats their files; a pack whose files (size, mtime, inode) are unchanged is served from an in-process cache,
+and so is the placeholder corpus built from the packs — an MCP server or a CLI run pays the reading and parsing once,
+and an edit is picked up by the very next call. A hook is a fresh process: it reads the packs once (one pack ≈ a few
+milliseconds; 20 packs × 4 language folders ≈ 60 ms).
 
 ## Limits
 
@@ -167,3 +190,6 @@ is never read as packs (every `spec_tracks` action refuses with `legacyFeature: 
   either — requirements may already be approved); `spec_create` does, for a new feature.
 - A pack's section names are one string per language; the headings a scaffold writes use the feature's language.
 - A feature language without its own fragment folder uses the pack root's fragments.
+- Editing a pack under `.specs/tracks/` does not refresh ROADMAP.md by itself (the save hook skips pack files, as it skips
+  `.specs/templates/`); the next engine mutation, or `dev-spec roadmap --write`, does.
+- A variable in a slot is a wildcard: `[the {{name}} screens]` also recognises `[the checkout screens]` as the slot.

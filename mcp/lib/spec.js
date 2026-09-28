@@ -2836,8 +2836,8 @@ function requirementsMd(name, tracks, summary, lang) {
 
 // Mandatory design sections for a single track. Shared by designMd (greenfield) and addTrack
 // (escalating an existing feature) so the two can never drift.
-function trackDesignBlock(track, lang) {
-  return isPackTrack(track) ? packDesignBlock(packOf(track), lang) : i18n.trackDesignBlock(track, lang); // a track pack: its sections (1.15)
+function trackDesignBlock(track, lang, vars) {
+  return isPackTrack(track) ? packDesignBlock(packOf(track), lang, vars) : i18n.trackDesignBlock(track, lang); // a track pack: its sections (1.15)
 }
 
 function designMd(name, tracks, lang) {
@@ -3058,7 +3058,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("load-test.md", scaf("load-test", () => loadTestMd(name, lng)));
   }
   put("quickstart.md", scaf("quickstart", () => quickstartMd(name, lng)));
-  put("checklist.md", scaf("checklist", () => checklistMd(name, t, lng), { tracks: t })); // + a track pack's items (1.15)
+  put("checklist.md", scaf("checklist", () => checklistMd(name, t, lng), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")) })); // + a track pack's items (1.15)
   // tasks.md last (it references the tracks; a template's track blocks keep only the ACs requirements.md defines; a track pack's
   // tasks make its planned tests green)
   put("tasks.md", scaf("tasks", () => tasksMd(name, t, lng), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")),
@@ -3315,7 +3315,7 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
     for (const tr of ["tdd", ...markerTracks()]) {
       if (!want(tr)) continue;
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(out)) : headingHasMarker(out, trackMarker(tr));
-      if (!present) out = out.trimEnd() + "\n" + trackDesignBlock(tr, lang);
+      if (!present) out = out.trimEnd() + "\n" + trackDesignBlock(tr, lang, vars);
     }
   } else if (key === "requirements") {
     for (const tr of markerTracks()) {
@@ -3353,7 +3353,7 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
   } else if (key === "checklist") {
     for (const tr of packTracks()) { // the built-in tracks' items are the i18n builder's (a team's checklist template keeps its own)
       if (!want(tr)) continue;
-      const block = packChecklistBlock(packOf(tr), lang, out, vars);
+      const block = packChecklistBlock(packOf(tr), lang, out, vars, (reqText && reqText()) || "");
       if (block) out = out.trimEnd() + "\n" + block + "\n";
     }
   }
@@ -3794,18 +3794,45 @@ function stripJsonComments(text) {
   }
   return out + text.slice(from);
 }
-// One file of a pack: a regular file (never a link) whose real path stays inside the project's .specs/, at most `max` bytes (the
-// size is read before the content), BOM-stripped with LF line ends. → { text } | { missing } | { linked } | { tooBig }.
-function readPackFile(abs, realSpecs, max) {
-  let st;
-  try { st = fs.lstatSync(abs); } catch { return { missing: true }; }
-  if (st.isSymbolicLink() || !st.isFile()) return { linked: true };
-  try {
-    const real = fs.realpathSync.native(abs);
-    if (real === realSpecs || !isInsideDir(realSpecs, real)) return { linked: true };
-  } catch { return { missing: true }; }
-  if (st.size > max) return { tooBig: true };
-  const raw = readIfExists(abs);
+// A pack folder's entries as the loader reads them — the pack root and each <lang>/ folder — WITHOUT their content: { items, sig }.
+// items: { frel, abs, name, lang, state: "file" (+ size) | "linked" (a link, or a folder where a file belongs) | "unknown" }. Every
+// allowlisted file is lstat'ed: a regular file, never a link. Its folder chain is already checked (.specs/tracks/ is no link, the pack
+// folder's real path is inside .specs/, a <lang>/ folder is no link), so a regular file's real path stays inside too — no per-file
+// realpath (F4 review R9: it was the loader's biggest cost). sig: every entry with size / mtime / ctime / inode — the key of the
+// cross-call pack cache (PACK_CACHE): an edit changes it and is picked up by the next call.
+function packScan(dir, rel) {
+  const items = [], sig = [];
+  const visit = (absDir, relDir, langKey) => {
+    for (const e of readDirCached(absDir) || []) {
+      if (e.name.startsWith(".")) continue;
+      const frel = relDir + e.name, abs = path.join(absDir, e.name);
+      if (langKey === "" && i18n.LANGS.includes(e.name)) {
+        if (e.isSymbolicLink() || !e.isDirectory()) { items.push({ frel, name: e.name, lang: langKey, state: "linked" }); sig.push(frel + "|L"); continue; }
+        sig.push(frel + "/");
+        visit(abs, frel + "/", e.name);
+        continue;
+      }
+      if (!((langKey === "" && e.name === PACK_JSON) || PACK_FRAGMENTS.includes(e.name))) {
+        items.push({ frel: frel + (e.isDirectory() ? "/" : ""), name: e.name, lang: langKey, state: "unknown" });
+        sig.push(frel + "|U");
+        continue;
+      }
+      let st = null;
+      try { st = fs.lstatSync(abs); } catch { /* vanished meanwhile */ }
+      if (!st) continue;
+      if (st.isSymbolicLink() || !st.isFile()) { items.push({ frel, name: e.name, lang: langKey, state: "linked" }); sig.push(frel + "|L"); continue; }
+      items.push({ frel, abs, name: e.name, lang: langKey, state: "file", size: st.size });
+      sig.push(frel + "|" + st.size + "|" + st.mtimeMs + "|" + st.ctimeMs + "|" + st.ino);
+    }
+  };
+  visit(dir, rel, "");
+  return { items, sig: sig.join("\n") };
+}
+// One scanned file's text — at most `max` bytes (the size comes from lstat, before any read), BOM-stripped with LF line ends.
+// → { text } | { missing } | { tooBig }.
+function readPackItem(it, max) {
+  if (it.size > max) return { tooBig: true };
+  const raw = readIfExists(it.abs);
   if (raw == null) return { missing: true };
   const t = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   return { text: t.replace(/\r\n?/g, "\n") };
@@ -3849,6 +3876,29 @@ function packTableRows(text) {
 // The {{variables}} a fragment may use: {{ac1}}… (the pack's n-th criterion as the feature numbers it), {{acs}} (all of them),
 // {{t1}}… / {{tests}} (their planned tests), {{title}}, {{marker}}, and the feature's {{name}} / {{slug}}.
 const RE_PACK_VAR = /^(?:ac\d{1,3}|acs|t\d{1,3}|tests|title|marker|name|slug)$/;
+// A section's guidance takes the feature / pack values only (it has no criteria of its own).
+const RE_PACK_GUIDANCE_VAR = /^(?:title|marker|name|slug)$/;
+// A section name / synonym as headingMatches compares it: lower-case, its heading lead stripped (RE_HEADING_LEAD — numbering, an
+// emoji, a dash, "Section N"; names hold no bracket, so no marker).
+function packSectionKey(lower) {
+  let t = lower;
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(RE_HEADING_LEAD, ""); }
+  return t.trim();
+}
+// The core design's own headings (every language, + the tdd block's) as section keys — a pack section named like one only counts
+// under its marker (sections are marker-bound); check says so (section-core-name). Static i18n text: built once per process.
+let CORE_DESIGN_KEYS = null;
+function coreDesignHeadingKeys() {
+  if (CORE_DESIGN_KEYS) return CORE_DESIGN_KEYS;
+  const set = new Set();
+  for (const l of i18n.BASE_LANGS) { // (pt-BR's headings derive from pt's — not rendered a fourth time: toPtBr is costly)
+    for (const line of i18n.design({ name: "x", tracks: ["core", "tdd"], label: "core +tdd" }, l).split("\n")) {
+      const m = line.match(/^#{2,6}\s+(.*)$/);
+      if (m) set.add(packSectionKey(m[1].replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase()));
+    }
+  }
+  return (CORE_DESIGN_KEYS = set);
+}
 function packVarRefs(text) {
   const out = [];
   for (const m of String(text).matchAll(RE_TEMPLATE_VAR)) out.push(m[1].toLowerCase());
@@ -3892,22 +3942,43 @@ function packLocalized(v, field, ok, rule, jrel, err, warn) {
   return out;
 }
 
-// One pack folder → { entry, pack? } — pack only when it is valid (every problem goes through problem()).
-function loadPack(dir, folder, rel, realSpecs, problem) {
+// One pack folder → { entry, pack?, problems } — pack only when it is valid. A folder whose scan (packScan's sig) is unchanged since
+// an earlier call is served from PACK_CACHE (F4 review R9: 20 packs × 4 languages cost ~100 ms per call); its real path is checked
+// every time.
+const PACK_CACHE = new Map(); // readCacheKey(pack dir) → { sig, entry, pack, problems } — across calls, bounded
+function loadPack(dir, folder, rel, realSpecs) {
+  let realDir = null;
+  try { realDir = fs.realpathSync.native(dir); } catch { /* vanished */ }
+  if (!realDir || !isInsideDir(realSpecs, realDir)) {
+    return { entry: { name: folder, folder: rel, valid: false, marker: null, title: null, errors: 1 }, problems: [{ file: rel, severity: "error", code: "linked-folder", args: {}, pack: folder }] };
+  }
+  const scan = packScan(dir, rel);
+  const ck = readCacheKey(dir);
+  const hit = PACK_CACHE.get(ck);
+  if (hit && hit.sig === scan.sig) return { entry: { ...hit.entry }, pack: hit.pack, problems: hit.problems };
+  const problems = [];
+  const r = loadPackScan(scan, folder, rel, (file, severity, code, args, line) =>
+    problems.push({ file, severity, code, args: args || {}, ...(line ? { line } : {}), pack: folder }));
+  if (r.pack) r.pack.sig = scan.sig;
+  if (PACK_CACHE.size >= 64) PACK_CACHE.clear();
+  PACK_CACHE.set(ck, { sig: scan.sig, entry: { ...r.entry }, pack: r.pack || null, problems });
+  return { entry: r.entry, pack: r.pack, problems };
+}
+// The validation of one scanned pack (every problem goes through problem()).
+function loadPackScan(scan, folder, rel, problem) {
   let errors = 0;
-  const err = (file, code, args, line) => { errors++; problem(file, "error", code, args, line, folder); };
-  const warn = (file, code, args, line) => problem(file, "warn", code, args, line, folder);
+  const err = (file, code, args, line) => { errors++; problem(file, "error", code, args, line); };
+  const warn = (file, code, args, line) => problem(file, "warn", code, args, line);
   const entry = { name: folder, folder: rel, valid: false, marker: null, title: null, errors: 0 };
   const done = () => { entry.errors = errors; return { entry }; };
   const jrel = rel + PACK_JSON;
   if (!RE_PACK_NAME.test(folder)) err(rel, "name-invalid", { name: folder });
   else if (packReservedName(folder)) err(rel, "name-reserved", { name: folder });
-  let realDir = null;
-  try { realDir = fs.realpathSync.native(dir); } catch { /* vanished */ }
-  if (!realDir || !isInsideDir(realSpecs, realDir)) { err(rel, "linked-folder", {}); return done(); }
-  const jf = readPackFile(path.join(dir, PACK_JSON), realSpecs, PACK_LIMITS.jsonBytes);
+  const jItem = scan.items.find((x) => x.lang === "" && x.name === PACK_JSON);
+  if (!jItem) { err(jrel, "json-missing", {}); return done(); }
+  if (jItem.state === "linked") { err(jrel, "fragment-linked", { file: PACK_JSON }); return done(); }
+  const jf = readPackItem(jItem, PACK_LIMITS.jsonBytes);
   if (jf.missing) { err(jrel, "json-missing", {}); return done(); }
-  if (jf.linked) { err(jrel, "fragment-linked", { file: PACK_JSON }); return done(); }
   if (jf.tooBig) { err(jrel, "too-big", { file: PACK_JSON, max: PACK_LIMITS.jsonBytes }); return done(); }
   const stripped = stripJsonComments(jf.text);
   let j = null;
@@ -3971,6 +4042,17 @@ function loadPack(dir, folder, rel, realSpecs, problem) {
       for (const k of Object.keys(s)) if (!PACK_SECTION_KEYS.has(k)) warn(jrel, "unknown-key", { key: f + "." + k });
       // (a section name keys the localized-name lookups: never an Object.prototype key such as "constructor")
       const names = packLocalized(s.name, f + ".name", (x) => packTextOk(x, PACK_LIMITS.textLen) && !PROTO_KEYS.has(x.trim().toLowerCase()), textRule, jrel, err, warn);
+      // A name / synonym is matched as headingMatches reads a heading: after its lead (numbering "2 " / "1.2 ", "Section 3",
+      // an emoji, a dash) — the same strip here, or "2 Offline Modes" could never match its own heading (F4 review R4). Nothing
+      // left after the lead → invalid; a lead stripped → a warning (it is ignored when matching).
+      let leadWarned = false;
+      const key = (x, field) => {
+        const raw = x.trim().replace(/\s+/g, " ").toLowerCase();
+        const k = packSectionKey(raw);
+        if (k.length < 2) { err(jrel, "field-invalid", { field, rule: "a name after its numbering / emoji / dash" }); return null; }
+        if (k !== raw && !leadWarned) { leadWarned = true; warn(jrel, "section-name-lead", { name: x.trim(), key: k }); }
+        return k;
+      };
       const list = (k) => {
         const v = s[k];
         if (v == null) return [];
@@ -3979,17 +4061,31 @@ function loadPack(dir, folder, rel, realSpecs, problem) {
         const out = [];
         for (const x of v) {
           if (!packTextOk(x, PACK_LIMITS.textLen)) { err(jrel, "field-invalid", { field: f + "." + k, rule: textRule }); return null; }
-          out.push(x.trim().replace(/\s+/g, " ").toLowerCase());
+          const kx = key(x, f + "." + k);
+          if (kx == null) return null;
+          out.push(kx);
         }
         return out;
       };
       const syn = list("syn"), loose = list("loose");
       const guidance = s.guidance == null ? null : packLocalized(s.guidance, f + ".guidance", packGuidanceOk, "one line, ≤ " + PACK_LIMITS.guidanceLen + " characters, no <!-- -->", jrel, err, warn);
       if (!names || !syn || !loose || (s.guidance != null && !guidance)) return;
-      const nameKeys = [...new Set(Object.values(names).map((x) => x.replace(/\s+/g, " ").toLowerCase()))];
+      if (guidance) for (const g of Object.values(guidance)) for (const v of packVarRefs(g)) if (!RE_PACK_GUIDANCE_VAR.test(v)) warn(jrel, "unknown-variable", { v });
+      const nameKeys = [];
+      for (const [l, x] of Object.entries(names)) {
+        const kx = key(x, f + ".name" + (typeof s.name === "string" ? "" : "." + l));
+        if (kx == null) return;
+        if (!nameKeys.includes(kx)) nameKeys.push(kx);
+      }
       const clash = sections.find((o) => nameKeys.some((x) => o.nameKeys.includes(x)));
       if (clash) { err(jrel, "section-duplicate", { name: names.en }); return; }
-      sections.push({ name: names.en, names, nameKeys, syn: [...new Set([...nameKeys, ...syn, ...loose])], loose: loose.filter((x) => !nameKeys.includes(x)), guidance });
+      // Every pack synonym is MARKER-BOUND (F4 review R7): it names the section only on a heading carrying the pack's marker, or on an
+      // unmarked heading nested under one — never the core design's own "## Architecture" / "## Testing Strategy". (`loose` is kept
+      // for symmetry with the built-in tables; for a pack every synonym already behaves as one.)
+      const all = [...new Set([...nameKeys, ...syn, ...loose])];
+      const core = all.filter((x) => coreDesignHeadingKeys().has(x));
+      if (core.length) warn(jrel, "section-core-name", { name: names.en, heading: core[0] });
+      sections.push({ name: names.en, names, nameKeys, syn: all, loose: all, guidance });
     });
   }
 
@@ -4004,28 +4100,18 @@ function loadPack(dir, folder, rel, realSpecs, problem) {
     }
   }
 
-  // The fragments: the pack root, then each <lang>/ folder; anything else is listed (ignored).
+  // The fragments: the pack root, then each <lang>/ folder (packScan's items); anything else is listed (ignored).
   const fragments = {};
-  const readFragments = (absDir, relDir, langKey) => {
-    for (const e of readDirCached(absDir) || []) {
-      if (e.name.startsWith(".")) continue;
-      const frel = relDir + e.name;
-      if (langKey === "" && e.name === PACK_JSON) continue;
-      if (langKey === "" && i18n.LANGS.includes(e.name)) {
-        if (e.isSymbolicLink() || !e.isDirectory()) { err(frel, "fragment-linked", { file: e.name }); continue; }
-        readFragments(path.join(absDir, e.name), frel + "/", e.name);
-        continue;
-      }
-      if (!PACK_FRAGMENTS.includes(e.name)) { warn(frel + (e.isDirectory() ? "/" : ""), "unknown-file", {}); continue; }
-      const r = readPackFile(path.join(absDir, e.name), realSpecs, PACK_LIMITS.fragmentBytes);
-      if (r.linked) { err(frel, "fragment-linked", { file: e.name }); continue; }
-      if (r.tooBig) { err(frel, "too-big", { file: e.name, max: PACK_LIMITS.fragmentBytes }); continue; }
-      if (r.missing) continue;
-      const parsed = parsePackFragment(e.name, r.text, frel, err, warn);
-      if (parsed) (fragments[e.name] = fragments[e.name] || {})[langKey] = { ...parsed, rel: frel };
-    }
-  };
-  readFragments(dir, rel, "");
+  for (const it of scan.items) {
+    if (it.lang === "" && it.name === PACK_JSON) continue;
+    if (it.state === "unknown") { warn(it.frel, "unknown-file", {}); continue; }
+    if (it.state === "linked") { err(it.frel, "fragment-linked", { file: it.name }); continue; }
+    const r = readPackItem(it, PACK_LIMITS.fragmentBytes);
+    if (r.tooBig) { err(it.frel, "too-big", { file: it.name, max: PACK_LIMITS.fragmentBytes }); continue; }
+    if (r.missing) continue;
+    const parsed = parsePackFragment(it.name, r.text, it.frel, err, warn);
+    if (parsed) (fragments[it.name] = fragments[it.name] || {})[it.lang] = { ...parsed, rel: it.frel };
+  }
   // {{acN}} / {{tN}} must name a criterion / a planned test the pack scaffolds — per language context (a <lang>/ folder, else the root).
   const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const contexts = ["", ...i18n.LANGS.filter((l) => PACK_FRAGMENTS.some((fl) => fragments[fl] && has(fragments[fl], l)))];
@@ -4043,11 +4129,14 @@ function loadPack(dir, folder, rel, realSpecs, problem) {
     for (const fl of ["tasks.md", "test-plan.md", "checklist.md"]) {
       const fr = effective(fl, ctx);
       if (!fr) continue;
-      for (const v of packVarRefs(fr.text)) {
+      for (const v of new Set(packVarRefs(fr.text))) {
         const m = v.match(/^(ac|t)(\d{1,3})$/);
         if (!m) continue;
         const max = m[1] === "ac" ? nAc : fl === "tasks.md" ? nT : 0;
-        if (+m[2] < 1 || +m[2] > max) err(fr.rel, "fragment-ref", { file: fl, ref: "{{" + v + "}}", n: max });
+        // Named with the language context and where the count comes from (F4 review R10): a root tasks.md checked for the pt/
+        // features reads pt/requirements.md's criteria.
+        const from = m[1] === "ac" ? (req ? req.rel : "") : fl === "tasks.md" ? (plan ? plan.rel : req ? req.rel : "") : "";
+        if (+m[2] < 1 || +m[2] > max) err(fr.rel, "fragment-ref", { file: fl, ref: "{{" + v + "}}", n: max, ctx, from, kind: m[1] });
       }
     }
   }
@@ -4057,7 +4146,7 @@ function loadPack(dir, folder, rel, realSpecs, problem) {
   entry.valid = true;
   entry.marker = "[" + token + "]";
   entry.title = title.en;
-  return { entry, pack: { name: folder, token, marker: "[" + token + "]", title, description, signals, sections, steering, rel, dir, fragments } };
+  return { entry, pack: { name: folder, token, marker: "[" + token + "]", title, description, signals, sections, steering, rel, fragments } };
 }
 
 // Every pack folder of a project's .specs/ → the registry { packs (valid, in name order), names, byName, byToken, problems, entries,
@@ -4081,7 +4170,8 @@ function loadTrackPacks(root) {
     if (e.isSymbolicLink()) { problem(rel, "error", "linked-folder", {}, null, e.name); reg.entries.push({ name: e.name, folder: rel, valid: false, marker: null, title: null, errors: 1 }); continue; }
     if (!e.isDirectory()) { problem(rel0 + e.name, "warn", "unknown-file", {}); continue; }
     if (++count > PACK_LIMITS.packs) { problem(rel, "error", "too-many-packs", { max: PACK_LIMITS.packs }, null, e.name); reg.entries.push({ name: e.name, folder: rel, valid: false, marker: null, title: null, errors: 1 }); continue; }
-    const r = loadPack(path.join(tdir, e.name), e.name, rel, realSpecs, problem);
+    const r = loadPack(path.join(tdir, e.name), e.name, rel, realSpecs);
+    reg.problems.push(...r.problems);
     if (r.pack) {
       const other = reg.byToken.get(r.pack.token);
       if (other) { // markers are unique: the first pack (by name) keeps it
@@ -4141,16 +4231,18 @@ function packMarkersFor(tracks) {
   for (const t of tracks || []) if (isPackTrack(t)) m[t] = trackMarker(t);
   return Object.keys(m).length ? { packMarkers: m } : {};
 }
-// The saved track packs the project lacks now (this engine call): [[name, marker]] — their sections, criteria and task blocks are
-// INACTIVE like a removed track's (inactiveMarkerLines / inactiveTaskLines). Filled by detectTracks from each feature's
-// .state.json packMarkers (a marker that is a valid pack's or reserved is never one); dropped with the read-cache scope.
+// The track packs a feature once used that the project lacks now (this engine call): [[name, marker]] — their sections, criteria
+// and task blocks are INACTIVE like a removed track's (inactiveMarkerLines / inactiveTaskLines). Filled by detectTracks from each
+// feature's .state.json packMarkers — EVERY recorded pack that is no valid pack now, whether the feature still lists it or turned
+// it off before the pack went (F4 review R1: an off-then-deleted pack's sections came back to life); a marker that is a valid
+// pack's or reserved is never one. Dropped with the read-cache scope.
 let GHOST_MARKERS = null;
 function noteGhostPacks(st) {
-  if (!READ_CACHE || !isObj(st) || !isObj(st.packMarkers) || !Array.isArray(st.tracks)) return;
+  if (!READ_CACHE || !isObj(st) || !isObj(st.packMarkers)) return;
   const valid = allTracks();
   for (const n of Object.keys(st.packMarkers)) {
     const m = st.packMarkers[n];
-    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || valid.includes(n) || !st.tracks.includes(n)) continue;
+    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || valid.includes(n)) continue;
     const token = m.length > 2 && m.startsWith("[") && m.endsWith("]") ? m.slice(1, -1) : "";
     if (!RE_PACK_MARKER.test(token) || RE_PACK_MARKER_RESERVED.test(token) || packRegistry().byToken.has(token)) continue;
     if (!GHOST_MARKERS) GHOST_MARKERS = new Map();
@@ -4158,12 +4250,19 @@ function noteGhostPacks(st) {
   }
 }
 const ghostMarkers = () => (GHOST_MARKERS ? [...GHOST_MARKERS] : []);
+// A saved (non-built-in) track name that is a track pack's: a valid pack now, or one recorded in the state's packMarkers (a pack the
+// feature used) — never a reserved word (F4 review R6: a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
+// back to the files as in 1.14).
+function savedPackName(st, n) {
+  if (VALID_TRACKS.includes(n) || !RE_PACK_NAME.test(n) || packReservedName(n)) return false;
+  return isPackTrack(n) || (isObj(st) && isObj(st.packMarkers) && Object.prototype.hasOwnProperty.call(st.packMarkers, n));
+}
 // A feature's saved tracks naming a pack the project no longer has (deleted, or now invalid): inactive, kept in .state.json.
 function missingPackTracks(dir) {
   const st = readJson(statePath(dir)).data;
   const saved = isObj(st) && Array.isArray(st.tracks) ? st.tracks : [];
   const valid = allTracks();
-  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase()).filter((x) => !valid.includes(x) && RE_PACK_NAME.test(x)))];
+  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase()).filter((x) => !valid.includes(x) && savedPackName(st, x)))];
 }
 
 // --- rendering a pack's blocks (the design sections, criteria, task block, test rows, checklist items, steering stub) ---
@@ -4202,11 +4301,20 @@ function packSubst(text, ctx) {
 function packCtx(pack, lang, acs, tids, vars) {
   return { acs, tids, title: packTitle(pack, lang), marker: pack.marker, acSlot: i18n.msg(lang).tracks.acPlaceholder(pack.name), ...(vars || {}) };
 }
-// The mandatory design sections: `## [MARKER] <name>` + the > **TODO** sentinel + the section's guidance (as the built-in blocks).
-function packDesignBlock(pack, lang) {
+// {{title}} / {{marker}} (and {{name}} / {{slug}} when `vals` has them) filled in; every other {{variable}} left as written.
+function packSubstBasic(text, vals) {
+  return String(text).replace(RE_TEMPLATE_VAR, (m, k) => {
+    const key = k.toLowerCase();
+    return (key === "title" || key === "marker" || key === "name" || key === "slug") && vals[key] != null ? vals[key] : m;
+  });
+}
+// The mandatory design sections: `## [MARKER] <name>` + the > **TODO** sentinel + the section's guidance (as the built-in blocks) —
+// the guidance's {{title}} / {{marker}} / {{name}} / {{slug}} filled in (vars: the feature's { name, slug }).
+function packDesignBlock(pack, lang, vars) {
   const P = i18n.msg(lang).trackPacks;
+  const vals = { title: packTitle(pack, lang), marker: pack.marker, ...(vars || {}) };
   return pack.sections.map((s) => {
-    const g = s.guidance ? packLocal(s.guidance, lang) : "";
+    const g = s.guidance ? packSubstBasic(packLocal(s.guidance, lang), vals) : "";
     return "\n## " + pack.marker + " " + packLocal(s.names, lang) + "\n" + P.todoLine + "\n" + (g ? g + "\n" : "");
   }).join("");
 }
@@ -4227,13 +4335,15 @@ function packRequirementsBlock(pack, lang, existing, vars) {
   return lines.join("\n");
 }
 // requirements.md + a pack's criteria block, placed right after the US-1 criteria (before the next story / section heading) —
-// appended at the end when the text has no US-1 criterion.
+// appended at the end when the text has no US-1 criterion. The heading is a REAL one: never inside an HTML comment (F4 review R3 —
+// a template's `<!-- Add more stories like this: ### US-2 … -->` swallowed the block) nor fenced code.
 function insertPackRequirements(text, block) {
   const lines = text.split("\n");
   const us1 = [...acIndex(text).values()].filter((e) => /^US-1\.AC-/.test(e.id)).map((e) => e.line);
   if (us1.length) {
     const last = us1.reduce((a, b) => Math.max(a, b), 0) - 1;
-    const at = headingIndex(lines).find((h) => h > last && lines[h].match(/^(#{1,6})/)[1].length <= 3);
+    const cl = commentLines(lines);
+    const at = headingIndex(lines).find((h) => h > last && !cl[h].hidden && cl[h].vis.startsWith("#") && lines[h].match(/^(#{1,6})/)[1].length <= 3);
     if (at != null) {
       let k = at;
       while (k > 0 && !lines[k - 1].trim()) k--;
@@ -4305,12 +4415,13 @@ function packTestRowsBlock(pack, lang, planText, reqText, vars) {
   return "\n## " + pack.marker + " " + heading + "\n\n" + lines[first - 2] + "\n" + lines[first - 1] + "\n" + body.join("\n") + "\n";
 }
 // The checklist items (`- [ ] MARKER: …`) — null when the checklist already holds one of them.
-function packChecklistBlock(pack, lang, text, vars) {
+// reqText: the feature's requirements.md — a checklist item's {{acN}} names the pack's criteria as it numbers them.
+function packChecklistBlock(pack, lang, text, vars, reqText) {
   const lead = pack.token + ":";
   const RE_BOX = /^\s*[-*]\s+\[[ xX]\]\s+/;
   if (String(text || "").split("\n").some((l) => RE_BOX.test(l) && l.replace(RE_BOX, "").startsWith(lead))) return null;
   const P = i18n.msg(lang).trackPacks;
-  const ctx = packCtx(pack, lang, [], [], vars);
+  const ctx = packCtx(pack, lang, [...trackAcIds(reqText || "", pack.name)], [], vars);
   const f = packFragment(pack, "checklist.md", lang);
   const items = f ? f.items.map((it) => packSubst(it.text, ctx).text) : [P.checklistItem(pack.sections.length)];
   return items.map((t) => "- [ ] " + (t.startsWith(lead) ? t : lead + " " + t)).join("\n");
@@ -4328,30 +4439,59 @@ function trackSteeringStub(file, lang) {
   return p ? packSteeringStub(p, lang) : null;
 }
 
-// The pack blocks as template corpus (placeholder detection): every valid pack rendered in every language — its brackets, code-span
-// slots and task lines are template text until a feature edits them. Built on first use per call (in the pack memo).
+// The pack blocks as template corpus (placeholder detection): every text a valid pack scaffolds, in every language — its brackets,
+// code-span slots and task lines are template text until a feature edits them. Read straight from the pack's sources (the section
+// guidance, the fragments' items / rows, the i18n defaults) — never by rendering whole blocks (F4 review R9) — with {{title}} /
+// {{marker}} filled in and the FEATURE's values ({{name}} {{slug}} {{acN}} {{acs}} {{tN}} {{tests}}) kept as variables: a key holding
+// one is a LINEAR wildcard (packWildcard → wildcardMatch, the project templates' rule), so `[the {{name}} screens]` still reads as
+// a slot once it became `[the Login screens]` (F4 review R2). Built on first use per call and cached across calls by the packs' scan
+// signatures (PACK_CORPUS_CACHE — any edit to a pack changes the key).
+const RE_PACK_WILD_VAR = /\{\{\s*(?:ac\d{1,3}|acs|t\d{1,3}|tests|name|slug)\s*\}\}/i;
+const RE_PACK_WILD_VAR_G = new RegExp(RE_PACK_WILD_VAR.source, "gi");
+const PACK_CORPUS_CACHE = new Map(); // corpus key → sets, across calls (bounded)
 function packCorpusSets() {
   const reg = packRegistry();
   if (!reg.packs.length) return null;
   if (reg.corpus) return reg.corpus;
+  const ck = reg.packs.map((p) => p.name + "|" + p.token + "|" + (p.sig || "")).join("\n");
+  const cached = PACK_CORPUS_CACHE.get(ck);
+  if (cached) return (reg.corpus = cached);
   const sets = { brackets: { set: new Set(), wild: [] }, code: new Set(), tasks: { set: new Set(), wild: [] } };
   reg.corpus = sets; // visible to the scan below (a code-span slot lookup) while it is filled
   const seen = new Set();
+  // A key holding a feature variable → a wildcard (at least 3 literal characters, as templateWildcard: a slot that is nothing but
+  // a variable would match every bracket), else an exact key.
+  const put = (entry, key) => {
+    if (!RE_PACK_WILD_VAR.test(key)) { entry.set.add(key); return; }
+    const segs = key.split(RE_PACK_WILD_VAR_G);
+    if (segs.join("").replace(/\s+/g, "").length >= 3) entry.wild.push(segs);
+  };
   for (const p of reg.packs) {
     for (const l of i18n.LANGS) {
-      const req = packRequirementsBlock(p, l, ""); // its criteria read as the pack's: the block's heading carries the marker
-      const plan = packTestRowsBlock(p, l, "", req) || "";
-      const tasks = packTaskBlock(p, "", req, plan, l) || "";
-      const bare = packTaskBlock(p, "", "", "", l) || ""; // spec_add_track's: the criteria not written yet (the track's slot)
-      const texts = [packDesignBlock(p, l), req, plan, tasks, bare, packChecklistBlock(p, l, "") || "", packSteeringStub(p, l), i18n.msg(l).tracks.acPlaceholder(p.name)];
+      const P = i18n.msg(l).trackPacks;
+      const vals = { title: packTitle(p, l), marker: p.marker };
+      const texts = [], taskTexts = [];
+      for (const s of p.sections) if (s.guidance) texts.push(packLocal(s.guidance, l));
+      const fr = packFragment(p, "requirements.md", l);
+      if (fr) fr.items.forEach((it) => texts.push(it.text, ...it.sub)); else texts.push(P.defaultCriterion(vals.title));
+      const ft = packFragment(p, "tasks.md", l);
+      if (ft) ft.items.forEach((it) => { texts.push(it.text, ...it.sub); taskTexts.push(it.text); });
+      else { const d = P.defaultTask(p.marker, vals.title); texts.push(d); taskTexts.push(d); }
+      const fp = packFragment(p, "test-plan.md", l);
+      if (fp) fp.rows.forEach((r) => texts.push("| " + r.cells.slice(1).join(" | ") + " |")); else texts.push(P.rowDesc);
+      const fc = packFragment(p, "checklist.md", l);
+      if (fc) fc.items.forEach((it) => texts.push(it.text)); else texts.push(P.checklistItem(p.sections.length));
+      texts.push(packSteeringStub(p, l), i18n.msg(l).tracks.acPlaceholder(p.name));
       for (const t of texts) {
-        const k = templateBracketKeys(t, seen);
-        k.brackets.forEach((x) => sets.brackets.set.add(x));
+        const k = templateBracketKeys(packSubstBasic(t, vals), seen);
+        k.brackets.forEach((x) => put(sets.brackets, x));
         k.code.forEach((x) => sets.code.add(x));
       }
-      for (const t of [...parseTasks(tasks), ...parseTasks(bare)]) sets.tasks.set.add(taskDescription(t.text));
+      for (const t of taskTexts) put(sets.tasks, taskDescription(packSubstBasic(t, vals)));
     }
   }
+  if (PACK_CORPUS_CACHE.size >= 16) PACK_CORPUS_CACHE.clear();
+  PACK_CORPUS_CACHE.set(ck, sets);
   return sets;
 }
 
@@ -4511,9 +4651,10 @@ function detectTracks(dir) {
 // files — detectTracks' fallback, and what spec_upgrade {apply} saves).
 function savedTracks(st) {
   const saved = st && typeof st === "object" && !Array.isArray(st) ? st.tracks : null;
-  // A name shaped like a track pack's (1.15) is a saved track too, one the project may lack now (inactive: normalizeTracks drops
-  // it, doctor warns track-pack-missing); the list still wins over the files.
-  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || RE_PACK_NAME.test(x.toLowerCase()))) ? normalizeTracks(saved) : null;
+  // A track pack's name (1.15 — a valid pack now, or one the state recorded in packMarkers) is a saved track too, one the project
+  // may lack now (inactive: normalizeTracks drops it, doctor warns track-pack-missing); any other unknown name → the files decide,
+  // as in 1.14 (savedPackName — F4 review R6).
+  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase()))) ? normalizeTracks(saved) : null;
 }
 
 // A markdown heading (outside fenced code and HTML comments) carrying a track marker.
@@ -9654,12 +9795,12 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, trackMarker(tr));
       if (!present) {
-        writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng)); // trimEnd: no /\s*$/ backtracking
+        writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng, { name, slug })); // trimEnd: no /\s*$/ backtracking
         note(T.addedDesign);
       }
     } else if (tr !== "tdd") {
       // A bugfix has no design.md: the escalated track's mandatory sections still need a home (localized title).
-      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng))) note(T.addedDesign);
+      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng, { name, slug }))) note(T.addedDesign);
     }
 
     // Steering the track needs (scale/observability/cost, ai-strategy, testing-standards) — project-level,
@@ -9725,7 +9866,8 @@ function scaffoldTestPlan(dir, name, lng, tracks) {
   const mine = packIds.size ? new Set([...reqIds].filter((id) => !packIds.has(id))) : reqIds;
   const same = mine.size === tmpl.length && tmpl.every((id) => mine.has(id));
   const written = reqText != null && !!reqText.trim();
-  return testPlanMd(name, lng, t, same || (!reqIds.size && !written) ? undefined : [...reqIds]);
+  // (the generic rows leave a pack's criteria out too: the pack's own rows plan them — packTestRowsBlock via withTrackBlocks)
+  return testPlanMd(name, lng, t, same || (!reqIds.size && !written) ? undefined : [...mine]);
 }
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
@@ -9754,7 +9896,8 @@ function trackAcIds(reqText, tr) {
   const marker = trackMarker(tr);
   if (!marker || !reqText) return out;
   const inSection = inactiveMarkerLines(reqText, allTracks().filter((t) => t !== tr)); // exactly that track's sections
-  for (const [id, e] of acIndex(reqText)) if (inSection.has(e.line - 1) || e.text.includes(marker)) out.add(id); // case-sensitive marker (C4)
+  // … and only ITS lines: a missing pack's ghost sections (inactiveMarkerLines adds them) are no other track's criteria (F4 review R5)
+  for (const [id, e] of acIndex(reqText)) if (inSection.get(e.line - 1) === tr || e.text.includes(marker)) out.add(id); // case-sensitive marker (C4)
   return out;
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
@@ -17848,12 +17991,35 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
   // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
   if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "").size) warnings.push(W.wNoCriteriaAtAll);
+  // 1.15 track packs (F4 review R8): the import replaced the scaffold's requirements.md — each pack's [MARKER] criteria go back in,
+  // after the imported US-1 criteria, as spec_create writes them (a pack's scaffold always has its criteria); its test rows and its
+  // task block follow below, citing the IDs the criteria got here.
+  const packs = cr.tracks.filter(isPackTrack);
+  const packVars = { name, slug: cr.slug };
+  const reqFile = path.join(cr.dir, "requirements.md");
+  if (packs.length) {
+    let rq = readIfExists(reqFile) || "";
+    for (const tr of packs) if (!headingHasMarker(rq, trackMarker(tr))) rq = insertPackRequirements(rq, packRequirementsBlock(packOf(tr), lng, rq, packVars));
+    put("requirements.md", rq.endsWith("\n") ? rq : rq + "\n");
+  }
+  const withPackTasks = (text) => {
+    let out = text;
+    for (const tr of packs) {
+      const b = packTaskBlock(packOf(tr), out, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")) || "", lng, packVars);
+      if (b) out = out.trimEnd() + "\n" + b;
+    }
+    return out;
+  };
   // createFeature scaffolded the +tdd test plan from the TEMPLATE requirements (the imported ones weren't written yet):
   // its T-01…T-05 rows covered US-1.AC-3 / US-1.AC-4 / US-2.AC-1 the feature doesn't have — "(typos?)" in trace_check,
   // and a doctor FAIL once real tasks were imported. Re-planned from the imported ACs: the plan `spec_add_track tdd`
   // gives this feature (scaffoldTestPlan — one generic row per AC). Scaffold output, not imported text (not in `imported`).
   // A test plan scaffolded from the project's own template (.specs/templates/) is the team's format: kept as it is (1.14).
-  if (cr.created.includes("test-plan.md") && !(cr.templates && cr.templates["test-plan.md"])) writeFileAtomic(path.join(cr.dir, "test-plan.md"), scaffoldTestPlan(cr.dir, name, lng, cr.tracks));
+  if (cr.created.includes("test-plan.md") && !(cr.templates && cr.templates["test-plan.md"])) {
+    let plan = scaffoldTestPlan(cr.dir, name, lng, cr.tracks);
+    if (packs.length) plan = withTrackBlocks("test-plan", plan, cr.tracks, lng, () => readIfExists(reqFile) || "", { only: packs, vars: packVars }); // + the packs' rows
+    writeFileAtomic(path.join(cr.dir, "test-plan.md"), plan);
+  }
 
   if (model.design) {
     const dl = model.design.text.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -17861,7 +18027,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     const body = (h1 !== -1 && dl.slice(0, h1).every((l) => !l.trim()) ? dl.slice(h1 + 1) : dl).join("\n").trim();
     // The active tracks' mandatory sections, unless the imported design already has them.
     const blocks = cr.tracks.filter((x) => x !== "core").filter((x) => (x === "tdd" ? !RE_TESTABILITY.test(body) : !headingHasMarker(body, trackMarker(x))))
-      .map((x) => trackDesignBlock(x, lng)).join("");
+      .map((x) => trackDesignBlock(x, lng, { name, slug: cr.slug })).join("");
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", body, blocks].join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
   }
 
@@ -17882,15 +18048,22 @@ function importSpec(projectDir, tool, source, opts = {}) {
       model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
       for (const [k, j] of model.taskAliases || []) mapping[k] = "task " + (j + 1); // an ExecPlan step Progress already lists
     }
-    put("tasks.md", tk.text.replace("{{NOTE}}", () => note)); // a function: a '$' in the folder name is not a pattern
+    put("tasks.md", withPackTasks(tk.text.replace("{{NOTE}}", () => note))); // a function: a '$' in the folder name is not a pattern
     if (!tk.anyRefs && tk.count && acOf.size) warnings.push(W.wNoRefs);
   } else if (cr.created.includes("tasks.md")) {
-    // No tasks.md in the source: the scaffold's is kept (wNoTasks) — its template references fitted to the imported spec.
+    // No tasks.md in the source: the scaffold's is kept (wNoTasks) — its template references fitted to the imported spec. A track
+    // pack's block is written again (its criteria were renumbered after the imported ones), never fitted.
     const tp = path.join(cr.dir, "tasks.md");
-    const cur = readIfExists(tp);
+    let cur = readIfExists(tp);
     if (cur != null) {
-      const fitted = fitTemplateTasks(cur, readIfExists(path.join(cr.dir, "requirements.md")) || "", readIfExists(path.join(cr.dir, "test-plan.md")), lng);
-      if (fitted !== cur) writeFileAtomic(tp, fitted);
+      const orig = cur;
+      if (packs.length) {
+        const lines = cur.split("\n");
+        const drop = sectionDropLines(lines, (l) => packs.find((tr) => trackTaskHeadingIs(tr, l)));
+        if (drop.size) cur = lines.filter((_, i) => !drop.has(i)).join("\n");
+      }
+      const fitted = withPackTasks(fitTemplateTasks(cur, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")), lng));
+      if (fitted !== orig) writeFileAtomic(tp, fitted);
     }
   }
   // Provenance on the scaffolded classification too (it was generated from the imported text).

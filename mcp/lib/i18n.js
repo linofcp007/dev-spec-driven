@@ -3388,7 +3388,10 @@ const MSG = {
         "unknown-variable": (a) => `{{${a.v}}} is not a pack variable — left as is (known: {{ac1}}… {{acs}} {{t1}}… {{tests}} {{title}} {{marker}} {{name}} {{slug}}).`,
         "fragment-empty": (a) => `${a.file} holds nothing the engine reads — the built-in default is used instead.`,
         "fragment-row": (a) => `a ${a.file} row without the plan's six cells (Test ID | Layer | Kind | Description | Covers | File) — the pack is ignored.`,
-        "fragment-ref": (a) => `${a.ref} names nothing: this pack scaffolds ${a.n} of them for ${a.file} — the pack is ignored.`,
+        "fragment-ref": (a) => a.kind === "t" && a.file !== "tasks.md" ? `${a.ref} can't be used in ${a.file} — only tasks.md names the planned tests — the pack is ignored.`
+          : `${a.ref} names nothing ${a.ctx ? "for " + a.ctx + " features" : "in the pack root"}: ${a.from || "the built-in default"} gives ${a.n} ${a.kind === "ac" ? "criterion(s)" : "planned test(s)"} — the pack is ignored.`,
+        "section-name-lead": (a) => `section name '${a.name}' starts with numbering, an emoji or a dash — ignored when matching a heading: it counts as '${a.key}'.`,
+        "section-core-name": (a) => `section '${a.name}' has the name of a core design heading ('${a.heading}') — only a heading carrying the pack's marker (or under one) counts; the core section never does.`,
       },
     },
 
@@ -4990,7 +4993,10 @@ _Outcome: [go | no-go | pivot]_
         "unknown-variable": (a) => `{{${a.v}}} não é uma variável de pack — fica como está (conhecidas: {{ac1}}… {{acs}} {{t1}}… {{tests}} {{title}} {{marker}} {{name}} {{slug}}).`,
         "fragment-empty": (a) => `${a.file} não tem nada que o motor leia — é usado o padrão incluído.`,
         "fragment-row": (a) => `uma linha de ${a.file} sem as seis células do plano (Test ID | Camada | Tipo | Descrição | Cobre | Ficheiro) — o pack é ignorado.`,
-        "fragment-ref": (a) => `${a.ref} não nomeia nada: este pack cria ${a.n} para ${a.file} — o pack é ignorado.`,
+        "fragment-ref": (a) => a.kind === "t" && a.file !== "tasks.md" ? `${a.ref} não pode ser usado em ${a.file} — só o tasks.md nomeia os testes planeados — o pack é ignorado.`
+          : `${a.ref} não nomeia nada ${a.ctx ? "nas features " + a.ctx : "na raiz do pack"}: ${a.from || "o padrão incluído"} dá ${a.n} ${a.kind === "ac" ? "critério(s)" : "teste(s) planeado(s)"} — o pack é ignorado.`,
+        "section-name-lead": (a) => `o nome de secção '${a.name}' começa por numeração, um emoji ou um travessão — ignorado ao comparar títulos: conta como '${a.key}'.`,
+        "section-core-name": (a) => `a secção '${a.name}' tem o nome de um título do design base ('${a.heading}') — só conta um título com o marcador do pack (ou debaixo de um); a secção base nunca conta.`,
       },
     },
 
@@ -6562,7 +6568,10 @@ _Outcome: [go | no-go | pivot]_
         "unknown-variable": (a) => `{{${a.v}}} no es una variable de pack — se deja tal cual (conocidas: {{ac1}}… {{acs}} {{t1}}… {{tests}} {{title}} {{marker}} {{name}} {{slug}}).`,
         "fragment-empty": (a) => `${a.file} no contiene nada que el motor lea — se usa el valor de serie.`,
         "fragment-row": (a) => `una fila de ${a.file} sin las seis celdas del plan (Test ID | Capa | Tipo | Descripción | Cubre | Archivo) — el pack se ignora.`,
-        "fragment-ref": (a) => `${a.ref} no nombra nada: este pack crea ${a.n} para ${a.file} — el pack se ignora.`,
+        "fragment-ref": (a) => a.kind === "t" && a.file !== "tasks.md" ? `${a.ref} no se puede usar en ${a.file} — solo tasks.md nombra las pruebas planificadas — el pack se ignora.`
+          : `${a.ref} no nombra nada ${a.ctx ? "en las funciones " + a.ctx : "en la raíz del pack"}: ${a.from || "el valor de serie"} da ${a.n} ${a.kind === "ac" ? "criterio(s)" : "prueba(s) planificada(s)"} — el pack se ignora.`,
+        "section-name-lead": (a) => `el nombre de sección '${a.name}' empieza con numeración, un emoji o un guion — se ignora al comparar encabezados: cuenta como '${a.key}'.`,
+        "section-core-name": (a) => `la sección '${a.name}' tiene el nombre de un encabezado del diseño base ('${a.heading}') — solo cuenta un encabezado con el marcador del pack (o bajo uno); la sección base nunca cuenta.`,
       },
     },
 

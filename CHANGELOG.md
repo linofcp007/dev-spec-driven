@@ -27,13 +27,18 @@ this project versions the plugin as a whole.
   **`spec_tracks`** `{action: list | init | check, name?, lang?}` (35 tools), CLI `dev-spec tracks [list|init <name>|check]`
   (check exits 1 on an error), command **`/spec-tracks`** (52 commands), guide `references/project-tracks.md`. `tracks`
   is a reserved feature slug (a pre-1.15 feature of that name stays a feature); the PostToolUse hook and the pre-commit
-  check never lint a pack's fragments as a feature's spec.
+  check never lint a pack's fragments as a feature's spec. Pack sections are marker-bound (a heading counts only with the
+  pack's marker, or under one — a core `## Architecture` never satisfies a pack's section) and a name's lead (numbering,
+  an emoji, a dash) is ignored when matching, as in the heading; a slot holding a variable (`[the {{name}} screens]`)
+  still reads as a placeholder; packs and their placeholder corpus are cached across calls by their files' size / mtime
+  (an edit is picked up by the next call).
 
 ### Tests
-- `node mcp/test.js` 1242 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
+- `node mcp/test.js` 1252 assertions (was 1221), `node cli/test-cli.js` 401 (was 395): a full +a11y pack end to end
   (classification, the scaffold in EN / PT / ES / pt-BR, the gates, trace, add / remove, a deleted and an invalidated pack,
-  twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook) and the CLI's
-  `tracks` command; every existing assertion unchanged except the exact tool / command counts.
+  twelve kinds of invalid pack, a linked pack folder, the reserved slug, init, a project template, the hook), one
+  regression per F4 review finding (R1–R10) and the CLI's `tracks` command; every existing assertion unchanged except the
+  exact tool / command counts.
 
 ## [1.14.0] — 2026-09-28
 
