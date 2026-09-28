@@ -197,12 +197,12 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references). The
 evidence rules behind the Stop hooks: `references/verification.md`.
 
-**Plugin options (Claude Code `userConfig`, 1.16)** — fallbacks only; a project's own `roadmap.json` meta always wins:
-`default_lang` (the language a NEW project gets when `spec_init` / its first `spec_create` names none — seeded into
-`meta.lang`), `stop_check` (the Stop gate while `meta.stopCheck` is unset), `guard_default` (`off` / `on` / `scope` while
-`meta.guard` is unset). Precedence: project meta → `DEV_SPEC_<KEY>` → `CLAUDE_PLUGIN_OPTION_<KEY>` (Claude Code exports it to
-the hooks; `mcp/servers.json` passes it to the MCP server) → the built-in default; an empty, invalid or unexpanded value
-changes nothing. `spec_init` reports the values an option decides in `userDefaults`.
+**Your defaults (environment variables, 1.16)** — fallbacks only; a project's own `roadmap.json` meta always wins:
+`DEV_SPEC_DEFAULT_LANG` (the language a NEW project gets when `spec_init` / its first `spec_create` names none — seeded into
+`meta.lang`), `DEV_SPEC_STOP_CHECK` (the Stop gate while `meta.stopCheck` is unset), `DEV_SPEC_GUARD_DEFAULT` (`off` / `on` /
+`scope` while `meta.guard` is unset). In Claude Code: the `env` block of `settings.json`, which reaches the hooks, the MCP
+server and the Bash tool alike; elsewhere the shell or the MCP config's `env`. An empty, invalid or unexpanded value changes
+nothing. `spec_init` reports the values a variable decides in `userDefaults`.
 
 ## Directory structure
 

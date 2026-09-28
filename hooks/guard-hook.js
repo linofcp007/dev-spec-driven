@@ -6,7 +6,7 @@
  *
  * Wired from hooks/hooks.json as PreToolUse (Write|Edit|MultiEdit|NotebookEdit). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
- * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's plugin option guard_default decides). When on, a
+ * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
  * code edit outside `.specs/` while no feature has approved, unfinished
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
  * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
@@ -32,11 +32,11 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
-// The user's GUARD_DEFAULT plugin option (1.16 — plugin.json userConfig guard_default, exported by Claude Code as
-// CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT; DEV_SPEC_GUARD_DEFAULT wins): on / scope turns the guard on for a project whose
-// roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads the same variables.
+// The user's default (1.16 — the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
+// on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
+// the same variable.
 function userGuardDefault() {
-  for (const n of ["DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"]) {
+  for (const n of ["DEV_SPEC_GUARD_DEFAULT"]) {
     const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
     if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:on|true|yes|1|scope)$/i.test(v);
   }

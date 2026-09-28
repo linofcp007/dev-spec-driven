@@ -84,8 +84,8 @@ claude --plugin-dir "<PLUGIN>"
 ```
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
-See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, the plugin options (`default_lang`, `stop_check`,
-`guard_default` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
+See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, your defaults (`DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`,
+`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
 `node "<PLUGIN>/cli/dev-spec.js" statusline --print-config` for the `settings.json` entry).
 
 The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /

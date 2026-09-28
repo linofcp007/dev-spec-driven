@@ -12811,7 +12811,7 @@ function endRun() {
       js([lg1.citing, lg1.tasks.map((t) => t.commits.map((c) => c.short)), lg2.truncated]) + ")");
   }
 
-  // 1.16 package (C) — Claude Code integration: status line, userConfig, annotations / completion, plan-mode bridge.
+  // 1.16 package (C) — Claude Code integration: status line, user defaults (DEV_SPEC_*), annotations / completion, plan-mode bridge.
 
   {
     const cRoot = path.join(tmp, "p16c");
@@ -12820,13 +12820,14 @@ function endRun() {
     const cMeta = (d) => (JSON.parse(cRead(path.join(d, ".specs", "roadmap.json"))).meta || {});
     const OPT_KEYS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
       "DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"];
-    // The user's plugin options for one in-process engine call (restored after it); unset keys are removed.
+    // The user's defaults for one in-process engine call (restored after it); unset keys are removed. The CLAUDE_PLUGIN_OPTION_*
+    // names are cleared too: the engine must ignore them (the plugin declares no userConfig).
     const withOpts = (vars, fn) => {
       const saved = OPT_KEYS.map((k) => [k, process.env[k]]);
       for (const k of OPT_KEYS) { if (vars[k] == null) delete process.env[k]; else process.env[k] = vars[k]; }
       try { return fn(); } finally { for (const [k, v] of saved) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
     };
-    // A child's environment: no plugin option and no project folder from this process unless given.
+    // A child's environment: no DEV_SPEC_* default and no project folder from this process unless given.
     const childEnv = (env) => {
       const e = { ...process.env };
       for (const k of OPT_KEYS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR"])) delete e[k];
@@ -12931,75 +12932,73 @@ function endRun() {
     ok(r50.features === 50 && typeof r50.line === "string" && r50.line.startsWith("◆ feature-") && first50 < 3000 && warm50 < 1000,
       "1.16 C1: a 50-feature project — one line, bounded time (first " + first50 + " ms, warm " + warm50.toFixed(1) + " ms per call)");
 
-    // --- C2: the user's plugin options (userConfig) — fallbacks only; the project's meta wins ---
+    // --- C2: the user's defaults (DEV_SPEC_<KEY> environment variables) — fallbacks only; the project's meta wins ---
     const u1 = path.join(cRoot, "opts-fresh");
-    const u1r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "false", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.initProject(u1, ["core"]));
+    const u1r = withOpts({ DEV_SPEC_DEFAULT_LANG: "pt", DEV_SPEC_STOP_CHECK: "false", DEV_SPEC_GUARD_DEFAULT: "scope" }, () => S.initProject(u1, ["core"]));
     const u1m = cMeta(u1);
     ok(u1r.lang === "pt" && u1m.lang === "pt" && u1r.stopCheck === false && u1r.guard === "scope" && JSON.stringify(u1r.userDefaults) === '{"lang":"pt","stopCheck":false,"guard":"scope"}' &&
       !("stopCheck" in u1m) && !("guard" in u1m) && withOpts({}, () => S.stopCheckEnabled(u1) === true && S.guardLevel(u1) === false && S.projectLang(u1) === "pt"),
-      "1.16 C2: a new project takes the user's options — default_lang seeded into meta.lang (kept without the option), stop_check / guard_default as fallbacks only, reported in userDefaults (got " +
+      "1.16 C2: a new project takes the user's options — DEV_SPEC_DEFAULT_LANG seeded into meta.lang (kept without the variable), DEV_SPEC_STOP_CHECK / DEV_SPEC_GUARD_DEFAULT as fallbacks only, reported in userDefaults (got " +
       JSON.stringify([u1r.lang, u1r.userDefaults, u1m]) + ")");
     const u2 = path.join(cRoot, "opts-meta");
-    const u2r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "on" },
+    const u2r = withOpts({ DEV_SPEC_DEFAULT_LANG: "pt", DEV_SPEC_STOP_CHECK: "off", DEV_SPEC_GUARD_DEFAULT: "on" },
       () => [S.initProject(u2, ["core"], "es", { stopCheck: true, guard: "off" }), S.stopCheckEnabled(u2), S.guardLevel(u2)]);
     const u2m = cMeta(u2);
     ok(u2r[0].lang === "es" && u2m.lang === "es" && u2m.stopCheck === true && u2m.guard === false && u2r[1] === true && u2r[2] === false && !u2r[0].userDefaults,
       "1.16 C2: the project wins — an explicit lang, stopCheck on (written where the user's option says off) and guard off beat the options (got " + JSON.stringify([u2m, u2r.slice(1), u2r[0].userDefaults]) + ")");
     const prec = [
+      withOpts({ DEV_SPEC_STOP_CHECK: "off" }, () => S.stopCheckEnabled(sl)),
       withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" }, () => S.stopCheckEnabled(sl)),
-      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off", DEV_SPEC_STOP_CHECK: "on" }, () => S.stopCheckEnabled(sl)),
-      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "${user_config.stop_check}" }, () => S.stopCheckEnabled(sl)),
-      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "maybe" }, () => S.stopCheckEnabled(sl)),
-      withOpts({ CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.guardLevel(sl)),
-      withOpts({ DEV_SPEC_GUARD_DEFAULT: "on", CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "scope" }, () => S.guardLevel(sl)),
-      withOpts({ CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" }, () => S.stopCheck(sl, { message: "All tasks are done." }).why),
+      withOpts({ DEV_SPEC_STOP_CHECK: "${DEV_SPEC_STOP}" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ DEV_SPEC_STOP_CHECK: "maybe" }, () => S.stopCheckEnabled(sl)),
+      withOpts({ DEV_SPEC_GUARD_DEFAULT: "scope" }, () => S.guardLevel(sl)),
+      withOpts({ CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "on" }, () => S.guardLevel(sl)),
+      withOpts({ DEV_SPEC_STOP_CHECK: "off" }, () => S.stopCheck(sl, { message: "All tasks are done." }).why),
       withOpts({}, () => S.stopCheck(sl, { message: "All tasks are done." }).block),
     ];
-    ok(JSON.stringify(prec) === '[false,true,true,true,"scope",true,"off",true]',
-      "1.16 C2: precedence — meta unset → DEV_SPEC_<KEY> over CLAUDE_PLUGIN_OPTION_<KEY>; an unexpanded ${user_config.x} or an invalid value changes nothing; the stop gate answers 'off' (got " + JSON.stringify(prec) + ")");
-    // default_lang never re-labels an existing project; the first spec_create of a new one takes it (and seeds meta.lang).
+    ok(JSON.stringify(prec) === '[false,true,true,true,"scope",false,"off",true]',
+      "1.16 C2: meta unset → DEV_SPEC_<KEY> decides; CLAUDE_PLUGIN_OPTION_<KEY> (no userConfig), an unexpanded ${X} or an invalid value changes nothing; the stop gate answers 'off' (got " + JSON.stringify(prec) + ")");
+    // DEV_SPEC_DEFAULT_LANG never re-labels an existing project; the first spec_create of a new one takes it (and seeds meta.lang).
     const u4 = path.join(cRoot, "opts-legacy");
     withOpts({}, () => S.createFeature(u4, "Old", ["core"], "x", undefined, "en"));
-    const u4r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => [S.initProject(u4, ["core"]).lang, S.createFeature(u4, "New", ["core"], "y").lang]);
+    const u4r = withOpts({ DEV_SPEC_DEFAULT_LANG: "es" }, () => [S.initProject(u4, ["core"]).lang, S.createFeature(u4, "New", ["core"], "y").lang]);
     const u5 = path.join(cRoot, "opts-create");
-    const u5r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => S.createFeature(u5, "Pagos", ["core"], "cobros con tarjeta"));
+    const u5r = withOpts({ DEV_SPEC_DEFAULT_LANG: "es" }, () => S.createFeature(u5, "Pagos", ["core"], "cobros con tarjeta"));
     const u6 = path.join(cRoot, "opts-explicit");
-    const u6r = withOpts({ CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es" }, () => S.createFeature(u6, "Pay", ["core"], "cards", undefined, "pt-BR"));
+    const u6r = withOpts({ DEV_SPEC_DEFAULT_LANG: "es" }, () => S.createFeature(u6, "Pay", ["core"], "cards", undefined, "pt-BR"));
     ok(JSON.stringify(u4r) === '["en","en"]' && !("lang" in cMeta(u4)) && u5r.ok && u5r.lang === "es" && cMeta(u5).lang === "es" && u5r.userDefaults && u5r.userDefaults.lang === "es" &&
       /^## Historias de Usuario/m.test(cRead(path.join(u5r.dir, "requirements.md"))) && u6r.lang === "pt-BR" && !("lang" in cMeta(u6)) && !u6r.userDefaults,
-      "1.16 C2: default_lang — never for a project that has features; a new project's first spec_create takes it and seeds meta.lang; an explicit lang wins (got " +
+      "1.16 C2: DEV_SPEC_DEFAULT_LANG — never for a project that has features; a new project's first spec_create takes it and seeds meta.lang; an explicit lang wins (got " +
       JSON.stringify([u4r, u5r.lang, cMeta(u5).lang, u6r.lang]) + ")");
-    // The options reach the MCP server (mcp/servers.json env) and the hooks (Claude Code's CLAUDE_PLUGIN_OPTION_<KEY>).
+    // The variables reach the MCP server and the hooks (Claude Code's settings.json `env` sets them for every subprocess).
     const u7 = path.join(cRoot, "opts-mcp");
-    const u7s = cServer(u7, { CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "pt-BR" });
+    const u7s = cServer(u7, { DEV_SPEC_DEFAULT_LANG: "pt-BR" });
     await u7s.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
     const u7r = payload(await u7s.req("tools/call", { name: "spec_init", arguments: { tracks: ["core"] } }));
     await u7s.stop();
     const u8 = path.join(cRoot, "opts-mcp-literal");
-    const u8s = cServer(u8, { CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "${user_config.default_lang}", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "${user_config.stop_check}" });
+    const u8s = cServer(u8, { DEV_SPEC_DEFAULT_LANG: "${DEV_SPEC_LANG}", DEV_SPEC_STOP_CHECK: "${STOP}", CLAUDE_PLUGIN_OPTION_DEFAULT_LANG: "es", CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" });
     await u8s.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
     const u8r = payload(await u8s.req("tools/call", { name: "spec_init", arguments: { tracks: ["core"] } }));
     await u8s.stop();
     const stopPayload = { hook_event_name: "Stop", cwd: sl, last_assistant_message: "All tasks are done and verified." };
     const guardPayload = { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(sl2, "src", "login.js") }, cwd: sl2 };
-    const hStop = [hook("stop-hook.js", stopPayload), hook("stop-hook.js", stopPayload, { CLAUDE_PLUGIN_OPTION_STOP_CHECK: "false" })];
-    const hGuard = [hook("guard-hook.js", guardPayload), hook("guard-hook.js", guardPayload, { CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT: "on" })];
+    const hStop = [hook("stop-hook.js", stopPayload), hook("stop-hook.js", stopPayload, { DEV_SPEC_STOP_CHECK: "false" })];
+    const hGuard = [hook("guard-hook.js", guardPayload), hook("guard-hook.js", guardPayload, { DEV_SPEC_GUARD_DEFAULT: "on" })];
     const hg = jsonOut(hGuard[1]);
     ok(u7r.lang === "pt-BR" && cMeta(u7).lang === "pt-BR" && u8r.lang === "en" && u8r.stopCheck === true && !u8r.userDefaults &&
       (jsonOut(hStop[0]) || {}).decision === "block" && hStop[1].status === 0 && hStop[1].stdout === "" &&
       hGuard[0].status === 0 && hGuard[0].stdout === "" && hg && hg.hookSpecificOutput.permissionDecision === "ask",
-      "1.16 C2: the options reach the MCP server (servers.json env; a literal ${user_config.x} is ignored) and the hooks — stop_check off silences the Stop gate, guard_default on makes the guard ask (got " +
+      "1.16 C2: the variables reach the MCP server (a literal ${X} and the CLAUDE_PLUGIN_OPTION_* names are ignored) and the hooks — DEV_SPEC_STOP_CHECK off silences the Stop gate, DEV_SPEC_GUARD_DEFAULT on makes the guard ask (got " +
       JSON.stringify([u7r.lang, u8r.lang, hStop.map((h) => h.stdout.slice(0, 40)), hGuard.map((h) => h.stdout.slice(0, 60))]) + ")");
-    // The manifest: three userConfig options, each referenced by mcp/servers.json as CLAUDE_PLUGIN_OPTION_<KEY>; no hooks key.
+    // The manifest declares NO userConfig (a configuration dialog on every install, and an older Claude Code validating option
+    // fields strictly would refuse the plugin) and mcp/servers.json passes no ${user_config.*}; still no hooks key.
     const man = JSON.parse(cRead(path.join(root, ".claude-plugin", "plugin.json")));
     const srvEnv = JSON.parse(cRead(path.join(root, "mcp", "servers.json"))).mcpServers["spec-driven"].env;
-    const uc = man.userConfig || {};
-    const refs = Object.values(srvEnv).map((v) => (/^\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(v) || [])[1]).filter(Boolean);
-    ok(Object.keys(uc).join() === "default_lang,stop_check,guard_default" &&
-      Object.values(uc).every((o) => ["string", "boolean"].includes(o.type) && o.title && o.description && "default" in o && Object.keys(o).every((k) => ["type", "title", "description", "default"].includes(k))) &&
-      refs.length === 3 && refs.every((k) => k in uc && srvEnv["CLAUDE_PLUGIN_OPTION_" + k.toUpperCase()] === "${user_config." + k + "}") && !("hooks" in man),
-      "1.16 C2: plugin.json declares userConfig default_lang / stop_check / guard_default (type, title, description, default) and mcp/servers.json passes each as CLAUDE_PLUGIN_OPTION_<KEY>; still no hooks key (got " +
-      JSON.stringify([Object.keys(uc), srvEnv]) + ")");
+    ok(!("userConfig" in man) && !("hooks" in man) && Object.keys(srvEnv).sort().join() === "SPEC_MCP_PROMPTS,SPEC_PROJECT_DIR" &&
+      !/user_config|CLAUDE_PLUGIN_OPTION/.test(JSON.stringify(srvEnv)),
+      "1.16 C2: plugin.json declares no userConfig and no hooks key; mcp/servers.json passes only SPEC_PROJECT_DIR / SPEC_MCP_PROMPTS (got " +
+      JSON.stringify([Object.keys(man), srvEnv]) + ")");
 
     // --- C3: MCP tool annotations and completion/complete ---
     const tl = (await rpc("tools/list", {})).result.tools;

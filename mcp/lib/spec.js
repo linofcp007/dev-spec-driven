@@ -1448,7 +1448,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     evidence: evidenceMode(projectDir), // 1.14 F1: the CURRENT evidence mode ("reported" | "observed"), whether or not this call changed it
   };
   if (Object.keys(templates).length) res.templates = templates;
-  // 1.16 C2: which of the reported values come from the user's plugin options (the project sets none of them itself).
+  // 1.16 C2: which of the reported values come from the user's DEV_SPEC_* defaults (the project sets none of them itself).
   const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
   if (Object.keys(fromUser).length) res.userDefaults = fromUser;
   if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
@@ -2515,15 +2515,16 @@ const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
 
-// 1.16 C2 — the user's plugin options (.claude-plugin/plugin.json userConfig), read as FALLBACKS only: a project's own
-// roadmap.json meta always wins, and an option that is unset, empty, unexpanded (`${user_config.x}` from a Claude Code without
-// userConfig) or not a valid value changes nothing (today's behaviour). Claude Code exports every option to the hooks as
-// CLAUDE_PLUGIN_OPTION_<KEY>; mcp/servers.json passes the same variables to the MCP server; DEV_SPEC_<KEY> (a terminal, another
-// tool, the CLI outside Claude Code) wins over both. Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang),
-// STOP_CHECK (the end-of-turn evidence gate while meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is
-// unset). hooks/guard-hook.js and hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
+// 1.16 C2 — the user's defaults, the environment variables DEV_SPEC_<KEY>, read as FALLBACKS only: a project's own roadmap.json
+// meta always wins, and a variable that is unset, empty, unexpanded (`${X}`) or not a valid value changes nothing (today's
+// behaviour). Set in Claude Code's settings.json `env` block they reach the hooks, the MCP server and the CLI alike (and any
+// other tool's MCP config `env`, or a shell). Deliberately NOT plugin.json `userConfig`: it opens a configuration dialog on every
+// install / enable, and an older Claude Code that validates option fields strictly would refuse to load the plugin.
+// Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang), STOP_CHECK (the end-of-turn evidence gate while
+// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is unset). hooks/guard-hook.js and
+// hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
 function userOptionRaw(key) {
-  for (const name of ["DEV_SPEC_" + key, "CLAUDE_PLUGIN_OPTION_" + key]) {
+  for (const name of ["DEV_SPEC_" + key]) {
     const v = process.env[name];
     const s = typeof v === "string" ? v.trim() : "";
     if (s && !/^\$\{[^}]*\}$/.test(s)) return s;
@@ -19683,7 +19684,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
 
 // ---------------------------------------------------------------------------
 // 1.16 C — Claude Code integration: the status line (`dev-spec statusline`) and the plan-mode bridge (hooks/plan-hook.js).
-// The user's plugin options (userDefaults) live beside guardLevel / stopCheckEnabled, which read them.
+// The user's DEV_SPEC_* defaults (userDefaults) live beside guardLevel / stopCheckEnabled, which read them.
 // ---------------------------------------------------------------------------
 
 const STATUS_MAX_FEATURES = 200; // feature folders a status line reads, at most (sorted by name)
@@ -20005,7 +20006,7 @@ module.exports = {
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
 
   importSpec,
-  // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's plugin options (fallbacks)
+  // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
   planBridge,

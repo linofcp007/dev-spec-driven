@@ -193,20 +193,26 @@ machine's — keep it out of a committed `.claude/settings.json`). A plugin inst
 versioned cache folder: run `/spec-statusline` again after an update. It reads only `.specs/` (no repo walk), exits 0 always
 and costs no tokens.
 
-**Plugin options (`userConfig`).** Claude Code asks for three optional settings when you enable the plugin (and lists them
-in `/config`); each is a fallback — a project's own `.specs/roadmap.json` always wins:
+**Your defaults (environment variables, 1.16).** Three optional settings for every project that doesn't set its own —
+each is a fallback; a project's `.specs/roadmap.json` always wins:
 
-| Option | Default | What it does |
+| Variable | Default | What it does |
 |---|---|---|
-| `default_lang` | empty (= en) | The language a NEW project gets when `/spec-init` or its first feature names none — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
-| `stop_check` | on | The end-of-turn evidence gate for every project that doesn't set `meta.stopCheck` itself (`init --stop-check on\|off` pins a project). |
-| `guard_default` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-guard` pins a project). |
+| `DEV_SPEC_DEFAULT_LANG` | unset (= en) | The language a NEW project gets when `/spec-init` or its first feature names none (`en`, `pt`, `pt-BR`, `es`) — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
+| `DEV_SPEC_STOP_CHECK` | on | `off` switches the end-of-turn evidence gate off for every project that doesn't set `meta.stopCheck` itself (`init --stop-check on\|off` pins a project). |
+| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-guard` pins a project). |
 
-Precedence: the project's `roadmap.json` meta → `DEV_SPEC_<KEY>` in the environment (a terminal or another tool — e.g.
-`DEV_SPEC_DEFAULT_LANG=pt`, `DEV_SPEC_STOP_CHECK=off`, `DEV_SPEC_GUARD_DEFAULT=scope`) → the plugin option (Claude Code gives it
-to the hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`, and `mcp/servers.json` passes it to the MCP server) → the built-in default. An
-empty or invalid value changes nothing. The CLI that Claude runs through its Bash tool doesn't receive the plugin options
-(Claude Code exports them to hooks and servers only) — set `DEV_SPEC_<KEY>` for it if you rely on one.
+In Claude Code put them in the `env` block of `~/.claude/settings.json` (you, every project) or a project's
+`.claude/settings.local.json` — Claude Code hands that block to the hooks, the MCP server and the commands Claude runs, so
+all three see the same values:
+
+```json
+{ "env": { "DEV_SPEC_DEFAULT_LANG": "pt", "DEV_SPEC_GUARD_DEFAULT": "scope" } }
+```
+
+Elsewhere set them in your shell or in the other tool's MCP config `env`. An empty or invalid value changes nothing.
+(The plugin declares no `userConfig`: that would open a configuration dialog on every install, and it would reach neither
+the CLI nor other MCP clients.)
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
 content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the

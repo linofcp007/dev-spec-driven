@@ -3585,12 +3585,12 @@ if (inSection("p16u")) {
 }
 
 // 1.16 package (C): if (inSection("p16c")) { … }
-if (inSection("p16c")) { // 1.16 package C — the status line, the user's plugin options and the plan-mode bridge on the CLI
+if (inSection("p16c")) { // 1.16 package C — the status line, the user's DEV_SPEC_* defaults and the plan-mode bridge on the CLI
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
     "DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"];
-  // A CLI run with stdin (closed at once when none is given), no plugin option and no project folder from this process.
+  // A CLI run with stdin (closed at once when none is given), no DEV_SPEC_* default and no project folder from this process.
   const cli = (args, o = {}) => {
     const env = { ...process.env };
     for (const k of OPTS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"])) delete env[k];
@@ -3647,14 +3647,15 @@ if (inSection("p16c")) { // 1.16 package C — the status line, the user's plugi
     cli(["statusline", "--print-config=maybe"]).code === 1,
     "1.16 C1: statusline --print-config prints the settings.json statusLine entry (this clone's absolute path) — --json bare, else with localized guidance; a bad switch value is refused (got " +
     js([pcj, pcPt.out.slice(0, 80)]) + ")");
-  // The user's plugin options through the environment: DEV_SPEC_<KEY> (a terminal) and CLAUDE_PLUGIN_OPTION_<KEY> (Claude Code's hooks).
+  // The user's defaults through the environment: DEV_SPEC_<KEY> (a shell, or Claude Code's settings.json `env`); the
+  // CLAUDE_PLUGIN_OPTION_<KEY> names mean nothing (the plugin declares no userConfig).
   const fresh = path.join(tmp, "p16c-opts");
   const io = cli(["init", "core", "--project", fresh], { env: { DEV_SPEC_DEFAULT_LANG: "es" } });
   const stopMsg = ["stop-check", "--message", "All tasks are done.", "--project", sp];
-  const sc = [cli(stopMsg), cli(stopMsg, { env: { CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" } }), cli(stopMsg, { env: { CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off", DEV_SPEC_STOP_CHECK: "on" } })];
+  const sc = [cli(stopMsg), cli(stopMsg, { env: { DEV_SPEC_STOP_CHECK: "off" } }), cli(stopMsg, { env: { CLAUDE_PLUGIN_OPTION_STOP_CHECK: "off" } })];
   ok(io.code === 0 && JSON.parse(fs.readFileSync(path.join(fresh, ".specs", "roadmap.json"), "utf8")).meta.lang === "es" &&
     sc[0].code === 1 && sc[1].code === 0 && /evidence gate: off/.test(sc[1].out) && sc[2].code === 1,
-    "1.16 C2: DEV_SPEC_DEFAULT_LANG gives a new project its language; CLAUDE_PLUGIN_OPTION_STOP_CHECK=off turns the stop gate off where meta leaves it unset, DEV_SPEC_STOP_CHECK wins (got " +
+    "1.16 C2: DEV_SPEC_DEFAULT_LANG gives a new project its language; DEV_SPEC_STOP_CHECK=off turns the stop gate off where meta leaves it unset; CLAUDE_PLUGIN_OPTION_STOP_CHECK is ignored (got " +
     js([io.out.slice(0, 60), sc.map((r) => [r.code, r.out.slice(0, 50)])]) + ")");
   // import plan - / --text: the plan from stdin or inline (a plan outside the project).
   const planMd = ["# Plan: Dark mode", "", "## Goals", "- WHEN the user picks dark mode THE SYSTEM SHALL apply the dark palette", "", "## Steps",

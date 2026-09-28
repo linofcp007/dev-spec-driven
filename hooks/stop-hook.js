@@ -19,7 +19,7 @@
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
- * `dev-spec init --stop-check off`; 1.16: while it is unset, the user's plugin option stop_check off), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
+ * `dev-spec init --stop-check off`; 1.16: while it is unset, the user's DEV_SPEC_STOP_CHECK=off), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
  * internal error exits 0 silently. Bounded: the message's tail, each feature's .state.json / tasks.md, one report file.
  */
 
@@ -56,10 +56,10 @@ function isDevSpecProject(dir) {
   }
 }
 
-// The user's STOP_CHECK plugin option (1.16 — plugin.json userConfig stop_check, exported by Claude Code as
-// CLAUDE_PLUGIN_OPTION_STOP_CHECK; DEV_SPEC_STOP_CHECK wins) set to off. The engine (spec.stopCheckEnabled) reads the same.
+// The user's default (1.16 — the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
+// off. The engine (spec.stopCheckEnabled) reads the same.
 function userStopCheckOff() {
-  for (const n of ["DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK"]) {
+  for (const n of ["DEV_SPEC_STOP_CHECK"]) {
     const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
     if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:false|off|no|0)$/i.test(v);
   }
