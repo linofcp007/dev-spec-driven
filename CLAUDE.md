@@ -1242,8 +1242,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Status line** — `statusLine(dir, {columns})` / `statusLineProject(dirs)` (walks up at most 40 folders to the nearest
   dev-spec `.specs/`; reads each active feature's `.state.json` + tasks.md, ≤ 200 features; picks the most recently active
   feature with work under way, else the most recent). The step follows next_action's order but stays cheap — it runs the
-  pending phase's approve checks, never the doctor, a code scan or the drift hash. Step codes (stable): re-review · fill ·
-  fix · approve · tests · tasks · implement · blocked · verify · decide · finish · finished. `dev-spec statusline` renders
+  pending phase's approve checks, never the doctor, a code scan or the drift hash (`statusNext()`; review fixes): a spike
+  takes next_action's own steps (fill · implement · blocked · decide — the decision, then its `_Outcome:_` · promote /
+  archive / pivot); Phase 4 goes through `statusTestsGate()` (+ai's eval-sets check; +tdd answered only when provable
+  without the walk — no planned T-ID → fix, every planned T-ID in a test FILE its plan row names, ≤ 20 files read → approve,
+  else `tests`); once every phase is approved, a FORCED approval is re-checked (`approvalChecks` minus the checks the doctor
+  only warns about, `STATUS_DOCTOR_WARNS`) and a bugfix with bug.md → Root Cause empty → `fix` (file bug.md — never a task the
+  bugfix gate refuses); every task done: verify (a tick) → finish (no baseline, or `staleFinish(…, {newFiles: false})` →
+  `again`) → verify (`suiteStatus(…, null)`: the project checks without the code hash → `suite`) → sign-off (execution
+  missing, or `executionSignOffStale` → `again`) → finished (never "✓": drift is not checked). Step codes (stable): re-review ·
+  fill · fix · approve · tests · tasks · implement · blocked · verify · decide · promote · archive · pivot · finish · sign-off ·
+  finished — next_action's own except blocked → fix, tests → fix | approve, sign-off / finished → finished, and any end
+  state may be next_action's `drift` (mcp/test.js "1.16 C review (parity)" checks 27 states). A network path (`isNetworkPath`,
+  the engine's — server.js uses it too) is skipped before any fs call (a UNC cwd hung it for minutes). `dev-spec statusline` renders
   BEFORE any flag check (a status line must never print an error): exit 0 always, stdin capped, silent outside a project,
   cut to `$COLUMNS`, `--json`; `--print-config` prints the `statusLine` entry with this clone's absolute path (a note when
   it is a versioned plugin-cache copy). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
@@ -1251,9 +1262,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)
   changes nothing. `newProjectLang()` only for a brand-new project (no meta.lang, no feature — active or archived), seeded
-  by `seedProjectLang()` under the roadmap lock; `spec_init` reports what a variable decided in `userDefaults`;
+  by `seedProjectLang()` under the roadmap lock; `spec_init` reports what a variable decided in `userDefaults`, and so do
+  spec_create and spec_import (whose own text — warnings, design.md headings — follows `configuredLang()` too);
   `init --stop-check on` writes meta when DEV_SPEC_STOP_CHECK says off. The guard and stop hooks read the same names raw
-  (their cheap pre-checks). **Never plugin.json `userConfig`**: it opens a configuration dialog on every install / enable,
+  (their cheap pre-checks). A roadmap.json that doesn't parse: DEV_SPEC_STOP_CHECK still decides (engine and hook), the
+  guard stays off. DEV_SPEC_GUARD_DEFAULT reaches a dev-spec `.specs/` without roadmap.json (`isDevSpecDir` — steering/ or a
+  feature's .state.json; the hook's `devSpecWithoutRoadmap()`), never a folder without `.specs/` nor another tool's. **Never plugin.json `userConfig`**: it opens a configuration dialog on every install / enable,
   reaches neither the Bash tool (the CLI) nor other MCP clients (Claude Code exports `CLAUDE_PLUGIN_OPTION_*` to hooks
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
@@ -1265,9 +1279,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   prefix then substring); an unknown prompt / template / argument / ref → -32602; with prompts off `ref/prompt` → -32602.
 - **Plan-mode bridge** — `spec_import {tool: plan | execplan, text}` (`TEXT_IMPORT_TOOLS`; server.js `REQUIRED_ONE_OF`:
   `path` or `text`) = the file import minus the source note (`inline: true`, `source: null`); CLI `import plan -` (stdin)
-  or `--text`. `hooks/plan-hook.js` (PostToolUse, matcher `ExitPlanMode`): one line of `additionalContext` in a dev-spec
+  or `--text` (a word after the tool that is no track list, given with `--text`, is passed as the path: the engine's "path or
+  text, not both"). `hooks/plan-hook.js` (PostToolUse, matcher `ExitPlanMode`): one line of `additionalContext` in a dev-spec
   project, silent and exit 0 otherwise (the payload is undocumented — `tool_input.plan` and a plan-file path read
-  defensively).
+  defensively); a network cwd is skipped before any stat (an inlined `isNetworkPath`).
 
 ## Spec quality (1.16 Q)
 - **Steering amendments** — `approvePhase` records `steering` {file: sha1} on a requirements / design approval and its

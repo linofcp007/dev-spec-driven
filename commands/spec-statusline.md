@@ -11,8 +11,9 @@ Args: $ARGUMENTS
 project's `.specs/` (the nearest one at or above the session's folder) and prints one line in the project language, e.g.
 `◆ billing · 4/9 tasks · 1 unverified · next: approve tasks` — the feature with work under way that changed last (else the
 most recently active one), its task progress, ticks without verification evidence and the next step (spec_next_action's
-order, kept cheap: it never runs the doctor or scans the code). Outside a dev-spec project it prints nothing; it always
-exits 0, never writes anything and runs locally (no tokens).
+step, kept cheap: it never runs the doctor, scans the code or hashes the finished files — so a finished feature reads
+"finished", never "clean"; drift is `/spec-drift`'s). Outside a dev-spec project (or in a network folder) it prints nothing;
+it always exits 0, never writes anything and runs locally (no tokens).
 
 **Steps**
 1. Get the entry with this plugin's absolute path:

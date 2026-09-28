@@ -990,10 +990,13 @@ function main() {
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
       if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
-      // With --text the words after the tool are tracks; with - or a path, the words after it.
+      // With --text the words after the tool are tracks; with - or a path, the words after it. A word after the tool that is no
+      // track list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not
+      // both" (as spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
+      const pathWithText = hasText && !!pos[1] && spec.parseTracks(pos[1]).unknown.length > 0;
       const doImport = (text) => {
-        const r = spec.importSpec(projectDir, pos[0], text != null ? undefined : pos[1], { name: flags.name, lang: flags.lang,
-          tracks: withTracksFlag(pos.slice(hasText ? 1 : 2)), text });
+        const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : pos[1], { name: flags.name, lang: flags.lang,
+          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text });
         if (!r.ok) return fail(r);
         return out(r, (r) => {
           const B = spec.msg(r.lang).importSpec;

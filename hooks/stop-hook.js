@@ -65,15 +65,16 @@ function userStopCheckOff() {
   }
   return false;
 }
-// roadmap.json meta.stopCheck === false → off; not a boolean (unset) → the user's option. Read raw: the engine is loaded only
-// when the gate may have something to say.
+// roadmap.json meta.stopCheck === false → off; not a boolean (unset) → the user's option; missing, unreadable or broken → the
+// user's option too (spec.stopCheckEnabled's rule — DEV_SPEC_STOP_CHECK=off used to be ignored while the file didn't parse).
+// Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
     const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
     return meta.stopCheck === false || (typeof meta.stopCheck !== "boolean" && userStopCheckOff());
   } catch {
-    return false; // missing or broken roadmap.json: the engine decides (it never blocks on a file it can't read)
+    return userStopCheckOff(); // missing or broken roadmap.json: the user's option, else the engine decides (it never blocks on a file it can't read)
   }
 }
 

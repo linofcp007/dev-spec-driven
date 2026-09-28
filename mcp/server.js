@@ -614,20 +614,9 @@ const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`, local to the machine).
 // Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. A default projectDir (the
 // server's cwd, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR) is the user's own config, not an argument, and the CLI is
-// user-driven: neither is restricted. (A drive letter mapped to a share can't be told apart without I/O.)
-function isNetworkPath(p) {
-  const s = String(p).trim();
-  if (!/^[\\/]{2}/.test(s)) return false;
-  let rest = s.slice(2);
-  if (/^[?.][\\/]/.test(rest)) {
-    rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
-    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
-    rest = rest.slice(4);
-  }
-  const host = rest.split(/[\\/]/)[0].toLowerCase();
-  return host !== "wsl$" && host !== "wsl.localhost";
-}
+// user-driven: neither is restricted. (A drive letter mapped to a share can't be told apart without I/O.) The rule is the
+// engine's (spec.isNetworkPath — the status line and the plan-mode hook skip such a folder too, 1.16).
+const isNetworkPath = spec.isNetworkPath;
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const TYPE_CHECK = {
   string: (v) => typeof v === "string",

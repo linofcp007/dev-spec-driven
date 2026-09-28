@@ -3634,15 +3634,29 @@ if (inSection("p16c")) { // 1.16 package C — the status line, the user's DEV_S
     return { out: r.stdout || "", err: r.stderr || "", code: r.status, ms: Date.now() - t0 };
   };
   const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-cli-none-")); // no .specs/ at or above it
+  // A core feature whose planning chain is filled — every gate through tasks passes, so no approval needs force (a forced one whose
+  // gate still fails is a `fix` for next_action and the status line alike).
+  const cFill = (dir, name) => {
+    const w = (rel, txt) => fs.writeFileSync(path.join(dir, rel), txt);
+    w("classification.md", `# Classification: ${name}\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; one module.\n\n## Compliance Tags\nnone\n`);
+    w("requirements.md", `# Feature: ${name}\n\n## Summary\nUsers log in with email and password.\n\n## User Stories (prioritized — each independently testable)\n\n### US-1 (P1 — MVP): Log in\n` +
+      "**As a** user, **I want** to log in, **so that** I see my account.\n**Why P1:** nothing works without it.\n**Independent Test:** Can be fully tested by logging in and delivers access, without the other stories.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the user submits valid credentials THE SYSTEM SHALL open a session\n2. **US-1.AC-2** — IF the credentials are wrong THEN THE SYSTEM SHALL show an error\n\n" +
+      "## Success Criteria (measurable, technology-agnostic)\n- **SC-001** — 95% of logins complete in under 2 seconds\n\n## Edge Cases & Error Handling\n- **EC-1** — Locked account: show the lock message\n\n" +
+      "## Non-Functional Requirements\n- **NFR-1** — p95 latency under 300 ms\n\n## Out of Scope\n- Social login\n\n## Assumptions\n- Users already have accounts\n");
+    w("design.md", `# Design: ${name}\n\n## Overview\nA form posts to /login; the server checks the hash.\n\n## Architecture\nThe web app calls the auth service.\n\n## Data Models\nUser { id, email, hash }\n\n` +
+      "## API Contracts\nPOST /login returns 200 or 401.\n\n## Security Considerations\nHashes use bcrypt.\n\n## Error Handling\nWrong credentials give 401.\n\n## Testing Strategy\n- Unit tests for the handler.\n\n" +
+      "## Constitution Check\n- [x] Simplicity — complies\n\n## Complexity Tracking\nNone.\n");
+  };
   // A project with a feature under way: 2 of 4 tasks ticked, one of them without verification evidence.
   const sp = path.join(tmp, "p16c-status");
   S16.initProject(sp, ["core"], "en");
-  S16.createFeature(sp, "Billing", ["core"], "Invoices", undefined, "en");
+  cFill(S16.createFeature(sp, "Billing", ["core"], "Invoices", undefined, "en").dir, "Billing");
   fs.writeFileSync(path.join(sp, ".specs", "billing", "tasks.md"), ["# Tasks: Billing", "", "## Phase 1", "",
     "- [ ] 1. Charge the card", "  - _Requirements: US-1.AC-1_", "  - _Verify: node -e \"process.exit(0)\"_",
     "- [ ] 2. Send the invoice", "  - _Requirements: US-1.AC-2_", "  - _Verify: node -e \"process.exit(0)\"_",
     "- [ ] 3. Refund", "- [ ] 4. Report", ""].join("\n"));
-  for (const ph of ["classification", "requirements", "design", "tasks"]) S16.approvePhase(sp, "billing", ph, "t", { force: true });
+  S16.approvePhase(sp, "billing", null, "t", { through: "tasks" });
   S16.completeTask(sp, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" });
   S16.completeTask(sp, "billing", 2, { summary: "sent by hand" });
   const line = "◆ billing · 2/4 tasks · 1 unverified · next: task 3";
@@ -3712,6 +3726,32 @@ if (inSection("p16c")) { // 1.16 package C — the status line, the user's DEV_S
   const doc16 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
     "1.16: help and the header docblock document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
+  // 1.16 C review 5: a UNC folder in the session JSON is never stat'ed (an unreachable host hung the status line for minutes) —
+  // a TEST-NET address (192.0.2.1, never routed), a child process with its own timeout; silent and fast on every platform.
+  const uncRuns = [js({ cwd: "\\\\192.0.2.1\\share\\proj" }), js({ workspace: { current_dir: "//192.0.2.1/share/proj", project_dir: "\\\\?\\UNC\\192.0.2.1\\share" } })].map((input) => {
+    const env = { ...process.env };
+    for (const k of OPTS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"])) delete env[k];
+    const t0 = Date.now();
+    const r = spawnSync(process.execPath, [CLI, "statusline"], { input, encoding: "utf8", env, cwd: none, timeout: 20000 });
+    return { code: r.status, out: r.stdout || "", err: r.error ? r.error.code : null, ms: Date.now() - t0 };
+  });
+  ok(uncRuns.every((r) => r.code === 0 && r.out === "" && !r.err && r.ms < 10000),
+    "1.16 C review 5: statusline with a network cwd / workspace folder (UNC, //host, \\\\?\\UNC) prints nothing and exits at once — no SMB connection (got " + js(uncRuns) + ")");
+  // 1.16 C review 8: --print-config names a project's .claude/settings.local.json (the entry holds this machine's path).
+  const pcEn = cli(["statusline", "--print-config", "--project", sp]);
+  ok(pcEn.code === 0 && /\.claude\/settings\.local\.json/.test(pcEn.out) && !/to a project's \.claude\/settings\.json:/.test(pcEn.out),
+    "1.16 C review 8: statusline --print-config points to ~/.claude/settings.json or a project's .claude/settings.local.json, never the committed .claude/settings.json (got " + js(pcEn.out.split("\n")[0]) + ")");
+  // 1.16 C review 9: `import plan <path> --text "…"` is the engine's "path or text, not both" (spec_import's), never "Unknown track".
+  const pt9 = path.join(tmp, "p16c-import-both");
+  fs.mkdirSync(path.join(pt9, "plans"), { recursive: true });
+  fs.writeFileSync(path.join(pt9, "plans", "x.md"), planMd);
+  const both = cli(["import", "plan", "plans/x.md", "--text", planMd, "--project", pt9]);
+  const bothJ = cli(["import", "plan", "plans/x.md", "--text", planMd, "--json", "--project", pt9]);
+  let bothJo = null;
+  try { bothJo = JSON.parse(bothJ.out); } catch { /* stays null */ }
+  ok(both.code === 1 && /Pass either `path` or `text`, not both/.test(both.err) && !/Unknown track/i.test(both.err + both.out) && bothJ.code === 1 && bothJo && bothJo.ok === false &&
+    /not both/.test(bothJo.error) && !fs.existsSync(path.join(pt9, ".specs", "dark-mode")),
+    "1.16 C review 9: import plan <path> --text is refused as spec_import {path, text} is (path or text, not both) — nothing imported (got " + js([both.code, both.err.slice(0, 80), bothJo]) + ")");
   try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 

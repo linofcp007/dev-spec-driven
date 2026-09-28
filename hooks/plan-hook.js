@@ -10,7 +10,8 @@
  * inside the project; CLI `dev-spec import plan -`). The decision and the localized line are the engine's (spec.planBridge).
  *
  * It is silent (exit 0, no output) for any other tool or event, outside a dev-spec project (another tool's .specs/ included)
- * and on a malformed payload, and it NEVER blocks: any error exits 0 silently. Cheap: a few stats to recognise the project,
+ * and on a malformed payload, and it NEVER blocks: any error exits 0 silently. Cheap: a few stats to recognise the project
+ * (never of a network path — a UNC cwd is skipped before any fs call),
  * the engine loaded only then; stdin bounded (PAYLOAD_MAX — a longer payload is ignored); nothing is written.
  */
 
@@ -47,6 +48,24 @@ function isDevSpecProject(dir) {
   }
 }
 
+// A network path (UNC `\\host\share`, `//host/share`, `\\?\UNC\…`, `\\.\UNC\…`, other device paths) is never stat'ed: it would
+// open an SMB connection to whatever host the payload names and block this hook until an unreachable host times out. Local:
+// `\\?\C:\…` / `\\.\C:\…` and WSL's `\\wsl$\…` / `\\wsl.localhost\…`. The engine's rule (spec.isNetworkPath), inlined so the
+// engine is only loaded inside a dev-spec project.
+function isNetworkPath(p) {
+  const s = String(p).trim();
+  if (!/^[\\/]{2}/.test(s)) return false;
+  let rest = s.slice(2);
+  if (/^[?.][\\/]/.test(rest)) {
+    rest = rest.slice(2);
+    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false;
+    if (!/^UNC[\\/]/i.test(rest)) return true;
+    rest = rest.slice(4);
+  }
+  const host = rest.split(/[\\/]/)[0].toLowerCase();
+  return host !== "wsl$" && host !== "wsl.localhost";
+}
+
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run it
   ran = true;
@@ -65,7 +84,7 @@ function main(raw) {
   // The project: the session's cwd, else the project dir Claude Code (or the user) exported.
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const pdir = [cwd, process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
-    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()))
+    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()) && !isNetworkPath(v))
     .map((v) => path.resolve(v))
     .find(isDevSpecProject);
   if (!pdir) return finish();
