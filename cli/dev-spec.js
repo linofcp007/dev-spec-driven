@@ -40,7 +40,8 @@
  *                                      status, tasks, tests, evidence, decisions, approval); [--csv] the matrix as RFC 4180 CSV
  *   clarify <feature>                  Surface ambiguities/gaps in requirements
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
- *   next <feature> [--batch] [--max N] Next unchecked task (+ the [P] tasks that can run beside it)
+ *   next <feature> [--batch] [--max N] Next task whose _Depends:_ are done (+ the [P] tasks that can run beside it);
+ *                                      --waves: the execution waves of every open task (+ cycles, blocked tasks)
  *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
  *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
  *   approve <feature> <phase> [--by NAME] [--force]  Record a phase approval — refused while its checks fail
@@ -57,7 +58,7 @@
  *   finish <feature> [--write] [--include-body] [--run]  Readiness report + merge summary (no PRs);
  *                                      --run [--shell bash|<path>] runs the project checks (meta.checks) and records them
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
- *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL]
+ *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
  *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
@@ -164,6 +165,7 @@ VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_chang
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
+VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -197,6 +199,7 @@ const on = (k) => flags[k] === true;
 // is false, as spec_finish {includeBody: false} (on() ? true : undefined turned it into the default).
 const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
 // --help (in BOOL_FLAGS) anywhere prints the help (`done big 2 --help` ticked the task)
+// --waves (1.14 F3: next <f> --waves = spec_next_task {waves: true}) is in spec.CLI_SWITCHES too.
 // An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so
 // `done big 2 --rnu` ticked the task with no evidence (exit 0). Known = VALUE_FLAGS ∪ BOOL_FLAGS, with a did-you-mean.
 // `evals` forwards its flags untouched to mcp/evals/run-evals.js, which checks its own (--dry-run, --max-items…).
@@ -477,13 +480,24 @@ function main() {
     }
 
     case "next": {
-      if (!pos[0]) usage("dev-spec next <feature> [--batch] [--max N]");
-      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: intFlag("max") });
+      if (!pos[0]) usage("dev-spec next <feature> [--batch] [--max N] [--waves]");
+      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: intFlag("max"), waves: on("waves") }); // = spec_next_task {batch, max, waves}
       if (!r.ok) return fail(r);
       const T = featureText(r.feature);
+      const D = spec.msg(spec.featureLang(projectDir, r.feature)).taskDeps; // 1.14 F3
+      const waits = (list) => list.map((x) => D.waitLine(x.number, x.waitsOn.map((d) => "#" + d).join(", "))).join("; ");
       return out(r, (r) => {
-        console.log(r.next ? T.next(r.next.number, r.next.text, r.remaining, r.total) : T.allDone);
+        // No task can start while some are open (a cycle, a _Depends:_ naming no task): say so — never "all done".
+        console.log(r.next ? T.next(r.next.number, r.next.text, r.remaining, r.total) : r.remaining ? r.note : T.allDone);
+        if (r.next && r.skipped && r.skipped.length) console.log(D.cliSkipped(waits(r.skipped)));
         if (r.batch && r.batch.length > 1) console.log(T.batch(r.batch.map((b) => "#" + b.number + " [" + b.implements.join(", ") + "]").join("  ")));
+        if (r.waves) {
+          console.log(D.cliWaves(r.waves.length));
+          if (!r.waves.length) console.log(D.cliNoWave);
+          r.waves.forEach((w, k) => console.log(D.cliWave(k + 1, w.map((n) => "#" + n).join(" "))));
+          (r.cycles || []).forEach((c) => console.log(D.cliCycles(c.map((n) => "#" + n).join(", "))));
+        }
+        if (r.next && r.blocked && r.blocked.length) console.log(D.cliBlocked(waits(r.blocked))); // (no next: the note names them)
       });
     }
 
@@ -614,7 +628,8 @@ function main() {
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
-        console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : D.allDone));
+        // "all done" only when no task is open (1.14 F3: open tasks none of which can start are named by the note)
+        console.log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
         if (r.redRecorded) console.log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // B5: _Expect: fail_
         if (r.note) console.log("  ⚠ " + r.note);
       });
@@ -869,7 +884,7 @@ function main() {
 
     case "append-tasks": {
       // dev-spec append-tasks <feature> --task "<text>" [...] — ONE task per call; = spec_append_tasks {tasks: [that task]}
-      if (!pos[0] || typeof flags.task !== "string") usage('dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--makes-green T-01[,…]] [--expect-fail] [--size XS|S|M|L|XL] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
+      if (!pos[0] || typeof flags.task !== "string") usage('dev-spec append-tasks <feature> --task "<text>" [--req US-1.AC-2[,…]] [--implements path[,…]] [--verify "<cmd>"] [--makes-green T-01[,…]] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3[,5]] [--story US1|shared] [--parallel] [--heading "<phase heading>"]');
       const T = spec.msg(spec.featureLang(projectDir, pos[0])).appendTasks;
       // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a.
       // Collect every occurrence, walking argv with the parser's own rules (as `depend` does for --add/--rm).
@@ -900,6 +915,8 @@ function main() {
       if (greens.length) task.makesGreen = greens;
       if (flags["expect-fail"] != null) task.expectFail = on("expect-fail");
       if (typeof flags.size === "string") task.size = flags.size;
+      const deps = every("depends"); // 1.14 F3: = the MCP task field depends (repeatable, "3,5" / "#3" split by the engine)
+      if (deps.length) task.depends = deps;
       const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -1312,7 +1329,9 @@ function helpText() {
   clarify <feature>               Surface ambiguities/gaps in requirements before design
   ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})
-  next <feature> [--batch]        Next unchecked task (--batch: + the [P] tasks that can run beside it; --max N, default 3)
+  next <feature> [--batch]        Next task whose _Depends:_ are all done (--batch: + the [P] tasks that can run beside it; --max N, default 3);
+                                  --waves: the execution waves of every open task (dependencies done or in earlier waves, no shared
+                                  _Implements:_ file), + dependency cycles and blocked tasks
   next-action <feature>           "You are here → do this next" (+ what changed since approval); alias: na
   brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
@@ -1328,6 +1347,7 @@ function helpText() {
   append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"
                                   · --makes-green T-01[,…] (planned in test-plan.md) · --expect-fail (_Expect: fail_) · --size XS|S|M|L|XL
+                                  · --depends 3,5 (_Depends:_ — task numbers of this tasks.md; must exist, no cycle)
   approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
                                   that role (required for a phase init --roles lists)

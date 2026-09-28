@@ -9,7 +9,8 @@ Target: $ARGUMENTS
 
 **Inline (default).** Before coding, re-read steering, requirements, design, any test/eval plans, and
 tasks; summarize your understanding. Use `spec_next_task` to find the next task (or jump to the given
-number). Pick the loop per task: plain implement-and-test (core); red → green → refactor against the
+number) — the first open task whose `_Depends: 3, 5_` tasks are all done (a task without `_Depends:_` just follows
+tasks.md order). Pick the loop per task: plain implement-and-test (core); red → green → refactor against the
 target tests (+tdd); prompt-iteration gated on eval delta with a new `prompts/vN.md` (+ai). After each
 task, run its `_Verify:_` command fresh and call `spec_complete_task {…, evidence}` with the command, exit
 code and output summary — evidence before claims (`references/verification.md`). The rules the engine applies:
@@ -21,6 +22,10 @@ code and output summary — evidence before claims (`references/verification.md`
   counts: run the check again;
 - duplicate task numbers resolve to the first open one — renumber them (doctor warns `duplicate-tasks`);
 - a bugfix refuses tasks after the root-cause task until `bug.md → Root Cause` is filled;
+- a task whose `_Depends:_` tasks are not all done is skipped by `spec_next_task` (`skipped`); ticking it anyway is
+  recorded — with `waitsOn` and a note, never refused — so do its dependencies first. No open task able to start
+  (`blocked`: a cycle, or a `_Depends:_` naming no task) means the plan is wrong: `spec_doctor` fails `task-deps` — fix
+  the markers in tasks.md and re-approve the tasks phase;
 - a task marked **`_Expect: fail_`** (it writes a test before its code) is proven by a **failing** run — record the
   red run; a passing one is refused (`unexpected-pass`: the test doesn't fail yet), and so is a failing one whose
   output shows the test never ran — a missing test file, module or script (`couldNotRun`);
@@ -48,7 +53,9 @@ needs — 0, or non-zero on an `_Expect: fail_` task). Keep
 the ledger. Stop at every `**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
 AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt/eval) run inline. If the
 host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate
-worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol).
+worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol) — or dispatch the plan wave by wave:
+`spec_next_task {waves:true}` (CLI `dev-spec next <feature> --waves`) lists the waves (a wave's tasks have their
+dependencies done or in earlier waves and share no `_Implements:_` file); run one wave, merge and review it, then the next.
 
 When the last task is done, run `/spec-converge` if you doubt every AC is delivered, then close with `/spec-finish`.
 

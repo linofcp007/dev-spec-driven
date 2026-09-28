@@ -71,7 +71,9 @@ Checkpoint US1: presented → approved
 Read `tasks.md` once. Write a table to the ledger with one row per **pair of tasks that share a file**
 (`_Implements:_`) or an interface — what one produces vs. what the other consumes — and one row per task
 whose own text disagrees with itself (its tests vs. its code, its files vs. later tasks). Check that
-every `[P]` claim is true (different files, no dependency). Rule on each conflict **within the design**
+every `[P]` claim is true (different files, no dependency) and that every `_Depends: 3, 5_` marker is right: a task
+that consumes what another produces must name it (`spec_doctor` fails `task-deps` on a dependency naming no task, a
+task depending on itself or a cycle). Rule on each conflict **within the design**
 and ledger the ruling. A conflict that can only be resolved by changing an AC, the design or a planned
 test is not yours to rule on — see "Where autonomy stops".
 
@@ -174,10 +176,11 @@ When a story has several independent `[P]` tasks, they can run concurrently — 
 own git worktree, so they never share a working tree. Adapted from superpowers' *using-git-worktrees* and
 *dispatching-parallel-agents*.
 
-1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next open task
-   plus the following open `[P]` tasks **of the same section** whose `_Implements:_` files are declared
-   and disjoint (max 3 by default). No `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js`
-   are one file; a folder shares every file under it), a non-`[P]` task or a section
+1. `spec_next_task {name, batch: true}` (CLI `dev-spec next <feature> --batch`) returns the next task (the first
+   open one whose `_Depends:_` tasks are all done) plus the following open `[P]` tasks **of the same section** whose
+   `_Implements:_` files are declared and disjoint and whose own `_Depends:_` are done (max 3 by default). No
+   `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js` are one file; a folder shares every
+   file under it), a task waiting on an open dependency, a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
 2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
    worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own
@@ -190,6 +193,29 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
 
 Worth it only when the tasks are genuinely independent and big enough to amortise the merges; for small
 tasks the sequential loop is faster end to end.
+
+### Dispatch by waves (tasks that declare `_Depends:_`)
+
+When tasks.md states its dependencies (`_Depends: 3, 5_` on a task: the numbers of the tasks that must be done
+first), plan the whole run as **waves**: `spec_next_task {name, waves: true}` (CLI `dev-spec next <feature> --waves`)
+returns `waves` — `[[1], [2, 3], [4]]` — plus `cycles` and `blocked`. The rules, which the engine applies (never guess
+them):
+
+- a task **with** `_Depends:_` waits for exactly those tasks; a task **without** one keeps tasks.md order among the
+  tasks that declare none — it waits for the open ones before it, a run of consecutive `[P]` tasks of one section
+  waits together, and the task after the run waits for the whole run (the batch's `[P]` rule, unchanged);
+- a wave holds tasks whose dependencies are done or in earlier waves, never two tasks sharing an `_Implements:_` file
+  (a folder shares its files), and a task without `_Implements:_` (its files can't be proven disjoint) or an +ai
+  prompt task (inline only) is a wave of its own;
+- `blocked` tasks can never start as things stand (a cycle, a `_Depends:_` naming no task, or waiting on one of
+  those) and `cycles` lists the loops: stop — `spec_doctor` fails `task-deps`; fixing tasks.md changes the approved
+  plan (re-approve the tasks phase).
+
+Per wave: write each task's brief, dispatch a wave of one sequentially as usual, and a wider wave as in the parallel
+mode above (one worktree per implementer, merge one at a time, full suite after each merge, review each diff,
+complete each with its own evidence). Ask for the waves again after each wave — a merge conflict re-run sequentially
+or a task that turned out to need another changes them. Only a task's own `_Depends:_` can take it ahead of an
+earlier section's checkpoint: still stop at every `**Checkpoint:**` once that section's tasks are done.
 
 ## Where autonomy stops
 

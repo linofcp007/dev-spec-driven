@@ -1840,7 +1840,7 @@ const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (t
 const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
 // The CLI's boolean switches (cli/dev-spec.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv"]); // the CLI's BOOL_FLAGS ARE this list
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves"]); // the CLI's BOOL_FLAGS ARE this list
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "sudo", "env", "nohup", "time", "exec", "command", "call",
@@ -2332,9 +2332,13 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
   if (isTestFile(rel)) return allow("test-file", { level: "scope", covering: features, ...extra });
   const usable = (k) => !!k && k !== "." && !/^\[.*\]$/.test(k) && !/^(?:tbd|todo|n\/?a|none|-+|…|\.{3})$/i.test(k) && !k.split("/").includes("..");
   const open = [];
+  let scheduled = null; // 1.14 F3: the first feature's next task by next_task's rule (_Depends:_ all done)
   for (const name of features) {
     const dir = path.join(specsRoot(pdir), name);
-    for (const b of taskBlocks(activeTasks(texts.get(name) || "", detectTracks(dir)) || "")) {
+    const blocks = taskBlocks(activeTasks(texts.get(name) || "", detectTracks(dir)) || "");
+    const sn = scheduled ? null : taskSchedule(blocks).next;
+    if (sn) scheduled = { feature: name, number: sn.number };
+    for (const b of blocks) {
       if (b.done) continue;
       const refs = [];
       for (const ref of taskMarkers(b).implements) {
@@ -2362,7 +2366,7 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
     }
   }
   const S = i18n.msg(projectLang(pdir)).scopeGuard;
-  const next = open[0] || null;
+  const next = (scheduled && open.find((t) => t.feature === scheduled.feature && t.number === scheduled.number)) || open[0] || null;
   const hint = likely ? S.hint[likely.score === Infinity ? "same-folder" : "nearby"](likely.t.number, likely.t.feature, likely.r.rel)
     : next ? S.hint.next(next.number, next.feature) : "";
   const pick = likely ? likely.t : next;
@@ -3398,10 +3402,10 @@ function statusFeature(projectDir, name) {
   const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks); // inactive-track tasks are not counted
   const tasks = parseTasks(tasksText);
   const done = tasks.filter((t) => t.done).length;
-  const next = tasks.find((t) => !t.done) || null;
   // Judged per task BLOCK (its own _Verify:_, its own record), never per number: a duplicated number must
   // not lend one task's run or _Verify:_ to the other. Same order as parseTasks (stable sort by number).
   const blocks = taskBlocks(tasksText || "");
+  const next = taskSchedule(blocks).next; // 1.14 F3: next_task's rule (_Depends:_ all done)
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
   const mode = evidenceMode(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
@@ -3457,25 +3461,37 @@ function nextTask(projectDir, name, opts = {}) {
   if (raw == null) return { ok: false, error: errs(projectDir, f.slug).tasksMissing(f.slug) };
   const tracks = detectTracks(f.dir);
   const text = activeTasks(raw, tracks); // a removed track's task block is inactive, never "next"
-  const tasks = parseTasks(text);
-  const next = tasks.find((t) => !t.done);
+  const blocks = taskBlocks(text || "");
+  const sch = taskSchedule(blocks); // 1.14 F3: the next OPEN task whose _Depends:_ are all done
+  const next = sch.next;
   const res = {
     ok: true,
     feature: f.slug,
     next: next ? { number: next.number, text: next.text } : null,
-    remaining: tasks.filter((t) => !t.done).length,
-    total: tasks.length,
+    remaining: blocks.filter((b) => !b.done).length,
+    total: blocks.length,
   };
+  // Only when dependencies are in play (a tasks.md without _Depends:_ answers exactly as before): the open tasks passed over
+  // because they wait (skipped), the ones that can't start as things stand (blocked — a cycle, a _Depends:_ naming no task).
+  if (sch.skipped.length) res.skipped = sch.skipped;
+  if (sch.blocked.length) res.blocked = sch.blocked;
+  if (!next && res.remaining) res.note = taskDepsBlockedNote(sch, f.slug, featureLang(projectDir, f.slug));
   if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks);
+  if (opts.waves) {
+    const w = taskWaves(blocks, tracks);
+    Object.assign(res, { waves: w.waves, cycles: w.cycles, blocked: w.blocked });
+  }
   return res;
 }
 
-// A batch for parallel subagents: the next open task and, when it is [P], the following open [P] tasks of
-// the SAME section whose _Implements:_ files are declared and disjoint (never across a checkpoint).
+// A batch for parallel subagents: the next task (taskSchedule) and, when it is [P], the following open [P] tasks of
+// the SAME section whose _Implements:_ files are declared and disjoint (never across a checkpoint) and whose own _Depends:_
+// are all done — a task waiting on an open dependency (one in the batch included) ends it.
 function parallelBatch(tasksText, max, tracks) {
   const cap = Math.max(1, Math.min(parseInt(max, 10) || 3, 8));
   const blocks = taskBlocks(tasksText);
-  const i0 = blocks.findIndex((b) => !b.done);
+  const sch = taskSchedule(blocks);
+  const i0 = sch.next ? blocks.indexOf(sch.next) : -1;
   if (i0 === -1) return [];
   const first = blocks[i0];
   const pick = (b) => ({ number: b.number, text: b.text, implements: taskMarkers(b).implements });
@@ -3492,12 +3508,292 @@ function parallelBatch(tasksText, max, tracks) {
     if (b.done) continue;
     if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint) break;
     if (isPromptTask(b, taskMarkers(b), tracks || [])) break;
+    if (sch.graph.waitsOn(i).length) break; // 1.14 F3: it waits on an open task (or on one of this batch)
     const imp = keys(taskMarkers(b).implements);
     if (!imp.length || imp.some(overlaps)) break;
     files.push(...imp);
     batch.push(pick(b));
   }
   return batch;
+}
+
+// ---------------------------------------------------------------------------
+// Task dependencies and execution waves (1.14 F3)
+// ---------------------------------------------------------------------------
+// `_Depends: 3, 5_` (English-stable; `#3` or `3`, separated by commas, semicolons or spaces; the task line or a sub-line,
+// never fenced code — taskMarkers reads it like every marker) names tasks of the SAME tasks.md that must be done first.
+// Every reader works on ONE view — the active tasks (activeTasks) — and follows resolveTask's duplicate-number rule: a
+// dependency on number n is done once EVERY task numbered n is done; a number no active task carries never is.
+//   - next (taskSchedule): the first open task in tasks order (parseTasks: by number, stable) whose _Depends:_ are all done —
+//     only the task resolveTask answers for its number is a candidate. A tasks.md without _Depends:_ gets exactly the task it
+//     got before (the first open one). `skipped` = the tasks passed over, `blocked` = the tasks that can never start as things
+//     stand (a cycle, a _Depends:_ naming no task — or waiting on such a task).
+//   - waves (taskWaves): layers of the open tasks. A task WITH _Depends:_ waits for exactly those tasks. A task WITHOUT one
+//     keeps tasks.md order among the tasks that declare none (today's sequential default): it waits for the open ones before
+//     it — a run of consecutive [P] tasks of one section (phase + checkpoint) waits together for what precedes the run, and
+//     the task after the run waits for the whole run (today's [P] batch). A wave holds tasks whose dependencies are done or
+//     in earlier waves, filled in tasks order with the batch's limits: never two tasks sharing an _Implements:_ file
+//     (implementsKey; a folder overlaps its files), and a task without _Implements:_ (its files can't be proven disjoint) or
+//     an +ai prompt task (inline only) is a wave of its own. Only a task's own _Depends:_ can take it ahead of an earlier
+//     section's checkpoint — the controller still stops at each checkpoint once that section's tasks are done.
+//   - complete_task never refuses a task whose dependencies are open (a tick records what happened — work may have been
+//     done in another order): it ticks, with `waitsOn` + a note. The bugfix gate keeps its precedence (a refusal).
+//   - doctor `task-deps` (fail): a _Depends:_ value that is not a task number, a number no active task carries, a task that
+//     depends on itself, a cycle — only when some task declares _Depends:_; the tasks approval refuses on it.
+// The graph walks are linear in the tasks and their dependencies and iterative (no recursion on a long chain); the waves'
+// greedy rounds only revisit tasks that were ready together and collided on a file (n tasks sharing one file: n rounds).
+const RE_DEP_TOKEN = /^#?(\d{1,15})$/;
+// A block's _Depends:_ → { declared, numbers (unique, as written), invalid (tokens that are not a task number) }.
+// A value wholly in [brackets] is a template slot, like a [placeholder] _Verify:_: nothing is declared.
+function taskDependsSpec(block) {
+  const numbers = [], invalid = [];
+  // Fast path — every status / roadmap / next call reads every task: no "depends" on its lines, no marker to parse.
+  if (!/depends/i.test(block.text || "") && !(block.body || []).some((l) => /depends/i.test(l))) return { declared: false, numbers, invalid };
+  const seenN = new Set(), seenBad = new Set();
+  let declared = false;
+  for (const v of taskMarkers(block).depends) {
+    if (/^\[.*\]$/.test(v)) continue;
+    declared = true;
+    for (const tok of v.split(/\s+/)) {
+      if (!tok) continue;
+      const m = tok.match(RE_DEP_TOKEN);
+      const n = m ? taskNumber(m[1]) : NaN;
+      if (Number.isFinite(n)) { if (!seenN.has(n)) { seenN.add(n); numbers.push(n); } }
+      else if (!seenBad.has(tok)) { seenBad.add(tok); invalid.push(tok); }
+    }
+  }
+  return { declared, numbers, invalid };
+}
+// The dependency view of a task list (blocks in file order): numbers → blocks, each block's _Depends:_, which numbers are
+// done, and the tasks order (parseTasks' — by number, stable).
+function taskDepGraph(blocks) {
+  const byNum = new Map();
+  blocks.forEach((b, i) => { const l = byNum.get(b.number); if (l) l.push(i); else byNum.set(b.number, [i]); });
+  const doneNum = new Map();
+  for (const [num, l] of byNum) doneNum.set(num, l.every((i) => blocks[i].done));
+  const specs = blocks.map(taskDependsSpec);
+  const order = blocks.map((_, i) => i).sort((a, b) => blocks[a].number - blocks[b].number || a - b);
+  // The dependency numbers of block i that are not done yet (open, or carried by no task), ascending.
+  const waitsOn = (i) => specs[i].numbers.filter((n) => doneNum.get(n) !== true).sort((a, b) => a - b);
+  return { blocks, byNum, doneNum, specs, order, waitsOn };
+}
+// Open tasks that can never start as things stand: Kahn's walk over the open tasks' _Depends:_ — a dependency no task
+// carries never clears, a cycle never clears, and neither does a task waiting on one of those. Tasks without _Depends:_ are
+// never blocked (tasks.md order always lets them start eventually). → [{number, waitsOn}] in tasks order.
+function stuckTasks(g) {
+  const { blocks, byNum, specs } = g;
+  const need = new Array(blocks.length).fill(0);
+  const dependents = new Map();
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i].done) continue;
+    for (const d of specs[i].numbers) {
+      const l = byNum.get(d);
+      if (!l) { need[i]++; continue; }
+      for (const j of l) {
+        if (blocks[j].done) continue;
+        need[i]++;
+        if (dependents.has(j)) dependents.get(j).push(i); else dependents.set(j, [i]);
+      }
+    }
+  }
+  const queue = [];
+  for (let i = 0; i < blocks.length; i++) if (!blocks[i].done && need[i] === 0) queue.push(i);
+  for (let q = 0; q < queue.length; q++) for (const k of dependents.get(queue[q]) || []) if (--need[k] === 0) queue.push(k);
+  return g.order.filter((i) => !blocks[i].done && need[i] > 0).map((i) => ({ number: blocks[i].number, waitsOn: g.waitsOn(i) }));
+}
+// The next task — ONE rule for spec_next_task, next_action's implement step, spec_task_brief's default task, `next --batch`,
+// spec_status, the roadmap and complete_task's `next`. → { next (a block of `blocks`, or null), skipped, blocked, graph }.
+function taskSchedule(blocks) {
+  const g = taskDepGraph(blocks);
+  const seen = new Set(); // numbers answered for: resolveTask serves the FIRST open task of a duplicated number
+  const skipped = [];
+  let next = null;
+  for (const i of g.order) {
+    const b = blocks[i];
+    if (b.done || seen.has(b.number)) continue;
+    seen.add(b.number);
+    const w = g.waitsOn(i);
+    if (!w.length) { next = b; break; }
+    skipped.push({ number: b.number, waitsOn: w });
+  }
+  const anyDeps = g.specs.some((s) => s.declared);
+  return { next, skipped, blocked: anyDeps ? stuckTasks(g) : [], graph: g };
+}
+// Cycles of _Depends:_ (Tarjan, iterative): → [[numbers…]] (each ascending, unique), a self-dependency included as [n].
+// openOnly: only open tasks (a done task no longer holds anyone back — waves); else every task (doctor: the plan itself).
+function dependencyCycles(g, openOnly) {
+  const { blocks, byNum, specs } = g;
+  const n = blocks.length;
+  const skip = (i) => openOnly && blocks[i].done;
+  const adj = blocks.map((_, i) => (skip(i) ? [] : specs[i].numbers.flatMap((d) => (byNum.get(d) || []).filter((j) => !skip(j)))));
+  const idx = new Array(n).fill(-1), low = new Array(n).fill(0), on = new Array(n).fill(false);
+  const stack = [];
+  const out = [];
+  let counter = 0;
+  for (let s = 0; s < n; s++) {
+    if (idx[s] !== -1 || skip(s)) continue;
+    const call = [[s, 0]];
+    idx[s] = low[s] = counter++;
+    stack.push(s); on[s] = true;
+    while (call.length) {
+      const top = call[call.length - 1];
+      const v = top[0];
+      if (top[1] < adj[v].length) {
+        const w = adj[v][top[1]++];
+        if (idx[w] === -1) { idx[w] = low[w] = counter++; stack.push(w); on[w] = true; call.push([w, 0]); }
+        else if (on[w]) low[v] = Math.min(low[v], idx[w]);
+        continue;
+      }
+      call.pop();
+      if (call.length) { const u = call[call.length - 1][0]; low[u] = Math.min(low[u], low[v]); }
+      if (low[v] !== idx[v]) continue;
+      const comp = [];
+      let w;
+      do { w = stack.pop(); on[w] = false; comp.push(w); } while (w !== v);
+      if (comp.length > 1 || adj[v].includes(v)) out.push([...new Set(comp.map((i) => blocks[i].number))].sort((a, b) => a - b));
+    }
+  }
+  const key = (c) => c.join(",");
+  const uniq = new Map();
+  for (const c of out) if (!uniq.has(key(c))) uniq.set(key(c), c);
+  return [...uniq.values()].sort((a, b) => a[0] - b[0] || a.length - b.length);
+}
+// Execution waves of the open tasks (the rules above). → { waves: [[numbers…]…], cycles, blocked }.
+function taskWaves(blocks, tracks) {
+  const g = taskDepGraph(blocks);
+  const n = blocks.length;
+  const open = (i) => !blocks[i].done;
+  const rank = new Array(n);
+  g.order.forEach((i, r) => { rank[i] = r; });
+  // Nodes: the blocks, then one join node per multi-task [P] run (it clears once the whole run is placed).
+  const dependents = blocks.map(() => []);
+  const need = new Array(n).fill(0);
+  const edge = (from, to) => { dependents[from].push(to); need[to]++; };
+  for (let i = 0; i < n; i++) {
+    if (!open(i)) continue;
+    for (const d of g.specs[i].numbers) {
+      const l = g.byNum.get(d);
+      if (!l) { need[i]++; continue; } // names no task: never clears (blocked)
+      for (const j of l) if (open(j)) edge(j, i);
+    }
+  }
+  // tasks.md order among the open tasks without _Depends:_: runs of consecutive [P] tasks of one section wait together.
+  let prev = -1; // the node the next run waits for (a task, or the previous run's join)
+  let run = null;
+  const closeRun = () => {
+    if (!run) return;
+    if (prev !== -1) run.members.forEach((i) => edge(prev, i));
+    if (run.members.length === 1) prev = run.members[0];
+    else {
+      const J = dependents.length;
+      dependents.push([]);
+      need.push(0);
+      run.members.forEach((i) => edge(i, J));
+      prev = J;
+    }
+    run = null;
+  };
+  for (const i of g.order) {
+    const b = blocks[i];
+    if (!open(i) || g.specs[i].declared) continue;
+    if (run && run.parallel && b.parallel && run.phase === b.phase && run.checkpoint === b.checkpoint) { run.members.push(i); continue; }
+    closeRun();
+    run = { members: [i], parallel: b.parallel, phase: b.phase, checkpoint: b.checkpoint };
+  }
+  closeRun();
+  // Files per task (the batch's comparison: implementsKey, a folder overlaps the files under it) — computed once.
+  const keysOf = blocks.map((b, i) => (open(i) ? [...new Set(taskMarkers(b).implements.map(implementsKey).filter(Boolean))] : []));
+  const alone = blocks.map((b, i) => open(i) && (!keysOf[i].length || isPromptTask(b, taskMarkers(b), tracks || [])));
+  const parents = (k) => { const parts = k.split("/"); const out = []; for (let p = 1; p < parts.length; p++) out.push(parts.slice(0, p).join("/")); return out; };
+  const above = keysOf.map((ks) => ks.map(parents)); // the folders above each file, once per task
+  const waves = [];
+  let ready = g.order.filter((i) => open(i) && need[i] === 0);
+  // Greedy per round, in tasks order: linear in a round; only tasks that are ready together AND collide are looked at again in
+  // the next round (n tasks sharing one file: n rounds — the degenerate case, still a simple scan each).
+  while (ready.length) {
+    const wave = [];
+    const files = new Set(), folders = new Set(); // the wave's files, and every folder above them
+    let solo = false;
+    const rest = [];
+    for (const i of ready) {
+      if (solo || (alone[i] && wave.length)) { rest.push(i); continue; }
+      if (alone[i]) { wave.push(i); solo = true; continue; }
+      const ks = keysOf[i];
+      if (ks.some((k, x) => files.has(k) || folders.has(k) || above[i][x].some((p) => files.has(p)))) { rest.push(i); continue; }
+      wave.push(i);
+      ks.forEach((k, x) => { files.add(k); above[i][x].forEach((p) => folders.add(p)); });
+    }
+    waves.push(wave.map((i) => blocks[i].number));
+    // Release what the wave clears (a join node passes it on to the run after it), then keep tasks order.
+    const released = [];
+    const stack = wave.slice();
+    while (stack.length) {
+      const x = stack.pop();
+      for (const y of dependents[x]) if (--need[y] === 0) (y < n ? released.push(y) : stack.push(y));
+    }
+    released.sort((a, b) => rank[a] - rank[b]);
+    const merged = [];
+    for (let a = 0, b = 0; a < rest.length || b < released.length;) {
+      merged.push(b >= released.length || (a < rest.length && rank[rest[a]] < rank[released[b]]) ? rest[a++] : released[b++]);
+    }
+    ready = merged;
+  }
+  return { waves, cycles: dependencyCycles(g, true), blocked: stuckTasks(g) };
+}
+// complete_task: the task's _Depends:_ that are not done in the active view (its own number aside), ascending.
+function openDependenciesOf(tasksText, tracks, task) {
+  const spec = taskDependsSpec(task);
+  if (!spec.numbers.length) return [];
+  const g = taskDepGraph(taskBlocks(activeTasks(tasksText, tracks) || ""));
+  return spec.numbers.filter((d) => d !== task.number && g.doneNum.get(d) !== true).sort((a, b) => a - b);
+}
+// The brief's view of a task's _Depends:_: [{number, status: done | open | missing, text?}] in the order written.
+function briefDependencies(activeBlocks, task) {
+  const spec = taskDependsSpec(task);
+  if (!spec.numbers.length) return [];
+  const g = taskDepGraph(activeBlocks);
+  return spec.numbers.map((d) => {
+    const l = g.byNum.get(d);
+    if (!l) return { number: d, status: "missing" };
+    const b = activeBlocks[l.find((i) => !activeBlocks[i].done) ?? l[0]];
+    return { number: d, status: g.doneNum.get(d) ? "done" : "open", text: b.text };
+  });
+}
+// The localized note for "no task can start": the blocked tasks (else the waiting ones — a duplicated number).
+function taskDepsBlockedNote(sch, slug, lang) {
+  const D = i18n.msg(lang).taskDeps;
+  const list = (sch.blocked.length ? sch.blocked : sch.skipped);
+  return D.blocked(taskDepsWaitList(list, lang), slug);
+}
+function taskDepsWaitList(list, lang) {
+  const D = i18n.msg(lang).taskDeps;
+  const shown = list.slice(0, 8).map((x) => D.waitLine(x.number, x.waitsOn.map((d) => "#" + d).join(", ")));
+  return shown.join("; ") + (list.length > 8 ? " " + i18n.msg(lang).gates.more(list.length - 8) : "");
+}
+// doctor `task-deps` (the active tasks): null when no task declares _Depends:_, else { declared, issues: [localized] }.
+function taskDepsIssues(blocks, lang) {
+  const g = taskDepGraph(blocks);
+  const declared = g.specs.filter((s) => s.declared).length;
+  if (!declared) return null;
+  const D = i18n.msg(lang).taskDeps;
+  const issues = [];
+  const seen = new Set();
+  const add = (s) => { if (!seen.has(s)) { seen.add(s); issues.push(s); } };
+  blocks.forEach((b, i) => {
+    const s = g.specs[i];
+    s.invalid.forEach((tok) => add(D.invalid(b.number, tok)));
+    s.numbers.forEach((d) => { if (d === b.number) add(D.self(b.number)); else if (!g.byNum.has(d)) add(D.phantom(b.number, d)); });
+  });
+  for (const c of dependencyCycles(g, false)) if (c.length > 1) add(D.cycle(c.map((x) => "#" + x).join(", ")));
+  return { declared, issues };
+}
+function taskDepsCheck(blocks, lang) {
+  const r = taskDepsIssues(blocks, lang);
+  if (!r) return null;
+  const D = i18n.msg(lang).taskDeps;
+  if (!r.issues.length) return { status: "pass", detail: D.doctorOk(r.declared) };
+  const shown = r.issues.slice(0, 8).join("; ") + (r.issues.length > 8 ? " " + i18n.msg(lang).gates.more(r.issues.length - 8) : "");
+  return { status: "fail", detail: D.doctorFail(shown) };
 }
 
 const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(?![\p{L}])/iu;
@@ -3628,8 +3924,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
     return withObserved(out);
   }
-  const tasks = parseTasks(activeTasks(updated, detectTracks(f.dir))); // done/total/next as status counts them
-  const next = tasks.find((t) => !t.done) || null;
+  const tracksNow = detectTracks(f.dir);
+  const tasks = parseTasks(activeTasks(updated, tracksNow)); // done/total/next as status counts them
+  const sch = taskSchedule(taskBlocks(activeTasks(updated, tracksNow) || "")); // 1.14 F3: next_task's rule
+  const next = sch.next;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
   // The same verdict doctor, spec_finish and ROADMAP.md give (taskVerification): unverified ⇔ a reason code.
@@ -3675,7 +3973,18 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.note = [res.note, i18n.msg(lng).verifyPipe.completeNote(n, ev.command)].filter(Boolean).join(" ");
   }
   if (xf) expectFailResult(res, xf, n, lng); // B5: expected: "fail" (+ redRecorded / the pass-after-red note)
-  return withObserved(res);
+  // 1.14 F3: ticked while some of its _Depends:_ are still open — a warning, never a refusal (a tick records what happened;
+  // the work may have been done in another order). waitsOn: stable. No task left that can start: blocked, as next_task says.
+  const early = ticks ? openDependenciesOf(text, tracksNow, task) : [];
+  if (early.length) {
+    res.waitsOn = early;
+    res.note = [res.note, i18n.msg(lng).taskDeps.tickedEarly(n, early.map((d) => "#" + d).join(", "))].filter(Boolean).join(" ");
+  }
+  if (!next && res.done < res.total) {
+    if (sch.blocked.length) res.blocked = sch.blocked;
+    res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
+  }
+  return withObserved(res); // 1.14 F1: the observed stamp on every result
 }
 
 // ---------------------------------------------------------------------------
@@ -4866,7 +5175,7 @@ function tasksProseText(tasksText) {
 // `_Implements: src/a.ts_;` (1.14 full review Pa1 — those yielded NO marker: a task whose check fails ticked as "nothing
 // to verify", and a done task's missing file passed trace_check). An underscore inside the value survives
 // (`src/keys_util.js`, `src/__init__.py`). Linear: a line's closers are found once, its openers walk them with a cursor.
-const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size"];
+const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_ (1.14 F3)
 const RE_TASK_MARKER_OPEN = new RegExp("(?:_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
 const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
@@ -4929,14 +5238,16 @@ function withoutTaskMarkers(line) {
 }
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
 function taskMarkers(block) {
-  const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [] };
+  const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [], depends: [] };
+  const seen = {}; // per key: what out[key] holds — a long `_Depends: 1, 2, …_` list stays linear (no includes() per value)
   for (const line of taskProse(block)) {
     for (const sp of taskMarkerSpans(line)) {
       const key = sp.key;
       if (!out[key]) continue; // _Size:_ — taskSize reads it
       let parts = WHOLE_VALUE_MARKERS.has(key) ? [sp.value.trim()] : sp.value.split(/[,;]/).map((s) => s.trim());
       if (key === "verify") parts = parts.map((p) => p.replace(/^`+|`+$/g, "").trim()).filter((p) => p && !/^\[.*\]$/.test(p));
-      parts.filter(Boolean).forEach((p) => { if (!out[key].includes(p)) out[key].push(p); });
+      const have = seen[key] || (seen[key] = new Set());
+      parts.filter(Boolean).forEach((p) => { if (!have.has(p)) { have.add(p); out[key].push(p); } });
     }
   }
   return out;
@@ -4945,14 +5256,14 @@ function taskMarkers(block) {
 // "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test`,
 // `_Verify:_ npm test`. The tools read nothing there (no check to run, no file to trace). → [{ number, labels }] — doctor's
 // malformed-markers warn.
-const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect)[ \t]*:/giu;
-const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect" };
+const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends)[ \t]*:/giu;
+const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect", depends: "Depends" };
 function malformedMarkers(blocks) {
   const out = [];
   for (const b of blocks) {
     const labels = new Set();
     for (const line of taskProse(b)) {
-      if (!/verify|implements|green|expect/i.test(line)) continue;
+      if (!/verify|implements|green|expect|depends/i.test(line)) continue;
       const masked = withoutTaskMarkers(line);
       const ticks = backtickRuns(masked);
       let plain = "";
@@ -6162,10 +6473,16 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const exDir = path.join(dir, ".execution");
 
   let block;
+  const activeBlocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   if (number == null || number === "") {
-    // "The next task" is next_task's: a removed track's block is inactive, never served as next. An explicit
-    // number still reaches the whole file (like complete_task).
-    block = taskBlocks(activeTasks(tasksText, tracks)).find((b) => !b.done);
+    // "The next task" is next_task's (taskSchedule — its _Depends:_ all done): a removed track's block is inactive, never
+    // served as next. An explicit number still reaches the whole file (like complete_task).
+    const sch = taskSchedule(activeBlocks);
+    block = sch.next;
+    if (!block && activeBlocks.some((b) => !b.done)) { // 1.14 F3: open tasks, none can start — say why, never "all done"
+      return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
+        note: taskDepsBlockedNote(sch, slug, lng) };
+    }
     if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone };
   } else {
     const n = taskNumber(number);
@@ -6254,11 +6571,13 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const pipes = verifyPipes(block);
   const expectFail = expectsFail(block); // B5: _Expect: fail_ — the brief's Verification section says the run must fail
   const checks = projectChecks(projectDir).checks; // B5: roadmap.json meta.checks — part of the definition of done
+  const deps = briefDependencies(activeBlocks, block); // 1.14 F3: its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
     feature: slug,
     tracks: trackLabel(tracks),
     task: block,
+    dependsOn: deps,
     loop,
     inlineOnly,
     stories,
@@ -6323,6 +6642,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // B5: [{name, command}] the definition of done names
+  if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
   if (block.done) res.note = t.alreadyDone(block.number);
@@ -8290,7 +8610,7 @@ function unwrapCodeSpan(v) {
 
 // One task of a spec_append_tasks call → its normalized fields and rendered text/sub-lines, or { error }.
 // `i` is its 1-based position in the call (errors name it).
-function newTaskSpec(t, i, A) {
+function newTaskSpec(t, i, A, D) {
   if (!isObj(t)) return { error: A.noText(i) };
   const folded = typeof t.text === "string" ? t.text.replace(/\s+/g, " ").trim() : "";
   // Tags typed in the text merge with story/parallel — never "[US1] [US1] …".
@@ -8345,6 +8665,16 @@ function newTaskSpec(t, i, A) {
     size = String(t.size).trim().toUpperCase();
     if (!Object.prototype.hasOwnProperty.call(SIZE_POINTS, size)) return { error: A.badSize(i, String(t.size).trim()) };
   }
+  // 1.14 F3: _Depends:_ — task numbers (3, "3", "#3"; "3,5" split like the other lists). appendTasks checks each names a task:
+  // an active one, or one this call appends.
+  const depends = [];
+  const depSeen = new Set();
+  for (const v of list(t.depends, /[,;\s]+/)) {
+    const m = v.match(RE_DEP_TOKEN);
+    const num = m ? taskNumber(m[1]) : NaN;
+    if (!Number.isFinite(num)) return { error: D.badDepends(i, v) };
+    if (!depSeen.has(num)) { depSeen.add(num); depends.push(num); }
+  }
   const tags = (story ? `[${story}]` : "") + (parallel ? "[P]" : "");
   const lineText = (tags ? tags + " " : "") + text;
   const body = [];
@@ -8354,6 +8684,7 @@ function newTaskSpec(t, i, A) {
   if (stored) body.push(`_Verify: ${stored}_`);
   if (expectFail) body.push("_Expect: fail_");
   if (size) body.push(`_Size: ${size}_`);
+  if (depends.length) body.push(`_Depends: ${depends.join(", ")}_`);
   // Round trip: the markers must read back exactly as given — a "_ " inside a path or command, a marker typed in
   // the text… would make trace/brief/complete see something other than what was asked for.
   const mk = taskMarkers({ text: lineText, body });
@@ -8364,10 +8695,12 @@ function newTaskSpec(t, i, A) {
   if (!same(mk.verify, verify ? [verify] : [])) return { error: A.unstorable(i, "_Verify:_") };
   if (!same(mk.expect, expectFail ? ["fail"] : [])) return { error: A.unstorable(i, "_Expect:_") };
   if (taskSize({ text: lineText, body }) !== size) return { error: A.unstorable(i, "_Size:_") };
-  return { text, lineText, body, story, parallel, requirements, makesGreen, expectFail, size, implements: files, verify, markers: mk };
+  const depSpec = taskDependsSpec({ text: lineText, body });
+  if (!same(depSpec.numbers, depends) || depSpec.invalid.length || depSpec.declared !== depends.length > 0) return { error: A.unstorable(i, "_Depends:_") };
+  return { text, lineText, body, story, parallel, requirements, makesGreen, expectFail, size, depends, implements: files, verify, markers: mk };
 }
 
-// spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, story?, parallel?}], heading?}.
+// spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, depends?, story?, parallel?}], heading?}.
 // Tasks are numbered after every number in use and appended under a phase heading: an existing heading with that
 // text (at the end of its phase, before its closing checkpoint) or a new one (default: the localized
 // "Phase: Convergence", with a closing **Checkpoint:**) placed after the last ACTIVE line — never inside a removed
@@ -8386,9 +8719,10 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   if (state.invalid) return { ok: false, error: state.invalid };
 
   const items = [];
+  const DP = M.taskDeps; // 1.14 F3: `depends`
   if (!Array.isArray(tasks) || !tasks.length) return { ok: false, error: A.noTasks };
   for (let i = 0; i < tasks.length; i++) {
-    const t = newTaskSpec(tasks[i], i + 1, A);
+    const t = newTaskSpec(tasks[i], i + 1, A, DP);
     if (t.error) return { ok: false, error: t.error };
     items.push(t);
   }
@@ -8421,7 +8755,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     // Stored as test-plan.md spells them: trace_check compares T-IDs as written (T-1 given for a planned T-01 would be a gap).
     for (let i = 0; i < items.length; i++) {
       if (!items[i].makesGreen.length) continue;
-      const again = newTaskSpec({ ...tasks[i], makesGreen: items[i].makesGreen.map((id) => planned.get(tKey(id.slice(2)))) }, i + 1, A);
+      const again = newTaskSpec({ ...tasks[i], makesGreen: items[i].makesGreen.map((id) => planned.get(tKey(id.slice(2)))) }, i + 1, A, DP);
       if (again.error) return { ok: false, error: again.error };
       items[i] = again;
     }
@@ -8464,6 +8798,20 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const usedKeys = (o) => Object.keys(isRecord(o) ? o : {}).filter((k) => /^\d+$/.test(k)).map(Number);
   let n = Math.max(0, ...before.map((b) => b.number), ...usedKeys(state.evidence), ...usedKeys(state.ticks));
   const numbered = items.map((t) => ({ ...t, number: ++n }));
+  // 1.14 F3: every `depends` names an ACTIVE task or a task of this call (by the number it gets here), never the task itself.
+  const withDeps = numbered.some((t) => t.depends.length);
+  if (withDeps) {
+    const known = new Set(taskBlocks(activeTasks(raw, tracks) || "").map((b) => b.number));
+    const fresh = new Set(numbered.map((t) => t.number));
+    for (let k = 0; k < numbered.length; k++) {
+      const t = numbered[k];
+      if (t.depends.includes(t.number)) return { ok: false, error: DP.selfDepends(k + 1, t.number) };
+      const missing = t.depends.filter((d) => !known.has(d) && !fresh.has(d));
+      if (missing.length) {
+        return { ok: false, error: DP.phantomDepends(k + 1, missing.map((d) => "#" + d).join(", "), numbered[0].number, numbered[numbered.length - 1].number), phantomDepends: missing };
+      }
+    }
+  }
   const taskLines = numbered.flatMap((t) => [`- [ ] ${t.number}. ${t.lineText}`, ...t.body.map((b) => "  - " + b)]);
   let at;
   let insert;
@@ -8533,8 +8881,14 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     const b = hits[0];
     const mk = b && taskMarkers(b);
     const fits = hits.length === 1 && !b.done && b.text === t.lineText && b.phase === phase && active.has(t.number) &&
-      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "makes green", "implements", "verify", "expect"].every((k) => same(mk[k], t.markers[k])) && taskSize(b) === t.size;
+      b.checkpoint === (target ? closingCp : A.checkpoint) && ["requirements", "makes green", "implements", "verify", "expect"].every((k) => same(mk[k], t.markers[k])) && taskSize(b) === t.size &&
+      same(taskDependsSpec(b).numbers, t.depends);
     if (!fits) return { ok: false, error: A.unsafe(t.number) };
+  }
+  // 1.14 F3: no new dependency cycle — one through a task of this call (a pre-existing cycle is doctor's task-deps).
+  if (withDeps) {
+    const cyc = dependencyCycles(taskDepGraph(taskBlocks(activeTasks(updated, tracks) || "")), false).filter((c) => c.some((x) => newNums.has(x)));
+    if (cyc.length) return { ok: false, error: DP.cycleDepends(cyc.map((c) => c.map((x) => "#" + x).join(", ")).join("; ")), cycles: cyc };
   }
 
   writeFileAtomic(file, updated);
@@ -8550,7 +8904,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     heading: phase,
     headingCreated: !target,
     appended: numbered.map((t) => ({ number: t.number, text: t.lineText, story: t.story, parallel: t.parallel, requirements: t.requirements, implements: t.implements, verify: t.verify,
-      makesGreen: t.makesGreen, expectFail: t.expectFail, size: t.size })), // full review Ga6: _Makes green:_ / _Expect: fail_ / _Size:_
+      makesGreen: t.makesGreen, expectFail: t.expectFail, size: t.size, depends: t.depends })), // full review Ga6: _Makes green:_ / _Expect: fail_ / _Size:_; 1.14 F3: _Depends:_
     total: now.length,
     remaining: now.filter((t) => !t.done).length,
     needsReapproval,
@@ -8628,6 +8982,7 @@ function nextAction(projectDir, name, opts = {}) {
   let reReviewRefused = null; // the re-review phase whose approve gate would refuse (refusedGate names it)
   let finishedRoles = null; // the roles still to sign the execution phase off (finished step)
   let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
+  let depsBlocked = null; // 1.14 F3: [{number, waitsOn}] — open tasks, none can start (fix step)
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
@@ -8683,11 +9038,15 @@ function nextAction(projectDir, name, opts = {}) {
   } else {
     const activeText = activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks);
     const tasks = parseTasks(activeText);
-    const next = tasks.find((t) => !t.done);
-    step = next ? "implement" : tasks.length ? "finish" : "tasks";
+    const sch = taskSchedule(taskBlocks(activeText || "")); // 1.14 F3: the next task whose _Depends:_ are all done
+    const next = sch.next;
+    // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): fix the dependencies — never "finish".
+    const stuck = !next && tasks.some((t) => !t.done);
+    step = next ? "implement" : stuck ? "fix" : tasks.length ? "finish" : "tasks";
     recommendation = next
       ? nx.implement(next.number, cleanTaskText(next.text), slug)
-      : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
+      : stuck ? taskDepsBlockedNote(sch, slug, lng) : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
+    if (stuck) depsBlocked = sch.blocked.length ? sch.blocked : sch.skipped;
     if (step === "finish") {
       const stale = staleFinish(projectDir, st, activeText || "");
       const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
@@ -8781,6 +9140,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (gateFix) res.refusedGate = { phase: reReviewRefused || pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
   if (finishedRoles) res.missingRoles = finishedRoles; // the execution sign-off's roles still to sign (finished step)
   if (suiteMissing) res.suite = suiteMissing; // stable: [{name, status}] — the project checks the verify step asks to run
+  if (depsBlocked) res.blocked = depsBlocked; // 1.14 F3: stable — the open tasks and the dependencies each waits on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
@@ -8917,6 +9277,7 @@ function storeCreateFlow(dir, flow) {
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
+CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -9713,6 +10074,8 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       const tr = traceCheck(projectDir, slug);
       const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
       need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
+      const deps = taskDepsCheck(taskBlocks(activeTasks(read("tasks.md"), tracks) || ""), lang); // 1.14 F3: doctor's task-deps
+      if (deps) need("task-deps", deps.status !== "fail", deps.detail);
       break;
     }
     case "tests": {
@@ -9918,6 +10281,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // Duplicated task numbers: complete/brief resolve to the first OPEN one, but humans read them as one task.
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", fm.evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  // 1.14 F3 — `_Depends:_` that name no (active) task, a task depending on itself, a cycle: a fail (the tasks approval refuses
+  // on it) — only when some task declares _Depends:_. Active tasks only (a removed track's tasks are inactive).
+  const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng);
+  if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   // A _Verify:_ that pipes into another command (`npm test | tee log`) reports the pipeline's LAST exit code: a failing
   // check exits 0 and its run reads as verified. Active tasks only (a removed track's tasks are inactive).
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
@@ -10362,7 +10729,7 @@ function roadmapData(projectDir, opts = {}) {
     const done = tasks.filter((t) => t.done).length;
     tasksDone += done;
     tasksTotal += tasks.length;
-    const next = tasks.find((t) => !t.done);
+    const next = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")).next; // 1.14 F3: next_task's rule
     // The icon agrees with the percent: past the requirements (16–25% = design / test / eval plan) a feature is in
     // progress — ⬜ 'not started' only below that; tasks-ready (30%, nothing done) is 📋 planned.
     const state = f.percent === 100 ? "done" : f.blocked ? "blocked" : done > 0 || f.phase === "executing" ? "inprogress"
@@ -11858,6 +12225,8 @@ function spikeDoctor(projectDir, f) {
   }
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", i18n.msg(lng).evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
+  if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
@@ -11873,12 +12242,15 @@ function spikeNextAction(projectDir, f, opts = {}) {
   const tracks = detectTracks(dir);
   const doc = opts.doctor && opts.doctor.ok ? opts.doctor : spikeDoctor(projectDir, f);
   const s = spikeInfo(dir);
-  const next = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks)).find((t) => !t.done);
+  const spikeBlocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks) || "");
+  const sch = taskSchedule(spikeBlocks); // 1.14 F3: next_task's rule (_Depends:_ all done)
+  const next = sch.next;
   const late = s.timeboxPassed ? " " + N.timeboxPassed(s.timeboxPassed) : "";
   const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), verdict: doc.verdict, gatesOk: true, pendingGates: [], changedSinceApproval: [] };
   if (s.text == null) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.missing(slug) });
   else if (!s.questionFilled) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.fillQuestion(slug) });
   else if (next) Object.assign(res, { step: "implement", recommendation: N.investigate(next.number, cleanTaskText(next.text), slug) + late });
+  else if (spikeBlocks.some((b) => !b.done)) Object.assign(res, { step: "fix", blocked: sch.blocked.length ? sch.blocked : sch.skipped, recommendation: taskDepsBlockedNote(sch, slug, lng) });
   else if (!s.decisionFilled) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.decide(slug) + late });
   else if (!s.outcome) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.outcome(slug) });
   else if (s.outcome === "go") {
@@ -16273,6 +16645,9 @@ module.exports = {
   taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
   stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
   globalConstraints,
+  taskDependsSpec, // 1.14 F3: a task block's _Depends:_ → { declared, numbers, invalid }
+  taskSchedule, // 1.14 F3: task blocks → { next, skipped, blocked } — THE next-task rule (dependencies all done)
+  taskWaves, // 1.14 F3: task blocks (+ tracks) → { waves: [[numbers…]…], cycles, blocked } — spec_next_task {waves}
   finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && (a[2].write || a[2].evidence != null))), // write: the drift baseline · evidence (B5): finishChecks — both in .state.json
   parseTasks,
   approvePhase: featureLocked(approvePhase),
