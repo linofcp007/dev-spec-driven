@@ -3582,6 +3582,41 @@ if (inSection("p16u")) {
     js(l2.j) === js(SU.taskCommits(pl, "login", log, {})) && l1.j.tasks[0].commits.length === 1 && l3.code === 1,
     "1.16 U4: `log <f> - --max N` passes the window of the piped log (a log that long reads truncated) — the same result as spec_log {gitLog, max}; --max 0 is refused (got " +
     js([l1.j && l1.j.truncated, l2.j && l2.j.truncated]) + ")");
+
+  // 1.16 U review 5 — `undone` refuses done's evidence flags (it silently ignored them); --run=false is no run.
+  const pv = mk("review-flags", "pt");
+  run(["done", "login", "1", "--run", "--project", pv]);
+  const tv = fs.readFileSync(path.join(pv, ".specs", "login", "tasks.md"), "utf8");
+  const vf = [["--evidence", "ok"], ["--exit", "0"], ["--cmd", RUN], ["--run"], ["--run", "--shell", "bash"]].map((fl) => run(["undone", "login", "1", ...fl, "--project", pv]));
+  const vj = runJ(["undone", "login", "1", "--cmd", RUN, "--exit", "0", "--json", "--project", pv]);
+  const vUnchanged = fs.readFileSync(path.join(pv, ".specs", "login", "tasks.md"), "utf8") === tv && !stOf(pv).unticks;
+  const vOff = run(["undone", "login", "1", "--run=false", "--project", pv]);
+  ok(vf.every((r) => r.code === 1 && /undo não aceita evidência/.test(r.out)) && vj.code === 1 && vj.j && vj.j.ok === false && /undo não aceita evidência/.test(vj.j.error) &&
+    vUnchanged && vOff.code === 0 && /^Tarefa 1 desmarcada\./.test(vOff.out),
+    "1.16 U review 5: `undone` with --evidence / --exit / --cmd / --run exits 1 with the localized refusal (PT; --json: the refusal as spec_complete_task {undo, evidence} returns it) and changes nothing; --run=false is no run (got " +
+    js([vf.map((r) => r.code + " " + r.out.trim().slice(0, 60)), vOff.out.trim().slice(0, 40)]) + ")");
+  // 1.16 U review 2 — two ticked tasks share the number: `undone` exits 1 (duplicateTicked), nothing changed.
+  const pw = mk("review-dup");
+  fs.writeFileSync(path.join(pw, ".specs", "login", "tasks.md"), "- [ ] 1. Alpha\n  - _Verify: " + RUN + "_\n- [ ] 1. Beta\n- [ ] 2. second\n");
+  run(["done", "login", "1", "--run", "--project", pw]);
+  run(["done", "login", "1", "--project", pw]);
+  const tw = fs.readFileSync(path.join(pw, ".specs", "login", "tasks.md"), "utf8");
+  const dw = runJ(["undone", "login", "1", "--json", "--project", pw]);
+  const dh = run(["undone", "login", "1", "--project", pw]);
+  ok(dw.code === 1 && dw.j && dw.j.duplicateTicked === true && js(dw.j.tasks.map((t) => t.line)) === "[1,3]" && dh.code === 1 &&
+    /Several ticked tasks share number 1 \(line 1: "Alpha", line 3: "Beta"\)/.test(dh.out) && fs.readFileSync(path.join(pw, ".specs", "login", "tasks.md"), "utf8") === tw,
+    "1.16 U review 2: `undone` of a number two ticked tasks share exits 1 (--json: duplicateTicked + tasks with their lines) — tasks.md unchanged (got " + js([dw.j, dh.out.trim()]) + ")");
+  // 1.16 U review 1 — an _Expect: fail_ task undone after its red run: the note says the red run is kept, and `done --run` (a pass
+  // now) re-ticks it as the fix going green.
+  const px = mk("review-red");
+  fs.writeFileSync(path.join(px, ".specs", "login", "tasks.md"), "- [ ] 1. Write the test and watch it fail\n  - _Verify: " + RUN + "_\n  - _Expect: fail_\n- [ ] 2. second\n");
+  const xr = run(["done", "login", "1", "--cmd", RUN, "--exit", "1", "--evidence", "not ok 1 - login", "--project", px]);
+  const xu = run(["undone", "login", "1", "--project", px]);
+  const xd = runJ(["done", "login", "1", "--run", "--json", "--project", px]);
+  ok(xr.code === 0 && xu.code === 0 && /Its red run of \d{4}-\d\d-\d\d \(the _Expect: fail_ proof\) is kept/.test(xu.out) && !/no longer counts/.test(xu.out) &&
+    xd.code === 0 && xd.j && xd.j.ok && xd.j.verified === true && xd.j.expected === "fail" && xd.j.observed === "cli",
+    "1.16 U review 1: `undone` of an _Expect: fail_ task keeps its red run (the note says so), and `done --run` — whose run passes now — re-ticks it verified (got " +
+    js([xu.out.trim(), xd.j]) + ")");
 }
 
 // 1.16 package (C): if (inSection("p16c")) { … }

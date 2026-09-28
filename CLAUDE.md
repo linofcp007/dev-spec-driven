@@ -1199,19 +1199,33 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Undo, revoke, waivers, MCP-only gates (1.16 U)
 - **Undo a tick** — `completeTask(…, {undo, reason})` → `untickTask` (`spec_complete_task {undo}` / `dev-spec undone <f> <n>
-  [--reason]`), under the feature lock: it resolves the first TICKED task of that number; `.state.json` is written first
+  [--reason]`), under the feature lock: it resolves the TICKED task of that number — several ticked tasks sharing it are
+  refused, nothing changed (`duplicateTicked` + `tasks` [{number, line, text}]: which tick was the mistake is unknowable —
+  done ticks the first OPEN one; renumber first); `.state.json` is written first
   (the evidence record `stale: true` + `staleBy: "undo"` — a re-tick needs a new run; `ticks[n]` dropped unless another task
   of that number stays ticked; `unticks` `[{n, at, reason?}]` appended), then tasks.md (CRLF / BOM kept). Evidence with
-  `undo`, or a `reason` without it, is refused; an open task → ok + `alreadyOpen`. Never gated (the bugfix gate refuses
+  `undo`, or a `reason` without it, is refused (CLI: `undone` refuses `--evidence` / `--exit` / `--cmd` / `--run` the same
+  way); an open task → ok + `alreadyOpen`. Never gated (the bugfix gate refuses
   ticks only). `changesSince()` reads `unticks` (kind `untick`): a finish / execution sign-off older than an untick is
   stale. `reasonInput()`: one line, ≤ 500 characters.
+- **Undo and `_Expect: fail_`** — `redProof()` reads through `staleBy: "undo"` (never a plain `stale`): an undo changed
+  neither the spec nor the test, and once the fix is in the red run can't be made again (the task was stuck on
+  `unexpected-pass`). The record still reads `stale-evidence` until a new run; the passing re-tick is the fix going green
+  (`passAfterRed`, the red run carried as `red`). The undo answers `redKept: true` + `undo.redKept` (the red run is kept) in
+  place of "a new run is needed". An edited `_Verify:_` no longer matches the record (`ownRecord`): no proof. `spec_impact
+  --reopen` keeps its rule (stale without `staleBy`: the spec changed — the updated test must fail again). Observed mode is
+  unchanged: `observedProof()` reads the kept red run's own stamp.
 - **Revoke** — `revokeApproval()` (`spec_approve {revoke, reason}` / `approve --revoke`): removes `approvals[p]` and
   `signoffs[p]`, appends `{phase, at, by, revoked: true, reason?, role?, roles?, approvedAt?, wasForced?, partial?}` (no
   snapshot; pre-history approvals are seeded as legacy records first), never cascades (`laterApproved` stay approved — the
   revoked phase is pending again, so approving a later one is refused on `phase-order`). Refused with force / expires /
   through, and for a phase that isn't approved (`notApproved`). **Every reader of approvalHistory filters through
   `isApprovalRecord()`** — never `partial !== true` alone (a revoked record is no approval). The approval guard reads a
-  revoke as an approval action (`revoke: true`; the human's command is `approve … --revoke`).
+  revoke as an approval action (`revoke: true`; the human's command is `approve … --revoke`). `changesSince()` also emits
+  each revocation newer than t (`{kind: "revoke", phase, at}` — a record that removed an approval, never `partial`, never of
+  the `except` phase = `execution`), so a finish / execution sign-off older than it is stale (drift verdict `stale`,
+  `revoke.driftWhy` in the CLI line; `revokedSinceList()` drops a phase re-approved since — it reads "re-approved"). The
+  catalog's `finished` also needs no pending gate (`pendingGateList`, existence checks only): SPECS.md reads ☑ complete.
 - **Waivers** — `force` + `reason` / `expires` (`waiverInput()`: `YYYY-MM-DD` from today up to 3650 days, or `Nd`) →
   `waiver {reason?, expires?}` on the approval, its history record and role sign-offs; either without force is refused, a
   gate that passes answers `waiverIgnored`. `waiverView` / `forcedApprovalList` / `strictestWaiver`: doctor warn
@@ -1220,7 +1234,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   Metrics count `revokedApprovals` and `untickedTasks`.
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (the same decision as `dev-spec stop-check
   --json`); `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server still never
-  runs git or any command (`dev-spec log` keeps running git itself; `log <f> - --max N` passes the window too).
+  runs git or any command (`dev-spec log` keeps running git itself; `log <f> - --max N` passes the window too). An empty
+  `gitLog` (a repository without commits → 0 commits) and an empty `message` (→ `no-claim`) are values, not missing
+  arguments: server.js `EMPTY_OK` exempts them from `missingArgs`' blank-string rule (the CLI accepted them already).
 
 ## Claude Code integration (1.16 C)
 - **Status line** — `statusLine(dir, {columns})` / `statusLineProject(dirs)` (walks up at most 40 folders to the nearest

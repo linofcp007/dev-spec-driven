@@ -68,6 +68,10 @@ ask the user to run the test and paste the red output — don't write the fix on
   editing the checkbox. Its evidence record is marked stale (`staleBy: "undo"`): ticking it again needs a NEW run
   (`stale-evidence`, labelled "unticked since this evidence was recorded"); `ticks[n]` is dropped and `.state.json →
   unticks` records `{n, at, reason}`. A finished or signed-off feature must then be finished and signed off again.
+  An `_Expect: fail_` task keeps its red run through the undo (`redKept: true` — the fix may already be in, so the red
+  run can't be made again): its re-tick's passing run counts as the fix going green — unless its `_Verify:_` was edited
+  meanwhile. When several ticked tasks share the number, undo refuses (`duplicateTicked`, naming them): renumber first
+  (doctor warns `duplicate-tasks`). `undone` takes no evidence (`--evidence` / `--exit` / `--cmd` / `--run` are refused).
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
   task, where the failing run is the proof and a passing one is refused). `--shell bash` (or

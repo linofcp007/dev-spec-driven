@@ -5517,11 +5517,13 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
 
 // 1.16 U1 — undo a tick: spec_complete_task {undo: true, reason?} / `dev-spec undone <feature> <n> [--reason "…"]` (both reach
 // it through completeTask, under the feature lock). The task goes back to open: the checkbox of the line it resolves to — the
-// first TICKED task of that number (the mirror of complete's first open one), else the one resolveTask answers — is reset at
+// TICKED task of that number (several ticked tasks sharing it → refused, duplicateTicked: which tick was the mistake is
+// unknowable), else the one resolveTask answers — is reset at
 // its checkbox column (CRLF / a BOM kept, tasks.md replaced atomically). In .state.json, written FIRST (a failure after it
 // leaves a ticked task whose evidence no longer counts — erring toward unverified, never a tick that keeps a stale proof):
 // its own evidence record is marked `stale: true` + `staleBy: "undo"` (a re-tick needs a new run, like spec_impact --reopen —
-// reason stale-evidence, with its own label), ticks[n] is dropped (forecasts: it is open again) unless another task of that
+// reason stale-evidence, with its own label; an _Expect: fail_ task's red run still counts as its red proof — redProof —, so
+// the pass after the fix re-ticks it: redKept), ticks[n] is dropped (forecasts: it is open again) unless another task of that
 // number stays ticked, and `unticks` gets {n, at, reason?} (changesSince reads it: a finish or an execution sign-off older than
 // an untick is asked for again). An open task → ok, nothing changed (alreadyOpen + a note). Never gated (the bugfix gate
 // refuses TICKS: unticking completes nothing). → { ok, feature, number, unticked, alreadyOpen?, evidenceStale, done, total, next, note }
@@ -5551,7 +5553,15 @@ function untickTask(projectDir, name, number, opts = {}) {
   const blocks = taskBlocks(text);
   const same = blocks.filter((b) => b.number === n);
   if (!same.length) return { ok: false, error: E.taskNotFound(n) };
-  const task = same.find((b) => b.done) || resolveTask(blocks, n);
+  // 1.16 U review 2: several TICKED tasks share the number — undo can't know which tick was the mistake (done ticks the first
+  // OPEN one, so "the first ticked" was usually the right tick of another task: its proof went stale). Refused, nothing
+  // changed; duplicateTicked + tasks [{number, line, text}] are stable. Renumber them first (doctor warns duplicate-tasks).
+  const ticked = same.filter((b) => b.done);
+  if (ticked.length > 1) {
+    return { ok: false, duplicateTicked: true, tasks: ticked.map((b) => ({ number: b.number, line: b.line + 1, text: b.text })),
+      error: U.duplicateTicked(n, ticked.map((b) => U.duplicateItem(b.line + 1, cleanTaskText(b.text).slice(0, 80))).join(", ")) };
+  }
+  const task = ticked[0] || resolveTask(blocks, n);
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const progress = (txt) => {
@@ -5582,9 +5592,14 @@ function untickTask(projectDir, name, number, opts = {}) {
   writeFileAtomic(file, updated);
   maybeRefreshRoadmap(projectDir);
   const runnable = taskMarkers(task).verify.length > 0;
-  const notes = [U.unticked(n, f.slug, runnable, staled)];
+  // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
+  // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
+  const red = staled && expectsFail(task) ? redProof(rec) : null;
+  const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
+  if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));
   const res = { ok: true, feature: f.slug, number: n, unticked: true, evidenceStale: staled, ...progress(updated), note: notes.join(" ") };
+  if (red) res.redKept = true;
   if (reason.value) res.reason = reason.value;
   return res;
 }
@@ -7395,9 +7410,14 @@ function isRedRun(r) {
   return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !cantRunRecord(r);
 }
 // The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
-// stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more.
+// stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more. One an UNDO made stale (staleBy
+// "undo", 1.16 U review 1) keeps its red run: unticking changed neither the spec nor the test, and once the fix is in that red
+// run can't be made again — the task was stuck on unexpected-pass for good. The record itself still reads stale-evidence
+// (evidenceIssue checks `stale` first), so a re-tick needs a new run: a pass is then the fix going green (expectFailRun's
+// passAfterRed), and the red run is carried into the new record as `red`. Callers pass the task's OWN record (ownEvidence /
+// ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
 function redProof(e) {
-  if (!isRecord(e) || e.stale === true) return null;
+  if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
   return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
 }
 // evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
@@ -14061,10 +14081,13 @@ function catalogData(projectDir) {
     // unapproved criterion edit is not "what the system does today"), a ticked task's latest run failed / its _Verify:_
     // never ran (verificationStatus), or it changed since the finish (staleFinish: a change request or re-approval, then —
     // the cheap checks first, only for a feature still finished — an _Implements:_ file the baseline never recorded, the
-    // bounded walk next_action and drift do).
+    // bounded walk next_action and drift do). 1.16 U review 3: nor while a gate is pending (pendingGateList — a revoked approval,
+    // a phase that became due after the finish: next_action asks for the approval, spec_finish refuses) — existence checks only.
     if (fin && !s.archived && s.phase === "complete") {
-      const cs = changedSinceApproval(s.dir, isObj(s.state.approvals) ? s.state.approvals : {}, s.tracks, s.state.kind, { detail: true });
-      if (cs.changed.some((x) => !cs.byDate.includes(x)) || verificationStatus(projectDir, s.slug, s.dir).unverified.length ||
+      const appr = isObj(s.state.approvals) ? s.state.approvals : {};
+      const cs = changedSinceApproval(s.dir, appr, s.tracks, s.state.kind, { detail: true });
+      if (pendingGateList(s.dir, s.tracks, s.state.kind || "feature", appr).length ||
+        cs.changed.some((x) => !cs.byDate.includes(x)) || verificationStatus(projectDir, s.slug, s.dir).unverified.length ||
         staleFinish(projectDir, s.state, "", { newFiles: false }) ||
         staleFinish(projectDir, s.state, activeTasks(readIfExists(path.join(s.dir, "tasks.md")) || "", s.tracks))) fin = null;
     }
@@ -16733,7 +16756,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
 // the catalog kept calling it finished. tasksText: the ACTIVE tasks (what a finish records). opts.newFiles === false skips
 // the _Implements:_ walk (state only): SessionStart's bounded drift check and the catalog, refreshed after every mutation.
 // → null (no baseline, or still current) | { finishedAt, since: [{ kind: "change-request", n, at } | { kind: "approval",
-// phase, at } | { kind: "untick", task, at } (1.16 U1)], newFiles: [rel …] }
+// phase, at } | { kind: "untick", task, at } (1.16 U1) | { kind: "revoke", phase, at } (1.16 U review 3)], newFiles: [rel …] }
 function staleFinish(projectDir, st, tasksText, opts = {}) {
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return null;
@@ -16766,7 +16789,19 @@ function changesSince(st, t, except) {
     const at = isRecord(u) && Number.isSafeInteger(u.n) ? timeOf(u.at) : null;
     if (at != null && at > t) out.push({ kind: "untick", task: u.n, at: u.at });
   }
+  // 1.16 U review 3: an approval revoked after t (spec_approve {revoke}) — the phase is pending again, so a finish or a sign-off
+  // older than it no longer speaks for the feature (the catalog kept calling it finished, drift said clean). Only a revocation
+  // that removed an approval (a `partial` one withdrew waiting sign-offs: nothing was approved) and never of `except`.
+  for (const h of Array.isArray(st.approvalHistory) ? st.approvalHistory : []) {
+    const at = isRecord(h) && h.revoked === true && h.partial !== true && typeof h.phase === "string" && h.phase !== except ? timeOf(h.at) : null;
+    if (at != null && at > t) out.push({ kind: "revoke", phase: h.phase, at: h.at });
+  }
   return out;
+}
+// The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
+function revokedSinceList(since) {
+  const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));
+  return [...new Set(since.filter((x) => x.kind === "revoke" && !back.has(x.phase)).map((x) => x.phase))];
 }
 // The execution sign-off predates a change (a change request or a re-approval of another phase after it): it signed
 // off a different feature — next_action asks for it again.
@@ -16786,6 +16821,8 @@ function signOffWhyText(st, lang) {
   if (crs.length) parts.push(W.changeRequests(crs.join(", ")));
   const un = [...new Set(since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
   if (un.length) parts.push(i18n.msg(lang).undo.signOffWhy(un.join(", ")));
+  const rv = revokedSinceList(since); // 1.16 U review 3
+  if (rv.length) parts.push(i18n.msg(lang).revoke.signOffWhy(rv.join(", ")));
   return parts.join(W.join);
 }
 // "change request #2, tasks re-approved, 1 implementing file not in the baseline (src/a.js)" — localized.
@@ -16799,6 +16836,8 @@ function staleFinishText(stale, lang) {
   if (stale.newFiles.length) parts.push(W.newFiles(stale.newFiles.length, stale.newFiles.slice(0, 5).join(", ") + (stale.newFiles.length > 5 ? ", …" : "")));
   const un = [...new Set(stale.since.filter((x) => x.kind === "untick").map((x) => "#" + x.task))]; // 1.16 U1
   if (un.length) parts.push(i18n.msg(lang).undo.driftWhy(un.join(", ")));
+  const rv = revokedSinceList(stale.since); // 1.16 U review 3
+  if (rv.length) parts.push(i18n.msg(lang).revoke.driftWhy(rv.join(", ")));
   return parts.join("; ");
 }
 // spec_drift {name?} / `dev-spec drift [feature]`: per finished feature, the recorded files changed / missing / now

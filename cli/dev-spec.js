@@ -725,6 +725,9 @@ function main() {
       // mistake — its evidence turns stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it.
       if (!pos[0] || pos[1] == null) usage("dev-spec undone <feature> <task-number> [--reason \"…\"]");
       const M = spec.msg(spec.featureLang(projectDir, pos[0])); // human output in the feature's language
+      // 1.16 U review 5: done's evidence flags (--evidence / --exit / --cmd / --run) are refused, as spec_complete_task refuses
+      // {undo, evidence} — they were silently ignored (the user believed a run had been recorded). Nothing runs, nothing changes.
+      if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run")) return fail({ ok: false, error: M.undo.noEvidence });
       const r = spec.completeTask(projectDir, pos[0], pos[1], undefined, { undo: true, reason: flags.reason });
       if (!r.ok) return fail(r);
       return out(r, (r) => {

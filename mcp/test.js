@@ -12809,6 +12809,123 @@ function endRun() {
       lg3.result.isError === true && /Missing required argument\(s\): gitLog/.test(lg3.result.content[0].text) && lg4.isError,
       "1.16 U4: spec_log reads the git log TEXT the client passes (no repository needed — the server runs no git): commits per task, a foreign feature's '#1' ignored, `max` marks a full window (truncated) — the same JSON as `dev-spec log <f> - [--max N] --json`; gitLog is required (got " +
       js([lg1.citing, lg1.tasks.map((t) => t.commits.map((c) => c.short)), lg2.truncated]) + ")");
+
+    // ---- 1.16 U review fixes ----
+    // 1: an _Expect: fail_ task undone after its fix went green keeps its red run (staleBy "undo" still proves the red phase): the
+    // re-tick's pass is the fix going green. An EDITED _Verify:_ still drops it; a spec_impact reopen (stale, no staleBy) too.
+    const pR1 = uDir("review-red");
+    S.initProject(pR1, ["core"], "en");
+    const tR1 = "# Tasks\n\n- [ ] 1. Write test T-01 and watch it fail\n  - _Verify: node t01.js_\n  - _Expect: fail_\n- [ ] 2. Make T-01 pass\n  - _Verify: node t01.js_\n" +
+      "- [ ] 3. Write test T-02 and watch it fail\n  - _Verify: node t02.js_\n  - _Expect: fail_\n";
+    const fR1 = uFeature(pR1, "redg", tR1);
+    const redR1 = S.completeTask(pR1, "redg", 1, { command: "node t01.js", exitCode: 1, summary: "not ok 1 T-01" });
+    const fixR1 = S.completeTask(pR1, "redg", 2, { command: "node t01.js", exitCode: 0 });
+    const unR1 = (await uCall("spec_complete_task", { name: "redg", number: 1, undo: true, reason: "meant task 2", projectDir: pR1 })).p;
+    const reR1 = S.completeTask(pR1, "redg", 1, { command: "node t01.js", exitCode: 0 }); // the fix is in: the test passes now
+    const recR1 = uSt(fR1.dir).evidence["1"];
+    S.completeTask(pR1, "redg", 3, { command: "node t02.js", exitCode: 1, summary: "not ok 1 T-02" });
+    S.completeTask(pR1, "redg", 3, undefined, { undo: true });
+    uW(fR1.dir, "tasks.md", uR(fR1.dir, "tasks.md").replace("_Verify: node t02.js_", "_Verify: node t02b.js_")); // the command changed
+    const edR1 = S.completeTask(pR1, "redg", 3, { command: "node t02b.js", exitCode: 0 });
+    const stR1 = uSt(fR1.dir);
+    stR1.evidence["1"].stale = true; // what spec_impact --reopen writes (no staleBy): the spec changed — the red run must be made again
+    uPut(fR1.dir, stR1);
+    const roR1 = S.completeTask(pR1, "redg", 1, { command: "node t01.js", exitCode: 0 });
+    ok(redR1.verified && fixR1.verified && unR1.ok && unR1.unticked && unR1.redKept === true &&
+      /Its red run of \d{4}-\d\d-\d\d \(the _Expect: fail_ proof\) is kept: .* a passing run counts as the fix going green: dev-spec done redg 1 --run\./.test(unR1.note) &&
+      !/no longer counts/.test(unR1.note) && reR1.ok && reR1.verified === true && !reR1.unverifiedReason && recR1.stale === undefined && recR1.red && recR1.red.exitCode === 1 &&
+      edR1.ok === false && edR1.unexpectedPass === true && roR1.ok === false && roR1.unexpectedPass === true &&
+      S.msg("pt").undo.redKept(1, "x", "d") !== S.msg("en").undo.redKept(1, "x", "d") && /prueba de _Expect: fail_/.test(S.msg("es").undo.redKept(1, "x", "d")),
+      "1.16 U review 1: undoing an _Expect: fail_ task after its fix went green keeps its red run (redKept, a note that says so — EN / PT / ES) and a passing re-tick verifies it (the red run carried as `red`); an edited _Verify:_ or a spec_impact reopen (stale without staleBy) still needs a new red run — unexpected-pass (got " +
+      js([unR1.note, reR1.unverifiedReason, recR1.red, edR1.error, roR1.unexpectedPass]) + ")");
+    // 1 (observed mode): the red proof's own stamp still decides — a CLI-made red run proves, an unobserved one leaves it unobserved.
+    const pR1o = uDir("review-red-observed");
+    S.initProject(pR1o, ["core"], "en", { evidence: "observed" });
+    uFeature(pR1o, "redg", tR1);
+    S.completeTask(pR1o, "redg", 1, { command: "node t01.js", exitCode: 1, summary: "not ok 1 T-01" }, { ranBy: "cli" });
+    S.completeTask(pR1o, "redg", 3, { command: "node t02.js", exitCode: 1, summary: "not ok 1 T-02" }); // reported, never observed
+    [1, 3].forEach((n) => S.completeTask(pR1o, "redg", n, undefined, { undo: true }));
+    const o1 = S.completeTask(pR1o, "redg", 1, { command: "node t01.js", exitCode: 0 }, { ranBy: "cli" });
+    const o3 = S.completeTask(pR1o, "redg", 3, { command: "node t02.js", exitCode: 0 }, { ranBy: "cli" });
+    ok(o1.ok && o1.verified === true && o3.ok && o3.verified === false && o3.unverifiedReason === "unobserved",
+      "1.16 U review 1 (meta.evidence observed): after an undo the kept red run's own stamp decides — a CLI-made red run verifies the passing re-tick, a reported one leaves it unobserved (got " +
+      js([o1.unverifiedReason, o3.unverifiedReason]) + ")");
+
+    // 2: several TICKED tasks share a number — undo refuses (duplicateTicked, the tasks named), nothing changed; once renumbered it works.
+    const pR2 = uDir("review-dup");
+    S.initProject(pR2, ["core"], "en");
+    const fR2 = uFeature(pR2, "dup", "# Tasks\n\n- [ ] 1. Alpha\n  - _Verify: " + uRun + "_\n- [ ] 1. Beta\n  - _Verify: " + uRun + "_\n- [ ] 2. Gamma\n");
+    S.completeTask(pR2, "dup", 1, { command: uRun, exitCode: 0 }); // Alpha, verified
+    S.completeTask(pR2, "dup", 1); // Beta, ticked by mistake
+    const bR2 = [uR(fR2.dir, "tasks.md"), uR(fR2.dir, ".state.json")];
+    const dR2 = await uCall("spec_complete_task", { name: "dup", number: 1, undo: true, reason: "undo the mistaken tick", projectDir: pR2 });
+    const aR2 = [uR(fR2.dir, "tasks.md"), uR(fR2.dir, ".state.json")];
+    uW(fR2.dir, "tasks.md", bR2[0].replace("- [x] 1. Beta", "- [x] 3. Beta"));
+    const nR2 = S.completeTask(pR2, "dup", 3, undefined, { undo: true });
+    const sR2 = uSt(fR2.dir).evidence["1"];
+    ok(dR2.isError && dR2.p.duplicateTicked === true && js(dR2.p.tasks) === js([{ number: 1, line: 3, text: "Alpha" }, { number: 1, line: 5, text: "Beta" }]) &&
+      /^Several ticked tasks share number 1 \(line 3: "Alpha", line 5: "Beta"\) — undo can't tell which tick was the mistake\. .*Nothing was changed\.$/.test(dR2.p.error) &&
+      aR2[0] === bR2[0] && aR2[1] === bR2[1] && nR2.ok && nR2.unticked && /- \[x\] 1\. Alpha/.test(uR(fR2.dir, "tasks.md")) &&
+      [sR2].concat(sR2.others || []).every((r) => r.stale === undefined) && /^Varias tareas marcadas comparten el número 1/.test(S.msg("es").undo.duplicateTicked(1, "x")),
+      "1.16 U review 2: undo with several ticked tasks sharing the number is refused (duplicateTicked + tasks [{number, line, text}], localized) — tasks.md and .state.json untouched, Alpha's passing run never staled; renumbered, the mistaken tick undoes alone (got " +
+      js([dR2.p, nR2.ok]) + ")");
+
+    // 3: a revocation after the finish makes the finish stale — the catalog / SPECS.md read complete (not finished), drift says stale
+    // (CLI exit 1, the why names it) — and the pending gate alone keeps the catalog off "finished"; re-approved and finished again, it is finished.
+    const pR3 = uDir("review-revoke-finished");
+    S.initProject(pR3, ["core"], "en");
+    uFeature(pR3, "login");
+    S.approvePhase(pR3, "login", null, "u", { through: "tasks" });
+    [1, 2].forEach((n) => S.completeTask(pR3, "login", n, { command: uRun, exitCode: 0 }));
+    S.finishFeature(pR3, "login", { write: true });
+    S.approvePhase(pR3, "login", "execution", "u");
+    S.catalog(pR3, { write: true }); // SPECS.md exists: every mutation refreshes it
+    const catR3 = () => (S.catalog(pR3, {}).features.find((x) => x.feature === "login") || {}).status;
+    const c0R3 = catR3();
+    const rvR3 = (await uCall("spec_approve", { name: "login", phase: "requirements", revoke: true, projectDir: pR3 })).p;
+    const c1R3 = catR3();
+    const mdR3 = uR(path.join(pR3, ".specs"), "SPECS.md");
+    const drR3 = S.drift(pR3, "login");
+    const dcR3 = cli16(["drift", "login", "--project", pR3]);
+    const stR3 = uSt(path.join(pR3, ".specs", "login"));
+    const hiddenR3 = { ...stR3, approvalHistory: stR3.approvalHistory.filter((h) => !h.revoked) }; // the pending gate alone (no revoke record)
+    uPut(path.join(pR3, ".specs", "login"), hiddenR3);
+    const c2R3 = catR3();
+    uPut(path.join(pR3, ".specs", "login"), stR3);
+    S.approvePhase(pR3, "login", "requirements", "u");
+    const naR3 = S.nextAction(pR3, "login");
+    S.finishFeature(pR3, "login", { write: true });
+    S.approvePhase(pR3, "login", "execution", "u");
+    ok(c0R3 === "finished" && rvR3.ok && c1R3 === "complete" && /## ☑ login/.test(mdR3) && drR3.verdict === "stale" &&
+      drR3.stale[0].since.some((x) => x.kind === "revoke" && x.phase === "requirements") && /approval revoked: requirements/.test(drR3.stale[0].why) &&
+      dcR3.code === 1 && /login: changed since finish .*approval revoked: requirements/.test(dcR3.out) && c2R3 === "complete" &&
+      naR3.step === "finish" && /re-approved: requirements/.test(naR3.recommendation) && !/approval revoked/.test(naR3.recommendation) &&
+      catR3() === "finished" && S.drift(pR3, "login").verdict === "clean",
+      "1.16 U review 3: revoking a phase of a finished feature makes its finish stale (changesSince kind revoke) — catalog / SPECS.md complete, spec_drift stale with the revocation named (CLI exit 1); a pending gate alone keeps the catalog off 'finished'; re-approved (next_action names the re-approval only) and finished again, it is finished and clean (got " +
+      js([c0R3, c1R3, drR3.verdict, drR3.stale[0] && drR3.stale[0].why, c2R3, naR3.step]) + ")");
+
+    // 5: MCP accepts an empty gitLog / message (the CLI does — an empty git log is a repository without commits); `undone` refuses
+    // done's evidence flags instead of ignoring them.
+    const pR5 = uDir("review-empty");
+    S.initProject(pR5, ["core"], "en");
+    const fR5 = uFeature(pR5, "login");
+    const l5a = await uCall("spec_log", { name: "login", gitLog: "", projectDir: pR5 });
+    const l5b = await uCall("spec_log", { name: "login", gitLog: "\n", projectDir: pR5 });
+    const s5a = await uCall("spec_stop_check", { message: "", projectDir: pR5 });
+    const n5a = await uCall("spec_log", { name: " ", gitLog: "", projectDir: pR5 }); // name stays required
+    const l5cli = cli16(["log", "login", "-", "--json", "--project", pR5], "");
+    S.completeTask(pR5, "login", 1, { command: uRun, exitCode: 0 });
+    const tR5 = uR(fR5.dir, "tasks.md");
+    const u5 = [["--evidence", "x"], ["--exit", "0"], ["--cmd", uRun], ["--run"]].map((fl) => cli16(["undone", "login", "1", ...fl, "--project", pR5]));
+    const u5j = cli16(["undone", "login", "1", "--run", "--json", "--project", pR5]);
+    let l5j = null, u5jj = null;
+    try { l5j = JSON.parse(l5cli.out); u5jj = JSON.parse(u5j.out); } catch { /* stay null */ }
+    ok(!l5a.isError && l5a.p.ok && l5a.p.commits === 0 && js(l5a.p) === js(l5j) && !l5b.isError && l5b.p.commits === 0 &&
+      !s5a.isError && s5a.p.ok && s5a.p.block === false && s5a.p.why === "no-claim" && n5a.isError && /Missing required argument\(s\): name/.test(n5a.p.error) &&
+      u5.every((r) => r.code === 1 && /undo takes no evidence/.test(r.err)) && u5j.code === 1 && u5jj && u5jj.ok === false && /undo takes no evidence/.test(u5jj.error) &&
+      uR(fR5.dir, "tasks.md") === tR5 && !uSt(fR5.dir).unticks,
+      "1.16 U review 5: spec_log {gitLog: ''} (0 commits, the CLI's JSON) and spec_stop_check {message: ''} (no-claim) are accepted — name stays required; `dev-spec undone` refuses --evidence / --exit / --cmd / --run (exit 1, localized, --json the refusal) and changes nothing (got " +
+      js([l5a.p.error, s5a.p.why, n5a.p.error, u5.map((r) => r.code), u5jj]) + ")");
   }
 
   // 1.16 package (C) — Claude Code integration: status line, user defaults (DEV_SPEC_*), annotations / completion, plan-mode bridge.
