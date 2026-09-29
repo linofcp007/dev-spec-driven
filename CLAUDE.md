@@ -52,8 +52,9 @@ Read the file BEFORE you change its area (a section name another note cites — 
   Claude Code integration (1.16 C).
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes, the locks,
   process I/O or CLI flags / exit codes: Conventions & gotchas (resolver, JSON state, locks, rename, stdout, the CLI).
-- **`docs/maintainers/testing.md`** — before writing a test that runs a command or depends on the file system, or running
-  the Linux / plugin-eval suites: Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.
+- **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
+  runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The
+  suites (files, runner, `--only`) · Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.
 - **`docs/maintainers/extending.md`** — before adding an operation, a tool, a command, a track, an artifact, an importer,
   a CLI flag, a hook or a string: When extending (the checklists).
 
@@ -119,7 +120,8 @@ hooks/                         hooks.json (auto-loaded) + guard / approval / obs
 commands/ · agents/            the slash commands (also the MCP prompts) · the plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
-mcp/test.js · cli/test-cli.js  the suites · scripts/test-docker.js runs both in Linux containers (local Docker)
+mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
+scripts/                       test-runner.js (both suites' runner: --only, --list) · test-docker.js (both in Linux containers)
 docs/maintainers/              these notes by topic — NOT loaded automatically; the topic map above says when to read each
 AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions.md   rule files for other tools
 ```
@@ -129,10 +131,12 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 (1529 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 471 for the CLI. The harness fails (exit 1) if the server dies or stops
-answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
+answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
+AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
+each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (54 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
 U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels) read every `mcp/lib` source
-— the facades and all their modules (`libSources()` in mcp/test.js) — never a facade alone.
+— the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone.
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

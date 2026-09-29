@@ -33,7 +33,19 @@ node cli/test-cli.js    # universal CLI (must end `0 failed`)
 # or both:
 npm test
 npm run test:docker     # optional: both suites in Linux containers (Node 18 / 22 / 24) on your own Docker
+
+# one part of a suite — a file, an area or its number (plus the files it needs):
+node mcp/test.js --only gates           # mcp/tests/06-gates.js
+node cli/test-cli.js --only 09          # every cli/tests/09-evidence-*.js
+node mcp/test.js --list                 # the files, one per area, and what each needs (--times: each file's time)
 ```
+
+Each suite is a folder of files, one per area: `mcp/tests/NN-<area>[-<topic>].js` and `cli/tests/NN-<area>-<topic>.js`
+(NN numbers the area, the same in both — 06 gates, 09 evidence…), each exporting `run(ctx)` over its folder's
+`harness.js`; `mcp/test.js` and `cli/test-cli.js` only start the runner both share (`scripts/test-runner.js`), which runs
+independent files in parallel processes and prints one total. **A new test goes into the file of its area** — see
+[docs/maintainers/testing.md](./docs/maintainers/testing.md) → The suites (the context a file receives, `deps` for a
+file that reads what another built, when to start a new file).
 
 `npm run test:docker` (`scripts/test-docker.js`) mounts the clone read-only, runs without network (only the first run
 pulls the images and builds a small cached image with git) and as an unprivileged user; `--image <name>`, `--suite
@@ -51,7 +63,7 @@ claude plugin eval . --ablation none --tag behavior --scaffold --allow-real-serv
 
 See [evals/README.md](./evals/README.md) for the cases, the fixtures and why each flag is needed.
 
-Add an assertion whenever you add a tool or change behavior. Keep the tests dependency-free.
+Add an assertion whenever you add a tool or change behavior, in the file of its area. Keep the tests dependency-free.
 The exact assertion counts live in two places only — the release's `### Tests` entry in CHANGELOG.md and the
 Tests section of CLAUDE.md — so update both when the totals change (`mcp/test.js` checks that they agree and
 that README / INSTALL / llms-install / this file state no count that could go stale).

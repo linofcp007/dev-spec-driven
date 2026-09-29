@@ -1353,8 +1353,9 @@ dev-spec-driven/                      ← plugin root
 │   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
-├── scripts/test-docker.js            ← both suites in Linux containers (npm run test:docker)
+│   ├── test.js                       ← the MCP test suite (node mcp/test.js — must end `0 failed`; --only <area>, --list)
+│   └── tests/                        ← its files, one per area (cli/test-cli.js + cli/tests/: the CLI suite)
+├── scripts/                          ← test-runner.js (both suites' runner) · test-docker.js (both suites in Linux containers)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, Bash observed-evidence log, opt-in PreToolUse guard + approval guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
