@@ -1865,7 +1865,7 @@ if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy t
     "steering security.md (PT template, not a custom file) and import --tracks sec,privacy (the [SEC] / [PRIVACY] design sections)");
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", a2]).out;
-  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
+  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist(?:\/\+\w+)* \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
     "help and the add-track usage name the +sec / +privacy / +dist tracks");
 }
 
@@ -1929,11 +1929,11 @@ if (inSection("pb1")) { // 1.14 package B1 (CLI tests) — `dev-spec templates [
   const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
   ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
     fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
-    inPt.code === 0 && /29 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    inPt.code === 0 && /30 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
     fs.existsSync(tpl("pt", "steering", "tech.md")),
-    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 29 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md) into .specs/templates/pt/, reported in Portuguese");
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 30 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md) into .specs/templates/pt/, reported in Portuguese");
   const ckClean = run(["templates", "check", "--project", b1]);
-  ok(ckClean.code === 0 && /^30 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  ok(ckClean.code === 0 && /^31 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
   // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
   fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
   const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);
@@ -3423,7 +3423,7 @@ if (inSection("fftracks")) {
   const ck = r(["tracks", "check"]);
   let ckJ = {};
   try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
-  ok(ls.code === 0 && /^Tracks — 7 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+  ok(ls.code === 0 && /^Tracks — 8 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
     /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
     "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
   // classify / create / status / doctor with the pack.
@@ -4001,9 +4001,9 @@ if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (dist
   const pk = run(["tracks", "init", "dist", "--project", pd]);
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", pd]).out;
-  ok(trk.code === 0 && /^Tracks — 7 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
-    /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
-    "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the seven built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
+  ok(trk.code === 0 && /^Tracks — 8 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+    /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
+    "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
   const kiro = path.join(pd, ".kiro", "specs", "signup");
   fs.mkdirSync(kiro, { recursive: true });
   fs.writeFileSync(path.join(kiro, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to sign up.\n\n#### Acceptance Criteria\n\n1. WHEN the user signs up THEN the system SHALL store the user and publish a UserCreated event to Kafka\n");
@@ -4196,6 +4196,58 @@ if (inSection("p17f")) { // 1.17 package F — dev-spec import fluidplan (= spec
 // 1.19 package (R): if (inSection("p19r")) { … }
 
 // 1.19 package (T): if (inSection("p19t")) { … }
+if (inSection("p19t")) { // 1.19 package T (CLI tests) — the +api, +ui and +obs tracks on the CLI, EN / PT / ES
+  const js = (v) => JSON.stringify(v);
+  const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
+  const help = run(["help"]).out;
+  const C19 = [
+    { tr: "api", marker: "[API]", classify: ["Version the public REST API and return problem+json errors with stable codes", "Versionar a API pública, sem alterações incompatíveis, e devolver os erros em problem+json"],
+      steering: "api.md", steeringEs: /^# Estándares de API/, statusPt: /Secções do contrato da API: ◐ Contrato da API \(por preencher\)[^\n]*◐ Limites de Taxa e Quotas \(por preencher\)/,
+      docEs: /✗ api-sections — Contrato de la API:sin rellenar/, filledEs: /✓ api-sections — las 5 rellenadas/, typo: "apii", statusKey: "apiSections" },
+  ];
+  for (const X of C19) {
+    const n0 = X.tr;
+    const pd = path.join(tmp, "p19t-" + n0);
+    const en = run(["classify", X.classify[0], "--project", pd]), pt = run(["classify", X.classify[1], "--project", pd]);
+    ok(en.code === 0 && new RegExp("^Tracks: core(?: \\+\\w+)* \\+" + n0 + "\\b").test(en.out) && new RegExp("\\+" + n0 + ": ON").test(en.out) &&
+      new RegExp("^Tracks: core(?: \\+\\w+)* \\+" + n0 + "\\b").test(pt.out) && new RegExp("\\+" + n0 + ": ATIVO").test(pt.out),
+      `1.19 T1 (CLI): classify turns +${n0} on in EN and PT, with its reasoning (got ` + js([en.out.split("\n")[0], pt.out.split("\n")[0]]) + ")");
+    const ini = run(["init", n0, "--lang", "es", "--project", pd]);
+    const cr = run(["create", "Pedidos " + n0, "--tracks", "tdd," + n0, "--lang", "pt", "--project", pd]);
+    const slug = "pedidos-" + n0;
+    const st = run(["status", slug, "--project", pd]).out;
+    ok(ini.code === 0 && ini.out.includes(X.steering) && X.steeringEs.test(rd(pd, ".specs", "steering", X.steering)) &&
+      cr.code === 0 && new RegExp("\\[core \\+tdd \\+" + n0 + "\\] \\(pt\\)").test(cr.out) && X.statusPt.test(st),
+      `1.19 T2 (CLI): init ${n0} --lang es writes the ES ${X.steering}; create --tracks tdd,${n0} (PT) → status shows the ${X.marker} sections ◐ unfilled, in Portuguese (got ` + js([ini.out, cr.out, st]) + ")");
+    const es = run(["create", "Orders " + n0, "--tracks", n0, "--lang", "es", "--project", pd]);
+    const eslug = "orders-" + n0;
+    const doc = run(["doctor", eslug, "--project", pd]);
+    run(["approve", eslug, "classification", "--force", "--project", pd]);
+    run(["approve", eslug, "requirements", "--force", "--project", pd]);
+    const appr = run(["approve", eslug, "design", "--project", pd]);
+    const des = path.join(pd, ".specs", eslug, "design.md");
+    fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const doc2 = run(["doctor", eslug, "--project", pd]).out;
+    const sj = JSON.parse(run(["status", eslug, "--json", "--project", pd]).out);
+    ok(es.code === 0 && doc.code === 1 && X.docEs.test(doc.out) && appr.code === 1 && new RegExp(n0 + "-sections").test(appr.out) &&
+      X.filledEs.test(doc2) && sj[X.statusKey].length === 5 && sj[X.statusKey].every((s) => s.filled) && sj.distSections === null,
+      `1.19 T3 (CLI): doctor exits 1 with ${n0}-sections failing (ES) and approve design is refused naming it; once the TODO lines are gone the check passes (--json: ${X.statusKey}) (got ` +
+      js([doc.out.split("\n").filter((l) => l.includes(n0 + "-sections")), doc2.split("\n").filter((l) => l.includes(n0 + "-sections"))]) + ")");
+    run(["create", "Plain " + n0, "core", "--lang", "en", "--project", pd]);
+    const pslug = "plain-" + n0;
+    const typo = run(["add-track", pslug, X.typo, "--project", pd]);
+    const add = run(["add-track", pslug, "+" + n0, "--project", pd]);
+    const rm = run(["add-track", pslug, n0, "--remove", "--project", pd]);
+    const trk = run(["tracks", "--project", pd]);
+    const pk = run(["tracks", "init", n0, "--project", pd]);
+    const usage = run(["add-track", "--project", pd]).out;
+    ok(typo.code === 1 && new RegExp("did you mean '" + n0 + "'").test(typo.out) && add.code === 0 && new RegExp("core \\+" + n0).test(add.out) &&
+      rm.code === 0 && rm.out.includes("design.md (" + X.marker + " sections)") && trk.code === 0 && trk.out.split("\n").some((l) => l.startsWith("  · " + n0 + " ") && l.includes(X.marker + "  5 secci")) &&
+      pk.code === 1 && /reservado/.test(pk.out) && new RegExp("\\+dist(?:/\\+\\w+)*/\\+" + n0 + "\\b").test(help) && new RegExp("\\|" + n0 + "[|>]").test(usage),
+      `1.19 T4 (CLI): add-track '${X.typo}' gets a did-you-mean, +${n0} is added and --remove lists its inactive ${X.marker} sections; tracks lists ${n0} ${X.marker} (5 sections, ES project); tracks init ${n0} is refused (reserved); help and the add-track usage name +${n0} (got ` +
+      js([typo.out, rm.out, trk.out.split("\n").slice(0, 12), pk.out]) + ")");
+  }
+}
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");

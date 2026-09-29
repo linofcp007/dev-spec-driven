@@ -25,6 +25,7 @@ steering files.
 | `security.md` | `+sec` | when the security track is used |
 | `privacy.md` | `+privacy` | when the privacy track is used |
 | `distributed.md` | `+dist` | when the distributed systems & data consistency track is used |
+| `api.md` | `+api` | when the API contract track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
 
 At project start, create at least the four `core` files. Add the others the first time a
@@ -511,6 +512,38 @@ The patterns behind each rule (outbox, inbox, sagas, isolation levels, locking, 
 
 ---
 
+## `api.md` (+api)
+
+```markdown
+# API Standards
+
+## Style & Contract
+- Style: [REST] · the contract lives in: [openapi.yaml at the repo root] — written first, reviewed before the handlers.
+- Naming: plural nouns for collections · [snake_case] fields · ISO 8601 UTC timestamps · IDs as strings.
+
+## Versioning & Compatibility
+- Strategy: [URL /v1] · only additive changes within a version · a breaking change ships as a new version.
+- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.
+
+## Errors
+- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.
+
+## Pagination, Idempotency & Concurrency
+- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).
+
+## Rate Limits
+- Per [API key]: [600] requests per [minute] · 429 with Retry-After and the RateLimit headers.
+
+## Checks (local)
+- Contract tests: [npm run test:contract] · breaking-change diff against the published contract: [npm run api:diff].
+```
+
+Per-feature decisions (the resources, the error codes, the page size of one endpoint) belong in the feature's `[API]`
+design sections, not here. The reasoning behind each rule (what counts as breaking, the deprecation lifecycle,
+problem details, cursor pagination, Idempotency-Key, ETag / If-Match): `references/api-design-patterns.md`.
+
+---
+
 ## `glossary.md` (optional — the ubiquitous language)
 
 One entry per domain term: the word the specs use, what it means in this product, and the words **not** to use for it.
@@ -594,7 +627,7 @@ override when present — create-only, never over an existing file.
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.

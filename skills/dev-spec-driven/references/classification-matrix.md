@@ -9,7 +9,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 
 ---
 
-## The seven tracks
+## The built-in tracks
 
 | Track | Adds | Activated when… |
 |---|---|---|
@@ -20,8 +20,9 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+sec** | 5 mandatory `[SEC]` sections (STRIDE threat model, ASVS level, authn/authz, secrets, security testing), 3 criteria, abuse-case tests, `security.md` | a mistake here is a breach, not just a bug |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
 | **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
+| **+api** | 5 mandatory `[API]` sections (API contract, versioning & compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas), 4 criteria, contract tests + a breaking-change diff, `api.md` | other code depends on the API's contract — public, partner or internal: a versioned API, OpenAPI / GraphQL / gRPC, SDKs |
 
-`core` is always on. The other six are added independently based on the signals below.
+`core` is always on. The others are added independently based on the signals below.
 
 ### How `spec_classify` weighs a signal
 
@@ -38,9 +39,9 @@ is a draft for the human, who confirms Phase 0.
 - A weak word inside a longer strong phrase (of another track, or of its own) is part of that phrase: `model` in "threat
   model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
   both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
-- **Generic** signals (+dist only — app-level words: queue, retry, consumer / producer, subscriber, publish … event,
-  worker) add to the score but never turn the track on alone: at least one strong or weak (cross-system) signal must be
-  there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
+- **Generic** signals (app-level words — +dist: queue, retry, consumer / producer, subscriber, publish … event, worker;
+  +api: api, endpoint, route, request, pagination) add to the score but never turn the track on alone: at least one strong
+  or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
   password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
@@ -51,7 +52,8 @@ is a draft for the human, who confirms Phase 0.
 - **Negation never vetoes a track**, it annotates it: "no personal data" keeps +privacy off and says so; a negated
   keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
   A +dist **hazard** (lost update, oversell, race condition, duplicate delivery, write skew, split brain) is written
-  negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts.
+  negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts. So is a +api
+  breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles").
 
 ---
 
@@ -257,6 +259,47 @@ Worked examples (what `spec_classify` answers):
 | Create an endpoint that writes a user to Postgres and returns it | `core` | — |
 | Plain CRUD endpoint for users, no Kafka and no events | `core` (+dist kept off, noted) | kafka (negated) |
 
+## +api signals (turn on the API contract track)
+
+Turn on `+api` if **any** are true (see `api-design-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| Other code depends on the API's contract | A public or partner API, an SDK you ship, a mobile client that updates months later, another team's service |
+| The contract is an artifact | An OpenAPI / Swagger document, `.proto` files, a GraphQL schema — contract-first design, contract tests |
+| Compatibility is a decision | Versioning, deprecation, "no breaking changes for existing clients" |
+| The contract fixes behaviour | Error bodies (problem+json, stable codes), pagination, Idempotency-Key, ETag / If-Match, rate-limit headers |
+
+Classifier signals — **strong:** public / REST / RESTful / HTTP / web / JSON / partner API, API-first, contract-first, OpenAPI,
+Swagger, GraphQL, gRPC, protobuf, protocol buffers, a proto file, API versioning / version, versioned API, API v1 / v2 / v3,
+a breaking API change, the API contract / spec / specification / design, API consumers, third-party / external developers,
+a developer portal, contract tests, consumer-driven contracts, (application/)problem+json, problem details, RFC 9457 / 7807,
+Idempotency-Key, rate limit headers, X-RateLimit, Retry-After, the Sunset / Deprecation header (*API pública, API REST,
+versionamento da API, contrato da API, programadores externos, portal do programador, teste de contrato · versionado de
+la API, contrato de la API, desarrolladores externos, portal de desarrolladores, prueba de contrato*). **Weak:** a
+breaking change, backward compatible / compatibility, an SDK, a client library, ETag, If-Match / If-None-Match, status
+codes, HTTP status, JSON Schema, request / response schema, cursor (keyset) pagination, deprecation, an API gateway, an
+internal API, an API client, the API docs / reference, content negotiation (*quebra de compatibilidade, alteração
+incompatível, retrocompatível, código de estado / de status, paginação por cursor · cambio incompatible, retrocompatible,
+compatibilidad hacia atrás, paginación por cursor*). **Generic** (only beside a strong or weak one): api, endpoint, route,
+request(s), pagination (*rota, requisição, paginação · ruta, solicitud / petición http, paginación*). A breaking change is
+a **hazard**: "without breaking changes" counts. An API **key** is +sec's word, not a contract: "an API key management
+page" is a UI, "call the Stripe API" consumes someone else's contract — both stay `core` with a *possible +api* note.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Publish an OpenAPI spec for the orders REST API and generate the client SDKs from it | `core +api` | rest api, openapi, sdk |
+| Version the public API: ship v2 and deprecate v1 with a Sunset header | `core +api` | public api, sunset header |
+| Add cursor-based pagination to the list endpoints without breaking existing clients | `core +api` (weak-only) | cursor-based pagination, endpoint |
+| Avoid breaking changes to the orders API for existing clients | `core +api` (weak-only) | breaking change (a hazard — not negated), api |
+| *Devolver os erros em formato problem+json com códigos estáveis* | `core +api` | problem+json |
+| *Definir el contrato gRPC del servicio de precios en protobuf* | `core +dist +api` | grpc, protobuf (+dist: gRPC, the pricing service) |
+| API key management page where admins create and revoke keys | `core`, *possible +api* | api (generic only) |
+| Call the Stripe API to charge the customer's card | `core +tdd`, *possible +api* | api (generic only; charge → +tdd) |
+| Bump the AWS SDK to v3 | `core`, *possible +api* | sdk |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -276,10 +319,11 @@ Worked examples (what `spec_classify` answers):
 | `core +tdd +sec +privacy` | a typical sign-up / account feature: abuse-case and data-rights tests in the test plan |
 | `core +dist` | design gains 5 `[DIST]` sections; `[DIST]` criteria US-1.AC-16..19; outbox / inbox / concurrency / resilience / failure-injection tasks; `steering/distributed.md` |
 | `core +tdd +saas +dist` | a checkout across services: saga, outbox, idempotent consumers, failure-injection and property tests, load test |
+| `core +api` | design gains 5 `[API]` sections; `[API]` criteria US-1.AC-20..23; contract-first, error-model, idempotency / concurrency, compatibility-gate and contract-test tasks; `steering/api.md` |
 
 **Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
-its 6 and `+dist` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are English in every language and case-sensitive.
+its 6, `+dist` its 5 and `+api` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -288,7 +332,8 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are Engli
 - `+saas` hot path → load-test task at the end must pass before "done".
 - `+sec` → the security-testing task's `_Verify:_` runs the scans and the abuse-case tests; `+privacy` → data subject
   rights verified end to end before "done"; `+dist` → the failure-injection tests (crash between commit and publish,
-  duplicate delivery, concurrent updates, a dependency down) green before "done".
+  duplicate delivery, concurrent updates, a dependency down) green before "done"; `+api` → the contract tests and the
+  breaking-change diff against the published contract green before "done".
 
 ---
 
@@ -301,7 +346,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are Engli
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -310,6 +355,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist]
 - **+sec:** [signal] — [why]
 - **+privacy:** [signal] — [why]
 - **+dist:** [signal] — [why]
+- **+api:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

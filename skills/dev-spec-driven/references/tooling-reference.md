@@ -11,9 +11,9 @@ input schema (a wrong type or unknown value is refused with a clear message).
 
 | Tool | Use it for |
 |---|---|
-| `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy +dist) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware) |
+| `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy +dist +api) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware) |
 | `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`"on"` / `"off"` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands), `approvalRoles` (phase → roles), `evidence` (`"reported"` default / `"observed"` — only runs the harness saw, or the CLI made, verify a runnable `_Verify:_`) and `approvalGuard` (`"off"` / `"ask"` / `"deny"` — an agent's approval asks the user or is refused) — each stored in `roadmap.json → meta` and always reported back |
-| `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`, `distributed.md`, and `glossary.md` — the terms to use and the words to avoid, `_Avoid:_`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
+| `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`, `distributed.md`, `api.md`, and `glossary.md` — the terms to use and the words to avoid, `_Avoid:_`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
@@ -40,7 +40,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
 | `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `format: "gherkin"` (1.16) → a Gherkin `.feature` per feature: one Scenario per current acceptance criterion (tags `@US-n.AC-m`, its planned `@T-xx`, the track markers), the EARS clauses as Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL response, verbatim) — a criterion that can't be split cleanly is one Then step with its whole text (`unsplit`); template and shipped-superseded criteria left out with a comment; PT / ES in Gherkin's own dialect (`# language: pt` / `es`); `format: "jira"` · `"linear"` (1.16) → a CSV for the tracker's importer (feature → stories → tasks by `[USn]`; Jira: Work item ID · Work type · Summary · Description · Status · Parent · Labels…; Linear: ID · Title · Description · Status · Estimate · Labels · Parent issue; the marker is the last header cell); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv, `<feature>.feature`, `<feature>.<tracker>.csv` / `project.<tracker>.csv`) |
 | `spec_changelog` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md`; `milestone` → only that milestone's features (`since` defaults to `all`; `write` → `.specs/RELEASE-NOTES.<milestone>.md`, `meta.changelogAt` untouched) |
-| `spec_add_track` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist (additive, never overwrites); `remove: true` takes a track off without deleting files |
+| `spec_add_track` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api (additive, never overwrites); `remove: true` takes a track off without deleting files |
 | `spec_feature` | archive (reversible) · restore · rename (deps follow) · flow (`design-first` / `requirements-first`) · remove (destructive — needs `confirm: true`) |
 | `spec_roadmap` | Multi-feature roadmap (%, blocked, cycles, velocity + ETA forecasts, cross-feature overlaps, needs attention); `write: true` → `.specs/ROADMAP.md` (+ `html: true`), `lang` = chrome language |
 | `spec_depend` | Show / replace (`dependsOn`) / edit (`add`, `remove`) dependencies and `order` — existing features only, cycles rejected |
@@ -231,6 +231,7 @@ project-root/
     │   ├── security.md                               # +sec
     │   ├── privacy.md                                # +privacy
     │   ├── distributed.md                            # +dist
+    │   ├── api.md                                    # +api
     │   └── <custom>.md           # scoped steering (front matter inclusion: always | fileMatch | manual)
     ├── _archive/<feature>/       # archived features (spec_feature archive / restore)
     └── [feature-name]/
@@ -328,7 +329,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/next-action` | any | "You are here → do this next" + what changed since approval (uses `spec_next_action`) |
 | `/spec-impact` | change | What an edit after approval touches; `--reopen` with the user's OK; then re-approve (uses `spec_impact`) |
 | `/spec-decide` | change | Record a decision or discovery in `decisions.md` (D-n, `_Affects:_`) (uses `spec_decide`) |
-| `/add-track` | any | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist, additive; `--remove` takes a track off without deleting files (uses `spec_add_track`) |
+| `/add-track` | any | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api, additive; `--remove` takes a track off without deleting files (uses `spec_add_track`) |
 | `/feature` | any | Archive / restore / rename / remove a feature, deps kept consistent; `flow` switches design-first; remove needs `confirm: true` (CLI `--yes`) (uses `spec_feature`) |
 | `/eval` | +ai | Run the local eval harness (golden/adversarial/regression) with your API key |
 | `/roadmap` | any | Multi-feature roadmap: %, deps, blocked, cycles, ETA, overlaps, needs attention; writes `.specs/ROADMAP.md` (uses `spec_roadmap`) |

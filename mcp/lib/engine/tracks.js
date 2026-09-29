@@ -26,7 +26,7 @@ function __link(E) { ({ acIndex, commentLines, earsValidate, existsCached, extra
   readJson, readRoadmap, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, useTemplateScopeOf, writeIfAbsent } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -34,7 +34,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"] };
+  dist: ["distributed.md"], api: ["api.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -64,7 +64,9 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy",
   // +dist (1.17 D) — also names a pack can't take (packReservedName reads these keys)
   distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
-  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist" };
+  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist",
+  // +api (1.19 T) — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
+  apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -396,6 +398,55 @@ const SIGNALS = {
       "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
       "transacción", "consistencia", "atomicidad", "atómicamente"],
   },
+  // +api (1.19 T): an API contract other code depends on — public, partner or internal. STRONG: contract-level words only (a
+  // public / REST / HTTP API, OpenAPI / Swagger, GraphQL, gRPC / protobuf, API versioning, the contract itself, its consumers —
+  // third-party developers, a developer portal —, the headers and formats a contract fixes: problem+json, Idempotency-Key,
+  // rate-limit headers, Retry-After, Sunset). WEAK — the anchors, on only in pairs or beside a generic word: compatibility
+  // (backward compatible, a breaking change), an SDK / client library (also the one you consume), ETag / If-Match, status codes,
+  // JSON Schema, cursor pagination, deprecation, an API gateway / internal API / the API docs. GENERIC (app-level): api, endpoint,
+  // route, request, pagination — every app has them; alone they are 'possible' at most ("call the Stripe API", "an API key
+  // management page" — +sec's api key is no contract). HAZARDS: a breaking change is written negated by nature ("without
+  // breaking changes") — the negation is the requirement.
+  api: {
+    strong: [
+      "public api", "rest api", "restful", "http api", "web api", "json api", "partner api", "api-first", "contract-first",
+      "openapi", "swagger", "graphql", "grpc", "protobuf", "protocol buffers", "proto file",
+      "api versioning", "api version", "versioned api", "api v1", "api v2", "api v3", "breaking api change", "api contract",
+      "api spec", "api specification", "api design", "api consumer", "third-party developers", "third party developers",
+      "external developers", "developer portal", "contract test", "consumer-driven contract",
+      "application/problem+json", "problem+json", "problem details", "rfc 9457", "rfc 7807", "idempotency-key", "rate limit headers",
+      "ratelimit header", "x-ratelimit", "retry-after", "sunset header", "deprecation header",
+      // PT (the plural of a phrase's first word is generated only for "de" / non-ASCII phrases: the others are listed)
+      "api pública", "api rest", "versionamento da api", "versionamento de api", "versão da api", "versões da api",
+      "contrato da api", "contrato de api", "especificação da api", "consumidores da api", "programadores externos",
+      "desenvolvedores externos", "programadores terceiros", "desenvolvedores terceiros", "portal de programadores",
+      "portal do programador", "portal do desenvolvedor", "portal de desenvolvedores", "teste de contrato",
+      // ES
+      "versionado de la api", "versionado de api", "versión de la api", "versiones de la api", "contrato de la api",
+      "especificación de la api", "consumidores de la api", "desarrolladores externos", "desarrolladores de terceros",
+      "portal de desarrolladores", "prueba de contrato",
+    ],
+    weak: [
+      "breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
+      "backward compatibility", "backwards compatibility", "sdk", "client library", "client libraries", "etag", "if-match",
+      "if-none-match", "status code", "http status", "json schema", "request schema", "response schema", "cursor pagination",
+      "cursor-based pagination", "keyset pagination", "deprecation", "api gateway", "internal api", "api client",
+      "api documentation", "api docs", "api reference", "content negotiation",
+      // PT
+      "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis", "mudança incompatível", "mudanças incompatíveis",
+      "compatibilidade retroativa", "retrocompatível", "retrocompatíveis", "retrocompatibilidade", "compatível com versões anteriores",
+      "código de estado", "código de status", "esquema json", "paginação por cursor",
+      "cliente da api", "api interna", "documentação da api", "descontinuação", "gateway de api",
+      // ES
+      "cambio incompatible", "cambios incompatibles", "compatibilidad hacia atrás", "retrocompatible",
+      "retrocompatibilidad", "paginación por cursor", "cliente de la api", "documentación de la api", "obsolescencia",
+    ],
+    generic: [
+      "api", "endpoint", "route", "request", "pagination", "paginate",
+      // PT / ES
+      "rota", "requisição", "paginação", "ruta", "solicitud http", "petición http", "paginación",
+    ],
+  },
 };
 // One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
 // "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
@@ -438,6 +489,25 @@ const SIGNAL_CONCEPTS = {
     sameRecord: ["update … same"],
     searchIndex: ["search index", "elasticsearch", "opensearch"],
   }),
+  // +api (1.19 T): compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
+  // status codes, the schemas, cursor pagination, a client library / SDK; the generic words (an endpoint and its route, a request).
+  api: conceptMap({
+    compat: ["breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
+      "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+      "mudança incompatível", "mudanças incompatíveis", "compatibilidade retroativa", "retrocompatível", "retrocompatíveis",
+      "retrocompatibilidade", "compatível com versões anteriores", "cambio incompatible", "cambios incompatibles",
+      "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad"],
+    client: ["sdk", "client library", "client libraries", "api client", "cliente da api", "cliente de la api"],
+    etag: ["etag", "if-match", "if-none-match"],
+    status: ["status code", "http status", "código de estado", "código de status"],
+    schema: ["json schema", "request schema", "response schema", "esquema json"],
+    cursor: ["cursor pagination", "cursor-based pagination", "keyset pagination", "paginação por cursor", "paginación por cursor"],
+    docs: ["api documentation", "api docs", "api reference", "documentação da api", "documentación de la api"],
+    deprecation: ["deprecation", "descontinuação", "obsolescencia"],
+    endpoint: ["endpoint", "route", "rota", "ruta"],
+    request: ["request", "requisição", "solicitud http", "petición http"],
+    paging: ["pagination", "paginate", "paginação", "paginación"],
+  }),
 };
 // HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
 // "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
@@ -448,6 +518,9 @@ const SIGNAL_HAZARDS = {
     "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
     "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
     "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
+  // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
+  api: new Set(["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+    "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles"]),
 };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
@@ -602,6 +675,8 @@ const IRREGULAR_FORMS = new Map([
   // An EXACT form (no inflection at all — 1.17 D review): "2PC", never "2PCS" (a product listing's "2 pieces"). Upper case: matched
   // case-sensitively like every keyword written with capitals.
   ["2PC", ["2PC", ""]],
+  // +api (1.19 T): the noun only — "requests", never "requested" ("the user requested a refund" is no HTTP request)
+  ["request", ["request", "(?:s)?"]],
 ]);
 // A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
 // words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
@@ -910,7 +985,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -1443,6 +1518,13 @@ function legacyPackName(st, n) {
   return typeof n === "string" && RE_PACK_NAME.test(n) && packReservedName(n) && isObj(st) && isObj(st.packMarkers) &&
     Object.prototype.hasOwnProperty.call(st.packMarkers, n);
 }
+// The dev-spec release that reserved a pack name a feature still records (1.19 T): the +api / +ui / +obs names and their aliases
+// became reserved in 1.19, +dist's in 1.17 — the doctor / upgrade messages say "a track pack from before <that release>".
+const TRACK_RESERVED_SINCE = { dist: "1.17", api: "1.19", ui: "1.19", obs: "1.19" };
+function packReservedSince(n) {
+  const tr = Object.prototype.hasOwnProperty.call(TRACK_ALIASES, n) ? TRACK_ALIASES[n] : n;
+  return Object.prototype.hasOwnProperty.call(TRACK_RESERVED_SINCE, tr) ? TRACK_RESERVED_SINCE[tr] : "1.17";
+}
 // A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — 1.17 — its name reserved since):
 // inactive, kept in .state.json.
 function missingPackTracks(dir) {
@@ -1854,7 +1936,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -2028,9 +2110,30 @@ const DIST_SECTIONS = [
     "modos de falla", "modo de falla"],
   loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
 ];
+// +api (1.19 T) — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
+// Handling": every ordinary name here is `loose` — it names an [API] section only on a heading carrying the marker or nested
+// under one, so deleting "## [API] API Contract" never lets the core heading stand in for it. The full compound names stay strict.
+const API_SECTIONS = [
+  { name: "API Contract", syn: ["api contract", "api specification", "api spec", "contrato da api", "contrato de api", "especificação da api",
+    "contrato de la api", "especificación de la api"],
+  loose: ["api contract", "api specification", "api spec", "contrato da api", "contrato de api", "especificação da api", "contrato de la api",
+    "especificación de la api"] },
+  { name: "Versioning & Compatibility", syn: ["versioning & compatibility", "versioning and compatibility", "api versioning", "versioning", "compatibility",
+    "versionamento e compatibilidade", "versionamento", "compatibilidade", "versionado y compatibilidad", "versionado", "compatibilidad"],
+  loose: ["api versioning", "versioning", "compatibility", "versionamento", "compatibilidade", "versionado", "compatibilidad"] },
+  { name: "Error Model", syn: ["error model", "error format", "api errors", "errors", "modelo de erros", "formato de erros", "erros da api", "erros",
+    "modelo de errores", "formato de errores", "errores de la api", "errores"],
+  loose: ["error format", "api errors", "errors", "formato de erros", "erros da api", "erros", "formato de errores", "errores de la api", "errores"] },
+  { name: "Pagination, Idempotency & Concurrency", syn: ["pagination, idempotency & concurrency", "pagination, idempotency and concurrency", "pagination",
+    "paginação, idempotência e concorrência", "paginação", "paginación, idempotencia y concurrencia", "paginación"],
+  loose: ["pagination", "paginação", "paginación"] },
+  { name: "Rate Limits & Quotas", syn: ["rate limits & quotas", "rate limits and quotas", "rate limits", "rate limiting", "quotas",
+    "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
+  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -2056,11 +2159,11 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   packVarRefs, parsePackFragment, packLocalized, PACK_CACHE, loadPack, loadPackScan, loadTrackPacks, NO_PACKS,
   packRegistry, packTracks, packOf, isPackTrack, allTracks, optionalTracks, markerTracks, trackMarker,
   trackSectionTable, trackSteeringFiles, trackSignalTable, isPackMarkerBracket, packMarkersFor, noteGhostPacks,
-  ghostMarkers, savedPackName, legacyPackName, missingPackTracks, packLocal, packTitle, packFragment, packSubst,
+  ghostMarkers, savedPackName, legacyPackName, TRACK_RESERVED_SINCE, packReservedSince, missingPackTracks, packLocal, packTitle, packFragment, packSubst,
   packCtx, packSubstBasic, packDesignBlock, packRequirementsBlock, insertPackRequirements, packPlanRows, packTaskBlock,
   packTestRowsBlock, packChecklistBlock, packSteeringStub, trackSteeringStub, RE_PACK_WILD_VAR, RE_PACK_WILD_VAR_G,
   PACK_CORPUS_CACHE, packCorpusSets, localizePackProblem, trackPacks, listTrackPacks, checkTrackPacks, initTrackPack,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };

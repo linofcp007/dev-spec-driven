@@ -158,7 +158,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` (1.19) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -223,6 +223,21 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   **Gotcha:** within a track the first keyword matching at a position wins it (seenSpan — strong, weak, generic, context in
   that order) — list a longer phrase before its prefix ("backoff exponencial" before "backoff", +saas "fila de mensagens"
   before "fila"), or the self-match sweep fails.
+- **+api (1.19 T)** — the eighth built-in marker track `[API]` (API contracts), added through the same registries (VALID_TRACKS
+  after dist, TRACK_MARKER, `API_SECTIONS`, TRACK_STEERING `api.md`, TEMPLATE_ACS US-1.AC-20..23, RE_STABLE_BRACKET,
+  RE_PACK_MARKER_RESERVED, TRACK_ALIASES: apis / rest / restful / openapi / swagger / graphql / grpc are reserved pack names).
+  SIGNALS.api — strong: contract-level words only (public / REST / HTTP / partner API, OpenAPI, Swagger, GraphQL, gRPC,
+  protobuf, API versioning, the API contract / spec, API consumers, third-party developers, a developer portal, contract tests,
+  problem+json, Idempotency-Key, rate-limit headers, Retry-After, Sunset); weak (anchors): a breaking change, backward
+  compatibility, an SDK / client library, ETag / If-Match, status codes, JSON Schema, cursor pagination, deprecation, an
+  internal API / API gateway / API docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never
+  "requested"), pagination. SIGNAL_CONCEPTS.api folds compatibility, ETag / If-Match, status codes, schemas, the client,
+  the endpoint / route words; SIGNAL_HAZARDS.api: a breaking change is never negated ("without breaking changes"). An API
+  **key** stays +sec's word — "an API key management page" / "call the Stripe API" are `core` with a *possible +api* note.
+  The core design already has `## API Contracts` / `## Error Handling`: every ordinary name in API_SECTIONS is `loose`
+  (marker-bound), only the full compound names are strict. The generic-only note names what an anchor would be, per track
+  (`classify.genericOnly`). A pre-1.19 pack named `api` / `rest`… is a missing pack like a pre-1.17 `dist` one; doctor and
+  spec_upgrade say "from before 1.19" (`packReservedSince()` — `TRACK_RESERVED_SINCE`). Guide: `references/api-design-patterns.md`.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the

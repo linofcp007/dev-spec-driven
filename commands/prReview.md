@@ -22,6 +22,8 @@ Review against the full chain, gating checks by the feature's active tracks:
   erasure reach every store the inventory names; no personal data in logs or sent to an unlisted processor.
 - **+dist** — no database commit followed by a direct publish / cache / API write (outbox, inbox or saga as the design
   says); consumers idempotent; retries with timeouts, backoff + jitter and a DLQ; the concurrency control the design names.
+- **+api** — the contract file matches the handlers (every status code, error code and header); no breaking change inside
+  a version (the diff against the published contract is clean); errors are problem+json; creates honour Idempotency-Key.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.

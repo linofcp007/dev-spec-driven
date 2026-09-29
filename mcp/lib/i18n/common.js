@@ -59,9 +59,10 @@ function baseLang(l) {
 // T-02 unmapped).
 const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"],
   sec: ["US-1.AC-10", "US-1.AC-11", "US-1.AC-12"], privacy: ["US-1.AC-13", "US-1.AC-14", "US-1.AC-15"],
-  dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"] }; // +dist (1.17 D)
+  dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"], // +dist (1.17 D)
+  api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"] }; // +api (1.19 T)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
-const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist"];
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api"];
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
@@ -111,6 +112,11 @@ function templateTestRows(tracks, row, L, acs) {
   if (T["US-1.AC-16"]) rows.push(r("US-1.AC-16", L.integration, L.outboxCrash, "tests/integration/..."),
     r("US-1.AC-17", L.integration, L.duplicateDelivery, "tests/integration/...", "property"), r("US-1.AC-18", L.integration, L.lostUpdate, "tests/integration/...", "property"),
     r("US-1.AC-19", L.integration, L.dependencyDown, "tests/integration/..."));
+  // +api (1.19 T): contract tests against the spec; an Idempotency-Key replay has one effect however often it is repeated → property;
+  // the breaking-change diff compares the contract with the published one.
+  if (T["US-1.AC-20"]) rows.push(r("US-1.AC-20", L.contract, L.problemJson, "tests/contract/..."),
+    r("US-1.AC-21", L.integration, L.idempotencyReplay, "tests/integration/...", "property"), r("US-1.AC-22", L.integration, L.staleEtag, "tests/integration/..."),
+    r("US-1.AC-23", L.contract, L.breakingDiff, "tests/contract/..."));
   return rows.join("\n");
 }
 

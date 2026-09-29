@@ -5,8 +5,8 @@ description: >
   then execution. This skill should be used when the user wants to plan or scope a non-trivial feature
   before coding, fix a reported bug (root cause and a failing regression test first), adopt specs in an
   existing codebase, manage a feature roadmap, or update existing specs after a dev-spec-driven update.
-  Tracks: +tdd, +saas (scale, observability, cost), +ai (evals, prompts, token cost), +sec,
-  +privacy, +dist. Triggers: "spec this", "plan this feature", "implementation plan", "break into tasks",
+  Tracks: +tdd, +saas (scale, cost), +ai (evals, prompts), +sec, +privacy, +dist,
+  +api. Triggers: "spec this", "plan this feature", "implementation plan", "break into tasks",
   "tests first", "fix this bug", "update the specs"; PT "especificar", "plano de implementação",
   "dividir em tarefas", "antes de começar a programar", "corrige este bug", "atualizar as specs"; ES
   "especificar", "plan de implementación", "dividir en tareas", "antes de empezar a programar", "arregla
@@ -30,6 +30,7 @@ scale design + evals at once. Handle both with one pipeline and composable track
 | **+sec** | 5 mandatory `[SEC]` sections: STRIDE threat model, ASVS level, authn/authz, secrets, security testing |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (GDPR / RGPD): data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA |
 | **+dist** *(1.17)* | 5 mandatory `[DIST]` sections for data that crosses systems: consistency model, cross-system (dual) writes, delivery & idempotency, concurrency, failure modes |
+| **+api** *(1.19)* | 5 mandatory `[API]` sections for a contract other code depends on: API contract (OpenAPI / proto / GraphQL), versioning & compatibility, error model (problem+json), pagination / idempotency / concurrency, rate limits & quotas |
 | **+your own** *(1.15)* | A project track pack in `.specs/tracks/<name>/` (`/spec-tracks`): its own `[MARKER]` sections, criteria, tasks and signals — a marker track like +sec (`references/project-tracks.md`) |
 
 **With the superpowers plugin installed too:** for feature work this workflow replaces its brainstorming,
@@ -53,21 +54,18 @@ tool message then come out localized — fill the placeholders, don't translate 
 Keep these **structural tokens stable across languages** (the tooling matches them literally): AC/SC
 IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`,
 `_Implements:_`, `_Verify:_`, `_Expect:_`, `_Size:_`), story/parallel tags (`[US1]`, `[shared]`, `[P]`), track names,
-the section markers `[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` (case-sensitive: `[sec]` is no marker) and the
+the section markers `[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` (case-sensitive: `[sec]` is no marker) and the
 `[NEEDS CLARIFICATION:]` marker. EARS keywords may be localized (they're detected in all three).
 
-If the user mixes languages or asks to switch, follow their lead. When unsure, match the language of
-their most recent message.
+If the user mixes languages or asks to switch, follow their lead. When unsure, match the language of their most recent message.
 
 ## Core Principles
 
-1. **No implementation without approval.** Each phase produces an artifact the developer reviews.
-   Misunderstandings get caught early, when they're cheap.
-2. **Right rigor for the job.** Tracks compose per feature. Don't TDD a copy change; don't ship a
-   payment path on vibes.
+1. **No implementation without approval.** Each phase produces an artifact the developer reviews. Misunderstandings get caught early, when they're cheap.
+2. **Right rigor for the job.** Tracks compose per feature. Don't TDD a copy change; don't ship a payment path on vibes.
 3. **Traceability end-to-end.** Code → tasks → (tests/evals) → design → requirements → need. Every
    acceptance criterion has a stable ID that later artifacts reference.
-4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy and +dist the track's design sections
+4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy, +dist and +api the track's design sections
    cannot be blank. An honest "not needed because X" is fine; an empty section means "I didn't think
    about it" — the source of every 3AM incident, every breach and every surprise bill.
 5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no
@@ -190,6 +188,7 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
    - `+sec` if a mistake is a breach: credentials, a trust boundary (public endpoint, upload, webhook), who-may-do-what, secrets.
    - `+privacy` if it collects, stores, shares, profiles or deletes personal data (GDPR / RGPD, HIPAA).
    - `+dist` if one write reaches more than one system (a database AND a broker, a cache, another service) or delivery, idempotency, concurrency or partial failures matter — Kafka, outbox, saga, microservices.
+   - `+api` if other code depends on the API's contract — a public, partner or internal API, OpenAPI / GraphQL / gRPC, versioning, breaking changes, SDKs (`references/api-design-patterns.md`).
    - **When unsure, turn the track on.** Under-investing on a critical feature is far more expensive than over-investing on a simple one. One auth word alone only makes `+sec` "possible" (weak there, strong for `+tdd`); the classifier's notes say so.
 3. **Present for approval:** mode, active tracks, the signals, blast radius, and (per track) hot-path /
    autonomy / volume / compliance. If the user disagrees with the track set, adjust it now.
@@ -246,6 +245,7 @@ testable and specific — no "fast", "user-friendly"; use concrete values. Full 
   trace in any response or log (scaffolded as `US-1.AC-10..12`), plus the abuse cases the threat model finds.
 - **+privacy:** the subject's data exported machine-readably, erased in every store, deleted or anonymized when its retention ends (`US-1.AC-13..15`), and consent withdrawal when consent is the lawful basis.
 - **+dist:** a publish that fails after the commit is still delivered (outbox), a duplicate message has one effect, concurrent updates are never lost, a dependency down degrades instead of blocking (`US-1.AC-16..19`).
+- **+api:** a malformed request answered 400 with a problem+json body naming the field, an Idempotency-Key replay with one effect, a stale If-Match refused with 412, a breaking change only in a new version (`US-1.AC-20..23`).
 - **+tdd:** make sure every AC is concrete enough to become a failing test — if it can't, rewrite it.
 
 ## Phase 2: Design (`/design`)
@@ -277,7 +277,7 @@ Strategy · Safety & Abuse · Fallback & Degradation · Observability for AI · 
 
 **+privacy adds 6 mandatory `[PRIVACY]` sections** — Personal Data Inventory · Lawful Basis & Purpose · Retention & Deletion · Data Subject Rights · Processors & International Transfers · DPIA. See `references/privacy-track.md` (not legal advice: the DPO or counsel decides, the spec records it).
 
-**+dist adds 5 mandatory `[DIST]` sections** — Consistency Model · Cross-system Writes (every dual write → outbox / inbox / saga, or an accepted risk) · Delivery & Idempotency · Concurrency · Failure Modes (CAP / PACELC). See `references/distributed-data-patterns.md`.
+**+dist adds 5 mandatory `[DIST]` sections** — Consistency Model · Cross-system Writes (every dual write → outbox / inbox / saga, or an accepted risk) · Delivery & Idempotency · Concurrency · Failure Modes (CAP / PACELC). See `references/distributed-data-patterns.md`. **+api adds 5 mandatory `[API]` sections** — API Contract · Versioning & Compatibility · Error Model (RFC 9457 problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. See `references/api-design-patterns.md`.
 
 Design principles: simplicity over cleverness, consistency with the codebase, reach for known
 patterns over novelty. Present for approval before proceeding.
@@ -289,7 +289,7 @@ gets a stable ID (`T-01`) mapped to AC IDs, a layer (unit/integration/E2E) follo
 `example` (one concrete case — event-driven WHEN / IF…THEN) or `property` (an invariant over generated inputs —
 ubiquitous, WHILE, "never / for every" rules like tenant isolation). The Coverage Check section must show every AC
 appears in ≥1 test. On +saas, add tenant-isolation, rate-limit, idempotency, authorization-matrix, and audit-log
-tests; on +sec, one abuse-case test per threat; on +privacy, export / erasure / retention tests; on +dist, failure injection. Approve before
+tests; on +sec, one abuse-case test per threat; on +privacy, export / erasure / retention tests; on +dist, failure injection; on +api, contract tests and the breaking-change diff. Approve before
 writing test code. References: `references/test-patterns.md`.
 
 **+ai → Eval Plan.** Build three sets: **golden** (50–200 representative inputs with expected
@@ -389,7 +389,7 @@ Track-gated "done" checks before a feature is finished:
 - **+ai:** cost validation (real token usage within ~20% of the projection) and safety validation (full adversarial
   set, 100% on safety-critical categories, human spot-check of ~20 outputs).
 - **+sec:** security scans clean, the threat model re-checked against what was built; **+privacy:** data subject
-  rights verified end to end on the real stores, retention scheduled; **+dist:** failure-injection tests green, no dual write left.
+  rights verified end to end on the real stores, retention scheduled; **+dist:** failure-injection tests green, no dual write left; **+api:** contract tests and the breaking-change diff green.
 
 If blocked, pause and discuss — don't improvise outside the design. If a test/measurement reveals a
 gap, go back to that phase, not the implementation. If a "green" test is actually wrong, pause,
@@ -496,10 +496,10 @@ Depth: `references/change-management.md`.
 | `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
 | `/spec-guard` | Opt-in guard mode (`spec_init {guard}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks (a test file during Phase 4 and an active spike's prototype excepted); `scope` also asks for a code file no open task names in `_Implements:_`. | `references/tooling-reference.md` |
 | `/spec-review-feedback` | Every review comment judged against the spec: fix AC violations, send spec changes back to their phase, push back on out-of-scope asks citing `Out of Scope`, ask about unclear ones. | `references/review-feedback.md` |
-| `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · +sec / +privacy / +dist sections honoured · security. | — |
+| `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · +sec / +privacy / +dist / +api sections honoured · security. | — |
 | `/spec-commit` | Conventional commit referencing the task (`Part of .specs/<feature>/ task #N.`), `Makes T-xx green`, the eval delta and emitted metrics; Phase-4 commits use `test:`. `dev-spec log <feature>` reads them back per task (+tdd: the red-first check). | `references/tooling-reference.md` |
 | `/promptReview` · `/migrateModel` (+ai) | Prompt changes are blocked without eval results (golden up, adversarial held, version bumped, cost delta noted). A model migration is eval-gated only: run the current sets on the new model, switch only if equal-or-better (or tune the prompt to recover), record it in Model Lifecycle — never migrate blind. | `references/eval-suite-patterns.md` · `references/model-provider-guide.md` |
-| `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · restore · rename (deps follow) · flow (design-first) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
+| `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · restore · rename (deps follow) · flow (design-first) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
 | `/roadmap` · `/depend` · `/backlog` · `/spec-milestone` | Order and dependencies between features (cycles rejected), %, blocked status, ETA from velocity (`_Size:_`), features whose open tasks plan the same files, planned-but-unspecced work, milestones (a target date for a set of features: on-track · at-risk · late · done). Don't start a feature whose dependencies aren't met without saying so. `.specs/ROADMAP.md` is regenerated automatically — never hand-edit it. | `references/tooling-reference.md` |
 | `/spec-status` | Mode, tracks, phase, task progress, test/eval state, section completeness (`spec_status` / `spec_list`). | — |
 
@@ -526,7 +526,7 @@ MCP clients get them as MCP prompts. Full table: `references/tooling-reference.m
 - `references/design-first.md` — the design-first phase order and spikes (investigate → decide)
 - `references/change-management.md` — after approval: snapshots + approval history, `spec_impact` + reopen, decisions, `_Supersedes:_`, the catalog, drift, archive/restore, metrics, roles + fast-forward, export + release notes, upgrading
 - `references/improvement-specs.md` — internal-improvement work (the metric delta is the acceptance criterion) · `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 13 steering-file templates (incl. `distributed.md` and the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
+- `references/steering-templates.md` — all 14 steering-file templates (incl. `distributed.md`, `api.md` and the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
 - `references/tooling-reference.md` — the MCP tools, prompts + resources, the CLI, the hooks, doctor checks, command table, annotated `.specs/` tree, roadmap, commit format
 - `references/verification.md` — evidence before claims: the gate, `_Verify:_`, `_Expect: fail_`, reason codes, pipes, project checks, the Stop gate
 - `references/bugfix.md` — systematic debugging as a light spec (reproduce → root cause → approval → red regression test → fix)
@@ -536,4 +536,4 @@ MCP clients get them as MCP prompts. Full table: `references/tooling-reference.m
 - `references/test-patterns.md` — naming, T-IDs in test names, `_Expect: fail_`, AAA, table-driven and property-based tests, anti-patterns
 - +saas: `references/scale-design-template.md` (the 5 sections, filled) · `references/saas-patterns.md` (caching, queues, rate limiting, idempotency, multi-tenancy) · `references/load-testing-patterns.md` (k6/Artillery)
 - +ai: `references/mandatory-ai-design-sections.md` (the 10 sections, filled) · `references/eval-suite-patterns.md` · `references/prompt-engineering-patterns.md` · `references/ai-cost-modeling.md` · `references/ai-safety-patterns.md` · `references/model-provider-guide.md`
-- +sec: `references/security-track.md` (STRIDE, ASVS, OWASP Top 10, abuse cases, local security testing) · +privacy: `references/privacy-track.md` (GDPR / RGPD sections, data subject rights, retention, DPIA — not legal advice) · +dist: `references/distributed-data-patterns.md` (dual writes, outbox / inbox, sagas, retries, idempotency, isolation levels, locking, CAP / PACELC)
+- +sec: `references/security-track.md` (STRIDE, ASVS, OWASP Top 10, abuse cases, local security testing) · +privacy: `references/privacy-track.md` (GDPR / RGPD sections, data subject rights, retention, DPIA — not legal advice) · +dist: `references/distributed-data-patterns.md` (dual writes, outbox / inbox, sagas, retries, idempotency, isolation levels, locking, CAP / PACELC) · +api: `references/api-design-patterns.md` (versioning, breaking changes, problem+json, pagination, idempotency, ETag, rate limits, contract tests)

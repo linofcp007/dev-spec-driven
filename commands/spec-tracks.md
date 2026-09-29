@@ -10,7 +10,7 @@ Args: $ARGUMENTS
 Call the `spec_tracks` MCP tool (CLI `dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es]`) and show
 its `lines`.
 
-- **`list`** (default) — the built-in tracks (core, tdd, saas, ai, sec, privacy, dist) and every pack folder in
+- **`list`** (default) — the built-in tracks (core, tdd, saas, ai, sec, privacy, dist, api) and every pack folder in
   `.specs/tracks/`, valid or not (an invalid pack is ignored everywhere until it is fixed).
 - **`init <name>`** — scaffolds `.specs/tracks/<name>/`: a commented example `track.json` and one example of each
   fragment (`requirements.md`, `tasks.md`, `test-plan.md`, `checklist.md`, `steering.md`) in `lang` or the project

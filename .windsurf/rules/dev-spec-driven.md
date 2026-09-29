@@ -9,14 +9,14 @@ trigger: always_on
 Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
 
 - Plan before coding for non-trivial work. Classify the feature into composable tracks
-  (`core` always; add `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist` when warranted), then run requirements → design →
+  (`core` always; add `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist`, `+api` when warranted), then run requirements → design →
   (tests/evals) → tasks → execute, with user approval at each phase gate.
 - Use the local engine for mechanical steps (zero-dependency, no CI):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`
   (full list: `node cli/dev-spec.js help`).
   The `spec-driven` MCP server exposes the same operations if configured.
 - Artifacts live in `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
-- Mandatory +saas/+ai/+sec/+privacy/+dist design sections must be filled (no leftover `> TODO`).
+- Mandatory +saas/+ai/+sec/+privacy/+dist/+api design sections must be filled (no leftover `> TODO`).
 - `dev-spec approve` refuses while that phase's checks fail (`--force` records a flagged, forced approval).
   A task whose `_Verify:_` names a runnable command is verified only by a recorded run of it — a passing one, or
   a failing one on an `_Expect: fail_` task (`dev-spec done <feature> <n> --run`); if you can't run it, don't tick:
