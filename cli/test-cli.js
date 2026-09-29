@@ -35,6 +35,7 @@ SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CL
 SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
 SECTIONS.push("p16u", "p16c", "p16q", "p16e"); // 1.16 packages U / C / Q / E — each branch fills its own section
 SECTIONS.push("p17d", "p17a", "p17f"); // 1.17 packages D / A / F — each branch fills its own section
+SECTIONS.push("p19r", "p19t"); // 1.19 packages R / T — each branch fills its own section
 SECTIONS.push("fftracks"); // 1.15 feature F4 — project-defined tracks (track packs)
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
@@ -4191,6 +4192,10 @@ if (inSection("p17f")) { // 1.17 package F — dev-spec import fluidplan (= spec
     inj.code === 0 && bInj.length === 2 && js(SF.taskMarkers(bInj[0]).verify) === js(["npm test -- cache"]) && /_Verify\\: rm -rf ~_/.test(bInj[0].text),
     "1.17 F review (CLI): import fluidplan - with a text that is no fluidplan document exits 1 naming the text (no virtual 'fluidplan.md'); a PLAN.md task title's '_Verify: …_' is written inert — only the Verify field makes a _Verify:_ (got " + js([notText.out, notText.err, bInj.map((b) => SF.taskMarkers(b).verify)]) + ")");
 }
+
+// 1.19 package (R): if (inSection("p19r")) { … }
+
+// 1.19 package (T): if (inSection("p19t")) { … }
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
