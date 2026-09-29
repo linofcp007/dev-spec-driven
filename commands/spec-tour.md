@@ -19,7 +19,7 @@ they choose to keep the feature, archive it or remove it.
    scan (a missing input check on a route it listed, a small helper with no test, a clearer error message) and let
    the user pick. One user-visible behaviour, one or two files, testable with the project's own test command.
 3. **Classify** — `spec_classify` on the change. *Gate: the tracks decide which artifacts and checks apply.* For the
-   tour, prefer core: if it proposes +saas / +ai / +sec / +privacy / +dist / +api, say why, and suggest a smaller change or keep
+   tour, prefer core: if it proposes +saas / +ai / +sec / +privacy / +dist / +api / +ui, say why, and suggest a smaller change or keep
    core with the user's OK. Then `spec_init {tracks, lang}` if `.specs/` doesn't exist yet and
    `spec_create {name, tracks, lang, summary}` once, and record the decision in the `classification.md` it seeds (as
    `/classify` does): the tracks and why, the blast radius, the compliance tags — every bracketed template line

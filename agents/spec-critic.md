@@ -24,7 +24,7 @@ obra/superpowers (MIT).
 
 The controller gives you the feature folder (`.specs/<feature>/`), the artifact under review, the active
 tracks, and the latest `spec_doctor` result. Read the steering files (`.specs/steering/constitution.md`
-first; `security.md` / `privacy.md` / `distributed.md` / `api.md` on +sec / +privacy / +dist / +api) and the artifacts the one under review depends on (design →
+first; `security.md` / `privacy.md` / `distributed.md` / `api.md` / `ui.md` on +sec / +privacy / +dist / +api / +ui) and the artifacts the one under review depends on (design →
 requirements — or, on a design-first feature, requirements → the approved design; tasks → requirements + design +
 test plan), plus `decisions.md` and `.specs/steering/glossary.md` when they exist.
 

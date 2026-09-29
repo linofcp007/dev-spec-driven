@@ -6942,7 +6942,7 @@ function endRun() {
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api" && // 1.17 D: + dist; 1.19 T: + api
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui" && // 1.17 D: + dist; 1.19 T: + api, ui
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -7551,7 +7551,7 @@ function endRun() {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 30 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 31 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -7563,10 +7563,10 @@ function endRun() {
     const tplDir = path.join(pi, ".specs", "templates");
     ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
       i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 30 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      i3.created.length === 31 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
       fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
       S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 30 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 31 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -12085,7 +12085,7 @@ function endRun() {
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
       "feature F4: spec_tracks list shows the built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 
@@ -14614,7 +14614,7 @@ function endRun() {
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api",
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui",
       "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
@@ -15847,6 +15847,16 @@ function endRun() {
           /\| T-\d+ \| integration \| property \| a create replayed with the same Idempotency-Key has one effect and returns the first response \| US-1\.AC-21 \|/],
         importAc: "WHEN a partner calls the public REST API v2 THEN the system SHALL return the order as the OpenAPI spec defines it",
         steeringHead: { en: /^# API Standards/, pt: /^# Padrões de API/, es: /^# Estándares de API/, "pt-BR": /^# Padrões de API/ } },
+      { tr: "ui", marker: "[UI]", token: "UI", ids: ["24", "25", "26", "27"], steering: "ui.md", typo: "uii", alias: "frontend", legacy: "wcag",
+        sections: ["Design System Usage", "UI States", "Accessibility", "Responsiveness & i18n", "UI Performance Budget"],
+        title: { en: "UI States", pt: "Estados da Interface", es: "Estados de la Interfaz", "pt-BR": "Estados da Interface" }, taskHead: "Story US-1 — User Interface",
+        loose: ["## [UI] Accessibility", "## Accessibility", "Accessibility:missing"], prose: "### Colours [ui]\n- the spacing, in [ui] units\n", infer: "## [UI] UI States\n- loading, empty, error\n",
+        briefTask: /^\[US1\] UI states/, briefSection: "[UI] Accessibility", matrixAc: "US-1.AC-25", matrixSection: "[UI] UI States",
+        finish: /^\+ui: the automated accessibility check/, statusKey: "uiSections",
+        plan: [/\| T-\d+ \| e2e \| example \| keyboard-only walk-through \+ an automated accessibility check \(axe\): every action reachable, focus visible, no violation \| US-1\.AC-24 \|/,
+          /\| T-\d+ \| component \| property \| a form with invalid fields: every value kept, each error named in text, focus on the summary \| US-1\.AC-25 \|/],
+        importAc: "WHEN the user opens the settings page THEN the system SHALL show it with the design system components and meet WCAG 2.2 AA",
+        steeringHead: { en: /^# UI Standards/, pt: /^# Padrões de Interface/, es: /^# Estándares de Interfaz/, "pt-BR": /^# Padrões de Interface/ } },
     ];
     const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|DIST\]|API\]|UI\]|OBS\]|NEEDS)[^\]\n]*\]/g;
 
@@ -16038,7 +16048,7 @@ function endRun() {
       ["api", "Añadir paginación por cursor a los endpoints de la API sin cambios incompatibles"], ["api", "Los desarrolladores externos se integran a través del portal de desarrolladores"],
       ["api", "Definir el contrato gRPC del servicio de precios en protobuf"], ["api", "Publicar la especificación de la API con OpenAPI"],
       // +api — hard negatives
-      ["", "API key management page where admins create and revoke keys"], ["", "Call the Stripe API to charge the customer's card"],
+      ["ui", "API key management page where admins create and revoke keys"], ["", "Call the Stripe API to charge the customer's card"],
       ["", "Fix the route guard so logged-out users are redirected to the login page"], ["", "Upgrade React to version 19 and fix the breaking changes in the router"],
       ["", "Send an HTTP request to the weather service and cache the response for ten minutes"], ["", "Bump the AWS SDK to v3"], ["", "Add pagination to the admin users table"],
       ["", "Users can request a refund from their order history"], ["", "Plan the delivery route for each driver"], ["", "Store the uploaded photos in S3"],
@@ -16046,6 +16056,25 @@ function endRun() {
       ["", "Chamar a API do Stripe para cobrar o cartão"], ["", "Planear a rota de entrega de cada motorista"], ["", "Atualizar o SDK da AWS para a versão 3"],
       ["", "O utilizador pode pedir o reembolso de uma encomenda"],
       ["", "Llamar a la API de Stripe para cobrar la tarjeta"], ["", "Calcular la ruta de reparto de cada conductor"], ["", "Actualizar el SDK de AWS a la versión 3"],
+      // +ui — positives
+      ["ui", "Build the settings page with design-system components and WCAG 2.2 AA accessibility"], ["ui", "Make the checkout form usable with a screen reader and keyboard navigation"],
+      ["ui", "Add a dark mode using the design tokens"], ["ui", "Redesign the dashboard as a responsive layout for mobile and desktop"],
+      ["ui", "Create a reusable date picker in the component library, documented in Storybook"], ["ui", "Show an empty state and a skeleton screen while the orders load"],
+      ["ui", "Improve the Core Web Vitals of the product page: LCP under 2.5 s"], ["ui", "Fix the color contrast and the focus indicator on the login page"],
+      ["ui", "Implement the new onboarding UI from the Figma designs"], ["ui", "Add visual regression tests for the invoice screens"], ["ui", "Admin panel to manage users and roles"],
+      ["ui", "Build the profile page with inline form validation"], ["ui", "Rewrite the frontend in React"], ["ui", "Support right-to-left languages in the mobile app UI"],
+      ["ui", "Add alt text to every product image"], ["ui", "A modal with a dropdown to pick the delivery slot"],
+      ["ui", "Criar a página de definições com componentes do design system e acessibilidade WCAG"], ["ui", "Tornar o formulário de checkout utilizável com leitor de ecrã e navegação por teclado"],
+      ["ui", "Adicionar modo escuro à aplicação"], ["ui", "Mostrar um estado vazio quando a lista de encomendas não tem itens"], ["ui", "Layout responsivo para o painel de administração"],
+      ["ui", "Melhorar o contraste de cores e o texto alternativo das imagens"],
+      ["ui", "Crear la página de ajustes con el sistema de diseño y accesibilidad WCAG"], ["ui", "Hacer el formulario de pago usable con lector de pantalla y navegación por teclado"],
+      ["ui", "Añadir modo oscuro a la aplicación"], ["ui", "Mostrar un estado vacío cuando no hay pedidos"], ["ui", "Diseño responsivo para el panel de administración"],
+      // +ui — hard negatives
+      ["", "Add a button to export orders as CSV"], ["", "Log in form"], ["", "Metrics dashboard for sales"], ["", "The support team screens job applicants before the interview"],
+      ["", "Nightly job that recalculates the loyalty points of every customer"], ["", "Form a committee to review the refund policy"], ["", "Translate the error messages into Portuguese"],
+      ["", "Add a React Native push notification handler"], ["", "Update the page count in the PDF export"], ["", "Generate the monthly PDF report for the accountants"],
+      ["", "Adicionar um botão para exportar as encomendas em CSV"], ["", "Formulário de login"], ["", "Gerar o relatório mensal em PDF"],
+      ["", "Añadir un botón para exportar los pedidos a CSV"], ["", "Formulario de inicio de sesión"], ["", "Generar el informe mensual en PDF"],
     ];
     for (const X of T19) {
       let tp = 0, fp = 0, fn = 0, pos = 0;
@@ -16067,6 +16096,14 @@ function endRun() {
       cls("Add an endpoint and a route for the orders request").notes.some((n) => /only app-level words .*none names an API contract/.test(n)),
       "1.19 T8: +api — an API key page, a call to the Stripe API and an SDK bump are no API contract ('possible' at most); 'no breaking changes' states the concern (a hazard, never negated); generic words alone are named as such (got " +
       js([keyPage.signals.api, stripe.possible, noBreak.negated.api, sdk.possible]) + ")");
+    const btn = cls("Add a button to export orders as CSV"), login = cls("Log in form"), sales = cls("Metrics dashboard for sales");
+    ok(keyPage.tracks.includes("ui") && keyPage.signals.ui.includes("management page") && !btn.tracks.includes("ui") && btn.possible.some((p) => p.track === "ui") &&
+      !login.tracks.includes("ui") && !(login.signals.obs || []).length && !sales.tracks.includes("ui") &&
+      cls("The screening of job applicants").signals.ui.length === 0 && cls("A team formed in 2020").signals.ui.length === 0 &&
+      !cls("Translate the UI into Spanish").tracks.includes("ui") && cls("Build the UI for invoices in React").tracks.includes("ui") && !cls("no UI change: a backend-only fix").tracks.includes("ui") && S.signalConcept("ui", "Vue") === "framework" &&
+      cls("A modal with a dropdown").notes.some((n) => /on from weak signals only/i.test(n)) && btn.notes.some((n) => /none names a UI concern of its own/.test(n) || /weak signal 'button'|app-level words \('button'\)/.test(n)),
+      "1.19 T8: +ui — an API key management page is UI (not API); a button, the log in form (no +obs from 'log') and a sales dashboard are 'possible' at most; 'screening' / 'formed' are no screen / form; 'UI' (capitals) is an anchor — 'translate the UI' alone stays possible, UI + React turns it on, 'no UI' keeps it off (got " +
+      js([keyPage.signals, btn.possible, login.signals.ui, sales.possible]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

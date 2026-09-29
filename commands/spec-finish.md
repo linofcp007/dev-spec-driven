@@ -18,7 +18,7 @@ Feature: $ARGUMENTS
    covers, planned tests no test file names): they don't block, but each one deserves a decision.
 2. **Verify fresh, now** (`references/verification.md`): run the full test suite and every check the
    report lists for the active tracks (+saas load test and observability, +ai cost and safety, +sec security scans
-   and the threat model re-checked, +privacy data subject rights and retention, +dist failure-injection tests, +api contract tests and the breaking-change diff, bugfix: the reproduction no longer
+   and the threat model re-checked, +privacy data subject rights and retention, +dist failure-injection tests, +api contract tests and the breaking-change diff, +ui accessibility checks and the performance budget, bugfix: the reproduction no longer
    reproduces). With project checks set, record them: run each configured command and pass the results as
    `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `dev-spec finish <feature> --run`
    (`--timeout <seconds>` optional), which runs and records them; a check that could not run (no shell, a signal,

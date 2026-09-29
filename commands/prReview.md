@@ -24,6 +24,8 @@ Review against the full chain, gating checks by the feature's active tracks:
   says); consumers idempotent; retries with timeouts, backoff + jitter and a DLQ; the concurrency control the design names.
 - **+api** — the contract file matches the handlers (every status code, error code and header); no breaking change inside
   a version (the diff against the published contract is clean); errors are problem+json; creates honour Idempotency-Key.
+- **+ui** — built from design-system components and tokens (no one-off styles); every state of the design's state matrix
+  handled; keyboard operable, labelled, sufficient contrast (the automated accessibility check clean); strings in the catalogue.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.

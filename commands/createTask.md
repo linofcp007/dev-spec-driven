@@ -19,7 +19,8 @@ task per prompt change, and a cost-monitoring task (+ai); keep the scaffolded se
 secrets, security testing — its `_Verify:_` runs the scans and abuse-case tests) on +sec and the privacy tasks (data
 inventory, data subject requests, retention job) on +privacy and the data-consistency tasks (outbox, idempotent
 consumer, concurrency control, resilience, failure-injection tests) on +dist and the API-contract tasks (contract first, error
-model, idempotency and concurrency, the compatibility gate, contract tests) on +api; `_Implements: path_` on tasks that touch real files. Optionally
+model, idempotency and concurrency, the compatibility gate, contract tests) on +api and the UI tasks (design-system build, UI states,
+forms and keyboard, accessibility checks, responsiveness / i18n / performance budget) on +ui; `_Implements: path_` on tasks that touch real files. Optionally
 `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points) — the roadmap turns sizes and the recorded velocity into an ETA — and
 `_Depends: 3, 5_` where a task needs other tasks of this tasks.md done first (without it, tasks.md order is the order):
 `spec_next_task` then serves the first open task whose dependencies are done, `dev-spec next <feature> --waves` shows

@@ -66,6 +66,9 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const apiAc = a.tracks.includes("api")
         ? "\n\n#### [API] Acceptance Criteria (EARS)\n20. **US-1.AC-20** — IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.\n21. **US-1.AC-21** — WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.\n22. **US-1.AC-22** — IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.\n23. **US-1.AC-23** — IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date."
         : "";
+      const uiAc = a.tracks.includes("ui")
+        ? "\n\n#### [UI] Acceptance Criteria (EARS)\n24. **US-1.AC-24** — WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.\n25. **US-1.AC-25** — IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.\n26. **US-1.AC-26** — WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.\n27. **US-1.AC-27** — IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -86,7 +89,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -289,6 +292,29 @@ Input types · size/count limits · token counting per type · validation pipeli
 ## [API] Rate Limits & Quotas
 > **TODO** — replace with real values (remove this line when done).
 - Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt.
+`;
+      }
+      if (track === "ui") {
+        return `
+## [UI] Design System Usage
+> **TODO** — replace with real values (remove this line when done).
+- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.
+
+## [UI] UI States
+> **TODO** — replace with real values (remove this line when done).
+- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).
+
+## [UI] Accessibility
+> **TODO** — replace with real values (remove this line when done).
+- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass).
+
+## [UI] Responsiveness & i18n
+> **TODO** — replace with real values (remove this line when done).
+- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue.
+
+## [UI] UI Performance Budget
+> **TODO** — replace with real values (remove this line when done).
+- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users).
 `;
       }
       return "";
@@ -507,6 +533,21 @@ ${phases}`
   - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
 `;
       }
+      if (a.track === "ui") {
+        return `
+## Story US-1 — User Interface
+- [ ] ${id()}. [US1] Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)
+  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
+- [ ] ${id()}. [US1] UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md
+  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
+- [ ] ${id()}. [US1] Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus
+  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
+- [ ] ${id()}. [US1] Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)
+  - _Requirements: US-1.AC-24, US-1.AC-25_
+- [ ] ${id()}. [US1] Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget
+  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
+`;
+      }
       return "";
     },
 
@@ -618,7 +659,10 @@ ${a.summary || "[one line: the bug being fixed]"}
           outboxCrash: "crash between the DB commit and the publish: the event is still delivered", duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
           lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
           contract: "contract", problemJson: "contract test: a request missing a required field gets 400 problem+json naming it", idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
-          staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change" }, acs);
+          staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
+          component: "component", visual: "visual", keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
+          formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary", emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
+          loadError: "a failed load: an error with Retry, the content already shown kept" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -743,6 +787,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("privacy")) items.push("PRIVACY: 6 mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
       if (a.tracks.includes("dist")) items.push("DIST: 5 mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
       if (a.tracks.includes("api")) items.push("API: 5 mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
+      if (a.tracks.includes("ui")) items.push("UI: 5 mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -809,6 +854,9 @@ const steering = {
     // 1.19 T — +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
     "api.md":
       "# API Standards\n\n## Style & Contract\n- Style: [REST | GraphQL | gRPC] · the contract lives in: [openapi.yaml | proto/ | schema.graphql] — written first, reviewed before the handlers.\n- Naming: plural nouns for collections · [snake_case | camelCase] fields · ISO 8601 UTC timestamps · IDs as strings.\n\n## Versioning & Compatibility\n- Strategy: [URL /v1 | header | date] · only additive changes within a version · a breaking change ships as a new version.\n- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.\n\n## Errors\n- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.\n\n## Pagination, Idempotency & Concurrency\n- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).\n\n## Rate Limits\n- Per [API key | user | IP]: [N] requests per [window] · 429 with Retry-After and the RateLimit headers.\n\n## Checks (local)\n- Contract tests: [command] · breaking-change diff against the published contract: [command].\n",
+    // 1.19 T — +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
+    "ui.md":
+      "# UI Standards\n\n## Design System\n- Components: [library / Storybook URL] · tokens: [colour, spacing, type — where they live] · a new component enters the system first (documented, reviewed), never as a one-off.\n\n## States\n- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.\n- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.\n\n## Accessibility\n- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.\n- Checks: [axe / Lighthouse command] on every local run · a manual keyboard + screen-reader pass ([NVDA / VoiceOver]) per feature.\n\n## Responsiveness & i18n\n- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [yes / no] · dates, numbers and currency through the locale.\n\n## Performance Budget\n- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally / RUM].\n",
     // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -897,7 +945,7 @@ const msg = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore | flow",
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -1891,8 +1939,8 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
-      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}` }, // `dev-spec status`
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -1902,6 +1950,8 @@ const msg = {
           "+dist: no cross-system write in the final code bypasses its mitigation (outbox / inbox / saga) — no database commit followed by a direct publish."],
         api: ["+api: contract tests and the breaking-change diff against the published contract green on a fresh local run.",
           "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
+        ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
+          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -2016,7 +2066,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",

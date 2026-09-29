@@ -21,7 +21,9 @@ the "never" rules are `property` rows; `references/security-track.md`); on +priv
 and retention-expiry tests (`references/privacy-track.md`); on +dist failure-injection tests — a crash between the
 commit and the publish, the same message twice (a `property` row), concurrent updates, a dependency down
 (`references/distributed-data-patterns.md`); on +api contract tests against the spec, an Idempotency-Key replay (a
-`property` row), a stale If-Match (412) and the breaking-change diff (`references/api-design-patterns.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
+`property` row), a stale If-Match (412) and the breaking-change diff (`references/api-design-patterns.md`); on +ui a keyboard-only walk-through with an
+automated accessibility check, the form-error behaviour (a `property` row), visual regression of the view's states and the
+failed-load state (`references/ui-design-patterns.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
 row covers. The Coverage Check must show every AC appears in ≥1 test. Write `test-plan.md` (no template
 placeholders left — the test-plan gate refuses them) and present for approval — no test code yet. See
 `references/test-patterns.md` (Property-Based Tests; Test IDs in test names).

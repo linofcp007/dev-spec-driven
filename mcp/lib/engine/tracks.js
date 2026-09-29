@@ -26,7 +26,7 @@ function __link(E) { ({ acIndex, commentLines, earsValidate, existsCached, extra
   readJson, readRoadmap, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, useTemplateScopeOf, writeIfAbsent } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -34,7 +34,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "ap
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"], api: ["api.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -66,7 +66,9 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
   microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist",
   // +api (1.19 T) — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
-  apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api" };
+  apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api",
+  // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
+  frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -447,6 +449,54 @@ const SIGNALS = {
       "rota", "requisição", "paginação", "ruta", "solicitud http", "petición http", "paginación",
     ],
   },
+  // +ui (1.19 T): a user-facing interface — the screens, the design system, accessibility, the states every view needs, the
+  // front-end performance budget. STRONG: the design system and its parts (tokens, a component library, UI components), WCAG /
+  // accessibility and its concrete words (a screen reader, keyboard navigation, focus order, contrast, alt text, ARIA, reduced
+  // motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals (LCP), visual regression, an empty state / skeleton
+  // screen and the UI-heavy page types (a settings / admin / management / profile / landing page, an admin panel). WEAK (anchors):
+  // the frontend, UI / UX (capitals — "translate the UI into Spanish", "Spanish UI labels" alone stay 'possible'), a UI framework named with its capital (React, Vue, Angular,
+  // Svelte), CSS / Tailwind, widgets (modal, dropdown, tooltip, sidebar, toast, carousel, spinner), responsive, i18n / l10n,
+  // RTL / CLS / INP (capitals), a loading / error state, form validation, a wireframe / mockup. GENERIC (app-level — every
+  // feature has them): screen, page, form, button, dialog, dashboard, menu, icon, widget, click, layout, theme — "add a button
+  // to export" or "the log in form" is 'possible' at most. A dashboard is +ui's generic word only (never +obs: "a metrics
+  // dashboard for sales" is a product screen); a monitoring / Grafana dashboard is +obs strong and shadows it.
+  ui: {
+    strong: [
+      "design system", "design-system", "design tokens", "component library", "ui component", "ui kit", "user interface", "wcag", "accessibility", "a11y",
+      "screen reader", "screen-reader", "keyboard navigation", "keyboard accessible", "keyboard-only", "keyboard only", "focus order",
+      "focus trap", "focus indicator", "focus management", "color contrast", "colour contrast", "contrast ratio", "alt text", "aria-label",
+      "aria-live", "ARIA", "reduced motion", "prefers-reduced-motion", "responsive layout", "responsive design", "mobile-first", "dark mode",
+      "storybook", "figma", "core web vitals", "largest contentful paint", "cumulative layout shift", "interaction to next paint", "LCP",
+      "visual regression", "skeleton screen", "skeleton loader", "empty state", "right-to-left", "landing page", "settings page",
+      "settings screen", "admin page", "admin panel", "admin ui", "management page", "profile page", "account page",
+      // PT
+      "sistema de design", "acessibilidade", "leitor de ecrã", "leitor de tela", "navegação por teclado", "contraste de cor", "texto alternativo", "movimento reduzido", "design responsivo", "layout responsivo", "modo escuro", "tema escuro",
+      "interface do utilizador", "interface de utilizador", "interface do usuário", "interface de usuário", "componente de interface",
+      "biblioteca de componentes", "regressão visual", "estado vazio", "página de definições", "página de configurações",
+      "página de administração", "painel de administração", "página de gestão", "página de perfil", "ecrã de definições",
+      "tela de configurações",
+      // ES
+      "sistema de diseño", "accesibilidad", "lector de pantalla", "navegación por teclado", "contraste de color", "movimiento reducido",
+      "diseño responsivo", "diseño adaptable", "modo oscuro", "tema oscuro", "interfaz de usuario", "componente de interfaz", "regresión visual",
+      "estado vacío", "página de ajustes", "página de configuración", "panel de administración", "página de gestión", "pantalla de ajustes",
+    ],
+    weak: [
+      "frontend", "front-end", "UI", "UX", "React", "Vue", "Angular", "Svelte", "tailwind", "css", "stylesheet", "modal", "dropdown", "tooltip",
+      "navbar", "sidebar", "toast", "carousel", "spinner", "responsive", "i18n", "l10n", "RTL", "CLS", "INP", "loading state", "error state",
+      "form validation", "wireframe", "mockup",
+      // PT
+      "responsivo", "responsiva", "estado de carregamento", "estado de erro", "validação de formulário",
+      // ES
+      "estado de carga", "estado de error", "validación de formulario",
+    ],
+    generic: [
+      "screen", "page", "form", "button", "dialog", "dashboard", "menu", "icon", "widget", "click", "layout", "theme",
+      // PT
+      "ecrã", "tela", "página", "formulário", "botão", "painel", "ícone",
+      // ES
+      "pantalla", "formulario", "botón", "icono",
+    ],
+  },
 };
 // One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
 // "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
@@ -507,6 +557,25 @@ const SIGNAL_CONCEPTS = {
     endpoint: ["endpoint", "route", "rota", "ruta"],
     request: ["request", "requisição", "solicitud http", "petición http"],
     paging: ["pagination", "paginate", "paginação", "paginación"],
+  }),
+  // +ui (1.19 T): a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
+  // the generic words too (a screen is a page, a form, a button, a dashboard, an icon).
+  ui: conceptMap({
+    framework: ["React", "Vue", "Angular", "Svelte"],
+    uiux: ["UI", "UX"],
+    style: ["css", "stylesheet", "tailwind"],
+    frontend: ["frontend", "front-end"],
+    i18n: ["i18n", "l10n", "RTL"],
+    vitals: ["CLS", "INP"],
+    states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
+    formValidation: ["form validation", "validação de formulário", "validación de formulario"],
+    responsive: ["responsive", "responsivo", "responsiva"],
+    design: ["wireframe", "mockup"],
+    screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
+    form: ["form", "formulário", "formulario"],
+    button: ["button", "botão", "botón", "click"],
+    dashboard: ["dashboard", "painel"],
+    icon: ["icon", "ícone", "icono"],
   }),
 };
 // HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
@@ -677,6 +746,8 @@ const IRREGULAR_FORMS = new Map([
   ["2PC", ["2PC", ""]],
   // +api (1.19 T): the noun only — "requests", never "requested" ("the user requested a refund" is no HTTP request)
   ["request", ["request", "(?:s)?"]],
+  // +ui (1.19 T): the nouns only — "screening", "formed", "paged the on-call" are no UI
+  ["screen", ["screen", "(?:s)?"]], ["page", ["page", "(?:s)?"]], ["form", ["form", "(?:s)?"]],
 ]);
 // A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
 // words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
@@ -985,7 +1056,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -1936,7 +2007,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -2131,9 +2202,28 @@ const API_SECTIONS = [
     "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
   loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"] },
 ];
+// +ui (1.19 T) — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
+// +saas's "## [SaaS] Performance Budget", never stands in for a deleted [UI] section; the full names stay strict.
+const UI_SECTIONS = [
+  { name: "Design System Usage", syn: ["design system usage", "design system", "component inventory", "uso do design system", "sistema de design",
+    "inventário de componentes", "uso del design system", "sistema de diseño", "inventario de componentes"],
+  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"] },
+  { name: "UI States", syn: ["ui states", "view states", "states", "estados da interface", "estados da ui", "estados de la interfaz", "estados de la ui", "estados"],
+  loose: ["view states", "states", "estados"] },
+  { name: "Accessibility", syn: ["accessibility", "a11y", "acessibilidade", "accesibilidad"], loose: ["accessibility", "a11y", "acessibilidade", "accesibilidad"] },
+  { name: "Responsiveness & i18n", syn: ["responsiveness & i18n", "responsiveness and i18n", "responsiveness", "responsive design", "internationalization",
+    "internationalisation", "i18n", "design responsivo e i18n", "design responsivo", "responsividade", "internacionalização", "diseño adaptable e i18n",
+    "diseño adaptable", "diseño responsivo", "internacionalización"],
+  loose: ["responsiveness", "responsive design", "internationalization", "internationalisation", "i18n", "design responsivo", "responsividade",
+    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"] },
+  { name: "UI Performance Budget", syn: ["ui performance budget", "web performance budget", "front-end performance", "frontend performance", "core web vitals",
+    "performance budget", "orçamento de desempenho da interface", "orçamento de desempenho", "presupuesto de rendimiento de la interfaz",
+    "presupuesto de rendimiento"],
+  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -2166,4 +2256,4 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };

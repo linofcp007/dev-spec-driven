@@ -18,8 +18,8 @@ Add the track-specific ACs the feature's classification calls for (tenant isolat
 for +saas; quality, latency, cost, refusal, injection-resistance for +ai; 401 / 403 + audit event / no secret in
 responses or logs for +sec; export, erasure in every store, retention expiry for +privacy; a publish that fails after the commit still delivered, a
 duplicate message applied once, no lost update, a dependency down degrading for +dist; a malformed request answered 400 problem+json, an
-Idempotency-Key replay, a stale If-Match refused with 412, a breaking change only in a new version for +api — the scaffold seeds
-`US-1.AC-10…23` for the last four: make them concrete). On a design-first feature (`flow: "design-first"`) this phase
+Idempotency-Key replay, a stale If-Match refused with 412, a breaking change only in a new version for +api; keyboard operation, a form that keeps its values and names its errors, an
+empty state, a failed load with Retry for +ui — the scaffold seeds `US-1.AC-10…27` for the last five: make them concrete). On a design-first feature (`flow: "design-first"`) this phase
 comes after the design approval: the criteria must match the approved design. Replace every template
 placeholder — the requirements gate refuses an approval while any remains. Run the `ears_validate`
 MCP tool to catch missing SHALL, missing IDs, vague words and leftover placeholders (issue `code`s: `no-modal`,

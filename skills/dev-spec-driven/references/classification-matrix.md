@@ -21,6 +21,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
 | **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
 | **+api** | 5 mandatory `[API]` sections (API contract, versioning & compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas), 4 criteria, contract tests + a breaking-change diff, `api.md` | other code depends on the API's contract — public, partner or internal: a versioned API, OpenAPI / GraphQL / gRPC, SDKs |
+| **+ui** | 5 mandatory `[UI]` sections (design-system usage, UI states, accessibility, responsiveness & i18n, UI performance budget), 4 criteria, accessibility + visual-regression tests, `ui.md` | a user-facing screen, component or flow: a design system, accessibility (WCAG), responsive layout, dark mode, a settings / admin page |
 
 `core` is always on. The others are added independently based on the signals below.
 
@@ -40,7 +41,7 @@ is a draft for the human, who confirms Phase 0.
   model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
   both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
 - **Generic** signals (app-level words — +dist: queue, retry, consumer / producer, subscriber, publish … event, worker;
-  +api: api, endpoint, route, request, pagination) add to the score but never turn the track on alone: at least one strong
+  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon) add to the score but never turn the track on alone: at least one strong
   or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
@@ -300,6 +301,48 @@ Worked examples (what `spec_classify` answers):
 | Call the Stripe API to charge the customer's card | `core +tdd`, *possible +api* | api (generic only; charge → +tdd) |
 | Bump the AWS SDK to v3 | `core`, *possible +api* | sdk |
 
+## +ui signals (turn on the UI track)
+
+Turn on `+ui` if **any** are true (see `ui-design-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| A user-facing screen, component or flow is the work | A settings / admin / profile page, a checkout flow, a new component |
+| The design system is involved | Tokens, the component library, Storybook, Figma designs, dark mode |
+| Accessibility matters | WCAG 2.2 AA, a screen reader, keyboard navigation, contrast, alt text |
+| The states or the layout are the risk | Empty / loading / error states, responsive layout, right-to-left, Core Web Vitals |
+
+Classifier signals — **strong:** design system, design tokens, component library, UI component / kit, user interface,
+WCAG, accessibility, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
+/ management, colour / color contrast, contrast ratio, alt text, `ARIA`, aria-label, reduced motion, responsive layout /
+design, mobile-first, dark mode, Storybook, Figma, Core Web Vitals, `LCP`, visual regression, skeleton screen, empty state,
+right-to-left, a landing / settings / admin / management / profile / account page, an admin panel (*sistema de design,
+acessibilidade, leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
+painel de administração · sistema de diseño, accesibilidad, lector de pantalla, modo oscuro, interfaz de usuario, página de
+ajustes, panel de administración*). **Weak:** frontend, `UI` / `UX` (capitals, one concept — "translate the UI into
+Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
+`Angular`, `Svelte` — one concept), CSS / Tailwind, a modal, dropdown, tooltip, navbar, sidebar, toast, carousel, spinner,
+responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation, a wireframe / mockup. **Generic**
+(only beside a strong or weak one): screen, page, form (the nouns — never "screening", "formed"), button, click, dialog,
+dashboard, menu, icon, widget, layout, theme (*ecrã, tela, página, formulário, botão, painel · pantalla, formulario, botón*).
+A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
+dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Build the settings page with design-system components and WCAG 2.2 AA accessibility | `core +ui` | wcag, accessibility, settings page |
+| Make the checkout form usable with a screen reader and keyboard navigation | `core +tdd +ui` | screen reader, keyboard navigation, form (checkout → +tdd) |
+| Add a dark mode using the design tokens | `core +ui` | design tokens, dark mode |
+| API key management page where admins create and revoke keys | `core +ui`, *possible +sec / +api* | management page |
+| Rewrite the frontend in React | `core +ui` (weak-only) | frontend, React |
+| *Adicionar modo escuro à aplicação* | `core +ui` | modo escuro |
+| *Mostrar un estado vacío cuando no hay pedidos* | `core +ui` | estado vacío |
+| Add a button to export orders as CSV | `core`, *possible +ui* | button (generic only) |
+| Log in form | `core`, *possible +ui* | form (generic only — "log" is no +obs word) |
+| Metrics dashboard for sales | `core`, *possible +ui* | dashboard (generic only) |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -320,10 +363,11 @@ Worked examples (what `spec_classify` answers):
 | `core +dist` | design gains 5 `[DIST]` sections; `[DIST]` criteria US-1.AC-16..19; outbox / inbox / concurrency / resilience / failure-injection tasks; `steering/distributed.md` |
 | `core +tdd +saas +dist` | a checkout across services: saga, outbox, idempotent consumers, failure-injection and property tests, load test |
 | `core +api` | design gains 5 `[API]` sections; `[API]` criteria US-1.AC-20..23; contract-first, error-model, idempotency / concurrency, compatibility-gate and contract-test tasks; `steering/api.md` |
+| `core +ui` | design gains 5 `[UI]` sections; `[UI]` criteria US-1.AC-24..27; design-system, UI-states, forms-and-keyboard, accessibility-check and responsiveness / performance tasks; `steering/ui.md` |
 
 **Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
-its 6, `+dist` its 5 and `+api` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`) are English in every language and case-sensitive.
+its 6, `+dist` its 5, `+api` its 5 and `+ui` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -333,7 +377,8 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`) 
 - `+sec` → the security-testing task's `_Verify:_` runs the scans and the abuse-case tests; `+privacy` → data subject
   rights verified end to end before "done"; `+dist` → the failure-injection tests (crash between commit and publish,
   duplicate delivery, concurrent updates, a dependency down) green before "done"; `+api` → the contract tests and the
-  breaking-change diff against the published contract green before "done".
+  breaking-change diff against the published contract green before "done"; `+ui` → the automated accessibility check, the
+  manual keyboard / screen-reader pass and the performance budget before "done".
 
 ---
 
@@ -346,7 +391,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`) 
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -356,6 +401,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api]
 - **+privacy:** [signal] — [why]
 - **+dist:** [signal] — [why]
 - **+api:** [signal] — [why]
+- **+ui:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

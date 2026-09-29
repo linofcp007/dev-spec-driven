@@ -158,7 +158,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` (1.19) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` (1.19) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -238,6 +238,21 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   (marker-bound), only the full compound names are strict. The generic-only note names what an anchor would be, per track
   (`classify.genericOnly`). A pre-1.19 pack named `api` / `rest`… is a missing pack like a pre-1.17 `dist` one; doctor and
   spec_upgrade say "from before 1.19" (`packReservedSince()` — `TRACK_RESERVED_SINCE`). Guide: `references/api-design-patterns.md`.
+- **+ui (1.19 T)** — the ninth built-in marker track `[UI]` (user-facing UI, the design system, accessibility): TRACK_MARKER,
+  `UI_SECTIONS` (Design System Usage · UI States · Accessibility · Responsiveness & i18n · UI Performance Budget — every ordinary
+  name `loose`: a core "## Accessibility" never stands in for the deleted [UI] one, nor does +saas's "[SaaS] Performance
+  Budget"), TRACK_STEERING `ui.md`, US-1.AC-24..27, TRACK_ALIASES frontend / front-end / ux / gui / wcag — **never `a11y` /
+  `accessibility`**: the canonical track-pack example is a team's `a11y` pack, it keeps its name (its signals and +ui's then
+  both fire, as a pack's may). SIGNALS.ui — strong: the design system (tokens, a component library),
+  WCAG / accessibility / a11y and their concrete words (screen reader, keyboard navigation, focus order, contrast, alt text,
+  `ARIA`, reduced motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals / `LCP`, visual regression, an empty
+  state, the UI-heavy page types (a settings / admin / management / profile page, an admin panel — "an API key management
+  page" is +ui); weak: frontend, `UI` / `UX` (capitals, one concept — "translate the UI into Spanish" alone stays possible;
+  1.19 T made it an anchor, not strong: two 1.18 tests read such texts as core), `React` / `Vue` / `Angular` / `Svelte` (one
+  concept), CSS, widgets, responsive, i18n,
+  `RTL` / `CLS` / `INP`, a loading / error state, form validation; **generic**: screen, page, form (IRREGULAR_FORMS: the nouns
+  only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard, menu, icon, widget, layout, theme.
+  A dashboard is +ui's generic word only, never +obs's ("a metrics dashboard for sales").
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the

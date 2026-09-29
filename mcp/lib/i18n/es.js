@@ -65,6 +65,9 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
       const apiAc = a.tracks.includes("api")
         ? "\n\n#### [API] Criterios de Aceptación (EARS)\n20. **US-1.AC-20** — SI una petición omite [un campo obligatorio] o lo envía mal formado, ENTONCES EL SISTEMA DEBE responder 400 con un cuerpo application/problem+json que nombra el campo y lleva un código de error estable.\n21. **US-1.AC-21** — CUANDO un cliente repite [una petición de creación] con la misma Idempotency-Key y el mismo cuerpo, EL SISTEMA DEBE devolver la primera respuesta sin aplicar el efecto otra vez.\n22. **US-1.AC-22** — SI una actualización trae un ETag If-Match que ya no coincide con el recurso, ENTONCES EL SISTEMA DEBE responder 412 y dejar el recurso sin cambios.\n23. **US-1.AC-23** — SI un cambio en el contrato pudiera romper un cliente existente, ENTONCES EL SISTEMA DEBE publicarlo solo en una nueva [versión de la API] y mantener la versión actual en funcionamiento hasta su fecha de Sunset anunciada."
         : "";
+      const uiAc = a.tracks.includes("ui")
+        ? "\n\n#### [UI] Criterios de Aceptación (EARS)\n24. **US-1.AC-24** — CUANDO un usuario maneja [la vista] solo con el teclado, EL SISTEMA DEBE hacer cada acción alcanzable y operable en un orden de foco lógico, con un indicador de foco visible.\n25. **US-1.AC-25** — SI un formulario enviado tiene campos no válidos, ENTONCES EL SISTEMA DEBE conservar todos los valores introducidos, identificar cada error en texto junto a su campo y mover el foco a un resumen de errores.\n26. **US-1.AC-26** — MIENTRAS [la lista] no tenga elementos, EL SISTEMA DEBE mostrar un estado vacío que explica por qué y ofrece la siguiente acción.\n27. **US-1.AC-27** — SI la carga [de los datos] falla, ENTONCES EL SISTEMA DEBE mostrar un mensaje de error con una acción Reintentar y conservar el contenido ya mostrado."
+        : "";
       return (
 `# Función: ${a.name}
 
@@ -85,7 +88,7 @@ Cada historia debe entregar valor autónomo si se lanza sola.
 1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
-4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}
+4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}
 
 ### US-2 (P2): [Título de la Historia]
 **Como** [rol], **quiero** [capacidad], **para que** [beneficio].
@@ -288,6 +291,29 @@ Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo ·
 ## [API] Límites de Tasa y Cuotas
 > **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
 - Límites por cliente / clave / inquilino y sus ventanas · 429 con Retry-After y las cabeceras RateLimit · cuotas y cómo un cliente sabe cuánto le queda · qué queda exento.
+`;
+      }
+      if (track === "ui") {
+        return `
+## [UI] Uso del Design System
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código.
+
+## [UI] Estados de la Interfaz
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados).
+
+## [UI] Accesibilidad
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- WCAG 2.2 AA: operable con el teclado y orden de foco visible · nombre / etiqueta en cada control · contraste (4,5:1 en el texto, 3:1 en la interfaz) · tamaño de los objetivos (24×24 px) · movimiento reducido · errores identificados en texto · cómo se prueba (una comprobación automática + una pasada manual con teclado y lector de pantalla).
+
+## [UI] Diseño Adaptable e i18n
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Breakpoints y cómo se adapta el layout · expansión del texto (+30–40 %) · layouts de derecha a izquierda · formatos del locale (fechas, números, moneda) · todas las cadenas en el catálogo de traducciones.
+
+## [UI] Presupuesto de Rendimiento de la Interfaz
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Core Web Vitals en el percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · el presupuesto de JS / imágenes de esta vista · cómo se mide (laboratorio + usuarios reales).
 `;
       }
       return "";
@@ -503,6 +529,21 @@ ${phases}`
   - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
 `;
       }
+      if (a.track === "ui") {
+        return `
+## Historia US-1 — Interfaz de Usuario
+- [ ] ${id()}. [US1] Construir la vista con componentes y tokens del design system — un componente nuevo solo a través del sistema (documentado, revisado)
+  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
+- [ ] ${id()}. [US1] Estados de la interfaz — cargando, vacío, error con Reintentar, parcial, sin conexión, sin permiso, éxito — según la matriz de estados de design.md
+  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
+- [ ] ${id()}. [US1] Formularios y teclado — valores conservados en un error, errores en texto con un resumen, orden de foco lógico, foco visible
+  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
+- [ ] ${id()}. [US1] Comprobaciones de accesibilidad — una comprobación automática (axe o equivalente) ejecutable en local + una pasada manual con teclado y lector de pantalla (los hallazgos en el informe)
+  - _Requirements: US-1.AC-24, US-1.AC-25_
+- [ ] ${id()}. [US1] Diseño adaptable, i18n y el presupuesto de rendimiento — los breakpoints, la expansión del texto, RTL, los formatos del locale; LCP / INP / CLS dentro del presupuesto
+  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
+`;
+      }
       return "";
     },
 
@@ -614,7 +655,8 @@ ${a.summary || "[una línea: el bug a corregir]"}
           erasure: "tras la supresión ningún almacén conserva los datos personales del interesado", retention: "los registros con el plazo de conservación vencido se eliminan o anonimizan",
           outboxCrash: "caída entre el commit en la BD y la publicación: el evento se entrega igualmente", duplicateDelivery: "el mismo mensaje entregado dos (o N) veces tiene exactamente un efecto",
           lostUpdate: "actualizaciones concurrentes del mismo registro: ninguna se pierde en silencio", dependencyDown: "una dependencia caída: degradar / reintentar con retroceso, la ruta crítica no se bloquea",
-          contract: "contrato", problemJson: "prueba de contrato: una petición sin un campo obligatorio recibe 400 problem+json que lo nombra", idempotencyReplay: "una creación repetida con la misma Idempotency-Key tiene un solo efecto y devuelve la primera respuesta", staleEtag: "una actualización con un If-Match obsoleto recibe 412 y no cambia nada", breakingDiff: "comparación de cambios incompatibles: el contrato frente a la versión publicada no informa de ninguno" }, acs);
+          contract: "contrato", problemJson: "prueba de contrato: una petición sin un campo obligatorio recibe 400 problem+json que lo nombra", idempotencyReplay: "una creación repetida con la misma Idempotency-Key tiene un solo efecto y devuelve la primera respuesta", staleEtag: "una actualización con un If-Match obsoleto recibe 412 y no cambia nada", breakingDiff: "comparación de cambios incompatibles: el contrato frente a la versión publicada no informa de ninguno",
+          component: "componente", visual: "visual", keyboardA11y: "recorrido solo con teclado + una comprobación automática de accesibilidad (axe): cada acción alcanzable, foco visible, ninguna violación", formErrors: "formulario con campos no válidos: los valores conservados, cada error nombrado en texto, el foco en el resumen", emptyState: "regresión visual de los estados de la vista: el estado vacío explica por qué y ofrece la siguiente acción", loadError: "carga fallida: un error con Reintentar, el contenido ya mostrado conservado" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -739,6 +781,7 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
       if (a.tracks.includes("privacy")) items.push("PRIVACIDAD: 6 secciones obligatorias de diseño rellenadas (sin TODO) — decisión sobre la EIPD registrada.", "PRIVACIDAD: acceso/exportación y supresión funcionan de extremo a extremo, en todos los almacenes y encargados.", "PRIVACIDAD: proceso de conservación programado; política de privacidad y registro de actividades de tratamiento actualizados.");
       if (a.tracks.includes("dist")) items.push("DIST: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada escritura entre sistemas tiene su mitigación (outbox / inbox / saga) o un riesgo aceptado.", "DIST: consumidores idempotentes (inbox o una clave única en la transacción del efecto); reintentos con retroceso + jitter y una DLQ; nada no idempotente reintentado a ciegas.", "DIST: pruebas de inyección de fallos (caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, dependencia caída) en verde en una ejecución local.");
       if (a.tracks.includes("api")) items.push("API: 5 secciones obligatorias de diseño rellenadas (sin TODO) — el fichero del contrato (OpenAPI / .proto / esquema GraphQL) está en el repositorio y lo indica el marcador Implements de una tarea.", "API: errores en problem+json con códigos estables; las creaciones aceptan una Idempotency-Key; las actualizaciones respetan If-Match; los endpoints de listado paginan con un cursor estable.", "API: pruebas de contrato y la comparación de cambios incompatibles con la versión publicada en verde en una ejecución local; lo que se elimine queda obsoleto con una fecha de Sunset.");
+      if (a.tracks.includes("ui")) items.push("UI: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada estado de la matriz de estados diseñado; los componentes nuevos entran por el design system.", "UI: WCAG 2.2 AA — la comprobación automática de accesibilidad limpia en una ejecución local, más una pasada manual con teclado y lector de pantalla con los hallazgos corregidos.", "UI: adaptable en cada breakpoint, cadenas en el catálogo (expansión del texto, RTL comprobados); LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 medidos.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar la función por terminada.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -803,6 +846,8 @@ const steering = {
       "# Estándares de Sistemas Distribuidos y Consistencia de Datos\n\n## Garantía de Entrega\n- Por defecto: al menos una vez — todos los consumidores son idempotentes. \"Exactamente una vez\" es un efecto de la idempotencia, nunca una promesa del broker.\n- Orden: por clave (partición / grupo de mensajes) solo donde una función lo pide: []\n\n## Escrituras entre Sistemas\n- Una escritura que toca más de un sistema (BD + broker, BD + caché, BD + API externa) pasa por un outbox transaccional (o CDC) — nunca \"commit y después publicar\".\n- Transacciones de negocio entre servicios: una saga con una compensación por paso; orquestación o coreografía: []\n\n## Idempotencia\n- Origen de la clave de idempotencia (cabecera del cliente / ID del mensaje / clave natural): [] · dónde viven las claves procesadas (tabla inbox / restricción de unicidad) y durante cuánto tiempo: []\n\n## Política de Reintentos (valores por defecto)\n- Retroceso exponencial con jitter · máximo de intentos: [] · tiempo de espera por llamada: []\n- Nunca se reintenta: una llamada no idempotente sin clave, un error de validación (un 4xx — pero 408 y 429 se reintentan, respetando el Retry-After) · mensajes envenenados → DLQ tras [] intentos, con alerta.\n\n## Política de Bloqueo\n- Por defecto: bloqueo optimista (una columna de versión); pesimista (SELECT … FOR UPDATE) solo en secciones cortas y muy disputadas · tiempo de espera del bloqueo: []\n\n## Consistencia por Defecto\n- Nivel de aislamiento por defecto: [] · dónde se acepta la consistencia eventual y el retraso máximo: [] · leer las propias escrituras para el usuario que escribió.\n\n## Observabilidad\n- Retraso del outbox, retraso de los consumidores, profundidad de la DLQ y número de reintentos son métricas con alertas: []\n",
     "api.md":
       "# Estándares de API\n\n## Estilo y Contrato\n- Estilo: [REST | GraphQL | gRPC] · el contrato está en: [openapi.yaml | proto/ | schema.graphql] — escrito primero, revisado antes de los handlers.\n- Nombres: sustantivos en plural para las colecciones · campos en [snake_case | camelCase] · fechas en ISO 8601 UTC · IDs como strings.\n\n## Versionado y Compatibilidad\n- Estrategia: [URL /v1 | cabecera | fecha] · solo cambios aditivos dentro de una versión · un cambio incompatible sale en una nueva versión.\n- Obsolescencia: las cabeceras Deprecation y Sunset, al menos [6 meses] de aviso, una entrada en el changelog, el uso seguido por cliente.\n\n## Errores\n- application/problem+json (RFC 9457): type, title, status, detail, instance + un `code` estable; un error de validación lista cada campo. Ningún stack trace en una respuesta.\n\n## Paginación, Idempotencia y Concurrencia\n- Paginación por cursor (un cursor opaco, como máximo [100] elementos por página) · una Idempotency-Key en cada creación no idempotente, guardada durante [24 h] · ETag / If-Match en las actualizaciones (412 en una versión obsoleta).\n\n## Límites de Tasa\n- Por [clave de API | usuario | IP]: [N] peticiones por [ventana] · 429 con Retry-After y las cabeceras RateLimit.\n\n## Comprobaciones (locales)\n- Pruebas de contrato: [comando] · comparación de cambios incompatibles con el contrato publicado: [comando].\n",
+    "ui.md":
+      "# Estándares de Interfaz\n\n## Design System\n- Componentes: [biblioteca / URL de Storybook] · tokens: [color, espaciado, tipografía — dónde están] · un componente nuevo entra primero en el sistema (documentado, revisado), nunca como pieza suelta.\n\n## Estados\n- Cada vista diseña: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito.\n- Formularios: errores en el campo + un resumen, los valores conservados en un error, el botón de enviar nunca es la única señal.\n\n## Accesibilidad\n- Objetivo: WCAG 2.2 AA · operable con el teclado, foco visible · cada control con nombre · contraste 4,5:1 (texto) / 3:1 (interfaz) · objetivos ≥ 24×24 px · prefers-reduced-motion respetado.\n- Comprobaciones: [comando axe / Lighthouse] en cada ejecución local · una pasada manual con teclado + lector de pantalla ([NVDA / VoiceOver]) por función.\n\n## Diseño Adaptable e i18n\n- Breakpoints: [360 / 768 / 1280 px] · expansión del texto +30–40 % · RTL: [sí / no] · fechas, números y moneda según el locale.\n\n## Presupuesto de Rendimiento\n- Core Web Vitals (p75): LCP ≤ 2,5 s · INP ≤ 200 ms · CLS ≤ 0,1 · JS por ruta ≤ [170 KB gz] · medido con: [Lighthouse en local / RUM].\n",
     "glossary.md":
       "# Glosario\n\n<!-- El lenguaje ubicuo del producto: una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
   };
@@ -890,7 +935,7 @@ const msg = {
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       badAction: "la acción debe ser: remove | archive | rename | restore | flow",
-      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -1817,9 +1862,10 @@ const msg = {
         "Consistency Model": "Modelo de Consistencia", "Cross-system Writes": "Escrituras entre Sistemas", "Delivery & Idempotency": "Entrega e Idempotencia",
         "Concurrency": "Concurrencia", "Failure Modes": "Modos de Fallo",
         "API Contract": "Contrato de la API", "Versioning & Compatibility": "Versionado y Compatibilidad", "Error Model": "Modelo de Errores", "Pagination, Idempotency & Concurrency": "Paginación, Idempotencia y Concurrencia", "Rate Limits & Quotas": "Límites de Tasa y Cuotas",
+        "Design System Usage": "Uso del Design System", "UI States": "Estados de la Interfaz", "Accessibility": "Accesibilidad", "Responsiveness & i18n": "Diseño Adaptable e i18n", "UI Performance Budget": "Presupuesto de Rendimiento de la Interfaz",
       },
-      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas" },
-      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}` },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas" },
+      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}`, ui: (list) => `Secciones de la interfaz: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
           "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
@@ -1829,6 +1875,8 @@ const msg = {
           "+dist: ninguna escritura entre sistemas del código final se salta su mitigación (outbox / inbox / saga) — ningún commit en la base de datos seguido de una publicación directa."],
         api: ["+api: pruebas de contrato y la comparación de cambios incompatibles con el contrato publicado en verde en una ejecución local nueva.",
           "+api: el fichero del contrato coincide con el comportamiento entregado — cada código de estado, código de error y cabecera documentados es lo que devuelven los handlers; lo eliminado está obsoleto con su fecha de Sunset."],
+        ui: ["+ui: la comprobación automática de accesibilidad limpia y la pasada con teclado / lector de pantalla hecha en la versión final; cada estado de la matriz de estados alcanzable y mostrado.",
+          "+ui: el presupuesto de rendimiento medido en la versión final (LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1) y la regresión visual de los estados revisada."],
       },
       clarify: {
         secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
@@ -1934,7 +1982,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — un track definido por el proyecto (dev-spec 1.15). Solo datos: nada de esta carpeta se ejecuta.
 // Guía: references/project-tracks.md · valídalo: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api).
+  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api ui).
   "name": "${a.name}",
   // El marcador estable (distingue mayúsculas) de sus secciones de diseño, criterios y bloque de tareas: [${a.token}].
   "marker": "${a.token}",

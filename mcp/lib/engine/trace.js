@@ -1050,7 +1050,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", "dist", "api", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);

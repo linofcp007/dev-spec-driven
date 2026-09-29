@@ -257,6 +257,7 @@ function statusFeature(projectDir, name) {
     privacySections: trackView("privacy"),
     distSections: trackView("dist"), // 1.17 D
     apiSections: trackView("api"), // 1.19 T
+    uiSections: trackView("ui"),
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
