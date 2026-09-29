@@ -41,10 +41,12 @@ feature and composes exactly the rigor it needs:
 | **+ai** | Eval-driven dev, prompts-as-code, token economics, safety, model lifecycle |
 | **+sec** | Threat model (STRIDE), security requirements, authentication & authorization, secrets & key management, security testing |
 | **+privacy** | GDPR / RGPD: personal data inventory, lawful basis, retention & deletion, data subject rights, processors & transfers, DPIA |
+| **+dist** | Distributed systems & data consistency: consistency model, cross-system (dual) writes → transactional outbox / inbox / saga, delivery & idempotency, concurrency, failure modes (CAP / PACELC) |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
 LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
-point there). A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
+point there); an endpoint that writes a user to Postgres and publishes a `UserCreated` event to Kafka is `+dist`. A copy
+tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
@@ -425,10 +427,12 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+ai** | Desenvolvimento guiado por evals, prompts como código, economia de tokens, segurança, ciclo de vida do modelo |
 | **+sec** | Modelo de ameaças (STRIDE), requisitos de segurança, autenticação e autorização, gestão de segredos e chaves, testes de segurança |
 | **+privacy** | RGPD / GDPR: inventário de dados pessoais, fundamento de licitude, conservação e eliminação, direitos dos titulares, subcontratantes e transferências, AIPD |
+| **+dist** | Sistemas distribuídos e consistência de dados: modelo de consistência, escritas entre sistemas (escrita dupla) → outbox transacional / inbox / saga, entrega e idempotência, concorrência, modos de falha (CAP / PACELC) |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
 com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
-a HIPAA apontam para aí). Uma alteração de texto é modo Vibe: sem cerimónia. Um
+a HIPAA apontam para aí); um endpoint que grava um utilizador no Postgres e publica um evento `UserCreated` no Kafka é
+`+dist`. Uma alteração de texto é modo Vibe: sem cerimónia. Um
 **classificador de Fase 0** (a ferramenta local `spec_classify`, multilíngue) escolhe os tracks; tu
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
@@ -827,10 +831,12 @@ compone exactamente el rigor necesario:
 | **+ai** | Desarrollo guiado por evals, prompts como código, economía de tokens, seguridad, ciclo de vida del modelo |
 | **+sec** | Modelo de amenazas (STRIDE), requisitos de seguridad, autenticación y autorización, gestión de secretos y claves, pruebas de seguridad |
 | **+privacy** | RGPD / GDPR: inventario de datos personales, base de legitimación, conservación y supresión, derechos de los interesados, encargados y transferencias, EIPD |
+| **+dist** | Sistemas distribuidos y consistencia de datos: modelo de consistencia, escrituras entre sistemas (escritura dual) → outbox transaccional / inbox / saga, entrega e idempotencia, concurrencia, modos de fallo (CAP / PACELC) |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
 facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el
-RGPD, el GDPR y la HIPAA apuntan ahí). Un cambio de texto es modo Vibe: sin ceremonia. Un
+RGPD, el GDPR y la HIPAA apuntan ahí); un endpoint que escribe un usuario en Postgres y publica un evento `UserCreated` en
+Kafka es `+dist`. Un cambio de texto es modo Vibe: sin ceremonia. Un
 **clasificador de Fase 0** (la herramienta local `spec_classify`, multilingüe) elige los tracks; tú
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.

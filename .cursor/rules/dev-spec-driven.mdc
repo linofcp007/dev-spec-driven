@@ -11,7 +11,7 @@ alwaysApply: true
 Follow the spec-driven workflow described in [`AGENTS.md`](../../AGENTS.md). Summary:
 
 - For non-trivial work, **plan before coding**: classify the feature into composable tracks
-  (`core` always; `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` as warranted), then run requirements → design →
+  (`core` always; `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` / `+dist` as warranted), then run requirements → design →
   (tests/evals) → tasks → execute, with the user approving each phase.
 - Use the bundled engine for the mechanical steps (local, zero-cost, no CI):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`

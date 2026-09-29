@@ -4,6 +4,10 @@ This is a reference of battle-tested patterns for SaaS at scale. Don't reinvent 
 pick the right pattern for your context and adapt. Each pattern includes when to use it,
 when not to, and the main trade-offs.
 
+The data-consistency side of the same tools — the dual-write problem (a DB write + a publish), the
+transactional outbox, the inbox / idempotent consumer, sagas, isolation levels, locking, CAP / PACELC —
+lives in `distributed-data-patterns.md` (the +dist track). This file keeps the scale view.
+
 ## Table of Contents
 
 1. [Caching](#caching)
@@ -137,6 +141,9 @@ Example: base 2s, max 5 min, ±25% jitter.
 **Don't retry on:** 4xx errors (bad input won't become good), auth failures, validation
 errors. Retry only on transient failures (network, 5xx, timeout).
 
+Timeouts on every remote call, retry budgets, retries at one layer only, poison messages: see
+`distributed-data-patterns.md` → *Retries, timeouts, circuit breakers* (+dist).
+
 ---
 
 ## Rate Limiting
@@ -223,6 +230,10 @@ Design mutations so replaying them produces the same result:
 - "Add item if not exists" — check-then-insert with unique constraint
 
 Prefer this over explicit idempotency keys when possible; less state to manage.
+
+A dedup check in Redis followed by a write to the database is itself a dual write: when both live in
+one database, keep the processed key and the effect in the same transaction (the inbox pattern —
+`distributed-data-patterns.md` → *Inbox / idempotent consumer*).
 
 ### Webhook Idempotency
 

@@ -1864,8 +1864,8 @@ if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy t
     "steering security.md (PT template, not a custom file) and import --tracks sec,privacy (the [SEC] / [PRIVACY] design sections)");
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", a2]).out;
-  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy>/.test(usage),
-    "help and the add-track usage name the +sec / +privacy tracks");
+  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
+    "help and the add-track usage name the +sec / +privacy / +dist tracks");
 }
 
 if (inSection("pa4")) { // 1.14 package A4 (CLI tests)
@@ -1928,11 +1928,11 @@ if (inSection("pb1")) { // 1.14 package B1 (CLI tests) — `dev-spec templates [
   const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
   ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
     fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
-    inPt.code === 0 && /28 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    inPt.code === 0 && /29 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
     fs.existsSync(tpl("pt", "steering", "tech.md")),
-    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 28 (1.16: + steering/glossary.md) into .specs/templates/pt/, reported in Portuguese");
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 29 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md) into .specs/templates/pt/, reported in Portuguese");
   const ckClean = run(["templates", "check", "--project", b1]);
-  ok(ckClean.code === 0 && /^29 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  ok(ckClean.code === 0 && /^30 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
   // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
   fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
   const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);
@@ -3422,7 +3422,7 @@ if (inSection("fftracks")) {
   const ck = r(["tracks", "check"]);
   let ckJ = {};
   try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
-  ok(ls.code === 0 && /^Tracks — 6 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+  ok(ls.code === 0 && /^Tracks — 7 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
     /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
     "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
   // classify / create / status / doctor with the pack.
@@ -3959,6 +3959,57 @@ if (inSection("p16e")) {
 }
 
 // 1.17 package (D): if (inSection("p17d")) { … }
+if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (distributed systems and data consistency) on the CLI, EN / PT / ES
+  const js = (v) => JSON.stringify(v);
+  const pd = path.join(tmp, "p17d-proj");
+  const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
+  const en = run(["classify", "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", "--project", pd]);
+  const es = run(["classify", "Crear un endpoint que escribe un usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios", "--project", pd]);
+  const plain = run(["classify", "Create an endpoint that writes a user to Postgres and returns it", "--project", pd]);
+  ok(en.code === 0 && /^Tracks: core \+dist /.test(en.out) && /dist=high/.test(en.out) && /\+dist: ON \[high confidence\] — matched signals: kafka, publish … event, other services/.test(en.out) &&
+    /^Tracks: core \+dist /.test(es.out) && /\+dist: ACTIVO/.test(es.out) && /^Tracks: core /.test(plain.out) && !/^Tracks: core \+dist/.test(plain.out),
+    "1.17 D1 (CLI): classify turns +dist on for the user's example (EN / ES), with its confidence and signals; plain CRUD stays core (got " + js([en.out.split("\n")[0], es.out.split("\n")[0], plain.out.split("\n")[0]]) + ")");
+  const ini = run(["init", "dist", "--lang", "pt", "--project", pd]);
+  const cr = run(["create", "Publicar eventos", "--tracks", "tdd,dist", "--lang", "es", "--project", pd]);
+  const st = run(["status", "publicar-eventos", "--project", pd]).out;
+  ok(ini.code === 0 && /distributed\.md/.test(ini.out) && /^# Padrões de Sistemas Distribuídos/.test(rd(pd, ".specs", "steering", "distributed.md")) &&
+    cr.code === 0 && /\[core \+tdd \+dist\] \(es\)/.test(cr.out) && /Secciones de consistencia de datos: ◐ Modelo de Consistencia \(sin rellenar\)[^\n]*◐ Modos de Fallo \(sin rellenar\)/.test(st),
+    "1.17 D2 (CLI): init dist --lang pt writes the PT distributed.md steering; create --tracks tdd,dist (ES) → status shows the five [DIST] sections ◐ unfilled, in Spanish (got " + js([ini.out, cr.out, st]) + ")");
+  const doc = run(["doctor", "publicar-eventos", "--project", pd]);
+  run(["approve", "publicar-eventos", "classification", "--force", "--project", pd]);
+  run(["approve", "publicar-eventos", "requirements", "--force", "--project", pd]);
+  const appr = run(["approve", "publicar-eventos", "design", "--project", pd]);
+  const des = path.join(pd, ".specs", "publicar-eventos", "design.md");
+  fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  const doc2 = run(["doctor", "publicar-eventos", "--project", pd]).out;
+  const sj = JSON.parse(run(["status", "publicar-eventos", "--json", "--project", pd]).out);
+  ok(doc.code === 1 && /✗ dist-sections — Modelo de Consistencia:sin rellenar/.test(doc.out) && appr.code === 1 && /dist-sections/.test(appr.out) &&
+    /✓ dist-sections — las 5 rellenadas/.test(doc2) && sj.distSections.length === 5 && sj.distSections.every((s) => s.filled) && sj.secSections === null,
+    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once the TODO lines are gone the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
+  run(["create", "Plain", "core", "--lang", "en", "--project", pd]);
+  const typo = run(["add-track", "plain", "distt", "--project", pd]);
+  const add = run(["add-track", "plain", "+dist", "--project", pd]);
+  const stPlain = run(["status", "plain", "--project", pd]).out;
+  const rm = run(["add-track", "plain", "dist", "--remove", "--project", pd]);
+  const stRm = run(["status", "plain", "--project", pd]).out;
+  ok(typo.code === 1 && /did you mean 'dist'/.test(typo.out) && add.code === 0 && /core \+dist/.test(add.out) && /Data consistency sections: ◐ Consistency Model \(unfilled\)/.test(stPlain) &&
+    rm.code === 0 && /design\.md \(\[DIST\] sections\)/.test(rm.out) && !/Data consistency sections/.test(stRm),
+    "1.17 D4 (CLI): add-track 'distt' gets a did-you-mean, +dist is added (status shows its sections), --remove lists the inactive [DIST] sections and status stops showing them (got " + js([typo.out, rm.out]) + ")");
+  const trk = run(["tracks", "--project", pd]);
+  const pk = run(["tracks", "init", "dist", "--project", pd]);
+  const help = run(["help"]).out;
+  const usage = run(["add-track", "--project", pd]).out;
+  ok(trk.code === 0 && /^Tracks — 7 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+    /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
+    "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the seven built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
+  const kiro = path.join(pd, ".kiro", "specs", "signup");
+  fs.mkdirSync(kiro, { recursive: true });
+  fs.writeFileSync(path.join(kiro, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to sign up.\n\n#### Acceptance Criteria\n\n1. WHEN the user signs up THEN the system SHALL store the user and publish a UserCreated event to Kafka\n");
+  const imp = run(["import", "kiro", ".kiro/specs/signup", "--lang", "en", "--project", pd]);
+  const impDesign = fs.existsSync(path.join(pd, ".specs", "signup", "design.md")) ? rd(pd, ".specs", "signup", "design.md") : "";
+  ok(imp.code === 0 && /\+dist/.test(imp.out) && /## \[DIST\] Cross-system Writes/.test(impDesign),
+    "1.17 D6 (CLI): import kiro auto-classifies a Kafka-publishing spec as +dist and appends the [DIST] design sections (got " + js(imp.out.slice(0, 300)) + ")");
+}
 
 // 1.17 package (A): if (inSection("p17a")) { … }
 

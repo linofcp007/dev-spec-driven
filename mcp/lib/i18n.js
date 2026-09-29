@@ -13,7 +13,7 @@
  * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
- *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY]),
+ *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY], [DIST]),
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
@@ -21,7 +21,7 @@
  *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
- * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS) and RE_* matchers in spec.js.
+ * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in spec.js.
  */
 
 // The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README) and every locale the
@@ -55,9 +55,10 @@ function baseLang(l) {
 // every AC and every planned test is made green by a task (it used to start with AC-3/AC-4/US-2.AC-1 uncovered and
 // T-02 unmapped).
 const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"],
-  sec: ["US-1.AC-10", "US-1.AC-11", "US-1.AC-12"], privacy: ["US-1.AC-13", "US-1.AC-14", "US-1.AC-15"] };
+  sec: ["US-1.AC-10", "US-1.AC-11", "US-1.AC-12"], privacy: ["US-1.AC-13", "US-1.AC-14", "US-1.AC-15"],
+  dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"] }; // +dist (1.17 D)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
-const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy"];
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist"];
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
@@ -102,6 +103,11 @@ function templateTestRows(tracks, row, L, acs) {
     r("US-1.AC-11", L.integration, L.forbidden, "tests/integration/...", "property"), r("US-1.AC-12", L.integration, L.noSecrets, "tests/integration/...", "property"));
   if (T["US-1.AC-13"]) rows.push(r("US-1.AC-13", L.integration, L.exportData, "tests/integration/..."), r("US-1.AC-14", L.integration, L.erasure, "tests/integration/..."),
     r("US-1.AC-15", "unit", L.retention, "tests/unit/..."));
+  // +dist (1.17 D): failure-injection tests; "exactly one effect" and "no lost update" hold for every delivery count /
+  // interleaving → property.
+  if (T["US-1.AC-16"]) rows.push(r("US-1.AC-16", L.integration, L.outboxCrash, "tests/integration/..."),
+    r("US-1.AC-17", L.integration, L.duplicateDelivery, "tests/integration/...", "property"), r("US-1.AC-18", L.integration, L.lostUpdate, "tests/integration/...", "property"),
+    r("US-1.AC-19", L.integration, L.dependencyDown, "tests/integration/..."));
   return rows.join("\n");
 }
 
@@ -156,6 +162,9 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const privacyAc = a.tracks.includes("privacy")
         ? "\n\n#### [PRIVACY] Acceptance Criteria (EARS)\n13. **US-1.AC-13** — WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.\n14. **US-1.AC-14** — WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.\n15. **US-1.AC-15** — WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it."
         : "";
+      const distAc = a.tracks.includes("dist")
+        ? "\n\n#### [DIST] Acceptance Criteria (EARS)\n16. **US-1.AC-16** — IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).\n17. **US-1.AC-17** — WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).\n18. **US-1.AC-18** — WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).\n19. **US-1.AC-19** — IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path]."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -176,7 +185,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -333,6 +342,29 @@ Input types · size/count limits · token counting per type · validation pipeli
 ## [PRIVACY] DPIA (when required — Art. 35)
 > **TODO** — replace with real values (remove this line when done).
 - Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not.
+`;
+      }
+      if (track === "dist") {
+        return `
+## [DIST] Consistency Model
+> **TODO** — replace with real values (remove this line when done).
+- What must be atomic (one transaction) · is ACID required, at which isolation level and why · where consistency is strong and where eventual · the staleness the business accepts · read-your-writes needs.
+
+## [DIST] Cross-system Writes
+> **TODO** — replace with real values (remove this line when done).
+- Every write that touches more than one system (DB + broker, DB + cache, DB + external API) → its mitigation: transactional outbox (+ relay / CDC), inbox, saga with compensations — or the risk explicitly accepted, and by whom.
+
+## [DIST] Delivery & Idempotency
+> **TODO** — replace with real values (remove this line when done).
+- Delivery guarantee (at-least-once) · idempotency keys or natural idempotency · deduplication (inbox table, unique constraint) · retry policy (exponential backoff + jitter, max attempts, what is never retried) · DLQ / poison messages · ordering needs.
+
+## [DIST] Concurrency
+> **TODO** — replace with real values (remove this line when done).
+- Race conditions on each shared record · optimistic (version column) or pessimistic (SELECT … FOR UPDATE) locking · unique constraints · isolation anomalies ruled out (lost update, write skew) · lock timeouts and deadlocks.
+
+## [DIST] Failure Modes
+> **TODO** — replace with real values (remove this line when done).
+- Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job).
 `;
       }
       return "";
@@ -505,6 +537,21 @@ ${phases}`
   - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
+      if (a.track === "dist") {
+        return `
+## Story US-1 — Data Consistency
+- [ ] ${id()}. [US1] Transactional outbox — write the outbox row in the same transaction as the state change; a relay (polling or CDC) publishes it and marks it sent
+  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
+- [ ] ${id()}. [US1] Idempotent consumer — an inbox / processed-message table keyed by the message ID, written in the same transaction as the effect
+  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
+- [ ] ${id()}. [US1] Concurrency control — a version column (optimistic locking) or a unique constraint; a conflict is an error, never a silent overwrite
+  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
+- [ ] ${id()}. [US1] Resilience — timeouts, retries with exponential backoff + jitter (never a non-idempotent call without a key), a DLQ, the degraded path when a dependency is down
+  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
+- [ ] ${id()}. [US1] Failure-injection tests — crash between the commit and the publish, duplicate delivery, concurrent updates, a dependency down — runnable locally
+  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
+`;
+      }
       return "";
     },
 
@@ -612,7 +659,9 @@ ${a.summary || "[one line: the bug being fixed]"}
           golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget",
           unauthenticated: "abuse case: an unauthenticated request gets 401 and no data", forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
           noSecrets: "no secret, token or stack trace in any response or log", exportData: "a subject's export holds all of their personal data, machine-readable",
-          erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized" }, acs);
+          erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized",
+          outboxCrash: "crash between the DB commit and the publish: the event is still delivered", duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
+          lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -735,6 +784,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("ai")) items.push("AI: 10 mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
       if (a.tracks.includes("sec")) items.push("SEC: 5 mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
       if (a.tracks.includes("privacy")) items.push("PRIVACY: 6 mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
+      if (a.tracks.includes("dist")) items.push("DIST: 5 mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -813,6 +863,9 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
       const privacyAc = a.tracks.includes("privacy")
         ? "\n\n#### [PRIVACY] Critérios de Aceitação (EARS)\n13. **US-1.AC-13** — QUANDO um titular dos dados pede uma cópia dos seus dados pessoais, O SISTEMA DEVE exportá-los num formato estruturado e de leitura automática no prazo de um mês.\n14. **US-1.AC-14** — QUANDO o pedido de apagamento de um titular dos dados é aceite, O SISTEMA DEVE apagar ou anonimizar de forma irreversível os seus dados pessoais em todos os repositórios no prazo de um mês.\n15. **US-1.AC-15** — QUANDO o prazo de conservação de um registo termina, O SISTEMA DEVE apagá-lo ou anonimizá-lo."
         : "";
+      const distAc = a.tracks.includes("dist")
+        ? "\n\n#### [DIST] Critérios de Aceitação (EARS)\n16. **US-1.AC-16** — SE a publicação de [o evento] falhar depois do commit da transação na base de dados, ENTÃO O SISTEMA DEVE entregá-lo mais tarde, pelo menos uma vez, sem o perder (outbox transacional).\n17. **US-1.AC-17** — QUANDO a mesma mensagem for entregue mais de uma vez, O SISTEMA DEVE aplicar o seu efeito exatamente uma vez (consumidor idempotente).\n18. **US-1.AC-18** — QUANDO dois pedidos atualizarem a mesma [entidade] em simultâneo, O SISTEMA NÃO DEVE perder nenhuma das atualizações (bloqueio otimista ou uma restrição de unicidade).\n19. **US-1.AC-19** — SE [a dependência] estiver indisponível, ENTÃO O SISTEMA DEVE [degradar / repetir com recuo exponencial e jitter] e NÃO DEVE bloquear [o caminho crítico]."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -833,7 +886,7 @@ Cada história deve entregar valor autónomo se for lançada sozinha.
 1. **US-1.AC-1** — QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 2. **US-1.AC-2** — ENQUANTO [estado], QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 3. **US-1.AC-3** — SE [condição de erro] ENTÃO O SISTEMA DEVE [recuperação]
-4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}${secAc}${privacyAc}
+4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}
 
 ### US-2 (P2): [Título da História]
 **Como** [papel], **quero** [capacidade], **para que** [benefício].
@@ -990,6 +1043,29 @@ Tipos de entrada · limites de tamanho/quantidade · contagem de tokens por tipo
 ## [PRIVACY] AIPD (quando obrigatória — art. 35.º)
 > **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
 - É obrigatória? (risco elevado: categorias especiais em grande escala, controlo sistemático, definição de perfis com efeitos jurídicos…) · se sim: riscos → medidas → risco residual; se não: porque não.
+`;
+      }
+      if (track === "dist") {
+        return `
+## [DIST] Modelo de Consistência
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- O que tem de ser atómico (uma transação) · se ACID é necessário, com que nível de isolamento e porquê · onde a consistência é forte e onde é eventual · o atraso que o negócio aceita · necessidades de ler as próprias escritas.
+
+## [DIST] Escritas entre Sistemas
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Cada escrita que toca mais de um sistema (BD + broker, BD + cache, BD + API externa) → a sua mitigação: outbox transacional (+ relay / CDC), inbox, saga com compensações — ou o risco assumido explicitamente, e por quem.
+
+## [DIST] Entrega e Idempotência
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Garantia de entrega (pelo menos uma vez) · chaves de idempotência ou idempotência natural · deduplicação (tabela inbox, restrição de unicidade) · política de novas tentativas (recuo exponencial + jitter, máximo de tentativas, o que nunca se repete) · DLQ / mensagens venenosas · requisitos de ordem.
+
+## [DIST] Concorrência
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Condições de corrida em cada registo partilhado · bloqueio otimista (coluna de versão) ou pessimista (SELECT … FOR UPDATE) · restrições de unicidade · anomalias de isolamento excluídas (atualização perdida, write skew) · tempos limite de bloqueio e deadlocks.
+
+## [DIST] Modos de Falha
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Falhas parciais e tempos limite por dependência · o que acontece quando cada dependência está indisponível (degradar, pôr em fila, falhar depressa) · partições de rede: o compromisso CAP / PACELC escolhido · recuperação e reconciliação (reprocessamento, compensação, um processo de reconciliação).
 `;
       }
       return "";
@@ -1159,6 +1235,21 @@ ${phases}`
   - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
+      if (a.track === "dist") {
+        return `
+## História US-1 — Consistência de Dados
+- [ ] ${id()}. [US1] Outbox transacional — escrever a linha do outbox na mesma transação que a alteração de estado; um relay (polling ou CDC) publica-a e marca-a como enviada
+  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
+- [ ] ${id()}. [US1] Consumidor idempotente — uma tabela inbox / de mensagens processadas com a chave no ID da mensagem, escrita na mesma transação que o efeito
+  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
+- [ ] ${id()}. [US1] Controlo de concorrência — uma coluna de versão (bloqueio otimista) ou uma restrição de unicidade; um conflito é um erro, nunca uma sobreposição silenciosa
+  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
+- [ ] ${id()}. [US1] Resiliência — tempos limite, novas tentativas com recuo exponencial + jitter (nunca uma chamada não idempotente sem chave), uma DLQ, o caminho degradado quando uma dependência está indisponível
+  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
+- [ ] ${id()}. [US1] Testes de injeção de falhas — falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, uma dependência indisponível — executáveis localmente
+  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
+`;
+      }
       return "";
     },
 
@@ -1267,7 +1358,9 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
           golden: "conjunto golden ≥ limiar de qualidade", injection: "adversarial: instruções injetadas são ignoradas", cost: "custo por pedido dentro do orçamento",
           unauthenticated: "caso de abuso: um pedido não autenticado recebe 401 e nenhum dado", forbidden: "caso de abuso: o utilizador B nunca lê o recurso do utilizador A (403 + evento de auditoria)",
           noSecrets: "nenhum segredo, token ou stack trace em respostas ou logs", exportData: "a exportação de um titular contém todos os seus dados pessoais, em formato de leitura automática",
-          erasure: "após o apagamento nenhum repositório guarda os dados pessoais do titular", retention: "os registos com o prazo de conservação expirado são apagados ou anonimizados" }, acs);
+          erasure: "após o apagamento nenhum repositório guarda os dados pessoais do titular", retention: "os registos com o prazo de conservação expirado são apagados ou anonimizados",
+          outboxCrash: "falha entre o commit na BD e a publicação: o evento é entregue na mesma", duplicateDelivery: "a mesma mensagem entregue duas (ou N) vezes tem exatamente um efeito",
+          lostUpdate: "atualizações concorrentes do mesmo registo: nenhuma se perde em silêncio", dependencyDown: "uma dependência indisponível: degradar / repetir com recuo, o caminho crítico não fica bloqueado" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -1390,6 +1483,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
       if (a.tracks.includes("ai")) items.push("IA: 10 secções obrigatórias de design preenchidas (sem TODO).", "IA: golden ≥ limiar, segurança adversarial 100%, regressão mantida.", "IA: prompts versionados em prompts/vN.md; custo dentro do orçamento.");
       if (a.tracks.includes("sec")) items.push("SEC: 5 secções obrigatórias de design preenchidas (sem TODO) — modelo de ameaças revisto.", "SEC: autenticação + autorização ao nível do objeto impostas, negar por omissão; nenhum segredo no código ou nos logs.", "SEC: SAST, auditoria de dependências e testes de casos de abuso limpos numa execução local.");
       if (a.tracks.includes("privacy")) items.push("PRIVACIDADE: 6 secções obrigatórias de design preenchidas (sem TODO) — decisão sobre a AIPD registada.", "PRIVACIDADE: acesso/exportação e apagamento funcionam de ponta a ponta, em todos os repositórios e subcontratantes.", "PRIVACIDADE: processo de conservação agendado; política de privacidade e registo das atividades de tratamento atualizados.");
+      if (a.tracks.includes("dist")) items.push("DIST: 5 secções obrigatórias de design preenchidas (sem TODO) — cada escrita entre sistemas tem a sua mitigação (outbox / inbox / saga) ou um risco assumido.", "DIST: consumidores idempotentes (inbox ou uma chave única na transação do efeito); novas tentativas com recuo + jitter e uma DLQ; nada não idempotente repetido às cegas.", "DIST: testes de injeção de falhas (falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, dependência indisponível) a verde numa execução local.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar a feature por concluída.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -1468,6 +1562,9 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
       const privacyAc = a.tracks.includes("privacy")
         ? "\n\n#### [PRIVACY] Criterios de Aceptación (EARS)\n13. **US-1.AC-13** — CUANDO un interesado solicita una copia de sus datos personales, EL SISTEMA DEBE exportarlos en un formato estructurado y de lectura mecánica en el plazo de un mes.\n14. **US-1.AC-14** — CUANDO se acepta la solicitud de supresión de un interesado, EL SISTEMA DEBE eliminar o anonimizar de forma irreversible sus datos personales en todos los almacenes en el plazo de un mes.\n15. **US-1.AC-15** — CUANDO vence el plazo de conservación de un registro, EL SISTEMA DEBE eliminarlo o anonimizarlo."
         : "";
+      const distAc = a.tracks.includes("dist")
+        ? "\n\n#### [DIST] Criterios de Aceptación (EARS)\n16. **US-1.AC-16** — SI la publicación de [el evento] falla después del commit de la transacción en la base de datos, ENTONCES EL SISTEMA DEBE entregarlo más tarde, al menos una vez, sin perderlo (outbox transaccional).\n17. **US-1.AC-17** — CUANDO el mismo mensaje se entregue más de una vez, EL SISTEMA DEBE aplicar su efecto exactamente una vez (consumidor idempotente).\n18. **US-1.AC-18** — CUANDO dos solicitudes actualicen la misma [entidad] de forma concurrente, EL SISTEMA NO DEBE perder ninguna de las actualizaciones (bloqueo optimista o una restricción de unicidad).\n19. **US-1.AC-19** — SI [la dependencia] no está disponible, ENTONCES EL SISTEMA DEBE [degradarse / reintentar con retroceso exponencial y jitter] y NO DEBE bloquear [la ruta crítica]."
+        : "";
       return (
 `# Función: ${a.name}
 
@@ -1488,7 +1585,7 @@ Cada historia debe entregar valor autónomo si se lanza sola.
 1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
-4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}
+4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}
 
 ### US-2 (P2): [Título de la Historia]
 **Como** [rol], **quiero** [capacidad], **para que** [beneficio].
@@ -1645,6 +1742,29 @@ Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo ·
 ## [PRIVACY] EIPD (cuando sea obligatoria — art. 35)
 > **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
 - ¿Es obligatoria? (alto riesgo: categorías especiales a gran escala, observación sistemática, elaboración de perfiles con efectos jurídicos…) · si lo es: riesgos → medidas → riesgo residual; si no: por qué no.
+`;
+      }
+      if (track === "dist") {
+        return `
+## [DIST] Modelo de Consistencia
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Qué debe ser atómico (una transacción) · si se requiere ACID, con qué nivel de aislamiento y por qué · dónde la consistencia es fuerte y dónde eventual · el retraso que el negocio acepta · necesidades de leer las propias escrituras.
+
+## [DIST] Escrituras entre Sistemas
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Cada escritura que toca más de un sistema (BD + broker, BD + caché, BD + API externa) → su mitigación: outbox transaccional (+ relay / CDC), inbox, saga con compensaciones — o el riesgo aceptado explícitamente, y por quién.
+
+## [DIST] Entrega e Idempotencia
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Garantía de entrega (al menos una vez) · claves de idempotencia o idempotencia natural · deduplicación (tabla inbox, restricción de unicidad) · política de reintentos (retroceso exponencial + jitter, máximo de intentos, lo que nunca se reintenta) · DLQ / mensajes envenenados · necesidades de orden.
+
+## [DIST] Concurrencia
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Condiciones de carrera en cada registro compartido · bloqueo optimista (columna de versión) o pesimista (SELECT … FOR UPDATE) · restricciones de unicidad · anomalías de aislamiento descartadas (actualización perdida, write skew) · tiempos de espera de bloqueo y deadlocks.
+
+## [DIST] Modos de Fallo
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Fallos parciales y tiempos de espera por dependencia · qué ocurre cuando cada dependencia está caída (degradar, encolar, fallar rápido) · particiones de red: el compromiso CAP / PACELC elegido · recuperación y reconciliación (reprocesamiento, compensación, un proceso de reconciliación).
 `;
       }
       return "";
@@ -1814,6 +1934,21 @@ ${phases}`
   - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
 `;
       }
+      if (a.track === "dist") {
+        return `
+## Historia US-1 — Consistencia de Datos
+- [ ] ${id()}. [US1] Outbox transaccional — escribir la fila del outbox en la misma transacción que el cambio de estado; un relay (polling o CDC) la publica y la marca como enviada
+  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
+- [ ] ${id()}. [US1] Consumidor idempotente — una tabla inbox / de mensajes procesados con la clave en el ID del mensaje, escrita en la misma transacción que el efecto
+  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
+- [ ] ${id()}. [US1] Control de concurrencia — una columna de versión (bloqueo optimista) o una restricción de unicidad; un conflicto es un error, nunca una sobrescritura silenciosa
+  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
+- [ ] ${id()}. [US1] Resiliencia — tiempos de espera, reintentos con retroceso exponencial + jitter (nunca una llamada no idempotente sin clave), una DLQ, la ruta degradada cuando una dependencia está caída
+  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
+- [ ] ${id()}. [US1] Pruebas de inyección de fallos — caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, una dependencia caída — ejecutables localmente
+  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
+`;
+      }
       return "";
     },
 
@@ -1922,7 +2057,9 @@ ${a.summary || "[una línea: el bug a corregir]"}
           golden: "conjunto golden ≥ umbral de calidad", injection: "adversarial: las instrucciones inyectadas se ignoran", cost: "coste por solicitud dentro del presupuesto",
           unauthenticated: "caso de abuso: una solicitud no autenticada recibe 401 y ningún dato", forbidden: "caso de abuso: el usuario B nunca lee el recurso del usuario A (403 + evento de auditoría)",
           noSecrets: "ningún secreto, token ni stack trace en respuestas o logs", exportData: "la exportación de un interesado contiene todos sus datos personales, en formato de lectura mecánica",
-          erasure: "tras la supresión ningún almacén conserva los datos personales del interesado", retention: "los registros con el plazo de conservación vencido se eliminan o anonimizan" }, acs);
+          erasure: "tras la supresión ningún almacén conserva los datos personales del interesado", retention: "los registros con el plazo de conservación vencido se eliminan o anonimizan",
+          outboxCrash: "caída entre el commit en la BD y la publicación: el evento se entrega igualmente", duplicateDelivery: "el mismo mensaje entregado dos (o N) veces tiene exactamente un efecto",
+          lostUpdate: "actualizaciones concurrentes del mismo registro: ninguna se pierde en silencio", dependencyDown: "una dependencia caída: degradar / reintentar con retroceso, la ruta crítica no se bloquea" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -2045,6 +2182,7 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
       if (a.tracks.includes("ai")) items.push("IA: 10 secciones obligatorias de diseño rellenadas (sin TODO).", "IA: golden ≥ umbral, seguridad adversarial 100%, regresión mantenida.", "IA: prompts versionados en prompts/vN.md; coste dentro del presupuesto.");
       if (a.tracks.includes("sec")) items.push("SEC: 5 secciones obligatorias de diseño rellenadas (sin TODO) — modelo de amenazas revisado.", "SEC: autenticación + autorización a nivel de objeto impuestas, denegar por defecto; ningún secreto en el código ni en los logs.", "SEC: SAST, auditoría de dependencias y pruebas de casos de abuso limpias en una ejecución local.");
       if (a.tracks.includes("privacy")) items.push("PRIVACIDAD: 6 secciones obligatorias de diseño rellenadas (sin TODO) — decisión sobre la EIPD registrada.", "PRIVACIDAD: acceso/exportación y supresión funcionan de extremo a extremo, en todos los almacenes y encargados.", "PRIVACIDAD: proceso de conservación programado; política de privacidad y registro de actividades de tratamiento actualizados.");
+      if (a.tracks.includes("dist")) items.push("DIST: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada escritura entre sistemas tiene su mitigación (outbox / inbox / saga) o un riesgo aceptado.", "DIST: consumidores idempotentes (inbox o una clave única en la transacción del efecto); reintentos con retroceso + jitter y una DLQ; nada no idempotente reintentado a ciegas.", "DIST: pruebas de inyección de fallos (caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, dependencia caída) en verde en una ejecución local.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar la función por terminada.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -2108,6 +2246,9 @@ const STEERING = {
       "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
     "privacy.md":
       "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
+    // 1.17 D — +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
+    "distributed.md":
+      "# Distributed Systems & Data Consistency Standards\n\n## Delivery Guarantee\n- Default: at-least-once — every consumer is idempotent. Exactly-once is an effect of idempotency, never a broker promise.\n- Ordering: per key (partition / message group) only where a feature says so: []\n\n## Cross-system Writes\n- A write that touches more than one system (DB + broker, DB + cache, DB + external API) goes through a transactional outbox (or CDC) — never \"commit, then publish\".\n- Business transactions across services: a saga with one compensation per step; orchestration or choreography: []\n\n## Idempotency\n- Idempotency key source (client header / message ID / natural key): [] · where processed keys live (inbox table / unique constraint) and for how long: []\n\n## Retry Policy (defaults)\n- Exponential backoff with jitter · max attempts: [] · per-call timeout: []\n- Never retried: a non-idempotent call without a key, a validation error (4xx) · poison messages → DLQ after [] attempts, with an alert.\n\n## Locking Policy\n- Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: []\n\n## Consistency Defaults\n- Default isolation level: [] · where eventual consistency is accepted and the maximum staleness: [] · read-your-writes for the user who wrote.\n\n## Observability\n- Outbox lag, consumer lag, DLQ depth and retry counts are metrics with alerts: []\n",
     // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -2135,8 +2276,10 @@ const STEERING = {
       "# Padrões de Segurança\n\n## Nível de Garantia\n- Nível OWASP ASVS alvo: [L1 | L2 | L3] — porquê: []\n\n## Modelação de Ameaças\n- Método: STRIDE por componente e fronteira de confiança, revisto a cada alteração de design.\n- Onde ficam os modelos de ameaças: no design.md de cada feature +sec → Modelo de Ameaças.\n\n## Autenticação e Autorização\n- Fornecedor de identidade / modelo de sessão: []\n- Modelo de autorização (RBAC / ABAC / verificação de titularidade), negar por omissão: []\n\n## Segredos e Criptografia\n- Cofre de segredos: [] — nunca no código, em configuração versionada, em logs ou em tickets.\n- Cifragem em repouso / em trânsito (versão de TLS, rotação de chaves): []\n\n## Regras de Código Seguro\n- Validar a entrada nas fronteiras de confiança; codificar a saída; só queries parametrizadas.\n- Nenhum segredo, token ou stack trace em respostas ou logs.\n\n## Testes de Segurança (locais)\n- SAST: [] · auditoria de dependências: [] · análise de segredos: [] · DAST (serviços expostos): []\n- Cada ameaça relevante tem um teste de caso de abuso.\n\n## Gestão de Vulnerabilidades\n- Prazos de correção por severidade (crítica / alta / média): [] · quem faz a triagem: []\n",
     "privacy.md":
       "# Padrões de Privacidade (RGPD)\n\n## Papéis\n- Responsável pelo tratamento: [] · EPD / contacto de privacidade: [] · autoridade de controlo: [ex.: CNPD]\n\n## Princípios (RGPD, art. 5.º)\n- Licitude, lealdade e transparência · limitação das finalidades · minimização dos dados · exatidão · limitação da conservação · integridade e confidencialidade · responsabilidade.\n\n## Registo das Atividades de Tratamento (art. 30.º)\n- Onde está o registo das atividades de tratamento: []\n\n## Fundamentos de Licitude em Uso (art. 6.º)\n- [atividade de tratamento → fundamento de licitude]\n\n## Prazos de Conservação\n| Categoria de dados | Prazo de conservação | Método de eliminação |\n|---|---|---|\n| | | |\n\n## Pedidos dos Titulares\n- Canal · verificação de identidade · prazo de um mês (art. 12.º, n.º 3) · responsável: []\n\n## Subcontratantes e Transferências\n- Subcontratantes aprovados (contratos do art. 28.º): [] · transferências para fora do EEE e a sua garantia: []\n\n## Proteção de Dados desde a Conceção (art. 25.º)\n- Por omissão: recolher o mínimo, pseudonimizar sempre que possível, sem dados pessoais nos logs.\n\n## Resposta a Violações de Dados\n- Notificar a autoridade de controlo no prazo de 72 horas (art. 33.º) · runbook: []\n",
+    "distributed.md":
+      "# Padrões de Sistemas Distribuídos e Consistência de Dados\n\n## Garantia de Entrega\n- Por omissão: pelo menos uma vez — todos os consumidores são idempotentes. \"Exatamente uma vez\" é um efeito da idempotência, nunca uma promessa do broker.\n- Ordem: por chave (partição / grupo de mensagens) só onde uma feature o pede: []\n\n## Escritas entre Sistemas\n- Uma escrita que toca mais de um sistema (BD + broker, BD + cache, BD + API externa) passa por um outbox transacional (ou CDC) — nunca \"commit e depois publicar\".\n- Transações de negócio entre serviços: uma saga com uma compensação por passo; orquestração ou coreografia: []\n\n## Idempotência\n- Origem da chave de idempotência (cabeçalho do cliente / ID da mensagem / chave natural): [] · onde ficam as chaves processadas (tabela inbox / restrição de unicidade) e durante quanto tempo: []\n\n## Política de Novas Tentativas (valores por omissão)\n- Recuo exponencial com jitter · máximo de tentativas: [] · tempo limite por chamada: []\n- Nunca repetir: uma chamada não idempotente sem chave, um erro de validação (4xx) · mensagens venenosas → DLQ após [] tentativas, com alerta.\n\n## Política de Bloqueio\n- Por omissão: bloqueio otimista (uma coluna de versão); pessimista (SELECT … FOR UPDATE) só em secções curtas e muito disputadas · tempo limite de bloqueio: []\n\n## Consistência por Omissão\n- Nível de isolamento por omissão: [] · onde se aceita a consistência eventual e o atraso máximo: [] · ler as próprias escritas para o utilizador que escreveu.\n\n## Observabilidade\n- Atraso do outbox, atraso dos consumidores, profundidade da DLQ e número de novas tentativas são métricas com alertas: []\n",
     "glossary.md":
-      "# Glossário\n\n<!-- A linguagem ubíqua do produto: uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
+      "# Glossário\n\n<!-- A linguagem ubíqua do produto:uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
   },
   es: {
     "constitution.md":
@@ -2161,8 +2304,10 @@ const STEERING = {
       "# Estándares de Seguridad\n\n## Nivel de Garantía\n- Nivel OWASP ASVS objetivo: [L1 | L2 | L3] — por qué: []\n\n## Modelado de Amenazas\n- Método: STRIDE por componente y frontera de confianza, revisado en cada cambio de diseño.\n- Dónde viven los modelos de amenazas: en el design.md de cada función +sec → Modelo de Amenazas.\n\n## Autenticación y Autorización\n- Proveedor de identidad / modelo de sesión: []\n- Modelo de autorización (RBAC / ABAC / comprobación de propiedad), denegar por defecto: []\n\n## Secretos y Criptografía\n- Almacén de secretos: [] — nunca en el código, en configuración versionada, en logs ni en tickets.\n- Cifrado en reposo / en tránsito (versión de TLS, rotación de claves): []\n\n## Reglas de Código Seguro\n- Validar la entrada en las fronteras de confianza; codificar la salida; solo queries parametrizadas.\n- Ningún secreto, token ni stack trace en respuestas o logs.\n\n## Pruebas de Seguridad (locales)\n- SAST: [] · auditoría de dependencias: [] · análisis de secretos: [] · DAST (servicios expuestos): []\n- Cada amenaza relevante tiene una prueba de caso de abuso.\n\n## Gestión de Vulnerabilidades\n- Plazos de corrección por severidad (crítica / alta / media): [] · quién hace el triaje: []\n",
     "privacy.md":
       "# Estándares de Privacidad (RGPD)\n\n## Roles\n- Responsable del tratamiento: [] · DPD / contacto de privacidad: [] · autoridad de control: [p.ej., AEPD]\n\n## Principios (RGPD, art. 5)\n- Licitud, lealtad y transparencia · limitación de la finalidad · minimización de datos · exactitud · limitación del plazo de conservación · integridad y confidencialidad · responsabilidad proactiva.\n\n## Registro de Actividades de Tratamiento (art. 30)\n- Dónde está el registro de actividades de tratamiento: []\n\n## Bases Jurídicas en Uso (art. 6)\n- [actividad de tratamiento → base jurídica]\n\n## Plazos de Conservación\n| Categoría de datos | Plazo de conservación | Método de supresión |\n|---|---|---|\n| | | |\n\n## Solicitudes de los Interesados\n- Canal · verificación de identidad · plazo de un mes (art. 12.3) · responsable: []\n\n## Encargados y Transferencias\n- Encargados aprobados (contratos del art. 28): [] · transferencias fuera del EEE y su garantía: []\n\n## Protección de Datos desde el Diseño (art. 25)\n- Por defecto: recoger lo mínimo, seudonimizar siempre que sea posible, sin datos personales en los logs.\n\n## Respuesta a Brechas de Datos\n- Notificar a la autoridad de control en un plazo de 72 horas (art. 33) · runbook: []\n",
+    "distributed.md":
+      "# Estándares de Sistemas Distribuidos y Consistencia de Datos\n\n## Garantía de Entrega\n- Por defecto: al menos una vez — todos los consumidores son idempotentes. \"Exactamente una vez\" es un efecto de la idempotencia, nunca una promesa del broker.\n- Orden: por clave (partición / grupo de mensajes) solo donde una función lo pide: []\n\n## Escrituras entre Sistemas\n- Una escritura que toca más de un sistema (BD + broker, BD + caché, BD + API externa) pasa por un outbox transaccional (o CDC) — nunca \"commit y después publicar\".\n- Transacciones de negocio entre servicios: una saga con una compensación por paso; orquestación o coreografía: []\n\n## Idempotencia\n- Origen de la clave de idempotencia (cabecera del cliente / ID del mensaje / clave natural): [] · dónde viven las claves procesadas (tabla inbox / restricción de unicidad) y durante cuánto tiempo: []\n\n## Política de Reintentos (valores por defecto)\n- Retroceso exponencial con jitter · máximo de intentos: [] · tiempo de espera por llamada: []\n- Nunca se reintenta: una llamada no idempotente sin clave, un error de validación (4xx) · mensajes envenenados → DLQ tras [] intentos, con alerta.\n\n## Política de Bloqueo\n- Por defecto: bloqueo optimista (una columna de versión); pesimista (SELECT … FOR UPDATE) solo en secciones cortas y muy disputadas · tiempo de espera del bloqueo: []\n\n## Consistencia por Defecto\n- Nivel de aislamiento por defecto: [] · dónde se acepta la consistencia eventual y el retraso máximo: [] · leer las propias escrituras para el usuario que escribió.\n\n## Observabilidad\n- Retraso del outbox, retraso de los consumidores, profundidad de la DLQ y número de reintentos son métricas con alertas: []\n",
     "glossary.md":
-      "# Glosario\n\n<!-- El lenguaje ubicuo del producto: una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
+      "# Glosario\n\n<!-- El lenguaje ubicuo del producto:una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
   },
 };
 
@@ -2274,7 +2419,7 @@ const MSG = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore | flow",
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -3263,19 +3408,23 @@ const MSG = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled" }, // doctor's sec-sections / privacy-sections pass detail
-      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}` }, // `dev-spec status`
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
         privacy: ["+privacy: access/export and erasure verified end to end on the real stores (processors included).",
           "+privacy: retention job scheduled; privacy notice and records of processing (Art. 30) updated; DPIA decision on file."],
+        dist: ["+dist: failure-injection tests green on a fresh local run — crash between commit and publish, duplicate delivery, concurrent updates, a dependency down.",
+          "+dist: no cross-system write in the final code bypasses its mitigation (outbox / inbox / saga) — no database commit followed by a direct publish."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
         secSecrets: "Specify which secrets / credentials the feature handles and that none of them reaches a response or a log (write it as an AC).",
         privacyRights: "Specify the data subject rights the feature must serve (access, erasure, portability…) as ACs, with the one-month deadline.",
         privacyRetention: "Specify how long each category of personal data is kept and what happens when that period ends.",
+        distDelivery: "Specify the delivery guarantee (at-least-once) and how a message delivered twice is detected and applied once (idempotency key, inbox) — write it as an AC.",
+        distFailure: "Specify what the feature does when each dependency (database, broker, external API) is unavailable or times out — as IF … THEN THE SYSTEM SHALL criteria.",
       },
     },
 
@@ -3378,7 +3527,7 @@ const MSG = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",
@@ -4121,7 +4270,7 @@ _Outcome: [go | no-go | pivot]_
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
       badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
-      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy",
+      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
@@ -5041,20 +5190,26 @@ _Outcome: [go | no-go | pivot]_
         "Personal Data Inventory": "Inventário de Dados Pessoais", "Lawful Basis & Purpose": "Fundamento de Licitude e Finalidade",
         "Retention & Deletion": "Conservação e Eliminação", "Data Subject Rights": "Direitos dos Titulares dos Dados",
         "Processors & International Transfers": "Subcontratantes e Transferências Internacionais", "DPIA": "AIPD",
+        "Consistency Model": "Modelo de Consistência", "Cross-system Writes": "Escritas entre Sistemas", "Delivery & Idempotency": "Entrega e Idempotência",
+        "Concurrency": "Concorrência", "Failure Modes": "Modos de Falha",
       },
-      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas" },
-      statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}` },
+      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas", dist: "as 5 preenchidas" },
+      statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}`, dist: (list) => `Secções de consistência de dados: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoria de dependências e análise de segredos limpos numa execução local nova; todos os testes de casos de abuso a verde.",
           "+sec: modelo de ameaças revisto contra o código final — nenhum ponto de entrada ou fronteira de confiança novo sem mitigação."],
         privacy: ["+privacy: acesso/exportação e apagamento verificados de ponta a ponta nos repositórios reais (subcontratantes incluídos).",
           "+privacy: processo de conservação agendado; política de privacidade e registo das atividades de tratamento (art. 30.º) atualizados; decisão sobre a AIPD registada."],
+        dist: ["+dist: testes de injeção de falhas a verde numa execução local nova — falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, uma dependência indisponível.",
+          "+dist: nenhuma escrita entre sistemas no código final contorna a sua mitigação (outbox / inbox / saga) — nenhum commit na base de dados seguido de uma publicação direta."],
       },
       clarify: {
         secAccess: "Especifica o que recebe quem chama sem autenticação ou sem autorização (SE … ENTÃO O SISTEMA DEVE negar …) e o nível ASVS que a feature visa.",
         secSecrets: "Especifica que segredos / credenciais a feature trata e que nenhum chega a uma resposta ou a um log (escreve-o como AC).",
         privacyRights: "Especifica os direitos dos titulares que a feature tem de satisfazer (acesso, apagamento, portabilidade…) como ACs, com o prazo de um mês.",
         privacyRetention: "Especifica durante quanto tempo é conservada cada categoria de dados pessoais e o que acontece quando esse prazo termina.",
+        distDelivery: "Especifica a garantia de entrega (pelo menos uma vez) e como uma mensagem entregue duas vezes é detetada e aplicada uma só vez (chave de idempotência, inbox) — escreve-o como AC.",
+        distFailure: "Especifica o que a feature faz quando cada dependência (base de dados, broker, API externa) está indisponível ou excede o tempo limite — como critérios SE … ENTÃO O SISTEMA DEVE.",
       },
     },
 
@@ -5149,7 +5304,7 @@ _Outcome: [go | no-go | pivot]_
       initJson: (a) => `// Track pack +${a.name} — um track definido pelo projeto (dev-spec 1.15). Só dados: nada nesta pasta é executado.
 // Guia: references/project-tracks.md · validação: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy).
+  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy dist).
   "name": "${a.name}",
   // O marcador estável (sensível a maiúsculas) das secções de design, dos critérios e do bloco de tarefas: [${a.token}].
   "marker": "${a.token}",
@@ -5851,7 +6006,7 @@ _Outcome: [go | no-go | pivot]_
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       badAction: "la acción debe ser: remove | archive | rename | restore | flow",
-      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -6771,20 +6926,26 @@ _Outcome: [go | no-go | pivot]_
         "Personal Data Inventory": "Inventario de Datos Personales", "Lawful Basis & Purpose": "Base Jurídica y Finalidad",
         "Retention & Deletion": "Conservación y Supresión", "Data Subject Rights": "Derechos de los Interesados",
         "Processors & International Transfers": "Encargados del Tratamiento y Transferencias Internacionales", "DPIA": "EIPD",
+        "Consistency Model": "Modelo de Consistencia", "Cross-system Writes": "Escrituras entre Sistemas", "Delivery & Idempotency": "Entrega e Idempotencia",
+        "Concurrency": "Concurrencia", "Failure Modes": "Modos de Fallo",
       },
-      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas" },
-      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}` },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas" },
+      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
           "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
         privacy: ["+privacy: acceso/exportación y supresión verificados de extremo a extremo en los almacenes reales (encargados incluidos).",
           "+privacy: proceso de conservación programado; política de privacidad y registro de actividades de tratamiento (art. 30) actualizados; decisión sobre la EIPD registrada."],
+        dist: ["+dist: pruebas de inyección de fallos en verde en una ejecución local nueva — caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, una dependencia caída.",
+          "+dist: ninguna escritura entre sistemas del código final se salta su mitigación (outbox / inbox / saga) — ningún commit en la base de datos seguido de una publicación directa."],
       },
       clarify: {
         secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
         secSecrets: "Especifica qué secretos / credenciales maneja la función y que ninguno llega a una respuesta o a un log (escríbelo como AC).",
         privacyRights: "Especifica los derechos de los interesados que la función debe atender (acceso, supresión, portabilidad…) como ACs, con el plazo de un mes.",
         privacyRetention: "Especifica cuánto tiempo se conserva cada categoría de datos personales y qué ocurre cuando vence ese plazo.",
+        distDelivery: "Especifica la garantía de entrega (al menos una vez) y cómo un mensaje entregado dos veces se detecta y se aplica una sola vez (clave de idempotencia, inbox) — escríbelo como AC.",
+        distFailure: "Especifica qué hace la función cuando cada dependencia (base de datos, broker, API externa) no está disponible o agota el tiempo de espera — como criterios SI … ENTONCES EL SISTEMA DEBE.",
       },
     },
 
@@ -6879,7 +7040,7 @@ _Outcome: [go | no-go | pivot]_
       initJson: (a) => `// Track pack +${a.name} — un track definido por el proyecto (dev-spec 1.15). Solo datos: nada de esta carpeta se ejecuta.
 // Guía: references/project-tracks.md · valídalo: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy).
+  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist).
   "name": "${a.name}",
   // El marcador estable (distingue mayúsculas) de sus secciones de diseño, criterios y bloque de tareas: [${a.token}].
   "marker": "${a.token}",
@@ -7961,6 +8122,8 @@ const PTBR_W = "\\p{L}\\p{N}_"; // word characters
 
 // 0. Exact European fragments the rules would get wrong → Brazilian (case-sensitive, applied first, then protected).
 const PTBR_OVERRIDES = [
+  // +dist (1.17 D): a race condition is a "condição de corrida" in Brazil too — never the "corrida" (a run) → "executada" rule
+  ["Condições de corrida", "Condições de corrida"], ["condições de corrida", "condições de corrida"], ["condição de corrida", "condição de corrida"],
   ["caminho/ficheiro.test.js", "caminho/arquivo.test.js"], // an example path inside a _Verify:_ placeholder
   ["<ficheiro>", "<arquivo>"], ["<artefacto>", "<artefato>"], // placeholders inside a path / URI
   ["Põe-no a falhar", "Faça-o falhar"],
@@ -8118,6 +8281,7 @@ const RE_PTBR_CLAUSE = /(?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+•]|\d+[.)])[ \t]+)
 
 // 5. Single words (a key may carry a hyphen: palavra-passe). Verb forms not listed keep their spelling (it is shared).
 const PTBR_WORDS = {
+  atómico: "atômico", atómica: "atômica", atómicos: "atômicos", atómicas: "atômicas", // +dist (1.17 D)
   utilizador: "usuário", utilizadores: "usuários", utilizadora: "usuária", utilizadoras: "usuárias", utente: "usuário", utentes: "usuários",
   ficheiro: "arquivo", ficheiros: "arquivos", ecrã: "tela", ecrãs: "telas", equipa: "equipe", equipas: "equipes",
   "palavra-passe": "senha", "palavras-passe": "senhas", telemóvel: "celular", telemóveis: "celulares",

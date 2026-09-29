@@ -40,7 +40,7 @@ the principles the code *already* follows (e.g. "all DB access goes through the 
 For each module you document: `spec_create` a feature, then fill `requirements.md` and `design.md`
 to describe **what the code does today** (note "reverse-engineered" at the top). Keep AC IDs stable.
 Where helpful, classify the module into tracks (a payment module is `+tdd`; a multi-tenant API is
-`+saas`; a login or an admin API `+sec`; anything holding personal data `+privacy`) so the mandatory sections
+`+saas`; a login or an admin API `+sec`; anything holding personal data `+privacy`; a service that writes a database and publishes events `+dist`) so the mandatory sections
 prompt you to capture isolation/observability/cost, threat-model and data-inventory reality.
 
 **Validate accuracy:** the reverse-engineered spec must match real behavior — endpoints match

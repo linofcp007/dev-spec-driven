@@ -311,7 +311,7 @@ slug loses part of the name — `Sprint α` → `sprint-<8 hex>`) without touchi
 
 **Gherkin (1.16 — `format: "gherkin"`, CLI `export [feature] --gherkin`).** One `.feature` per feature for a BDD
 runner (Cucumber, behave, SpecFlow…): the feature's title and summary, its active tracks as tags (`@SaaS` `@AI` `@SEC`
-`@PRIVACY` `@tdd` …), and one `Scenario` per current acceptance criterion tagged `@US-n.AC-m`, the T-IDs the test plan
+`@PRIVACY` `@DIST` `@tdd` …), and one `Scenario` per current acceptance criterion tagged `@US-n.AC-m`, the T-IDs the test plan
 plans for it (`@T-01`) and the marker of the track that defines it. The steps are the criterion's own EARS clauses —
 `WHILE` / `WHERE` / `IF` → `Given`, `WHEN` → `When`, the `SHALL` response → `Then`, verbatim (`THEN` only marks the
 response); a ubiquitous criterion is a `Then` (with a `Given` for a lead set off by a comma). A criterion whose

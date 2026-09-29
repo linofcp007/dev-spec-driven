@@ -6925,7 +6925,7 @@ function endRun() {
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy" &&
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist" && // 1.17 D: + dist
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -7534,7 +7534,7 @@ function endRun() {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 28 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 29 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -7546,10 +7546,10 @@ function endRun() {
     const tplDir = path.join(pi, ".specs", "templates");
     ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
       i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 28 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      i3.created.length === 29 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
       fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
       S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 28 (1.16: + steering/glossary.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 29 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -12068,9 +12068,9 @@ function endRun() {
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
-      "feature F4: spec_tracks list shows the six built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
+      "feature F4: spec_tracks list shows the seven built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 
     // Classification: spec_classify with the project picks +a11y from its signals (a strong keyword); without it, never.
     const cl = payload(await call("spec_classify", { description: "Make the settings page usable with a screen reader and the keyboard", projectDir: tp }));
@@ -14368,6 +14368,278 @@ function endRun() {
   }
 
   // 1.17 package (D) — +dist track: distributed systems and data consistency.
+
+  { // 1.17 D — the built-in +dist track end to end: registry, classifier (EN / PT / ES), scaffolds (EN / PT / ES / pt-BR), gates, views
+    const I = require("./lib/i18n.js");
+    const js = (v) => JSON.stringify(v);
+    const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
+    const dRoot = path.join(tmp, "p17d");
+    const d = (n) => path.join(dRoot, n);
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
+
+    // --- D1: the registry
+    const typo = S.createFeature(d("typo"), "Typo", "distt");
+    const alias = S.createFeature(d("typo"), "Typo", ["kafka"]);
+    ok(S.VALID_TRACKS.includes("dist") && S.OPTIONAL_TRACKS[S.OPTIONAL_TRACKS.length - 1] === "dist" && S.TRACK_MARKER.dist === "[DIST]" &&
+      S.trackLabel(S.normalizeTracks("+dist privacy tdd")) === "core +tdd +privacy +dist" && S.trackSections("dist").map((x) => x.name).join() === "Consistency Model,Cross-system Writes,Delivery & Idempotency,Concurrency,Failure Modes" &&
+      !typo.ok && /did you mean 'dist'/.test(typo.error) && !alias.ok && /'kafka' \(did you mean 'dist'\?\)/.test(alias.error),
+      "1.17 D1: dist is a valid, composable marker track ([DIST], 5 sections, labelled after privacy); 'distt' / 'kafka' get a did-you-mean (got " + js([S.OPTIONAL_TRACKS, typo.error, alias.error]) + ")");
+
+    // --- D2: the user's example turns +dist on in EN / PT / ES (and without Kafka, from the gap phrase + other services)
+    const exEn = cls("Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services");
+    const exPt = cls("Criar um endpoint que grava um utilizador no Postgres e publica um evento UserCreated no Kafka para outros serviços");
+    const exEs = cls("Crear un endpoint que escribe un usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios");
+    const exNoKafka = cls("Create an endpoint that writes a user to Postgres and publishes a UserCreated event for other services");
+    ok([exEn, exPt, exEs].every((r) => r.label === "core +dist" && r.signals.dist.includes("kafka") && r.confidence.dist === "high") && exPt.lang === "pt" && exEs.lang === "es" &&
+      exEn.signals.dist.includes("publish … event") && exPt.signals.dist.includes("public … evento") && exEs.signals.dist.includes("otros servicios") &&
+      exNoKafka.tracks.includes("dist") && exNoKafka.weak.includes("dist") && /\+dist: ON/.test(exEn.reasoning),
+      "1.17 D2: the user's example (Postgres + a UserCreated event to Kafka for other services) is core +dist in EN / PT / ES; without Kafka the gap phrase 'publish … event' + 'other services' still turn it on (weak-only) (got " +
+      js([exEn.signals.dist, exPt.signals.dist, exEs.signals.dist, exNoKafka.signals.dist]) + ")");
+
+    // --- D3: negatives and 'possible' — plain CRUD, a lone retry, an events app, DOM events, video streaming, an account lock, CDC the agency
+    const neg = {
+      crud: cls("Create an endpoint that writes a user to Postgres and returns it"),
+      retry: cls("Retry the image upload when the network drops"),
+      retries: cls("Retry failed uploads; limit retries to 3"),
+      events: cls("Organizers can publish an event and sell tickets"),
+      click: cls("Add a click event listener to the button"),
+      video: cls("Video streaming page with a playlist"),
+      lock: cls("Lock the account after 5 failed login attempts; the user can retry after 15 minutes"),
+      cdc: cls("Health dashboard following CDC guidelines"),
+      audit: cls("Store audit events in Postgres"),
+    };
+    const offAll = Object.values(neg).every((r) => !r.tracks.includes("dist"));
+    const possible = (r) => r.possible.some((p) => p.track === "dist");
+    ok(offAll && !neg.crud.signals.dist.length && !possible(neg.crud) && possible(neg.retry) && possible(neg.retries) && js(neg.retries.signals.dist) === js(["retry"]) &&
+      possible(neg.events) && !neg.click.signals.dist.length && !neg.video.signals.dist.length && possible(neg.lock) && neg.lock.tracks.includes("tdd") && possible(neg.cdc) &&
+      !neg.audit.signals.dist.length && cls("the health CDC report").signals.dist.includes("CDC") && !cls("the cdc report").signals.dist.length,
+      "1.17 D3: no +dist from plain CRUD, a click event, video streaming or audit events; a lone retry (one concept: 'retry' + 'retries'), 'publish an event' on an events app, an account lock's retry, 'CDC' — only 'possible' (got " +
+      js(Object.fromEntries(Object.entries(neg).map(([k, r]) => [k, [r.label, r.signals.dist]]))) + ")");
+
+    // --- D4: pairs of weak signals, shadowing, shared keywords, negation annotates
+    const pair = cls("Queue the welcome email and retry with exponential backoff");
+    const mq = cls("Consume orders from a message queue");
+    const both = cls("Stream processing of clicks with exactly-once semantics");
+    const kept = cls("Plain CRUD endpoint for users, no Kafka and no events");
+    const although = cls("Kafka consumer for orders — no distributed transactions");
+    const saga = cls("Implement checkout as a saga with compensating transactions across the order and payment services");
+    const lockOpt = cls("Use optimistic locking so concurrent updates to the cart never overwrite each other");
+    ok(pair.tracks.includes("dist") && pair.weak.includes("dist") && mq.tracks.includes("dist") && !mq.signals.saas.includes("queue") && !mq.possible.some((p) => p.track === "saas") &&
+      both.tracks.includes("dist") && both.tracks.includes("tdd") && both.signals.tdd.includes("exactly-once") && both.signals.dist.includes("exactly-once") &&
+      !kept.tracks.includes("dist") && kept.notes.some((n) => /\+dist kept off — 'kafka'/.test(n)) &&
+      although.tracks.includes("dist") && although.notes.some((n) => /\+dist is ON although 'distributed transaction' appeared negated/.test(n)) &&
+      saga.tracks.includes("dist") && saga.signals.dist.includes("compensating transaction") && lockOpt.signals.dist.includes("optimistic locking"),
+      "1.17 D4: two weak signals turn +dist on (weak-only); 'queue' inside 'message queue' is no +saas hint; 'exactly-once' serves +tdd and +dist; a negated signal keeps it off with a note or annotates it when a strong one wins (got " +
+      js([pair.signals.dist, mq.signals, both.signals.dist, kept.notes, although.notes]) + ")");
+
+    // --- D5: self-match sweep — every +dist keyword (EN / PT / ES) matches itself as a word; a strong one alone turns the track on
+    const probe = { "public … evento": "publicar … evento", "public … mensagem": "publicou … mensagem", "public … mensaje": "publicó … mensaje", reintento: "reintentar" };
+    const sweep = [];
+    const sg = S.trackSignals("dist");
+    for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
+      const r = S.classify("We need " + (probe[kw] || kw) + " here");
+      if (!r.signals.dist.some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes("dist"))) sweep.push(tier + ":" + kw);
+    }
+    const ctxAlone = cls("The transaction keeps the totals consistent and atomic");
+    ok(sweep.length === 0 && sg.strong.length > 60 && sg.weak.length > 40 && sg.context.includes("transaction") && !ctxAlone.signals.dist.length && !possible(ctxAlone) &&
+      cls("We publish updates. The event page lists them").signals.dist.length === 0 && cls("publishes an OrderPlaced domain event").signals.dist.includes("domain event"),
+      "1.17 D5: self-match sweep — every +dist keyword matches itself (gap phrases and verb stems probed by a conjugation); context words alone are no signal; a gap never crosses a sentence (misses: " + sweep.join(", ") + ")");
+    const mcpCls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", projectDir: d("mcp") } }));
+    const tl = await rpc("tools/list", {});
+    const addDesc = ((tl.result.tools.find((t) => t.name === "spec_add_track") || {}).inputSchema || { properties: { track: {} } }).properties.track.description || "";
+    ok(mcpCls.label === "core +dist" && /sec \| privacy \| dist/.test(addDesc),
+      "1.17 D5: spec_classify (MCP) reports core +dist for the example; the spec_add_track schema names dist (got " + js([mcpCls.label, addDesc]) + ")");
+
+    // --- D6: scaffold per language: 5 [DIST] sections with the TODO sentinel, the [DIST] criteria, fresh artifacts read 'placeholder',
+    // dist-sections fails and the design approval is refused while TODO; filled, it passes
+    const unfilledWord = { en: /unfilled/, pt: /por preencher/, es: /sin rellenar/, "pt-BR": /sem preencher/ };
+    const titles = { en: "Cross-system Writes", pt: "Escritas entre Sistemas", es: "Escrituras entre Sistemas", "pt-BR": "Escritas entre Sistemas" };
+    for (const lang of ["en", "pt", "es", "pt-BR"]) {
+      const p = d("scaffold-" + lang);
+      const f = S.createFeature(p, "Dist " + lang, ["dist"], "", undefined, lang);
+      const design = rd(f.dir, "design.md"), reqs = rd(f.dir, "requirements.md"), tasks = rd(f.dir, "tasks.md");
+      const heads = design.split("\n").filter((l) => /^## \[DIST\] /.test(l));
+      const e = S.earsValidate(reqs, lang);
+      const own = e.issues.filter((i) => i.code !== "placeholder" && /US-1\.AC-1[6-9]/.test(i.text || ""));
+      const states = fs.readdirSync(f.dir).filter((n) => n.endsWith(".md") && n !== "checklist.md").map((n) => [n, S.artifactState(path.join(f.dir, n))]);
+      const before = S.specDoctor(p, f.slug);
+      S.approvePhase(p, f.slug, "classification", "t", { force: true });
+      S.approvePhase(p, f.slug, "requirements", "t", { force: true });
+      const refused = S.approvePhase(p, f.slug, "design", "t");
+      dropTodo(path.join(f.dir, "design.md"));
+      const after = S.specDoctor(p, f.slug);
+      const retry = S.approvePhase(p, f.slug, "design", "t");
+      ok(f.ok && f.label === "core +dist" && heads.length === 5 && design.includes(titles[lang]) && (design.match(/^> \*\*TODO\*\*/gm) || []).length === 5 &&
+        reqs.includes("#### [DIST]") && ["16", "17", "18", "19"].every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)) &&
+        !own.length && e.issues.every((i) => i.severity !== "error") && states.length >= 4 && states.every(([, st]) => st === "placeholder") &&
+        chk(before, "dist-sections").status === "fail" && unfilledWord[lang].test(chk(before, "dist-sections").detail) && !chk(before, "sec-sections").status &&
+        !refused.ok && refused.failing.includes("dist-sections") && chk(after, "dist-sections").status === "pass" && /5/.test(chk(after, "dist-sections").detail) &&
+        !(retry.failing || []).includes("dist-sections"),
+        `1.17 D6: ${lang} +dist scaffold — 5 [DIST] sections with the TODO sentinel, [DIST] criteria US-1.AC-16..19 (no EARS issue but slots), every fresh artifact reads 'placeholder', dist-sections fails and the design approval is refused while TODO, passes once filled (got ` +
+        js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, "dist-sections").detail, chk(after, "dist-sections").detail]) + ")");
+    }
+
+    // --- D7: a filled +dist feature is ready — doctor passes and every gate approves without force (EN / PT / ES round trip)
+    const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|DIST\]|NEEDS)[^\]\n]*\]/g;
+    for (const lang of ["en", "pt", "es"]) {
+      const p = d("filled-" + lang);
+      S.initProject(p, ["core", "dist"], lang);
+      const f = S.createFeature(p, "Filled " + lang, ["dist"], "", undefined, lang);
+      for (const file of ["classification.md", "requirements.md", "design.md", "tasks.md"]) {
+        const fp = path.join(f.dir, file);
+        let t = rd(fp);
+        for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order event");
+        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+      }
+      const doc = S.specDoctor(p, f.slug);
+      const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
+      ok(doc.readyToAdvance && !doc.checks.some((c) => c.status === "fail") && chk(doc, "dist-sections").status === "pass" && chk(doc, "ears").status === "pass" &&
+        chk(doc, "traceability").status === "pass" && gates.every(([ph, r]) => r.ok && r.approved === ph && !r.forced),
+        `1.17 D7: ${lang} — a filled +dist feature is ready (doctor has no fail, EARS + traceability pass) and classification → requirements → design → tasks approve without force (got ` +
+        js(gates.filter(([, r]) => !r.ok).map(([ph, r]) => ph + ":" + (r.failing || []).join(","))) + ")");
+    }
+
+    // --- D8: every marker track together (+tdd +saas +sec +privacy +dist): criteria in track order, T-IDs after the others, property rows, traced
+    const cb = d("combined");
+    const combo = S.createFeature(cb, "Order Events", ["tdd", "saas", "sec", "privacy", "dist"], "", undefined, "en");
+    const cReq = rd(combo.dir, "requirements.md"), cPlan = rd(combo.dir, "test-plan.md");
+    const cTr = S.traceCheck(cb, combo.slug);
+    ok(combo.label === "core +tdd +saas +sec +privacy +dist" && cReq.indexOf("[PRIVACY]") < cReq.indexOf("[DIST]") &&
+      /\| T-14 \| integration \| example \| crash between the DB commit and the publish: the event is still delivered \| US-1\.AC-16 \|/.test(cPlan) &&
+      /\| T-15 \| integration \| property \| the same message delivered twice \(or N times\) has exactly one effect \| US-1\.AC-17 \|/.test(cPlan) &&
+      /\| T-16 \| integration \| property \| .* \| US-1\.AC-18 \|/.test(cPlan) && /\| T-17 \| integration \| example \| .* \| US-1\.AC-19 \|/.test(cPlan) &&
+      !cTr.uncoveredByTasks.length && !cTr.uncoveredByTests.length && !cTr.phantomAcsInTasks.length && !cTr.phantomTestsInTasks.length && !(cTr.testsNotMappedToTasks || []).length &&
+      ["saas-sections", "sec-sections", "privacy-sections", "dist-sections"].every((id) => chk(S.specDoctor(cb, combo.slug), id).status === "fail"),
+      "1.17 D8: core+tdd+saas+sec+privacy+dist — [DIST] criteria after [PRIVACY], its 4 test rows T-14..17 (duplicate delivery and lost update are property rows), every template AC planned and tasked, four section checks (got " +
+      js(cPlan.split("\n").filter((l) => /US-1\.AC-1[6-9]/.test(l))) + ")");
+    dropTodo(path.join(combo.dir, "design.md"));
+    const cStatus = S.statusFeature(cb, combo.slug);
+    const fin = S.finishFeature(cb, combo.slug);
+    const cTasks = S.parseTasks(rd(combo.dir, "tasks.md"));
+    const outboxTask = cTasks.find((x) => /^\[US1\] Transactional outbox/.test(x.text));
+    const brief = S.taskBrief(cb, combo.slug, outboxTask.number);
+    const secTask = cTasks.find((x) => /object-level authorization/.test(x.text));
+    const secBrief = S.taskBrief(cb, combo.slug, secTask.number);
+    const mx = S.traceMatrix(cb, combo.slug);
+    const mRow = (mx.rows || []).find((r) => r.id === "US-1.AC-17") || {};
+    ok(Array.isArray(cStatus.distSections) && cStatus.distSections.length === 5 && cStatus.distSections.every((s) => s.filled) &&
+      fin.checks.some((c) => /^\+dist: failure-injection tests green/.test(c)) && fin.checks.some((c) => /^\+sec: SAST/.test(c)) &&
+      brief.ok && brief.designSections.includes("[DIST] Cross-system Writes") && brief.designSections.includes("[DIST] Failure Modes") && !brief.designSections.some((s) => /\[SEC\]|\[PRIVACY\]/.test(s)) &&
+      secBrief.ok && !secBrief.designSections.some((s) => /\[DIST\]/.test(s)) && (mRow.design || []).includes("[DIST] Delivery & Idempotency"),
+      "1.17 D8: once filled — spec_status distSections (5, filled), spec_finish lists the +dist checks, a task proving a [DIST] criterion gets the [DIST] design sections in its brief (and only those), the matrix links a [DIST] criterion to them (got " +
+      js([cStatus.distSections, brief.designSections, secBrief.designSections, mRow.design]) + ")");
+    fs.writeFileSync(path.join(combo.dir, "requirements.md"), "# F\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a user asks THE SYSTEM SHALL answer\n");
+    const cq = S.clarify(cb, combo.slug).questions;
+    fs.writeFileSync(path.join(combo.dir, "requirements.md"), "# F\n\n## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a message is delivered more than once THE SYSTEM SHALL apply it once\n2. **US-1.AC-2** — IF the broker is unavailable THEN THE SYSTEM SHALL keep the events in the outbox\n");
+    const cq2 = S.clarify(cb, combo.slug).questions;
+    const Q = S.msg("en").secPrivacy.clarify;
+    ok(cq.includes(Q.distDelivery) && cq.includes(Q.distFailure) && !cq2.includes(Q.distDelivery) && !cq2.includes(Q.distFailure),
+      "1.17 D8: spec_clarify asks for the delivery guarantee / duplicates and each dependency's failure while requirements.md is silent, not once they are written (got " + js(cq.filter((q) => /delivery|dependency/i.test(q))) + ")");
+
+    // --- D9: steering distributed.md (EN / PT / ES / pt-BR), doctor's steering warns while it is a template
+    const stP = d("steering-pt");
+    const initPt = S.initProject(stP, ["core", "dist"], "pt");
+    const stF = S.createFeature(stP, "Eventos", ["dist"]);
+    ok(initPt.created.includes("distributed.md") && /^# Padrões de Sistemas Distribuídos e Consistência de Dados/.test(rd(stP, ".specs", "steering", "distributed.md")) &&
+      /distributed\.md/.test(chk(S.specDoctor(stP, stF.slug), "steering").detail) && I.steeringKnownFiles().includes("distributed.md") &&
+      ["en", "pt", "es", "pt-BR"].every((l) => /outbox/.test(I.steeringStub("distributed.md", l) || "")) && /^# Estándares de Sistemas Distribuidos/.test(I.steeringStub("distributed.md", "es")),
+      "1.17 D9: spec_init +dist writes steering/distributed.md in the project language, flagged as a template until filled; EN / PT / ES / pt-BR stubs exist (got " + js([initPt.created, chk(S.specDoctor(stP, stF.slug), "steering").detail]) + ")");
+
+    // --- D10: add_track / remove / re-add (additive, non-destructive)
+    const at = d("add-track");
+    S.initProject(at, ["core"], "en");
+    const plain = S.createFeature(at, "Plain", ["core"], "", undefined, "en");
+    const tBefore = S.statusFeature(at, plain.slug).tasks.total;
+    const add = S.addTrack(at, plain.slug, "+dist");
+    const pDesign = rd(plain.dir, "design.md"), pTasks = rd(plain.dir, "tasks.md");
+    const docAdd = S.specDoctor(at, plain.slug);
+    const tAdded = S.statusFeature(at, plain.slug).tasks.total;
+    const rm = S.removeTrack(at, plain.slug, "dist");
+    const docRm = S.specDoctor(at, plain.slug), stRm = S.statusFeature(at, plain.slug);
+    const reAdd = S.addTrack(at, plain.slug, "dist");
+    ok(add.ok && add.tracks === "core +dist" && add.added.includes("steering/distributed.md") && /## \[DIST\] Consistency Model/.test(pDesign) && /## Story US-1 — Data Consistency/.test(pTasks) &&
+      /_Requirements: \[the \+dist criterion this task proves\]_/.test(pTasks) && /## Active Tracks\ncore \+dist/.test(rd(plain.dir, "classification.md")) && chk(docAdd, "dist-sections").status === "fail" &&
+      tAdded === tBefore + 5 && rm.ok && rm.tracks === "core" && rm.inactive.includes("design.md ([DIST] sections)") && rm.inactive.includes("tasks.md (Story US-1 — Data Consistency)") &&
+      !chk(docRm, "dist-sections").status && stRm.distSections === null && stRm.tasks.total === tBefore && rd(plain.dir, "design.md").includes("[DIST] Consistency Model") &&
+      reAdd.ok && reAdd.tracks === "core +dist" && (rd(plain.dir, "tasks.md").match(/## Story US-1 — Data Consistency/g) || []).length === 1 && S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
+      "1.17 D10: add_track dist (sections, steering, 5 template tasks with placeholder ACs, Active Tracks, dist-sections fails); --remove is non-destructive (inactive, no check, distSections null, tasks not counted); re-adding duplicates nothing (got " +
+      js([add.added, rm.inactive, tBefore, tAdded]) + ")");
+
+    // --- D11: markers are case-sensitive; the loose synonyms only count in the [DIST] context; [DIST] is no placeholder
+    const cs = d("case");
+    const csF = S.createFeature(cs, "Timeouts", ["core"], "", undefined, "en");
+    fs.appendFileSync(path.join(csF.dir, "design.md"), "\n### Queue [dist]\n- the retry delay, in [dist] units\n");
+    const csState = path.join(csF.dir, ".state.json");
+    const csSt = JSON.parse(rd(csState)); delete csSt.tracks; fs.writeFileSync(csState, JSON.stringify(csSt, null, 2));
+    const csTracks = S.statusFeature(cs, csF.slug).tracks;
+    fs.appendFileSync(path.join(csF.dir, "design.md"), "\n## [DIST] Consistency Model\n- one transaction\n");
+    const csInferred = S.statusFeature(cs, csF.slug).tracks;
+    const lz = S.createFeature(d("loose"), "Loose", ["dist"], "", undefined, "en");
+    dropTodo(path.join(lz.dir, "design.md"));
+    fs.writeFileSync(path.join(lz.dir, "design.md"), rd(lz.dir, "design.md").replace("## [DIST] Concurrency", "## Concurrency"));
+    const lzDoc = chk(S.specDoctor(d("loose"), lz.slug), "dist-sections");
+    ok(csTracks === "core" && csInferred === "core +dist" && lzDoc.status === "fail" && /Concurrency:missing/.test(lzDoc.detail) && !/Consistency Model:/.test(lzDoc.detail) &&
+      S.artifactState({ text: "# Notes\n\nThe [DIST] sections were reviewed on Monday by the whole team.\n" }) === "filled",
+      "1.17 D11: '### Queue [dist]' is prose (no +dist inferred), '## [DIST] Consistency Model' infers it; a core '## Concurrency' never satisfies [DIST] Concurrency (loose synonym); [DIST] is a stable bracket, not a slot (got " +
+      js([csTracks, csInferred, lzDoc.detail]) + ")");
+
+    // --- D12: a track pack can't take the name or the marker (nor an alias: kafka)
+    const tp = d("packs");
+    S.initProject(tp, ["core"], "en");
+    const pDist = S.trackPacks(tp, "init", { name: "dist" });
+    const pKafka = S.trackPacks(tp, "init", { name: "kafka" });
+    fs.mkdirSync(path.join(tp, ".specs", "tracks", "events"), { recursive: true });
+    fs.writeFileSync(path.join(tp, ".specs", "tracks", "events", "track.json"), JSON.stringify({ name: "events", marker: "DIST", title: { en: "Events" }, sections: [{ name: "Event Catalog" }] }));
+    const pChk = S.trackPacks(tp, "check");
+    const probs = JSON.stringify(pChk);
+    ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist",
+      "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the seven built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
+
+    // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
+    const tt = d("templates");
+    S.initProject(tt, ["core"], "en");
+    const tInit = S.templates(tt, "init", {});
+    const tClean = S.templates(tt, "check");
+    fs.writeFileSync(path.join(tt, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Overview\n[how]\n\n## Constitution Check\n- [ ] [Principle 1]\n\n## [DIST] Consistency Model\n> **TODO** — fill it.\n- [what is atomic]\n");
+    const tBad = S.templates(tt, "check");
+    const miss = (tBad.problems || []).filter((x) => x.code === "missing-section" && /\[DIST\]/.test(x.message));
+    const tf = S.createFeature(tt, "From Template", ["dist"], "", undefined, "en");
+    const tfDesign = rd(tf.dir, "design.md");
+    ok(tInit.ok && tInit.created.includes(".specs/templates/steering/distributed.md") && tClean.verdict === "pass" && tBad.verdict === "fail" && miss.length === 4 &&
+      (tfDesign.match(/^## \[DIST\] Consistency Model/gm) || []).length === 1,
+      "1.17 D13: spec_templates init copies steering/distributed.md and the copies check clean; a design template carrying one [DIST] section must carry all five (4 missing-section errors); a +dist feature from it keeps the template's section (got " +
+      js([tClean.verdict, miss.map((x) => x.message)]) + ")");
+
+    // --- D14: spec_import auto-classifies +dist and appends the [DIST] sections; the Gherkin export tags the feature @DIST
+    const im = d("import");
+    fs.mkdirSync(path.join(im, ".kiro", "specs", "signup"), { recursive: true });
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "signup", "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to sign up.\n\n#### Acceptance Criteria\n\n1. WHEN the user signs up THEN the system SHALL store the user and publish a UserCreated event to Kafka\n");
+    fs.writeFileSync(path.join(im, ".kiro", "specs", "signup", "design.md"), "# Design\n\n## Overview\nA signup endpoint.\n");
+    const imp = S.importSpec(im, "kiro", ".kiro/specs/signup", {});
+    const impDesign = imp.ok ? rd(im, ".specs", "signup", "design.md") : "";
+    const gk = S.exportSpecs(im, { name: "signup", format: "gherkin" });
+    ok(imp.ok && imp.tracks.includes("dist") && /A signup endpoint/.test(impDesign) && /## \[DIST\] Cross-system Writes/.test(impDesign) && /^@DIST\b/m.test(gk.content || ""),
+      "1.17 D14: spec_import classifies a Kafka-publishing spec as +dist and appends the [DIST] sections to the imported design; the Gherkin export tags it @DIST (got " + js([imp.tracks, (gk.content || "").split("\n").filter((l) => l.startsWith("@")).slice(0, 2)]) + ")");
+
+    // --- D15: PT views (design-save check, ROADMAP.md attention) and the pt-BR twins of the new PT strings
+    const pv = d("pt-views");
+    S.initProject(pv, ["core"], "pt");
+    const pvF = S.createFeature(pv, "Publicar eventos", ["dist"], "", undefined, "pt");
+    const pvSave = S.designSaveCheck(pv, pvF.slug);
+    const pvMap = rd(pv, ".specs", "ROADMAP.md");
+    const aBr = { name: "ARGN", tracks: ["core", "tdd", "dist"], label: "core +tdd +dist", slug: "argn", summary: "" };
+    const brTexts = [...["requirements", "design", "tasks", "checklist"].map((b) => I[b](aBr, "pt-BR")), I.testPlan("ARGN", "pt-BR", aBr.tracks), I.steeringStub("distributed.md", "pt-BR"),
+      ...S.msg("pt-BR").secPrivacy.finishChecks.dist, S.msg("pt-BR").secPrivacy.clarify.distDelivery, S.msg("pt-BR").secPrivacy.clarify.distFailure].join("\n");
+    const EU = /(?<![\p{L}])(?:utilizador(?:es)?|registos?|partilhad[oa]s?|atómic[oa]s?|secç(?:ão|ões))(?![\p{L}])|por omissão|em baixo|condições de executada/iu;
+    ok(/secções \[DIST\]: Modelo de Consistência:por preencher/.test(pvSave.text) && /\[DIST\] Modos de Falha \(por preencher\)/.test(pvMap) &&
+      !EU.test(brTexts) && /Condições de corrida/.test(brTexts) && /atômico/.test(brTexts) && I.toPtBr(brTexts) === brTexts &&
+      (brTexts.match(/US-1\.AC-1[6-9]/g) || []).length >= 12 && /## \[DIST\] Modelo de Consistência/.test(brTexts),
+      "1.17 D15: PT — the design-save check and ROADMAP.md name the [DIST] sections in Portuguese; the pt-BR twins hold no European-only word ('condição de corrida' kept, atômico), are idempotent and keep [DIST] / the AC IDs (got " +
+      js([(brTexts.match(EU) || [])[0], pvSave.text.split("\n")[1]]) + ")");
+  }
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
 

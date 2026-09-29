@@ -15,7 +15,7 @@ Target: $ARGUMENTS
 3. Pick a strategy (constitution-only / + baseline specs for core modules / full coverage).
 4. For each documented module, `spec_create` a feature and fill `requirements.md` + `design.md`
    describing what the code *does today* (mark as reverse-engineered; a login or admin module often takes `+sec`,
-   anything holding personal data `+privacy`, so their sections capture today's threat model and data inventory). Use `_Implements: path_`
+   anything holding personal data `+privacy`, a service that writes a database and publishes events `+dist`, so their sections capture today's threat model and data inventory). Use `_Implements: path_`
    markers so `trace` ties specs to real files — and so `spec_coverage` can count them.
 5. Run `spec_coverage` to see what's still undocumented (covered files / code files, per folder).
 

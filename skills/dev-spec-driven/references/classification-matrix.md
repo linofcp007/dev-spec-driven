@@ -9,7 +9,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 
 ---
 
-## The six tracks
+## The seven tracks
 
 | Track | Adds | Activated when… |
 |---|---|---|
@@ -19,8 +19,9 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle, eval-gated execution | feature quality depends on LLM/agent/embedding output |
 | **+sec** | 5 mandatory `[SEC]` sections (STRIDE threat model, ASVS level, authn/authz, secrets, security testing), 3 criteria, abuse-case tests, `security.md` | a mistake here is a breach, not just a bug |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
+| **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
 
-`core` is always on. The other five are added independently based on the signals below.
+`core` is always on. The other six are added independently based on the signals below.
 
 ### How `spec_classify` weighs a signal
 
@@ -31,14 +32,17 @@ is a draft for the human, who confirms Phase 0.
   turns ON at 2 (one strong, or two weak — then a note says "on from weak signals only — double-check"), and a lone
   weak signal is reported as **possible** (a note), not enabled.
 - **Corroborating-only** signals (`permission` / `permissão` / `permiso`, `at rest` / `in transit` and their PT/ES
-  forms for +sec) count as weak evidence only beside another signal of the same track ("RBAC permissions", "encrypt
-  customer PII at rest"); alone they are no hint at all (file permission bits, a leave of absence, a parcel in transit).
+  forms for +sec; `transaction`, `consistency`, `atomic` for +dist) count as weak evidence only beside another signal of the
+  same track ("RBAC permissions", "encrypt customer PII at rest"); alone they are no hint at all (file permission bits, a
+  leave of absence, a parcel in transit).
 - A weak word inside a longer strong phrase of another track is part of that phrase: `model` in "threat model" is no
-  +ai hint, `security` in "row-level security" no +sec one.
+  +ai hint, `security` in "row-level security" no +sec one, `queue` in "message queue" (+dist) no +saas one.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
   password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
 - Upper-case acronyms are matched case-sensitively where the lower-case word means something else: `STRIDE` (weak +sec)
-  — a lower-case "stride" is an array stride.
+  — a lower-case "stride" is an array stride; `CDC` (weak +dist).
+- A word may serve two tracks: `exactly-once` is strong for +tdd and +dist, `idempotent` / `webhook` strong for +saas and
+  weak for +dist. A gap phrase (`publish … event`, +dist) matches up to three words between its parts.
 - **Negation never vetoes a track**, it annotates it: "no personal data" keeps +privacy off and says so; a negated
   keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
 
@@ -183,6 +187,58 @@ screen, a trash folder's retention) until a second privacy signal corroborates t
 Since 1.14, GDPR / RGPD / HIPAA turn `+privacy` on, not `+saas`. Skip `+privacy` when no information about an
 identifiable person is involved. Details (not legal advice): `privacy-track.md`.
 
+## +dist signals (turn on the distributed systems & data consistency track)
+
+Turn on `+dist` if **any** are true:
+
+| Signal | Example |
+|---|---|
+| One write reaches more than one system | Save to the database AND publish an event, update a cache, call another service or an external API |
+| Messaging | A broker (Kafka, RabbitMQ, SQS), consumers / producers, webhooks received or sent, retries, a DLQ |
+| A business transaction across services | Order → payment → stock → shipping (a saga), microservices sharing an outcome |
+| Concurrency on shared data | Two requests updating one row, counters, stock, seats, double submits |
+| Consistency is a product decision | Read replicas, a search index or another service's copy that may lag; CQRS / event sourcing |
+| Partial failure matters | A dependency that can be down or slow while the feature must keep working or recover |
+
+Classifier signals — **strong:** Kafka, RabbitMQ, ActiveMQ, AMQP, SQS, Kinesis, EventBridge, Debezium, message broker /
+queue / bus, event bus / broker / stream, event-driven, event sourcing, domain / integration event, CQRS, outbox,
+transactional outbox, inbox pattern, idempotent consumer, dual write, eventual / strong consistency, read-your-writes,
+distributed transaction / system / lock / cache, two-phase commit (2PC), microservice(s), change data capture,
+exactly-once, at-least-once delivery, saga pattern / orchestration, compensating transaction, optimistic / pessimistic
+locking, isolation level, write skew, lost update, network partition, split brain, leader election (and their PT / ES
+forms: *fila de mensagens, consistência eventual, transação distribuída, microsserviço, bloqueio otimista, nível de
+isolamento · cola de mensajes, consistencia eventual, transacción distribuida, microservicio, bloqueo optimista, nivel de
+aislamiento*). **Weak:** queue, consumer, producer, subscriber, webhook, retry / retries, (exponential) backoff, jitter,
+idempotency, deduplication, race condition, replication, read replica, cache invalidation, at-least-once / at-most-once,
+exactly once, pub/sub, **publish … event / message** (a gap phrase: up to three words between — "publishes a
+UserCreated event"), other / downstream services, cross-service, saga, `CDC` (upper case — also a health agency), dead
+letter, DLQ, poison message, circuit breaker, event store, concurrent updates / writes, clock skew, message ordering
+(*novas tentativas, condição de corrida, replicação, publica … evento, outros serviços · reintento, condición de carrera,
+replicación, publica … evento, otros servicios*). **Corroborating only:** transaction, consistency, atomic(ity).
+Never a bare "event" (DOM / calendar / analytics events), "lock" (an account lock), "stream" (video) or "broker".
+
+The canonical example — *"Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka
+for other services"* — is `core +dist` in EN, PT and ES. Skip `+dist` when every write stays in one database and no
+other system consumes the result (a CRUD screen over one table). Details and patterns: `distributed-data-patterns.md`.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services | `core +dist` | kafka, publish … event, other services |
+| … the same without Kafka ("publishes a UserCreated event for other services") | `core +dist` (weak-only) | publish … event, other services |
+| Split billing into its own microservice | `core +tdd +dist` | microservice (billing → +tdd) |
+| Implement checkout as a saga with compensating transactions across the order and payment services | `core +tdd +dist` | compensating transaction, saga |
+| Use optimistic locking so concurrent updates to the cart never overwrite each other | `core +dist` | optimistic locking, concurrent updates |
+| Queue the welcome email and retry with exponential backoff | `core +dist` (weak-only) | queue, retry, exponential backoff |
+| Receive Stripe webhooks idempotently and retry failed deliveries | `core +saas +dist` | webhook, retry, idempotent |
+| *Sincronizar o stock entre serviços com consistência eventual e um outbox transacional* | `core +dist` | outbox transacional, consistência eventual |
+| *Reintentar los pagos fallidos con retroceso exponencial y una cola de mensajes* | `core +tdd +dist` | cola de mensajes, reintento, retroceso exponencial |
+| Retry the image upload when the network drops | `core`, *possible +dist* | retry |
+| Organizers can publish an event and sell tickets | `core`, *possible +dist* | publish … event |
+| Create an endpoint that writes a user to Postgres and returns it | `core` | — |
+| Plain CRUD endpoint for users, no Kafka and no events | `core` (+dist kept off, noted) | kafka (negated) |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -200,10 +256,12 @@ identifiable person is involved. Details (not legal advice): `privacy-track.md`.
 | `core +sec` | design gains 5 `[SEC]` sections; `[SEC]` criteria US-1.AC-10..12; security tasks; `steering/security.md` |
 | `core +privacy` | design gains 6 `[PRIVACY]` sections; `[PRIVACY]` criteria US-1.AC-13..15; privacy tasks; `steering/privacy.md` |
 | `core +tdd +sec +privacy` | a typical sign-up / account feature: abuse-case and data-rights tests in the test plan |
+| `core +dist` | design gains 5 `[DIST]` sections; `[DIST]` criteria US-1.AC-16..19; outbox / inbox / concurrency / resilience / failure-injection tasks; `steering/distributed.md` |
+| `core +tdd +saas +dist` | a checkout across services: saga, outbox, idempotent consumers, failure-injection and property tests, load test |
 
-**Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5 and `+privacy`
-its 6, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`) are English in every language and case-sensitive.
+**Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
+its 6 and `+dist` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -211,7 +269,8 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`) are English in ever
 - Plain task on `core` only → implement → run existing tests + its `_Verify:_` → `spec_complete_task {evidence}`.
 - `+saas` hot path → load-test task at the end must pass before "done".
 - `+sec` → the security-testing task's `_Verify:_` runs the scans and the abuse-case tests; `+privacy` → data subject
-  rights verified end to end before "done".
+  rights verified end to end before "done"; `+dist` → the failure-injection tests (crash between commit and publish,
+  duplicate delivery, concurrent updates, a dependency down) green before "done".
 
 ---
 
@@ -224,7 +283,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`) are English in ever
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -232,6 +291,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy]
 - **+ai:** [signal] — [why]
 - **+sec:** [signal] — [why]
 - **+privacy:** [signal] — [why]
+- **+dist:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

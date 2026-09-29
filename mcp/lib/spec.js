@@ -13,14 +13,15 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("./i18n.js");
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
 // (requirements criteria, design block, template tasks, test rows, steering stub).
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
-const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"] };
+const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
+  dist: ["distributed.md"] };
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -814,7 +815,10 @@ function normalizeTracks(tracks) {
 // Words people type for a track — suggestion only, never accepted as input.
 const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas",
   security: "sec", secure: "sec", appsec: "sec", owasp: "sec", seguranca: "sec", "segurança": "sec", seguridad: "sec",
-  priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy" };
+  priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy",
+  // +dist (1.17 D) — also names a pack can't take (packReservedName reads these keys)
+  distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
+  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -1045,6 +1049,70 @@ const SIGNALS = {
       "política de conservación",
     ],
   },
+  // +dist (1.17 D): distributed systems and data consistency — a write that reaches more than one system (a database AND a
+  // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers and the
+  // patterns that only exist across systems (outbox, saga pattern, dual write, eventual consistency, two-phase commit,
+  // microservices, event sourcing, CQRS, change data capture, optimistic / pessimistic locking…). WEAK — generic alone,
+  // on only in pairs: queue, consumer / producer, webhook, retries / backoff, idempotency, deduplication, race conditions,
+  // replication, cache invalidation, a bare "saga" (also a story series), "CDC" (also the health agency) and the GAP phrases
+  // "publish … event" / "publish … message" (up to three words between: "publishes a UserCreated event" — an events-app
+  // "publish the event" alone stays 'possible'). Never a bare "event" (DOM, calendar, analytics events), "lock" (an account
+  // lock), "stream" (video streaming) or "broker" (an insurance broker). CONTEXT (corroborating only): transaction,
+  // consistency, atomic(ity) — data-consistency words that alone are ordinary ("a consistent UI").
+  // Shared spans: 'exactly-once' is +tdd strong too, 'idempoten' / 'webhook' / 'circuit breaker' / 'dead letter' +saas strong,
+  // 'queue' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks (equal spans are never
+  // shadowed); 'queue' inside "message queue" (a longer +dist STRONG phrase) is no +saas hint.
+  dist: {
+    strong: [
+      "kafka", "rabbitmq", "activemq", "amqp", "amazon sqs", "sqs", "kinesis", "eventbridge", "service bus", "redis streams", "debezium",
+      "message broker", "message queue", "message bus", "event bus", "event broker", "event-driven", "event driven", "event stream",
+      "stream processing", "event sourcing", "event-sourced", "domain event", "integration event",
+      "transactional outbox", "inbox pattern", "idempotent consumer", "dual write", "dual-write",
+      "eventual consistency", "eventually consistent", "strong consistency", "strongly consistent", "read-your-writes",
+      "distributed transaction", "distributed system", "distributed lock", "distributed cache", "two-phase commit", "two phase commit",
+      "2pc", "microservice", "micro-service", "cqrs", "change data capture", "exactly-once", "at-least-once delivery",
+      "saga pattern", "saga orchestration", "saga orchestrator", "compensating transaction", "compensating action",
+      "optimistic locking", "pessimistic locking", "isolation level", "write skew", "lost update", "network partition",
+      "split brain", "split-brain", "leader election",
+      // PT (pluralize() adds a plural to a phrase's FIRST word only for -ção / "de" phrases: the other plurals are listed)
+      "fila de mensagens", "barramento de eventos", "broker de mensagens", "outbox transacional", "escrita dupla", "escritas duplas",
+      "consistência eventual", "eventualmente consistente", "consistência forte", "transação distribuída", "transações distribuídas",
+      "commit em duas fases", "commit de duas fases", "microsserviço", "micro-serviço", "arquitetura orientada a eventos",
+      "orientado a eventos", "orientada a eventos", "sistema distribuído", "bloqueio otimista", "bloqueio pessimista",
+      "nível de isolamento", "atualização perdida", "atualizações perdidas", "partição de rede", "partições de rede",
+      "captura de dados de alteração", "transação de compensação", "transações de compensação", "consumidor idempotente",
+      // ES
+      "cola de mensajes", "bus de eventos", "broker de mensajes", "outbox transaccional", "escritura dual", "escrituras duales",
+      "doble escritura", "consistencia eventual", "consistencia fuerte", "transacción distribuida", "transacciones distribuidas",
+      "commit en dos fases", "confirmación en dos fases", "microservicio", "arquitectura orientada a eventos", "sistema distribuido",
+      "sistemas distribuidos", "bloqueo optimista", "bloqueo pesimista", "nivel de aislamiento", "actualización perdida",
+      "actualizaciones perdidas", "partición de red", "particiones de red", "captura de datos de cambios", "transacción de compensación",
+      "transacciones de compensación",
+      // last: a keyword matching at the same place as an earlier one is skipped — "outbox transacional" is listed before "outbox"
+      "outbox",
+    ],
+    weak: [
+      "queue", "consumer", "producer", "subscriber", "webhook", "retry", "exponential backoff",
+      "backoff exponencial", "backoff", "jitter", // (PT / ES "backoff exponencial" before "backoff": the first keyword matching at a place wins it)
+      "idempoten", "deduplica", "dedup", "dedupe", "race condition", "replication", "read replica", "cache invalidation",
+      "at-least-once", "at-most-once", "exactly once", "pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe",
+      "publish … event", "publish … message", "other services", "downstream service", "cross-service", "saga", "CDC", "dead letter",
+      "dead-letter", "dlq", "poison message", "circuit breaker", "event store", "concurrent updates", "concurrent writes", "clock skew",
+      "message ordering",
+      // PT ("tentar novamente" is no signal: "the user can try again")
+      "fila", "consumidor", "produtor", "subscritor", "nova tentativa", "novas tentativas", "retentativa",
+      "recuo exponencial", "desduplica", "condição de corrida", "condições de corrida", "replicação", "réplica",
+      "invalidação de cache", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "public … evento", "public … mensagem",
+      "outros serviços", "atualizações concorrentes", "escritas concorrentes",
+      // ES
+      "cola", "productor", "suscriptor", "reintento", "retroceso exponencial", "condición de carrera",
+      "condiciones de carrera", "replicación", "invalidación de caché", "al menos una vez", "como máximo una vez", "exactamente una vez",
+      "public … mensaje", "otros servicios", "actualizaciones concurrentes", "escrituras concurrentes",
+    ],
+    context: ["transaction", "consistency", "atomic", "atomically", "atomicity",
+      "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
+      "transacción", "consistencia", "atomicidad", "atómicamente"],
+  },
 };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
@@ -1140,7 +1208,9 @@ function isNegated(text, idx, kwLen, lang, cased) {
 const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina",
   // +sec / +privacy: vulnerability / vulnerabilities / vulnerabilidade(s) / vulnerabilidad(es); sanitize / sanitização;
   // anonymize / anonymisation / anonimização / anonimización; data minimization / minimisation.
-  "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza"]);
+  "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza",
+  // +dist (1.17 D): deduplicate / deduplication / deduplicação / deduplicación; desduplicação
+  "deduplica", "desduplica"]);
 // VERB stems (full review Pb5): the stem + one of the listed endings, nothing else — 'cifr' is cifrar / cifrado / cifram…,
 // never "cifra" (a figure); 'encript' never "encriptação" (a keyword of its own). The stem is the keyword (its literal and
 // its name in notes), so a verb and its noun (encriptar / encriptação) are one signal, as encrypt / encryption are.
@@ -1148,7 +1218,22 @@ const VERB_STEMS = new Map([
   ["encript", "(?:ar|a|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
   ["cifr", "(?:ar|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
   ["criptograf", "(?:ar|a|am|amos|ando|ado|ada|ados|adas|ou|aram|em)"],
+  // +dist (1.17 D): publicar (PT / ES) — only inside the gap phrases "public … evento" / "… mensagem" / "… mensaje"; a bare
+  // English "public" (a public API) never matches it: an ending is required.
+  ["public", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
 ]);
+// Irregular inflections (1.17 D): a keyword whose forms the suffix rules can't produce — retry → retries / retried. The key is
+// the keyword (its name in notes); the value its literal prefix and the alternation of endings. One concept, one signal:
+// "retry … retries" is a single +dist hint, not the two weak ones that would turn the track on.
+const IRREGULAR_FORMS = new Map([
+  ["retry", ["retr", "(?:y|ies|ied|ying)"]],
+  ["reintento", ["reintent", "(?:o|os|ar|a|an|ado|ada|ando)"]], // ES reintento(s) / reintentar / reintenta…
+]);
+// A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
+// words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
+// events", "publicou o evento". Each part is matched as a keyword of its own (inflections, stems, verb stems).
+const KW_GAP = " … ";
+const KW_GAP_RE = "(?:\\s+[^\\s.!?;:,]+){0,3}?\\s+";
 // Inflections accepted on an exact keyword: payment→payments, cache→cached, rate-limit→rate-limiting.
 const INFLECTION = "(?:e?s|ed|ing|d)?";
 // Short acronyms ('rag', 'sla', 'slo', 'gpt', 'llm', 'ai') pluralize but never conjugate — without
@@ -1183,6 +1268,9 @@ function keywordLiteral(kw) {
   let lit = KW_LITERAL.get(kw);
   if (lit != null) return lit;
   if (KW_LITERAL.size >= KW_CACHE_MAX) KW_LITERAL.clear();
+  // a gap keyword: its first part's literal · an irregular one: its stem (1.17 D)
+  if (kw.includes(KW_GAP)) { lit = keywordLiteral(kw.slice(0, kw.indexOf(KW_GAP))); KW_LITERAL.set(kw, lit); return lit; }
+  if (IRREGULAR_FORMS.has(kw)) { lit = IRREGULAR_FORMS.get(kw)[0]; KW_LITERAL.set(kw, lit); return lit; }
   const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const first = (kw.match(/^[\p{L}\p{N}]+/u) || [""])[0];
   const n = pluralize(escaped, kw) === escaped ? kw.length : Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
@@ -1195,17 +1283,25 @@ function keywordRe(kw) {
   let re = KW_RE.get(kw);
   if (re) return re;
   if (KW_RE.size >= KW_CACHE_MAX) KW_RE.clear(); // track packs (1.15) add keywords: a long-lived server's cache stays bounded
-  const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
-  const tail = STEMS.has(kw) ? "\\p{L}*" : VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX;
+  // A gap keyword's parts, each its own keyword pattern, joined by at most three words (KW_GAP_RE: whitespace and non-whitespace
+  // runs alternate — linear); the edge guards below wrap the whole phrase.
+  const bodyTail = kw.includes(KW_GAP) ? kw.split(KW_GAP).map(keywordPattern).join(KW_GAP_RE) : keywordPattern(kw);
   // Left edge: not glued to a word char, and not part of a dotted/slashed/hyphenated identifier
   // ('.claude-plugin', 'src/rag.ts'). Right edge: after the optional inflection/adjective, no word
   // char and no '-<letter>' compound ('claude-plugin') — but '-<digit>' stays legal ('gpt-4').
   re = new RegExp(
-    "(?<![\\p{L}\\p{N}_\\-./\\\\])" + body + tail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
+    "(?<![\\p{L}\\p{N}_\\-./\\\\])" + bodyTail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
     "gu"
   );
   KW_RE.set(kw, re);
   return re;
+}
+// One keyword (or one part of a gap keyword) → its pattern: the escaped text (pluralized) + its tail — a stem's letters, a verb
+// stem's endings, an irregular keyword's forms, else the inflections (+ an adjective compound).
+function keywordPattern(kw) {
+  if (IRREGULAR_FORMS.has(kw)) { const [stem, ends] = IRREGULAR_FORMS.get(kw); return stem + ends; }
+  const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
+  return body + (STEMS.has(kw) ? "\\p{L}*" : VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
 
 // Tokens that look like source paths ("src/rag", "lib/auth.ts") must stay opaque to the classifier.
@@ -1294,6 +1390,10 @@ function classify(description, opts = {}) {
     const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
     matched[t].strong = keep(matched[t].strong);
     matched[t].weak = keep(matched[t].weak);
+    // The same for the negated ones (1.17 D): "no distributed transactions" is ONE negated concept, not also a negated
+    // corroborating 'transaction' (+dist's context word inside it).
+    const neg = negated[t];
+    negated[t] = neg.filter((k) => !neg.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
   }
 
   // Weighting: score = strong*2 + weak. A track turns ON at score >= 2 (one strong signal,
@@ -3864,7 +3964,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -4985,6 +5085,7 @@ function statusFeature(projectDir, name) {
     aiSections,
     secSections: trackView("sec"),
     privacySections: trackView("privacy"),
+    distSections: trackView("dist"), // 1.17 D
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
@@ -8227,7 +8328,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   const want = (s) => {
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
@@ -8468,7 +8569,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
-  for (const tr of ["sec", "privacy"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
+  for (const tr of ["sec", "privacy", "dist"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
@@ -9912,7 +10013,7 @@ function xacNumbers(low, base) {
 // nums: [numbers in document order], numKey: "n unit|…" (sorted), neg: the response's polarity }.
 function acShape(text, lang) {
   const base = i18n.baseLang(normalizeLang(lang));
-  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY)\]/g, " ")
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST)\]/g, " ")
     .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
   const sys = low.match(RE_XAC_SYS_MODAL);
   const m = sys ? null : low.match(RE_XAC_MODAL);
@@ -11016,7 +11117,7 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 
 // The ONE code path that turns tracks ON for an existing feature — spec_add_track, and spec_create re-run on
@@ -11292,7 +11393,7 @@ function removeTracks(projectDir, f, named, lng) {
 }
 
 function inactiveArtifacts(dir, gone, T) {
-  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [] };
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [] };
   const design = readIfExists(path.join(dir, "design.md")) || "";
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];
@@ -12032,7 +12133,7 @@ function storeCreateFlow(dir, flow) {
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
@@ -12097,9 +12198,29 @@ const PRIVACY_SECTIONS = [
     "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
     loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"] },
 ];
+// +dist (1.17 D) — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
+// "## Concurrency", "## Failure modes", "## Idempotency", "## Consistency") — they name a [DIST] section only on a heading
+// carrying the marker or nested under one. The cross-system writes names (dual writes) are unambiguous: strict.
+const DIST_SECTIONS = [
+  { name: "Consistency Model", syn: ["consistency model", "data consistency", "consistency", "modelo de consistência", "modelo de consistencia",
+    "consistência de dados", "consistencia de dados", "consistencia de datos", "consistência", "consistencia"],
+  loose: ["data consistency", "consistency", "consistência de dados", "consistencia de dados", "consistencia de datos", "consistência", "consistencia"] },
+  { name: "Cross-system Writes", syn: ["cross-system writes", "cross-system write", "cross system writes", "dual writes", "dual write", "dual-writes",
+    "escritas entre sistemas", "escrita entre sistemas", "escritas duplas", "escrita dupla", "escrituras entre sistemas", "escritura entre sistemas",
+    "escrituras duales", "escritura dual", "doble escritura"] },
+  { name: "Delivery & Idempotency", syn: ["delivery & idempotency", "delivery and idempotency", "idempotency", "delivery guarantees", "message delivery",
+    "entrega e idempotência", "entrega e idempotencia", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega", "entrega y idempotencia"],
+  loose: ["idempotency", "delivery guarantees", "message delivery", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega"] },
+  { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
+    "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
+  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"] },
+  { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
+    "modos de falla"],
+  loose: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo", "modos de falla"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -12209,7 +12330,7 @@ function sectionState(design, sections, marker) {
 // The list separator is UNAMBIGUOUS — `\s*(?:[,;/]\s*)?`, never `\s*[,;/]?\s*`: with the separator optional
 // between two `\s*`, every whitespace gap could split two ways and a failing match (`[US-1 US-2 … and more]`)
 // backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
-const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|DIST|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 // The core-only Signals answer scaffolds before 1.13 wrote in brackets (`- [none beyond core]`, PT/ES): the tool's own
 // final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
@@ -12360,7 +12481,7 @@ function templateCorpus(langs) {
   // a larger set does (for three tracks this IS the full power set; it grows quadratically, not 2^n, as tracks are added).
   const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS]
     .map((x) => ["core", ...x]);
-  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] };
+  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"], dist: ["kafka"] };
   for (const l of langs || i18n.BASE_LANGS) { // the authored locales; pt-BR's slots come from pt's lines (templateSetsBr)
     const M = i18n.msg(l);
     for (const tracks of combos) {
@@ -15966,7 +16087,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);
@@ -20559,6 +20680,9 @@ const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solic
 const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
 // +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
 const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
+// +dist (1.17 D): a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
+const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez/i;
+const RE_DIST_FAILURE = /unavailable|is down|timeout|timed out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|no est[áa] disponible|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -20622,6 +20746,8 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
+  if (tracks.includes("dist") && !RE_DIST_DELIVERY.test(reqs)) add(QP.distDelivery); // 1.17 D
+  if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
   // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
   // pointing at doctor). No glossary → nothing asked.
   const gl = glossaryEntries(f.root);
