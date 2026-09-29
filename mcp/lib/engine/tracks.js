@@ -3,9 +3,10 @@
 /**
  * dev-spec-driven engine — the track registries.
  * The built-in tracks and every table a track brings: VALID_TRACKS, the aliases people type, the stable markers, the mandatory
- * design sections (TRACK_SECTIONS), the steering files and the classifier's signals (SIGNALS — the data classify.js reads);
- * track input (parseTracks); the accessors that add the project's track packs (allTracks, trackMarker, trackSectionTable…);
- * a feature's saved tracks (detectTracks) and the inactive-section readers (activeTasks, activeDesign).
+ * design sections (TRACK_SECTIONS), the steering files and the classifier's signals (SIGNALS — one object per track: its keyword
+ * tiers, concepts, hazards and cue rules, the DATA classify.js interprets); track input (parseTracks); the accessors that add the
+ * project's track packs (allTracks, trackMarker, trackSectionTable…); a feature's saved tracks (detectTracks) and the
+ * inactive-section readers (activeTasks, activeDesign).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -393,19 +394,59 @@ function activeDesign(design, tracks) {
 }
 
 // ---------------------------------------------------------------------------
-// The classifier's signals — per built-in track (classify.js reads them)
+// The classifier's signals — per built-in track (the data classify.js interprets)
 // ---------------------------------------------------------------------------
-
-// Signals are split into STRONG (turns a track on alone) and WEAK (needs corroboration —
-// a single weak match is reported as "possible" but does NOT auto-enable the track, which
-// cuts false positives like "user-agent" → +ai or "data model" → +ai). Multilingual EN/PT/ES
-// plus technical synonyms.
+// ONE object per optional built-in track: adding or tuning a track's signals is editing this table, never classify.js.
+//   strong   — turns the track on alone.
+//   weak     — an anchor that needs corroboration: two of them, or one beside a strong / generic word, turn the track on; alone
+//              it is only a "possible" note — it cuts false positives like "user-agent" → +ai or "data model" → +ai.
+//   generic  — app-level words (1.17 D review): they add to the score but never turn the track on without a strong or a weak
+//              signal (two alone stay 'possible', named by the genericOnly note).
+//   context  — corroborating only (C4): evidence beside another (non-negated) strong / weak signal of the track; alone no
+//              signal, no note at all ("file permission bits").
+//   concepts — { concept: [keywords] } (1.17 D review): one concept, one signal — the weak / generic keywords of a concept count
+//              once ("deduplicate … dedupe them", "producers and consumers"), an anchor member first. Per track: a keyword may
+//              belong to a concept in one track only (+saas' 'worker' and 'background job' stay two signals there).
+//   hazards  — [keywords] (1.17 D review): a failure a requirement says must never happen, written negated by nature ("no lost
+//              updates", "without breaking changes") — the negation is the requirement: never negated, no "kept off" note.
+//   cues     — [rules] (1.19 T review): a keyword whose tier depends on the words around it. Rules are tried in order and the
+//              first that fires decides; `kind` names the generic mechanism (classify.js CUE_KINDS: near · sentence · text ·
+//              clause · ownership), `on` the keywords it reads (none: every keyword of the track), `ifTier` a hit of that tier
+//              only, `then` the new tier, "none" (no signal at all) or "keep" (unchanged, no later rule).
+// Keywords are EN / PT / ES (+ pt-BR words) and technical synonyms, matched as WORDS (classify.js keywordRe: inflections, PT / ES
+// plurals, STEMS, VERB_STEMS, IRREGULAR_FORMS). One written with capitals is matched case-sensitively ("STRIDE", "UI"); " … " is a
+// gap keyword (≤ 3 words between, never across . ! ? ; : ,). Within a track the first keyword matching at a place wins it: list a
+// longer phrase before its prefix. A phrase may serve two tracks (equal spans are never shadowed). Track packs have their own
+// strong / weak / context keywords (packs.js), never concepts, hazards or cues.
 // +api (1.19 verify 2): breaking compatibility as a verb — "must not break compatibility", "não pode quebrar a compatibilidade da API
-// pública", "no puede romper la compatibilidad": weak, one concept with the compatibility nouns (SIGNAL_CONCEPTS.api.compat) and a
-// hazard (SIGNAL_HAZARDS.api — the negation is the requirement), in the three languages alike.
+// pública", "no puede romper la compatibilidad": weak, one concept with the compatibility nouns (api concepts.compat) and a hazard
+// (api hazards — the negation is the requirement), in the three languages alike.
 const API_BREAK_VERBS = ["break compatibility", "breaks compatibility", "breaking compatibility", "quebrar a compatibilidade",
   "quebra a compatibilidade", "quebre a compatibilidade", "quebrem a compatibilidade", "quebrar compatibilidade", "romper la compatibilidad",
   "rompa la compatibilidad", "rompe la compatibilidad", "rompan la compatibilidad", "romper compatibilidad"];
+// +ui: the page types and the frontend / UI / UX words — what the backend-only cues read (ui cues)
+const UI_PAGE_WORDS = ["landing page", "settings page", "settings screen", "admin page", "admin panel", "admin ui", "management page",
+  "profile page", "account page", "página de definições", "página de configurações", "página de administração", "painel de administração",
+  "página de gestão", "página de perfil", "ecrã de definições", "tela de configurações", "página de ajustes", "página de configuración",
+  "panel de administración", "página de gestión", "pantalla de ajustes", "frontend", "front-end", "UI", "UX"];
+// +obs: the TECHNICAL TARGETS (1.19 T review) — context words, and one concept (obs concepts.target): a service, servers, a cron /
+// batch / sync job, production, a cluster, an endpoint, the backend, the infrastructure, ops / SRE, a status page, disk / CPU /
+// queue depth — phrases where the bare word is also a business word (a sales pipeline, a production line, a job posting, a reefer
+// container, a restaurant's server)
+const OBS_TARGETS = [
+  "service", "servers", "web server", "app server", "microservice", "in production", "to production", "on production",
+  "production environment", "production traffic", "in prod", "to prod", "cluster", "kubernetes", "k8s", "pod", "cron job", "cronjob",
+  "cron", "batch job", "sync job", "import job", "export job", "backup job", "scheduled job", "nightly job", "background job",
+  "background worker", "etl job", "data pipeline", "etl pipeline", "ci pipeline", "deployment pipeline", "endpoint", "backend",
+  "infrastructure", "ops", "devops", "sre", "status page", "queue depth", "consumer lag", "disk usage", "disk space", "cpu",
+  "memory usage",
+  // PT
+  "serviço", "servidor", "servidores", "microsserviço", "em produção", "para produção", "ambiente de produção", "tarefa agendada",
+  "tarefa noturna", "processo … noturno", "infraestrutura", "página de estado", "uso de disco", "espaço em disco",
+  // ES
+  "servicio", "microservicio", "en producción", "a producción", "entorno de producción", "tarea programada", "tarea nocturna",
+  "proceso … nocturno", "infraestructura", "espacio en disco",
+];
 const SIGNALS = {
   tdd: {
     strong: [
@@ -614,7 +655,7 @@ const SIGNALS = {
   // track on only beside a strong or an anchor signal — two generic words alone stay 'possible'. Never a bare "event" (DOM,
   // calendar, analytics events), "lock" (an account lock), "stream" (video streaming) or "broker" (an insurance broker).
   // CONTEXT (corroborating only): transaction, consistency, atomic(ity) — data-consistency words that alone are ordinary
-  // ("a consistent UI"). One concept, one signal: SIGNAL_CONCEPTS folds the words of one concept (retry · backoff · jitter,
+  // ("a consistent UI"). One concept, one signal: its concepts fold the words of one concept (retry · backoff · jitter,
   // consumer · producer · subscriber, dedupe · deduplicate).
   // Shared spans: 'exactly-once' is +tdd strong too, 'idempoten' / 'webhook' / 'circuit breaker' / 'dead letter' +saas strong,
   // 'queue' / 'worker' / 'background job' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks
@@ -698,6 +739,45 @@ const SIGNALS = {
     context: ["transaction", "consistency", "atomic", "atomically", "atomicity",
       "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
       "transacción", "consistencia", "atomicidad", "atómicamente"],
+    concepts: {
+      queue: ["queue", "fila", "cola"],
+      party: ["consumer", "producer", "subscriber", "consumidor", "produtor", "subscritor", "productor", "suscriptor"],
+      retry: ["retry", "jitter", "nova tentativa", "novas tentativas", "retentativa", "reintento", "exponential backoff", "backoff exponencial",
+        "backoff", "recuo exponencial", "retroceso exponencial"],
+      dedup: ["deduplica", "dedup", "dedupe", "desduplica"],
+      race: ["race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera"],
+      publish: ["pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
+        "public … evento", "public … mensagem", "public … mensaje", "send … message", "envi … mensagem", "envi … mensaje"],
+      worker: ["worker", "background job", "em segundo plano", "en segundo plano"],
+      concurrent: ["concurrently", "simultaneously", "em simultâneo", "simultaneamente", "simultáneamente", "de forma concurrente",
+        "concurrent updates", "concurrent writes", "atualizações concorrentes", "escritas concorrentes", "actualizaciones concurrentes",
+        "escrituras concurrentes"],
+      services: ["other services", "another service", "downstream service", "cross-service", "outros serviços", "outro serviço",
+        "otros servicios", "otro servicio", "notification service", "payment service", "billing service", "order service", "orders service",
+        "shipping service", "inventory service", "analytics service", "pricing service", "catalog service", "serviço de notificações",
+        "serviço de pagamentos", "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos",
+        "serviço de envios", "serviço de inventário", "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
+        "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
+        "servicio de inventario", "servicio de precios", "servicio de catálogo"],
+      deadLetter: ["dead letter", "dead-letter", "dlq", "poison message"],
+      delivery: ["at-least-once", "at-most-once", "exactly once", "duplicate delivery", "delivered twice", "delivered more than once",
+        "duplicate message", "duplicate event", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "entregue duas vezes",
+        "mensagens duplicadas", "eventos duplicados", "al menos una vez", "como máximo una vez", "exactamente una vez", "entregado dos veces",
+        "mensajes duplicados"],
+      replication: ["replication", "réplica", "replicação", "replicación"],
+      cacheInvalidation: ["cache invalidation", "invalidação de cache", "invalidación de caché"],
+      eventBus: ["event bus", "barramento de eventos", "bus de eventos"],
+      eventDriven: ["event-driven", "event driven", "orientado a eventos", "orientada a eventos"],
+      lostUpdate: ["update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other"],
+      versionColumn: ["version column", "coluna de versão", "columna de versión"],
+      sameRecord: ["update … same"],
+      searchIndex: ["search index", "elasticsearch", "opensearch"],
+    },
+    hazards: ["lost update", "atualização perdida", "atualizações perdidas", "actualización perdida", "actualizaciones perdidas",
+      "update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other", "write skew", "split brain", "split-brain",
+      "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
+      "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
+      "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"],
   },
   // +api (1.19 T): an API contract other code depends on — public, partner or internal. STRONG: contract-level words only (a
   // public / REST / HTTP API, OpenAPI / Swagger, GraphQL, gRPC / protobuf, API versioning, the contract itself, its consumers —
@@ -708,12 +788,12 @@ const SIGNALS = {
   // route, request, pagination — every app has them; alone they are 'possible' at most ("call the Stripe API", "an API key
   // management page" — +sec's api key is no contract). HAZARDS: a breaking change is written negated by nature ("without
   // breaking changes") — the negation is the requirement.
-  // OWNERSHIP (1.19 T review — SIGNAL_CUES.api, apiCueTier): an API someone ELSE owns is app-level for us. A keyword right after
+  // OWNERSHIP (1.19 T review — the cues below): an API someone ELSE owns is app-level for us. A keyword right after
   // a third-party owner ("Stripe's REST API", "the payment provider's OpenAPI spec", "their Admin API version"; PT / ES "a API
   // REST do Stripe", "la API REST del banco") counts as a GENERIC word, and so does one after a consumer verb ("call", "integrate
   // with", "sync from", "through", "via", "the Salesforce REST API"; PT "integrar com", "chamar"; ES "integrar con", "llamar a")
   // unless the clause says the API is ours ("our", an own verb: expose, publish, offer, provide, design, document…). The
-  // ownership-AMBIGUOUS names (API_AMBIGUOUS: a REST / public / HTTP / JSON / web / partner API, an API version, problem
+  // ownership-AMBIGUOUS names (the cues' `ambiguous`: a REST / public / HTTP / JSON / web / partner API, an API version, problem
   // details) are weak — strong only beside an own cue ("our public REST API", "Expose … through a versioned REST API",
   // "Versionar a API pública").
   api: {
@@ -740,7 +820,7 @@ const SIGNALS = {
       "portal de desarrolladores", "prueba de contrato",
     ],
     weak: [
-      // ownership-ambiguous (API_AMBIGUOUS — strong beside an own cue; one concept: "the public API is a REST API" is one hint)
+      // ownership-ambiguous (the cues' `ambiguous` — strong beside an own cue; one concept: "the public API is a REST API" is one hint)
       "public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
       "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api",
       "breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
@@ -764,6 +844,96 @@ const SIGNALS = {
       // PT / ES
       "rota", "requisição", "paginação", "ruta", "solicitud http", "petición http", "paginación",
     ],
+    // +api (1.19 T): compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
+    // status codes, the schemas, cursor pagination, a client library / SDK; the generic words (an endpoint and its route, a request).
+    concepts: {
+      // (1.19 T review) the ownership-ambiguous names: one hint, whichever of them a text uses
+      kind: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "api pública", "api rest",
+        "versão da api", "versões da api", "versión de la api", "versiones de la api"],
+      role: ["management api", "admin api"],
+      compat: ["breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
+        "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+        "mudança incompatível", "mudanças incompatíveis", "compatibilidade retroativa", "retrocompatível", "retrocompatíveis",
+        "retrocompatibilidade", "compatível com versões anteriores", "cambio incompatible", "cambios incompatibles",
+        "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad", ...API_BREAK_VERBS],
+      client: ["sdk", "client library", "client libraries", "api client", "cliente da api", "cliente de la api"],
+      etag: ["etag", "if-match", "if-none-match"],
+      status: ["status code", "http status", "código de estado", "código de status"],
+      schema: ["json schema", "request schema", "response schema", "esquema json"],
+      cursor: ["cursor pagination", "cursor-based pagination", "keyset pagination", "paginação por cursor", "paginación por cursor"],
+      docs: ["api documentation", "api docs", "api reference", "documentação da api", "documentación de la api"],
+      deprecation: ["deprecation", "descontinuação", "obsolescencia"],
+      endpoint: ["endpoint", "route", "rota", "ruta"],
+      request: ["request", "requisição", "solicitud http", "petición http"],
+      paging: ["pagination", "paginate", "paginação", "paginación"],
+    },
+    // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
+    hazards: ["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+      "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles", ...API_BREAK_VERBS],
+    // CUES — who owns the API (1.19 T review; the ownership kind in classify.js holds the algorithm, these are its words):
+    // - a third party named at the API phrase makes it someone else's (GENERIC): "Stripe's REST API", "the provider's OpenAPI
+    //   spec", "their API", a `possessives` word ≤ window.near words back, "<phrase> of / do / del <Owner>" (`ownerAfter`, ≤
+    //   window.ownerReach characters) — an owner is a Titlecase word, a `thirdParty` noun or an ALL-CAPS organisation acronym
+    //   ("la API pública del BCE"; never one of `techAcronyms`), never one of `notOwner`;
+    // - unless the clause says the API is ours — an own cue: an `ownWords` word ≤ window.near words back, an `ownVerbs` verb
+    //   anywhere before it (a past participle right after a `determiners` word is an adjective: "the deprecated Google Places API"),
+    //   a `versionWords` word opening the clause, a `buildVerbs` verb whose direct object it is ("Build a REST API") — a consumer
+    //   verb governing the phrase (`consumerVerbs`: ≤ window.verbReach words back, only `articles` / `linkWords`, Titlecase names
+    //   and ≤ window.verbGap other words between) and "the <Name> <phrase>" (`nameArticles`, ≤ window.names names) make it
+    //   GENERIC (`ownNames` never: ours by name);
+    // - an `ambiguous` name is strong with an own cue, else weak; a `kinds` name also when it opens its clause or follows a plain
+    //   article + ≤ window.adjectives lower-case adjectives ("REST API for the mobile app", "Add rate limiting to the public API").
+    // Verb lists hold one whole lower-case word per entry — a word or a regex fragment ("publish(?:es|ed|ing)?").
+    cues: [
+      {
+        kind: "ownership",
+        ambiguous: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
+          "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api"],
+        kinds: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api pública", "api rest"],
+        ownNames: ["internal api", "api interna", "management api", "admin api"],
+        thirdParty: ["provider", "providers", "supplier", "suppliers", "vendor", "vendors", "partner", "partners", "bank", "banks", "carrier",
+          "carriers", "courier", "couriers", "merchant", "merchants", "third-party", "fornecedor", "fornecedores",
+          "parceiro", "parceiros", "banco", "bancos", "transportadora", "transportadoras", "provedor", "provedores",
+          "terceiros", "proveedor", "proveedores", "socio", "socios", "transportista", "transportistas", "terceros"],
+        ownWords: ["our", "ours", "own", "nosso", "nossa", "nossos", "nossas", "próprio", "própria", "nuestro", "nuestra", "nuestros",
+          "nuestras", "propio", "propia"],
+        ownVerbs: ["expos(?:e|es|ed|ing)", "publish(?:es|ed|ing)?", "offer(?:s|ed|ing)?", "provid(?:e|es|ed|ing)", "design(?:s|ed|ing)?",
+          "document(?:s|ed|ing)?", "deprecat\\p{L}*", "expor", "expõe", "expõem", "expomos", "publicar", "publica",
+          "publicam", "publicamos", "disponibiliz\\p{L}*", "oferecer", "oferece", "oferecem", "oferecemos", "versionar",
+          "versiona", "versionam", "versionamos", "desenhar", "projetar", "documentar", "documenta", "documentam",
+          "descontinuar", "exponer", "expone", "exponen", "exponemos", "ofrecer", "ofrece", "ofrecen", "ofrecemos",
+          "proporcionar", "proporciona", "diseñar", "diseña", "deprecar"],
+        buildVerbs: ["build", "builds", "building", "create", "creates", "creating", "implement", "implements", "implementing", "develop",
+          "develops", "developing", "ship", "construir", "constrói", "criar", "cria", "implementar", "implementa",
+          "desenvolver", "desenvolve", "crear", "crea", "desarrollar", "desarrolla"],
+        articles: ["a", "an", "the", "this", "um", "uma", "o", "un", "una", "el", "la"],
+        linkWords: ["its", "their", "that", "os", "as", "los", "las", "seu", "sua", "seus", "suas", "su", "sus", "with", "to", "from", "into",
+          "via", "through", "on", "com", "ao", "à", "aos", "às", "do", "da", "dos", "das", "de", "del", "con", "al", "en"],
+        consumerVerbs: ["call", "calls", "called", "calling", "consume", "consumes", "consumed", "consuming", "integrate", "integrates",
+          "integrated", "integrating", "integration", "integrations", "sync", "syncs", "synced", "syncing",
+          "synchroni[sz]\\p{L}*", "via", "through", "connect", "connects", "connected", "connecting", "fetch", "fetches",
+          "fetched", "fetching", "pull", "pulls", "pulled", "pulling", "poll", "polls", "polled", "polling", "integrar",
+          "integra", "integram", "integração", "integrações", "chamar", "chama", "chamam", "chamada", "chamadas",
+          "consumir", "consome", "consomem", "sincronizar", "sincroniza", "sincronizam", "através", "buscar", "busca",
+          "consultar", "consulta", "obter", "obtém", "vía", "integran", "integración", "integraciones", "llamar", "llama",
+          "llaman", "llamada", "llamadas", "consumen", "sincronizan", "través", "conectar", "conecta", "conectan",
+          "obtener", "obtiene"],
+        notOwner: ["it", "that", "there", "here", "what", "let", "he", "she", "who", "public", "private", "internal", "external", "new",
+          "old", "legacy", "current", "next", "main", "core", "our", "admin", "management", "rest", "http", "json", "web",
+          "open", "the"],
+        techAcronyms: ["api", "apis", "rest", "http", "https", "json", "xml", "yaml", "soap", "rpc", "sdk", "cli", "crm", "erp", "cms", "lms",
+          "dms", "pos", "mvp", "ui", "ux", "gui", "spa", "pwa", "iot", "etl", "saas", "paas", "iaas", "sso", "jwt", "oauth",
+          "oidc", "ldap", "url", "uri", "sql", "db", "pdf", "csv", "qa", "ci", "cd", "ai", "ml", "llm", "sms", "mfa", "otp",
+          "crud", "id", "ids", "app", "web", "os", "ios", "kpi", "smtp", "ftp", "sftp", "tcp", "udp", "dns", "cdn", "vpn",
+          "b2b", "b2c", "hr", "rh", "rrhh", "ti"],
+        determiners: ["a", "an", "the", "this", "that", "these", "those", "its", "their", "his", "her", "any", "some", "every"],
+        possessives: ["their"],
+        versionWords: ["version"],
+        nameArticles: ["the"],
+        ownerAfter: { links: ["of", "do", "da", "dos", "das", "de", "del"], articles: ["the", "la", "el", "los", "las", "o", "a", "os", "as"] },
+        window: { near: 3, verbReach: 8, verbGap: 1, names: 3, adjectives: 2, ownerReach: 60 },
+      },
+    ],
   },
   // +ui (1.19 T): a user-facing interface — the screens, the design system, accessibility, the states every view needs, the
   // front-end performance budget. STRONG: the design system and its parts (tokens, a component library, UI components), WCAG /
@@ -776,7 +946,7 @@ const SIGNALS = {
   // feature has them): screen, page, form, button, dialog, dashboard, menu, icon, widget, click, layout, theme — "add a button
   // to export" or "the log in form" is 'possible' at most. A dashboard is +ui's generic word only (never +obs: "a metrics
   // dashboard for sales" is a product screen); a monitoring / Grafana dashboard is +obs strong and shadows it.
-  // CUES (1.19 T review — SIGNAL_CUES.ui, uiCueTier): a page type (a settings / admin / profile page, an admin panel…) and the
+  // CUES (1.19 T review — the cues below): a page type (a settings / admin / profile page, an admin panel…) and the
   // frontend / UI / UX words count as GENERIC in a CLAUSE that says the work is backend-only — a handler, an endpoint, the
   // backend, an API (never "API keys"), a data layer / repository / SQL, "the UI already exists" ("a PATCH handler that the
   // settings page calls", "the profile page backend should return…") — unless a negator governs the backend word ("no backend
@@ -824,6 +994,78 @@ const SIGNALS = {
       // ES ("tablero" / "cuadro de mando": a dashboard — 1.19 T review)
       "pantalla", "formulario", "botón", "icono", "tablero", "cuadro de mando",
     ],
+    // +ui (1.19 T): a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
+    // the generic words too (a screen is a page, a form, a button, a dashboard, an icon).
+    concepts: {
+      framework: ["React", "Vue", "Angular", "Svelte"],
+      uiux: ["UI", "UX"],
+      style: ["css", "stylesheet", "tailwind"],
+      frontend: ["frontend", "front-end"],
+      i18n: ["i18n", "l10n", "RTL"],
+      vitals: ["CLS", "INP"],
+      states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
+      formValidation: ["form validation", "validação de formulário", "validación de formulario"],
+      responsive: ["responsive", "responsivo", "responsiva"],
+      design: ["wireframe", "mockup"],
+      a11y: ["accessibility", "acessibilidade", "accesibilidad"],
+      gesture: ["swipe", "swipeable"],
+      dialog: ["confirmation dialog", "confirm dialog"],
+      inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline"],
+      screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
+      form: ["form", "formulário", "formulario"],
+      button: ["button", "botão", "botón", "click"],
+      dashboard: ["dashboard", "painel", "tablero", "cuadro de mando"],
+      icon: ["icon", "ícone", "icono"],
+    },
+    // CUES (1.19 T review, verify 1) — rules tried in order, the first that fires decides (generic kinds in classify.js):
+    cues: [
+      // an empty state in a sentence about a state machine is a flow state, not a UI state ("the empty state blocks sales"): weak
+      { kind: "sentence", on: ["empty state", "estado vazio", "estado vacío"], ifTier: "strong", then: "weak", edge: "letter",
+        phrases: ["state[- ]machines?", "state transitions?", "máquinas? de estados?", "transiç(?:ão|ões) de estados?",
+          "transici(?:ón|ones) de estados?"] },
+      // "the frontend team" / "a equipa de frontend" names a team, not UI work
+      { kind: "near", on: ["frontend", "front-end"], then: "generic",
+        after: { words: ["teams?", "developers?", "devs?", "engineers?", "squads?"], chars: 20 },
+        before: { words: [[["equipas?", "equipes?", "equipos?"], ["de", "do", "del"]]], chars: 20, edge: "letter" } },
+      // a text that says the work is frontend-only ("Frontend only, …", "Apenas frontend", "Solo frontend"): nothing is demoted
+      { kind: "text", on: UI_PAGE_WORDS, then: "keep", edge: "word",
+        phrases: ["front-?end[- ]only", ["only", { optional: "the" }, "front-?end"],
+          [["apenas", "só", "somente", "unicamente"], { optional: "o" }, "front-?end"],
+          [["solo", "sólo", "solamente", "únicamente"], { optional: "el" }, "front-?end"]] },
+      // the work is backend-only — a backend word in the page word's CLAUSE (cueClause: a colon after a short label joins the two;
+      // never the whole sentence — "Redesign the admin panel; the backend team will add the endpoints later" is UI work): an HTTP
+      // method + a path or a route word, a handler, an endpoint, the backend, a data layer / repository / SQL, "already exists", an
+      // API (never an API key / token). The page types and the frontend / UI / UX words are then generic ("a PATCH
+      // /me/preferences handler that the settings page calls; the UI already exists") — unless a negator governs the backend word
+      // (≤ negWindow words back in the clause, or a word ending n't: "no backend changes", "does not touch the backend", "needs no
+      // API changes", "sin backend"; PT "no" is em + o) or the page CONSUMES it: it follows the page word with a consumer verb
+      // between ("The landing page loads its testimonials from the CMS API"; a backend word before the page — "a handler that the
+      // settings page calls" — or right after it — "the profile page backend", "the admin page's API" — still says the work is
+      // backend-only) …
+      { kind: "clause", on: UI_PAGE_WORDS, then: "generic",
+        mention: {
+          words: ["request handlers?", "route handlers?", "endpoints?", "back-?end", "data layer", "repositor(?:y|ies)", "sql",
+            "server-side", "already exists?", "já existe", "ya existe", "camada de dados", "capa de datos"],
+          requests: { methods: ["get", "post", "put", "patch", "delete"], targets: ["handlers?", "endpoints?", "routes?"] },
+          api: { words: ["apis?"], notAfter: [["chaves?", "claves?"], ["de", "da", "del"]], notBefore: ["keys?", "tokens?"] },
+        },
+        negators: ["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"],
+        negWindow: 4,
+        consumers: ["load", "loads", "loaded", "loading", "fetch", "fetches", "fetched", "fetching", "call", "calls", "called", "calling",
+          "consume", "consumes", "consumed", "consuming", "read", "reads", "reading", "pull", "pulls", "pulled", "pulling",
+          "get", "gets", "getting", "query", "queries", "queried", "querying", "use", "uses", "used", "using", "submit",
+          "submits", "submitted", "submitting", "send", "sends", "sending", "post", "posts", "posted", "posting", "carrega",
+          "carregam", "carregar", "busca", "buscam", "buscar", "chama", "chamam", "chamar", "consome", "consomem",
+          "consumir", "lê", "leem", "ler", "obtém", "obtêm", "obter", "usa", "usam", "usar", "utiliza", "utilizam",
+          "utilizar", "envia", "enviam", "enviar", "consulta", "consultam", "consultar", "carga", "cargan", "cargar",
+          "obtiene", "obtienen", "obtener", "llama", "llaman", "llamar", "consumen", "lee", "leen", "leer", "usan", "envía",
+          "envían", "consultan", "buscan"] },
+      // … or "the UI / the interface / the form already exists" in its SENTENCE (the backend words stay clause-bound: "the endpoint
+      // already exists; redesign the settings page" is UI work)
+      { kind: "sentence", on: UI_PAGE_WORDS, then: "generic", edge: "word",
+        phrases: [[["ui", "ux", "user interface", "interface", "interfaz", "front-?end", "form", "formulário", "formulario"],
+          { optional: ["itself", "em si", "en sí"] }, ["already exists?", "já existe", "ya existe"]]] },
+    ],
   },
   // +obs (1.19 T): observability & operability — a feature the team can watch, alert on, roll out and roll back. STRONG: SLOs /
   // SLIs / error budgets / burn rates, observability, OpenTelemetry, distributed tracing, runbooks, on-call, the alerting and
@@ -840,12 +1082,12 @@ const SIGNALS = {
   // 1.19 T review — business monitoring is no operability: "monitor stock levels and send alerts to purchasing", "warehouse
   // temperature monitoring … alerts go to the shift manager", "price-drop alerts … monitor competitor prices", a support
   // incident within the SLA, a clinical health check. So: monitoring · monitor · alert(s) · alerting · an incident · a
-  // postmortem · an SLA are ONE concept (SIGNAL_CONCEPTS.obs.watch — "monitoring and alerts" is one hint); an SLA, an incident
+  // postmortem · an SLA are ONE concept (concepts.watch — "monitoring and alerts" is one hint); an SLA, an incident
   // and a health check are CONTEXT (evidence only beside another obs signal); on-call, game day, postmortem and a lower-case
   // "otel" (Otel reservations) are weak ("OTel" in its capitals stays strong); and a TECHNICAL TARGET — a service, servers, a
   // cron / batch / sync job, production, a cluster, an endpoint, the backend, the infrastructure, ops / SRE, a status page, disk /
   // CPU / queue depth (CONTEXT, one concept) — backs a lone weak word: "monitor the ERP sync job and alert ops", "alert the team
-  // when the nightly backup job hasn't completed" are +obs. (SIGNAL_CUES.obs drops "customer / room service", "service level".)
+  // when the nightly backup job hasn't completed" are +obs. (Its cues drop "customer / room service", "service level".)
   obs: {
     strong: [
       "observability", "slo", "sli", "error budget", "burn rate", "burn-rate", "opentelemetry", "OTel", "otel collector", "distributed tracing",
@@ -901,162 +1143,46 @@ const SIGNALS = {
     context: [
       "sla", "incident", "incidente", "health check", "verificação de saúde", "verificações de saúde", "comprobación de salud",
       "comprobaciones de salud",
-      // technical targets (one concept) — phrases where the bare word is also a business word (a sales pipeline, a production
-      // line, a job posting, a reefer container, a restaurant's server)
-      "service", "servers", "web server", "app server", "microservice", "in production", "to production", "on production",
-      "production environment", "production traffic", "in prod", "to prod", "cluster", "kubernetes", "k8s", "pod", "cron job", "cronjob",
-      "cron", "batch job", "sync job", "import job", "export job", "backup job", "scheduled job", "nightly job", "background job",
-      "background worker", "etl job", "data pipeline", "etl pipeline", "ci pipeline", "deployment pipeline", "endpoint", "backend",
-      "infrastructure", "ops", "devops", "sre", "status page", "queue depth", "consumer lag", "disk usage", "disk space", "cpu",
-      "memory usage",
-      // PT
-      "serviço", "servidor", "servidores", "microsserviço", "em produção", "para produção", "ambiente de produção", "tarefa agendada",
-      "tarefa noturna", "processo … noturno", "infraestrutura", "página de estado", "uso de disco", "espaço em disco",
-      // ES
-      "servicio", "microservicio", "en producción", "a producción", "entorno de producción", "tarea programada", "tarea nocturna",
-      "proceso … nocturno", "infraestructura", "espacio en disco",
+      ...OBS_TARGETS, // the technical targets (one concept: concepts.target)
+    ],
+    // +obs (1.19 T): alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
+    // availability are one concept each; the generic metrics / logs / latency / deploy words too.
+    // 1.19 T review: watching and alerting — monitoring, monitor, alert(s), an incident, a postmortem (+ PT / ES) — are ONE concept
+    // ("monitor stock levels and send alerts" is one hint, never the two that turned +obs on); the technical targets are one too.
+    concepts: {
+      // (an SLA too: "tickets breaching the SLA … alerts to the supervisor" is a help desk's words, one hint)
+      watch: ["monitoring", "monitor", "alerts", "alerting", "alert", "incident", "postmortem", "post-mortem", "sla", "alertar", "avisar", "monitorização",
+        "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "incidente", "monitorización", "monitoreo", "monitorear"],
+      health: ["health check", "healthcheck", "liveness", "readiness", "verificação de saúde", "verificações de saúde",
+        "comprobación de salud", "comprobaciones de salud"],
+      rollback: ["rollback", "roll back", "reversão", "reversión"],
+      rollout: ["rollout", "roll out"],
+      outage: ["outage", "downtime", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
+      telemetry: ["telemetry", "instrumentation", "telemetria", "instrumentação", "telemetría", "instrumentación"],
+      tracing: ["tracing", "rastreio", "trazas"],
+      errors: ["error rate", "5xx", "taxa de erro", "tasa de error"],
+      oncall: ["on-call", "on call", "plantão", "guardia"],
+      availability: ["uptime"],
+      metrics: ["metrics", "métricas", "latency metrics", "métricas de latência", "métricas de latencia"],
+      logs: ["logs", "logging", "request logs", "application logs"],
+      latency: ["latency", "p99", "p95", "p50", "latência", "latencia"],
+      deploy: ["deploy", "implantação", "despliegue"],
+      target: OBS_TARGETS,
+    },
+    // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
+    hazards: ["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
+    // CUES (1.19 T review): "customer / room service", "service level", "serviço ao cliente", "servicio al cliente" are no
+    // technical target — no signal at all. (The words before carry no left edge, as in 1.19: "bathroom service" is room service.)
+    cues: [
+      { kind: "near", on: ["service", "serviço", "servicio"], then: "none",
+        before: { words: ["customer", "client", "room", "table", "field", "after-sales", "delivery"], chars: 20 },
+        after: { words: ["level", "ao cliente", "a clientes", "de atendimento", "al cliente", "de atención"], chars: 30, plural: true } },
     ],
   },
 };
-// One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
-// "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
-// that would turn the track on. Keyed by track (a keyword may belong to a concept in one track only: +saas' 'worker' and
-// 'background job' stay two signals there). The concept of the matched keywords decides, whatever their tier: a concept with an
-// anchor (weak) keyword matched counts as an anchor. Track packs have none (their keywords are their own).
-const conceptMap = (groups) => new Map(Object.entries(groups).flatMap(([c, kws]) => kws.map((k) => [k, c])));
-const SIGNAL_CONCEPTS = {
-  dist: conceptMap({
-    queue: ["queue", "fila", "cola"],
-    party: ["consumer", "producer", "subscriber", "consumidor", "produtor", "subscritor", "productor", "suscriptor"],
-    retry: ["retry", "jitter", "nova tentativa", "novas tentativas", "retentativa", "reintento", "exponential backoff", "backoff exponencial",
-      "backoff", "recuo exponencial", "retroceso exponencial"],
-    dedup: ["deduplica", "dedup", "dedupe", "desduplica"],
-    race: ["race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera"],
-    publish: ["pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
-      "public … evento", "public … mensagem", "public … mensaje", "send … message", "envi … mensagem", "envi … mensaje"],
-    worker: ["worker", "background job", "em segundo plano", "en segundo plano"],
-    concurrent: ["concurrently", "simultaneously", "em simultâneo", "simultaneamente", "simultáneamente", "de forma concurrente",
-      "concurrent updates", "concurrent writes", "atualizações concorrentes", "escritas concorrentes", "actualizaciones concurrentes",
-      "escrituras concurrentes"],
-    services: ["other services", "another service", "downstream service", "cross-service", "outros serviços", "outro serviço",
-      "otros servicios", "otro servicio", "notification service", "payment service", "billing service", "order service", "orders service",
-      "shipping service", "inventory service", "analytics service", "pricing service", "catalog service", "serviço de notificações",
-      "serviço de pagamentos", "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos",
-      "serviço de envios", "serviço de inventário", "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
-      "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
-      "servicio de inventario", "servicio de precios", "servicio de catálogo"],
-    deadLetter: ["dead letter", "dead-letter", "dlq", "poison message"],
-    delivery: ["at-least-once", "at-most-once", "exactly once", "duplicate delivery", "delivered twice", "delivered more than once",
-      "duplicate message", "duplicate event", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "entregue duas vezes",
-      "mensagens duplicadas", "eventos duplicados", "al menos una vez", "como máximo una vez", "exactamente una vez", "entregado dos veces",
-      "mensajes duplicados"],
-    replication: ["replication", "réplica", "replicação", "replicación"],
-    cacheInvalidation: ["cache invalidation", "invalidação de cache", "invalidación de caché"],
-    eventBus: ["event bus", "barramento de eventos", "bus de eventos"],
-    eventDriven: ["event-driven", "event driven", "orientado a eventos", "orientada a eventos"],
-    lostUpdate: ["update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other"],
-    versionColumn: ["version column", "coluna de versão", "columna de versión"],
-    sameRecord: ["update … same"],
-    searchIndex: ["search index", "elasticsearch", "opensearch"],
-  }),
-  // +api (1.19 T): compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
-  // status codes, the schemas, cursor pagination, a client library / SDK; the generic words (an endpoint and its route, a request).
-  api: conceptMap({
-    // (1.19 T review) the ownership-ambiguous names: one hint, whichever of them a text uses
-    kind: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "api pública", "api rest",
-      "versão da api", "versões da api", "versión de la api", "versiones de la api"],
-    role: ["management api", "admin api"],
-    compat: ["breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
-      "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
-      "mudança incompatível", "mudanças incompatíveis", "compatibilidade retroativa", "retrocompatível", "retrocompatíveis",
-      "retrocompatibilidade", "compatível com versões anteriores", "cambio incompatible", "cambios incompatibles",
-      "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad", ...API_BREAK_VERBS],
-    client: ["sdk", "client library", "client libraries", "api client", "cliente da api", "cliente de la api"],
-    etag: ["etag", "if-match", "if-none-match"],
-    status: ["status code", "http status", "código de estado", "código de status"],
-    schema: ["json schema", "request schema", "response schema", "esquema json"],
-    cursor: ["cursor pagination", "cursor-based pagination", "keyset pagination", "paginação por cursor", "paginación por cursor"],
-    docs: ["api documentation", "api docs", "api reference", "documentação da api", "documentación de la api"],
-    deprecation: ["deprecation", "descontinuação", "obsolescencia"],
-    endpoint: ["endpoint", "route", "rota", "ruta"],
-    request: ["request", "requisição", "solicitud http", "petición http"],
-    paging: ["pagination", "paginate", "paginação", "paginación"],
-  }),
-  // +ui (1.19 T): a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
-  // the generic words too (a screen is a page, a form, a button, a dashboard, an icon).
-  ui: conceptMap({
-    framework: ["React", "Vue", "Angular", "Svelte"],
-    uiux: ["UI", "UX"],
-    style: ["css", "stylesheet", "tailwind"],
-    frontend: ["frontend", "front-end"],
-    i18n: ["i18n", "l10n", "RTL"],
-    vitals: ["CLS", "INP"],
-    states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
-    formValidation: ["form validation", "validação de formulário", "validación de formulario"],
-    responsive: ["responsive", "responsivo", "responsiva"],
-    design: ["wireframe", "mockup"],
-    a11y: ["accessibility", "acessibilidade", "accesibilidad"],
-    gesture: ["swipe", "swipeable"],
-    dialog: ["confirmation dialog", "confirm dialog"],
-    inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline"],
-    screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
-    form: ["form", "formulário", "formulario"],
-    button: ["button", "botão", "botón", "click"],
-    dashboard: ["dashboard", "painel", "tablero", "cuadro de mando"],
-    icon: ["icon", "ícone", "icono"],
-  }),
-  // +obs (1.19 T): alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
-  // availability are one concept each; the generic metrics / logs / latency / deploy words too.
-  // 1.19 T review: watching and alerting — monitoring, monitor, alert(s), an incident, a postmortem (+ PT / ES) — are ONE concept
-  // ("monitor stock levels and send alerts" is one hint, never the two that turned +obs on); the technical targets are one too.
-  obs: conceptMap({
-    // (an SLA too: "tickets breaching the SLA … alerts to the supervisor" is a help desk's words, one hint)
-    watch: ["monitoring", "monitor", "alerts", "alerting", "alert", "incident", "postmortem", "post-mortem", "sla", "alertar", "avisar", "monitorização",
-      "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "incidente", "monitorización", "monitoreo", "monitorear"],
-    health: ["health check", "healthcheck", "liveness", "readiness", "verificação de saúde", "verificações de saúde",
-      "comprobación de salud", "comprobaciones de salud"],
-    rollback: ["rollback", "roll back", "reversão", "reversión"],
-    rollout: ["rollout", "roll out"],
-    outage: ["outage", "downtime", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
-    telemetry: ["telemetry", "instrumentation", "telemetria", "instrumentação", "telemetría", "instrumentación"],
-    tracing: ["tracing", "rastreio", "trazas"],
-    errors: ["error rate", "5xx", "taxa de erro", "tasa de error"],
-    oncall: ["on-call", "on call", "plantão", "guardia"],
-    availability: ["uptime"],
-    metrics: ["metrics", "métricas", "latency metrics", "métricas de latência", "métricas de latencia"],
-    logs: ["logs", "logging", "request logs", "application logs"],
-    latency: ["latency", "p99", "p95", "p50", "latência", "latencia"],
-    deploy: ["deploy", "implantação", "despliegue"],
-    target: ["service", "servers", "web server", "app server", "microservice", "in production", "to production", "on production",
-      "production environment", "production traffic", "in prod", "to prod", "cluster", "kubernetes", "k8s", "pod", "cron job", "cronjob",
-      "cron", "batch job", "sync job", "import job", "export job", "backup job", "scheduled job", "nightly job", "background job",
-      "background worker", "etl job", "data pipeline", "etl pipeline", "ci pipeline", "deployment pipeline", "endpoint", "backend",
-      "infrastructure", "ops", "devops", "sre", "status page", "queue depth", "consumer lag", "disk usage", "disk space", "cpu",
-      "memory usage", "serviço", "servidor", "servidores", "microsserviço", "em produção", "para produção", "ambiente de produção",
-      "tarefa agendada", "tarefa noturna", "processo … noturno", "infraestrutura", "página de estado", "uso de disco", "espaço em disco",
-      "servicio", "microservicio", "en producción", "a producción", "entorno de producción", "tarea programada", "tarea nocturna",
-      "proceso … nocturno", "infraestructura", "espacio en disco"],
-  }),
-};
-// HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
-// "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
-// not an absence: such a keyword counts (and is no "appeared negated" note). Built-in +dist only.
-const SIGNAL_HAZARDS = {
-  dist: new Set(["lost update", "atualização perdida", "atualizações perdidas", "actualización perdida", "actualizaciones perdidas",
-    "update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other", "write skew", "split brain", "split-brain",
-    "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
-    "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
-    "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
-  // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
-  api: new Set(["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
-    "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles", ...API_BREAK_VERBS]),
-  // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
-  obs: new Set(["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"]),
-};
 
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
-  TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS,
-  allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
+  TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,

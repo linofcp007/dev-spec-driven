@@ -3,26 +3,29 @@
 /**
  * dev-spec-driven engine — the Phase 0 classifier.
  * Local and keyword based (no model, no cost): the keyword machinery (word-bounded regexes, inflections, stems, gap keywords),
- * negation, shadowing, the context / generic tiers and concepts, the cue rules, the language guess (guessLang) — over the
- * built-in tracks' SIGNALS (tracks.js) and the project's track packs' keywords (packs.js).
+ * negation, shadowing, the context / generic tiers, concepts and hazards, the generic cue mechanisms (CUE_KINDS) that interpret
+ * each track's cue rules, the language guess (guessLang) — over the built-in tracks' SIGNALS (tracks.js: the data — adding or
+ * tuning a track's signals never touches this file) and the project's track packs' keywords (packs.js).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
 const i18n = require("../i18n.js");
+const { SIGNALS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, SIGNAL_CONCEPTS,
-  SIGNAL_HAZARDS, SIGNALS, specsRoot, trackLabel, trackSignalTable;
-function __link(E) { ({ allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap,
-  SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNALS, specsRoot, trackLabel, trackSignalTable } = E); }
+let allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot, trackLabel,
+  trackSignalTable;
+function __link(E) { ({ allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot,
+  trackLabel, trackSignalTable } = E); }
 
 // ---------------------------------------------------------------------------
 // Heuristic classifier (local, keyword based — no LLM, no cost)
 // ---------------------------------------------------------------------------
 
 // CUES (1.19 T review) — a built-in keyword whose tier depends on the words around it: SIGNAL_CUES[track](hit, text, cased, lang) → a new
-// tier ("strong" / "weak" / "generic"), "none" (no signal at all) or null (unchanged). Built-in tracks only (a track pack's keywords
-// are its own). Every rule reads a BOUNDED window around the hit (its clause / sentence, ≤ CUE_SPAN characters each way) with
-// linear regexes — the classifier stays linear in the text.
+// tier ("strong" / "weak" / "generic"), "none" (no signal at all) or null (unchanged), built below from the track's cue RULES
+// (tracks.js SIGNALS[track].cues — data) by the generic mechanisms of CUE_KINDS. Built-in tracks only (a track pack's keywords are
+// its own). Every rule reads a BOUNDED window around the hit (its clause / sentence, ≤ CUE_SPAN characters each way) with linear
+// regexes built from its word lists (once, on the rule's first use) — the classifier stays linear in the text.
 const CUE_SPAN = 200;
 const CUE_BOUNDARY = /[.!?;:\n]/;
 const SENTENCE_BOUNDARY = /[.!?\n]/;
@@ -63,173 +66,185 @@ function cueClause(s, start, end) {
   return { from: a + 1, to: b };
 }
 
-// +api — who owns the API (see SIGNALS.api). A third party named at the API phrase always makes it someone else's; a consumer verb
-// does unless the clause says the API is ours; an ownership-ambiguous name is strong only beside an own cue.
-const API_AMBIGUOUS = new Set(["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
-  "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api"]);
-const API_KIND = new Set(["public api", "rest api", "http api", "web api", "json api", "partner api", "api pública", "api rest"]);
-const API_OWN_NAMES = new Set(["internal api", "api interna", "management api", "admin api"]); // ours by name — never consumed by a verb
-const API_THIRD_PARTY = new Set(["provider", "providers", "supplier", "suppliers", "vendor", "vendors", "partner", "partners", "bank", "banks",
-  "carrier", "carriers", "courier", "couriers", "merchant", "merchants", "third-party", "fornecedor", "fornecedores", "parceiro", "parceiros",
-  "banco", "bancos", "transportadora", "transportadoras", "provedor", "provedores", "terceiros", "proveedor", "proveedores", "socio", "socios",
-  "transportista", "transportistas", "terceros"]);
-const API_OWN_WORDS = new Set(["our", "ours", "own", "nosso", "nossa", "nossos", "nossas", "próprio", "própria", "nuestro", "nuestra",
-  "nuestros", "nuestras", "propio", "propia"]);
-const RE_API_OWN_VERB = /^(?:expos(?:e|es|ed|ing)|publish(?:es|ed|ing)?|offer(?:s|ed|ing)?|provid(?:e|es|ed|ing)|design(?:s|ed|ing)?|document(?:s|ed|ing)?|deprecat\p{L}*|expor|expõe|expõem|expomos|publicar|publica|publicam|publicamos|disponibiliz\p{L}*|oferecer|oferece|oferecem|oferecemos|versionar|versiona|versionam|versionamos|desenhar|projetar|documentar|documenta|documentam|descontinuar|exponer|expone|exponen|exponemos|ofrecer|ofrece|ofrecen|ofrecemos|proporcionar|proporciona|diseñar|diseña|deprecar)$/u;
-// A build verb is an own cue only when the API phrase is its direct object ("Build a REST API", "Criar uma API REST pública") —
-// never "Create payment intents via the Stripe REST API".
-const RE_API_BUILD_VERB = /^(?:build|builds|building|create|creates|creating|implement|implements|implementing|develop|develops|developing|ship|construir|constrói|criar|cria|implementar|implementa|desenvolver|desenvolve|crear|crea|desarrollar|desarrolla)$/u;
-const API_ARTICLES = new Set(["a", "an", "the", "this", "um", "uma", "o", "un", "una", "el", "la"]);
-// A consumer verb counts only when it governs the API phrase — between them nothing but these link words, Titlecase names and at
-// most one other word ("Integrate with the Salesforce REST API", "Retry calls to the PayPal REST API", "Llamar a la API REST del
-// banco") — never "the order service calls the payment service over gRPC" (the verb's object is the service).
-const API_LINK_WORDS = new Set([...API_ARTICLES, "its", "their", "that", "os", "as", "los", "las", "seu", "sua", "seus", "suas", "su", "sus",
-  "with", "to", "from", "into", "via", "through", "on", "com", "ao", "à", "aos", "às", "do", "da", "dos", "das", "de", "del", "con", "al", "en"]);
-const RE_API_CONSUMER_VERB = /^(?:call|calls|called|calling|consume|consumes|consumed|consuming|integrate|integrates|integrated|integrating|integration|integrations|sync|syncs|synced|syncing|synchroni[sz]\p{L}*|via|through|connect|connects|connected|connecting|fetch|fetches|fetched|fetching|pull|pulls|pulled|pulling|poll|polls|polled|polling|integrar|integra|integram|integração|integrações|chamar|chama|chamam|chamada|chamadas|consumir|consome|consomem|sincronizar|sincroniza|sincronizam|através|buscar|busca|consultar|consulta|obter|obtém|vía|integran|integración|integraciones|llamar|llama|llaman|llamada|llamadas|consumen|sincronizan|través|conectar|conecta|conectan|obtener|obtiene)$/u;
-function consumerVerbGoverns(before, lower) {
-  let other = 0;
-  for (let i = lower.length - 1; i >= 0 && i >= lower.length - 8; i--) {
-    if (RE_API_CONSUMER_VERB.test(lower[i])) return true;
-    if (API_LINK_WORDS.has(lower[i]) || RE_TITLECASE.test(before[i])) continue;
-    if (++other > 1) return false;
-  }
-  return false;
+// --- the cue rules (tracks.js SIGNALS[track].cues — data) → SIGNAL_CUES[track] ---
+// A rule's word / phrase lists: each entry is a regex FRAGMENT (a word, "handlers?", "front-?end", "repositor(?:y|ies)" — never a
+// top-level |) or a SEQUENCE of slots — [slot, …], a slot being one fragment, a list of alternatives or { optional: fragment |
+// [alternatives] } — matched with one or more spaces (never a line break) between the slots. Edges: "letter" — no letter on
+// either side; "word" — no letter, digit or _ on either side.
+const CUE_SP = "[^\\S\\n]+";
+const CUE_EDGES = { letter: ["(?<![\\p{L}])", "(?![\\p{L}])"], word: ["(?<![\\p{L}\\p{N}_])", "(?![\\p{L}\\p{N}_])"] };
+const cueAlt = (a) => (Array.isArray(a) ? (a.length === 1 ? a[0] : "(?:" + a.join("|") + ")") : a);
+function cueSequence(slots) {
+  return slots.map((s, i) => (s && typeof s === "object" && !Array.isArray(s)
+    ? "(?:" + [].concat(s.optional).map((w) => w + CUE_SP).join("|") + ")?"
+    : cueAlt(s) + (i < slots.length - 1 ? CUE_SP : ""))).join("");
 }
-// words that look like an owner but aren't one ("It's", "the Public REST API", "the New API version")
-const API_NOT_OWNER = new Set(["it", "that", "there", "here", "what", "let", "he", "she", "who", "public", "private", "internal", "external",
-  "new", "old", "legacy", "current", "next", "main", "core", "our", "admin", "management", "rest", "http", "json", "web", "open", "the"]);
+const cuePhrases = (items) => cueAlt(items.map((it) => (Array.isArray(it) ? cueSequence(it) : it)));
+// (the ownership kind) a possessive ("Stripe's", "the providers'"), a Titlecase word, an organisation's ALL-CAPS acronym ("the ECB's
+// public API", "la API pública del BCE" — 1.19 verify 2)
 const RE_POSSESSIVE = /^(.+?)(?:['’]s|s['’])$/u;
 const RE_TITLECASE = /^\p{Lu}\p{Ll}/u;
-const RE_API_OWNER_AFTER = /^\s+(?:of|do|da|dos|das|de|del)(?:\s+(?:the|la|el|los|las|o|a|os|as))?\s+([\p{L}][\p{L}\p{N}-]*)/u;
-// (1.19 verify 2) an ALL-CAPS owner — an organisation's acronym ("the ECB's public API", "la API pública del BCE", "a API do INE") — is
-// a third party too; a technical acronym never names one ("the REST API of the CRM", "the public API of the SDK")
-const RE_API_ACRONYM = /^\p{Lu}{2,6}$/u;
-const API_TECH_ACRONYMS = new Set(["api", "apis", "rest", "http", "https", "json", "xml", "yaml", "soap", "rpc", "sdk", "cli", "crm", "erp", "cms",
-  "lms", "dms", "pos", "mvp", "ui", "ux", "gui", "spa", "pwa", "iot", "etl", "saas", "paas", "iaas", "sso", "jwt", "oauth", "oidc", "ldap",
-  "url", "uri", "sql", "db", "pdf", "csv", "qa", "ci", "cd", "ai", "ml", "llm", "sms", "mfa", "otp", "crud", "id", "ids", "app", "web", "os",
-  "ios", "kpi", "smtp", "ftp", "sftp", "tcp", "udp", "dns", "cdn", "vpn", "b2b", "b2c", "hr", "rh", "rrhh", "ti"]);
-// (1.19 verify 2) a past participle right after a determiner is an adjective, never an own verb: "Replace the deprecated Google
-// Places API calls", "the documented Stripe API"
-const API_DETERMINERS = new Set(["a", "an", "the", "this", "that", "these", "those", "its", "their", "his", "her", "any", "some", "every"]);
-function apiCueTier(h, text, cased) {
-  const before = cueWords(cueBefore(cased, h.start, CUE_BOUNDARY));
-  const lower = before.map((w) => w.toLowerCase());
-  const last3 = before.slice(-3);
-  const owner = (w) => !API_NOT_OWNER.has(w.toLowerCase()) && (RE_TITLECASE.test(w) || API_THIRD_PARTY.has(w.toLowerCase()) ||
-    (RE_API_ACRONYM.test(w) && !API_TECH_ACRONYMS.has(w.toLowerCase())));
-  // a third party named at the API phrase: "Stripe's REST API", "the provider's OpenAPI spec", "their API", "a API REST do Stripe"
-  const possessed = last3.some((w) => { const m = RE_POSSESSIVE.exec(w); return !!m && owner(m[1]); }) || lower.slice(-3).includes("their");
-  const post = RE_API_OWNER_AFTER.exec(cased.slice(h.end, Math.min(cased.length, h.end + 60)));
-  if (possessed || (post && owner(post[1]))) return "generic";
-  const n = lower.length;
-  const ownVerb = (w, i) => RE_API_OWN_VERB.test(w) && !(/ed$/.test(w) && i > 0 && API_DETERMINERS.has(lower[i - 1]));
-  const own = lower.slice(-3).some((w) => API_OWN_WORDS.has(w)) || lower.some(ownVerb) ||
-    (n > 0 && lower[0] === "version") ||
-    (n > 0 && RE_API_BUILD_VERB.test(lower[n - 1])) || (n > 1 && API_ARTICLES.has(lower[n - 1]) && RE_API_BUILD_VERB.test(lower[n - 2]));
-  if (!own && !API_OWN_NAMES.has(h.kw)) {
-    // a consumer verb governing the API phrase ("Integrate with the Salesforce REST API", "Book the courier through the partner API")
-    if (consumerVerbGoverns(before, lower)) return "generic";
-    // "the <Name> <API phrase>" — "the Shopify API version", "the Google Maps JSON API"
-    let k = before.length;
-    while (k > 0 && before.length - k < 3 && RE_TITLECASE.test(before[k - 1]) && !API_NOT_OWNER.has(before[k - 1].toLowerCase())) k--;
-    if (k < before.length && k > 0 && lower[k - 1] === "the") return "generic";
-  }
-  if (!API_AMBIGUOUS.has(h.kw)) return null;
-  if (own) return "strong";
-  // an API-kind name with no owner named is ours when it opens its clause or follows a plain determiner, adjectives allowed ("REST
-  // API for the mobile app…", "Add rate limiting to the public API", "a versioned REST API", "Uma API pública para os parceiros"):
-  // a third party's is named first ("Stripe REST API integration", "the shipping provider REST API" stay weak)
-  if (!API_KIND.has(h.kw)) return null;
-  let j = n, adj = 0;
-  while (j > 0 && adj < 2 && /^\p{Ll}+$/u.test(before[j - 1]) && !API_LINK_WORDS.has(lower[j - 1]) && !API_THIRD_PARTY.has(lower[j - 1])) { j--; adj++; }
-  return j === 0 || API_ARTICLES.has(lower[j - 1]) ? "strong" : null;
+const RE_CUE_ACRONYM = /^\p{Lu}{2,6}$/u;
+// The generic mechanisms a rule names (its `kind`): kind(rule) → test(hit, text, cased, lang) → false (did not fire), true (fired:
+// the rule's `then`) or an outcome of its own ("strong" / "weak" / "generic" / "none" / "keep").
+const CUE_KINDS = {
+  // near — words right BEFORE and / or right AFTER the hit. before: { words, chars, edge? } — they end the `chars` characters before
+  // the hit (spaces between — none only where no hit can start: keywordRe never matches right after a letter); edge "letter": never
+  // the end of a longer word. after: { words, chars, plural? } — they start the `chars` characters after it (spaces between) and end
+  // at a non-letter; plural: read from the keyword's own end, its plural ending (s / es) first ("services level").
+  near(rule) {
+    const b = rule.before, a = rule.after;
+    const reB = b ? new RegExp((b.edge ? CUE_EDGES[b.edge][0] : "") + cuePhrases(b.words) + "[^\\S\\n]*$", "u") : null;
+    const reA = a ? new RegExp((a.plural ? "^(?:s|es)?[^\\S\\n]+" : "^[^\\S\\n]*") + cuePhrases(a.words) + "(?![\\p{L}])", "u") : null;
+    return (h, text) => (!!reB && reB.test(text.slice(Math.max(0, h.start - b.chars), h.start))) ||
+      (!!reA && reA.test(a.plural ? text.slice(h.start + h.kw.length, h.end + a.chars) : text.slice(h.end, h.end + a.chars)));
+  },
+  // sentence — a phrase in the hit's SENTENCE (. ! ? or a line break, ≤ CUE_SPAN characters each way): { phrases, edge }.
+  sentence(rule) {
+    const re = new RegExp(CUE_EDGES[rule.edge][0] + cuePhrases(rule.phrases) + CUE_EDGES[rule.edge][1], "u");
+    return (h, text) => re.test(cueBefore(text, h.start, SENTENCE_BOUNDARY) + text.slice(h.start, h.end) + cueAfter(text, h.end, SENTENCE_BOUNDARY));
+  },
+  // text — a phrase anywhere in the classified text: { phrases, edge } — tested once per text, not per hit (the classifier stays
+  // linear in the text).
+  text(rule) {
+    const re = new RegExp(CUE_EDGES[rule.edge][0] + cuePhrases(rule.phrases) + CUE_EDGES[rule.edge][1], "u");
+    let memoText = null, memo = false;
+    return (h, text) => {
+      if (text !== memoText) { memoText = text; memo = re.test(text); }
+      return memo;
+    };
+  },
+  // clause — a MENTION in the hit's CLAUSE (cueClause) that is neither negated nor consumed: it does not count when a negator
+  // governs it (one of `negators` ≤ `negWindow` words before it in the clause, or a word ending n't — PT "no" is em + o, never a
+  // negator in a PT text, the classifier's rule) nor when it FOLLOWS the hit with a `consumers` verb between them (the hit consumes
+  // it); the hit itself is never its own mention. mention: { words — fragments; requests: { methods, targets } — an HTTP method
+  // + a path (/…) or a target word; api: { words, notAfter (a sequence), notBefore } — an API word, never right after notAfter
+  // nor right before notBefore (an API key) }.
+  clause(rule) {
+    const m = rule.mention, EDGE = "(?![\\p{L}\\p{N}_])";
+    const alts = [];
+    if (m.requests) alts.push(cueAlt(m.requests.methods) + CUE_SP + "(?:\\/|" + cueAlt(m.requests.targets) + EDGE + ")");
+    if (m.words) alts.push(cueAlt(m.words) + EDGE);
+    if (m.api) alts.push("(?<!" + cueSequence(m.api.notAfter) + CUE_SP + ")" + cueAlt(m.api.words) + EDGE + "(?!" + CUE_SP + cueAlt(m.api.notBefore) + "(?![\\p{L}]))");
+    const re = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + alts.join("|") + ")", "gu");
+    const negators = new Set(rule.negators), consumers = new Set(rule.consumers), win = rule.negWindow;
+    return (h, text, cased, lang) => {
+      const c = cueClause(text, h.start, h.end);
+      const clause = text.slice(c.from, c.to);
+      const pt = i18n.baseLang(lang || "en") === "pt";
+      // where the first consumer verb after the hit ends (a mention after it is consumed) — one pass over the clause
+      let consumedFrom = Infinity;
+      const RE_WORD = /[\p{L}\p{N}'’-]+/gu;
+      const tail = text.slice(h.end, c.to);
+      let w;
+      while ((w = RE_WORD.exec(tail)) !== null) if (consumers.has(w[0].toLowerCase())) { consumedFrom = h.end + w.index + w[0].length; break; }
+      re.lastIndex = 0;
+      let x;
+      while ((x = re.exec(clause)) !== null) {
+        const at = c.from + x.index;
+        if (at < h.end && at + x[0].length > h.start) continue; // (never the hit itself)
+        // the words just before it (a bounded look-back: negWindow words fit in 80 characters but for very long words)
+        const before = cueWords(text.slice(Math.max(c.from, at - 80), at)).slice(-win).map((y) => y.toLowerCase());
+        if (before.some((y) => (negators.has(y) && !(pt && y === "no")) || /n['’]t$/.test(y))) continue;
+        if (at >= consumedFrom) continue;
+        return true;
+      }
+      return false;
+    };
+  },
+  // ownership — who owns an API (+api, 1.19 T review; the words and windows are the rule's — see SIGNALS.api.cues in tracks.js). A
+  // rule of its own kind, not a table: possessives, a consumer verb governing the phrase, "the <Name> <phrase>", a build verb's
+  // direct object and an API-kind name opening its clause are word ORDER, not word lists. → "generic" (someone else's API),
+  // "strong" (an ambiguous name that is ours) or "keep".
+  ownership(rule) {
+    const S = (a) => new Set(a), whole = (a) => new RegExp("^(?:" + a.join("|") + ")$", "u");
+    const ambiguous = S(rule.ambiguous), kinds = S(rule.kinds), ownNames = S(rule.ownNames), thirdParty = S(rule.thirdParty),
+      ownWords = S(rule.ownWords), articles = S(rule.articles), linkWords = S([...rule.articles, ...rule.linkWords]), notOwner = S(rule.notOwner),
+      techAcronyms = S(rule.techAcronyms), determiners = S(rule.determiners), possessives = S(rule.possessives), versionWords = S(rule.versionWords),
+      nameArticles = S(rule.nameArticles);
+    const ownVerbRe = whole(rule.ownVerbs), buildVerbRe = whole(rule.buildVerbs), consumerVerbRe = whole(rule.consumerVerbs);
+    const ownerAfterRe = new RegExp("^\\s+(?:" + rule.ownerAfter.links.join("|") + ")(?:\\s+(?:" + rule.ownerAfter.articles.join("|") +
+      "))?\\s+([\\p{L}][\\p{L}\\p{N}-]*)", "u");
+    const W = rule.window;
+    // an owner: a Titlecase word, a third-party noun or an organisation's acronym — never a technical acronym ("the REST API of the
+    // CRM") nor a word that only looks like one ("It's", "the Public REST API", "the New API version")
+    const owner = (w) => !notOwner.has(w.toLowerCase()) && (RE_TITLECASE.test(w) || thirdParty.has(w.toLowerCase()) ||
+      (RE_CUE_ACRONYM.test(w) && !techAcronyms.has(w.toLowerCase())));
+    // a consumer verb governs the phrase: between them nothing but link words, Titlecase names and at most verbGap other words
+    // ("Integrate with the Salesforce REST API", "Llamar a la API REST del banco") — never "the order service calls the payment
+    // service over gRPC" (the verb's object is the service)
+    const consumerGoverns = (before, lower) => {
+      let other = 0;
+      for (let i = lower.length - 1; i >= 0 && i >= lower.length - W.verbReach; i--) {
+        if (consumerVerbRe.test(lower[i])) return true;
+        if (linkWords.has(lower[i]) || RE_TITLECASE.test(before[i])) continue;
+        if (++other > W.verbGap) return false;
+      }
+      return false;
+    };
+    return (h, text, cased) => {
+      const before = cueWords(cueBefore(cased, h.start, CUE_BOUNDARY));
+      const lower = before.map((w) => w.toLowerCase());
+      const near = before.slice(-W.near), nearLower = lower.slice(-W.near);
+      // a third party named at the API phrase: "Stripe's REST API", "the provider's OpenAPI spec", "their API", "a API REST do Stripe"
+      const possessed = near.some((w) => { const p = RE_POSSESSIVE.exec(w); return !!p && owner(p[1]); }) || nearLower.some((w) => possessives.has(w));
+      const post = ownerAfterRe.exec(cased.slice(h.end, Math.min(cased.length, h.end + W.ownerReach)));
+      if (possessed || (post && owner(post[1]))) return "generic";
+      const n = lower.length;
+      // a past participle right after a determiner is an adjective, never an own verb ("Replace the deprecated Google Places API calls")
+      const ownVerb = (w, i) => ownVerbRe.test(w) && !(/ed$/.test(w) && i > 0 && determiners.has(lower[i - 1]));
+      // a build verb is an own cue only when the API phrase is its direct object ("Build a REST API", "Criar uma API REST pública") —
+      // never "Create payment intents via the Stripe REST API"
+      const own = nearLower.some((w) => ownWords.has(w)) || lower.some(ownVerb) || (n > 0 && versionWords.has(lower[0])) ||
+        (n > 0 && buildVerbRe.test(lower[n - 1])) || (n > 1 && articles.has(lower[n - 1]) && buildVerbRe.test(lower[n - 2]));
+      if (!own && !ownNames.has(h.kw)) {
+        // a consumer verb governing the API phrase ("Integrate with the Salesforce REST API", "Book the courier through the partner API")
+        if (consumerGoverns(before, lower)) return "generic";
+        // "the <Name> <API phrase>" — "the Shopify API version", "the Google Maps JSON API"
+        let k = before.length;
+        while (k > 0 && before.length - k < W.names && RE_TITLECASE.test(before[k - 1]) && !notOwner.has(before[k - 1].toLowerCase())) k--;
+        if (k < before.length && k > 0 && nameArticles.has(lower[k - 1])) return "generic";
+      }
+      if (!ambiguous.has(h.kw)) return "keep";
+      if (own) return "strong";
+      // an API-kind name with no owner named is ours when it opens its clause or follows a plain determiner, adjectives allowed ("REST
+      // API for the mobile app…", "Add rate limiting to the public API", "a versioned REST API", "Uma API pública para os parceiros"):
+      // a third party's is named first ("Stripe REST API integration", "the shipping provider REST API" stay weak)
+      if (!kinds.has(h.kw)) return "keep";
+      let j = n, adj = 0;
+      while (j > 0 && adj < W.adjectives && /^\p{Ll}+$/u.test(before[j - 1]) && !linkWords.has(lower[j - 1]) && !thirdParty.has(lower[j - 1])) { j--; adj++; }
+      return j === 0 || articles.has(lower[j - 1]) ? "strong" : "keep";
+    };
+  },
+};
+// A track's cue rules → its SIGNAL_CUES function: the rules are tried in order (a rule reads the keywords of its `on` — none: every
+// keyword — and, with `ifTier`, a hit of that tier only); the first that fires decides — "keep" is null (unchanged). A rule naming
+// an unknown kind is an error while the engine loads (a table typo never passes silently); its test — its regexes — is built on
+// its first use, never while the engine loads (every hook and CLI call is a fresh process that loads the engine).
+function cueRules(rules, track) {
+  const compiled = rules.map((r) => {
+    if (!Object.prototype.hasOwnProperty.call(CUE_KINDS, r.kind)) throw new Error("engine: SIGNALS." + track + ".cues — unknown kind " + r.kind);
+    return { on: r.on ? new Set(r.on) : null, ifTier: r.ifTier || null, rule: r, test: null, then: r.then };
+  });
+  return function cues(h, text, cased, lang) {
+    for (const r of compiled) {
+      if ((r.on && !r.on.has(h.kw)) || (r.ifTier && h.tier !== r.ifTier)) continue;
+      if (!r.test) r.test = CUE_KINDS[r.rule.kind](r.rule);
+      const out = r.test(h, text, cased, lang);
+      if (out === false) continue;
+      const tier = out === true ? r.then : out;
+      return tier === "keep" ? null : tier;
+    }
+    return null;
+  };
 }
-
-// +ui — a page type / the frontend words in a sentence that says the work is backend-only; an empty state in a state machine.
-const UI_PAGE_WORDS = new Set(["landing page", "settings page", "settings screen", "admin page", "admin panel", "admin ui", "management page",
-  "profile page", "account page", "página de definições", "página de configurações", "página de administração", "painel de administração",
-  "página de gestão", "página de perfil", "ecrã de definições", "tela de configurações", "página de ajustes", "página de configuración",
-  "panel de administración", "página de gestión", "pantalla de ajustes", "frontend", "front-end", "UI", "UX"]);
-const UI_EMPTY_STATE = new Set(["empty state", "estado vazio", "estado vacío"]);
-const RE_UI_BACKEND = /(?<![\p{L}\p{N}_])(?:(?:get|post|put|patch|delete)[^\S\n]+(?:\/|(?:handlers?|endpoints?|routes?)(?![\p{L}\p{N}_]))|(?:request handlers?|route handlers?|endpoints?|back-?end|data layer|repositor(?:y|ies)|sql|server-side|already exists?|já existe|ya existe|camada de dados|capa de datos)(?![\p{L}\p{N}_])|(?<!(?:chaves?|claves?)[^\S\n]+(?:de|da|del)[^\S\n]+)apis?(?![\p{L}\p{N}_])(?![^\S\n]+(?:keys?|tokens?)(?![\p{L}])))/gu;
-const RE_UI_STATE_MACHINE = /(?<![\p{L}])(?:state[- ]machines?|state transitions?|máquinas? de estados?|transiç(?:ão|ões) de estados?|transici(?:ón|ones) de estados?)(?![\p{L}])/u;
-// 1.19 verify 1 — the backend cue reads the page word's CLAUSE (cueClause), never the whole sentence ("Redesign the admin panel;
-// the backend team will add the endpoints later"), and a backend word does not count when
-// - a negator governs it (≤ UI_NEG_WINDOW words before it in the clause: "no backend changes", "does not touch the backend",
-//   "needs no API changes", "sem backend", "sin backend" — PT "no" is em + o, never a negator), or
-// - the page CONSUMES it: it follows the page word, a consumer verb between them ("The landing page loads its testimonials from
-//   the CMS API") — a backend word before the page ("a PATCH handler that the settings page calls") or right after it ("the
-//   profile page backend", "the admin page's API") still says the work is backend-only;
-// and nothing is demoted where the text says the work is frontend-only ("Frontend only, …", "Apenas frontend", "Solo frontend").
-// "the frontend team" / "a equipa de frontend" names a team, not UI work: generic.
-const UI_NEG_WINDOW = 4;
-const UI_NEGATORS = new Set(["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"]);
-const UI_CONSUMER_VERBS = new Set(["load", "loads", "loaded", "loading", "fetch", "fetches", "fetched", "fetching", "call", "calls", "called",
-  "calling", "consume", "consumes", "consumed", "consuming", "read", "reads", "reading", "pull", "pulls", "pulled", "pulling", "get", "gets",
-  "getting", "query", "queries", "queried", "querying", "use", "uses", "used", "using", "submit", "submits", "submitted", "submitting",
-  "send", "sends", "sending", "post", "posts", "posted", "posting",
-  "carrega", "carregam", "carregar", "busca", "buscam", "buscar", "chama", "chamam", "chamar", "consome", "consomem", "consumir", "lê",
-  "leem", "ler", "obtém", "obtêm", "obter", "usa", "usam", "usar", "utiliza", "utilizam", "utilizar", "envia", "enviam", "enviar", "consulta",
-  "consultam", "consultar",
-  "carga", "cargan", "cargar", "obtiene", "obtienen", "obtener", "llama", "llaman", "llamar", "consumen", "lee", "leen", "leer", "usan",
-  "envía", "envían", "consultan", "buscan"]);
-const UI_FRONTEND_WORDS = new Set(["frontend", "front-end"]);
-const RE_UI_TEAM_AFTER = /^[^\S\n]*(?:teams?|developers?|devs?|engineers?|squads?)(?![\p{L}])/u;
-const RE_UI_TEAM_BEFORE = /(?<![\p{L}])(?:equipas?|equipes?|equipos?)[^\S\n]+(?:de|do|del)[^\S\n]+$/u;
-const RE_UI_FRONTEND_ONLY = /(?<![\p{L}\p{N}_])(?:front-?end[- ]only|only[^\S\n]+(?:the[^\S\n]+)?front-?end|(?:apenas|só|somente|unicamente)[^\S\n]+(?:o[^\S\n]+)?front-?end|(?:solo|sólo|solamente|únicamente)[^\S\n]+(?:el[^\S\n]+)?front-?end)(?![\p{L}\p{N}_])/u;
-// one test per classified text, not per page word (the classifier stays linear in the text)
-let uiFrontendOnlyText = null;
-let uiFrontendOnlyAnswer = false;
-function uiFrontendOnly(text) {
-  if (text !== uiFrontendOnlyText) { uiFrontendOnlyText = text; uiFrontendOnlyAnswer = RE_UI_FRONTEND_ONLY.test(text); }
-  return uiFrontendOnlyAnswer;
-}
-function uiBackendInClause(h, text, lang) {
-  const c = cueClause(text, h.start, h.end);
-  const clause = text.slice(c.from, c.to);
-  const pt = i18n.baseLang(lang || "en") === "pt";
-  // where the first consumer verb after the page word ends (a backend word after it is consumed) — one pass over the clause
-  let consumedFrom = Infinity;
-  const RE_WORD = /[\p{L}\p{N}'’-]+/gu;
-  const tail = text.slice(h.end, c.to);
-  let w;
-  while ((w = RE_WORD.exec(tail)) !== null) if (UI_CONSUMER_VERBS.has(w[0].toLowerCase())) { consumedFrom = h.end + w.index + w[0].length; break; }
-  RE_UI_BACKEND.lastIndex = 0;
-  let m;
-  while ((m = RE_UI_BACKEND.exec(clause)) !== null) {
-    const at = c.from + m.index;
-    if (at < h.end && at + m[0].length > h.start) continue; // (never the hit itself)
-    // the words just before it (a bounded look-back: UI_NEG_WINDOW words fit in 80 characters but for very long words)
-    const before = cueWords(text.slice(Math.max(c.from, at - 80), at)).slice(-UI_NEG_WINDOW).map((x) => x.toLowerCase());
-    if (before.some((x) => (UI_NEGATORS.has(x) && !(pt && x === "no")) || /n['’]t$/.test(x))) continue;
-    if (at >= consumedFrom) continue;
-    return true;
-  }
-  return false;
-}
-// "the UI / the interface / the form already exists" speaks for its whole sentence (the backend words stay clause-bound: "the
-// endpoint already exists; redesign the settings page" is UI work)
-const RE_UI_ALREADY = /(?<![\p{L}\p{N}_])(?:ui|ux|user interface|interface|interfaz|front-?end|form|formulário|formulario)[^\S\n]+(?:itself[^\S\n]+|em si[^\S\n]+|en sí[^\S\n]+)?(?:already exists?|já existe|ya existe)(?![\p{L}\p{N}_])/u;
-function uiCueTier(h, text, cased, lang) {
-  const isPage = UI_PAGE_WORDS.has(h.kw), isEmpty = UI_EMPTY_STATE.has(h.kw);
-  if (!isPage && !isEmpty) return null;
-  const sentence = () => cueBefore(text, h.start, SENTENCE_BOUNDARY) + text.slice(h.start, h.end) + cueAfter(text, h.end, SENTENCE_BOUNDARY);
-  if (isEmpty) return h.tier === "strong" && RE_UI_STATE_MACHINE.test(sentence()) ? "weak" : null;
-  if (UI_FRONTEND_WORDS.has(h.kw) && (RE_UI_TEAM_AFTER.test(text.slice(h.end, h.end + 20)) || RE_UI_TEAM_BEFORE.test(text.slice(Math.max(0, h.start - 20), h.start)))) return "generic";
-  if (uiFrontendOnly(text)) return null;
-  return uiBackendInClause(h, text, lang) || RE_UI_ALREADY.test(sentence()) ? "generic" : null;
-}
-
-// +obs — "customer service", "room service", "service level", "serviço ao cliente", "servicio al cliente" are no technical target.
-const OBS_SERVICE_WORDS = new Set(["service", "serviço", "servicio"]);
-const RE_OBS_NOT_TARGET_BEFORE = /(?:customer|client|room|table|field|after-sales|delivery)[^\S\n]*$/u;
-const RE_OBS_NOT_TARGET_AFTER = /^(?:s|es)?[^\S\n]+(?:level|ao cliente|a clientes|de atendimento|al cliente|de atención)(?![\p{L}])/u;
-function obsCueTier(h, text) {
-  if (!OBS_SERVICE_WORDS.has(h.kw)) return null;
-  return RE_OBS_NOT_TARGET_BEFORE.test(text.slice(Math.max(0, h.start - 20), h.start)) || RE_OBS_NOT_TARGET_AFTER.test(text.slice(h.start + h.kw.length, h.end + 30))
-    ? "none" : null;
-}
-const SIGNAL_CUES = { api: apiCueTier, ui: uiCueTier, obs: obsCueTier };
+// The per-track lookups the classifier reads, built once from the tables: SIGNAL_CONCEPTS[track] (keyword → concept),
+// SIGNAL_HAZARDS[track] (a Set), SIGNAL_CUES[track](hit, text, cased, lang) — for the built-in tracks that have them.
+const conceptMap = (groups) => new Map(Object.entries(groups).flatMap(([c, kws]) => kws.map((k) => [k, c])));
+const signalLookup = (key, build) => Object.fromEntries(Object.entries(SIGNALS).filter(([, s]) => s[key]).map(([t, s]) => [t, build(s[key], t)]));
+const SIGNAL_CONCEPTS = signalLookup("concepts", conceptMap);
+const SIGNAL_HAZARDS = signalLookup("hazards", (list) => new Set(list));
+const SIGNAL_CUES = signalLookup("cues", cueRules);
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
 const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin"];
@@ -681,8 +696,9 @@ function buildReasoning(tracks, signals, confidence, negated, C, optional) {
   return lines.join("\n");
 }
 
-module.exports = { SIGNAL_CUES, NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER, W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK,
-  ES_STRONG, ES_STRONG_CHARS, ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF, ES_INF, PTES_INF, ES_NO_INF,
+module.exports = { conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNAL_CUES, NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER,
+  W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS, ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF,
+  ES_INF, PTES_INF, ES_NO_INF,
   guessLang, configuredLang, isNegated, STEMS, VERB_STEMS, IRREGULAR_FORMS, KW_GAP, KW_GAP_RE, INFLECTION,
   ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral, keywordRe,
   keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, __link };
