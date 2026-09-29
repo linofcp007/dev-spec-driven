@@ -59,7 +59,11 @@ searches before writing, and three built-in tracks for API contracts, user inter
 - `references/saas-patterns.md` cited RFC 8594 for the `Deprecation` header — it is RFC 9745 (`Sunset` is RFC 8594).
 
 ### Tests
-- `node mcp/test.js` TBD assertions (was 1447), `node cli/test-cli.js` TBD (was 455).
+- `node mcp/test.js` 1529 assertions (was 1447), `node cli/test-cli.js` 471 (was 455): the three tracks end to end (a
+  precision / recall assertion over 88 hard EN / PT / ES texts — consuming vs designing an API, business monitoring vs
+  operability, the backend behind a page — every track combination, legacy packs by name and by marker), the Reuse &
+  Integration check and its upgrade path, the brief's Reuse section (a network path, a link out, a big folder), backlog
+  notes, and one regression per review finding.
 
 ## [1.18.0] — 2026-09-29
 
