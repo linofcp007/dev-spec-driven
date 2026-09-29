@@ -62,8 +62,24 @@ imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
 - Negated classifier keywords are deduplicated like matched ones; "message queue" no longer hints +saas.
 - `spec_templates` lists 29 built-in templates (the `distributed.md` steering stub).
 
+### Upgrade note — track packs with a now-reserved name
+- Track packs from before 1.17 named `dist`, `kafka`, `distributed`, `microservices`, `consistency` (or their PT / ES
+  forms), or marked `DIST`, are now reserved and ignored. A feature that used one keeps it as a missing pack: doctor's
+  `track-pack-missing` and `spec_upgrade` (`track-pack-reserved`) say so. A pack named `dist` is never read as the
+  built-in +dist. The way out: rename `.specs/tracks/<name>/` (and its marker and headings if the marker is reserved),
+  then `dev-spec add-track <feature> <new-name>` and `dev-spec add-track <feature> <old-name> --remove` — or, for `dist`,
+  adopt the built-in track with `dev-spec add-track <feature> dist`.
+
 ### Fixed
-- Line trimming in the importers and `spec_decide` is linear (a document with a very long run of spaces hung for minutes).
+- `spec_import` no longer stalls on long whitespace runs or long plans: markdown headings and ranges are read by scans (a
+  3,000-space heading took 10 s), the importers' trailing trims use `trimEnd` (`/\s+$/` was quadratic), a long dependency
+  chain is ordered in linear time, and imported requirements.md lines never open an HTML comment that hides the criteria
+  below it (every importer — a Kiro `<!-- … -->` line could hide an acceptance criterion).
+- The classifier's shadowing check (a weak keyword inside a longer strong one) is linear — 100 KB of repeated keywords
+  took seconds.
+- A PT / ES request starting with an infinitive ("Publicar eventos no Kafka") is read in its language: "no" there is em+o,
+  not a negation.
+- The PT / ES glossary stub lost a space in 1.16 ("produto:uma").
 
 ### Tests
 - `node mcp/test.js` TBD assertions (was 1362), `node cli/test-cli.js` TBD (was 438).
