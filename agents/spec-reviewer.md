@@ -56,10 +56,12 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   fabricated run.
 
 ### 3. Track checks (only for active tracks)
-- **+tdd:** the report shows RED for the right reason before GREEN; the target T-IDs are green; no
-  planned test's expectation or assertion changed in the diff (any such change is **Critical** — it is
-  a spec change nobody approved). Production behaviour in the diff that no test in it exercises is **Important**:
-  the micro-cycle writes each behaviour's test first (`references/test-patterns.md`).
+- **+tdd:** the report shows RED for the right reason before GREEN for each new behaviour's test (a guard test, a
+  characterization test of existing code or a T-ID an earlier task turned green is green from its first run — never
+  a finding); the target T-IDs are green; no planned test's expectation or assertion changed in the diff (any such
+  change is **Critical** — it is a spec change nobody approved). Production behaviour in the diff that no test
+  exercises (a target T-ID — committed in Phase 4, so usually not in this diff — or a helper test in the diff) is
+  **Important**: the micro-cycle writes each behaviour's test first (`references/test-patterns.md`).
 - **+saas:** `_Emits metrics:_` metrics actually emitted; queries on tenant data scoped
   (`WHERE tenant_id = ?` or RLS); no new unbounded hot-path work.
 - **+ai (deterministic tasks):** prompts in versioned files, not inline strings; no PII sent to a

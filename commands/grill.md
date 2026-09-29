@@ -36,8 +36,9 @@ Steps:
 
    The answers become acceptance criteria (an IF…THEN per failure), NFRs with numbers and Success Criteria — and the
    input of the design's **Alternatives & Trade-offs** and **Risks** sections. (`spec_clarify` asks about consistency
-   on its own when the spec names queues, events, concurrency or transactions and those design sections say nothing
-   about consistency or idempotency.)
+   on its own when the spec names queues, events, concurrency or transactions and neither the requirements nor the
+   design state a consistency model, a delivery guarantee or idempotency — an answer folded into the requirements
+   clears it.)
 4. When you reach shared understanding, take the engine's EARS-ready statements ("WHEN … THE SYSTEM
    SHALL …", "IF … THEN …") and fold them into `requirements.md` for this feature — as new acceptance
    criteria and as filled-in edge-case / out-of-scope / non-functional sections. Keep the spec

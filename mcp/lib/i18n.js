@@ -7961,11 +7961,11 @@ for (const l of BASE_LANGS) MSG[l].quality = QUALITY_MSG[l];
 const DESIGN_WEIGH_MSG = {
   en: {
     "design-tradeoffs": {
-      filled: (n) => `${n} option(s) weighed`,
+      filled: (n) => (n ? `${n} option(s) weighed` : "written as prose (no option list — the options weighed in a paragraph, or why this design has no key decision)"),
       missing: () => "no Alternatives & Trade-offs section — list the options weighed for each key decision (pros, cons, cost of being wrong, the one chosen and why)",
       template: () => "Alternatives & Trade-offs is still the template — replace its placeholders with the options really weighed",
       empty: () => "Alternatives & Trade-offs is empty — list the options weighed for each key decision",
-      few: (n, min) => `Alternatives & Trade-offs lists ${n} option(s) — weigh at least ${min} per key decision (a table row or a bullet each: one option alone was never weighed)`,
+      few: (n, min) => `Alternatives & Trade-offs lists ${n} option(s) — weigh at least ${min} per key decision (a table row or a bullet each: one option alone was never weighed), or say in a sentence why there is no key decision`,
     },
     "design-risks": {
       filled: (n) => (n ? `${n} risk(s) listed` : "written (no row or bullet — an honest 'no material risk' counts)"),
@@ -7974,15 +7974,16 @@ const DESIGN_WEIGH_MSG = {
       empty: () => "Risks is empty — an honest 'no material risk, because X' is fine; blank is not",
       few: () => "Risks lists no risk",
     },
-    clarifyConsistency: (words) => `The spec mentions ${words}, but the design's Alternatives & Trade-offs / Risks say nothing about consistency or idempotency: what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
+    legacyApproval: (d) => `design approved before 1.17 — asked only from its next approval (${d})`,
+    clarifyConsistency: (words) => `The spec mentions ${words}, but neither the requirements nor the design say anything about consistency or idempotency (the answer goes in the design's Alternatives & Trade-offs / Risks, or in a requirement): what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
   },
   pt: {
     "design-tradeoffs": {
-      filled: (n) => `${n} opção(ões) ponderada(s)`,
+      filled: (n) => (n ? `${n} opção(ões) ponderada(s)` : "escrita em prosa (sem lista de opções — as opções ponderadas num parágrafo, ou a razão de este design não ter nenhuma decisão-chave)"),
       missing: () => "sem secção Alternativas e Compromissos — lista as opções ponderadas para cada decisão-chave (prós, contras, custo de errar, a escolhida e porquê)",
       template: () => "Alternativas e Compromissos ainda é o template — substitui os placeholders pelas opções realmente ponderadas",
       empty: () => "Alternativas e Compromissos está vazia — lista as opções ponderadas para cada decisão-chave",
-      few: (n, min) => `Alternativas e Compromissos lista ${n} opção(ões) — o mínimo são ${min} por decisão-chave (uma linha da tabela ou um item cada: uma opção sozinha nunca foi ponderada)`,
+      few: (n, min) => `Alternativas e Compromissos lista ${n} opção(ões) — o mínimo são ${min} por decisão-chave (uma linha da tabela ou um item cada: uma opção sozinha nunca foi ponderada), ou uma frase a explicar a ausência de decisões-chave`,
     },
     "design-risks": {
       filled: (n) => (n ? `${n} risco(s) listado(s)` : "escrita (sem linha nem item — um honesto 'nenhum risco relevante' conta)"),
@@ -7991,15 +7992,16 @@ const DESIGN_WEIGH_MSG = {
       empty: () => "Riscos está vazia — um honesto 'nenhum risco relevante, porque X' serve; em branco não",
       few: () => "Riscos não lista nenhum risco",
     },
-    clarifyConsistency: (words) => `A spec menciona ${words}, mas as secções Alternativas e Compromissos / Riscos do design nada dizem sobre consistência ou idempotência: o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
+    legacyApproval: (d) => `design aprovado antes da 1.17 — só é exigido a partir da próxima aprovação (${d})`,
+    clarifyConsistency: (words) => `A spec menciona ${words}, mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência (a resposta vai para as secções Alternativas e Compromissos / Riscos do design, ou para um requisito): o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
   },
   es: {
     "design-tradeoffs": {
-      filled: (n) => `${n} opción(es) sopesada(s)`,
+      filled: (n) => (n ? `${n} opción(es) sopesada(s)` : "escrita en prosa (sin lista de opciones — las opciones sopesadas en un párrafo, o por qué este diseño no tiene ninguna decisión clave)"),
       missing: () => "sin sección Alternativas y Compensaciones — enumera las opciones sopesadas para cada decisión clave (pros, contras, coste de equivocarse, la elegida y por qué)",
       template: () => "Alternativas y Compensaciones sigue siendo la plantilla — sustituye sus placeholders por las opciones realmente sopesadas",
       empty: () => "Alternativas y Compensaciones está vacía — enumera las opciones sopesadas para cada decisión clave",
-      few: (n, min) => `Alternativas y Compensaciones enumera ${n} opción(es) — sopesa al menos ${min} por decisión clave (una fila de la tabla o un punto cada una: una opción sola nunca se sopesó)`,
+      few: (n, min) => `Alternativas y Compensaciones enumera ${n} opción(es) — sopesa al menos ${min} por decisión clave (una fila de la tabla o un punto cada una: una opción sola nunca se sopesó), o explica en una frase por qué no hay ninguna decisión clave`,
     },
     "design-risks": {
       filled: (n) => (n ? `${n} riesgo(s) enumerado(s)` : "escrita (sin fila ni punto — un honesto 'ningún riesgo relevante' cuenta)"),
@@ -8008,7 +8010,8 @@ const DESIGN_WEIGH_MSG = {
       empty: () => "Riesgos está vacía — un honesto 'ningún riesgo relevante, porque X' sirve; en blanco no",
       few: () => "Riesgos no enumera ningún riesgo",
     },
-    clarifyConsistency: (words) => `La spec menciona ${words}, pero Alternativas y Compensaciones / Riesgos del diseño no dicen nada de consistencia ni de idempotencia: ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
+    legacyApproval: (d) => `diseño aprobado antes de la 1.17 — solo se exige a partir de su próxima aprobación (${d})`,
+    clarifyConsistency: (words) => `La spec menciona ${words}, pero ni los requisitos ni el diseño dicen nada de consistencia ni de idempotencia (la respuesta va en Alternativas y Compensaciones / Riesgos del diseño, o en un requisito): ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
   },
 };
 for (const l of BASE_LANGS) MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];

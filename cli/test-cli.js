@@ -4022,14 +4022,14 @@ if (inSection("p17a")) {
     "2. **US-1.AC-2** — IF the cart is empty THEN THE SYSTEM SHALL reject it.\n\n## Success Criteria\n- **SC-001** — 95% of orders placed in under 2 s.\n\n" +
     "## Edge Cases & Error Handling\n- **EC-1** — WHEN stock runs out THE SYSTEM SHALL refuse the order.\n\n## Non-Functional Requirements\n- **NFR-1** — p95 < 2 s.\n\n## Out of Scope\n- Refunds.\n";
   const DESIGN = "# Design: Orders\n\n## Overview\nOrders go to the warehouse.\n\n## Architecture\n```mermaid\ngraph TD\n  A[API] --> W[Warehouse]\n```\n\n" +
-    "## Data Models\nOrder {id, total}.\n\n## Constitution Check\n- [x] Idempotent writes — complies.\n";
+    "## Data Models\nOrder {id, total}.\n\n## Constitution Check\n- [x] Small functions — complies.\n"; // (A review 2: "Idempotent writes" anywhere in the design answers the nudge)
 
   // EN: a design without Alternatives & Trade-offs / Risks — doctor warns (▲, exit 0), --json carries both ids; the design approval goes
   // through (warn only); clarify asks the consistency question (the spec names a queue) and --json carries nudges.
   const ap = path.join(tmp, "p17a-en");
   SA.initProject(ap, ["core"], "en");
   const af = SA.createFeature(ap, "Orders", ["core"]);
-  fs.writeFileSync(path.join(af.dir, "requirements.md"), REQ);
+  fs.writeFileSync(path.join(af.dir, "requirements.md"), REQ.replace("warehouse queue", "warehouse message queue")); // A review 7: a strong phrase fires alone
   fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
   const doc = run(["doctor", "orders", "--project", ap]);
   const docJ = jsonOf(run(["doctor", "orders", "--json", "--project", ap]));
@@ -4042,8 +4042,8 @@ if (inSection("p17a")) {
   ok(/  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(doc.out) && /  ▲ design-risks — no Risks section/.test(doc.out) &&
     js(ids) === js(["design-tradeoffs:warn", "design-risks:warn"]) && docJ.readyToAdvance === true &&
     apReq.code === 0 && apDes.code === 0 && !/forced|refused/i.test(apDes.out) &&
-    cl.code === 0 && /The spec mentions 'queue', but the design's Alternatives & Trade-offs \/ Risks say nothing about consistency or idempotency/.test(cl.out) &&
-    js(clJ.nudges) === js([{ code: "consistency-unstated", signals: ["queue"] }]),
+    cl.code === 0 && /The spec mentions 'message queue', but neither the requirements nor the design say anything about consistency or idempotency/.test(cl.out) &&
+    js(clJ.nudges) === js([{ code: "consistency-unstated", signals: ["message queue"] }]),
     "1.17 A1 / A2 (CLI): doctor warns design-tradeoffs / design-risks (▲; --json ids, readyToAdvance), the design approval still goes through; clarify asks the consistency question (--json nudges) (got " +
     js([doc.code, ids, apReq.code, apDes.code, apDes.out.slice(0, 160), cl.out.slice(0, 200), clJ.nudges]) + ")");
 
@@ -4060,7 +4060,7 @@ if (inSection("p17a")) {
   const pp = path.join(tmp, "p17a-pt");
   SA.initProject(pp, ["core"], "pt");
   const pf = SA.createFeature(pp, "Encomendas", ["core"], "", undefined, "pt");
-  fs.writeFileSync(path.join(pf.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", "pôr a encomenda na fila do armazém"));
+  fs.writeFileSync(path.join(pf.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", "pôr a encomenda na fila de mensagens do armazém"));
   fs.writeFileSync(path.join(pf.dir, "design.md"), "# Design: Encomendas\n\n## Visão Geral\nx.\n\n## Alternativas consideradas\n- Chamada síncrona.\n\n## Verificação da Constituição\n- [x] ok\n");
   const pDoc = run(["doctor", "encomendas", "--project", pp]);
   const pCl = run(["clarify", "encomendas", "--project", pp]);
@@ -4068,10 +4068,27 @@ if (inSection("p17a")) {
   fs.writeFileSync(path.join(pp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Visão Geral\n[Como funciona]\n\n## Verificação da Constituição\n- [ ] [Princípio 1] — cumpre\n");
   const pTpl = run(["templates", "check", "--project", pp]);
   ok(/▲ design-tradeoffs — Alternativas e Compromissos lista 1 opção\(ões\) — o mínimo são 2 por decisão-chave/.test(pDoc.out) && /▲ design-risks — sem secção Riscos/.test(pDoc.out) &&
-    /A spec menciona 'fila', mas as secções Alternativas e Compromissos \/ Riscos do design nada dizem sobre consistência ou idempotência/.test(pCl.out) &&
+    /A spec menciona 'fila de mensagens', mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência/.test(pCl.out) &&
     pTpl.code === 0 && /sem secção Alternativas e Compromissos — o doctor avisa \(design-tradeoffs\)/.test(pTpl.out) && /sem secção Riscos — o doctor avisa \(design-risks\)/.test(pTpl.out),
     "1.17 A1 / A2 (CLI, PT): doctor's design-tradeoffs ('lista 1 opção') / design-risks details and the clarify question are Portuguese; templates check warns (exit 0) on a design template without the sections (got " +
     js([pDoc.out.split("\n").filter((l) => /design-/.test(l)), pCl.out.slice(0, 160), pTpl.code, pTpl.out.slice(0, 300)]) + ")");
+
+  // 1.17 A review 3 (CLI): a design approval made by 1.17 is stamped (weigh) and its missing sections warn (▲); the same approval without the
+  // stamp (made before 1.17) → ✓ with the 'approved before 1.17' note — a finished pre-1.17 feature is never asked to reopen its design.
+  fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
+  const rApp = run(["approve", "orders", "design", "--project", ap]);
+  const rStamped = run(["doctor", "orders", "--project", ap]);
+  const rState = path.join(af.dir, ".state.json");
+  const rSt = JSON.parse(fs.readFileSync(rState, "utf8"));
+  const rWeigh = rSt.approvals.design.weigh;
+  delete rSt.approvals.design.weigh;
+  fs.writeFileSync(rState, JSON.stringify(rSt, null, 2));
+  const rLegacy = run(["doctor", "orders", "--project", ap]);
+  ok(rApp.code === 0 && rWeigh === true && /  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(rStamped.out) &&
+    /  ✓ design-tradeoffs — design approved before 1\.17 — asked only from its next approval \(no Alternatives & Trade-offs section/.test(rLegacy.out) &&
+    /  ✓ design-risks — design approved before 1\.17/.test(rLegacy.out),
+    "1.17 A review 3 (CLI): a 1.17 design approval carries weigh: true and doctor warns (▲) on its missing sections; without the stamp (approved before 1.17) both read ✓ 'design approved before 1.17' (got " +
+    js([rApp.code, rWeigh, rStamped.out.split("\n").filter((l) => /design-/.test(l)), rLegacy.out.split("\n").filter((l) => /design-/.test(l))]) + ")");
 }
 
 // 1.17 package (F): if (inSection("p17f")) { … }

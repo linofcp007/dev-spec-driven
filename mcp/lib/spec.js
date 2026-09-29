@@ -3836,8 +3836,8 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   if (k === "design") {
     if (!RE_CONSTITUTION_CHECK.test(rendered)) add("warn", "constitution-missing", P["constitution-missing"]);
     // 1.17 A1: no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
-    if (extractSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
-    if (extractSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
+    if (weighSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
+    if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     for (const tr of markerTracks()) { // + the track packs (1.15)
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
@@ -8795,6 +8795,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     entry.steering = sf.steering;
     if (Object.keys(sf.steeringMatch).length) entry.steeringMatch = sf.steeringMatch; // fileMatch files: counted while _Implements:_ match
   }
+  // 1.17 A review 3: a design approved by 1.17+ is held to the Alternatives & Trade-offs / Risks warns; one approved before never is.
+  if (p === "design") entry.weigh = true;
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -8810,6 +8812,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.waiver) record.waiver = entry.waiver;
   if (entry.steering) record.steering = entry.steering; // 1.16 Q1
   if (entry.steeringMatch) record.steeringMatch = entry.steeringMatch;
+  if (entry.weigh) record.weigh = true; // 1.17 A review 3
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -12899,51 +12902,119 @@ function bugTemplateSlots() {
 }
 const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
 
-// 1.17 A1 — every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections. Headings matched like
-// the Constitution Check (the synonym STARTS the heading, word-bounded — "Alternatives considered", "Riscos e mitigações",
-// "Trade-offs"), so hand-written and PT/ES designs are recognized. Doctor only WARNS (design-tradeoffs / design-risks) — never
-// an approval check: filled designs written before 1.17 lack both. A fresh scaffold's sections are template slots, which the
-// placeholder gate already refuses at the design approval like every other template section.
-const TRADEOFFS_SYN = ["alternatives", "trade-offs", "tradeoffs", "trade offs", "options considered", "design alternatives", "design options",
-  "alternativas", "compromissos", "opções consideradas", "opcoes consideradas", "opções de design", "opcoes de design",
-  "compensaciones", "concesiones", "opciones consideradas", "opciones de diseño", "opciones de diseno"];
-const RISKS_SYN = ["risks", "risk", "riscos", "risco", "riesgos", "riesgo"];
+// 1.17 A1 — every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections, found by weighSection()
+// (a synonym that NAMES the heading — see below), so hand-written and PT/ES designs are recognized. Doctor only WARNS
+// (design-tradeoffs / design-risks) — never an approval check — and only on a design not approved yet or approved by 1.17+
+// (`weigh: true` on the approval, A review 3): a design approved before 1.17 is never flagged. A fresh scaffold's sections are
+// template slots, which the placeholder gate already refuses at the design approval like every other template section.
+// A plain "Decisions" heading is NOT a trade-offs section (A review 6): the execplan / fluidplan imports write `## Decisions` — a
+// decision LOG (what was chosen, D-1…), not the options weighed; reading its entries as options would pass one-entry logs as
+// "few" and multi-entry logs as weighed. "Key decisions" / "Design decisions" (an ADR / MADR habit) are.
+const TRADEOFFS_SYN = ["alternatives", "alternatives considered", "considered alternatives", "analysis of alternatives", "trade-offs", "trade-off",
+  "tradeoffs", "tradeoff", "trade offs", "trade off", "trade-off analysis", "tradeoff analysis", "trade off analysis", "options", "options considered",
+  "considered options", "design alternatives", "design options", "key decisions", "key design decisions", "design decisions",
+  "alternativas", "alternativas consideradas", "análise de alternativas", "analise de alternativas", "compromissos", "opções", "opcoes",
+  "opções consideradas", "opcoes consideradas", "decisões e alternativas", "decisoes e alternativas", "decisões-chave", "decisoes-chave",
+  "decisões chave", "decisoes chave", "decisões principais", "decisoes principais", "decisões de design", "decisoes de design",
+  "compensaciones", "concesiones", "compromisos", "opciones", "opciones consideradas", "análisis de alternativas", "analisis de alternativas",
+  "decisiones y alternativas", "decisiones clave", "decisiones principales", "decisiones de diseño", "decisiones de diseno"];
+const RISKS_SYN = ["risks", "risk", "known risks", "key risks", "main risks", "open risks", "risk register", "risk assessment", "risk analysis",
+  "risk matrix", "risk log", "riscos", "risco", "riscos conhecidos", "principais riscos", "análise de riscos", "analise de riscos",
+  "avaliação de riscos", "avaliacao de riscos", "matriz de riscos", "registo de riscos", "registro de riscos",
+  "riesgos", "riesgo", "riesgos conocidos", "principales riesgos", "análisis de riesgos", "analisis de riesgos", "evaluación de riesgos",
+  "evaluacion de riesgos", "matriz de riesgos", "registro de riesgos"];
 // [id, synonyms, the fewest entries that count as weighed]: a decision needs at least two options; one honest line about the
 // risks (a table row, a bullet, or "no material risk, because X") is enough.
 const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2], ["design-risks", RISKS_SYN, 0]];
-// The entries a design section lists: table data rows (a table's header and separator rows skipped) + top-level list items —
-// or, when that is more, its sub-headings (one "### Option A" per option). Comments and fenced code never count. Linear.
-function designEntries(body) {
-  let rows = 0, items = 0, heads = 0, inTable = false;
+const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
+// A weigh heading NAMES its section (A review 6): after the heading lead (numbering, an emoji, a marker) the synonym is the whole
+// heading, or it is followed by a separator ( : , ; ( [ / & + | — – . or a spaced hyphen) or a connector word (and / or / vs / for /
+// of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
+// assumptions" are other sections. Trailing emphasis, emoji or closing #s are fine (no letter or digit after the synonym).
+const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
+function weighHeadingMatches(line, syns) {
+  const m = line.match(/^#{2,6}\s+(.*)$/); // never the H1 title (it carries the feature name)
+  if (!m) return false;
+  let t = m[1].toLowerCase();
+  const lead = headingLeadRe();
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
+  return syns.some((s) => t.startsWith(s) && RE_WEIGH_HEADING_REST.test(t.slice(s.length)));
+}
+// A weigh section's body (up to the next heading of its level or above) or null. An unmarked heading wins over one carrying a
+// track marker ("## [DIST] Risks" is a track's section, the core one is the design's own); fenced code never holds a heading.
+function weighSection(md, syns) {
+  const lines = String(md || "").split(/\r?\n/);
+  const heads = headingIndex(lines).filter((i) => weighHeadingMatches(lines[i], syns));
+  if (!heads.length) return null;
+  const MARKERS = markerTracks().map((t) => trackMarker(t));
+  const start = heads.find((i) => !MARKERS.some((mk) => lines[i].includes(mk))) ?? heads[0];
+  const level = (i) => (lines[i].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
+  const end = headingIndex(lines).find((i) => i > start && level(i) <= level(start));
+  return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
+}
+// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
+const genericUnit = (s) => isGenericSlot(String(s).replace(/[*_`]+/g, "").trim().replace(/[.:;!?]+$/, ""));
+// What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
+// at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
+// more, its sub-headings / bold-led paragraphs (one "### Option A" or "**Option A — …**" per option); `proseWords` = the words
+// of its other lines (a paragraph); `generic` = units holding only a generic slot word (a bare TODO / TBD), never counted.
+// Comments and fenced code never count. Linear.
+function designBody(body) {
+  let rows = 0, heads = 0, proseWords = 0, generic = 0, inTable = false;
+  const items = [];
   for (const l of stripFencedCode(stripHtmlComments(body || "")).split(/\r?\n/)) {
+    if (!l.trim()) { inTable = false; continue; }
     if (/^\s*\|/.test(l)) {
       if (!inTable) { inTable = true; continue; } // the header row
-      if (!/^[\s|:-]+$/.test(l) && /[^|\s]/.test(l)) rows++; // not the separator row, not an empty row
+      if (/^[\s|:-]+$/.test(l)) continue; // the separator row
+      const cells = l.split("|").map((c) => c.trim()).filter((c) => /[\p{L}\p{N}]/u.test(c));
+      if (!cells.length) continue; // an empty row
+      if (cells.every(genericUnit)) generic++; else rows++;
       continue;
     }
     inTable = false;
-    if (/^ ?(?:[-*+]|\d+[.)])\s+\S/.test(l)) items++;
-    else if (/^#{3,6}\s+\S/.test(l)) heads++;
+    const li = l.match(/^( *)(?:[-*+]|\d+[.)])\s+(\S.*)$/);
+    if (li) { if (genericUnit(li[2])) generic++; else items.push(li[1].length); continue; }
+    if (/^#{3,6}\s+\S/.test(l) || /^ {0,3}\*\*[^*\n]*\p{L}[^*\n]*\*\*/u.test(l)) { heads++; continue; }
+    if (genericUnit(l)) { generic++; continue; }
+    proseWords += (l.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
   }
-  return Math.max(rows + items, heads);
+  const top = items.reduce((a, n) => Math.min(a, n), Infinity);
+  const listed = top <= 3 ? items.filter((n) => n < top + 2).length : 0;
+  return { entries: Math.max(rows + listed, heads), proseWords, generic };
 }
-// One section's state: missing · template (a slot or the TODO sentinel left) · empty · few (fewer entries than `min`) · filled.
+const designEntries = (body) => designBody(body).entries;
+// A trade-offs section with no option list passes on a written paragraph of at least this many words: the options weighed in
+// prose, or the honest "No key decision here: the feature only reads existing data" (A review 6 — the escape Risks has).
+const WEIGH_PROSE_WORDS = 3;
+// One section's state: missing · template (a slot or the TODO sentinel left, or nothing but a generic TODO / TBD) · empty (blank,
+// or a table's header and separator alone) · few (fewer entries than `min`) · filled. Trade-offs: ≥ 2 entries, or no entry and a
+// written paragraph (prose); risks: any entry or any prose.
 function designWeighState(design, syn, min) {
-  const body = extractSection(design || "", syn);
+  const body = weighSection(design || "", syn);
   if (body == null) return { status: "missing", entries: 0 };
   if (RE_TODO_SENTINEL.test(body) || placeholderReport(body).length) return { status: "template", entries: 0 };
-  if (!stripHtmlComments(body).trim()) return { status: "empty", entries: 0 };
-  const n = designEntries(body);
-  return { status: n < min ? "few" : "filled", entries: n };
+  const b = designBody(body);
+  if (!b.entries && !b.proseWords) return { status: b.generic ? "template" : "empty", entries: 0 };
+  if (b.entries >= Math.max(min, 1)) return { status: "filled", entries: b.entries };
+  if (!b.entries && b.proseWords >= (min ? WEIGH_PROSE_WORDS : 1)) return { status: "filled", entries: 0, prose: true };
+  return { status: "few", entries: b.entries };
 }
-// The two doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }].
-function designWeighChecks(design, lang) {
+// The two doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }]. opts.legacy (A review 3):
+// the design was approved before 1.17 (its approval carries no `weigh`) — what would warn passes, with a note: the sections are
+// asked of a design from its next approval on, never of one already signed off (a finished feature following the advice would
+// re-open its re-review, changed-since-approval, stale finish and execution sign-off).
+function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
   return DESIGN_WEIGH.map(([id, syn, min]) => {
     const st = designWeighState(design, syn, min);
-    return { id, status: st.status === "filled" ? "pass" : "warn", detail: W[id][st.status](st.entries, min), state: st.status, entries: st.entries };
+    const detail = W[id][st.status](st.entries, min);
+    if (st.status !== "filled" && opts.legacy) return { id, status: "pass", detail: W.legacyApproval(detail), state: st.status, entries: st.entries, legacy: true };
+    return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
   });
 }
+// A design approval made before 1.17 (A review 3): an approval record without the `weigh` stamp approvePhase adds since 1.17.
+const designApprovedBeforeWeigh = (approvals) => isRecord(approvals && approvals.design) && approvals.design.weigh !== true;
 
 // What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
 // where `checks` lists only the FAILING ones as { id, detail }; artifact=false = nothing to approve (the file is
@@ -13171,8 +13242,12 @@ function specDoctor(projectDir, name, opts = {}) {
     add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
     // 1.17 A1 — design-tradeoffs / design-risks: warns only (never a fail, never an approval check). Not while design.md is
-    // still a LATER phase's template (nothing is being designed yet — the placeholders check already says so).
-    if (!ph.later.some((r) => r.file === "design.md")) for (const c of designWeighChecks(activeDesign(design, tracks), lng)) add(c.id, c.status, c.detail);
+    // still a LATER phase's template (nothing is being designed yet — the placeholders check already says so). A design approved
+    // before 1.17 (no `weigh` stamp) is never flagged: a pass with a note (A review 3).
+    if (!ph.later.some((r) => r.file === "design.md")) {
+      const legacy = designApprovedBeforeWeigh(readState(projectDir, slug).approvals);
+      for (const c of designWeighChecks(activeDesign(design, tracks), lng, { legacy })) add(c.id, c.status, c.detail);
+    }
   }
 
   // Mandatory sections — `<track>-sections` per active marker track (saas, ai, sec, privacy).
@@ -17862,7 +17937,8 @@ function upgradeFeature(projectDir, s, ctx) {
   if (vs.unverified.length) attention.push("unverified");
   if (drift && drift.drifted) attention.push("drift");
   if (drift && drift.stale) attention.push("stale-finish");
-  if (warns.length) attention.push("warnings");
+  // 1.17 A review 3: the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
+  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
     lang: normalizeLang(st.lang || projectLang(projectDir)), phase, status, tasks: { done, total: tasks.length },
@@ -21668,35 +21744,133 @@ const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solic
 const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
 // +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
 const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
-// 1.17 A2 — the constraint nudge: words that make consistency a design question (queues, events, concurrency, transactions,
-// retries — whole words; English ones in every spec, the feature language's own besides: "fila" is a queue in PT but a table
-// row in ES, "cola" the reverse), and the words that show the design's Alternatives & Trade-offs / Risks answered it.
+// 1.17 A2 — the constraint nudge: the words that make consistency a design question, by concept (a queue, events, async work,
+// concurrency, transactions, retries) plus STRONG phrases that can only mean it (a message queue, an event bus, publishing an
+// event, a background job, concurrent writes, a race condition, a distributed transaction, a webhook, Kafka…). A weak word alone
+// is often something else — "click event", "Retry button", "Images load async", a statement listing "transactions" — so the
+// nudge needs two DISTINCT concepts or one strong phrase (A review 7). Whole words; English ones in every spec, the feature
+// language's own besides ("fila" is a queue in PT but a table row in ES, "cola" the reverse).
+const CONSTRAINT_KINDS = ["strong", "queue", "event", "async", "concurrency", "transaction", "retry"];
 const CONSTRAINT_SIGNALS = {
-  en: "queue|queues|queued|event|events|event-driven|webhook|webhooks|async|asynchronous|asynchronously|concurrent|concurrently|concurrency|transaction|transactions|retry|retries|pub/sub|outbox|saga|kafka|rabbitmq",
-  pt: "fila|filas|evento|eventos|assíncrono|assíncrona|assíncronos|assíncronas|concorrente|concorrentes|concorrência|simultâneo|simultâneos|transação|transações|reenvio|reenvios",
-  es: "cola|colas|evento|eventos|asíncrono|asíncrona|asíncronos|asíncronas|concurrente|concurrentes|concurrencia|simultáneo|simultáneos|transacción|transacciones|reintento|reintentos",
+  en: {
+    strong: "message[\\s-]+(?:queues?|brokers?|bus)|(?:job|task|work|delayed|dead[\\s-]+letter|retry)[\\s-]+queues?|event[\\s-]+(?:bus|buses|streams?|sourcing|stores?|brokers?)|event-driven" +
+      "|(?:domain|integration)[\\s-]+events?|publish(?:es|ed|ing)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?events?|background[\\s-]+(?:jobs?|workers?|tasks?|processing|process(?:es)?)" +
+      "|(?:queue|job)[\\s-]+workers?|(?:concurrent|simultaneous|parallel)[\\s-]+(?:writes?|updates?|edits?|modifications?|writers?|transactions?)|race[\\s-]+conditions?|lost[\\s-]+updates?" +
+      "|double[\\s-]+(?:bookings?|spend(?:ing)?|charg(?:e|es|ed|ing))|distributed[\\s-]+(?:transactions?|locks?)|two[\\s-]+phase[\\s-]+commit|webhooks?|pub/sub|kafka|rabbitmq|sqs|sagas?",
+    queue: "queue|queues|queued|enqueue|enqueues|enqueued|dequeue|dequeues|dequeued",
+    event: "event|events",
+    async: "async|asynchronous|asynchronously",
+    concurrency: "concurrent|concurrently|concurrency|simultaneous|simultaneously",
+    transaction: "transaction|transactions|transactional",
+    retry: "retry|retries|retried|redeliver|redelivery|redelivered",
+  },
+  pt: {
+    strong: "filas?\\s+de\\s+(?:mensagens|tarefas|trabalhos|jobs|eventos|processamento)|barramentos?\\s+de\\s+eventos|orientad[oa]s?\\s+a\\s+eventos|eventos?\\s+de\\s+dom[íi]nio" +
+      "|publica(?:r|m|do|da|dos|das)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?eventos?|(?:tarefas?|trabalhos?|jobs?|processamentos?|processos?)\\s+em\\s+segundo\\s+plano" +
+      "|(?:escritas|atualiza[çc][õo]es|edi[çc][õo]es|altera[çc][õo]es|grava[çc][õo]es)\\s+(?:concorrentes|simult[âa]neas|em\\s+paralelo)|condi[çc](?:[ãa]o|[õo]es)\\s+de\\s+corrida" +
+      "|transa[çc](?:[ãa]o|[õo]es)\\s+distribu[íi]das?|commit\\s+em\\s+duas\\s+fases|(?:reserva|cobran[çc]a)\\s+dupla|duplo\\s+(?:d[ée]bito|pagamento)",
+    queue: "fila|filas|enfileirad[oa]s?|enfileirar",
+    event: "evento|eventos",
+    async: "ass[íi]ncron[oa]s?|assincronamente",
+    concurrency: "concorrente|concorrentes|concorr[êe]ncia|simult[âa]ne[oa]s?|simultaneamente",
+    transaction: "transa[çc](?:[ãa]o|[õo]es)|transacional|transacionais",
+    retry: "reenvio|reenvios|reenviad[oa]s?|nova\\s+tentativa|novas\\s+tentativas|retentativas?",
+  },
+  es: {
+    strong: "colas?\\s+de\\s+(?:mensajes|tareas|trabajos|eventos|procesamiento)|bus(?:es)?\\s+de\\s+eventos|orientad[oa]s?\\s+a\\s+eventos|eventos?\\s+de\\s+dominio" +
+      "|publica(?:r|n|do|da|dos|das)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?eventos?|(?:tareas?|trabajos?|jobs?|procesamientos?|procesos?)\\s+en\\s+segundo\\s+plano" +
+      "|(?:escrituras|actualizaciones|ediciones|modificaciones)\\s+(?:concurrentes|simult[áa]neas|en\\s+paralelo)|condici(?:[óo]n|ones)\\s+de\\s+carrera" +
+      "|transacci(?:[óo]n|ones)\\s+distribuidas?|confirmaci[óo]n\\s+en\\s+dos\\s+fases|doble\\s+(?:reserva|cobro|cargo|pago)",
+    queue: "cola|colas|encolad[oa]s?|encolar",
+    event: "evento|eventos",
+    async: "as[íi]ncron[oa]s?|as[íi]ncronamente",
+    concurrency: "concurrente|concurrentes|concurrencia|simult[áa]ne[oa]s?|simult[áa]neamente",
+    transaction: "transacci[óo]n|transacciones|transaccional|transaccionales",
+    retry: "reintento|reintentos|reintentar|reintentad[oa]s?",
+  },
 };
-const constraintSignalRe = (lang) => new RegExp("(?<![\\p{L}\\p{N}_/-])(?:" + CONSTRAINT_SIGNALS.en + (lang === "en" ? "" : "|" + CONSTRAINT_SIGNALS[lang]) + ")(?![\\p{L}\\p{N}_/-])", "giu");
-const RE_CONSISTENCY_ANSWER = /consisten|consistên|idempot|atomic|atómic|atômic|at[\s-]least[\s-]once|at[\s-]most[\s-]once|exactly[\s-]once|isolation|isolamento|aislamiento|serializ|eventual|optimistic|pessimistic|otimist|optimist|pessimist|pesimist|dedup/i;
-const CONSTRAINT_MAX_WORDS = 3;
-// → { code: "consistency-unstated", signals: [≤ 3 distinct words, in order of appearance] } | null. Reads requirements.md and
-// design.md as written (active tracks only; comments, fenced code and [bracketed] slots set aside — a scaffold's own text never
-// fires it). Only for a plain feature (a bugfix restores behaviour; a spike has no design) and not with +dist (its Consistency
-// Model / Delivery & Idempotency sections ask the same, 1.17 D).
-function constraintNudge(dir, reqs, tracks, kind, lang) {
-  if (kind !== "feature" || tracks.includes("dist")) return null;
-  const plain = (t) => stripFencedCode(stripHtmlComments(activeDesign(t || "", tracks))).replace(/\[[^\[\]\n]*\]/g, " ");
-  const design = readIfExists(path.join(dir, "design.md")) || "";
-  const re = constraintSignalRe(i18n.baseLang(lang));
-  const signals = [];
-  for (const m of (plain(reqs) + "\n" + plain(design)).slice(0, 200000).matchAll(re)) {
-    const w = m[0].toLowerCase();
-    if (!signals.includes(w)) signals.push(w);
-    if (signals.length >= CONSTRAINT_MAX_WORDS) break;
+// One regex per language, a capture group per kind (strong first: "event bus" is one strong phrase, never the weak "event").
+const CONSTRAINT_RE = new Map();
+function constraintSignalRe(lang) {
+  const l = lang === "pt" || lang === "es" ? lang : "en";
+  if (!CONSTRAINT_RE.has(l)) {
+    const alt = (k) => CONSTRAINT_SIGNALS.en[k] + (l === "en" ? "" : "|" + CONSTRAINT_SIGNALS[l][k]);
+    CONSTRAINT_RE.set(l, new RegExp("(?<![\\p{L}\\p{N}_/-])(?:" + CONSTRAINT_KINDS.map((k) => "(" + alt(k) + ")").join("|") + ")(?![\\p{L}\\p{N}_/-])", "giu"));
   }
-  if (!signals.length) return null;
-  const answered = DESIGN_WEIGH.some(([, syn]) => RE_CONSISTENCY_ANSWER.test(plain(extractSection(activeDesign(design, tracks), syn) || "")));
-  return answered ? null : { code: "consistency-unstated", signals };
+  return CONSTRAINT_RE.get(l);
+}
+// The answer (A review 7): multi-word phrases that state a consistency model, a delivery guarantee, idempotency or a locking
+// strategy — EN / PT / ES, in any spec. Never a bare "consistent" / "eventually" / "atomic" / "isolation" ("consistent UI styling",
+// "we will eventually add caching", "atomic design", "tenant isolation" answer nothing). ACID is matched upper-case only.
+const RE_CONSISTENCY_ANSWER = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "eventual(?:ly)?[\\s-]+consisten(?:t|cy)", "strong(?:ly)?[\\s-]+consisten(?:t|cy)", "consistency[\\s-]+(?:models?|levels?|guarantees?)",
+  "read[\\s-]+your[\\s-]+(?:own[\\s-]+)?writes", "idempoten\\p{L}*", "at[\\s-]+(?:least|most)[\\s-]+once", "exactly[\\s-]+once", "isolation[\\s-]+levels?",
+  "(?:serializable|snapshot)[\\s-]+isolation", "read[\\s-]+committed", "repeatable[\\s-]+read",
+  "(?:optimistic|pessimistic)[\\s-]+(?:locking|locks?|concurrency)", "outbox(?:es)?", "dedup\\p{L}*", "atomicity", "atomically", "two[\\s-]+phase[\\s-]+commit",
+  "compare[\\s-]+and[\\s-]+(?:swap|set)",
+  "consist[êe]ncia[\\s-]+(?:eventual|forte|fraca)", "(?:eventualmente|fortemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consist[êe]ncia",
+  "pelo[\\s-]+menos[\\s-]+uma[\\s-]+vez", "no[\\s-]+m[áa]ximo[\\s-]+uma[\\s-]+vez", "exatamente[\\s-]+uma[\\s-]+vez", "n[íi]vel[\\s-]+de[\\s-]+isolamento",
+  "bloqueio[\\s-]+(?:otimista|pessimista)", "concorr[êe]ncia[\\s-]+(?:otimista|pessimista)", "atomicidade", "atomicamente", "commit[\\s-]+em[\\s-]+duas[\\s-]+fases",
+  "consistencia[\\s-]+(?:eventual|fuerte|d[ée]bil)", "(?:eventualmente|fuertemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consistencia",
+  "al[\\s-]+menos[\\s-]+una[\\s-]+vez", "(?:como[\\s-]+m[áa]ximo|a[\\s-]+lo[\\s-]+sumo)[\\s-]+una[\\s-]+vez", "exactamente[\\s-]+una[\\s-]+vez",
+  "nivel[\\s-]+de[\\s-]+aislamiento", "bloqueo[\\s-]+(?:optimista|pesimista)", "concurrencia[\\s-]+(?:optimista|pesimista)", "atomicidad", "at[óo]micamente",
+  "confirmaci[óo]n[\\s-]+en[\\s-]+dos[\\s-]+fases",
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+const RE_ACID = /(?<![\p{L}\p{N}_])ACID(?![\p{L}\p{N}_])/u;
+const CONSTRAINT_MAX_WORDS = 3;
+// The user's own text of a spec file (A review 1) — never the tool's: its visible lines (scanTaskLines: comments and fenced code
+// out, inactive track sections dropped), minus every line that IS template text (glossUserParts over the line patterns the
+// glossary check builds — the built-in templates of every track combination in the feature's language, the track blocks, the
+// project's templates and track packs; a filled slot is the user's), minus a section still holding its `> **TODO**` sentinel
+// (a track section nobody wrote yet), with template [slots] and code spans blanked. → the parts, newline-joined.
+function userSpecText(text, tracks, sets) {
+  const rows = scanTaskLines(activeDesign(String(text || ""), tracks));
+  const skip = new Uint8Array(rows.length);
+  let start = 0, todo = false;
+  const close = (end) => { if (todo) for (let i = start; i < end; i++) skip[i] = 1; };
+  rows.forEach((r, i) => {
+    if (r.code) return;
+    if (/^#{1,6}\s/.test(r.vis)) { close(i); start = i; todo = false; } else if (RE_TODO_SENTINEL.test(r.vis)) todo = true;
+  });
+  close(rows.length);
+  const out = [];
+  let size = 0;
+  for (let i = 0; i < rows.length && size < 200000; i++) {
+    if (rows[i].code || skip[i] || !rows[i].vis.trim()) continue;
+    for (const part of glossUserParts(rows[i].vis.slice(0, 4000), sets)) {
+      const slots = part.includes("[") ? bracketPlaceholders(part, new Set()) : [];
+      const v = slots.reduce((a, p) => a.split(p).join(" "), part).replace(/`[^`\n]*`/g, " ");
+      out.push(v);
+      size += v.length;
+    }
+  }
+  return out.join("\n");
+}
+// → { code: "consistency-unstated", signals: [≤ 3 words, in order of appearance — one per concept, each strong phrase] } | null.
+// Reads the user's text of requirements.md and design.md (userSpecText — a pristine scaffold of any track, in any language, never
+// fires it, nor does a template criterion the spec keeps as written). Answered (A review 2) anywhere in that text — /clarify folds
+// the answer into requirements.md, and /grill asks in Phase 1 while design.md is still a template. Only for a plain feature (a
+// bugfix restores behaviour; a spike has no design) and not with +dist (its Consistency Model / Delivery & Idempotency sections
+// ask the same, 1.17 D).
+function constraintNudge(projectDir, dir, reqs, tracks, kind, lang) {
+  if (kind !== "feature" || tracks.includes("dist")) return null;
+  const lng = normalizeLang(lang || "en");
+  const sets = [glossBuiltinLines(lng), glossProjectLines(projectDir, lng)].filter(Boolean);
+  const text = userSpecText(reqs, tracks, sets) + "\n" + userSpecText(readIfExists(path.join(dir, "design.md")) || "", tracks, sets);
+  const signals = [];
+  const seen = new Set();
+  let strong = false;
+  for (const m of text.matchAll(constraintSignalRe(i18n.baseLang(lng)))) {
+    const k = CONSTRAINT_KINDS[m.slice(1).findIndex((g) => g !== undefined)];
+    const w = m[0].toLowerCase().replace(/\s+/g, " ");
+    const key = k === "strong" ? "strong:" + w.replace(/s$/, "") : k; // "webhook" and "webhooks" are one signal
+    if (k === "strong") strong = true;
+    if (!seen.has(key)) { seen.add(key); if (signals.length < CONSTRAINT_MAX_WORDS) signals.push(w); }
+    if (signals.length >= CONSTRAINT_MAX_WORDS && (strong || seen.size >= 2)) break;
+  }
+  if (!strong && seen.size < 2) return null;
+  if (RE_CONSISTENCY_ANSWER.test(text) || RE_ACID.test(text)) return null;
+  return { code: "consistency-unstated", signals };
 }
 // +dist (1.17 D): a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
 const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez/i;
@@ -21764,9 +21938,10 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
-  // 1.17 A2 — the constraint nudge (one question, bounded): the spec names queues / events / concurrency / transactions, and the
-  // design's Alternatives & Trade-offs / Risks say nothing about consistency or idempotency.
-  const nudge = constraintNudge(dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
+  // 1.17 A2 — the constraint nudge (one question, bounded): the user's text of the spec names queues / events / concurrency /
+  // transactions (two concepts, or one strong phrase), and neither requirements.md nor design.md states a consistency model,
+  // a delivery guarantee or idempotency (A review 1 / 2 / 7).
+  const nudge = constraintNudge(projectDir, dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
   if (nudge) add(fm.designWeigh.clarifyConsistency(nudge.signals.map((w) => `'${w}'`).join(", ")));
   if (tracks.includes("dist") && !RE_DIST_DELIVERY.test(reqs)) add(QP.distDelivery); // 1.17 D
   if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
