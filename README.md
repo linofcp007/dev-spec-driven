@@ -205,7 +205,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   feature: criteria become `US-N.AC-M` EARS lines (or keep their text with `[NEEDS CLARIFICATION]`),
   tasks are renumbered with their checkbox state. Plans too: `plan` (a Claude Code plan-mode file copied into
   the project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD
-  and stories). The source must be inside the project and is only read.
+  and stories) — and `fluidplan` (a plan settled with the fluidplan skill: `.fluidplan/<id>/` or its `PLAN.md` /
+  `DECISIONS.md` → stories, criteria, tasks with `_Verify:_` / `_Depends:_`, and a `decisions.md` of the settled decisions).
+  The source must be inside the project and is only read.
 - **Deeper traceability** — `trace_check` warns about edge cases (EC-n), NFRs and success criteria
   (SC-nnn) nothing covers; `--code` looks for T-IDs in test names (`test("T-01 …")`, `def test_T01_…`).
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
@@ -594,7 +596,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   funcionalidade: os critérios passam a linhas EARS `US-N.AC-M` (ou mantêm o texto com
   `[NEEDS CLARIFICATION]`) e as tarefas são renumeradas com o estado das checkboxes. Também planos: `plan` (um
   ficheiro do plan mode do Claude Code copiado para o projeto, ou um `.cursor/plans/*.plan.md` do Cursor), `execplan`
-  (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD). A origem tem de estar dentro do projeto e só é lida.
+  (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD) — e `fluidplan` (um plano decidido com a skill
+  fluidplan: `.fluidplan/<id>/` ou o `PLAN.md` / `DECISIONS.md` dele → histórias, critérios, tarefas com `_Verify:_` /
+  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
   `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
@@ -1002,7 +1006,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   nueva: los criterios pasan a líneas EARS `US-N.AC-M` (o conservan su texto con `[NEEDS CLARIFICATION]`) y
   las tareas se renumeran con el estado de sus casillas. También planes: `plan` (un archivo del plan mode de Claude
   Code copiado al proyecto, o un `.cursor/plans/*.plan.md` de Cursor), `execplan` (un ExecPlan de Codex) y `bmad` (PRD
-  e historias de BMAD-METHOD). El origen debe estar dentro del proyecto y solo se lee.
+  e historias de BMAD-METHOD) — y `fluidplan` (un plan decidido con la skill fluidplan: `.fluidplan/<id>/` o su
+  `PLAN.md` / `DECISIONS.md` → historias, criterios, tareas con `_Verify:_` / `_Depends:_` y un `decisions.md` con las
+  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
   `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con

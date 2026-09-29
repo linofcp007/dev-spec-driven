@@ -76,7 +76,7 @@ test files, and `spec_finish {write: true}` records the implementing files so `s
 ## Import from other spec tools
 
 Specs and plans already written for another tool become dev-spec features with `spec_import {tool, path, name?,
-tracks?, lang?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks …]
+tracks?, lang?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks …]
 [--lang pt]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
 NEW feature (an existing slug is an error).
 
@@ -88,14 +88,15 @@ NEW feature (an existing slug is an error).
 | `plan` | a Markdown plan: Claude Code plan mode, or a Cursor plan `.cursor/plans/*.plan.md` (`name` / `overview` / `todos` front matter) | goals and acceptance-like bullets (Goals, Acceptance / Success Criteria, Verification…) → US-1's criteria; checklists, Cursor `todos` or a Steps / Implementation section's items (an Approach section's only when the plan has no other steps section) → tasks keeping their state (a cancelled to-do comes in open, with a warning); the file paths a step names → `_Implements:_`; the rest (context, approach, files, verification commands) → `design.md` |
 | `execplan` | a Codex ExecPlan written per `PLANS.md` | Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps → tasks, with `_Verify:_` when a step names a test / lint / build / curl command; Decision Log → `design.md` "## Decisions" (D-1…); Purpose → the summary; the living sections (Surprises & Discoveries, Outcomes, Context, Plan of Work…) → `design.md` |
 | `bmad` | BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/` (v6: `_bmad-output/planning-artifacts/`), `docs/stories/*.md`, `docs/architecture.md` — or one story file | epic stories + story files (the file wins) → `US-1…US-n` in story order, their ACs → `US-n.AC-m`; `FR1` / `NFR1` → `FR-1` / `NFR-1`; Tasks / Subtasks → tasks tagged `[USn]` with `(AC: 1, 3)` → `_Requirements:_`; architecture + Technical Assumptions + Dev Notes → `design.md`; Status / Change Log named in a warning, not imported |
+| `fluidplan` | a plan settled with the [fluidplan](https://github.com/morganhub/fluidplan) skill: its folder `.fluidplan/<id>/` (`plan.json`, `answers.json`, `PLAN.md`, `DECISIONS.md`), its `plan.json`, its `PLAN.md` / `DECISIONS.md` (also at `plan.json`'s `output` paths) or a plans folder holding one plan | the finalized `PLAN.md` / `DECISIONS.md` win; `plan.json` + `answers.json` fill in the rest (each option's pros / cons / effort, the pages) or stand alone. Pages (themes) → user stories (without `plan.json`: the phases); each task's acceptance → criteria; tasks → `tasks.md` under their phase headings, ticks kept — `files` → `_Implements:_` (a delete named in the task text; an absolute / home / URL / `..` / glob path refused with a warning), `verify` → one `_Verify:_` per command, `after` → `_Depends:_`; accepted **and** rejected decisions → `decisions.md` (D-1…, `spec_decide`'s format: Context = why, importance, proposal; Decision = the choice + the reviewer's remarks; Consequences = the chosen option's pros / cons / effort + the other options; `_Affects:_` = the criteria its tasks carry) and `design.md` "## Decisions" + "## Alternatives & Trade-offs"; the working rules → `tasks.md` "## Global Constraints"; rejected decisions → "## Out of Scope"; decisions still open (no answer, to change, a question) → requirements.md "## Open decisions" with `[NEEDS CLARIFICATION]` + a warning; context, glossary, final check, visuals → `design.md`; the round history is not imported (a warning) |
 
 **Claude Code plans live outside the project.** Plan mode saves them under `plansDirectory` — by default
 `~/.claude/plans` — so the import refuses that path (it must resolve inside the project). Import the plan's **text**
-instead (1.16): `spec_import {tool: "plan", text: <the plan's markdown>}` (also `execplan`), CLI `dev-spec import plan -
+instead (1.16): `spec_import {tool: "plan", text: <the plan's markdown>}` (also `execplan`, and `fluidplan` for a pasted `PLAN.md` — its `DECISIONS.md` may follow it), CLI `dev-spec import plan -
 < plan.md` or `--text "…"` — same mapping and guarantees, the note reads "Imported from plan (inline text)". In Claude
 Code the plugin's ExitPlanMode hook reminds the agent of it when the user approves a plan in a dev-spec project (one
 line of context; it never imports by itself — ask the user first). Or copy the plan file into the project, or set
-`plansDirectory` to a folder inside it. A folder holding several plans is refused — name the file. A plan or ExecPlan names its feature from its title, BMAD from the PRD (one story file: the story's title).
+`plansDirectory` to a folder inside it. A folder holding several plans is refused — name the file. A plan or ExecPlan names its feature from its title, BMAD from the PRD (one story file: the story's title), fluidplan from the plan's title; a plans folder holding several fluidplan plans is refused — name one.
 A plan that is mostly architecture fits the design-first order (`spec_feature {action: "flow", name, flow:
 "design-first"}` — `references/design-first.md`).
 

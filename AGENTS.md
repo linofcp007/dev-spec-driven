@@ -57,8 +57,8 @@ dev-spec tracks [list|init <name>|check] [name] [--lang]   # the team's own trac
 dev-spec create "<name>" [tracks...] [--lang] [--summary "…"] [--brownfield] [--flow design-first]  # scaffold the feature (no tracks → auto-classify; --brownfield → integration-plan.md)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
-dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan or BMAD docs → a NEW feature (IDs remapped)
-dev-spec import <plan|execplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
+dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan, BMAD docs or a fluidplan plan → a NEW feature (IDs remapped)
+dev-spec import <plan|execplan|fluidplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -226,8 +226,8 @@ next, `dev-spec next-action <feature>` names the single next step.
   +sec: `classify` reads its signals, `create` / `add-track` scaffold its `[MARKER]` criteria, design sections, tasks and
   test rows, and `doctor` fails `<name>-sections` until they are filled. `dev-spec tracks init <name>` scaffolds one,
   `tracks check` validates them (a bad pack is ignored). Guide: `skills/dev-spec-driven/references/project-tracks.md`.
-- **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>` turns a spec written for another tool
-  — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs — into a new feature: criteria become `US-N.AC-M` (EARS
+- **Import.** `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>` turns a spec written for another tool
+  — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs, a fluidplan plan (its settled decisions → `decisions.md`) — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
   inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — pass its text instead:
   `dev-spec import plan - < plan.md`, or `--text "…"`).
