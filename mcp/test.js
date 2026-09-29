@@ -90,6 +90,13 @@ function libSources({ i18n = true } = {}) {
   walk(path.join(__dirname, "lib"));
   return out;
 }
+// The maintainer notes (1.20): CLAUDE.md — the index, loaded into every session — and the topic files under
+// docs/maintainers/ it maps. A prose guard about "the notes" reads them all, never the index alone.
+function maintainerNotes() {
+  const dir = path.join(root, "docs", "maintainers");
+  const files = ["CLAUDE.md"].concat(fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => path.join("docs", "maintainers", f)));
+  return files.map((f) => fs.readFileSync(path.join(root, f), "utf8").replace(/\r\n/g, "\n")).join("\n");
+}
 // Phase by phase (1.13): a phase is approved only after every earlier pending one. A test exercising ONE phase's gate
 // first records the earlier ones (with force — they may still be templates; doctor keeps them flagged as forced).
 const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
@@ -6532,7 +6539,8 @@ function endRun() {
   // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
   // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
   // same sentence. (c) A test-plan row citing an undefined AC is the TEST-PLAN gate's traceability (approvalChecks), not
-  // the tasks gate's. (d) CLAUDE.md: the README tool-table test requires every live tool, not "the 23 v1.12 tools".
+  // the tasks gate's. (d) The maintainer notes ('When extending' — docs/maintainers/extending.md since 1.20): the README
+  // tool-table test requires every live tool, not "the 23 v1.12 tools".
   const docsWs = (t) => t.replace(/\s+/g, " ");
   const docsSec = (h) => docsWs((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0]);
   const docsSpecSrc = libSources({ i18n: false }).map((f) => fs.readFileSync(f, "utf8")).join("\n"); // the engine's sources (1.18: spec.js + engine/)
@@ -6554,19 +6562,55 @@ function endRun() {
     !/test-plan|doesn't define/.test(docsGate("; tasks: ", "; tests (")) && /`traceability` \(every AC covered by a task, no phantom AC \/ T-IDs in tasks\)/.test(docsGate("; tasks: ", "; tests (")) &&
     /test-plan: placeholders, every AC has a test, no row citing an AC requirements\.md does not define; eval-plan:/.test(apDesc),
     "/approve + spec_approve: a test-plan row citing an undefined AC fails the TEST-PLAN gate's traceability (approvalChecks) — never listed under the tasks gate");
-  const docsClaude = docsWs(docsRead("CLAUDE.md"));
-  ok(!/23 v1\.12 tools|does not yet require newer ones/.test(docsClaude) &&
-    /README tool tables \(EN\/PT\/ES — `mcp\/test\.js` builds the expected set from the live `tools\/list`: a missing or phantom row in any language fails the suite\)/.test(docsClaude),
-    "CLAUDE.md 'When extending': the README tool-table test requires every live tool (built from tools/list), not the 23 v1.12 tools");
+  // 1.20: the notes are CLAUDE.md (the index) + docs/maintainers/*.md — a moved section is read from its topic file, and
+  // what no note may say is checked across all of them.
+  const docsNotes = docsWs(maintainerNotes());
+  const docsExtending = docsWs(docsRead("docs", "maintainers", "extending.md"));
+  const docsConventions = docsWs(docsRead("docs", "maintainers", "conventions.md"));
+  ok(!/23 v1\.12 tools|does not yet require newer ones/.test(docsNotes) &&
+    /README tool tables \(EN\/PT\/ES — `mcp\/test\.js` builds the expected set from the live `tools\/list`: a missing or phantom row in any language fails the suite\)/.test(docsExtending),
+    "docs/maintainers/extending.md 'When extending': the README tool-table test requires every live tool (built from tools/list); no maintainer note says the 23 v1.12 tools");
   // tooling-reference said "`drift` (drift) exit 1" — the CLI's drift also exits 1 on a stale baseline (the feature changed
   // since its finish: finish it again, nothing drifted) and on an unreadable .state.json. Every surface documenting drift's
   // exit code names the stale baseline; none says drift alone.
   const docsDriftExit = [["tooling-reference.md", docsRef("tooling-reference.md"), /`drift` \(drift, a stale baseline or an unreadable state\) exit 1/],
     ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-drift.md", docsRead("commands", "spec-drift.md"), /exit 1 on drift or a stale baseline/],
     ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/dev-spec.js", docsRead("cli", "dev-spec.js"), /\(exit 1 on drift or a stale baseline\)/],
-    ["CLAUDE.md", docsClaude, /`drift` \(drift, a stale baseline or an error\)/]];
-  const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f);
-  ok(!docsDriftBad.length, "every surface documenting drift's exit code (tooling-reference, AGENTS.md, /spec-drift, change-management, CLI help, CLAUDE.md) says a stale baseline exits 1 too, never 'drift (drift)' alone (bad: " + docsDriftBad.join(", ") + ")");
+    ["docs/maintainers/conventions.md", docsConventions, /`drift` \(drift, a stale baseline or an error\)/]];
+  const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f)
+    .concat(/`drift` \(drift\)/.test(docsNotes) ? ["the maintainer notes (CLAUDE.md + docs/maintainers/)"] : []);
+  ok(!docsDriftBad.length, "every surface documenting drift's exit code (tooling-reference, AGENTS.md, /spec-drift, change-management, CLI help, the maintainer notes' CLI exit codes) says a stale baseline exits 1 too, never 'drift (drift)' alone (bad: " + docsDriftBad.join(", ") + ")");
+  { // 1.20 docs: CLAUDE.md is loaded into EVERY Claude Code session in this repository, so it is a short index — the hard
+    // constraints, the layout in brief and a topic map — over docs/maintainers/, whose files are read on demand. An
+    // `@docs/…` import would inline them all again. The map and the folder agree both ways, and the hard constraints
+    // stay in the index itself.
+    const idx = docsRead("CLAUDE.md").replace(/\r\n/g, "\n"), idxWs = docsWs(idx);
+    const idxLines = idx.split("\n").length - (idx.endsWith("\n") ? 1 : 0);
+    const idxImports = idx.split("\n").filter((l) => /(?:^|\s)@(?:\.\/)?docs\//.test(l));
+    ok(idxLines <= 250 && idxImports.length === 0,
+      "1.20 docs: CLAUDE.md is a short index (≤ 250 lines) that @-imports no topic file (got " + idxLines + " lines, imports " + JSON.stringify(idxImports) + ")");
+    const mDir = path.join(root, "docs", "maintainers");
+    const onDisk = fs.readdirSync(mDir).filter((f) => f.endsWith(".md")).sort();
+    const mapText = (idx.split(/\n## Topic map\n/)[1] || "").split(/\n## /)[0];
+    const topicRe = /docs\/maintainers\/([A-Za-z0-9._-]+\.md)/g;
+    const mapped = [...new Set([...mapText.matchAll(topicRe)].map((m) => m[1]))].sort();
+    const named = [...new Set([...idx.matchAll(topicRe)].map((m) => m[1]))].sort();
+    const unmapped = onDisk.filter((f) => !mapped.includes(f)), phantom = named.filter((f) => !onDisk.includes(f));
+    ok(onDisk.length >= 10 && !unmapped.length && !phantom.length && mapped.length === onDisk.length,
+      "1.20 docs: every docs/maintainers/*.md is in CLAUDE.md's topic map and every topic file CLAUDE.md names exists (got on disk " +
+      onDisk.join(", ") + "; mapped " + mapped.join(", ") + "; unmapped " + unmapped.join(", ") + "; phantom " + phantom.join(", ") + ")");
+    const hard = [["no Actions / CI / PRs", /No GitHub Actions \/ no paid CI \/ no pull requests\.\*\* All automation is local/],
+      ["no PR / CI steering", /No user-facing text may steer users toward PRs or CI/], ["zero runtime dependencies", /\*\*Zero runtime dependencies\.\*\* The MCP server and all scripts use only Node core/],
+      ["specs in .specs/", /Specs always live in `\.specs\/`/], ["never a top-level bin/", /## Never ship a top-level `bin\/` .*rejects\*\* any plugin shipping a top-level `bin\/`/],
+      ["hooks.json never in plugin.json", /\*\*Hooks: never reference `hooks\/hooks\.json` in `plugin\.json`\.\*\*/],
+      ["engine first, then tool AND subcommand AND test", /add it to the engine module of its concern first .* then wire it into server\.js \(tool\) AND cli\/dev-spec\.js \(subcommand\) AND mcp\/test\.js \(assertion\)\. Keep the CLI and MCP behavior identical/],
+      ["i18n in mcp/lib/i18n/, pt-BR derived", /every user-facing string lives in `mcp\/lib\/i18n\/\*` — `en\.js` · `pt\.js` · `es\.js` .* pt-BR is DERIVED from pt/],
+      ["the heredoc backslash gotcha", /\*\*Shell heredocs eat backslashes\.\*\*/], ["the U+FEFF gotcha", /\*\*Never write a literal U\+FEFF into source\.\*\*/],
+      ["the module rule", /\*\*The module rule \(1\.18\), in short:\*\* .*`\/\/ load time`.*`__link\(E\)`/],
+      ["read the topic file first", /\*\*Before changing an area, read its topic file — the index is not enough\.\*\*/]];
+    const hardMissing = hard.filter(([, re]) => !re.test(idxWs)).map(([n]) => n);
+    ok(!hardMissing.length, "1.20 docs: CLAUDE.md itself states every hard constraint — no Actions / CI / PRs, zero dependencies, .specs/, no top-level bin/, hooks.json, engine-first + parity, i18n, the heredoc and U+FEFF gotchas, the module rule — and the read-the-topic-file rule (got missing: " + (hardMissing.join(", ") || "none") + ")");
+  }
   const docsInstall =docsRead("INSTALL.md"), docsContrib = docsRead("CONTRIBUTING.md");
   ok(!/Copy-Item -Recurse/.test(docsInstall) && /\/plugin marketplace add <path-to-your-clone>/.test(docsInstall) && /dev-spec-driven@dev-spec-driven-marketplace/.test(docsInstall) &&
     [docsInstall, docsContrib].every((t) => /claude plugin validate [^\n]*plugin\.json/.test(t) && /claude plugin validate (?:\.|"\$plugin")[\s`]/.test(t)) &&
@@ -10934,8 +10978,8 @@ function endRun() {
     fs.writeFileSync(path.join(d13p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node t.js_\n  - _Expect: fail_\n");
     const d13a = S.completeTask(d13p, "red", 1, { command: "node t.js", exitCode: 127 });
     const d13Rec = (JSON.parse(fs.readFileSync(path.join(d13p, ".specs", "red", ".state.json"), "utf8")).evidence || {})["1"] || {};
-    ok(d13a.ok === false && d13a.recorded === true && d13Rec.exitCode === 127 && !/`done --run` records nothing for it/.test(dRead("CLAUDE.md")),
-      "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — CLAUDE.md no longer says done --run records nothing for it");
+    ok(d13a.ok === false && d13a.recorded === true && d13Rec.exitCode === 127 && !/`done --run` records nothing for it/.test(maintainerNotes()),
+      "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — no maintainer note (CLAUDE.md, docs/maintainers/) says done --run records nothing for it");
   }
 
   // 1.14 full review (R) — regressions the independent review of the merged fixes found: one assertion each.
