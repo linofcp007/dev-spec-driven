@@ -10,7 +10,8 @@
  * While the 1.18 split is in progress, spec.js still defines the rest and passes it in with link(extra).
  */
 
-const MODULES = ["./text.js", "./files.js", "./locks.js", "./state.js"];
+const MODULES = ["./text.js", "./files.js", "./locks.js", "./markdown.js", "./state.js", "./tracks.js", "./classify.js",
+  "./packs.js", "./templates.js", "./placeholders.js"];
 const E = {};
 const mods = MODULES.map((f) => require(f));
 const add = (m, from) => {
