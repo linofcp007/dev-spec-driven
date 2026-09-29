@@ -59,7 +59,7 @@ imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
 - Design approvals record `weigh: true`; `design-tradeoffs` / `design-risks` warn on a design not yet approved or approved
   from 1.17 on — a design approved before 1.17 is never flagged (a pass with a note: it is asked from its next approval),
   and the checks never count toward the spec_upgrade audit's attention. Nothing is refused and no artifact is edited.
-- Negated classifier keywords are deduplicated like matched ones; "message queue" no longer hints +saas.
+- Negated classifier keywords are deduplicated like matched ones; "message queue" hints +dist as well as +saas.
 - `spec_templates` lists 29 built-in templates (the `distributed.md` steering stub).
 
 ### Upgrade note — track packs with a now-reserved name
