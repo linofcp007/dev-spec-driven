@@ -15584,6 +15584,92 @@ function endRun() {
     ok(g11.isError && /^The text is not a fluidplan PLAN\.md or DECISIONS\.md/.test(g11.body.error) && !/fluidplan\.md'/.test(g11.body.error) && !g11pt.ok && /^O texto não é um PLAN\.md nem um DECISIONS\.md do fluidplan/.test(g11pt.error),
       "1.17 F review 11: spec_import {tool: 'fluidplan', text} with a text that is no fluidplan document is refused naming the text (localized — PT project), never a virtual 'fluidplan.md' (got " + js([g11.body.error, g11pt.error]) + ")");
   }
+  // 1.17 H — linear markdown heading / line patterns: a heading, list item, table row or marker holding a long run of blanks,
+  // backticks, '#', ':1' … — or a line terminator after it — is read in linear time. Those patterns backtracked quadratically
+  // (Given/When/Then cubically) and stalled the synchronous MCP server or a hook (10 s timeout). Relative bounds: the same calls
+  // on a small project, generous factors (Docker Linux is slow). The outputs are the old patterns' (a differential check ran
+  // every rewritten reader against them on the repo's markdown and random text).
+  {
+    const js = (v) => JSON.stringify(v);
+    const safe = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const timed = (fn) => { const t0 = Date.now(); const r = safe(fn); return { ms: Date.now() - t0, r: r || {} }; };
+    const sp = (n) => " ".repeat(n);
+    const LS = String.fromCharCode(0x2028);
+    const N = 100000;
+    const mk = (name) => { const p = path.join(tmp, name); S.initProject(p, ["core", "tdd"], "en"); S.createFeature(p, "lin", ["core", "tdd"], "Linear reads"); return p; };
+    const reads = (p) => [() => S.statusFeature(p, "lin"), () => S.specDoctor(p, "lin"), () => S.traceCheck(p, "lin", { matrix: true }), () => S.earsFeature(p, "lin"),
+      () => S.clarify(p, "lin"), () => S.nextAction(p, "lin"), () => S.taskBrief(p, "lin", 1), () => S.exportSpecs(p, { name: "lin" }), () => S.catalog(p, {})];
+    const small = mk("p17h-small");
+    reads(small).forEach((f) => safe(f)); // warm up
+    const base = reads(small).map((f) => timed(f).ms).reduce((a, b) => a + b, 0);
+    const bound = 5 * Math.max(base, 100) + 3000;
+
+    // L1 — the spec artifacts every tool reads: tasks.md (the task scanner), design.md / requirements.md headings, decisions.md,
+    // a long fence / backtick run, a TODO sentinel after a long blank run, a table separator row with a long blank run.
+    const big = mk("p17h-big");
+    put(big, ".specs/lin/requirements.md", "# Requirements\n\n## User Story 1\n\n#### Acceptance Criteria" + sp(N) + "x" + LS + "y\n\n- US-1.AC-1 WHEN a" + sp(N) +
+      "b THE SYSTEM SHALL c\n" + "\n".repeat(N / 10) + "> **TODO**\n- US-1.AC-2 WHEN d THE SYSTEM SHALL e _Supersedes: other/US-1.AC-1" + sp(N) + "\n### " + sp(N) + "z" + LS + "w\n");
+    put(big, ".specs/lin/design.md", "# Design\n\n## Data" + sp(N) + "Model" + LS + "\n\n## A" + sp(N) + "#\n\n## Constitution Check\n\n" + "`".repeat(N / 4) + "x\n\n| a |\n|---" + sp(N) + "x\n");
+    put(big, ".specs/lin/tasks.md", "# Tasks\n\n## Phase" + sp(N) + "1\n\n- [ ] 1." + sp(N) + "a" + LS + "b\n- [ ] 2. do _Requirements: US-1.AC-1_ _Verify:" + sp(N) + "_\n" +
+      "  _Implements: src/a.js" + ":1".repeat(N / 4) + "x_\n```" + "~".repeat(10) + "\n" + "~".repeat(N / 4) + "\r\n");
+    put(big, ".specs/lin/decisions.md", "# Decisions\n\n## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n\n**Context:** c\n");
+    const bigRuns = reads(big).map((f) => timed(f));
+    const bigMs = bigRuns.reduce((a, x) => a + x.ms, 0);
+    ok(bigRuns.every((x) => !x.r.threw) && bigMs < bound,
+      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 5 × the small feature's time + 3 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
+    const tb = S.taskBlocks("## Phase" + sp(N) + "one  \n\n- [ ] 1. a\n- [ ] 2. b" + LS + "c\n");
+    const dl = S.decisionLog("## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n");
+    ok(tb.length === 1 && tb[0].phase === "Phase" + sp(N) + "one" && S.markdownToHtml("## Title" + sp(N) + "##\n") === "<h2>Title</h2>" &&
+      S.markdownToHtml("# a" + sp(3) + "b #") === "<h1>a" + sp(3) + "b</h1>" && dl.length === 1 && dl[0].title === "Title" && dl[0].kind === "discovery" &&
+      js(S.taskMarkers(S.taskBlocks("- [ ] 1. t _Implements: src/a.js:12-20_ _Verify: `npm test`_\n")[0]).verify) === js(["npm test"]),
+      "1.17 linear headings: the readers keep their answers — a heading's text is what lies between the blanks after its '#'s and the blanks (or a closing '##') at its end; a task line whose text holds a line terminator is no task; a decision heading's closing '##' and a marker's blanks go (got " + js([tb.map((b) => [b.number, b.phase && b.phase.length]), dl]) + ")");
+
+    // L2 — the importers (spec_import is one synchronous call): Kiro, spec-kit, OpenSpec, a plan, an ExecPlan and BMAD sources whose
+    // headings, criteria, scenarios and list items hold long blank runs, a line terminator after them, or a long run of keywords.
+    const imp = path.join(tmp, "p17h-import");
+    S.initProject(imp, ["core"], "en");
+    const src = (tag) => ({
+      kiro: [".kiro/specs/" + tag + "/requirements.md", "# Requirements\n\n### Requirement 1" + sp(N) + "x" + LS + "\n\n**User Story:** I want" + sp(N) + "x" + LS + "y\n\n#### Acceptance Criteria\n\n1. WHEN a" + sp(N) + "b" + LS + "c\n2. " + "WHEN a ".repeat(N / 7) + "\n3. WHEN x THEN the system returns y\n"],
+      "spec-kit": ["specs/001-" + tag + "/spec.md", "# Feature Specification: X\n\n**Input**:" + sp(N) + "\n\n### User Story 1 - T" + sp(N) + "x" + LS + "\n\n**Acceptance Scenarios**" + sp(N) + "x\n\n1. **Given** a" + sp(N) + "x, **When** b" + sp(N) + "y" + LS + "\n2. " + "Given a when b ".repeat(N / 15) + "\n3. Given a, when b, then c\n"],
+      openspec: ["openspec/changes/" + tag + "/specs/cap/spec.md", "## RENAMED Requirements\n\n- FROM: `### Requirement:" + sp(N) + "x`\ry\n- TO: `### Requirement: z`\n\n## ADDED Requirements\n\n### Requirement: R" + sp(N) + "\n\nThe system SHALL work.\n\n#### Scenario:" + sp(N) + "x" + LS + "\n\n- **WHEN**" + sp(N) + "a" + LS + "b\n"],
+      plan: ["plans/" + tag + ".md", "# Plan\n\n## Goals\n\n- When a" + sp(N) + ", b\n- Run `npm test`" + sp(N) + "passes" + LS + "\n\n## Steps\n\n- [ ]" + sp(N) + "a" + LS + "b\n1." + sp(N) + "x" + LS + "\n- [ ] step `src/a.ts" + ":1".repeat(N / 4) + "x`\n"],
+      execplan: ["execplans/" + tag + "/PLANS.md", "```md\n# ExecPlan\n\n## Progress\n\n- [ ] step" + sp(N) + "x" + LS + "\n- [ ] two\n\n## Validation and Acceptance\n\n- Given a" + sp(N) + "then b" + LS + "\n```" + sp(N) + "\n"],
+      bmad: ["bmad-" + tag + "/docs/prd.md", "# Product Requirements Document" + sp(N) + "(PRD)" + sp(N) + ":\n\n## Requirements\n\n- FR1:" + sp(N) + "x" + LS + "y\n- FR2: z\n- **NFR2**:" + sp(N) + "**" + sp(N) + "\n#### FR-3:" + sp(N) + "x" + LS + "\n\n## Epic 1\n\n### Story 1.1:" + sp(N) + "x" + LS + "\n\n#### Acceptance Criteria" + sp(N) + "x\n\n1. AC" + sp(N) + "#" + sp(N) + "1: x\n"],
+    });
+    const smallSrc = (tag) => ({
+      kiro: [".kiro/specs/" + tag + "/requirements.md", "# Requirements\n\n### Requirement 1\n\n**User Story:** I want x\n\n#### Acceptance Criteria\n\n1. WHEN a THEN the system returns b\n"],
+      "spec-kit": ["specs/001-" + tag + "/spec.md", "# Feature Specification: X\n\n**Input**: x\n\n### User Story 1 - T\n\n**Acceptance Scenarios**\n\n1. Given a, when b, then c\n"],
+      openspec: ["openspec/changes/" + tag + "/specs/cap/spec.md", "## ADDED Requirements\n\n### Requirement: R\n\nThe system SHALL work.\n\n#### Scenario: s\n\n- **WHEN** a\n- **THEN** b\n"],
+      plan: ["plans/" + tag + ".md", "# Plan\n\n## Goals\n\n- When a, b\n\n## Steps\n\n- [ ] a\n"],
+      execplan: ["execplans/" + tag + "/PLANS.md", "# ExecPlan\n\n## Progress\n\n- [ ] step\n\n## Validation and Acceptance\n\n- Given a then b\n"],
+      bmad: ["bmad-" + tag + "/docs/prd.md", "# Product Requirements Document\n\n## Requirements\n\n- FR1: x\n\n## Epic 1\n\n### Story 1.1: x\n\n#### Acceptance Criteria\n\n1. x\n"],
+    });
+    const importAll = (make, tag) => Object.entries(make(tag)).map(([tool, [rel, text]]) => {
+      put(imp, rel, text);
+      const from = tool === "kiro" || tool === "spec-kit" || tool === "openspec" ? path.dirname(rel) : tool === "bmad" ? rel.split("/")[0] : rel;
+      return timed(() => S.importSpec(imp, tool, from, { name: tag + " " + tool, tracks: ["core"] }));
+    });
+    importAll(smallSrc, "warm");
+    const impBaseRuns = importAll(smallSrc, "base");
+    const impBase = impBaseRuns.reduce((a, x) => a + x.ms, 0);
+    const impBig = importAll(src, "big");
+    const impMs = impBig.reduce((a, x) => a + x.ms, 0);
+    ok(impBaseRuns.every((x) => x.r.ok) && impBig.every((x) => x.r.ok) && impMs < 5 * Math.max(impBase, 100) + 3000,
+      "1.17 linear headings: spec_import from Kiro, spec-kit, OpenSpec, a plan, an ExecPlan and BMAD with 100,000-character blank runs in headings, criteria, scenarios and list items (a line terminator after them), a run of 15,000 'when's in one scenario and ':1' × 25,000 in a path — within 5 × the small imports' time + 3 s (the Given/When/Then pattern was cubic) (got " + js({ base: impBase, big: impMs, each: impBig.map((x) => x.ms), errors: impBig.filter((x) => !x.r.ok).map((x) => x.r.error) }) + ")");
+
+    // L3 — the hooks' and the classifier's own reads: the stop gate's prose (4,000 unclosed '<!--' and a 3,000-backtick fence run),
+    // classify on a text with 50,000 blank lines, a git log header with a long blank run and a line terminator.
+    const hk = mk("p17h-hooks");
+    const hookRuns = [
+      timed(() => S.stopCheck(hk, { message: "All tasks done. " + "<!--".repeat(4000) + "\n" + "`".repeat(3000) })),
+      timed(() => S.classify("Criar " + "\n".repeat(N / 2) + "x")),
+      timed(() => S.taskCommits(hk, "lin", "commit " + "a".repeat(40) + "\nAuthor:" + sp(N) + "x\r\nDate: y\n\n    task" + sp(N) + "1 lin\n")),
+    ];
+    const hookMs = hookRuns.reduce((a, x) => a + x.ms, 0);
+    ok(hookRuns.every((x) => !x.r.threw) && hookMs < bound && S.classify("Criar " + "\n".repeat(3) + "x").lang === "pt",
+      "1.17 linear headings: the stop gate's prose (4,000 unclosed '<!--', a 3,000-backtick run), classify's clause starts after 50,000 blank lines and a git log header with a 100,000-space run stay linear, within the bound above — a hook has 10 s (got " + js({ each: hookRuns.map((x) => x.ms), threw: hookRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
