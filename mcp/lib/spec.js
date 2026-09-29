@@ -1240,28 +1240,46 @@ const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
 const EN_WORDS = W("the|and|with|for|of|is|are|to|an|in|on|by|from|that|this|it|should|must|when|without");
 // 1.17 D review: a PT / ES INFINITIVE opening a clause — the form a PT / ES requirement line starts with ("Publicar eventos no
 // Kafka.", "Gravar o pedido no Postgres e …"): a short line with no other marker read as English, and "no" (PT em + o) as a
-// negator. Only at a clause start (the text's start, after . ! ? ; : or a line break, or a list bullet), a STRONG marker (2)
-// for its language(s) — a verb both languages share counts for both. None is an English word ("remover", "registrar", "leer"
-// are left out: an English noun / verb).
-const CLAUSE_START = "(?:^|[.!?;:\\n]|[-*+•]\\s)\\s*";
-const INF = (words) => new RegExp(CLAUSE_START + "(" + words + ")(?![\\p{L}\\p{N}_])", "giu");
-const PT_INF = INF("criar|gravar|atualizar|adicionar|apagar|gerar|escrever|armazenar|receber|manter|processar|reprocessar|substituir|excluir|obter|alterar|mudar|testar|corrigir|melhorar|exibir|carregar|descarregar|baixar");
-const ES_INF = INF("crear|escribir|actualizar|añadir|agregar|borrar|generar|almacenar|recibir|mantener|procesar|reprocesar|sustituir|obtener|cambiar|comprobar|corregir|mejorar|cargar|descargar|reintentar");
-const PTES_INF = INF("publicar|enviar|guardar|consumir|notificar|validar|eliminar|mostrar|permitir|implementar|integrar|calcular|sincronizar|exportar|importar|listar|editar|bloquear|usar|pagar|cobrar|evitar|configurar|definir|verificar|migrar|filtrar|ordenar|buscar");
+// negator. Only at a clause start (the text's start, after . ! ? ; : or a line break, or a list bullet) and followed by its
+// object (a word on the same line — a UI label list "Guardar, Enviar, Cancelar" or "Enviar. Pagar." is no clause), a STRONG
+// marker (2) — and only in a text with no English function word (1.17 verification N1: "Spanish labels: …" is English).
+// PT_INF / ES_INF hold verbs that exist in ONE language only; a verb both languages have (alterar, excluir, mudar, apagar,
+// agregar, cambiar…) is in PTES_INF and counts for both — it tells PT / ES from English, never PT from ES (a tie is PT, or the
+// project's language when that is ES). None is an English word ("remover", "registrar", "leer" are left out: an English noun /
+// verb). CLAUSE_START is linear: the spaces after a start never cross a line break (`\s*` there re-read a whole run of blank
+// lines from each of its line breaks — quadratic; 1.17 verification N2).
+const CLAUSE_START = "(?:^|[.!?;:\\n]|[-*+•]\\s)[^\\S\\n]*";
+const INF_WORDS = {
+  pt: "atualizar|gerar|escrever|armazenar|receber|manter|processar|reprocessar|obter|corrigir|melhorar|exibir|carregar|descarregar|baixar",
+  es: "crear|escribir|actualizar|añadir|generar|almacenar|recibir|mantener|procesar|reprocesar|sustituir|obtener|comprobar|corregir|mejorar|cargar|descargar|reintentar",
+  both: "publicar|enviar|guardar|consumir|notificar|validar|eliminar|mostrar|permitir|implementar|integrar|calcular|sincronizar|exportar|importar|listar|editar|bloquear|usar|pagar|cobrar|evitar|configurar|definir|verificar|migrar|filtrar|ordenar|buscar|" +
+    "criar|gravar|adicionar|apagar|substituir|excluir|alterar|mudar|testar|agregar|borrar|cambiar",
+};
+const INF = (words) => new RegExp(CLAUSE_START + "(" + words + ")(?=[^\\S\\n]+[\\p{L}\\p{N}\"'`“«(])", "giu");
+const PT_INF = INF(INF_WORDS.pt);
+const ES_INF = INF(INF_WORDS.es);
+const PTES_INF = INF(INF_WORDS.both);
+// "no" + an infinitive is Spanish ("no usar LLM", "No enviar correos"): Portuguese negates with "não" (and its "no" = em + o
+// never precedes an infinitive). A STRONG ES marker (1.17 verification N1: "Adicionar productos al carrito, no usar LLM." read PT).
+const ES_NO_INF = new RegExp("(?<![\\p{L}\\p{N}_])no[^\\S\\n]+(" + INF_WORDS.es + "|" + INF_WORDS.both + ")(?![\\p{L}\\p{N}_])", "giu");
 // fallback (full review Pb2 — an imported source): the project's language, used when the text shows no language of its own
 // (no PT/ES marker to speak of and fewer than two English function words) — and its variant (pt-BR) when the text is in
 // its family. Without it the answer is the plain guess ('en' when nothing says otherwise).
 function guessLang(text, fallback) {
   const distinct = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
   const distinctInf = (re) => new Set(Array.from(text.matchAll(re), (m) => m[1].toLowerCase())).size;
-  const shared = distinctInf(PTES_INF);
-  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + distinctInf(PT_INF) + shared) + distinct(PT_WEAK);
-  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + distinctInf(ES_INF) + shared) + distinct(ES_WEAK);
   const en = distinct(EN_WORDS);
+  // clause-start infinitives only in a text without English function words (1.17 verification N1)
+  const inf = (re) => (en ? 0 : distinctInf(re));
+  const shared = inf(PTES_INF);
+  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + inf(PT_INF) + shared) + distinct(PT_WEAK);
+  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + inf(ES_INF) + shared + distinctInf(ES_NO_INF)) + distinct(ES_WEAK);
   const best = Math.max(pt, es);
-  const g = best < 2 || best <= en ? "en" : pt >= es ? "pt" : "es";
-  if (!fallback) return g;
-  const f = normalizeLang(fallback);
+  const f = fallback ? normalizeLang(fallback) : null;
+  // a PT / ES tie (a shared verb, "de", "para"…) is PT — unless the project's language is Spanish
+  const tieEs = pt === es && f !== null && i18n.baseLang(f) === "es";
+  const g = best < 2 || best <= en ? "en" : pt > es || (pt === es && !tieEs) ? "pt" : "es";
+  if (!f) return g;
   if (i18n.baseLang(f) === g) return f;
   return g === "en" && best < 2 && en < 2 ? f : g;
 }
@@ -15678,16 +15696,61 @@ function expInline(text) {
     return /^(?:https?:\/\/|mailto:)/i.test(u) ? put(`<a href="${htmlEsc(u)}" rel="noopener noreferrer">`) + label + put("</a>") : label;
   });
   // An entity reference is text in markdown (`&lt;!--` — how spec_decide stores a comment opener — reads "<!--"): kept as
-  // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup.
-  s = s.replace(/&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
+  // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup. After an odd run
+  // of backslashes its '&' is escaped: `\&lt;` is the text "&lt;" (1.17 verification N3).
+  s = s.replace(/(?<!(?:^|[^\\])(?:\\\\)*\\)&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
+  // Any ASCII punctuation escaped with a backslash is that character (CommonMark) — not only markup characters: an import
+  // writes `US-3\.AC-1`, `T\-800`, `_Verify\:` to keep IDs and markers inert, and the export showed the backslashes (1.17
+  // verification N3). After htmlEsc, an escaped `<` `>` `&` `"` reads `\&lt;` … — the backslash goes, the entity stays.
   s = htmlEsc(s)
     .replace(/\*\*(?=\S)([\s\S]{0,2000}?\S)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]{0,2000}?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
     .replace(/~~(?=\S)([\s\S]{0,2000}?\S)~~/g, "<del>$1</del>")
     .replace(/(?<![*\p{L}\p{N}\\])\*(?=[^\s*])([\s\S]{0,2000}?[^\s*\\])\*(?![*\p{L}\p{N}])/gu, "<em>$1</em>")
     .replace(/(?<![\p{L}\p{N}_\\])_(?=[^\s_])([\s\S]{0,2000}?[^\s_\\])_(?![\p{L}\p{N}_])/gu, "<em>$1</em>")
-    .replace(/\\([\\`*_~|#[\]])/g, "$1");
+    .replace(RE_MD_ESCAPE, "$1");
   return s.replace(/\u0001(\d+)\u0002/g, (m, k) => slots[+k]);
+}
+// A backslash escape: `\` + one ASCII punctuation character (CommonMark's set).
+const RE_MD_ESCAPE = /\\([!-/:-@[-`{-~])/g;
+const MD_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: String.fromCharCode(0xa0) };
+// Markdown inline text → the plain text a reader sees, for the exports that are no markdown (Gherkin, the CSV files, a page
+// <title>): outside inline code spans (backtickRuns — the engine's pairing, line by line), a backslash escape is its character
+// and an entity reference (&lt; &gt; &amp; &quot; &apos; &nbsp;, &#n; &#xh;) its character — an unknown name, and a numeric one
+// naming a control character or a line separator (the outputs are line-based), stay as written.
+// A code span is kept whole, backticks included (nothing is decoded inside one). Markup (emphasis, links) is left as it is.
+// Linear: one pass per line, each code span skipped once (1.17 verification N3 — the Gherkin export printed `NFR\-2`,
+// `US-3\.AC-1` and `&lt;!--` that the importer writes to keep IDs and comment openers inert).
+function mdPlainText(s) {
+  const text = String(s == null ? "" : s);
+  if (!text.includes("\\") && !text.includes("&")) return text;
+  return text.split("\n").map((line) => {
+    const ticks = line.includes("`") ? backtickRuns(line) : null;
+    let out = "";
+    let k = 0;
+    while (k < line.length) {
+      const c = line[k];
+      if (c === "`" && ticks) { const e = ticks.spanEnd(k); out += line.slice(k, e); k = e; continue; }
+      if (c === "\\" && k + 1 < line.length && /[!-/:-@[-`{-~]/.test(line[k + 1])) { out += line[k + 1]; k += 2; continue; }
+      if (c === "&") {
+        const m = /^&(?:#([0-9]{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/.exec(line.slice(k, k + 40));
+        const cp = m ? (m[1] != null ? parseInt(m[1], 10) : m[2] != null ? parseInt(m[2], 16) : null) : null;
+        // a numeric reference to a control character or a line / paragraph separator stays as written: the output is line-based
+        const ch = !m ? null : cp != null ? (cp >= 0x20 && cp <= 0x10ffff && !(cp >= 0x7f && cp <= 0x9f) && cp !== 0x2028 && cp !== 0x2029 && (cp < 0xd800 || cp > 0xdfff) ? String.fromCodePoint(cp) : null)
+          : own(MD_ENTITIES, m[3]) ? MD_ENTITIES[m[3]] : null;
+        if (ch != null) { out += ch; k += m[0].length; continue; }
+      }
+      const j = nextPlainStop(line, k + 1);
+      out += line.slice(k, j);
+      k = j;
+    }
+    return out;
+  }).join("\n");
+}
+// The next index at or after `from` holding a character mdPlainText acts on (` \ &), else the line's length.
+function nextPlainStop(line, from) {
+  for (let i = from; i < line.length; i++) { const c = line[i]; if (c === "`" || c === "\\" || c === "&") return i; }
+  return line.length;
 }
 // A fenced block from its opener at lines[i] → { html, next }. As fenceStep reads it: a fence opened inside a list item
 // (indented) ends with that item — a non-blank line less indented than its opener.
@@ -16139,7 +16202,7 @@ function exportHtml(doc) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="dev-spec">
-<title>${htmlEsc(doc.title)} — ${htmlEsc(doc.kicker)}</title>
+<title>${htmlEsc(mdPlainText(doc.title))} — ${htmlEsc(doc.kicker)}</title>
 <style>
 ${EXPORT_CSS}
 </style>
@@ -16582,7 +16645,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         feature: m.feature,
         id: r.id,
         kind: r.kind.toUpperCase(),
-        requirement: r.text,
+        requirement: mdPlainText(r.text), // plain text: an escape / entity as the character (1.17 verification N3)
         status: R.status[r.status] || r.status,
         gaps: r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g).join("; "),
         template: r.template ? R.yes : "",
@@ -16591,7 +16654,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         tests: r.tests.map((t) => t.id).join("; "),
         testFiles: r.tests.map((t) => `${t.id}: ${t.outsideCode ? R.outsideCode : t.files && t.files.length ? t.files.join(", ") : R.notInCode}`).join("; "),
         evidence: r.tasks.filter((t) => t.evidence).map((t) => rtmEvidenceWords(t, lang)).join("; "),
-        decisions: r.decisions.map((d) => `${d.id} ${d.title}`).join("; "),
+        decisions: r.decisions.map((d) => `${d.id} ${mdPlainText(d.title)}`).join("; "),
         supersedes: r.supersedes.join("; "),
         supersededBy: r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join("; ")) : r.supersededBy.join("; "), // 1.15: pending reads apart
         approvedAt: r.approval ? r.approval.at || "" : "",
@@ -16610,6 +16673,9 @@ const RTM_ICON = { verified: "✅", implemented: "⚠", planned: "☐", untraced
 // A table cell: a '|' escaped, lines folded (mdCell), and an HTML comment opener neutralized — markdownToHtml drops
 // <!-- … --> first, so an opener in one cell and a closer in a later one would swallow the cells between them.
 const rtmCell = (s) => mdCell(s).replace(/<!--/g, "&lt;!--");
+// The requirement's cell (the row's first text — only its ID before it, no backtick): an opener inside a code span stays as
+// written (commentInert's rule — "escape `<!--` in names" showed `&lt;!--` in the export's code; 1.17 verification N3).
+const rtmTextCell = (s) => inertOutsideCode(mdCell(s), false);
 function rtmMarkdown(mx, lang) {
   const R = i18n.msg(lang).rtm;
   const code = (s) => "`" + s + "`";
@@ -16629,7 +16695,7 @@ function rtmMarkdown(mx, lang) {
     const taskIcon = (t) => (!t.done ? "☐" : t.verified ? "✅" : "⚠");
     const cells = [
       r.supersededBy.length && !r.supersedePending ? `~~${r.id}~~` : r.id,
-      rtmCell(r.text) + (notes.length ? " " + italic("(" + rtmCell(notes.join("; ")) + ")") : ""),
+      rtmTextCell(r.text) + (notes.length ? " " + italic("(" + rtmCell(notes.join("; ")) + ")") : ""),
       `${RTM_ICON[r.status]} ${R.status[r.status]}` + (gaps.length ? " — " + rtmCell(gaps.join("; ")) : ""),
       r.design.length ? rtmCell(r.design.join("; ")) : "—",
       r.tasks.length ? r.tasks.map((t) => `#${t.number} ${taskIcon(t)}`).join(", ") : "—",
@@ -16744,6 +16810,9 @@ function ghStripEmphasis(s) {
   for (let i = 0; i < n;) {
     if (codeEnd.has(i)) { i = codeEnd.get(i); continue; }
     const c = s[i];
+    // a backslash escape (`\*`, `\_`) is a literal character, never a delimiter (1.17 verification N3 — mdPlainText drops the
+    // backslash afterwards; a paired `\*x\*` was markup, and left `\x\`)
+    if (c === "\\" && i + 1 < n && s[i + 1] !== "`" && /[!-/:-@[-`{-~]/.test(s[i + 1])) { i += 2; continue; }
     if (c !== "*" && c !== "_") { i++; continue; }
     let j = i;
     while (s[j] === c) j++;
@@ -16891,12 +16960,14 @@ function gherkinFeature(projectDir, f, opts = {}) {
   const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/requirements.md")}`];
   const ftags = gherkinFeatureTags(tracks, state.kind);
   if (ftags.length) lines.push(ftags.join(" "));
-  lines.push(`${D.feature}: ${ghLine(titledSlug(specTitle(reqRaw, slug), slug))}`);
+  // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText — 1.17
+  // verification N3: `NFR\-2`, `US-3\.AC-1`, `&lt;!--` from an import reached the steps as written).
+  lines.push(`${D.feature}: ${ghLine(mdPlainText(titledSlug(specTitle(reqRaw, slug), slug)))}`);
   const summary = sectionText(reqs, SUMMARY_SYN) || (state.kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null);
   if (summary) {
     // A description line that reads like a Gherkin token (a tag, a comment, a table row, a doc string, any keyword of the
     // dialect or English — ghRiskyLine) would change the file's structure: it gets the summary label in front — the words stay.
-    const s = ghLine(summary);
+    const s = ghLine(mdPlainText(summary));
     lines.push("  " + (ghRiskyLine(s, D) ? G.summaryLabel + ": " : "") + s);
   }
   const skipped = { template: [], superseded: [] };
@@ -16909,7 +16980,7 @@ function gherkinFeature(projectDir, f, opts = {}) {
     if (n !== story) {
       story = n;
       const ctx = storyContext(reqs, n);
-      lines.push("", `  # ${ghLine(ctx ? ctx[0] : "US-" + n)}`);
+      lines.push("", `  # ${ghLine(mdPlainText(ctx ? ctx[0] : "US-" + n))}`);
     }
     if (r.template) { skipped.template.push(r.id); lines.push("", `  # ${G.template(r.id)}`); continue; }
     if (r.supersededBy.length && !r.supersedePending) { skipped.superseded.push(r.id); lines.push("", `  # ${G.superseded(r.id, r.supersededBy.join(", "))}`); continue; }
@@ -16917,14 +16988,15 @@ function gherkinFeature(projectDir, f, opts = {}) {
     const full = acOneLine(e ? e.text : r.text, r.id, Infinity);
     const sp = earsSteps(full, lang);
     if (!sp.split) unsplit.push(r.id);
+    const steps = sp.steps.map((st) => ({ kind: st.kind, text: mdPlainText(st.text) })); // split first: an escape never cuts a clause
     lines.push("");
     if (r.supersedePending) lines.push(`  # ${X.toBeSupersededBy(r.supersededBy.join(", "))}`);
     if (!sp.split) lines.push(`  # ${G.unsplit}`);
     const tags = ["@" + r.id, ...r.tests.map((t) => "@" + t.id), ...byTrack.filter((t) => t.acs.has(r.id)).map((t) => t.tag)];
     lines.push("  " + [...new Set(tags)].join(" "));
-    lines.push(`  ${D.scenario}: ${r.id} — ${ghLine(oneLiner(sp.steps[sp.steps.length - 1].text, 100) || full)}`);
+    lines.push(`  ${D.scenario}: ${r.id} — ${ghLine(oneLiner(steps[steps.length - 1].text, 100) || mdPlainText(full))}`);
     let prev = null;
-    for (const st of sp.steps) {
+    for (const st of steps) {
       lines.push(`    ${st.kind === prev ? D.and : D[st.kind]} ${st.text}`);
       prev = st.kind;
     }
@@ -16979,7 +17051,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
   const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null) ||
     (kind === "spike" ? spikeInfo(dir).question : null);
   const title = specTitle(reqRaw || (kind === "spike" ? readContained(projectDir, path.join(dir, SPIKE_FILE)) || "" : ""), slug);
-  const feature = { key: slug, parent: null, type: "feature", summary: titledSlug(title, slug),
+  const feature = { key: slug, parent: null, type: "feature", summary: mdPlainText(titledSlug(title, slug)),
     description: [summary, T.featureLine(".specs/" + slug + "/", trackLabel(tracks), (i18n.msg(lang).phaseNames || {})[phase] || phase, done, blocks.length)].filter(Boolean).join("\n\n"),
     status: phase === "complete" ? "done" : status(done, blocks.length), labels: cap(base) };
   // The stories: heading order, then first-AC order (the export's); each with its intro and its criteria, whole.
@@ -16999,10 +17071,11 @@ function trackerRecords(projectDir, f, lang, supBy) {
       const k = dirKey(dir) + "\n" + a.id;
       const by = marks.get(k);
       const note = !by ? "" : " — " + (marks.live && !marks.live.has(k) ? X.toBeSupersededBy(by.join(", ")) : X.supersededBy(((marks.liveBy && marks.liveBy.get(k)) || by).join(", ")));
-      return `- ${a.id} — ${acOneLine(a.text, a.id, Infinity)}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
+      // the criterion as a reader sees it (mdPlainText — an import's `NFR\-2` / `&lt;!--` read as written; 1.17 verification N3)
+      return `- ${a.id} — ${mdPlainText(acOneLine(a.text, a.id, Infinity))}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
     });
     const st = blocks.filter((b) => b.story && b.story.toUpperCase() === "US" + n);
-    stories.push({ n, rec: { key: `${slug}/US-${n}`, parent: slug, type: "story", summary: ghLine(ctx ? ctx[0] : `US-${n}`),
+    stories.push({ n, rec: { key: `${slug}/US-${n}`, parent: slug, type: "story", summary: ghLine(mdPlainText(ctx ? ctx[0] : `US-${n}`)),
       description: [intro.join("\n"), acLines.length ? T.acceptance + "\n" + acLines.join("\n") : ""].filter(Boolean).join("\n\n"),
       status: status(st.filter((b) => b.done).length, st.length), labels: cap(base.concat(own.map((a) => a.id))) } });
   }
@@ -17017,7 +17090,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
     const size = taskSize(b);
     const occ = (seen.get(String(b.number)) || 0) + 1;
     seen.set(String(b.number), occ);
-    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(withoutTaskMarkers(cleanTaskText(b.text))) || ghLine(b.text)}`,
+    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(mdPlainText(withoutTaskMarkers(cleanTaskText(b.text)))) || ghLine(b.text)}`,
       description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
@@ -19100,7 +19173,29 @@ const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
 // left in the text was an unclosed one — plain text there, but in the files written it paired with a later `-->` (the
 // `<!-- <tool>: … -->` line under a converted criterion) and hid every criterion between.
-const commentInert = (s) => String(s).replace(/<!--/g, "&lt;!--");
+// Outside inline code spans only (1.17 verification N3): a code span's `<!--` is text to every comment reader (commentLines —
+// the same pairing, backtickRuns, line by line) and a code span shows its text verbatim — "escape `<!--` in user names" became
+// `&lt;!--` in requirements.md and the exports (1.16 kept it). The written line starts with the text or follows a prefix of the
+// importer's without backticks, so the pairing read here is the file's.
+const commentInert = (s) => inertOutsideCode(String(s), false);
+// `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line. Linear.
+function inertOutsideCode(text, closers) {
+  if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
+  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
+  return text.split("\n").map((line) => {
+    if (!line.includes("`")) return esc(line);
+    const ticks = backtickRuns(line);
+    let out = "";
+    let from = 0;
+    // [k, spanEnd(k)) is a whole code span, or an unmatched backtick run (literal — the scan goes on after it): kept as written
+    for (let k = line.indexOf("`"); k !== -1; k = line.indexOf("`", from)) {
+      const e = ticks.spanEnd(k);
+      out += esc(line.slice(from, k)) + line.slice(k, e);
+      from = e;
+    }
+    return out + esc(line.slice(from));
+  }).join("\n");
+}
 // A block of imported lines as requirements.md holds it: commentInert outside fenced code (a fenced `<!--` is code, kept), and a
 // fence the block leaves open closed at its end (the block starts outside any fence: it follows a heading the importer writes).
 function inertBlock(lines) {
@@ -20655,9 +20750,15 @@ const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
 //   an AC / T / EC / NFR / SC ID → `US-7\.AC-1`, `T\-01`, `NFR\-2` (extractAcIds & co. read the plain spelling only — a page
 //     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test).
 // Linear: fixed alternatives after a one-character lookbehind. Idempotent (an escaped form never matches again).
+// codeOk (1.17 verification N3): the comment escapes skip inline code spans (commentInert's rule) — only for text written into
+// requirements.md as a whole line or after the importer's backtick-free prefix (a criterion, a story's prose, Out of Scope):
+// its comment readers see code spans. Elsewhere a value is joined to others on its line (a code span's pairing could shift) or
+// lands in design.md / decisions.md, read by blankHtmlComments (no code spans) — escaped everywhere. The ID / marker escapes
+// apply inside code spans too: extractAcIds and taskMarkerSpans read code spans (a backslash shows there — CommonMark's rule).
 const RE_FP_MARKER_LIKE = new RegExp("(?<=[_*])(" + [...TASK_MARKER_LABELS, "Kind", "Date", "Affects", "Supersedes", "Outcome"].join("|") + ")(?=:)", "giu");
-function fpInert(s) {
-  return String(s == null ? "" : s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;").replace(RE_FP_MARKER_LIKE, "$1\\")
+function fpInert(s, codeOk) {
+  const t = String(s == null ? "" : s);
+  return (codeOk ? inertOutsideCode(t, true) : t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;")).replace(RE_FP_MARKER_LIKE, "$1\\")
     .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-");
 }
 const fpV = (s) => fpInert(fpOneLine(s)); // a value written inside one line
@@ -20679,13 +20780,13 @@ function fpLine(l) {
 // (+ fpLine's escapes when `structural` — requirements.md, where a heading or an ID-led line is structure); a fence it leaves open
 // is closed (it swallowed every line after it — the criteria, the decisions). The fence view is the readers' own (fenceStep):
 // the block starts outside any fence and is written whole lines at column 0.
-function fpProse(lines, structural) {
+function fpProse(lines, structural, codeOk) {
   const st = { fence: null };
   const out = [];
   for (const raw of lines) {
     const l = String(raw).replace(RE_FP_BREAKS, " ");
     if (fenceStep(st, l)) { out.push(l); continue; }
-    out.push(structural ? fpLine(fpInert(l)) : fpInert(l));
+    out.push(structural ? fpLine(fpInert(l, codeOk)) : fpInert(l, codeOk));
   }
   if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
   return out;
@@ -21442,13 +21543,13 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     const key = page ? "p:" + pid : "g:" + t.group;
     if (!stories.has(key)) {
       const g = fp.groups[t.group] || { title: fp.title || PP.planTitle };
-      stories.set(key, page ? { order: page.index, key: "page " + pid, title: fpHead(page.title), prose: fpProse(page.intro, true), crit: [], byText: new Map() }
+      stories.set(key, page ? { order: page.index, key: "page " + pid, title: fpHead(page.title), prose: fpProse(page.intro, true, true), crit: [], byText: new Map() }
         : { order: 1e6 + t.group, key: g.title, title: fpHead(g.title), prose: [], crit: [], byText: new Map() });
     }
     const s = stories.get(key);
     const list = [];
     t.acceptance.forEach((raw0, m) => {
-      const raw = fpV(raw0);
+      const raw = fpInert(fpOneLine(raw0), true); // requirements.md, after "N. **US-n.AC-m** — ": a code span's `<!--` stays
       const norm = raw.replace(/\s+/g, " ").trim().toLowerCase();
       let c = s.byText.get(norm);
       if (!c) { c = { key: `task ${t.num} / acceptance ${m + 1}`, raw, ears: earsFromPlanText(raw), also: [] }; s.byText.set(norm, c); s.crit.push(c); }
@@ -21617,7 +21718,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     }
   }
   // requirements.md: Out of Scope, Open decisions.
-  const scope = fp.outOfScope.length ? fpProse(fp.outOfScope, true)
+  const scope = fp.outOfScope.length ? fpProse(fp.outOfScope, true, true)
     : fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko").map((d) => `- **${fpV(d.fid)} · ${fpV(d.title)}** — ${P.rejectedMark}${d.reason ? `: ${fpV(d.reason)}` : ""}`);
   if (scope.length) model.extra.push({ heading: P.outOfScope, lines: scope });
   const openD = fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "open");
@@ -21721,8 +21822,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
-  // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs.
-  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : commentInert(model.nameHint);
+  // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs. Even in a
+  // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
+  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : String(model.nameHint).replace(/<!--/g, "&lt;!--");
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
@@ -22556,6 +22658,7 @@ module.exports = {
   csvCell, // one CSV field: quoted when it must be, a leading = + - @ / tab / CR neutralized with an apostrophe
   RTM_STATUSES, // the matrix's row status codes, best first
   earsSteps, // 1.16 E1 — one EARS criterion → its Gherkin steps [{kind: given|when|then, text}] + split (false: one Then, the whole text)
+  mdPlainText, // 1.17 verification N3 — markdown inline text → the plain text a reader sees (escapes / entities, outside code spans)
   EXPORT_FORMATS: Object.freeze(EXPORT_FORMATS.slice()), // the spec_export `format` enum (server.js reads it from here)
   TRACKERS: Object.freeze(TRACKERS.slice()), // 1.16 E2 — the tracker CSV formats (export --tracker)
   milestone, // 1.16 E3 — spec_milestone / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)
