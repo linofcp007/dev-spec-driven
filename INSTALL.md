@@ -116,7 +116,8 @@ validate the plugin through its `plugin.json`.
 
 The plugin check ends with `Validation passed with warnings` and one warning — `CLAUDE.md at the plugin root is not
 loaded as project context`. That is expected: `CLAUDE.md` holds the maintainers' notes for working on the plugin
-itself, not context for your projects (the workflow ships as the skill). Any other warning or error is worth a look.
+itself (an index over `docs/maintainers/`), not context for your projects (the workflow ships as the skill). Any other
+warning or error is worth a look.
 
 ---
 

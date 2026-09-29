@@ -548,7 +548,8 @@ ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requi
   frmJ && frmJ.needsConfirm === true && fs.existsSync(path.join(w4, ".specs", "doomed")), "feature remove without --yes deletes nothing, lists what it would delete, exits 1");
 // No hidden aliases: `feature delete` is refused like the MCP enum (spec_feature) refuses it — exit 1, nothing deleted.
 // CHANGED in the 1.14 full review (S7): `backlog remove` is now a DOCUMENTED alias of rm on both surfaces (the engine and
-// the spec_backlog enum accept it, as CLAUDE.md says) — it removes, exit 0; an unknown action (delete) is still refused.
+// the spec_backlog enum accept it, as docs/maintainers/lifecycle.md says) — it removes, exit 0; an unknown action (delete)
+// is still refused.
 run(["backlog", "add", "Zeta", "--project", w4]);
 const fdel = run(["feature", "delete", "doomed", "--yes", "--project", w4]);
 const brem = run(["backlog", "remove", "Zeta", "--project", w4]);

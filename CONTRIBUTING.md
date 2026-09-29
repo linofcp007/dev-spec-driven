@@ -17,8 +17,13 @@ exposed three ways — the **MCP server** (`mcp/server.js`: tools, plus prompts 
 commands + hooks**. When you add an operation, add it to the engine module of its concern and to the facade's object in
 `spec.js` first, then wire it into all three and add a test. A new command in `commands/` is automatically an MCP prompt too.
 
-Full maintainer notes (conventions, gotchas, the track model, multilingual rules) are in
-**[CLAUDE.md](./CLAUDE.md)** — read it before changing the engine.
+The maintainer notes come in two parts. **[CLAUDE.md](./CLAUDE.md)** — loaded into every Claude Code session in this
+repository, so it stays short — is the index: the hard constraints, the layout in brief and a **topic map** that says,
+for each area, which file of **[docs/maintainers/](./docs/maintainers/)** to read before changing it (architecture,
+tracks and the classifier, languages, the MCP server, gates and approvals, tasks and evidence, the feature lifecycle,
+templates / imports / exports, markdown and trace, spec quality, Claude Code integration, conventions, testing,
+extending). Read CLAUDE.md, then the topic file of the area you change — the index alone is not enough. A new topic
+file goes into the topic map (`mcp/test.js` checks that the map and the folder agree).
 
 ## Developing
 
