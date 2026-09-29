@@ -3,6 +3,30 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.18.0] — 2026-09-29
+
+A pure refactor: the engine as modules. No behaviour change — same tools, commands, results and files.
+
+### Changed
+- `mcp/lib/spec.js` (23,469 lines) is now a facade over `mcp/lib/engine/`: 20 modules by concept (text and paths, files and
+  locks, state, markdown, tracks and the classifier, templates, scaffolding, tasks, evidence, trace, gates and approvals,
+  doctor and next_action, quality, finish and the catalog, the roadmap, decisions, exports, guards, upgrade, the codebase
+  scan) plus one importer per source tool in `engine/import/`. The public object is unchanged (same keys, order, types and
+  arities; every operation in one read-cache scope; mutators under the feature lock), and the moved code is byte-identical.
+- The module rule: a value needed while a module loads comes through an acyclic `require` (marked `// load time`); every
+  other cross-module name is bound at call time by `__link` (`engine/index.js` merges the modules' exports — a name
+  defined twice throws); per-call state lives on one object, `CTX` (`engine/ctx.js`), mutated in place.
+- `mcp/lib/i18n.js` is a facade over `i18n/en.js`, `pt.js`, `es.js`, `common.js` and `pt-br.js`; each language loads on
+  first use (pt-BR is still derived lazily). Loading the engine costs the same as in 1.17 (a hook's cold start within
+  noise).
+- Proof: a differential harness ran the 1.17.0 engine and the new one side by side — 897,053 comparisons (pure functions
+  over 13,996 corpus strings, every i18n table leaf in four locales, lockstep project scenarios in EN / PT / ES / pt-BR,
+  every importer, 57 CLI commands, an MCP session, the hooks with 72 malformed payloads) — 0 differences.
+
+### Tests
+- `node mcp/test.js` 1443 assertions (was 1442), `node cli/test-cli.js` 455 (unchanged): the source guards scan every
+  `mcp/lib` file, and a new guard checks the module list and that `mcp/lib` requires only Node core or relative files.
+
 ## [1.17.0] — 2026-09-29
 
 Engineering judgement in the spec: a seventh track for distributed systems and data consistency (the dual-write problem,
