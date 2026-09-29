@@ -37,13 +37,16 @@ imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
   `templates check` warns about a project design template without them.
 - **/grill constraints round** — atomicity, ACID and the isolation level, race conditions, the consistency model, delivery
   guarantees and idempotency, each dependency failing, volume and growth, and a business outcome you can measure after
-  release. `spec_clarify` asks one question (`nudges: [{code: "consistency-unstated"}]`) when the spec names queues,
-  events, webhooks, async work, concurrency, transactions or retries and the design says nothing about consistency or
-  idempotency.
+  release. `spec_clarify` asks one question (`nudges: [{code: "consistency-unstated"}]`) when your own text (never the
+  templates') names two such concepts — queues, events, webhooks, async work, concurrency, transactions, retries — or one
+  strong phrase (a message queue, publishing an event, a background job, concurrent writes, Kafka…), and neither the
+  requirements nor the design answer it (eventual / strong consistency, idempotency, at-least-once, isolation level,
+  optimistic / pessimistic locking, outbox…).
 - **The TDD micro-cycle** inside each task (adapted from obra/superpowers' test-driven-development, MIT): one behaviour at
-  a time, watch it fail for the right reason, minimal code, refactor only on green, code written before its test is
-  deleted and redone — with the usual rationalizations answered and the red flags; in the +tdd loop, the implementer and
-  reviewer agents and /executeTask.
+  a time, watch it fail for the right reason, minimal code, refactor only on green, code written before its new
+  behaviour's test is deleted and redone — with the usual rationalizations answered and the red flags (guard tests,
+  characterization tests of existing code and a test an earlier task already turned green are exempt); in the +tdd loop,
+  the implementer and reviewer agents and /executeTask.
 
 ### Added — import
 - **`spec_import {tool: "fluidplan"}`** / `dev-spec import fluidplan <path>|-` — a plan settled with the fluidplan skill
@@ -53,8 +56,9 @@ imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
   Alternatives & Trade-offs, rejected ones → Out of Scope, open ones flagged. Inline text (a pasted PLAN.md) works too.
 
 ### Changed
-- Existing designs without Alternatives & Trade-offs / Risks now warn in doctor (and read `warnings` in the spec_upgrade
-  audit); nothing is refused and no artifact is edited.
+- Design approvals record `weigh: true`; `design-tradeoffs` / `design-risks` warn on a design not yet approved or approved
+  from 1.17 on — a design approved before 1.17 is never flagged (a pass with a note: it is asked from its next approval),
+  and the checks never count toward the spec_upgrade audit's attention. Nothing is refused and no artifact is edited.
 - Negated classifier keywords are deduplicated like matched ones; "message queue" no longer hints +saas.
 - `spec_templates` lists 29 built-in templates (the `distributed.md` steering stub).
 
