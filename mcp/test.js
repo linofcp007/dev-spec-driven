@@ -14836,6 +14836,63 @@ function endRun() {
       /\*\*408\*\*[^\n]*\*\*429\*\*/.test(ref) && /4³ = 64 calls/.test(ref) && !/27 calls/.test(ref) && !/key header/.test(ref) && /record header `event-id`/.test(ref) &&
       (stubs.match(/408/g) || []).length === 4 && (stubs.match(/429/g) || []).length === 4,
       "1.17 D review (references): distributed-data-patterns.md fixes write skew (Postgres RR, Oracle SERIALIZABLE), order-safe set semantics, MERGE, retriable 408 / 429, key vs header, 4³ = 64; the distributed.md stubs (EN / PT / ES / pt-BR) name 408 / 429 as retriable");
+
+    // --- 1.17 verify N1: the clause-start infinitive — a verb Spanish has too (alterar, excluir, mudar, adicionar…) is no PT
+    // evidence over ES, "no" + an infinitive is Spanish, a UI label list ("Guardar, Enviar") is no clause, and an English text's
+    // infinitives don't count — "no" negates again where 1.16 read it so; D review 5's PT lines stay PT
+    const vEs = ["Alterar el formulario de registro; no usar LLM.", "Excluir usuarios inactivos. No usar LLM.", "Mudar la base de datos a otro servidor; no usar LLM.",
+      "Adicionar productos al carrito, no usar LLM.", "Excluir los pedidos cancelados del informe; no usar Kafka."].map((t) => [t, cls(t)]);
+    const vEn = ["Spanish UI labels: Guardar, Enviar, Cancelar; no LLM.", "Translate buttons. Enviar. Pagar. No LLM translation."].map((t) => [t, cls(t)]);
+    const vEsProj = S.classify("Alterar el formulario de registro; no usar LLM.", { fallbackLang: "es" });
+    const vTie = [S.classify("Excluir contas inativas").lang, S.classify("Excluir contas inativas", { fallbackLang: "es" }).lang, S.classify("Publicar eventos no Kafka.", { fallbackLang: "pt" }).lang];
+    ok(vEs.every(([, r]) => r.lang === "es" && r.tracks.join(",") === "core") && vEn.every(([, r]) => r.lang === "en" && r.tracks.join(",") === "core") &&
+      vEsProj.lang === "es" && vEsProj.tracks.join(",") === "core" && /siempre activo/.test(vEsProj.reasoning) && js(vTie) === js(["pt", "es", "pt"]) &&
+      g1.lang === "pt" && g1.tracks.includes("dist") && g2.lang === "pt" && g2.tracks.includes("dist") && enNeg.every((r) => r.lang === "en" && !r.tracks.includes("dist")) &&
+      cls("Corrigir o cálculo do IVA no checkout").lang === "pt",
+      "1.17 verify N1: 'Alterar el formulario…; no usar LLM.', 'Excluir usuarios…', 'Mudar la base…', 'Adicionar productos…', 'Excluir los pedidos…; no usar Kafka.' read ES, core (LLM / Kafka negated, also in an ES project — the reasoning in Spanish); English UI-label texts stay EN, core; a PT / ES tie goes to the project's language; 'Publicar eventos no Kafka.' / 'Gravar o pedido…' stay PT +dist (got " +
+      js([vEs.map(([, r]) => r.lang + ":" + r.tracks), vEn.map(([, r]) => r.lang + ":" + r.tracks), vEsProj.lang, vTie, g1.lang, g2.lang]) + ")");
+
+    // --- 1.17 verify N1: differential against 1.16 — the language-sensitive texts of the classifier corpus keep 1.16's track decision
+    // (+dist aside); the only change is the documented one, "Corrigir o cálculo do IVA no checkout" → +tdd (1.16 read 'no' as a negator)
+    const v116 = [
+      ["Página de eventos: organizadores publicam um evento e participantes confirmam presença.", "core"], ["Publicar um artigo no blog e agendar a publicação.", "core"],
+      ["Fila de atendimento: tickets de suporte numa fila ordenada por prioridade.", "core"], ["Repetir o upload quando a rede cai, com nova tentativa automática.", "core"],
+      ["Bloquear a conta após cinco tentativas de login falhadas.", "core,tdd"], ["Migração do Postgres: adicionar uma coluna e preencher os dados.", "core,tdd"],
+      ["Transmissão de vídeo ao vivo com legendas.", "core"], ["Marketplace que liga produtores locais a consumidores, com catálogo e checkout.", "core,tdd"],
+      ["Fila de impressão: os utilizadores enviam documentos para a fila da impressora e podem fazer nova tentativa.", "core"], ["Cadastro de produtos com paginação e pesquisa.", "core"],
+      ["Página para o consumidor ver as suas encomendas e o histórico de compras.", "core"],
+      ["Criar um endpoint que grava o utilizador no Postgres e publica um evento UserCreated no Kafka para outros serviços.", "core"],
+      ["Enviar uma mensagem para o serviço de notificações quando a encomenda é paga.", "core"], ["Consistência eventual entre os serviços de encomendas e faturação.", "core,tdd"],
+      ["Um worker em background processa jobs do Redis e atualiza a tabela de encomendas.", "core"], ["Dois armazéns atualizam o mesmo stock em simultâneo; nenhuma atualização pode ser perdida.", "core"],
+      ["Página de eventos: los organizadores publican un evento y los asistentes se inscriben.", "core"], ["Cola de impresión: los usuarios envían documentos a la cola de la impresora y pueden reintentar.", "core"],
+      ["Marketplace que conecta productores locales con consumidores.", "core"], ["Bloquear la cuenta tras cinco intentos fallidos de inicio de sesión.", "core,tdd"],
+      ["Migración de la base de datos Postgres para añadir una columna.", "core,tdd"], ["Reintentar la subida de archivos cuando falla la red.", "core"],
+      ["Los suscriptores del boletín reciben un correo cada lunes.", "core"], ["Transmisión de video en streaming con subtítulos.", "core"],
+      ["Boletín: el editor publica el mensaje semanal para todos los suscriptores.", "core"],
+      ["Crear un endpoint que guarda el usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios.", "core"],
+      ["Consistencia eventual entre los servicios de pedidos y facturación.", "core,tdd"], ["Un worker en segundo plano procesa trabajos de Redis y actualiza la tabla de pedidos.", "core"],
+      ["Enviar un mensaje al servicio de notificaciones cuando se paga el pedido.", "core"], ["Replicación de la base de datos para alta disponibilidad con réplicas de lectura.", "core,saas"],
+      ["No distributed transactions and no LLM: a simple CRUD form.", "core"], ["Validate the order; no Kafka.", "core"], ["Plain CRUD endpoint for users, no Kafka and no events", "core"],
+      ["Corrigir o desvio", "core"], ["Pagar o carrinho.", "core"], ["Pagar el carrito.", "core"], ["Apagar o registo antigo no servidor.", "core"],
+      ["Cambiar el idioma de la interfaz sin usar IA.", "core"], ["Agregar un filtro por fecha al informe.", "core"], ["Testar o fluxo de checkout sem IA.", "core,tdd"],
+      ["Criar um relatório de vendas por região.", "core"], ["Gravar o rascunho no navegador.", "core"], ["Substituir o motor de busca por um mais rápido.", "core"],
+      ["Exibir o saldo do cliente no ecrã inicial.", "core"], ["Gerar faturas em PDF e enviar por email.", "core,tdd"], ["Crear un informe de ventas por región.", "core"],
+      ["Reintentar la subida de archivos.", "core"], ["Guardar el borrador en el navegador; no usar IA.", "core"], ["Enviar notificaciones push, no usar Kafka.", "core"],
+      ["Use no LLM for this; just rules.", "core"], ["No LLM: plain validation rules for the signup form.", "core"],
+    ];
+    const vDiff = v116.filter(([t, want]) => cls(t).tracks.filter((x) => x !== "dist").join(",") !== want).map(([t]) => t + " → " + cls(t).tracks);
+    ok(!vDiff.length && cls("Corrigir o cálculo do IVA no checkout").tracks.join(",") === "core,tdd",
+      "1.17 verify N1: " + v116.length + " language-sensitive texts (PT / ES / infinitive-led / 'no …') keep their 1.16 track decision (+dist aside); only 'Corrigir o cálculo do IVA no checkout' changes, to core +tdd (got " + js(vDiff) + ")");
+
+    // --- 1.17 verify N2: the clause-start pattern is linear — a run of blank lines (CRLF or LF) no longer costs seconds (40,000 CRLF
+    // blank lines: 7.8 s); the infinitive after them still reads
+    const vTimed = (t) => { const t0v = Date.now(); const r = S.classify(t); return [Date.now() - t0v, r]; };
+    const [vBaseMs] = vTimed("Nota. " + "palavra ".repeat(10000) + "Publicar eventos no Kafka.");
+    const [vCrlfMs, vCrlf] = vTimed("Nota." + "\r\n".repeat(40000) + "Publicar eventos no Kafka.");
+    const [vLfMs, vLf] = vTimed("Nota." + "\n".repeat(80000) + "Publicar eventos no Kafka.");
+    ok(vCrlfMs <= 5 * vBaseMs + 500 && vLfMs <= 5 * vBaseMs + 500 && vCrlf.lang === "pt" && vLf.lang === "pt" && vCrlf.tracks.includes("dist"),
+      "1.17 verify N2: 40,000 CRLF / 80,000 LF blank lines classify within 5 × an 80 KB prose text + 0.5 s (the spaces after a clause start never cross a line break), and the infinitive after them still reads PT (got " +
+      js({ base: vBaseMs, crlf: vCrlfMs, lf: vLfMs, lang: [vCrlf.lang, vLf.lang] }) + ")");
   }
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
@@ -15583,6 +15640,44 @@ function endRun() {
     const g11pt = safe(() => S.importSpec(fd, "fluidplan", undefined, { text: "# Notas\n\nNada.\n" }));
     ok(g11.isError && /^The text is not a fluidplan PLAN\.md or DECISIONS\.md/.test(g11.body.error) && !/fluidplan\.md'/.test(g11.body.error) && !g11pt.ok && /^O texto não é um PLAN\.md nem um DECISIONS\.md do fluidplan/.test(g11pt.error),
       "1.17 F review 11: spec_import {tool: 'fluidplan', text} with a text that is no fluidplan document is refused naming the text (localized — PT project), never a virtual 'fluidplan.md' (got " + js([g11.body.error, g11pt.error]) + ")");
+
+    // --- 1.17 verify N3: the importer's escapes are markdown for the files, never stray characters in what stakeholders read — the
+    // HTML export unescapes any ASCII punctuation escape, the Gherkin / matrix CSV / tracker exports write the plain text (escapes
+    // and the importer's entity decoded); a comment opener in an inline code span stays as written (fluidplan and Kiro); the engine
+    // still reads no ID, marker or comment the escapes guard (trace_check counts every criterion, no phantom US-3.AC-1).
+    const vN3 = mkR("p17f-vn3");
+    put(vN3, ".fluidplan/chk/plan.json", { version: 2, id: "chk", title: "Checkout rules", lang: "en", context: "The checkout must respect NFR-2 (p95 < 300 ms). See US-3.AC-1 of the cart spec.",
+      phases: [{ id: "p1", title: "Build" }], pages: [{ id: "pg", title: "Checkout", intro: "Rules for T-800 terminals; names may hold `<!--` and `-->`.",
+        decisions: [{ id: "D1", title: "Tax engine", phase: "p1", tasks: [{ id: "t1", title: "Wire the tax module into the T-800 terminal flow", do: "Write it.\n_Verify: by hand_",
+          acceptance: ["When the cart total changes, the system recomputes the tax within the NFR-2 budget", "When a user types <!-- in the note, the system shows it as text",
+            "The system SHALL escape `<!--` in user names", "The system SHALL keep a ` b <!-- c as text", "The system SHALL log EC-2 failures -->", "When a user pastes `<!--`, the system shows it"],
+          verify: ["npm test -- tax"], files: [{ path: "src/tax.js", op: "create" }] }] }] }] });
+    put(vN3, ".fluidplan/chk/answers.json", { D1: { status: "ok" } });
+    const g3n = safe(() => S.importSpec(vN3, "fluidplan", ".fluidplan/chk", { tracks: ["core", "tdd"] }));
+    const req3n = fdir(vN3, "checkout-rules", "requirements.md");
+    const tr3n = g3n.ok ? S.traceCheck(vN3, g3n.feature) : {};
+    const x3 = (fmt) => (g3n.ok ? S.exportSpecs(vN3, { name: g3n.feature, format: fmt }).content || "" : "");
+    const html3 = x3("html"), gh3 = x3("gherkin"), csv3 = x3("csv"), jira3 = x3("jira");
+    const body3 = (html3.split("<body")[1] || "").replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ");
+    put(vN3, ".kiro/specs/k/requirements.md", "# Requirements\n\n## Requirements\n\n### Requirement 1\n\n**User Story:** As a user, I want x, so that y.\n\n#### Acceptance Criteria\n\n" +
+      "1. WHEN the page renders THEN the system SHALL escape `<!--` in user names\n2. WHEN a THEN the system SHALL show b -->\n3. WHEN c THEN the system SHALL d <!-- and `x` e\n");
+    put(vN3, ".kiro/specs/k/tasks.md", "# Implementation Plan\n\n- [ ] 1. Do\n  - _Requirements: 1.1, 1.2, 1.3_\n");
+    const k3n = safe(() => S.importSpec(vN3, "kiro", ".kiro/specs/k", { tracks: ["core"] }));
+    const kreq3 = k3n.ok ? fdir(vN3, k3n.feature, "requirements.md") : "";
+    const ktr3 = k3n.ok ? S.traceCheck(vN3, k3n.feature) : {};
+    const plain3 = S.mdPlainText("`a\\-b` c\\-d &lt;!-- &#10; &amp;lt; &#x41; &bogus; \\\\x \\*y\\*");
+    ok(g3n.ok && tr3n.totalAcs === 6 && tr3n.verdict === "pass" &&
+      /NFR\\-2 \(p95 < 300 ms\)\. See US-3\\\.AC-1/.test(req3n) && /SHALL escape `<!--` in user names/.test(req3n) && /types &lt;!-- in the note/.test(req3n) &&
+      /keep a ` b &lt;!-- c as text/.test(req3n) && /EC\\-2 failures --&gt;/.test(req3n) && /WHEN a user pastes `<!--`, THE SYSTEM SHALL show it/.test(req3n) &&
+      !/\\[-.:]/.test(body3) && /NFR-2 \(p95 &lt; 300 ms\)\. See US-3\.AC-1/.test(body3) && /T-800 terminal flow/.test(body3) && /<code>&lt;!--<\/code>/.test(html3) && !/&amp;lt;!--/.test(html3) &&
+      !/\\[-.:]|&lt;|&gt;/.test(gh3) && /When a user types <!-- in the note/.test(gh3) && /escape `<!--` in user names/.test(gh3) && /NFR-2 \(p95 < 300 ms\)\. See US-3\.AC-1/.test(gh3) && /log EC-2 failures -->/.test(gh3) &&
+      /"WHEN a user types <!-- in the note, THE SYSTEM SHALL show it as text"/.test(csv3) && /,The system SHALL escape `<!--` in user names,/.test(csv3) && !/\\[-.:]/.test(csv3) &&
+      /- US-1\.AC-1 — WHEN the cart total changes, THE SYSTEM SHALL recompute the tax within the NFR-2 budget/.test(jira3) && /- US-1\.AC-2 — WHEN a user types <!-- in the note/.test(jira3) &&
+      k3n.ok && ktr3.totalAcs === 3 && ktr3.verdict === "pass" && /\*\*US-1\.AC-1\*\* — WHEN the page renders THEN the system SHALL escape `<!--` in user names/.test(kreq3) && /SHALL d &lt;!-- and `x` e/.test(kreq3) &&
+      plain3 === "`a\\-b` c-d <!-- &#10; &lt; A &bogus; \\x *y*" && S.mdPlainText(S.earsSteps("THE SYSTEM SHALL show \\*x\\* and *y*", "en").steps[0].text) === "THE SYSTEM SHALL show *x* and y" &&
+      /<p>a &amp;lt; b \. c &lt; d \\&amp; e \* f <code>x\\-y<\/code> g &lt;b&gt; h<\/p>/.test(S.markdownToHtml("a \\&lt; b \\. c &lt; d \\\\&amp; e \\* f `x\\-y` g \\<b\\> h")),
+      "1.17 verify N3: a fluidplan import keeps its inert escapes in requirements.md (NFR\\-2, US-3\\.AC-1, &lt;!-- outside code) but a code span's `<!--` as written; the HTML export shows NFR-2 / US-3.AC-1 / T-800 (any ASCII punctuation escape, CommonMark; `\\&lt;` is the text '&lt;') and `<!--` in code once escaped; the Gherkin, matrix CSV and Jira exports carry no backslash escape nor '&lt;' (an escaped `\\*` is no emphasis); a Kiro criterion's code-span `<!--` stays; trace_check counts every criterion (got " +
+      js([g3n.error, tr3n.totalAcs, tr3n.verdict, (body3.match(/.{0,30}\\[-.:].{0,20}/g) || []).slice(0, 3), (gh3.match(/.{0,30}(?:\\[-.:]|&lt;|&gt;).{0,20}/g) || []).slice(0, 3), ktr3.totalAcs, plain3]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

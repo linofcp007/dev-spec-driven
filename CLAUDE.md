@@ -134,8 +134,13 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   pack's keyword is a literal word (`keywordRe(kw, true)`, cached apart). Negated keywords are deduped by containment like
   matched ones (every track). Shadowing (every track) is a linear sweep over the strong hits sorted by start, and a weak /
   generic hit inside a longer strong phrase of its OWN track is shadowed too ("mensagens" in "fila de mensagens").
-  `guessLang` counts a PT / ES infinitive opening a clause (`PT_INF` / `ES_INF` / `PTES_INF` — none an English word) as a
-  strong marker: "Publicar eventos no Kafka." is PT (no is em + o), English "no Kafka" stays a negation.
+  `guessLang` counts a PT / ES infinitive opening a clause and followed by its object on the line (`INF_WORDS` → `PT_INF` /
+  `ES_INF` / `PTES_INF` — none an English word) as a strong marker, only in a text with no English function word: "Publicar
+  eventos no Kafka." is PT (no is em + o), English "no Kafka" / "Spanish labels: Guardar, Enviar; no LLM." stay English.
+  `pt` / `es` hold verbs of ONE language only; a verb both have (alterar, excluir, mudar, adicionar, apagar, criar, gravar,
+  testar, substituir, agregar, borrar, cambiar…) goes in `both` — it tells PT / ES from English, never PT from ES (a tie is
+  PT, or ES when the project's language is ES). "no" + a listed infinitive (`ES_NO_INF`, "no usar LLM") is a strong ES
+  marker. `CLAUSE_START`'s spaces are `[^\S\n]*` — `\s*` there re-read a run of blank lines from each line break (quadratic).
   **Gotcha:** within a track the first keyword matching at a position wins it (seenSpan — strong, weak, generic, context in
   that order) — list a longer phrase before its prefix ("backoff exponencial" before "backoff", +saas "fila de mensagens"
   before "fila"), or the self-match sweep fails.
@@ -1257,7 +1262,15 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
     plans folder is listed only when its real path is inside the project. EN / FR labels; every pattern linear
     (`fpTitleOf` / `fpTaskHeading`, `FP_LINE_MAX`, `fpOneLine` splits, `sortGroup` = Kahn + a min-heap; `mdHeadings` is a
     scan — `mdHeadingParts`). importSpec writes every imported requirements.md line comment-inert for every importer
-    (`commentInert` / `inertBlock`). Never write a raw U+2028 / U+2029 (or its `\u` escape through the Edit tool): build it
+    (`commentInert` / `inertBlock`). A `<!--` / `-->` inside an inline code span stays as written (`inertOutsideCode` —
+    backtickRuns, commentLines' pairing): in `commentInert` and in `fpInert(s, true)` for the criteria, a story's prose and
+    Out of Scope (whole requirements.md lines or after a backtick-free prefix); everything else (design.md, decisions.md —
+    read by the code-span-blind `blankHtmlComments` —, tasks.md, a value joined to others on a line, the feature name) is
+    escaped everywhere. The ID / marker escapes apply inside code spans too (extractAcIds / taskMarkerSpans read them).
+    The escapes never reach stakeholders as stray characters: `expInline` unescapes every ASCII punctuation escape
+    (`RE_MD_ESCAPE`), and the Gherkin / matrix CSV / tracker (criteria, summaries) exports and the HTML `<title>` write
+    `mdPlainText()` (escapes + entities decoded outside code spans; a numeric reference to a control character kept).
+    Never write a raw U+2028 / U+2029 (or its `\u` escape through the Edit tool): build it
     (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
   `spec_feature {action: "flow"}` / `feature flow <name> <flow>` — approved phases stay approved, pending gates follow the
