@@ -63,6 +63,15 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
       const distAc = a.tracks.includes("dist")
         ? "\n\n#### [DIST] Critérios de Aceitação (EARS)\n16. **US-1.AC-16** — SE a publicação [do evento] falhar depois do commit da transação na base de dados, ENTÃO O SISTEMA DEVE entregá-lo mais tarde, pelo menos uma vez, sem que se perca (outbox transacional).\n17. **US-1.AC-17** — QUANDO a mesma mensagem for entregue mais de uma vez, O SISTEMA DEVE aplicar o seu efeito exatamente uma vez (consumidor idempotente).\n18. **US-1.AC-18** — QUANDO dois pedidos atualizarem a mesma [entidade] em simultâneo, O SISTEMA NÃO DEVE perder nenhuma das atualizações (bloqueio otimista ou uma restrição de unicidade).\n19. **US-1.AC-19** — SE [a dependência] estiver indisponível, ENTÃO O SISTEMA DEVE [degradar / repetir com recuo exponencial e jitter] e NÃO DEVE bloquear [o caminho crítico]."
         : "";
+      const apiAc = a.tracks.includes("api")
+        ? "\n\n#### [API] Critérios de Aceitação (EARS)\n20. **US-1.AC-20** — SE um pedido omitir [um campo obrigatório] ou o enviar mal formado, ENTÃO O SISTEMA DEVE responder 400 com um corpo application/problem+json que indica o campo e traz um código de erro estável.\n21. **US-1.AC-21** — QUANDO um cliente repetir [um pedido de criação] com a mesma Idempotency-Key e o mesmo corpo, O SISTEMA DEVE devolver a primeira resposta sem aplicar o efeito outra vez.\n22. **US-1.AC-22** — SE uma atualização trouxer um ETag If-Match que já não corresponde ao recurso, ENTÃO O SISTEMA DEVE responder 412 e deixar o recurso inalterado.\n23. **US-1.AC-23** — SE uma alteração ao contrato puder quebrar um cliente existente, ENTÃO O SISTEMA DEVE publicá-la só numa nova [versão da API] e manter a versão atual a funcionar até à data de Sunset anunciada."
+        : "";
+      const uiAc = a.tracks.includes("ui")
+        ? "\n\n#### [UI] Critérios de Aceitação (EARS)\n24. **US-1.AC-24** — QUANDO um utilizador opera [a vista] só com o teclado, O SISTEMA DEVE tornar cada ação alcançável e operável numa ordem de foco lógica, com um indicador de foco visível.\n25. **US-1.AC-25** — SE um formulário submetido tiver campos inválidos, ENTÃO O SISTEMA DEVE manter todos os valores introduzidos, identificar cada erro em texto junto ao seu campo e mover o foco para um resumo dos erros.\n26. **US-1.AC-26** — ENQUANTO [a lista] não tiver itens, O SISTEMA DEVE mostrar um estado vazio que explica porquê e oferece a próxima ação.\n27. **US-1.AC-27** — SE o carregamento [dos dados] falhar, ENTÃO O SISTEMA DEVE mostrar uma mensagem de erro com uma ação Tentar de novo e manter o conteúdo já mostrado."
+        : "";
+      const obsAc = a.tracks.includes("obs")
+        ? "\n\n#### [OBS] Critérios de Aceitação (EARS)\n28. **US-1.AC-28** — O SISTEMA DEVE emitir [a métrica do pedido] com a latência, o resultado e um ID de correlação para cada [pedido], e registar cada erro com esse ID de correlação e sem dados pessoais.\n29. **US-1.AC-29** — QUANDO a taxa de consumo do orçamento de erro [do SLO] exceder [14,4]× durante [uma hora], O SISTEMA DEVE alertar a pessoa de serviço (on-call) com uma ligação para o runbook.\n30. **US-1.AC-30** — SE a taxa de erro do canário exceder [a referência] em [N] pontos percentuais, ENTÃO O SISTEMA DEVE parar o rollout e reverter automaticamente para a versão anterior.\n31. **US-1.AC-31** — ENQUANTO [uma dependência] estiver indisponível, O SISTEMA DEVE indicar que não está pronto (verificação de prontidão) sem deixar de estar vivo, e recuperar sem reinício quando ela voltar."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -83,7 +92,7 @@ Cada história deve entregar valor autónomo se for lançada sozinha.
 1. **US-1.AC-1** — QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 2. **US-1.AC-2** — ENQUANTO [estado], QUANDO [gatilho] O SISTEMA DEVE [comportamento]
 3. **US-1.AC-3** — SE [condição de erro] ENTÃO O SISTEMA DEVE [recuperação]
-4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}
+4. **US-1.AC-4** — [ubíquo] O SISTEMA DEVE [propriedade sempre verdadeira]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
 
 ### US-2 (P2): [Título da História]
 **Como** [papel], **quero** [capacidade], **para que** [benefício].
@@ -263,6 +272,75 @@ Tipos de entrada · limites de tamanho/quantidade · contagem de tokens por tipo
 ## [DIST] Modos de Falha
 > **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
 - Falhas parciais e tempos limite por dependência · o que acontece quando cada dependência está indisponível (degradar, pôr em fila, falhar rapidamente) · partições de rede: o compromisso CAP / PACELC escolhido · recuperação e reconciliação (reprocessamento, compensação, um processo de reconciliação).
+`;
+      }
+      if (track === "api") {
+        return `
+## [API] Contrato da API
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Estilo (REST / GraphQL / gRPC) · recursos e operações (método + caminho, ou query / mutation / RPC) · esquemas de pedido e de resposta · onde está o ficheiro do contrato (documento OpenAPI, ficheiros .proto, esquema GraphQL) — escrito primeiro, revisto antes dos handlers · scopes de autorização por operação.
+
+## [API] Versionamento e Compatibilidade
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Estratégia de versionamento (URL / cabeçalho / data) · o que é aqui uma alteração incompatível (um campo removido ou renomeado, um novo dado obrigatório, um tipo ou código de estado alterado, uma validação mais estrita) · só alterações aditivas dentro de uma versão · descontinuação: os cabeçalhos Deprecation / Sunset, o prazo de aviso, como os clientes são avisados.
+
+## [API] Modelo de Erros
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Formato dos erros: application/problem+json (RFC 9457 — type, title, status, detail, instance) · os códigos de erro estáveis em que os clientes se podem basear · erros de validação por campo · os códigos de estado que cada operação devolve · nenhum stack trace nem detalhe interno numa resposta.
+
+## [API] Paginação, Idempotência e Concorrência
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Paginação: um cursor opaco com ordem estável e um tamanho máximo de página (ou offset, e porquê) · Idempotency-Key nas criações não idempotentes (o seu âmbito, durante quanto tempo uma chave é guardada, uma chave reutilizada com outro corpo → 422) · ETag / If-Match nas atualizações (412 numa versão desatualizada) · operações demoradas (202 + um recurso de estado).
+
+## [API] Limites de Taxa e Quotas
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Limites por cliente / chave / inquilino e as suas janelas · 429 com Retry-After e os cabeçalhos RateLimit · quotas e como um cliente sabe quanto ainda lhe resta · o que fica isento.
+`;
+      }
+      if (track === "ui") {
+        return `
+## [UI] Uso do Design System
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.
+
+## [UI] Estados da Interface
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).
+
+## [UI] Acessibilidade
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- WCAG 2.2 AA: operável com o teclado e ordem de foco visível · nome / etiqueta em cada controlo · contraste (4,5:1 no texto, 3:1 na interface) · tamanho dos alvos (24×24 px) · movimento reduzido · erros identificados em texto · como é testado (uma verificação automática + uma passagem manual com teclado e leitor de ecrã).
+
+## [UI] Design Responsivo e i18n
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Breakpoints e como o layout se adapta · expansão do texto (+30–40 %) · layouts da direita para a esquerda · formatos do locale (datas, números, moeda) · todas as strings no catálogo de traduções.
+
+## [UI] Orçamento de Desempenho da Interface
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Core Web Vitals no percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · o orçamento de JS / imagens desta vista · como é medido (laboratório + utilizadores reais).
+`;
+      }
+      if (track === "obs") {
+        return `
+## [OBS] SLIs e SLOs
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Os percursos de utilizador que importam → os seus SLIs (disponibilidade, latência, correção) · o SLO de cada um numa janela (ex.: 99,5 % dos pedidos válidos abaixo de 800 ms, 28 dias) · o orçamento de erro e o que acontece quando se esgota · alertas por taxa de consumo (rápida e lenta).
+
+## [OBS] Telemetria
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Métricas (RED por endpoint / USE por recurso, um contador de negócio; cardinalidade de labels limitada) · logs estruturados com um ID de correlação / trace — sem dados pessoais · traces com o contexto propagado entre chamadas e filas (OpenTelemetry) · as métricas que cada tarefa emite.
+
+## [OBS] Alertas e Runbooks
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Cada alerta: o sintoma (um consumo do SLO, não uma causa), o limiar, a severidade e quem é chamado · cada chamada liga a um runbook (triagem, mitigação, verificação) · o que é um ticket e não uma chamada · dashboards por percurso.
+
+## [OBS] Lançamento e Reversão
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Feature flags (quem é dono de cada uma, quando é removida) · os passos do canário / rollout progressivo e as métricas que decidem cada passo · critérios de reversão (ex.: taxa de erro acima da referência) e quanto demora uma reversão · migrações reversíveis (expand / contract).
+
+## [OBS] Saúde e Capacidade
+> **TODO** — substituir pelos valores reais (remover esta linha quando estiver feito).
+- Verificações de vida vs de prontidão (o que cada uma verifica — nunca uma dependência na de vida) · os sinais de capacidade (saturação, profundidade de filas, uso de pools) e os seus limiares · a carga esperada e onde está o primeiro estrangulamento.
 `;
       }
       return "";
@@ -477,6 +555,52 @@ ${phases}`
   - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
 `;
       }
+      if (a.track === "api") {
+        return `
+## História US-1 — Contrato da API
+- [ ] ${id()}. [US1] Contrato primeiro — o documento OpenAPI / os ficheiros .proto / o esquema GraphQL no repositório, revisto antes dos handlers (o ficheiro é o marcador Implements desta tarefa)
+  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
+- [ ] ${id()}. [US1] Modelo de erros — cada erro um corpo application/problem+json com um código estável; um erro de validação indica cada campo
+  - _Requirements: US-1.AC-20_${greenLine(a.green, "US-1.AC-20")}
+- [ ] ${id()}. [US1] Idempotência e concorrência — uma Idempotency-Key nas criações (a resposta guardada é devolvida de novo), ETag / If-Match nas atualizações (412 numa versão desatualizada)
+  - _Requirements: US-1.AC-21, US-1.AC-22_${greenLine(a.green, "US-1.AC-21", "US-1.AC-22")}
+- [ ] ${id()}. [US1] Barreira de compatibilidade — uma comparação do contrato com a versão publicada que deteta alterações incompatíveis, executável localmente; o que for removido é descontinuado com uma data de Sunset
+  - _Requirements: US-1.AC-23_${greenLine(a.green, "US-1.AC-23")}
+- [ ] ${id()}. [US1] Testes de contrato — a implementação verificada contra o contrato (cada código de estado, esquema e cabeçalho documentado), executáveis localmente
+  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
+`;
+      }
+      if (a.track === "ui") {
+        return `
+## História US-1 — Interface do Utilizador
+- [ ] ${id()}. [US1] Construir a vista com componentes e tokens do design system — um componente novo só através do sistema (documentado, revisto)
+  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
+- [ ] ${id()}. [US1] Estados da interface — a carregar, vazio, erro com Tentar de novo, parcial, offline, sem permissão, sucesso — segundo a matriz de estados do design.md
+  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
+- [ ] ${id()}. [US1] Formulários e teclado — valores mantidos num erro, erros em texto com um resumo, ordem de foco lógica, foco visível
+  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
+- [ ] ${id()}. [US1] Verificações de acessibilidade — uma verificação automática (axe ou equivalente) executável localmente + uma passagem manual com teclado e leitor de ecrã (as conclusões no relatório)
+  - _Requirements: US-1.AC-24, US-1.AC-25_
+- [ ] ${id()}. [US1] Design responsivo, i18n e o orçamento de desempenho — os breakpoints, a expansão do texto, RTL, os formatos do locale; LCP / INP / CLS dentro do orçamento
+  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
+`;
+      }
+      if (a.track === "obs") {
+        return `
+## História US-1 — Operabilidade
+- [ ] ${id()}. [US1] SLIs, SLOs e alertas por taxa de consumo — definidos em código / configuração junto ao serviço, cada alerta ligado ao seu runbook
+  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
+- [ ] ${id()}. [US1] Telemetria — as métricas, os logs estruturados com o ID de correlação (sem dados pessoais) e os spans de trace que o design indica
+  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
+  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
+- [ ] ${id()}. [US1] Rollout — uma feature flag e um canário / rollout progressivo decidido pelas métricas do SLO; reversão automática segundo os critérios do design.md
+  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
+- [ ] ${id()}. [US1] Verificações de saúde — endpoints de vida e de prontidão (uma dependência indisponível → não pronto, ainda vivo); sinais de capacidade com limiares
+  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
+- [ ] ${id()}. [US1] Testes de operabilidade — injeção de falhas (uma dependência indisponível, uma dependência lenta), um alerta que dispara numa falha encenada, um ensaio de reversão — executáveis localmente ou em staging
+  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
+`;
+      }
       return "";
     },
 
@@ -587,7 +711,10 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
           noSecrets: "nenhum segredo, token ou stack trace em respostas ou logs", exportData: "a exportação de um titular contém todos os seus dados pessoais, em formato de leitura automática",
           erasure: "após o apagamento nenhum repositório guarda os dados pessoais do titular", retention: "os registos com o prazo de conservação expirado são apagados ou anonimizados",
           outboxCrash: "falha entre o commit na BD e a publicação: o evento é entregue mesmo assim", duplicateDelivery: "a mesma mensagem entregue duas (ou N) vezes tem exatamente um efeito",
-          lostUpdate: "atualizações concorrentes do mesmo registo: nenhuma se perde em silêncio", dependencyDown: "uma dependência indisponível: degradar / repetir com recuo, o caminho crítico não fica bloqueado" }, acs);
+          lostUpdate: "atualizações concorrentes do mesmo registo: nenhuma se perde em silêncio", dependencyDown: "uma dependência indisponível: degradar / repetir com recuo, o caminho crítico não fica bloqueado",
+          contract: "contrato", problemJson: "teste de contrato: um pedido sem um campo obrigatório recebe 400 problem+json que o indica", idempotencyReplay: "uma criação repetida com a mesma Idempotency-Key tem um só efeito e devolve a primeira resposta", staleEtag: "uma atualização com um If-Match desatualizado recebe 412 e não altera nada", breakingDiff: "comparação de alterações incompatíveis: o contrato face à versão publicada não reporta nenhuma",
+          component: "componente", visual: "visual", keyboardA11y: "percurso só com teclado + uma verificação automática de acessibilidade (axe): cada ação alcançável, foco visível, nenhuma violação", formErrors: "formulário com campos inválidos: os valores mantidos, cada erro nomeado em texto, o foco no resumo", emptyState: "regressão visual dos estados da vista: o estado vazio explica porquê e oferece a próxima ação", loadError: "carregamento falhado: um erro com Tentar de novo, o conteúdo já mostrado mantido",
+          telemetry: "cada pedido emite a métrica, uma linha de log estruturada e um trace com um só ID de correlação; nenhum dado pessoal no log", burnAlert: "falha encenada que consome o orçamento de erro: o alerta por taxa de consumo dispara e chama com a ligação ao runbook", rollbackDrill: "ensaio de reversão: um canário com a taxa de erro acima do limiar para o rollout e reverte", readiness: "injeção de falhas: uma dependência indisponível → a prontidão falha, a vida passa, recuperação sem reinício" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -711,6 +838,9 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
       if (a.tracks.includes("sec")) items.push("SEC: 5 secções obrigatórias de design preenchidas (sem TODO) — modelo de ameaças revisto.", "SEC: autenticação + autorização ao nível do objeto impostas, negar por omissão; nenhum segredo no código ou nos logs.", "SEC: SAST, auditoria de dependências e testes de casos de abuso limpos numa execução local.");
       if (a.tracks.includes("privacy")) items.push("PRIVACIDADE: 6 secções obrigatórias de design preenchidas (sem TODO) — decisão sobre a AIPD registada.", "PRIVACIDADE: acesso/exportação e apagamento funcionam de ponta a ponta, em todos os repositórios e subcontratantes.", "PRIVACIDADE: processo de conservação agendado; política de privacidade e registo das atividades de tratamento atualizados.");
       if (a.tracks.includes("dist")) items.push("DIST: 5 secções obrigatórias de design preenchidas (sem TODO) — cada escrita entre sistemas tem a sua mitigação (outbox / inbox / saga) ou um risco assumido.", "DIST: consumidores idempotentes (inbox ou uma chave única na transação do efeito); novas tentativas com recuo + jitter e uma DLQ; nada não idempotente repetido às cegas.", "DIST: testes de injeção de falhas (falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, dependência indisponível) a verde numa execução local.");
+      if (a.tracks.includes("api")) items.push("API: 5 secções obrigatórias de design preenchidas (sem TODO) — o ficheiro do contrato (OpenAPI / .proto / esquema GraphQL) está no repositório e é indicado pelo marcador Implements de uma tarefa.", "API: erros em problem+json com códigos estáveis; as criações aceitam uma Idempotency-Key; as atualizações respeitam If-Match; os endpoints de listagem paginam com um cursor estável.", "API: testes de contrato e a comparação de alterações incompatíveis com a versão publicada a verde numa execução local; o que for removido é descontinuado com uma data de Sunset.");
+      if (a.tracks.includes("ui")) items.push("UI: 5 secções obrigatórias de design preenchidas (sem TODO) — cada estado da matriz de estados desenhado; componentes novos entram pelo design system.", "UI: WCAG 2.2 AA — a verificação automática de acessibilidade limpa numa execução local, mais uma passagem manual com teclado e leitor de ecrã com as conclusões corrigidas.", "UI: responsivo em cada breakpoint, strings no catálogo (expansão do texto, RTL verificados); LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 medidos.");
+      if (a.tracks.includes("obs")) items.push("OBS: 5 secções obrigatórias de design preenchidas (sem TODO) — cada SLO tem um orçamento de erro, cada alerta um runbook, os critérios de reversão são números.", "OBS: as métricas, os logs estruturados (ID de correlação, sem dados pessoais) e os traces que o design indica são emitidos — vistos, não presumidos.", "OBS: um alerta disparou numa falha encenada, um ensaio de reversão feito e as verificações de saúde confirmadas com uma dependência indisponível.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar a feature por concluída.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -762,7 +892,7 @@ const steering = {
     "scale.md":
       "# Alvos de Escala\n\n## Alvos de Carga\n| Horizonte | Simultâneos | DAU | MAU | Pico RPS | Dados |\n|---|---|---|---|---|---|\n| Lançamento | | | | | |\n| 6 meses | | | | | |\n| 2 anos | | | | | |\n\n## Alvos de SLA\n| Classe de endpoint | P95 | P99 | Disponibilidade |\n|---|---|---|---|\n| Jornada crítica | | | |\n\n## Jornadas Críticas de Utilizador\n1. []\n\n## Limiares de Escalonamento\n- []\n",
     "observability.md":
-      "# Padrões de Observabilidade\n\n## Logging\nJSON estruturado. Campos obrigatórios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sem secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufixo de unidade. Por feature: contagem de pedidos, histograma de duração, contagem de erros, um contador de negócio. Cuidado com a cardinalidade de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Amostra 10% em prod, amostra sempre os erros.\n\n## Alertas (cada um liga a um runbook)\n- P0 alerta imediato (page) / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Padrões de Observabilidade\n\n## Logging\nJSON estruturado. Campos obrigatórios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sem secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufixo de unidade. Por feature: contagem de pedidos, histograma de duração, contagem de erros, um contador de negócio. Cuidado com a cardinalidade de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Amostra 10% em prod, amostra sempre os erros.\n\n## Alertas (cada um liga a um runbook)\n- P0 alerta imediato (page) / P1 ≤15min / P2 slack / P3 digest.\n\n## SLOs e Orçamentos de Erro\n- Por percurso crítico: o SLI, a meta do SLO e a sua janela · a política do orçamento de erro (o que para quando se esgota).\n- Alertas por taxa de consumo: o rápido (ex.: 14,4× em 1 h) chama, o lento (ex.: 6× em 6 h) abre um ticket.\n\n## Lançamento e Reversão\n- Feature flags: um dono e uma data de remoção cada · passos do canário / rollout progressivo e as métricas que os decidem · critérios e um tempo-alvo de reversão.\n\n## Saúde e Capacidade\n- A verificação de vida só verifica o processo, a de prontidão as dependências · sinais de capacidade (saturação, profundidade de filas, uso de pools) com limiares.\n",
     "cost.md":
       "# Orçamento de Custo\n\n## Orçamento de Infraestrutura\nAlvo: < $XX/mês no ano 1.\n\n## Alvo de Custo Por Utilizador\nAlvo: < $0,50 por MAU. Se for excedido, para e otimiza.\n\n## Alertas de Custo\n- Diário > $100 slack / > $200 alerta imediato (page).\n\n## Revisão de Custo Por Feature\nCada Envelope de Custo no design.md estima $/1000 utilizadores/mês e sinaliza caminhos críticos de custo.\n",
     "ai-strategy.md":
@@ -773,6 +903,10 @@ const steering = {
       "# Padrões de Privacidade (RGPD)\n\n## Papéis\n- Responsável pelo tratamento: [] · EPD / contacto de privacidade: [] · autoridade de controlo: [ex.: CNPD]\n\n## Princípios (RGPD, art. 5.º)\n- Licitude, lealdade e transparência · limitação das finalidades · minimização dos dados · exatidão · limitação da conservação · integridade e confidencialidade · responsabilidade.\n\n## Registo das Atividades de Tratamento (art. 30.º)\n- Onde está o registo das atividades de tratamento: []\n\n## Fundamentos de Licitude em Uso (art. 6.º)\n- [atividade de tratamento → fundamento de licitude]\n\n## Prazos de Conservação\n| Categoria de dados | Prazo de conservação | Método de eliminação |\n|---|---|---|\n| | | |\n\n## Pedidos dos Titulares\n- Canal · verificação de identidade · prazo de um mês (art. 12.º, n.º 3) · responsável: []\n\n## Subcontratantes e Transferências\n- Subcontratantes aprovados (contratos do art. 28.º): [] · transferências para fora do EEE e a sua garantia: []\n\n## Proteção de Dados desde a Conceção (art. 25.º)\n- Por omissão: recolher o mínimo, pseudonimizar sempre que possível, sem dados pessoais nos logs.\n\n## Resposta a Violações de Dados\n- Notificar a autoridade de controlo no prazo de 72 horas (art. 33.º) · runbook: []\n",
     "distributed.md":
       "# Padrões de Sistemas Distribuídos e Consistência de Dados\n\n## Garantia de Entrega\n- Por omissão: pelo menos uma vez — todos os consumidores são idempotentes. \"Exatamente uma vez\" é um efeito da idempotência, nunca uma promessa do broker.\n- Ordem: por chave (partição / grupo de mensagens) só onde uma feature o pede: []\n\n## Escritas entre Sistemas\n- Uma escrita que toca mais de um sistema (BD + broker, BD + cache, BD + API externa) passa por um outbox transacional (ou CDC) — nunca \"commit e depois publicar\".\n- Transações de negócio entre serviços: uma saga com uma compensação por passo; orquestração ou coreografia: []\n\n## Idempotência\n- Origem da chave de idempotência (cabeçalho do cliente / ID da mensagem / chave natural): [] · onde ficam as chaves processadas (tabela inbox / restrição de unicidade) e durante quanto tempo: []\n\n## Política de Novas Tentativas (valores por omissão)\n- Recuo exponencial com jitter · máximo de tentativas: [] · tempo limite por chamada: []\n- Nunca repetir: uma chamada não idempotente sem chave, um erro de validação (um 4xx — mas 408 e 429 podem ser repetidos, respeitando o Retry-After) · mensagens venenosas → DLQ após [] tentativas, com alerta.\n\n## Política de Bloqueio\n- Por omissão: bloqueio otimista (uma coluna de versão); pessimista (SELECT … FOR UPDATE) só em secções curtas e muito disputadas · tempo limite de bloqueio: []\n\n## Consistência por Omissão\n- Nível de isolamento por omissão: [] · onde se aceita a consistência eventual e o atraso máximo: [] · ler as próprias escritas para o utilizador que escreveu.\n\n## Observabilidade\n- Atraso do outbox, atraso dos consumidores, profundidade da DLQ e número de novas tentativas são métricas com alertas: []\n",
+    "api.md":
+      "# Padrões de API\n\n## Estilo e Contrato\n- Estilo: [REST | GraphQL | gRPC] · o contrato está em: [openapi.yaml | proto/ | schema.graphql] — escrito primeiro, revisto antes dos handlers.\n- Nomes: substantivos no plural para coleções · campos em [snake_case | camelCase] · datas em ISO 8601 UTC · IDs como strings.\n\n## Versionamento e Compatibilidade\n- Estratégia: [URL /v1 | cabeçalho | data] · só alterações aditivas dentro de uma versão · uma alteração incompatível sai numa nova versão.\n- Descontinuação: os cabeçalhos Deprecation e Sunset, pelo menos [6 meses] de aviso, uma entrada no changelog, o uso acompanhado por cliente.\n\n## Erros\n- application/problem+json (RFC 9457): type, title, status, detail, instance + um `code` estável; um erro de validação lista cada campo. Nenhum stack trace numa resposta.\n\n## Paginação, Idempotência e Concorrência\n- Paginação por cursor (um cursor opaco, no máximo [100] itens por página) · uma Idempotency-Key em cada criação não idempotente, guardada durante [24 h] · ETag / If-Match nas atualizações (412 numa versão desatualizada).\n\n## Limites de Taxa\n- Por [chave de API | utilizador | IP]: [N] pedidos por [janela] · 429 com Retry-After e os cabeçalhos RateLimit.\n\n## Verificações (locais)\n- Testes de contrato: [comando] · comparação de alterações incompatíveis com o contrato publicado: [comando].\n",
+    "ui.md":
+      "# Padrões de Interface\n\n## Design System\n- Componentes: [biblioteca / URL do Storybook] · tokens: [cor, espaçamento, tipografia — onde estão] · um componente novo entra primeiro no sistema (documentado, revisto), nunca como peça avulsa.\n\n## Estados\n- Cada vista desenha: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso.\n- Formulários: erros no campo + um resumo, os valores mantidos num erro, o botão de submeter nunca é o único sinal.\n\n## Acessibilidade\n- Alvo: WCAG 2.2 AA · operável com o teclado, foco visível · cada controlo com nome · contraste 4,5:1 (texto) / 3:1 (interface) · alvos ≥ 24×24 px · prefers-reduced-motion respeitado.\n- Verificações: [comando axe / Lighthouse] em cada execução local · uma passagem manual com teclado + leitor de ecrã ([NVDA / VoiceOver]) por feature.\n\n## Design Responsivo e i18n\n- Breakpoints: [360 / 768 / 1280 px] · expansão do texto +30–40 % · RTL: [sim / não] · datas, números e moeda pelo locale.\n\n## Orçamento de Desempenho\n- Core Web Vitals (p75): LCP ≤ 2,5 s · INP ≤ 200 ms · CLS ≤ 0,1 · JS por rota ≤ [170 KB gz] · medido por: [Lighthouse local / RUM].\n",
     "glossary.md":
       "# Glossário\n\n<!-- A linguagem ubíqua do produto: uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
   };
@@ -860,7 +994,7 @@ const msg = {
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
       badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
-      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist",
+      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
@@ -882,7 +1016,9 @@ const msg = {
       substantial: "Nenhum sinal de track encontrado, mas a descrição é substancial — considera se +tdd se aplica (correção/casos limite).",
       weakOnly: (list) => `Ativo só por sinais fracos — confirma: ${list}.`,
       possible: (t, sig) => `Possível +${t} — sinal fraco '${sig}' (precisa de corroboração; não foi ativado).`,
-      genericOnly: (t, list) => `Possível +${t} — só palavras comuns de aplicação (${list}): nenhuma nomeia um segundo sistema (um broker, outro serviço, um webhook…); não foi ativado.`,
+      genericOnly: (t, list) => `Possível +${t} — só palavras comuns de aplicação (${list}): nenhuma nomeia ${({ api: "um contrato de API (uma API pública, OpenAPI / GraphQL / gRPC, uma alteração incompatível…)",
+        ui: "uma questão de interface própria (um design system, acessibilidade, o frontend, um componente de UI…)", obs: "uma questão de operabilidade (um SLO, alertas, on-call, um runbook, um rollout…)" })[t] ||
+        "um segundo sistema (um broker, outro serviço, um webhook…)"}; não foi ativado.`,
       keptOff: (t, kw) => `+${t} mantido inativo — '${kw}' apareceu negado.`,
       onAlthough: (t, quoted, list) => `+${t} está ATIVO embora ${quoted} tenha aparecido negado — ativado por: ${list}. Confirma que é intencional.`,
     },
@@ -1656,7 +1792,7 @@ const msg = {
         verify: (list, slug) => `Regista uma execução bem-sucedida das tarefas marcadas que não a têm: ${list} — dev-spec done ${slug} <n> --run`,
         drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — dev-spec drift ${slug}`,
         stale: (slug) => `Mudou depois do fecho — volta a fechá-la: /spec-finish ${slug}`,
-        packReserved: (list, slug) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à 1.17 — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: dev-spec doctor ${slug}, verificação track-pack-missing)`,
+        packReserved: (list, slug, since) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à ${since || "1.17"} — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: dev-spec doctor ${slug}, verificação track-pack-missing)`,
         critic: (files) => `Revê-a com o agente spec-critic (só leitura), fase a fase: ${files || "—"}`,
         converge: (files) => "Corre a passagem de convergência do spec-reviewer (as tarefas feitas face aos seus ACs)" + (files ? `, depois o agente spec-critic sobre ${files}` : ""),
         none: "Não precisa de revisão da spec — todas as tarefas estão feitas",
@@ -1784,9 +1920,12 @@ const msg = {
         "Processors & International Transfers": "Subcontratantes e Transferências Internacionais", "DPIA": "AIPD",
         "Consistency Model": "Modelo de Consistência", "Cross-system Writes": "Escritas entre Sistemas", "Delivery & Idempotency": "Entrega e Idempotência",
         "Concurrency": "Concorrência", "Failure Modes": "Modos de Falha",
+        "API Contract": "Contrato da API", "Versioning & Compatibility": "Versionamento e Compatibilidade", "Error Model": "Modelo de Erros", "Pagination, Idempotency & Concurrency": "Paginação, Idempotência e Concorrência", "Rate Limits & Quotas": "Limites de Taxa e Quotas",
+        "Design System Usage": "Uso do Design System", "UI States": "Estados da Interface", "Accessibility": "Acessibilidade", "Responsiveness & i18n": "Design Responsivo e i18n", "UI Performance Budget": "Orçamento de Desempenho da Interface",
+        "SLIs & SLOs": "SLIs e SLOs", "Telemetry": "Telemetria", "Alerting & Runbooks": "Alertas e Runbooks", "Rollout & Rollback": "Lançamento e Reversão", "Health & Capacity": "Saúde e Capacidade",
       },
-      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas", dist: "as 5 preenchidas" },
-      statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}`, dist: (list) => `Secções de consistência de dados: ${list}` },
+      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas", dist: "as 5 preenchidas", api: "as 5 preenchidas", ui: "as 5 preenchidas", obs: "as 5 preenchidas" },
+      statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}`, dist: (list) => `Secções de consistência de dados: ${list}`, api: (list) => `Secções do contrato da API: ${list}`, ui: (list) => `Secções da interface: ${list}`, obs: (list) => `Secções de operabilidade: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoria de dependências e análise de segredos limpos numa execução local nova; todos os testes de casos de abuso a verde.",
           "+sec: modelo de ameaças revisto contra o código final — nenhum ponto de entrada ou fronteira de confiança novo sem mitigação."],
@@ -1794,6 +1933,12 @@ const msg = {
           "+privacy: processo de conservação agendado; política de privacidade e registo das atividades de tratamento (art. 30.º) atualizados; decisão sobre a AIPD registada."],
         dist: ["+dist: testes de injeção de falhas a verde numa execução local nova — falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, uma dependência indisponível.",
           "+dist: nenhuma escrita entre sistemas no código final contorna a sua mitigação (outbox / inbox / saga) — nenhum commit na base de dados seguido de uma publicação direta."],
+        api: ["+api: testes de contrato e a comparação de alterações incompatíveis com o contrato publicado a verde numa execução local nova.",
+          "+api: o ficheiro do contrato corresponde ao comportamento entregue — cada código de estado, código de erro e cabeçalho documentado é o que os handlers devolvem; o que foi removido está descontinuado com a sua data de Sunset."],
+        ui: ["+ui: a verificação automática de acessibilidade limpa e a passagem com teclado / leitor de ecrã feita na versão final; cada estado da matriz de estados alcançável e mostrado.",
+          "+ui: o orçamento de desempenho medido na versão final (LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1) e a regressão visual dos estados revista."],
+        obs: ["+obs: um alerta disparou numa falha encenada e o ensaio de reversão foi feito na versão final; os dashboards e runbooks a que os alertas ligam existem.",
+          "+obs: as métricas, os logs e os traces que o design indica vistos a ser emitidos pela versão final — nenhum dado pessoal nos logs nem nos traces."],
       },
       clarify: {
         secAccess: "Especifica o que recebe quem chama sem autenticação ou sem autorização (SE … ENTÃO O SISTEMA DEVE negar …) e o nível ASVS que a feature visa.",
@@ -1878,7 +2023,7 @@ const msg = {
       missing: (list) => `track pack(s) indisponível(eis): ${list} — o track fica inativo nesta feature até o pack voltar (dev-spec tracks check).`,
       missingAbsent: (name) => `+${name} (não há .specs/tracks/${name}/ neste projeto)`,
       missingInvalid: (name, codes) => `+${name} (o pack é inválido: ${codes})`,
-      missingReserved: (name, slug, builtIn) => `+${name} (um track pack anterior à 1.17 — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois dev-spec add-track ${slug} <novo-nome> e dev-spec add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: dev-spec add-track ${slug} ${name}` : ""})`,
+      missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois dev-spec add-track ${slug} <novo-nome> e dev-spec add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: dev-spec add-track ${slug} ${name}` : ""})`,
       badAction: (a) => `Ação de tracks desconhecida '${a}' — uma de: list, init, check.`,
       nameRequired: "o tracks init precisa de um nome — dev-spec tracks init <nome> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `Não há track nem track pack '${n}' — os packs do projeto: ${list}.`,
@@ -1900,7 +2045,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — um track definido pelo projeto (dev-spec 1.15). Só dados: nada nesta pasta é executado.
 // Guia: references/project-tracks.md · validação: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy dist).
+  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy dist api ui obs).
   "name": "${a.name}",
   // O marcador estável (sensível a maiúsculas) das secções de design, dos critérios e do bloco de tarefas: [${a.token}].
   "marker": "${a.token}",

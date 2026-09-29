@@ -5,7 +5,7 @@
 Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
 
 - For non-trivial work, **plan before coding**. Classify the feature into composable tracks —
-  `core` always, plus `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` / `+dist` when warranted — then run requirements → design →
+  `core` always, plus `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` / `+dist` / `+api` / `+ui` / `+obs` when warranted — then run requirements → design →
   (tests/evals) → tasks → execute, with the user approving each phase.
 - Use the local engine for the mechanical steps (zero-dependency, no CI, no cost):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`
@@ -13,7 +13,7 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
   If MCP is configured (`~/.gemini/settings.json`), the `spec-driven` server exposes the same tools (and the plugin's
   commands as MCP prompts).
 - Artifacts live under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
-  Mandatory +saas/+ai/+sec/+privacy/+dist design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
+  Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
 - `dev-spec approve` refuses while that phase's checks fail (`--force` records a flagged, forced approval).
   A task whose `_Verify:_` names a runnable command is verified only by a recorded run of it — a passing one, or
   a failing one on an `_Expect: fail_` task (`dev-spec done <feature> <n> --run`); if you can't run it, don't tick:

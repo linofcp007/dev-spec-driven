@@ -32,7 +32,11 @@ the active tracks: Testability Notes (+tdd); the 5 scale sections (+saas); the 1
 (+ai); the 5 `[SEC]` sections — threat model (STRIDE), security requirements (ASVS level), authn/authz, secrets,
 security testing (+sec); the 6 `[PRIVACY]` sections — data inventory, lawful basis, retention, data subject rights,
 processors & transfers, DPIA (+privacy); the 5 `[DIST]` sections — consistency model, cross-system writes (every dual
-write → outbox / inbox / saga, or an accepted risk), delivery & idempotency, concurrency, failure modes (+dist). No mandatory section may be blank — an honest "not needed because X" is
+write → outbox / inbox / saga, or an accepted risk), delivery & idempotency, concurrency, failure modes (+dist); the 5 `[API]` sections — API contract, versioning &
+compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas (+api — `references/api-design-patterns.md`); the 5 `[UI]` sections — design-system
+usage, UI states (a state matrix per view), accessibility (WCAG 2.2 AA), responsiveness & i18n, UI performance budget (+ui —
+`references/ui-design-patterns.md`); the 5 `[OBS]` sections — SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback,
+health & capacity (+obs — `references/observability-patterns.md`). No mandatory section may be blank — an honest "not needed because X" is
 acceptable; remove each `> **TODO**` sentinel and template placeholder as you fill it (saving `design.md` reports what
 is still open, and the design approval is refused while a track section, the Constitution Check or a placeholder is
 unfilled). Keep the markers `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` exactly (English, case-sensitive). In an

@@ -42,6 +42,9 @@ feature and composes exactly the rigor it needs:
 | **+sec** | Threat model (STRIDE), security requirements, authentication & authorization, secrets & key management, security testing |
 | **+privacy** | GDPR / RGPD: personal data inventory, lawful basis, retention & deletion, data subject rights, processors & transfers, DPIA |
 | **+dist** | Distributed systems & data consistency: consistency model, cross-system (dual) writes → transactional outbox / inbox / saga, delivery & idempotency, concurrency, failure modes (CAP / PACELC) |
+| **+api** | API contracts: the contract file (OpenAPI / proto / GraphQL schema), versioning & compatibility (what is breaking, deprecation), problem+json errors with stable codes, pagination / idempotency / concurrency (Idempotency-Key, ETag / If-Match), rate limits & quotas |
+| **+ui** | User interfaces: design-system usage, the UI states every view needs (loading / empty / error / offline…), accessibility (WCAG 2.2 AA), responsiveness & i18n, a performance budget (Core Web Vitals) |
+| **+obs** | Observability & operability: SLIs & SLOs with error budgets and burn-rate alerts, telemetry (metrics, structured logs, traces), alerting & runbooks, rollout & rollback (feature flags, canary), health & capacity |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
 LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
@@ -444,6 +447,9 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+sec** | Modelo de ameaças (STRIDE), requisitos de segurança, autenticação e autorização, gestão de segredos e chaves, testes de segurança |
 | **+privacy** | RGPD / GDPR: inventário de dados pessoais, fundamento de licitude, conservação e eliminação, direitos dos titulares, subcontratantes e transferências, AIPD |
 | **+dist** | Sistemas distribuídos e consistência de dados: modelo de consistência, escritas entre sistemas (escrita dupla) → outbox transacional / inbox / saga, entrega e idempotência, concorrência, modos de falha (CAP / PACELC) |
+| **+api** | Contratos de API: o ficheiro do contrato (OpenAPI / proto / esquema GraphQL), versionamento e compatibilidade (o que é incompatível, descontinuação), erros problem+json com códigos estáveis, paginação / idempotência / concorrência (Idempotency-Key, ETag / If-Match), limites de taxa e quotas |
+| **+ui** | Interfaces: uso do design system, os estados de cada vista (a carregar / vazio / erro / offline…), acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho (Core Web Vitals) |
+| **+obs** | Observabilidade e operabilidade: SLIs e SLOs com orçamento de erro e alertas por taxa de consumo, telemetria (métricas, logs estruturados, traces), alertas e runbooks, lançamento e reversão (feature flags, canário), saúde e capacidade |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
 com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
@@ -864,6 +870,9 @@ compone exactamente el rigor necesario:
 | **+sec** | Modelo de amenazas (STRIDE), requisitos de seguridad, autenticación y autorización, gestión de secretos y claves, pruebas de seguridad |
 | **+privacy** | RGPD / GDPR: inventario de datos personales, base de legitimación, conservación y supresión, derechos de los interesados, encargados y transferencias, EIPD |
 | **+dist** | Sistemas distribuidos y consistencia de datos: modelo de consistencia, escrituras entre sistemas (escritura dual) → outbox transaccional / inbox / saga, entrega e idempotencia, concurrencia, modos de fallo (CAP / PACELC) |
+| **+api** | Contratos de API: el fichero del contrato (OpenAPI / proto / esquema GraphQL), versionado y compatibilidad (qué es incompatible, obsolescencia), errores problem+json con códigos estables, paginación / idempotencia / concurrencia (Idempotency-Key, ETag / If-Match), límites de tasa y cuotas |
+| **+ui** | Interfaces: uso del design system, los estados de cada vista (cargando / vacío / error / sin conexión…), accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento (Core Web Vitals) |
+| **+obs** | Observabilidad y operabilidad: SLIs y SLOs con presupuesto de errores y alertas por tasa de consumo, telemetría (métricas, logs estructurados, trazas), alertas y runbooks, despliegue y reversión (feature flags, canario), salud y capacidad |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
 facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el

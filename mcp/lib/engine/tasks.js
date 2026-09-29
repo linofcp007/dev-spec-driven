@@ -1261,7 +1261,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   const want = (s) => {
     if (weighHeadingMatches("## " + s.title, REUSE_SYN)) return false; // 1.19 R2: its entries for this task are the Reuse section's
     const hay = s.title + "\n" + s.body;

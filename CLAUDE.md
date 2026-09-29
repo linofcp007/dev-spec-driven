@@ -158,7 +158,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -223,6 +223,56 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   **Gotcha:** within a track the first keyword matching at a position wins it (seenSpan — strong, weak, generic, context in
   that order) — list a longer phrase before its prefix ("backoff exponencial" before "backoff", +saas "fila de mensagens"
   before "fila"), or the self-match sweep fails.
+- **+api (1.19 T)** — the eighth built-in marker track `[API]` (API contracts), added through the same registries (VALID_TRACKS
+  after dist, TRACK_MARKER, `API_SECTIONS`, TRACK_STEERING `api.md`, TEMPLATE_ACS US-1.AC-20..23, RE_STABLE_BRACKET,
+  RE_PACK_MARKER_RESERVED, TRACK_ALIASES: apis / rest / restful / openapi / swagger / graphql / grpc are reserved pack names).
+  SIGNALS.api — strong: contract-level words only (public / REST / HTTP / partner API, OpenAPI, Swagger, GraphQL, gRPC,
+  protobuf, API versioning, the API contract / spec, API consumers, third-party developers, a developer portal, contract tests,
+  problem+json, Idempotency-Key, rate-limit headers, Retry-After, Sunset); weak (anchors): a breaking change, backward
+  compatibility, an SDK / client library, ETag / If-Match, status codes, JSON Schema, cursor pagination, deprecation, an
+  internal API / API gateway / API docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never
+  "requested"), pagination. SIGNAL_CONCEPTS.api folds compatibility, ETag / If-Match, status codes, schemas, the client,
+  the endpoint / route words; SIGNAL_HAZARDS.api: a breaking change is never negated ("without breaking changes"). An API
+  **key** stays +sec's word — "an API key management page" / "call the Stripe API" are `core` with a *possible +api* note.
+  The core design already has `## API Contracts` / `## Error Handling`: every ordinary name in API_SECTIONS is `loose`
+  (marker-bound), only the full compound names are strict. The generic-only note names what an anchor would be, per track
+  (`classify.genericOnly`). A pre-1.19 pack named `api` / `rest`… is a missing pack like a pre-1.17 `dist` one; doctor and
+  spec_upgrade say "from before 1.19" (`packReservedSince()` — `TRACK_RESERVED_SINCE`). Guide: `references/api-design-patterns.md`.
+- **+ui (1.19 T)** — the ninth built-in marker track `[UI]` (user-facing UI, the design system, accessibility): TRACK_MARKER,
+  `UI_SECTIONS` (Design System Usage · UI States · Accessibility · Responsiveness & i18n · UI Performance Budget — every ordinary
+  name `loose`: a core "## Accessibility" never stands in for the deleted [UI] one, nor does +saas's "[SaaS] Performance
+  Budget"), TRACK_STEERING `ui.md`, US-1.AC-24..27, TRACK_ALIASES frontend / front-end / ux / gui / wcag — **never `a11y` /
+  `accessibility`**: the canonical track-pack example is a team's `a11y` pack, it keeps its name (its signals and +ui's then
+  both fire, as a pack's may). SIGNALS.ui — strong: the design system (tokens, a component library),
+  WCAG / accessibility / a11y and their concrete words (screen reader, keyboard navigation, focus order, contrast, alt text,
+  `ARIA`, reduced motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals / `LCP`, visual regression, an empty
+  state, the UI-heavy page types (a settings / admin / management / profile page, an admin panel — "an API key management
+  page" is +ui); weak: frontend, `UI` / `UX` (capitals, one concept — "translate the UI into Spanish" alone stays possible;
+  1.19 T made it an anchor, not strong: two 1.18 tests read such texts as core), `React` / `Vue` / `Angular` / `Svelte` (one
+  concept), CSS, widgets, responsive, i18n,
+  `RTL` / `CLS` / `INP`, a loading / error state, form validation; **generic**: screen, page, form (IRREGULAR_FORMS: the nouns
+  only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard, menu, icon, widget, layout, theme.
+  A dashboard is +ui's generic word only, never +obs's ("a metrics dashboard for sales").
+- **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
+  SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
+  ordinary names `loose`), TRACK_STEERING **`observability.md`** — the +saas stub, extended with SLOs & error budgets, rollout &
+  rollback, health & capacity (no new steering file) —, US-1.AC-28..31, TRACK_ALIASES observability / o11y / monitoring / sre /
+  telemetry / opentelemetry. SIGNALS.obs — strong: SLO / SLI, error budget, burn rate, observability, OpenTelemetry, distributed
+  tracing, runbook, on-call, the tools (PagerDuty, Prometheus, Grafana, Datadog, Sentry…), structured logging, a correlation /
+  trace ID, incident response, feature flag / kill switch, a canary release / deployment (a bare "canary" is weak — "Canary
+  Islands"), blue-green / progressive / staged rollout, a rollback plan, liveness / readiness probes, fault injection, zero
+  downtime, a monitoring / Grafana dashboard (listed before "grafana": the longer phrase wins its place and shadows +ui's
+  "dashboard"); weak: monitoring, alerts, a health check, uptime, SLA, incident, outage, downtime, rollback, rollout, telemetry,
+  tracing, `APM`, error rate, 5xx, on call; **generic**: metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy —
+  never a bare "log" ("log in") or "trace". SIGNAL_HAZARDS.obs: downtime / an outage ("without downtime") is never negated.
+  Shared: observability / SLO / SLA / uptime stay +saas signals (a phrase may serve two tracks), rollback +tdd weak. The tasks'
+  telemetry task carries `_Emits metrics:_`. No logged 1.18 classify input turns +obs on.
+  **The three tracks, measured (1.19 T):** a precision / recall corpus of 133 EN / PT / ES texts (positives and hard negatives —
+  mcp/test.js 1.19 T8) — 100% / 100% for each track; the 1,783 classify inputs both suites log gave the same 1.18 track
+  decisions (only +api / +ui switched on beside them). The placeholder corpus (`templateCorpus()`, ≤ 2 optional tracks + all:
+  47 track sets now) renders 1,165 texts (1.18: 628); `templateSets()` builds in ~95 ms (1.18: ~70 ms) — T10 bounds it
+  relatively. Test helpers: `T19` in the 1.19 T block runs the same eight checks for each new track — a new built-in track adds
+  one entry there.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the

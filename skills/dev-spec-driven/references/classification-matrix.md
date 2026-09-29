@@ -9,7 +9,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 
 ---
 
-## The seven tracks
+## The built-in tracks
 
 | Track | Adds | Activated when… |
 |---|---|---|
@@ -20,8 +20,11 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+sec** | 5 mandatory `[SEC]` sections (STRIDE threat model, ASVS level, authn/authz, secrets, security testing), 3 criteria, abuse-case tests, `security.md` | a mistake here is a breach, not just a bug |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
 | **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
+| **+api** | 5 mandatory `[API]` sections (API contract, versioning & compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas), 4 criteria, contract tests + a breaking-change diff, `api.md` | other code depends on the API's contract — public, partner or internal: a versioned API, OpenAPI / GraphQL / gRPC, SDKs |
+| **+ui** | 5 mandatory `[UI]` sections (design-system usage, UI states, accessibility, responsiveness & i18n, UI performance budget), 4 criteria, accessibility + visual-regression tests, `ui.md` | a user-facing screen, component or flow: a design system, accessibility (WCAG), responsive layout, dark mode, a settings / admin page |
+| **+obs** | 5 mandatory `[OBS]` sections (SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback, health & capacity), 4 criteria, operability tests (an alert in a staged failure, a rollback drill, fault injection), `observability.md` | a service people depend on: SLOs, error budgets, alerting, on-call, runbooks, tracing, feature flags, a canary / progressive rollout |
 
-`core` is always on. The other six are added independently based on the signals below.
+`core` is always on. The others are added independently based on the signals below.
 
 ### How `spec_classify` weighs a signal
 
@@ -38,9 +41,9 @@ is a draft for the human, who confirms Phase 0.
 - A weak word inside a longer strong phrase (of another track, or of its own) is part of that phrase: `model` in "threat
   model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
   both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
-- **Generic** signals (+dist only — app-level words: queue, retry, consumer / producer, subscriber, publish … event,
-  worker) add to the score but never turn the track on alone: at least one strong or weak (cross-system) signal must be
-  there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
+- **Generic** signals (app-level words — +dist: queue, retry, consumer / producer, subscriber, publish … event, worker;
+  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon; +obs: metrics, logs, latency, p99, monitor, deploy) add to the score but never turn the track on alone: at least one strong
+  or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
   password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
@@ -51,7 +54,9 @@ is a draft for the human, who confirms Phase 0.
 - **Negation never vetoes a track**, it annotates it: "no personal data" keeps +privacy off and says so; a negated
   keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
   A +dist **hazard** (lost update, oversell, race condition, duplicate delivery, write skew, split brain) is written
-  negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts.
+  negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts. So is a +api
+  breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles") and a +obs outage
+  ("without downtime", "sem indisponibilidade").
 
 ---
 
@@ -257,6 +262,130 @@ Worked examples (what `spec_classify` answers):
 | Create an endpoint that writes a user to Postgres and returns it | `core` | — |
 | Plain CRUD endpoint for users, no Kafka and no events | `core` (+dist kept off, noted) | kafka (negated) |
 
+## +api signals (turn on the API contract track)
+
+Turn on `+api` if **any** are true (see `api-design-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| Other code depends on the API's contract | A public or partner API, an SDK you ship, a mobile client that updates months later, another team's service |
+| The contract is an artifact | An OpenAPI / Swagger document, `.proto` files, a GraphQL schema — contract-first design, contract tests |
+| Compatibility is a decision | Versioning, deprecation, "no breaking changes for existing clients" |
+| The contract fixes behaviour | Error bodies (problem+json, stable codes), pagination, Idempotency-Key, ETag / If-Match, rate-limit headers |
+
+Classifier signals — **strong:** public / REST / RESTful / HTTP / web / JSON / partner API, API-first, contract-first, OpenAPI,
+Swagger, GraphQL, gRPC, protobuf, protocol buffers, a proto file, API versioning / version, versioned API, API v1 / v2 / v3,
+a breaking API change, the API contract / spec / specification / design, API consumers, third-party / external developers,
+a developer portal, contract tests, consumer-driven contracts, (application/)problem+json, problem details, RFC 9457 / 7807,
+Idempotency-Key, rate limit headers, X-RateLimit, Retry-After, the Sunset / Deprecation header (*API pública, API REST,
+versionamento da API, contrato da API, programadores externos, portal do programador, teste de contrato · versionado de
+la API, contrato de la API, desarrolladores externos, portal de desarrolladores, prueba de contrato*). **Weak:** a
+breaking change, backward compatible / compatibility, an SDK, a client library, ETag, If-Match / If-None-Match, status
+codes, HTTP status, JSON Schema, request / response schema, cursor (keyset) pagination, deprecation, an API gateway, an
+internal API, an API client, the API docs / reference, content negotiation (*quebra de compatibilidade, alteração
+incompatível, retrocompatível, código de estado / de status, paginação por cursor · cambio incompatible, retrocompatible,
+compatibilidad hacia atrás, paginación por cursor*). **Generic** (only beside a strong or weak one): api, endpoint, route,
+request(s), pagination (*rota, requisição, paginação · ruta, solicitud / petición http, paginación*). A breaking change is
+a **hazard**: "without breaking changes" counts. An API **key** is +sec's word, not a contract: "an API key management
+page" is a UI, "call the Stripe API" consumes someone else's contract — both stay `core` with a *possible +api* note.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Publish an OpenAPI spec for the orders REST API and generate the client SDKs from it | `core +api` | rest api, openapi, sdk |
+| Version the public API: ship v2 and deprecate v1 with a Sunset header | `core +api` | public api, sunset header |
+| Add cursor-based pagination to the list endpoints without breaking existing clients | `core +api` (weak-only) | cursor-based pagination, endpoint |
+| Avoid breaking changes to the orders API for existing clients | `core +api` (weak-only) | breaking change (a hazard — not negated), api |
+| *Devolver os erros em formato problem+json com códigos estáveis* | `core +api` | problem+json |
+| *Definir el contrato gRPC del servicio de precios en protobuf* | `core +dist +api` | grpc, protobuf (+dist: gRPC, the pricing service) |
+| API key management page where admins create and revoke keys | `core`, *possible +api* | api (generic only) |
+| Call the Stripe API to charge the customer's card | `core +tdd`, *possible +api* | api (generic only; charge → +tdd) |
+| Bump the AWS SDK to v3 | `core`, *possible +api* | sdk |
+
+## +ui signals (turn on the UI track)
+
+Turn on `+ui` if **any** are true (see `ui-design-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| A user-facing screen, component or flow is the work | A settings / admin / profile page, a checkout flow, a new component |
+| The design system is involved | Tokens, the component library, Storybook, Figma designs, dark mode |
+| Accessibility matters | WCAG 2.2 AA, a screen reader, keyboard navigation, contrast, alt text |
+| The states or the layout are the risk | Empty / loading / error states, responsive layout, right-to-left, Core Web Vitals |
+
+Classifier signals — **strong:** design system, design tokens, component library, UI component / kit, user interface,
+WCAG, accessibility, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
+/ management, colour / color contrast, contrast ratio, alt text, `ARIA`, aria-label, reduced motion, responsive layout /
+design, mobile-first, dark mode, Storybook, Figma, Core Web Vitals, `LCP`, visual regression, skeleton screen, empty state,
+right-to-left, a landing / settings / admin / management / profile / account page, an admin panel (*sistema de design,
+acessibilidade, leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
+painel de administração · sistema de diseño, accesibilidad, lector de pantalla, modo oscuro, interfaz de usuario, página de
+ajustes, panel de administración*). **Weak:** frontend, `UI` / `UX` (capitals, one concept — "translate the UI into
+Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
+`Angular`, `Svelte` — one concept), CSS / Tailwind, a modal, dropdown, tooltip, navbar, sidebar, toast, carousel, spinner,
+responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation, a wireframe / mockup. **Generic**
+(only beside a strong or weak one): screen, page, form (the nouns — never "screening", "formed"), button, click, dialog,
+dashboard, menu, icon, widget, layout, theme (*ecrã, tela, página, formulário, botão, painel · pantalla, formulario, botón*).
+A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
+dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Build the settings page with design-system components and WCAG 2.2 AA accessibility | `core +ui` | wcag, accessibility, settings page |
+| Make the checkout form usable with a screen reader and keyboard navigation | `core +tdd +ui` | screen reader, keyboard navigation, form (checkout → +tdd) |
+| Add a dark mode using the design tokens | `core +ui` | design tokens, dark mode |
+| API key management page where admins create and revoke keys | `core +ui`, *possible +sec / +api* | management page |
+| Rewrite the frontend in React | `core +ui` (weak-only) | frontend, React |
+| *Adicionar modo escuro à aplicação* | `core +ui` | modo escuro |
+| *Mostrar un estado vacío cuando no hay pedidos* | `core +ui` | estado vacío |
+| Add a button to export orders as CSV | `core`, *possible +ui* | button (generic only) |
+| Log in form | `core`, *possible +ui* | form (generic only — "log" is no +obs word) |
+| Metrics dashboard for sales | `core`, *possible +ui* | dashboard (generic only) |
+
+## +obs signals (turn on the observability & operability track)
+
+Turn on `+obs` if **any** are true (see `observability-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| Someone depends on it being up | An SLO, an error budget, a critical journey, an on-call rotation |
+| It must be watchable | Metrics, structured logs with a correlation ID, distributed tracing (OpenTelemetry) — named as the work |
+| It must be safe to ship and undo | Feature flags, a canary / progressive rollout, a rollback plan, zero-downtime deploys |
+| It must say when it is broken | Alerts with runbooks, PagerDuty / Opsgenie, health / readiness checks, incident response |
+
+Classifier signals — **strong:** observability, SLO / SLI, error budget, burn rate, OpenTelemetry / OTel, distributed
+tracing, runbook, on-call, PagerDuty, Opsgenie, Alertmanager, an alerting / alert rule, Prometheus, Grafana, Datadog, New
+Relic, Jaeger, Zipkin, Sentry, structured logging / logs, correlation / trace ID, context propagation, golden signals, MTTR,
+incident response, postmortem, feature flag / toggle, kill switch, a canary release / deployment / rollout, blue-green,
+progressive / gradual / staged / phased rollout, dark launch, a rollback plan, automatic rollback, liveness / readiness
+probe, synthetic / real user monitoring, chaos engineering, fault injection, game day, zero(-)downtime, a monitoring /
+Grafana / Datadog / operational dashboard, log aggregation, error tracking (*observabilidade, orçamento de erro, rastreio
+distribuído, logs estruturados, lançamento canário, plano de rollback · observabilidad, presupuesto de error, trazas
+distribuidas, despliegue canario, plan de reversión*). **Weak:** monitoring, alerts / alerting, health check, liveness,
+readiness, uptime, SLA, incident, outage, downtime, rollback, rollout, a bare canary, telemetry, instrumentation, tracing,
+`APM`, error rate, 5xx, on call (*monitorização, alertas, incidente, indisponibilidade, reversão, telemetria · monitoreo,
+reversión, trazas, tasa de error, guardia*). **Generic:** metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy
+(*métricas, latência, implantação · latencia, despliegue*). Never a bare "log" ("log in"), "trace" or "dashboard" — a sales
+dashboard is a product screen (+ui's word). `observability` / `SLO` / `SLA` / `uptime` stay +saas signals too (a
+phrase may serve two tracks); the `observability.md` steering file serves both.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Define an SLO for checkout availability and alert on the error budget burn rate | `core +tdd +saas +obs` | slo, error budget, burn rate (checkout → +tdd, slo → +saas) |
+| Instrument the payments service with OpenTelemetry distributed tracing | `core +tdd +obs` | opentelemetry, distributed tracing |
+| Roll out the new pricing engine behind a feature flag with a canary release and automatic rollback | `core +tdd +obs` | feature flag, canary release, automatic rollback |
+| Add monitoring and alerts for the nightly import job | `core +obs` (weak-only) | monitoring, alerts |
+| Deploy the billing service without downtime and roll back on errors | `core +tdd +obs` (weak-only) | downtime (a hazard — not negated), roll back |
+| *Despliegue canario del nuevo motor de precios con plan de reversión* | `core +obs` | despliegue canario, plan de reversión |
+| Metrics dashboard for sales | `core`, *possible +ui / +obs* | dashboard, metrics (generic only) |
+| Send price alerts to users when a product gets cheaper | `core`, *possible +obs* | alerts |
+| Canary Islands shipping rates | `core`, *possible +obs* | canary (weak — never a release alone) |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -276,10 +405,13 @@ Worked examples (what `spec_classify` answers):
 | `core +tdd +sec +privacy` | a typical sign-up / account feature: abuse-case and data-rights tests in the test plan |
 | `core +dist` | design gains 5 `[DIST]` sections; `[DIST]` criteria US-1.AC-16..19; outbox / inbox / concurrency / resilience / failure-injection tasks; `steering/distributed.md` |
 | `core +tdd +saas +dist` | a checkout across services: saga, outbox, idempotent consumers, failure-injection and property tests, load test |
+| `core +api` | design gains 5 `[API]` sections; `[API]` criteria US-1.AC-20..23; contract-first, error-model, idempotency / concurrency, compatibility-gate and contract-test tasks; `steering/api.md` |
+| `core +ui` | design gains 5 `[UI]` sections; `[UI]` criteria US-1.AC-24..27; design-system, UI-states, forms-and-keyboard, accessibility-check and responsiveness / performance tasks; `steering/ui.md` |
+| `core +obs` | design gains 5 `[OBS]` sections; `[OBS]` criteria US-1.AC-28..31; SLO / alert, telemetry (`_Emits metrics:_`), rollout, health-check and operability-test tasks; `steering/observability.md` |
 
 **Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
-its 6 and `+dist` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are English in every language and case-sensitive.
+its 6, `+dist` its 5, `+api` its 5, `+ui` its 5 and `+obs` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -288,7 +420,10 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are Engli
 - `+saas` hot path → load-test task at the end must pass before "done".
 - `+sec` → the security-testing task's `_Verify:_` runs the scans and the abuse-case tests; `+privacy` → data subject
   rights verified end to end before "done"; `+dist` → the failure-injection tests (crash between commit and publish,
-  duplicate delivery, concurrent updates, a dependency down) green before "done".
+  duplicate delivery, concurrent updates, a dependency down) green before "done"; `+api` → the contract tests and the
+  breaking-change diff against the published contract green before "done"; `+ui` → the automated accessibility check, the
+  manual keyboard / screen-reader pass and the performance budget before "done"; `+obs` → an alert fired in a staged
+  failure, a rollback drill and the health checks with a dependency down before "done".
 
 ---
 
@@ -301,7 +436,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`) are Engli
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -310,6 +445,9 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist]
 - **+sec:** [signal] — [why]
 - **+privacy:** [signal] — [why]
 - **+dist:** [signal] — [why]
+- **+api:** [signal] — [why]
+- **+ui:** [signal] — [why]
+- **+obs:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

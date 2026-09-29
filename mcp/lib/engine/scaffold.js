@@ -950,7 +950,7 @@ function removeTracks(projectDir, f, named, lng, legacy = []) {
 }
 
 function inactiveArtifacts(dir, gone, T) {
-  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [] };
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [], api: [], ui: [], obs: [] };
   const design = readIfExists(path.join(dir, "design.md")) || "";
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];

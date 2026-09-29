@@ -76,6 +76,12 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+dist:** no database commit followed by a direct publish, cache write or API call — the outbox / inbox / saga the
   design names; the dedup record in the same transaction as the effect; retries with a timeout, backoff + jitter and a
   key; the version check / unique constraint the design names for concurrent updates.
+- **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
+  codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
+- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
+  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean.
+- **+obs:** the metrics the task's `_Emits metrics:_` names, structured logs with the correlation ID and no personal data, the
+  spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
@@ -110,7 +116,8 @@ Apply the `/prReview` checklist to the whole branch, gated by active tracks: spe
 all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — `dev-spec log <feature>` lists
 it per task when the commits follow `/spec-commit`), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
-data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), security, and
+data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), no breaking change inside a version (+api), the UI states and accessibility (+ui), telemetry, alerts
+and the rollback path (+obs), security, and
 duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
 wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings. Triage the ledger's deferred minors and parked findings: which must be fixed before merge, which can ship.
@@ -126,7 +133,9 @@ The question is "does the code deliver every AC?", not "is this diff right?". Re
    scoping on every tenant-data query, `_Emits metrics:_` metrics actually emitted; +ai prompts versioned, eval
    harness wired, cost tracking present; +sec the `[SEC]` criteria (401 / 403 + audit, no secrets in output) and the
    abuse-case tests; +privacy export, erasure and retention implemented across every store of the data inventory;
-   +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; security always.
+   +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; +api the contract
+   file and the contract tests; +ui the state matrix and the accessibility checks; +obs the telemetry, the alerts and the rollback drill;
+   security always.
 3. **Classify each gap:** a **task** (fixable within the approved ACs and design) or a **spec change** (needs a
    different AC, design decision or test expectation — list it apart; the controller routes it to its phase,
    never into a task).

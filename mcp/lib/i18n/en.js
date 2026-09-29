@@ -63,6 +63,15 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const distAc = a.tracks.includes("dist")
         ? "\n\n#### [DIST] Acceptance Criteria (EARS)\n16. **US-1.AC-16** — IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).\n17. **US-1.AC-17** — WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).\n18. **US-1.AC-18** — WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).\n19. **US-1.AC-19** — IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path]."
         : "";
+      const apiAc = a.tracks.includes("api")
+        ? "\n\n#### [API] Acceptance Criteria (EARS)\n20. **US-1.AC-20** — IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.\n21. **US-1.AC-21** — WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.\n22. **US-1.AC-22** — IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.\n23. **US-1.AC-23** — IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date."
+        : "";
+      const uiAc = a.tracks.includes("ui")
+        ? "\n\n#### [UI] Acceptance Criteria (EARS)\n24. **US-1.AC-24** — WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.\n25. **US-1.AC-25** — IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.\n26. **US-1.AC-26** — WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.\n27. **US-1.AC-27** — IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown."
+        : "";
+      const obsAc = a.tracks.includes("obs")
+        ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -83,7 +92,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -263,6 +272,75 @@ Input types · size/count limits · token counting per type · validation pipeli
 ## [DIST] Failure Modes
 > **TODO** — replace with real values (remove this line when done).
 - Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job).
+`;
+      }
+      if (track === "api") {
+        return `
+## [API] API Contract
+> **TODO** — replace with real values (remove this line when done).
+- Style (REST / GraphQL / gRPC) · resources and operations (method + path, or query / mutation / RPC) · request and response schemas · where the contract file lives (OpenAPI document, .proto files, GraphQL schema) — written first, reviewed before the handlers · auth scopes per operation.
+
+## [API] Versioning & Compatibility
+> **TODO** — replace with real values (remove this line when done).
+- Versioning strategy (URL / header / date) · what is a breaking change here (a removed or renamed field, a new required input, a changed type or status code, tighter validation) · additive-only changes within a version · deprecation: the Deprecation / Sunset headers, the notice period, how clients are told.
+
+## [API] Error Model
+> **TODO** — replace with real values (remove this line when done).
+- Error format: application/problem+json (RFC 9457 — type, title, status, detail, instance) · the stable error codes clients may branch on · validation errors per field · the status codes each operation returns · no stack trace or internal detail in a response.
+
+## [API] Pagination, Idempotency & Concurrency
+> **TODO** — replace with real values (remove this line when done).
+- Pagination: an opaque cursor with a stable order and a maximum page size (or offset, and why) · Idempotency-Key on non-idempotent creates (its scope, how long a key is kept, a reused key with another body → 422) · ETag / If-Match on updates (412 on a stale version) · long-running operations (202 + a status resource).
+
+## [API] Rate Limits & Quotas
+> **TODO** — replace with real values (remove this line when done).
+- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt.
+`;
+      }
+      if (track === "ui") {
+        return `
+## [UI] Design System Usage
+> **TODO** — replace with real values (remove this line when done).
+- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.
+
+## [UI] UI States
+> **TODO** — replace with real values (remove this line when done).
+- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).
+
+## [UI] Accessibility
+> **TODO** — replace with real values (remove this line when done).
+- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass).
+
+## [UI] Responsiveness & i18n
+> **TODO** — replace with real values (remove this line when done).
+- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue.
+
+## [UI] UI Performance Budget
+> **TODO** — replace with real values (remove this line when done).
+- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users).
+`;
+      }
+      if (track === "obs") {
+        return `
+## [OBS] SLIs & SLOs
+> **TODO** — replace with real values (remove this line when done).
+- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow).
+
+## [OBS] Telemetry
+> **TODO** — replace with real values (remove this line when done).
+- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits.
+
+## [OBS] Alerting & Runbooks
+> **TODO** — replace with real values (remove this line when done).
+- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey.
+
+## [OBS] Rollout & Rollback
+> **TODO** — replace with real values (remove this line when done).
+- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract).
+
+## [OBS] Health & Capacity
+> **TODO** — replace with real values (remove this line when done).
+- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is.
 `;
       }
       return "";
@@ -479,6 +557,52 @@ ${phases}`
   - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
 `;
       }
+      if (a.track === "api") {
+        return `
+## Story US-1 — API Contract
+- [ ] ${id()}. [US1] Contract first — the OpenAPI document / .proto files / GraphQL schema in the repo, reviewed before the handlers (the file is this task's Implements marker)
+  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
+- [ ] ${id()}. [US1] Error model — every error an application/problem+json body with a stable code; a validation error names each field
+  - _Requirements: US-1.AC-20_${greenLine(a.green, "US-1.AC-20")}
+- [ ] ${id()}. [US1] Idempotency and concurrency — an Idempotency-Key on creates (the stored response replayed), ETag / If-Match on updates (412 on a stale version)
+  - _Requirements: US-1.AC-21, US-1.AC-22_${greenLine(a.green, "US-1.AC-21", "US-1.AC-22")}
+- [ ] ${id()}. [US1] Compatibility gate — a breaking-change diff of the contract against the published version, runnable locally; anything removed is deprecated with a Sunset date
+  - _Requirements: US-1.AC-23_${greenLine(a.green, "US-1.AC-23")}
+- [ ] ${id()}. [US1] Contract tests — the implementation checked against the contract (every documented status code, schema and header), runnable locally
+  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
+`;
+      }
+      if (a.track === "ui") {
+        return `
+## Story US-1 — User Interface
+- [ ] ${id()}. [US1] Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)
+  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
+- [ ] ${id()}. [US1] UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md
+  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
+- [ ] ${id()}. [US1] Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus
+  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
+- [ ] ${id()}. [US1] Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)
+  - _Requirements: US-1.AC-24, US-1.AC-25_
+- [ ] ${id()}. [US1] Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget
+  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
+`;
+      }
+      if (a.track === "obs") {
+        return `
+## Story US-1 — Operability
+- [ ] ${id()}. [US1] SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook
+  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
+- [ ] ${id()}. [US1] Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names
+  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
+  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
+- [ ] ${id()}. [US1] Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md
+  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
+- [ ] ${id()}. [US1] Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds
+  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
+- [ ] ${id()}. [US1] Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging
+  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
+`;
+      }
       return "";
     },
 
@@ -588,7 +712,15 @@ ${a.summary || "[one line: the bug being fixed]"}
           noSecrets: "no secret, token or stack trace in any response or log", exportData: "a subject's export holds all of their personal data, machine-readable",
           erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized",
           outboxCrash: "crash between the DB commit and the publish: the event is still delivered", duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
-          lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked" }, acs);
+          lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
+          contract: "contract", problemJson: "contract test: a request missing a required field gets 400 problem+json naming it", idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
+          staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
+          component: "component", visual: "visual", keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
+          formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary", emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
+          loadError: "a failed load: an error with Retry, the content already shown kept",
+          telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
+          burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
+          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -712,6 +844,9 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("sec")) items.push("SEC: 5 mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
       if (a.tracks.includes("privacy")) items.push("PRIVACY: 6 mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
       if (a.tracks.includes("dist")) items.push("DIST: 5 mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
+      if (a.tracks.includes("api")) items.push("API: 5 mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
+      if (a.tracks.includes("ui")) items.push("UI: 5 mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
+      if (a.tracks.includes("obs")) items.push("OBS: 5 mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -763,7 +898,7 @@ const steering = {
     "scale.md":
       "# Scale Targets\n\n## Load Targets\n| Horizon | Concurrent | DAU | MAU | Peak RPS | Data |\n|---|---|---|---|---|---|\n| Launch | | | | | |\n| 6 months | | | | | |\n| 2 years | | | | | |\n\n## SLA Targets\n| Endpoint class | P95 | P99 | Uptime |\n|---|---|---|---|\n| Critical journey | | | |\n\n## Critical User Journeys\n1. []\n\n## Escalation Thresholds\n- []\n",
     "observability.md":
-      "# Observability Standards\n\n## Logging\nStructured JSON. Required fields: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. No secrets/PII.\n\n## Metrics\nPrometheus-style snake_case + unit suffix. Per feature: request count, duration histogram, error count, one business counter. Beware label cardinality.\n\n## Traces\nOpenTelemetry, W3C context. Sample 10% in prod, always sample errors.\n\n## Alerts (each links a runbook)\n- P0 page now / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Observability Standards\n\n## Logging\nStructured JSON. Required fields: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. No secrets/PII.\n\n## Metrics\nPrometheus-style snake_case + unit suffix. Per feature: request count, duration histogram, error count, one business counter. Beware label cardinality.\n\n## Traces\nOpenTelemetry, W3C context. Sample 10% in prod, always sample errors.\n\n## Alerts (each links a runbook)\n- P0 page now / P1 ≤15min / P2 slack / P3 digest.\n\n## SLOs & Error Budgets\n- Per critical journey: the SLI, the SLO target and its window · the error-budget policy (what stops when it is spent).\n- Burn-rate alerts: the fast one (e.g. 14.4× over 1 h) pages, the slow one (e.g. 6× over 6 h) opens a ticket.\n\n## Rollout & Rollback\n- Feature flags: an owner and a removal date each · canary / progressive steps and the metrics that gate them · rollback criteria and a target time.\n\n## Health & Capacity\n- Liveness checks the process only, readiness its dependencies · capacity signals (saturation, queue depth, pool usage) with thresholds.\n",
     "cost.md":
       "# Cost Budget\n\n## Infrastructure Budget\nTarget: < $XX/month year 1.\n\n## Cost Per User Target\nTarget: < $0.50 per MAU. If exceeded, stop and optimize.\n\n## Cost Alerts\n- Daily > $100 slack / > $200 page.\n\n## Per-Feature Cost Review\nEach design.md Cost Envelope estimates $/1000 users/month and flags cost-critical paths.\n",
     "ai-strategy.md":
@@ -775,6 +910,12 @@ const steering = {
     // 1.17 D — +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
     "distributed.md":
       "# Distributed Systems & Data Consistency Standards\n\n## Delivery Guarantee\n- Default: at-least-once — every consumer is idempotent. Exactly-once is an effect of idempotency, never a broker promise.\n- Ordering: per key (partition / message group) only where a feature says so: []\n\n## Cross-system Writes\n- A write that touches more than one system (DB + broker, DB + cache, DB + external API) goes through a transactional outbox (or CDC) — never \"commit, then publish\".\n- Business transactions across services: a saga with one compensation per step; orchestration or choreography: []\n\n## Idempotency\n- Idempotency key source (client header / message ID / natural key): [] · where processed keys live (inbox table / unique constraint) and for how long: []\n\n## Retry Policy (defaults)\n- Exponential backoff with jitter · max attempts: [] · per-call timeout: []\n- Never retried: a non-idempotent call without a key, a validation error (a 4xx — but 408 and 429 are retriable, honouring Retry-After) · poison messages → DLQ after [] attempts, with an alert.\n\n## Locking Policy\n- Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: []\n\n## Consistency Defaults\n- Default isolation level: [] · where eventual consistency is accepted and the maximum staleness: [] · read-your-writes for the user who wrote.\n\n## Observability\n- Outbox lag, consumer lag, DLQ depth and retry counts are metrics with alerts: []\n",
+    // 1.19 T — +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
+    "api.md":
+      "# API Standards\n\n## Style & Contract\n- Style: [REST | GraphQL | gRPC] · the contract lives in: [openapi.yaml | proto/ | schema.graphql] — written first, reviewed before the handlers.\n- Naming: plural nouns for collections · [snake_case | camelCase] fields · ISO 8601 UTC timestamps · IDs as strings.\n\n## Versioning & Compatibility\n- Strategy: [URL /v1 | header | date] · only additive changes within a version · a breaking change ships as a new version.\n- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.\n\n## Errors\n- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.\n\n## Pagination, Idempotency & Concurrency\n- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).\n\n## Rate Limits\n- Per [API key | user | IP]: [N] requests per [window] · 429 with Retry-After and the RateLimit headers.\n\n## Checks (local)\n- Contract tests: [command] · breaking-change diff against the published contract: [command].\n",
+    // 1.19 T — +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
+    "ui.md":
+      "# UI Standards\n\n## Design System\n- Components: [library / Storybook URL] · tokens: [colour, spacing, type — where they live] · a new component enters the system first (documented, reviewed), never as a one-off.\n\n## States\n- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.\n- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.\n\n## Accessibility\n- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.\n- Checks: [axe / Lighthouse command] on every local run · a manual keyboard + screen-reader pass ([NVDA / VoiceOver]) per feature.\n\n## Responsiveness & i18n\n- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [yes / no] · dates, numbers and currency through the locale.\n\n## Performance Budget\n- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally / RUM].\n",
     // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -863,7 +1004,7 @@ const msg = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore | flow",
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -885,7 +1026,10 @@ const msg = {
       substantial: "No track signals matched but the description is substantial — consider whether +tdd applies (correctness/edge cases).",
       weakOnly: (list) => `On from weak signals only — double-check: ${list}.`,
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
-      genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names a second system (a broker, another service, a webhook…); not auto-enabled.`,
+      // (1.19 T) what an anchor names, per track — +dist's wording unchanged
+      genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names ${({ api: "an API contract (a public API, OpenAPI / GraphQL / gRPC, a breaking change…)",
+        ui: "a UI concern of its own (a design system, accessibility, the frontend, a UI component…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)" })[t] ||
+        "a second system (a broker, another service, a webhook…)"}; not auto-enabled.`,
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
     },
@@ -1729,7 +1873,7 @@ const msg = {
         verify: (list, slug) => `Record a passing run for the ticked tasks without one: ${list} — dev-spec done ${slug} <n> --run`,
         drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — dev-spec drift ${slug}`,
         stale: (slug) => `It changed after its finish — finish it again: /spec-finish ${slug}`,
-        packReserved: (list, slug) => `Rename its track pack(s) from before 1.17 — ${list}: the name is reserved now, so the track is inactive (details: dev-spec doctor ${slug}, check track-pack-missing)`,
+        packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: dev-spec doctor ${slug}, check track-pack-missing)`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
         none: "No spec review needed — every task is done",
@@ -1854,8 +1998,8 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections pass detail
-      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}` }, // `dev-spec status`
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -1863,6 +2007,12 @@ const msg = {
           "+privacy: retention job scheduled; privacy notice and records of processing (Art. 30) updated; DPIA decision on file."],
         dist: ["+dist: failure-injection tests green on a fresh local run — crash between commit and publish, duplicate delivery, concurrent updates, a dependency down.",
           "+dist: no cross-system write in the final code bypasses its mitigation (outbox / inbox / saga) — no database commit followed by a direct publish."],
+        api: ["+api: contract tests and the breaking-change diff against the published contract green on a fresh local run.",
+          "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
+        ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
+          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed."],
+        obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
+          "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -1955,7 +2105,7 @@ const msg = {
       missingAbsent: (name) => `+${name} (no .specs/tracks/${name}/ in this project)`,
       missingInvalid: (name, codes) => `+${name} (the pack is invalid: ${codes})`,
       // 1.17 D review: a pack from before 1.17 whose name is reserved now
-      missingReserved: (name, slug, builtIn) => `+${name} (a track pack from before 1.17 — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then dev-spec add-track ${slug} <new-name> and dev-spec add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: dev-spec add-track ${slug} ${name}` : ""})`,
+      missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then dev-spec add-track ${slug} <new-name> and dev-spec add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: dev-spec add-track ${slug} ${name}` : ""})`,
       badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check.`,
       nameRequired: "tracks init needs a name — dev-spec tracks init <name> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
@@ -1978,7 +2128,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",
