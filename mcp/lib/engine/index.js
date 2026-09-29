@@ -9,12 +9,9 @@
  * in place (never re-bound). A new module goes into MODULES below; a new name must not exist in another module (checked).
  */
 
-const MODULES = ["./text.js", "./files.js", "./locks.js", "./markdown.js", "./state.js", "./tracks.js", "./classify.js",
-  "./packs.js", "./templates.js", "./placeholders.js", "./scaffold.js", "./steering.js", "./globs.js", "./tasks.js",
-  "./evidence.js", "./task-edit.js", "./brief.js", "./ears.js", "./trace.js", "./matrix.js", "./approvals.js",
-  "./impact.js", "./gates.js", "./doctor.js", "./quality.js", "./finish.js", "./lifecycle.js", "./catalog.js",
-  "./metrics.js", "./decisions.js", "./export.js", "./export-formats.js", "./changelog.js", "./roadmap.js",
-  "./roadmap-md.js", "./upgrade.js", "./scan.js", "./guards.js", "./approval-guard.js", "./status.js",
+const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tracks.js", "./templates.js",
+  "./scaffold.js", "./tasks.js", "./evidence.js", "./trace.js", "./gates.js", "./doctor.js", "./quality.js",
+  "./finish.js", "./roadmap-md.js", "./decisions.js", "./export.js", "./guards.js", "./upgrade.js", "./scan.js",
   "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js", "./import/plan.js",
   "./import/bmad.js", "./import/fluidplan.js", "./import/index.js"];
 const E = {};
