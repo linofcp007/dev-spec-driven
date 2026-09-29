@@ -1,0 +1,716 @@
+"use strict";
+
+/**
+ * dev-spec-driven engine — the decision log and the spike kind.
+ * decisions.md (spec_decide, append-only) and spikes (question → investigate → decide).
+ *
+ * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
+ */
+const fs = require("fs");
+const path = require("path");
+const i18n = require("../i18n.js");
+const { BOM_CHAR } = require("./state.js"); // load time
+const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
+// Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
+let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
+  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
+  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
+  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn;
+function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
+  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
+  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
+  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn } = E); }
+
+// ---------------------------------------------------------------------------
+// 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
+// ---------------------------------------------------------------------------
+//
+// decisions.md is COMMITTED with the spec (the .execution/ ledger is self-ignored scratch): a localized header, then one
+// entry per decision or discovery —
+//   ## D-<n> — <title>
+//   - _Kind: decision | discovery_
+//   - _Date: <ISO timestamp>_
+//   - _Affects: US-1.AC-2, T-03, <design section>_      (optional)
+//   - _Supersedes: D-1_                                 (optional)
+//   **Context:** …  **Decision:** (**Discovery:**) …  **Consequences:** …   (localized labels, any EN/PT/ES spelling read)
+// The IDs and the four markers are English-stable; the markers are read on the lines between the heading and the first
+// label only. spec_decide appends under the feature lock: numbered after the highest D-n, the existing bytes never
+// rewritten (a BOM and CRLF line ends are kept — the entry follows the file's line ends). _Affects:_ references are
+// validated against the feature when written (an unknown one is an error, nothing written: AC IDs defined in
+// requirements.md, T-IDs planned in test-plan.md, EC/NFR/SC IDs written in requirements.md, anything else a section heading
+// of design.md — bug.md / design.md for a bugfix, spike.md for a spike) and re-checked by trace_check (phantomAffects,
+// warnings) and doctor. A later entry's _Supersedes: D-n_ retires D-n: the brief and doctor's decision-affects-approved skip
+// it, the catalog marks it. Readers: spec_task_brief (entries citing the task's ACs / T-IDs, bounded), spec_finish's merge
+// summary, spec_export, spec_catalog, spec_doctor, trace_check. HTML comments and fenced code never hold an entry.
+const DECISIONS_FILE = "decisions.md";
+const DECISION_TITLE_MAX = 200;
+const DECISION_TEXT_MAX = 20000;
+// A "## D-3 — Title" heading → [line, hashes, number, title] | null — what
+// /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/ matched; the title is read by a scan (the lazy title
+// before [ \t]*$ was quadratic on a long blank run — 1.17 H).
+const RE_DECISION_HEAD_START = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)/;
+const isBlankUnit = (c) => c === " " || c === "\t";
+function decisionHead(line) {
+  const h = RE_DECISION_HEAD_START.exec(line);
+  if (!h) return null;
+  let i = h[0].length;
+  while (i < line.length && isBlankUnit(line[i])) i++;
+  if (i < line.length && "—–:-".includes(line[i])) {
+    while (i < line.length && "—–:-".includes(line[i])) i++;
+    while (i < line.length && isBlankUnit(line[i])) i++;
+  }
+  const title = stripEnd(line.slice(i), isBlankUnit);
+  return RE_LINE_TERMINATOR.test(title) ? null : [line, h[1], h[2], title];
+}
+// s.replace(/[ \t]+#+$/, "") — a closing "##" sequence led by blanks.
+function stripClosingHashes(s) {
+  let h0 = s.length;
+  while (h0 > 0 && s[h0 - 1] === "#") h0--;
+  let w0 = h0;
+  while (w0 > 0 && isBlankUnit(s[w0 - 1])) w0--;
+  return h0 < s.length && w0 < h0 ? s.slice(0, w0) : s;
+}
+// A whole-line `_Label: value_` marker (a list item too) → { label, value } | null — what
+// /^\s*(?:[-*+]\s+)?_(Label…):[ \t]*(.*)_\s*$/i matched ($1, $2): `head` reads up to the colon, the value is scanned (the
+// pattern's [ \t]*(.*)_ backtracked quadratically on a value with a long blank run and no closing "_" — 1.17 H).
+function underscoreMarkerLine(line, head) {
+  const h = head.exec(line);
+  if (!h) return null;
+  let a = h[0].length;
+  while (a < line.length && isBlankUnit(line[a])) a++;
+  const u = stripEnd(line, isWsUnit).length - 1; // the closing "_": the last unit before trailing whitespace
+  if (u < a || line[u] !== "_") return null;
+  const value = line.slice(a, u);
+  return RE_LINE_TERMINATOR.test(value) ? null : { label: h[1], value };
+}
+const RE_DECISION_MARKER_HEAD = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):/i;
+const decisionMarker = (line) => underscoreMarkerLine(line, RE_DECISION_MARKER_HEAD);
+const DECISION_LABELS = {
+  context: ["context", "contexto"],
+  decision: ["decision", "decisão", "decisao", "decisión", "discovery", "descoberta", "descubrimiento"],
+  consequences: ["consequences", "consequências", "consequencias", "consecuencias"],
+};
+const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LABELS).flat().join("|") + "):\\*\\*[ \\t]*(.*)$", "iu");
+const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
+const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
+const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
+// HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans (1.17 H).
+const blankHtmlComments = (s) => replaceHtmlCommentSpans(String(s || ""), (m) => m.replace(/[^\n]/g, ""));
+const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean);
+const normDecisionId = (s) => { const m = String(s || "").trim().match(/^D-(\d{1,6})$/i); return m ? "D-" + parseInt(m[1], 10) : null; };
+function decisionLabelKey(label) {
+  const l = String(label).toLowerCase();
+  return Object.keys(DECISION_LABELS).find((k) => DECISION_LABELS[k].includes(l)) || "decision";
+}
+
+// decisions.md → [{ id, n, title, line, kind, date (the marker's text), at (ms | null), affects: [ref], supersedes: [D-n],
+// context, decision, consequences }] in file order. An entry runs to the next heading of its level or above.
+function decisionLog(text) {
+  const lines = blankHtmlComments(String(text || "").replace(RE_LEADING_BOM, "")).split(/\r?\n/);
+  const entries = [];
+  const fst = { fence: null };
+  let cur = null;
+  let seg = "body";
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (fenceStep(fst, line)) { if (cur) cur.parts[seg].push(line); continue; }
+    const h = decisionHead(line);
+    if (h) {
+      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: stripClosingHashes(h[3]).trim(),
+        kind: "decision", date: null, affects: [], supersedes: [], parts: { body: [], context: [], decision: [], consequences: [] } };
+      entries.push(cur);
+      seg = "body";
+      seen.clear();
+      continue;
+    }
+    const hl = line.match(/^(#{1,6})\s/);
+    if (hl) {
+      if (cur && hl[1].length <= cur.level) cur = null;
+      else if (cur) cur.parts[seg].push(line);
+      continue;
+    }
+    if (!cur) continue;
+    const mk = seg === "body" ? decisionMarker(line) : null;
+    if (mk) {
+      const key = mk.label.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        const v = mk.value.trim();
+        if (key === "kind") cur.kind = /^discovery$/i.test(v.replace(/`/g, "").trim()) ? "discovery" : "decision";
+        else if (key === "date") cur.date = v.replace(/`/g, "").trim();
+        else cur[key] = splitRefs(v);
+      }
+      continue;
+    }
+    const lb = line.match(RE_DECISION_LABEL);
+    if (lb) { seg = decisionLabelKey(lb[1]); cur.parts[seg].push(lb[2]); continue; }
+    cur.parts[seg].push(line);
+  }
+  const txt = (arr) => arr.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return entries.map(({ parts, level: _l, ...e }) => ({
+    ...e,
+    at: e.date ? timeOf(e.date) : null,
+    supersedes: e.supersedes.map(normDecisionId).filter(Boolean),
+    context: txt(parts.context),
+    decision: txt(parts.decision) || txt(parts.body),
+    consequences: txt(parts.consequences),
+  }));
+}
+// D-n → the later entry that supersedes it.
+function retiredDecisions(log) {
+  const out = new Map();
+  for (const e of log) for (const s of e.supersedes) if (s !== e.id && !out.has(s)) out.set(s, e.id);
+  return out;
+}
+
+// A heading / an _Affects:_ section reference → its comparison keys: the text folded (case, whitespace, emphasis, a trailing
+// ':' / '.') and the same without a leading [Marker] / numbering (headingMatches' RE_HEADING_LEAD) — "Data Model" names
+// "## 3. Data Model", "[SaaS] Observability" and "Observability" name "### [SaaS] Observability".
+function decisionSectionKeys(text) {
+  const base0 = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const base = stripEnd(base0, unitIn(":.")).trim(); // /[:.]+$/
+  const keys = new Set(base ? [base] : []);
+  let t = base;
+  const lead = headingLeadRe(); // + the track packs' markers (1.15)
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, "").trim(); }
+  if (t) keys.add(t);
+  return keys;
+}
+// What an _Affects:_ reference may name in this feature (see the header comment).
+function decisionTargets(dir, kind) {
+  const read = (x) => readIfExists(path.join(dir, x)) || "";
+  const req = read("requirements.md");
+  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : ["design.md"];
+  const sections = new Map(); // key → { title, file }
+  for (const file of files) {
+    const lines = blankHtmlComments(read(file)).split(/\r?\n/);
+    for (const i of headingIndex(lines)) {
+      const m = atxHeading(lines[i], 2, 6, "closing"); // /^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/
+      if (!m || !m.text.trim()) continue;
+      for (const k of decisionSectionKeys(m.text)) if (!sections.has(k)) sections.set(k, { title: m.text.trim(), file });
+    }
+  }
+  return {
+    acs: requirementAcIds(req),
+    secondary: secondaryDefinitions(req).all,
+    tests: new Set([...extractTestIds(planIdText(read("test-plan.md")))].map((id) => tKey(id.slice(2)))),
+    sections,
+  };
+}
+// One reference → { ref (canonical: IDs upper-cased, a section as its heading reads), type: ac | test | secondary | section, ok }.
+function resolveAffect(ref, t) {
+  const r = String(ref || "").trim();
+  let m;
+  if ((m = r.match(/^US-(\d+)\.AC-(\d+)$/i))) { const id = `US-${m[1]}.AC-${m[2]}`; return { ref: id, type: "ac", ok: t.acs.has(id) }; }
+  if ((m = r.match(/^T-(\d+)$/i))) return { ref: "T-" + m[1], type: "test", ok: t.tests.has(tKey(m[1])) };
+  if ((m = r.match(/^(EC|NFR|SC)-(\d+)$/i))) { const p = m[1].toUpperCase(); return { ref: p + "-" + m[2], type: "secondary", ok: t.secondary.has(idKey(p, m[2])) }; }
+  const hit = [...decisionSectionKeys(r)].map((k) => t.sections.get(k)).find(Boolean);
+  return hit ? { ref: hit.title, type: "section", ok: true, file: hit.file } : { ref: r, type: "section", ok: false };
+}
+
+// A line without its trailing spaces / tabs — a scan, not /[ \t]+$/ (quadratic on a long run of blanks inside the line; 1.17 F).
+function trimBlanksEnd(l) {
+  let e = l.length;
+  while (e > 0 && (l[e - 1] === " " || l[e - 1] === "\t")) e--;
+  return e === l.length ? l : l.slice(0, e);
+}
+// User text written into a spec file (a decision's paragraphs, a spike's question): a line that would read as a heading, an
+// entry marker or a label is escaped, an HTML comment opener neutralized, an unclosed code fence closed — nothing a caller
+// writes can hide or fake the entries after it.
+function safeSpecText(s) {
+  const st = { fence: null };
+  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
+    if (fenceStep(st, l)) return l;
+    if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
+    if (decisionMarker(l) || outcomeMarker(l)) return l.replace("_", "\\_");
+    if (RE_DECISION_LABEL.test(l)) return l.replace("**", "\\*\\*");
+    return l;
+  });
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return stripEnds(out.join("\n"), unitIn("\n")); // /^\n+|\n+$/g
+}
+
+// spec_decide input → { title, decision, context, consequences, kind, affects, supersedes } | { error }.
+function decisionInput(input, D) {
+  const o = isObj(input) ? input : {};
+  const str = (k, max, required, errRequired) => {
+    const v = o[k];
+    if (v == null || (typeof v === "string" && !v.trim())) return required ? { error: errRequired } : { value: null };
+    if (typeof v !== "string") return { error: D.badText(k) };
+    if (v.length > max) return { error: D.tooLong(k, max) };
+    return { value: v };
+  };
+  const title = str("title", DECISION_TITLE_MAX * 4, true, D.titleRequired);
+  if (title.error) return title;
+  const t1 = title.value.replace(/\s+/g, " ").trim().replace(/<!--/g, "&lt;!--");
+  if (t1.length > DECISION_TITLE_MAX) return { error: D.tooLong("title", DECISION_TITLE_MAX) };
+  const decision = str("decision", DECISION_TEXT_MAX, true, D.decisionRequired);
+  if (decision.error) return decision;
+  const context = str("context", DECISION_TEXT_MAX, false);
+  if (context.error) return context;
+  const consequences = str("consequences", DECISION_TEXT_MAX, false);
+  if (consequences.error) return consequences;
+  let kind = "decision";
+  if (o.kind != null) {
+    const k = typeof o.kind === "string" ? o.kind.trim().toLowerCase() : null;
+    if (k !== "decision" && k !== "discovery") return { error: D.badKind(JSON.stringify(o.kind)) };
+    kind = k;
+  }
+  const list = (k) => {
+    const v = o[k];
+    if (v == null) return { value: [] };
+    const items = Array.isArray(v) ? v : [v];
+    if (items.some((x) => typeof x !== "string")) return { error: D.badText(k) };
+    return { value: [...new Set(items.flatMap(splitRefs))] };
+  };
+  const affects = list("affects");
+  if (affects.error) return affects;
+  const supersedes = list("supersedes");
+  if (supersedes.error) return supersedes;
+  return { title: t1, decision: decision.value, context: context.value, consequences: consequences.value, kind, affects: affects.value, supersedes: supersedes.value };
+}
+// One entry's lines (no line ends).
+function decisionEntryLines(e, D) {
+  const para = (label, text) => {
+    if (!text) return [];
+    const body = safeSpecText(text);
+    return body ? ["", `**${label}:** ` + body] : [];
+  };
+  return [
+    `## ${e.id} — ${e.title}`,
+    "",
+    `- _Kind: ${e.kind}_`,
+    `- _Date: ${e.at}_`,
+    ...(e.affects.length ? [`- _Affects: ${e.affects.join(", ")}_`] : []),
+    ...(e.supersedes.length ? [`- _Supersedes: ${e.supersedes.join(", ")}_`] : []),
+    ...para(D.labels.context, e.context),
+    ...para(e.kind === "discovery" ? D.labels.discovery : D.labels.decision, e.decision),
+    ...para(D.labels.consequences, e.consequences),
+  ].join("\n").split("\n");
+}
+
+// spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?} / `dev-spec decide`: append one
+// entry to decisions.md (created with its localized header when absent). Under the feature lock (featureLocked).
+function decide(projectDir, name, input) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const D = i18n.msg(lng).decisions;
+  const st = readState(projectDir, slug);
+  if (st.invalid) return { ok: false, error: st.invalid };
+  const kind = st.kind || "feature";
+  const inp = decisionInput(input, D);
+  if (inp.error) return { ok: false, error: inp.error };
+  const file = path.join(dir, DECISIONS_FILE);
+  if (!specsFileContained(projectDir, file)) return { ok: false, error: D.unsafeFile(".specs/" + slug + "/" + DECISIONS_FILE) };
+  const raw = readIfExists(file);
+  const log = decisionLog(raw || "");
+  const known = new Set(log.map((e) => e.id));
+  const sup = inp.supersedes.map((s) => ({ s, id: normDecisionId(s) }));
+  const badSup = sup.filter((x) => !x.id || !known.has(x.id)).map((x) => x.s);
+  if (badSup.length) return { ok: false, unknownSupersedes: badSup, error: D.badSupersedes(badSup.join(", ")) };
+  const targets = decisionTargets(dir, kind);
+  const resolved = inp.affects.map((r) => resolveAffect(r, targets));
+  const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
+  if (unknown.length) return { ok: false, unknownAffects: unknown, error: D.badAffects(unknown.join(", ")) };
+  const n = Math.max(0, ...log.map((e) => e.n)) + 1;
+  const entry = { id: "D-" + n, title: inp.title, kind: inp.kind, at: new Date().toISOString(), affects: [...new Set(resolved.map((r) => r.ref))],
+    supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences };
+  const lines = decisionEntryLines(entry, D);
+  let out;
+  if (raw == null) {
+    const title = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
+    out = D.header(title) + "\n" + lines.join("\n") + "\n";
+  } else {
+    // Append only: the file's bytes stay as they are (BOM, line ends, a missing final newline) — the entry follows its line ends.
+    const eol = /\r\n/.test(raw) ? "\r\n" : "\n";
+    // A code block left open at the end (a snippet pasted by hand) would swallow the entry — every reader skips fenced
+    // lines, so it was written, unreadable, and its number handed out again. Close it first (appended; nothing rewritten).
+    const fst = { fence: null };
+    for (const l of blankHtmlComments(raw.replace(RE_LEADING_BOM, "")).split(/\r?\n/)) fenceStep(fst, l);
+    const closer = fst.fence && !(fst.fence.indent > 0) ? fst.fence.mark : null;
+    const body = closer ? raw + (/\n$/.test(raw) ? "" : eol) + closer + eol : raw;
+    const sep = /(?:^|\n)[ \t]*\r?\n$/.test(body) ? "" : /\n$/.test(body) ? eol : eol + eol;
+    out = body + sep + lines.join(eol) + eol;
+  }
+  writeFileAtomic(file, out);
+  maybeRefreshRoadmap(projectDir); // + SPECS.md once it exists (the catalog lists the decisions)
+  const rel = ".specs/" + slug + "/" + DECISIONS_FILE;
+  return { ok: true, feature: slug, id: entry.id, n, kind: entry.kind, title: entry.title, affects: entry.affects, supersedes: entry.supersedes, at: entry.at,
+    file: rel, created: raw == null, message: D.recorded(entry.id, D.kinds[entry.kind] || entry.kind, rel) };
+}
+
+// trace_check's part: every _Affects:_ reference that names nothing in the feature now — warnings, never a gap.
+function decisionsTrace(dir, kind) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return { phantomAffects: [] };
+  const t = decisionTargets(dir, kind);
+  const out = [];
+  for (const e of decisionLog(raw)) for (const r of e.affects) if (!resolveAffect(r, t).ok) out.push({ decision: e.id, ref: r, line: e.line });
+  return { phantomAffects: out };
+}
+TRACE_INFO_FIELDS.add("phantomAffects"); // informational, so traceGaps never lists them as gaps
+// Localized "⚠" lines for a trace_check result's phantom _Affects:_ references (CLI).
+function affectsWarnings(tr, lang) {
+  const D = i18n.msg(lang).decisions;
+  return (tr && Array.isArray(tr.phantomAffects) ? tr.phantomAffects : []).map((p) => D.phantom(p.decision, p.ref));
+}
+
+// Doctor (warns): `decision-affects` — phantom _Affects:_ references; `decision-affects-approved` — a current decision recorded
+// AFTER the approval of requirements.md (it names its AC / EC / NFR / SC IDs) or of the design (its sections; a bugfix's
+// design approval signs off bug.md) — the approved spec may no longer say what was decided: re-review (spec_impact), re-approve.
+function decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return [];
+  const D = i18n.msg(lng).decisions;
+  const out = [];
+  const phantom = tr && Array.isArray(tr.phantomAffects) ? tr.phantomAffects : decisionsTrace(dir, kind).phantomAffects;
+  if (phantom.length) out.push({ id: "decision-affects", status: "warn", detail: D.phantomDoctor(phantom.map((p) => p.decision + " → " + p.ref).join(", ")) });
+  if (kind === "spike") return out;
+  const log = decisionLog(raw);
+  const retired = retiredDecisions(log);
+  const t = decisionTargets(dir, kind);
+  const approvals = isObj(state && state.approvals) ? state.approvals : {};
+  const approvedAt = (ph) => (isRecord(approvals[ph]) ? timeOf(approvals[ph].at) : null);
+  const rq = approvedAt("requirements");
+  const ds = approvedAt("design");
+  const hits = [];
+  const phases = [];
+  for (const e of log) {
+    if (retired.has(e.id) || e.at == null) continue;
+    const res = e.affects.map((r) => resolveAffect(r, t)).filter((r) => r.ok);
+    const reqRefs = res.filter((r) => r.type === "ac" || r.type === "secondary").map((r) => r.ref);
+    const desRefs = res.filter((r) => r.type === "section").map((r) => r.ref);
+    if (reqRefs.length && rq != null && e.at > rq) {
+      hits.push(D.affectsApprovedEntry(e.id, reqRefs.join(", "), "requirements.md", day(new Date(rq).toISOString())));
+      if (!phases.includes("requirements")) phases.push("requirements");
+    }
+    if (desRefs.length && ds != null && e.at > ds) {
+      hits.push(D.affectsApprovedEntry(e.id, desRefs.join(", "), phaseFile("design", kind), day(new Date(ds).toISOString())));
+      if (!phases.includes("design")) phases.push("design");
+    }
+  }
+  if (hits.length) out.push({ id: "decision-affects-approved", status: "warn", detail: D.affectsApproved(hits.join("; "), slug, phases.join(" | ")) });
+  return out;
+}
+
+// spec_task_brief: the current entries citing the task's AC IDs, T-IDs (T-3 = T-03) or EC / NFR / SC IDs — at most
+// BRIEF_DECISIONS_MAX, within BRIEF_DECISIONS_CHARS (the most recent kept first), shown in log order; the rest named.
+function briefDecisions(dir, acIds, testIds, blockText) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return { items: [], omitted: [] };
+  const log = decisionLog(raw);
+  const retired = retiredDecisions(log);
+  const acs = new Set(acIds);
+  const tests = new Set(testIds.map((id) => tKey(id.slice(2))));
+  const sec = secondaryIds(blockText);
+  const cites = (r) => {
+    if (acs.has(r)) return true;
+    let m;
+    if ((m = r.match(/^T-(\d+)$/i))) return tests.has(tKey(m[1]));
+    if ((m = r.match(/^(EC|NFR|SC)-(\d+)$/i))) return sec.has(idKey(m[1].toUpperCase(), m[2]));
+    return false;
+  };
+  const hits = log.filter((e) => !retired.has(e.id) && e.affects.some(cites));
+  const kept = [];
+  let budget = BRIEF_DECISIONS_CHARS;
+  for (const e of hits.slice().reverse()) {
+    const text = oneLiner(e.decision, 400) || "";
+    const cost = e.title.length + text.length;
+    if (kept.length >= BRIEF_DECISIONS_MAX || cost > budget) continue;
+    budget -= cost;
+    kept.push({ id: e.id, n: e.n, title: e.title, kind: e.kind, affects: e.affects, supersedes: e.supersedes, text });
+  }
+  kept.sort((a, b) => a.n - b.n);
+  const ids = new Set(kept.map((k) => k.id));
+  return { items: kept.map(({ n: _n, ...k }) => k), omitted: hits.filter((e) => !ids.has(e.id)).map((e) => e.id) };
+}
+
+// spec_finish's merge summary: "## Decisions" + one line per entry (superseded ones struck through), or [] without a log.
+function decisionSummaryLines(dir, lang) {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return [];
+  const log = decisionLog(raw);
+  if (!log.length) return [];
+  const D = i18n.msg(lang).decisions;
+  const retired = retiredDecisions(log);
+  return [D.prHeading, ...log.map((e) => {
+    const head = `**${e.id}** — ${e.title}`;
+    const meta = [D.kinds[e.kind] || e.kind, e.affects.join(", "), e.supersedes.length ? D.supersedesNote(e.supersedes.join(", ")) : ""].filter(Boolean).join(" · ");
+    const text = oneLiner(e.decision, 300);
+    return retired.has(e.id) ? `- ~~${head}~~ _(${D.superseded}: ${retired.get(e.id)})_` : `- ${head} _(${meta})_` + (text ? ": " + text : "");
+  })];
+}
+// spec_catalog: { count, items: [{ id, title, kind, superseded? }] }.
+function catalogDecisions(dir) {
+  const log = decisionLog(readIfExists(path.join(dir, DECISIONS_FILE)) || "");
+  const retired = retiredDecisions(log);
+  return { count: log.length, items: log.map((e) => Object.assign({ id: e.id, title: e.title, kind: e.kind }, retired.has(e.id) ? { supersededBy: retired.get(e.id) } : {})) };
+}
+
+// ---------------------------------------------------------------------------
+// The spike kind — spec_create {kind: "spike"} / `dev-spec spike "<name>" [--question …] [--timebox …]`
+// ---------------------------------------------------------------------------
+// An investigation with a question, a timebox and a DECISION — neither an unrecorded vibe session nor a spec with fake ACs.
+// It scaffolds spike.md (Question · Timebox · Options considered · Evidence · Decision + _Outcome: go | no-go | pivot_ ·
+// Follow-up — localized headings, matched by the synonyms below) and a small tasks.md of investigation steps; it is
+// core-only and has no requirements / design / test / tasks gates (gateWalk, pendingGateList and chainArtifacts are empty
+// for it; approve refuses every phase but the execution sign-off; add_track refuses it). Its own doctor (spikeDoctor:
+// question, decision — fail until written —, timebox — warn once its end date passed with no decision), next_action
+// (spikeNextAction: fill the question → investigate → record the decision → go: spec the real feature, seeded from the
+// question + decision, and archive the spike · no-go: archive it with its reason · pivot: a new spike) and finish
+// (spikeFinish: ready once the decision is written and every task ticked — no suite / evidence gates). detectPhase:
+// requirements (question unwritten) → tasks-ready → executing → complete (decision written and every task ticked).
+// Prototype code lives OUTSIDE .specs/. The changelog never lists a spike (it ships nothing).
+const SPIKE_FILE = "spike.md";
+const SPIKE_SYN = {
+  question: ["question", "pergunta", "pregunta"],
+  timebox: ["timebox", "prazo", "plazo"],
+  options: ["options considered", "opções consideradas", "opcoes consideradas", "opciones consideradas", "options", "opções", "opcoes", "opciones"],
+  evidence: ["evidence", "evidência", "evidencia"],
+  decision: ["decision", "decisão", "decisao", "decisión"],
+  followUp: ["follow-up", "follow up", "seguimento", "seguimiento"],
+};
+// /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i ($1 = value), scanned (underscoreMarkerLine — 1.17 H).
+const RE_OUTCOME_HEAD = /^\s*(?:[-*+]\s+)?_Outcome:/i;
+const outcomeMarker = (line) => underscoreMarkerLine(line, RE_OUTCOME_HEAD);
+// _Outcome:_ values (English-stable go | no-go | pivot; the PT / ES words and yes / no read too).
+const OUTCOME_SYN = {
+  go: ["go", "yes", "sim", "sí", "si", "avançar", "avancar", "avanzar", "seguir"],
+  "no-go": ["no-go", "no go", "nogo", "no", "não", "nao", "não avançar", "nao avancar", "no avanzar", "no seguir", "drop", "abandonar"],
+  pivot: ["pivot", "pivotar", "pivotear", "mudar de rumo", "cambiar de rumbo"],
+};
+function normOutcome(v) {
+  const s = stripEnd(String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase(), unitIn(".!")); // /[.!]+$/
+  if (!s || s.includes("|")) return null;
+  return Object.keys(OUTCOME_SYN).find((k) => OUTCOME_SYN[k].includes(s)) || null;
+}
+// A spike.md section's own prose: comments out, the TODO sentinel and the _Outcome:_ line set aside.
+function spikeProse(body) {
+  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !outcomeMarker(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
+}
+// Written = present, no `> **TODO**` sentinel, and some prose outside [bracketed slots] (the _Outcome:_ line alone is no rationale).
+function spikeFilled(body) {
+  return body != null && !RE_TODO_SENTINEL.test(stripHtmlComments(body)) && hasProseOutsideBrackets(spikeProse(body));
+}
+// The Decision section's outcome: its _Outcome: …_ line, else a first line that opens with go / no-go / pivot.
+function spikeOutcome(body) {
+  if (body == null) return null;
+  const lines = stripHtmlComments(body).split(/\r?\n/);
+  const mk = lines.map((l) => outcomeMarker(l)).find(Boolean);
+  const marked = mk ? normOutcome(mk.value) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
+  if (marked) return marked;
+  const first = spikeProse(body).split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "";
+  const m = first.match(/^(?:[-*+>]\s*)*(?:\*\*|__)?(no-go|no go|nogo|go|pivot|não avançar|nao avancar|no avanzar|avançar|avancar|avanzar|pivotar|pivotear)(?![\p{L}\p{N}-])/iu);
+  return m ? normOutcome(m[1]) : null;
+}
+// The first paragraph of a section's prose, one line (null when it is only [slots]).
+function spikeParagraph(body, max) {
+  const para = [];
+  for (const l of spikeProse(body).split(/\r?\n/).map((x) => x.trim())) {
+    if (!l) { if (para.length) break; continue; }
+    para.push(l);
+  }
+  const t = para.join(" ");
+  return t && hasProseOutsideBrackets(t) ? oneLiner(t, max || 300) : null;
+}
+const validIsoDay = (s) => { const d = new Date(s + "T00:00:00Z"); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; };
+// The Timebox section → { state: missing | unset (TODO / empty) | date | nodate, date? } — the first real YYYY-MM-DD in it.
+function spikeTimebox(body) {
+  if (body == null) return { state: "missing" };
+  const t = stripHtmlComments(body);
+  if (RE_TODO_SENTINEL.test(t) || !t.trim()) return { state: "unset" };
+  for (const m of t.matchAll(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g)) if (validIsoDay(m[0])) return { state: "date", date: m[0] };
+  return { state: "nodate" };
+}
+const todayIso = () => new Date().toISOString().slice(0, 10);
+// Everything the spike tools read from spike.md.
+function spikeInfo(dir) {
+  const text = readIfExists(path.join(dir, SPIKE_FILE));
+  if (text == null) return { text: null, questionFilled: false, decisionFilled: false, outcome: null, question: null, rationale: null, timebox: { state: "missing" } };
+  const q = extractSection(text, SPIKE_SYN.question);
+  const d = extractSection(text, SPIKE_SYN.decision);
+  const tb = spikeTimebox(extractSection(text, SPIKE_SYN.timebox));
+  const decisionFilled = spikeFilled(d);
+  return { text, questionFilled: spikeFilled(q), decisionFilled, outcome: decisionFilled ? spikeOutcome(d) : null, question: spikeFilled(q) ? spikeParagraph(q) : null,
+    rationale: decisionFilled ? spikeParagraph(d) : null, timebox: tb, timeboxPassed: !decisionFilled && tb.state === "date" && tb.date < todayIso() ? tb.date : null };
+}
+const isSpikeDir = (dir) => (readJson(statePath(dir)).data || {}).kind === "spike";
+// detectPhase for a spike (tasks: parseTasks of its tasks.md).
+function spikePhase(dir, tasks) {
+  const s = spikeInfo(dir);
+  const allDone = tasks.length > 0 && tasks.every((t) => t.done);
+  if (s.decisionFilled && (allDone || !tasks.length)) return "complete";
+  if (s.decisionFilled || tasks.some((t) => t.done)) return "executing";
+  return s.questionFilled ? "tasks-ready" : "requirements";
+}
+// spec_create's spike inputs → { question, until, raw } | { error }. timebox: an end date (YYYY-MM-DD) or a duration from
+// today (3d, 2w, 8h — days / weeks / hours; dias / semanas / horas / días read too).
+function spikeCreateInput(opts, M) {
+  const SP = M.spike;
+  const A = M.args;
+  const out = { question: null, until: null, raw: null };
+  const q = opts.question;
+  if (q != null && typeof q !== "string") return { error: A.invalid(A.item("question", A.type.string, JSON.stringify(q))) };
+  if (typeof q === "string" && q.trim()) {
+    if (q.length > DECISION_TEXT_MAX) return { error: M.decisions.tooLong("question", DECISION_TEXT_MAX) };
+    out.question = safeSpecText(q.trim());
+  }
+  const v = opts.timebox;
+  if (v == null || (typeof v === "string" && !v.trim())) return out;
+  if (typeof v !== "string") return { error: SP.badTimebox(JSON.stringify(v)) };
+  const s = v.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return validIsoDay(s) ? { ...out, until: s, raw: s } : { error: SP.badTimebox(JSON.stringify(s)) };
+  const m = s.match(/^(\d{1,3})\s*(h|hours?|horas?|d|days?|dias?|días?|w|weeks?|semanas?)$/i);
+  if (!m) return { error: SP.badTimebox(JSON.stringify(s)) };
+  const u = m[2][0].toLowerCase();
+  const ms = u === "h" ? 3600e3 : u === "w" || u === "s" ? 7 * 864e5 : 864e5;
+  return { ...out, until: new Date(Date.now() + parseInt(m[1], 10) * ms).toISOString().slice(0, 10), raw: s };
+}
+// The go seed: the spike's name without its "spike" words, and a summary from its question + decision.
+function spikeSeed(slug, s) {
+  const name = slug.split("-").filter((w) => !/^(spike|spikes|investigate|investigation|investigacao|investigacion|investigar|poc)$/.test(w)).join("-") || slug;
+  const summary = oneLiner([s.question, s.rationale].filter(Boolean).join(" — "), 240) || slug;
+  return { name, summary, archiveFirst: name === slug };
+}
+
+function spikeDoctor(projectDir, f) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const SP = i18n.msg(lng).spike;
+  const tracks = detectTracks(dir);
+  const st = readState(projectDir, slug);
+  const s = spikeInfo(dir);
+  const checks = [];
+  const add = (id, status, detail) => checks.push({ id, status, detail });
+  if (s.text == null) add("spike", "fail", SP.doctor.missing);
+  else {
+    add("question", s.questionFilled ? "pass" : "fail", s.questionFilled ? SP.doctor.questionOk : SP.doctor.questionMissing);
+    add("decision", !s.decisionFilled ? "fail" : s.outcome ? "pass" : "warn", !s.decisionFilled ? SP.doctor.decisionMissing : s.outcome ? SP.doctor.decisionOk(s.outcome) : SP.doctor.outcomeMissing);
+    const tb = s.timebox;
+    if (s.decisionFilled) add("timebox", "pass", SP.doctor.timeboxDecided);
+    else if (tb.state === "date") add("timebox", s.timeboxPassed ? "warn" : "pass", s.timeboxPassed ? SP.doctor.timeboxPassed(tb.date) : SP.doctor.timeboxOk(tb.date));
+    else add("timebox", "warn", tb.state === "nodate" ? SP.doctor.timeboxNoDate : SP.doctor.timeboxUnset);
+  }
+  const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
+  if (dupTasks.length) add("duplicate-tasks", "warn", i18n.msg(lng).evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
+  if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
+  for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
+  const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
+  if (wExp) add(wExp.id, wExp.status, wExp.detail);
+  const fails = checks.filter((c) => c.status === "fail");
+  const warns = checks.filter((c) => c.status === "warn");
+  return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
+    nextGate: null, gatesOk: true, checks, summary: { pass: checks.length - fails.length - warns.length, warn: warns.length, fail: fails.length },
+    readyToAdvance: fails.length === 0, verdict: fails.length ? "fail" : warns.length ? "warn" : "pass" };
+}
+
+function spikeNextAction(projectDir, f, opts = {}) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const N = i18n.msg(lng).spike.next;
+  const tracks = detectTracks(dir);
+  const doc = opts.doctor && opts.doctor.ok ? opts.doctor : spikeDoctor(projectDir, f);
+  const s = spikeInfo(dir);
+  const spikeBlocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks) || "");
+  const sch = taskSchedule(spikeBlocks); // 1.14 F3: next_task's rule (_Depends:_ all done)
+  const next = sch.next;
+  const late = s.timeboxPassed ? " " + N.timeboxPassed(s.timeboxPassed) : "";
+  const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), verdict: doc.verdict, gatesOk: true, pendingGates: [], changedSinceApproval: [] };
+  if (s.text == null) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.missing(slug) });
+  else if (!s.questionFilled) Object.assign(res, { step: "fill", file: SPIKE_FILE, recommendation: N.fillQuestion(slug) });
+  else if (next) Object.assign(res, { step: "implement", recommendation: N.investigate(next.number, cleanTaskText(next.text), slug) + late });
+  else if (spikeBlocks.some((b) => !b.done)) Object.assign(res, { step: "fix", blocked: sch.blocked.length ? sch.blocked : sch.skipped, recommendation: taskDepsBlockedNote(sch, slug, lng) });
+  else if (!s.decisionFilled) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.decide(slug) + late });
+  else if (!s.outcome) Object.assign(res, { step: "decide", file: SPIKE_FILE, recommendation: N.outcome(slug) });
+  else if (s.outcome === "go") {
+    const seed = spikeSeed(slug, s);
+    Object.assign(res, { step: "promote", outcome: "go", seed: { name: seed.name, summary: seed.summary },
+      recommendation: (seed.archiveFirst ? N.goArchiveFirst : N.goCreateFirst)(slug, seed.name, seed.summary) });
+  } else {
+    const why = s.rationale ? stripEnd(s.rationale, wsOrUnitIn(".;:!…")) : null; // /[\s.;:!…]+$/ — the message ends the sentence itself
+    if (s.outcome === "no-go") Object.assign(res, { step: "archive", outcome: "no-go", recommendation: N.noGo(slug, why) });
+    else Object.assign(res, { step: "pivot", outcome: "pivot", recommendation: N.pivot(slug, why) });
+  }
+  return res;
+}
+
+// spec_finish on a spike (after spec_finish {evidence} was recorded, if any): ready once the decision is written and every
+// task is ticked — no suite / evidence / approval gates. opts.gateOnly: the execution sign-off's checks.
+function spikeFinish(projectDir, f, opts, recordedChecks) {
+  const { slug, dir } = f;
+  const lng = featureLang(projectDir, slug);
+  const M = i18n.msg(lng);
+  const F = M.finish;
+  const SP = M.spike;
+  const tracks = detectTracks(dir);
+  const s = spikeInfo(dir);
+  const tasksText = activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks);
+  const blocks = taskBlocks(tasksText);
+  const open = blocks.filter((b) => !b.done).map((b) => b.number);
+  const blocked = [];
+  const block = (id, detail) => blocked.push({ id, detail });
+  if (s.text == null) block("spike", SP.finish.missing);
+  else if (!s.decisionFilled) block("decision", SP.finish.decisionBlocker);
+  if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
+  if (opts.gateOnly) return { ok: true, checks: blocked };
+  const blockers = blocked.map((b) => b.detail);
+  const text = s.text || "";
+  const sec = (syn) => { const b = extractSection(text, syn); return b == null ? null : spikeFilled(b) ? spikeProse(b).trim() : null; };
+  const mergeTitle = `docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — ${shortTitle(s.question || slug)}`;
+  const body = [SP.finish.prQuestion, s.question || slug, ""];
+  const decision = sec(SPIKE_SYN.decision);
+  if (decision) body.push(SP.finish.prDecision(s.outcome), decision, "");
+  for (const [syn, h] of [[SPIKE_SYN.options, SP.finish.prOptions], [SPIKE_SYN.evidence, SP.finish.prEvidence], [SPIKE_SYN.followUp, SP.finish.prFollowUp]]) {
+    const t = sec(syn);
+    if (t) body.push(h, t, "");
+  }
+  const dec = decisionSummaryLines(dir, lng);
+  if (dec.length) body.push(...dec, "");
+  if (blocks.length) body.push(F.prTasks, ...blocks.map((b) => `- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}`), "");
+  const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // 1.16 U3: a forced execution sign-off
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
+  body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
+  body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
+  const mergeSummary = body.join("\n") + "\n";
+  const exDir = path.join(dir, ".execution");
+  const summaryPath = path.join(exDir, "merge-summary.md");
+  const write = !!opts.write;
+  if (write) {
+    ensureDir(exDir);
+    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
+    forgetCached(summaryPath);
+    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+  }
+  const ready = blockers.length === 0;
+  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)
+  const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), readyToFinish: ready, message: ready ? SP.finish.ready(slug) : SP.finish.notReady(slug),
+    blockers, warnings: [], openTasks: open, unverified: [], pendingGates: [], changedSinceApproval: [], placeholders: [], checks: SP.finish.checks.slice(),
+    outcome: s.outcome, mergeTitle, paths: { summary: summaryPath }, wrote: write };
+  if (baseline) res.baseline = baseline;
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3
+  if (recordedChecks) res.recordedChecks = recordedChecks;
+  if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
+  return res;
+}
+
+module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
+  decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
+  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs,
+  normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
+  trimBlanksEnd, safeSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
+  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
+  outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
+  spikeTimebox, todayIso, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
+  spikeFinish, __link };

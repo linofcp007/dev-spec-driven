@@ -76,6 +76,20 @@ if (!SECTIONS.includes(SECTION)) {
 }
 const S = require("./lib/spec.js");
 const root = path.join(__dirname, "..");
+// Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
+// mcp/lib/engine/ and mcp/lib/i18n/ — the source guards scan them all, never a facade alone. i18n: false leaves the
+// localized text out (i18n.js and mcp/lib/i18n/).
+function libSources({ i18n = true } = {}) {
+  const out = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (i18n || e.name !== "i18n") walk(p); } else if (e.name.endsWith(".js") && (i18n || e.name !== "i18n.js")) out.push(p);
+    }
+  };
+  walk(path.join(__dirname, "lib"));
+  return out;
+}
 // Phase by phase (1.13): a phase is approved only after every earlier pending one. A test exercising ONE phase's gate
 // first records the earlier ones (with force — they may still be templates; doctor keeps them flagged as forced).
 const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
@@ -1528,9 +1542,9 @@ function endRun() {
   ok(S.parseTasks(cmBig).length === 3000, "thousands of inline '<!--' followed by one '-->' are still thousands of tasks");
   // No literal U+FEFF in shipped engine code (the scan_skill hidden-unicode rule): the escape is used instead.
   const BOM = String.fromCharCode(0xfeff);
-  const engineFiles = ["mcp/lib/spec.js", "mcp/lib/i18n.js", "mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
-    .map((f) => path.join(__dirname, "..", f)).filter((f) => fs.existsSync(f));
-  ok(engineFiles.length >= 4 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files");
+  const engineFiles = [...libSources(), ...["mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
+    .map((f) => path.join(__dirname, "..", f))].filter((f) => fs.existsSync(f));
+  ok(engineFiles.length >= 7 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files (every mcp/lib source, its modules included)");
   }
 
   async function sectionWp2() { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
@@ -6519,7 +6533,7 @@ function endRun() {
   // the tasks gate's. (d) CLAUDE.md: the README tool-table test requires every live tool, not "the 23 v1.12 tools".
   const docsWs = (t) => t.replace(/\s+/g, " ");
   const docsSec = (h) => docsWs((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0]);
-  const docsSpecSrc = docsRead("mcp", "lib", "spec.js");
+  const docsSpecSrc = libSources({ i18n: false }).map((f) => fs.readFileSync(f, "utf8")).join("\n"); // the engine's sources (1.18: spec.js + engine/)
   const docsAttn = [["## English", 'the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason', "Needs attention"],
     ["## Português", 'a linha "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo', "Precisa de atenção"],
     ["## Español", 'la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su motivo', "Necesita atención"]];
@@ -12773,7 +12787,7 @@ function endRun() {
     const lgt = tl16.find((t) => t.name === "spec_log") || {};
     ok(js(stc.inputSchema && stc.inputSchema.required) === '["message"]' && js(lgt.inputSchema && lgt.inputSchema.required) === '["name","gitLog"]' &&
       lgt.inputSchema.properties.max.type === "integer" && lgt.inputSchema.properties.max.minimum === 1 && !/\n/.test(stc.description + lgt.description) &&
-      /NEVER RUNS GIT/.test(lgt.description) && !/child_process/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")) && !/child_process/.test(fs.readFileSync(specJs, "utf8")),
+      /NEVER RUNS GIT/.test(lgt.description) && !/child_process/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")) && libSources().every((f) => !/child_process/.test(fs.readFileSync(f, "utf8"))),
       "1.16 U4: tools/list advertises spec_stop_check {message, agent?} and spec_log {name, gitLog, max?} (single-line descriptions); neither server.js nor the engine loads child_process (got " + js([stc.inputSchema, lgt.inputSchema]) + ")");
     const p12 = uDir("stop");
     S.initProject(p12, ["core"], "en");
@@ -15770,7 +15784,7 @@ function endRun() {
   // the BMAD importer — it matched only the exact "status:" form). A class letter quantified right after an anchor, a group
   // opener or an alternation, with no backslash, is the tell.
   {
-    const srcFiles = ["mcp/lib/spec.js", "mcp/lib/i18n.js", "mcp/lib/prompts-resources.js", "mcp/server.js", "cli/dev-spec.js",
+    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js",
       "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
       "hooks/plan-hook.js", "hooks/precommit-check.js"].filter((f) => fs.existsSync(path.join(root, f)));
     const lit = /(^|[=(,:!&|?;{}\s])\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/([dgimsuvy]*)/gm;
@@ -15788,6 +15802,24 @@ function endRun() {
     }
     ok(srcFiles.length >= 10 && bad.length === 0,
       "1.17: no regex literal in the engine, server, CLI or hooks looks backslash-stripped (got " + JSON.stringify(bad) + ")");
+  }
+
+  // 1.18: the engine as modules — mcp/lib/spec.js and i18n.js are facades over mcp/lib/engine/ and mcp/lib/i18n/. Every
+  // engine module is loaded (listed in engine/index.js MODULES: a module left out would leave its names undefined behind
+  // __link), and every mcp/lib source stays zero-dependency: Node core (fs, path, os, crypto) or a relative file.
+  {
+    const engDir = path.join(__dirname, "lib", "engine");
+    const idxSrc = fs.existsSync(path.join(engDir, "index.js")) ? fs.readFileSync(path.join(engDir, "index.js"), "utf8") : "";
+    const listed = [...((idxSrc.match(/const MODULES = \[([\s\S]*?)\];/) || ["", ""])[1]).matchAll(/"\.\/([^"]+)"/g)].map((m) => m[1]).sort();
+    const onDisk = libSources().map((f) => path.relative(engDir, f).split(path.sep).join("/"))
+      .filter((f) => !f.startsWith("..") && f !== "index.js" && f !== "ctx.js").sort();
+    const core = new Set(["fs", "path", "os", "crypto"]);
+    const badReq = [];
+    for (const f of libSources()) for (const m of fs.readFileSync(f, "utf8").matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g))
+      if (!core.has(m[2].replace(/^node:/, "")) && !/^\.\.?\//.test(m[2])) badReq.push(path.relative(root, f) + ": " + m[2]);
+    ok(listed.length > 0 && JSON.stringify(listed) === JSON.stringify(onDisk) && badReq.length === 0 && typeof S.withReadCache === "function",
+      "1.18: every engine module is listed in engine/index.js MODULES (and only those), and every mcp/lib source requires Node core or a relative file only (got " +
+      JSON.stringify([listed.length, onDisk.filter((f) => !listed.includes(f)), listed.filter((f) => !onDisk.includes(f)), badReq]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

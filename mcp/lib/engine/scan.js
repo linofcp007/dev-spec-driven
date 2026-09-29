@@ -1,0 +1,676 @@
+"use strict";
+
+/**
+ * dev-spec-driven engine — brownfield scan and coverage.
+ * The heuristic, bounded, read-only codebase scan (routes, env, migrations, entrypoints) and spec_coverage.
+ *
+ * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
+ */
+const fs = require("fs");
+const path = require("path");
+const i18n = require("../i18n.js");
+const { TEST_EXTRA_EXT } = require("./trace.js"); // load time
+// Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
+let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit, listFeatures,
+  projectLang, readDirCached, readIfExists, safeReaddir, specsRoot, stripEnd;
+function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit,
+  listFeatures, projectLang, readDirCached, readIfExists, safeReaddir, specsRoot, stripEnd } = E); }
+
+// ---------------------------------------------------------------------------
+// Brownfield: heuristic local codebase scan + spec coverage (no model, no cost)
+// ---------------------------------------------------------------------------
+
+const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
+const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
+// What guard mode treats as code (guardCheck). Broader than CODE_EXT on purpose: CODE_EXT is the brownfield scanner's
+// inventory (scan/coverage percentages), while the guard prompts for source files in a broad list of languages outside
+// .specs/ — reusing CODE_EXT waved .cc/.hpp, .mts/.cts, .sh/.ps1, .sql, Scala, Dart, Elixir… through silently as "not
+// code", and a shorter list still did for Windows batch (.bat/.cmd), .ksh/.fish, Kotlin script, CoffeeScript, CUDA,
+// Fortran, Pascal, assembly, HDLs, shaders, Elm, Tcl, Nix, Crystal and code-bearing templates (.erb, .jsp, .razor…).
+// It is an allow-list: docs, config, data, markup and styles (.md, .json, .yaml, .html, .css…) are never code.
+const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT, ".ipynb",
+  ".mts", ".cts", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".m", ".mm", ".scala", ".sc", ".dart", ".ex", ".exs", ".erl", ".hrl",
+  ".hs", ".clj", ".cljs", ".cljc", ".lua", ".pl", ".pm", ".r", ".jl", ".zig", ".nim", ".groovy", ".fs", ".fsx", ".fsi", ".vb", ".ml", ".mli",
+  ".sol", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".sql",
+  // shells and scripting (Windows batch included — the platform this plugin must stay safe on)
+  ".bat", ".cmd", ".ksh", ".fish", ".csh", ".tcsh", ".awk", ".vbs", ".tcl", ".raku", ".rakumod",
+  // JVM / .NET / web-compiled languages
+  ".kts", ".coffee", ".elm", ".purs", ".re", ".rei", ".hx", ".gleam", ".cr", ".nix", ".vala", ".gd", ".mojo", ".odin", ".pyi", ".pyx",
+  // Lisps and other functional languages
+  ".rkt", ".scm", ".lisp", ".el",
+  // systems, scientific, legacy
+  ".d", ".cu", ".cuh", ".f", ".f90", ".f95", ".f03", ".pas", ".dpr", ".asm", ".s", ".adb", ".ads", ".cob", ".cbl", ".bas", ".ino",
+  // hardware description and shaders
+  ".v", ".sv", ".svh", ".vhd", ".vhdl", ".glsl", ".hlsl", ".wgsl", ".vert", ".frag", ".metal",
+  // templates that carry code (not plain markup)
+  ".astro", ".razor", ".cshtml", ".jsp", ".erb"]);
+const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names, test/entrypoint hints)
+const SCAN_READ_BYTES = 200000;
+const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
+const SCAN_LIST_CAP = 100; // entrypoints / migrations listed (env names: twice that)
+const COVERAGE_CAP = 20000; // files walked by coverage()
+
+// Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
+// out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
+// opts.maxDepth: folder levels below the root to enter (0 = the root's own files); onFile returning WALK_STOP ends the walk.
+// opts.allowDir(name): a hidden / SCAN_IGNORE folder this walk enters anyway (a glob that spells `dist` or `.generated`).
+// Folder listings come from the per-call read cache (readDirCached). `full` is absolute (under path.resolve(root)) and
+// both paths are built by concatenation — path.relative / path.join cost ~15 µs a file on Windows, most of a `**` walk.
+const WALK_STOP = Symbol("walk-stop");
+function walkProject(root, cap, onFile, opts = {}) {
+  let total = 0;
+  const maxDepth = opts.maxDepth == null ? Infinity : opts.maxDepth;
+  const stack = [[path.resolve(root), 0, ""]]; // [absolute folder, depth, its forward-slash path from the root]
+  let stopped = false;
+  while (stack.length && total < cap && !stopped) {
+    const [d, depth, relDir] = stack.pop();
+    const entries = readDirCached(d);
+    if (!entries) continue;
+    const pre = d.endsWith(path.sep) ? d : d + path.sep; // a drive / file-system root already ends in a separator
+    const relPre = relDir ? relDir + "/" : "";
+    const dirs = [];
+    for (const e of entries) {
+      if (total >= cap) break;
+      if (e.isDirectory() && (e.name.startsWith(".") || SCAN_IGNORE.has(e.name))) {
+        if (!(opts.allowDir && opts.allowDir(e.name))) continue; // hidden dirs: VCS, tool caches, worktrees
+      } else if (SCAN_IGNORE.has(e.name)) continue;
+      if (e.isDirectory()) { if (depth < maxDepth) dirs.push(e.name); continue; }
+      if (!e.isFile()) continue;
+      total++;
+      if (onFile(relPre + e.name, pre + e.name, e.name) === WALK_STOP) { stopped = true; break; }
+    }
+    if (!stopped) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i]]);
+  }
+  return { total, truncated: !stopped && total >= cap };
+}
+
+// Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage.
+const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e"]);
+// Only the conventions: foo.test.ts / foo.spec.js, test_x.py / x_test.py / tests.py, x_test.go, x_spec.rb, FooTest(s).java|cs…,
+// FooSpec.kt, test-x.js. A module that merely ends in "spec" (dev-spec.js, lib/spec.js) is code.
+const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py)$|_test\.(?:go|py)$|_spec\.rb$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|Spec\.kt$/;
+function isTestFile(rel) {
+  const parts = rel.split("/");
+  const name = parts.pop();
+  return parts.some((p) => TEST_DIRS.has(p.toLowerCase())) || RE_TEST_NAME.test(name);
+}
+
+// --- routes (method + path + file:line), one matcher set per framework family --------------------------------
+const JS_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const FRONTEND_EXT = new Set([".jsx", ".tsx"]); // `api.get('/users')` there is a client call, not a route
+// Express / Koa router / Fastify / Hono: <owner>.<verb>('/path' — only owners that name a server or router
+// (axios.get('/x') and map.get('k') are not routes), and the path must start with '/' (app.get('env') reads a setting).
+const JS_ROUTE_OWNERS = new Set(["app", "router", "r", "route", "routes", "server", "fastify", "api", "hono", "koa", "instance"]);
+const RE_JS_OWNER_SUFFIX = /(?:Router|Routes|App|Server|router|routes|app|server)$/;
+const RE_JS_ROUTE = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|options|head|all)\s*\(\s*(['"`])(\/[^'"`]*|\*)\3/g;
+const RE_JS_ROUTE_CHAIN = /[\w$)\]]\s*\.\s*route\s*\(\s*(['"`])(\/[^'"`]*)\1\s*\)/; // router.route('/x').get(…).post(…)
+// Prettier puts each argument on its own line when the call head doesn't fit: `router.post(` ends the line and the
+// path opens the next one. Only that leading string literal is joined — the whole call would re-scan the handler
+// body, counting a route declared inside it twice.
+const RE_JS_ROUTE_OPEN = /(?<![\w$.])[A-Za-z_$][\w$]*\s*\.\s*(?:get|post|put|patch|delete|options|head|all)\s*\(\s*$/;
+const RE_JS_LEAD_STRING = /^\s*(['"`])(?:\/[^'"`]*|\*)\1/;
+const RE_JS_CHAIN_VERB = /\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/g;
+const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|koa-router|fastify|hono)(?:\/[^'"]*)?['"]/;
+// HTTP clients: `const api = axios.create(…); api.get('/users')` in a .js/.ts service file is a CALL, not a route.
+// A name assigned from a client factory is never a route owner; in a file that imports a client and no server
+// framework, the owners that name a client as often as a router (JS_GENERIC_OWNERS) don't count either.
+const RE_JS_CLIENT_IMPORT = /(?:require\s*\(\s*|from\s+)['"](axios|ky|ky-universal|got|node-fetch|cross-fetch|isomorphic-fetch|ofetch|redaxios|wretch|superagent|undici|@angular\/common\/http)(?:\/[^'"]*)?['"]/;
+const RE_JS_CLIENT_DEF = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:axios|ky|got|ofetch|wretch|redaxios|superagent)\s*\.\s*(?:create|extend)\s*\(/g;
+const JS_GENERIC_OWNERS = new Set(["api", "instance", "r", "route", "routes", "server"]);
+// `\(\s*(?:X)?\s*\)` read as `\(\s*(?:X\s*)?\)` (same calls): two blank runs meeting around an absent argument backtracked
+// quadratically (1.17 H).
+const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2\s*)?\)/g;
+const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})\s*)?\)/;
+const RE_NEXT_APP = /(?:^|\/)app\/((?:[^/]+\/)*)route\.[cm]?[jt]sx?$/; // Next.js app router: app/**/route.ts
+const RE_NEXT_PAGES = /(?:^|\/)pages\/api\/(.+)\.[cm]?[jt]sx?$/;
+const RE_NEXT_EXPORT = /^\s*export\s+(?:async\s+)?(?:function\s+|const\s+)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/;
+// Flask / FastAPI decorators (@app.route('/x', methods=[…]), @bp.get, @router.post) + APIRouter/Blueprint prefixes.
+const RE_PY_ROUTE = /^\s*@\s*([A-Za-z_]\w*)\.(route|get|post|put|patch|delete|options|head|api_route|websocket)\s*\(\s*(?:(?:path|rule)\s*=\s*)?[rRuUbBfF]{0,2}(['"])([^'"]*)\3(.*)$/;
+const RE_PY_METHODS = /methods\s*=\s*[[(]([^\])]*)[\])]/;
+// Decorator owners that name an app/router (@mock.patch("mod.fn") is not a PATCH route) — plus any name the file
+// assigns from FastAPI()/Flask()/APIRouter()/Blueprint().
+const PY_ROUTE_OWNERS = new Set(["app", "api", "application", "router", "routes", "route", "bp", "blueprint", "web", "server", "admin", "v1", "v2"]);
+const RE_PY_OWNER_SUFFIX = /(?:_app|_api|_router|_routes|_bp|_blueprint|App|Api|Router|Routes|Bp|Blueprint)$/;
+const RE_PY_APP_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:FastAPI|Flask|APIRouter|Blueprint|Quart|Sanic|Starlette)\s*\(/;
+const RE_PY_PREFIX_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:APIRouter|Blueprint)\s*\((.*)$/;
+const RE_PY_PREFIX_ARG = /\b(?:prefix|url_prefix)\s*=\s*[rRuU]?(['"])([^'"]*)\1/;
+const RE_PY_WEB_IMPORT = /^[^\S\n\r\u2028\u2029]*(?:from|import)\s+(fastapi|flask|django)\b/m; // the indent within its line (1.17 H)
+const RE_DJANGO_ROUTE = /(?<![\w.])(?:path|re_path|url)\s*\(\s*[rRuU]?(['"])([^'"]*)\1/g;
+const RE_SPRING = /@(Get|Post|Put|Patch|Delete|Request)Mapping\b(?:\s*\(([^)]*)\))?/g;
+const RE_ASP_ATTR = /\[\s*(?:[\w.]+\s*,\s*)*Http(Get|Post|Put|Patch|Delete|Head|Options)\s*(?:\(\s*(?:template\s*:\s*)?"([^"]*)"[^)]*\))?/g;
+const RE_ASP_ROUTE_ATTR = /\[\s*Route\s*\(\s*"([^"]*)"\s*\)/;
+const RE_ASP_MAP = /\.Map(Get|Post|Put|Patch|Delete)?\s*\(\s*"([^"]*)"/g;
+const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*(?:\(\s*)?(['"])([^'"]+)\2/; // \s*\(?\s* → \s*(?:\(\s*)? (1.17 H)
+const RE_RAILS_RES = /^\s*(resources|resource)\s*(?:\(\s*)?:(\w+)/;
+const RE_LARAVEL = /Route::(get|post|put|patch|delete|options|any|match|resource|apiResource)\s*\(\s*(?:\[[^\]]*\]\s*,\s*)?(['"])([^'"]+)\2/g;
+const RE_LARAVEL_CHAIN = /->\s*(get|post|put|patch|delete|options|any)\s*\(\s*(['"])([^'"]*)\2/g; // routes/*.php only
+const RE_SYMFONY = /#\[\s*Route\s*\(\s*(?:path\s*:\s*)?(['"])([^'"]+)\1(.*)$/; // the rest of the line holds methods: [...]
+const RE_GO_HANDLE = /(?<![\w.])(\w+)\.(?:HandleFunc|Handle)\s*\(\s*"([^"]+)"/g;
+const RE_GO_UPPER = /(?<![\w.])(\w+)\.(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD|Any)\s*\(\s*"(\/[^"]*)"/g; // gin / echo
+const RE_GO_TITLE = /(?<![\w.])(\w+)\.(Get|Post|Put|Patch|Delete|Options|Head)\s*\(\s*"(\/[^"]*)"/g; // chi / fiber
+const GO_CLIENTS = new Set(["http", "client", "httpClient", "resty"]); // http.Get("/x") is a client call
+const RE_SLASH_COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*(?:\s|\/|$))/;
+const RE_HASH_COMMENT_LINE = /^\s*#(?!\[)/;
+// Labels that don't name one framework: kept on the route, never listed under `frameworks`.
+const AMBIGUOUS_FRAMEWORK = new Set(["node", "python", "gin/echo", "chi/fiber"]);
+
+// A call split over several lines (a Black-wrapped `@router.get(\n    "/x",\n)`, a multi-line Spring annotation) joined
+// into one, bounded to SCAN_JOIN_LINES continuation lines. Parens are counted naively: route paths hold none.
+const SCAN_JOIN_LINES = 6;
+function joinOpenCall(lines, i) {
+  const depth = (s) => (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+  let s = lines[i];
+  let d = depth(s);
+  for (let j = i + 1; d > 0 && j <= i + SCAN_JOIN_LINES && j < lines.length; j++) { s += " " + lines[j].trim(); d += depth(lines[j]); }
+  return s;
+}
+
+function normRoutePath(p) {
+  const s = String(p == null ? "" : p).trim();
+  if (!s) return "/";
+  return /^[/^*]/.test(s) ? s : "/" + s; // Django regexes (^…$) and wildcards stay as written
+}
+function joinRoute(prefix, sub) {
+  const a = stripEnd(String(prefix || "").trim(), isSlashUnit); // /\/+$/
+  const b = String(sub || "").trim().replace(/^\/+/, "");
+  return normRoutePath(a ? (b ? a + "/" + b : a) : b);
+}
+function springPaths(args) {
+  if (!args || !args.trim()) return [""];
+  const named = args.match(/\b(?:value|path)\s*=\s*(\{[^}]*\}|\[[^\]]*\]|"[^"]*")/);
+  const lead = args.match(/^\s*(\{[^}]*\}|\[[^\]]*\]|"[^"]*")/);
+  const src = named ? named[1] : lead ? lead[1] : "";
+  const lits = [...src.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+  return lits.length ? lits : [""];
+}
+
+// The routes one (non-test) source file declares: [{ method, path, file, line, framework }].
+function scanRoutes(rel, text) {
+  const out = [];
+  const ext = path.extname(rel).toLowerCase();
+  const base = rel.split("/").pop();
+  // A trailing " // …" comment is dropped too (a URL's "://" has no space before it).
+  const lines = text.split(/\r?\n/).map((l) => (ext === ".py" || ext === ".rb" ? l : l.replace(/\s\/\/\s.*$/, "")));
+  const add = (method, p, i, framework) => out.push({ method: String(method).toUpperCase(), path: normRoutePath(p), file: rel, line: i + 1, framework });
+  const each = (re, line, fn) => { re.lastIndex = 0; let m; while ((m = re.exec(line)) !== null) fn(m); };
+  // A comment line documents a route, it doesn't declare one ("# @app.get('/x')", "// app.get('/x')"); a PHP #[Route] attribute is
+  // code. One huge line is bundled code: nothing to learn, and slow to scan.
+  const hashComments = ext === ".py" || ext === ".rb" || ext === ".php";
+  const skipLine = (l) => l.length > 4000 || RE_SLASH_COMMENT_LINE.test(l) || (hashComments && RE_HASH_COMMENT_LINE.test(l));
+
+  if (JS_EXT.has(ext)) {
+    const app = rel.match(RE_NEXT_APP);
+    if (app) {
+      const route = "/" + app[1].split("/").filter((s) => s && !/^\(.*\)$/.test(s) && !s.startsWith("@")).join("/");
+      lines.forEach((l, i) => { const m = l.match(RE_NEXT_EXPORT); if (m) add(m[1], route, i, "next.js"); });
+    }
+    const pages = rel.match(RE_NEXT_PAGES);
+    if (pages) {
+      const i = lines.findIndex((l) => /^\s*export\s+default\b/.test(l));
+      if (i !== -1) add("ANY", "/api/" + pages[1].replace(/(?:^|\/)index$/, ""), i, "next.js");
+    }
+    const imp = text.match(RE_JS_IMPORT);
+    const jsFw = imp ? ({ "@koa/router": "koa", "koa-router": "koa" }[imp[1]] || imp[1]) : "node";
+    const nest = /@Controller\s*\(|@nestjs\//.test(text);
+    const clientOwners = new Set([...text.matchAll(RE_JS_CLIENT_DEF)].map((m) => m[1]));
+    const clientFile = !imp && !nest && RE_JS_CLIENT_IMPORT.test(text);
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      if (nest) {
+        const c = l.match(RE_NEST_CTRL);
+        if (c) prefix = c[2] != null ? c[2] : c[4] != null ? c[4] : "";
+        each(RE_NEST_ROUTE, l, (m) => add(m[1], joinRoute(prefix, m[3] || ""), i, "nestjs"));
+      }
+      let jl = l;
+      if (RE_JS_ROUTE_OPEN.test(l)) {
+        let j = i + 1;
+        while (j < lines.length && j <= i + SCAN_JOIN_LINES && !lines[j].trim()) j++;
+        const lead = j < lines.length ? lines[j].match(RE_JS_LEAD_STRING) : null;
+        if (lead) jl = l + " " + lead[0].trim(); // reported on the call's line
+      }
+      each(RE_JS_ROUTE, jl, (m) => {
+        if (!JS_ROUTE_OWNERS.has(m[1]) && !RE_JS_OWNER_SUFFIX.test(m[1])) return;
+        if (m[1] === "api" && FRONTEND_EXT.has(ext)) return;
+        if (clientOwners.has(m[1]) || (clientFile && JS_GENERIC_OWNERS.has(m[1]))) return; // an HTTP client's call
+        add(m[2], m[4], i, m[1] === "fastify" ? "fastify" : jsFw);
+      });
+      const ch = l.match(RE_JS_ROUTE_CHAIN);
+      if (ch) {
+        const verbs = [...l.slice(ch.index + ch[0].length).matchAll(RE_JS_CHAIN_VERB)].map((v) => v[1]);
+        for (let j = i + 1; j < Math.min(lines.length, i + 12) && /^\s*\./.test(lines[j]); j++) {
+          const v = lines[j].match(/^\s*\.\s*(get|post|put|patch|delete|options|head|all)\s*\(/);
+          if (v) verbs.push(v[1]);
+        }
+        verbs.forEach((v) => add(v, ch[2], i, jsFw));
+      }
+    });
+  } else if (ext === ".py") {
+    const imp = text.match(RE_PY_WEB_IMPORT);
+    const pyFw = imp && imp[1] !== "django" ? imp[1] : null;
+    const prefixes = new Map();
+    const owners = new Set(lines.map((l) => (l.match(RE_PY_APP_DEF) || [])[1]).filter(Boolean));
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      // `router = APIRouter(\n    prefix="/items",\n    tags=[…],\n)` (Black / FastAPI's own docs) holds its prefix below.
+      const d = (RE_PY_PREFIX_DEF.test(l) ? joinOpenCall(lines, i) : l).match(RE_PY_PREFIX_DEF);
+      if (d) { const pm = d[2].match(RE_PY_PREFIX_ARG); if (pm) prefixes.set(d[1], pm[2]); }
+      // A wrapped decorator is matched on its joined call and reported on the decorator's line.
+      const m = (/^\s*@\s*[A-Za-z_]\w*\.\w+\s*\(/.test(l) ? joinOpenCall(lines, i) : l).match(RE_PY_ROUTE);
+      if (!m) return;
+      const [, owner, verb, , p, rest] = m;
+      if (!owners.has(owner) && !PY_ROUTE_OWNERS.has(owner) && !RE_PY_OWNER_SUFFIX.test(owner)) return;
+      const fw = pyFw || (verb === "route" ? "flask" : "python");
+      const full = joinRoute(prefixes.get(owner) || "", p);
+      if (verb === "route" || verb === "api_route") {
+        const mm = rest.match(RE_PY_METHODS);
+        const methods = mm ? [...mm[1].matchAll(/['"](\w+)['"]/g)].map((x) => x[1]) : [];
+        (methods.length ? methods : [verb === "route" ? "GET" : "ANY"]).forEach((x) => add(x, full, i, fw));
+      } else add(verb === "websocket" ? "WS" : verb, full, i, fw);
+    });
+    if (base === "urls.py" || /from\s+django\.(?:urls|conf\.urls)\s+import/.test(text)) {
+      lines.forEach((l, i) => { if (!skipLine(l)) each(RE_DJANGO_ROUTE, l, (m) => add("ANY", m[2], i, "django")); });
+    }
+  } else if (ext === ".java" || ext === ".kt") {
+    const classLine = lines.findIndex((l) => /\b(?:class|interface)\s+[A-Z]\w*/.test(l));
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_SPRING, /Mapping\s*\(/.test(l) ? joinOpenCall(lines, i) : l, (m) => {
+        const paths = springPaths(m[2]);
+        if (classLine !== -1 && i < classLine) { prefix = paths[0]; return; } // class-level mapping = prefix
+        const methods = m[1] === "Request" ? [...(m[2] || "").matchAll(/RequestMethod\.(\w+)/g)].map((x) => x[1]) : [m[1]];
+        (methods.length ? methods : ["ANY"]).forEach((mt) => paths.forEach((p) => add(mt, joinRoute(prefix, p), i, "spring")));
+      });
+    });
+  } else if (ext === ".cs") {
+    const classLine = lines.findIndex((l) => /\bclass\s+\w+/.test(l));
+    let prefix = "";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      const r = l.match(RE_ASP_ROUTE_ATTR);
+      if (r && (classLine === -1 || i < classLine)) prefix = r[1]; // [Route("api/[controller]")] on the controller
+      each(RE_ASP_ATTR, l, (m) => add(m[1], joinRoute(prefix, m[2] || ""), i, "aspnet"));
+      each(RE_ASP_MAP, l, (m) => add(m[1] || "ANY", m[2], i, "aspnet")); // minimal APIs: app.MapGet("/x", …)
+    });
+  } else if (ext === ".rb") {
+    const rails = /(?:^|\/)routes\.rb$|(?:^|\/)config\/routes\//.test(rel);
+    const sinatra = /require\s+['"]sinatra/.test(text);
+    if (rails || sinatra) {
+      lines.forEach((l, i) => {
+        if (skipLine(l)) return;
+        const v = l.match(RE_RUBY_VERB);
+        if (v) add(v[1] === "match" ? "ANY" : v[1], v[3], i, rails ? "rails" : "sinatra");
+        const res = rails && l.match(RE_RAILS_RES);
+        if (res) add(res[1] === "resources" ? "RESOURCES" : "RESOURCE", res[2], i, "rails");
+      });
+    }
+  } else if (ext === ".php") {
+    const routeFile = /(?:^|\/)routes\//.test(rel);
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_LARAVEL, l, (m) => add(/resource/i.test(m[1]) ? "RESOURCE" : m[1] === "any" || m[1] === "match" ? "ANY" : m[1], m[3], i, "laravel"));
+      if (routeFile) each(RE_LARAVEL_CHAIN, l, (m) => add(m[1] === "any" ? "ANY" : m[1], m[3], i, "laravel"));
+      const sy = l.match(RE_SYMFONY);
+      if (sy) {
+        const mm = sy[3].match(/methods\s*:\s*\[([^\]]*)\]/);
+        const methods = mm ? [...mm[1].matchAll(/['"](\w+)['"]/g)].map((x) => x[1]) : [];
+        (methods.length ? methods : ["ANY"]).forEach((x) => add(x, sy[2], i, "symfony"));
+      }
+    });
+  } else if (ext === ".go") {
+    const fwUpper = /labstack\/echo/.test(text) ? "echo" : /gin-gonic\/gin/.test(text) ? "gin" : "gin/echo";
+    const fwTitle = /gofiber\/fiber/.test(text) ? "fiber" : /go-chi\/chi/.test(text) ? "chi" : "chi/fiber";
+    const fwHandle = /gorilla\/mux/.test(text) ? "gorilla/mux" : "net/http";
+    lines.forEach((l, i) => {
+      if (skipLine(l)) return;
+      each(RE_GO_HANDLE, l, (m) => {
+        const pm = m[2].match(/^([A-Z]+)\s+(\S+)$/); // Go 1.22 patterns: HandleFunc("GET /x", …)
+        add(pm ? pm[1] : (l.match(/\.Methods\(\s*"(\w+)"/) || [])[1] || "ANY", pm ? pm[2] : m[2], i, fwHandle);
+      });
+      each(RE_GO_UPPER, l, (m) => add(m[2] === "Any" ? "ANY" : m[2], m[3], i, fwUpper));
+      each(RE_GO_TITLE, l, (m) => { if (!GO_CLIENTS.has(m[1])) add(m[2], m[3], i, fwTitle); });
+    });
+  }
+  return out;
+}
+
+// Environment variable NAMES the code reads — never a value. `.env` itself is never opened; only example files.
+const RE_ENV_READS = [
+  /process\.env\.([A-Za-z_][A-Za-z0-9_]*)/g,
+  /process\.env\[\s*['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]\s*\]/g,
+  /import\.meta\.env\.([A-Za-z_][A-Za-z0-9_]*)/g,
+  /(?:Deno|Bun)\.env\.get\(\s*['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]/g,
+  /\bos\.environ\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /\b(?:os\.)?environ\.get\(\s*['"]([A-Za-z_]\w*)['"]/g,
+  /\bgetenv\(\s*['"]([A-Za-z_]\w*)['"]/g, // Python os.getenv, PHP / C getenv
+  /\bENV\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /\bENV\.fetch\(\s*['"]([A-Za-z_]\w*)['"]/g,
+  /\bSystem\.getenv\(\s*"([A-Za-z_]\w*)"\s*\)/g,
+  /\bos\.(?:Getenv|LookupEnv)\(\s*"([A-Za-z_]\w*)"\s*\)/g,
+  /\bEnvironment\.GetEnvironmentVariable\(\s*"([A-Za-z_]\w*)"/g,
+  /\$_ENV\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
+  /(?<![\w>$:])env\(\s*['"]([A-Z_][A-Z0-9_]*)['"]/g, // Laravel env('APP_KEY') — upper-case names only
+  /\benv::var(?:_os)?\(\s*"([A-Za-z_]\w*)"/g, // Rust
+];
+const ENV_EXAMPLE_FILES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist", ".env.defaults", "env.example", "example.env", "sample.env"]);
+function envNamesIn(text, into) {
+  for (const re of RE_ENV_READS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) into.add(m[1]);
+  }
+}
+
+// Migrations and schema files: anything under a migrations/migrate/alembic folder, *.sql, *.prisma, db/schema.rb.
+const MIGRATION_DIRS = new Set(["migrations", "migrate", "migration", "alembic"]);
+function isMigrationFile(dirsLc, name, ext) {
+  if (ext === ".sql" || ext === ".prisma") return true;
+  if (name === "schema.rb" && dirsLc[dirsLc.length - 1] === "db") return true;
+  if (!dirsLc.some((d) => MIGRATION_DIRS.has(d))) return false;
+  return !/^(?:__init__\.py|readme(?:\.\w+)?|\.gitkeep|\.keep)$/i.test(name) && ![".md", ".txt", ".pyc", ".mako"].includes(ext);
+}
+
+// Entrypoints recognised by name and place.
+const PY_ENTRY = new Set(["main.py", "app.py", "manage.py", "wsgi.py", "asgi.py", "__main__.py", "run.py", "server.py"]);
+const NODE_ROOT_ENTRY = new Set(["index.js", "server.js", "app.js", "main.js", "index.mjs", "server.mjs", "index.ts", "server.ts", "app.ts", "main.ts"]);
+function entryKind(rel, name, depth) {
+  if (PY_ENTRY.has(name) && depth <= 2) return "python";
+  if (name === "main.go" && (depth === 0 || /(?:^|\/)cmd\/[^/]+\/main\.go$/.test(rel))) return "go main";
+  if (name === "Program.cs") return ".NET Program.cs";
+  if (/(?:^|\/)src\/main\.rs$/.test(rel) || /(?:^|\/)src\/bin\/[^/]+\.rs$/.test(rel)) return "rust main";
+  if (name === "config.ru" && depth === 0) return "rack";
+  if (name === "artisan" && depth === 0) return "laravel artisan";
+  if (/^(?:[^/]+\/)?public\/index\.php$/.test(rel)) return "php front controller";
+  if (NODE_ROOT_ENTRY.has(name) && depth === 0) return "node";
+  return null;
+}
+const normEntry = (p) => String(p).trim().replace(/\\/g, "/").replace(/^\.\//, "");
+
+const NODE_FRAMEWORKS = { express: "express", koa: "koa", "@koa/router": "koa", "koa-router": "koa", fastify: "fastify", hono: "hono", "@nestjs/core": "nestjs", next: "next.js", "@hapi/hapi": "hapi", restify: "restify" };
+const NODE_TEST_RUNNERS = { jest: "jest", vitest: "vitest", mocha: "mocha", ava: "ava", jasmine: "jasmine", tap: "tap", "@playwright/test": "playwright", cypress: "cypress", uvu: "uvu" };
+
+function scanCodebase(projectDir, opts = {}) {
+  const root = path.resolve(projectDir);
+  // Both surfaces refuse a cap that is not an integer ≥ 1 before calling; here it can only fall back to the default
+  // (a negative cap used to scan zero files and report "truncated").
+  const cap = Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : 5000;
+  const lang = projectLang(projectDir);
+  const B = i18n.msg(lang).brownfield;
+  const byExt = {};
+  const topDirs = [];
+  const routes = [];
+  let routeTotal = 0;
+  const routeFiles = new Set();
+  const env = new Set();
+  const envFiles = [];
+  const migrations = [];
+  const entrypoints = [];
+  const testFws = new Set();
+  const frameworks = new Set();
+  const csproj = [];
+  let testFiles = 0;
+  let read = 0;
+  let readCapped = false;
+  let pytestConfig = false;
+  let phpunitConfig = false;
+  const addEntry = (file, kind) => { if (!entrypoints.some((e) => e.file === file && e.kind === kind)) entrypoints.push({ file, kind }); };
+
+  // top-level dirs (candidate modules)
+  try {
+    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+      if (e.isDirectory() && !SCAN_IGNORE.has(e.name) && !e.name.startsWith(".")) topDirs.push(e.name);
+    }
+  } catch {}
+
+  // Root manifests: stack, frameworks, test runners, package.json entrypoints.
+  const has = (f) => fs.existsSync(path.join(root, f));
+  const text = (f) => { try { return fs.readFileSync(path.join(root, f), "utf8").slice(0, SCAN_READ_BYTES); } catch { return ""; } };
+  const stackHints = [];
+  if (has("package.json")) {
+    try {
+      const pj = JSON.parse(text("package.json").replace(/^\uFEFF/, ""));
+      const all = { ...(pj.dependencies || {}), ...(pj.devDependencies || {}) };
+      const deps = Object.keys(all);
+      stackHints.push("node (" + deps.slice(0, 12).join(", ") + (deps.length > 12 ? ", …" : "") + ")");
+      deps.forEach((d) => {
+        if (Object.prototype.hasOwnProperty.call(NODE_FRAMEWORKS, d)) frameworks.add(NODE_FRAMEWORKS[d]);
+        if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
+      });
+      const scripts = isObj(pj.scripts) ? pj.scripts : {};
+      // /\bnode\s+(?:[^|&;]*\s)?--test\b/, one command at a time: that pattern rescanned the command from each "node" and
+      // each of a long blank run's units (1.17 H).
+      const nodeTest = (seg) => { const m = /\bnode\s/.exec(seg); return !!m && /\s--test\b/.test(seg.slice(m.index + 4)); };
+      if (typeof scripts.test === "string" && scripts.test.split(/[|&;]/).some(nodeTest)) testFws.add("node:test");
+      if (typeof pj.main === "string" && pj.main.trim()) addEntry(normEntry(pj.main), "package.json main");
+      if (typeof pj.bin === "string" && pj.bin.trim()) addEntry(normEntry(pj.bin), "package.json bin");
+      else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addEntry(normEntry(v), "package.json bin"));
+      if (typeof scripts.start === "string" && scripts.start.trim()) {
+        const m = scripts.start.match(/(?:^|\s)(?:node|nodemon|ts-node|tsx|bun(?:\s+run)?|deno\s+run)\s+(?:--?[\w-]+(?:=\S+)?\s+)*([^\s&|;]+\.[cm]?[jt]s)\b/);
+        addEntry(m ? normEntry(m[1]) : scripts.start.trim(), "npm start");
+      }
+    } catch { stackHints.push("node"); }
+  }
+  const pyManifest = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile"].filter(has).map(text).join("\n").toLowerCase();
+  const hasPyManifest = has("requirements.txt") || has("pyproject.toml") || has("setup.py");
+  for (const fw of ["fastapi", "flask", "django"]) if (new RegExp("\\b" + fw + "\\b").test(pyManifest)) frameworks.add(fw);
+  if (/\bpytest\b/.test(pyManifest)) testFws.add("pytest");
+  const goMod = has("go.mod") ? text("go.mod") : "";
+  [["gin-gonic/gin", "gin"], ["labstack/echo", "echo"], ["go-chi/chi", "chi"], ["gofiber/fiber", "fiber"], ["gorilla/mux", "gorilla/mux"]].forEach(([k, v]) => { if (goMod.includes(k)) frameworks.add(v); });
+  const jvm = ["pom.xml", "build.gradle", "build.gradle.kts"].filter(has).map(text).join("\n").toLowerCase();
+  if (/spring-boot/.test(jvm)) frameworks.add("spring");
+  [["junit", "junit"], ["testng", "testng"], ["kotest", "kotest"]].forEach(([k, v]) => { if (jvm.includes(k)) testFws.add(v); });
+  const gemfile = has("Gemfile") ? text("Gemfile") : "";
+  if (/['"]rails['"]/.test(gemfile)) frameworks.add("rails");
+  if (/['"]sinatra['"]/.test(gemfile)) frameworks.add("sinatra");
+  [["rspec", "rspec"], ["minitest", "minitest"]].forEach(([k, v]) => { if (gemfile.includes(k)) testFws.add(v); });
+  const composer = has("composer.json") ? text("composer.json") : "";
+  [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
+  [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
+  const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
+  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
+
+  // bounded recursive walk
+  const walk = walkProject(root, cap, (rel, full, name) => {
+    const ext = path.extname(name).toLowerCase();
+    byExt[ext] = (byExt[ext] || 0) + 1;
+    const parts = rel.split("/");
+    const dirsLc = parts.slice(0, -1).map((p) => p.toLowerCase());
+    if (isMigrationFile(dirsLc, name, ext)) migrations.push(rel);
+    if (ENV_EXAMPLE_FILES.has(name)) {
+      envFiles.push(rel);
+      try {
+        for (const l of fs.readFileSync(full, "utf8").slice(0, 50000).split(/\r?\n/)) {
+          const m = l.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+          if (m) env.add(m[1]);
+        }
+      } catch {}
+    }
+    const kind = entryKind(rel, name, parts.length - 1);
+    if (kind) addEntry(rel, kind);
+    if (name === "conftest.py" || name === "pytest.ini") pytestConfig = true;
+    if (/^phpunit\.xml(?:\.dist)?$/.test(name)) phpunitConfig = true;
+    if (ext === ".csproj" && csproj.length < 20) csproj.push(full);
+    if (!CODE_EXT.has(ext)) return;
+    const test = isTestFile(rel);
+    if (test) {
+      testFiles++;
+      if (/_test\.go$/.test(name)) testFws.add("go test");
+      if (/_spec\.rb$/.test(name)) testFws.add("rspec");
+    }
+    if (read >= SCAN_READ_CAP) { readCapped = true; return; }
+    read++;
+    let txt;
+    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
+    envNamesIn(txt, env);
+    if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
+    if (test) {
+      // The runner a test file imports (the manifests above only cover declared dependencies).
+      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+pytest\b/m, "pytest"],
+        [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
+        .forEach(([re, fw]) => { if (re.test(txt)) testFws.add(fw); });
+      return; // tests call routes (supertest's api.get('/x')), they don't declare them
+    }
+    if (ext === ".py") { const im = txt.match(RE_PY_WEB_IMPORT); if (im) frameworks.add(im[1]); } // FastAPI/Flask without a manifest
+    if (/@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
+    else if (ext === ".java" && /\bstatic\s+void\s+main\s*\(/.test(txt)) addEntry(rel, "java main");
+    else if (ext === ".kt" && /^[^\S\n\r\u2028\u2029]*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main"); // indents within their line (1.17 H)
+    const found = scanRoutes(rel, txt);
+    if (!found.length) return;
+    routeFiles.add(rel);
+    routeTotal += found.length;
+    for (const r of found) {
+      if (!AMBIGUOUS_FRAMEWORK.has(r.framework)) frameworks.add(r.framework);
+      if (routes.length < SCAN_ROUTE_CAP) routes.push(r);
+    }
+  });
+  for (const f of csproj) {
+    let t = "";
+    try { t = fs.readFileSync(f, "utf8").slice(0, SCAN_READ_BYTES).toLowerCase(); } catch {}
+    if (/microsoft\.net\.sdk\.web|microsoft\.aspnetcore/.test(t)) frameworks.add("aspnet");
+    [["xunit", "xunit"], ["nunit", "nunit"], ["mstest", "mstest"]].forEach(([k, v]) => { if (t.includes(k)) testFws.add(v); });
+  }
+  if (pytestConfig) testFws.add("pytest");
+  if (phpunitConfig) testFws.add("phpunit");
+
+  // Stack from manifests; Python also from imports (FastAPI/Flask apps often ship without a manifest).
+  const pyFw = ["fastapi", "flask", "django"].filter((f) => frameworks.has(f));
+  if (hasPyManifest || pyFw.length) stackHints.push("python" + (pyFw.length ? " (" + pyFw.join(", ") + ")" : ""));
+  if (has("go.mod")) stackHints.push("go");
+  if (has("Cargo.toml")) stackHints.push("rust");
+  if (has("composer.json")) stackHints.push("php");
+  if (has("pom.xml") || has("build.gradle") || has("build.gradle.kts")) stackHints.push("java/jvm");
+  if (has("Gemfile")) stackHints.push("ruby");
+  if (csproj.length) stackHints.push(".net");
+
+  const extList = Object.entries(byExt).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => (k || "(none)") + ":" + v);
+  const envList = [...env].sort();
+  const res = {
+    ok: true,
+    root,
+    filesScanned: walk.total,
+    truncated: walk.truncated,
+    topLevelDirs: topDirs.sort(),
+    byExtension: extList,
+    stack: stackHints,
+    frameworks: [...frameworks].sort(),
+    candidateEndpoints: routeTotal, // ROUTES found (before 1.13: files that matched)
+    endpointFiles: routeFiles.size,
+    endpointSamples: [...routeFiles].slice(0, 25), // forward-slash paths of files that declare routes
+    routes,
+    routesTruncated: routeTotal > routes.length,
+    testFrameworks: [...testFws].sort(),
+    testFiles,
+    entrypoints: entrypoints.slice(0, SCAN_LIST_CAP),
+    envVars: envList.slice(0, SCAN_LIST_CAP * 2),
+    envVarsTotal: envList.length,
+    envFiles,
+    migrations: migrations.slice(0, SCAN_LIST_CAP),
+    migrationsTotal: migrations.length,
+    migrationDirs: [...new Set(migrations.map((m) => (m.includes("/") ? m.slice(0, m.lastIndexOf("/")) : ".")))].slice(0, SCAN_LIST_CAP),
+    codeFilesRead: read,
+    readCapped,
+    note: i18n.msg(lang).notes.scan,
+  };
+  if (res.routesTruncated) res.routesNote = B.routesTruncated(routes.length, routeTotal);
+  if (readCapped) res.readNote = B.readCapped(SCAN_READ_CAP);
+  return res;
+}
+
+// Spec coverage: the share of code files (CODE_EXT, tests apart) named in any _Implements:_ marker of any
+// feature — active or archived — with a per-top-level-folder breakdown. Compatible fields, meaning since 1.13:
+// coveragePercent = covered code files / code files (was: top-level folders whose NAME matched a feature slug);
+// modulesTotal = top-level folders holding code ("." = the root); documented / undocumented = those folders
+// with at least one / no covered file (undocumented is also returned as uncoveredFolders); features = the
+// active features (unchanged). unmatchedImplements = entries naming nothing on disk (a gap);
+// nonCodeImplements = entries naming an existing test / non-code file (informational, never counted).
+function coverage(projectDir) {
+  const root = path.resolve(projectDir);
+  const specs = specsRoot(root);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const active = listFeatures(projectDir).features.map((f) => f.name);
+  const archiveDir = path.join(specs, "_archive");
+  const archived = safeReaddir(archiveDir).filter((n) => { try { return fs.statSync(path.join(archiveDir, n)).isDirectory(); } catch { return false; } }).sort();
+  const sources = active.map((n) => ({ feature: n, archived: false, dir: path.join(specs, n) }))
+    .concat(archived.map((n) => ({ feature: n, archived: true, dir: path.join(archiveDir, n) })));
+
+  const code = new Map(); // fold(rel) → rel
+  const other = new Map(); // every other walked file (tests, docs, config) — an _Implements:_ naming one is not a gap
+  let testFiles = 0;
+  const walk = walkProject(root, COVERAGE_CAP, (rel, full, name) => {
+    if (!CODE_EXT.has(path.extname(name).toLowerCase())) other.set(fold(rel), rel);
+    else if (isTestFile(rel)) { testFiles++; other.set(fold(rel), rel); }
+    else code.set(fold(rel), rel);
+  });
+
+  const covered = new Set();
+  const byFeature = [];
+  const unmatched = [];
+  const nonCode = [];
+  const onDisk = (ref) => { // a file/folder the walk skips (dist/, a hidden dir) still exists
+    const p = implementsPath(ref);
+    if (!p || /[*?]/.test(p)) return false;
+    const abs = path.resolve(root, p);
+    return abs !== root && isInsideDir(root, abs) && fs.existsSync(abs);
+  };
+  for (const s of sources) {
+    const refs = implementsRefs(readIfExists(path.join(s.dir, "tasks.md")));
+    const mine = new Set();
+    for (const ref of refs) {
+      const hits = implementsTargets(root, ref, code, fold);
+      // No code file: a test / doc / config target that exists is informational (a +tdd task names its test file);
+      // only an entry that names nothing on disk is a gap — the same reading as trace_check.
+      if (!hits.length) {
+        const list = implementsTargets(root, ref, other, fold).length || onDisk(ref) ? nonCode : unmatched;
+        if (list.length < 50) list.push({ feature: s.feature, ref });
+      }
+      hits.forEach((k) => { mine.add(k); covered.add(k); });
+    }
+    if (refs.length) byFeature.push({ feature: s.feature, archived: s.archived, refs: refs.length, files: mine.size });
+  }
+
+  const folders = new Map();
+  for (const [k, rel] of code) {
+    const top = rel.includes("/") ? rel.slice(0, rel.indexOf("/")) : ".";
+    const f = folders.get(top) || { folder: top, files: 0, covered: 0 };
+    f.files++;
+    if (covered.has(k)) f.covered++;
+    folders.set(top, f);
+  }
+  const byFolder = [...folders.values()].sort((a, b) => (a.folder < b.folder ? -1 : a.folder > b.folder ? 1 : 0))
+    .map((f) => ({ ...f, percent: Math.round((f.covered / f.files) * 100) }));
+  const documented = byFolder.filter((f) => f.covered > 0).map((f) => f.folder);
+  const undocumented = byFolder.filter((f) => f.covered === 0).map((f) => f.folder);
+  return {
+    ok: true,
+    coveragePercent: code.size ? Math.round((covered.size / code.size) * 100) : 0,
+    codeFiles: code.size,
+    coveredFiles: covered.size,
+    testFiles,
+    modulesTotal: byFolder.length,
+    documented,
+    undocumented,
+    uncoveredFolders: undocumented.slice(),
+    byFolder,
+    uncoveredSample: [...code].filter(([k]) => !covered.has(k)).map(([, rel]) => rel).sort().slice(0, 25),
+    features: active,
+    archivedFeatures: archived,
+    byFeature,
+    unmatchedImplements: unmatched,
+    nonCodeImplements: nonCode,
+    truncated: walk.truncated,
+    note: i18n.msg(projectLang(projectDir)).notes.coverage,
+  };
+}
+
+module.exports = { SCAN_IGNORE, CODE_EXT, GUARD_CODE_EXT, SCAN_READ_CAP, SCAN_READ_BYTES, SCAN_ROUTE_CAP, SCAN_LIST_CAP,
+  COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, RE_TEST_NAME, isTestFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
+  RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,
+  RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL, RE_NEXT_APP,
+  RE_NEXT_PAGES, RE_NEXT_EXPORT, RE_PY_ROUTE, RE_PY_METHODS, PY_ROUTE_OWNERS, RE_PY_OWNER_SUFFIX, RE_PY_APP_DEF,
+  RE_PY_PREFIX_DEF, RE_PY_PREFIX_ARG, RE_PY_WEB_IMPORT, RE_DJANGO_ROUTE, RE_SPRING, RE_ASP_ATTR, RE_ASP_ROUTE_ATTR,
+  RE_ASP_MAP, RE_RUBY_VERB, RE_RAILS_RES, RE_LARAVEL, RE_LARAVEL_CHAIN, RE_SYMFONY, RE_GO_HANDLE, RE_GO_UPPER,
+  RE_GO_TITLE, GO_CLIENTS, RE_SLASH_COMMENT_LINE, RE_HASH_COMMENT_LINE, AMBIGUOUS_FRAMEWORK, SCAN_JOIN_LINES,
+  joinOpenCall, normRoutePath, joinRoute, springPaths, scanRoutes, RE_ENV_READS, ENV_EXAMPLE_FILES, envNamesIn,
+  MIGRATION_DIRS, isMigrationFile, PY_ENTRY, NODE_ROOT_ENTRY, entryKind, normEntry, NODE_FRAMEWORKS, NODE_TEST_RUNNERS,
+  scanCodebase, coverage, __link };
