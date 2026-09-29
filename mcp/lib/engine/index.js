@@ -11,7 +11,8 @@
  */
 
 const MODULES = ["./text.js", "./files.js", "./locks.js", "./markdown.js", "./state.js", "./tracks.js", "./classify.js",
-  "./packs.js", "./templates.js", "./placeholders.js"];
+  "./packs.js", "./templates.js", "./placeholders.js", "./steering.js", "./globs.js", "./tasks.js", "./evidence.js",
+  "./task-edit.js", "./brief.js"];
 const E = {};
 const mods = MODULES.map((f) => require(f));
 const add = (m, from) => {
