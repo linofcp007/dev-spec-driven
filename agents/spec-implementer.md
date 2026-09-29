@@ -27,8 +27,12 @@ requirements, the spec is the authority behind it, and the controller holds ever
    files next to yours), then the codebase by **concept and at least three synonyms** (`rg -n -i "retry|backoff|with_?retries"`),
    the shared folders `structure.md` names, whoever already wraps the library you were about to wrap, and
    `.specs/SPECS.md`. Then **reuse**, else **extend** (a parameter with a default — existing callers and their tests
-   unchanged; a unit outside the task's files only for a small change like that, named in the report — anything larger
-   is NEEDS_CONTEXT), else **create** — local to the feature until a second or third real use (the rule of three).
+   unchanged — in the files your task's `_Implements:_` names), else **create** — local to the feature until a second or
+   third real use (the rule of three). A unit to extend **outside** the task's files is never edited silently: report
+   **NEEDS_CONTEXT** naming the unit and the change (the controller adds a converge task for it — `spec_append_tasks` with
+   that file in `_Implements:_`, approved like any change to the plan — or tells you to go ahead), or, when the task
+   can be done without it, create locally and name the extension in the report's Reuse block. Under the scope guard
+   (`meta.guard: "scope"`) an edit to a file no open task plans stops for the user's permission mid-task.
    Never reuse by copy-paste. What you searched and found goes in the report's **Reuse** block, also when nothing was
    found.
 4. If anything is unclear — an AC you can't satisfy as written, a missing interface, an unresolved
@@ -111,8 +115,9 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
   job and is already scheduled; a reviewer you spawn duplicates it and counts for nothing.
 - **No new helper, component or client without the search** (Before you begin, step 3) — and none that duplicates an
   existing one: the reviewer searches the codebase too, and a duplicate is an Important finding.
-- Don't restructure code outside your task. A small **preparatory** refactor the task itself needs — in its own files,
-  behaviour-preserving, on green, in its own commit — is fine; anything else you notice (a smell, a duplicate, a
+- Don't restructure code outside your task. A small **preparatory** refactor the task itself needs — in its own files
+  (the ones `_Implements:_` names; a unit outside them is NEEDS_CONTEXT, step 3), behaviour-preserving, on green, in its
+  own commit — is fine; anything else you notice (a smell, a duplicate, a
   tangled file) is **filed, not done**: list it under *Refactor candidates* in the Reuse block — the controller puts it
   in the backlog.
 - Don't mark the task done in tasks.md and don't call `spec_complete_task` — the controller does

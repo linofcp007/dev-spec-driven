@@ -165,7 +165,7 @@ const TOOLS = [
   },
   {
     name: "spec_backlog",
-    description: "Manage the backlog — planned features that don't have a `.specs/<feature>/` folder yet (so the roadmap's 'what's left' includes work not yet started). Actions: 'add' (name + optional note; a name that already has an active feature folder is refused — it is specced, not planned), 'rm' (alias 'remove'), or omit / 'list' to list. Stored in .specs/roadmap.json.",
+    description: "Manage the backlog — planned features that don't have a `.specs/<feature>/` folder yet (so the roadmap's 'what's left' includes work not yet started). Actions: 'add' (name + optional note; a name that already has an active feature folder is refused — it is specced, not planned; a name already in the backlog, compared case-insensitively, keeps its entry and the new note is APPENDED to its note — one line, joined with ' · ', a note it already holds changes nothing, the whole note at most 2,000 characters (past it add is refused: file it under another name) — the result then carries `exists: true`, `appended` and a localized `note`; give separate items distinct names), 'rm' (alias 'remove'), or omit / 'list' to list. Stored in .specs/roadmap.json.",
     inputSchema: { type: "object", properties: { action: { type: "string", enum: spec.BACKLOG_ACTIONS.slice() }, name: { type: "string" }, note: { type: "string" }, projectDir: { type: "string" } } },
   },
   {

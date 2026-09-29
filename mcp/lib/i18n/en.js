@@ -1312,6 +1312,10 @@ const msg = {
       removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: dev-spec status ${slug}).`,
+      // 1.19 R review 5: add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
+      backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note.`,
+      backlogKept: (name) => `'${name}' is already in the backlog with that note — nothing changed.`,
+      backlogNoteFull: (name, max) => `'${name}' is already in the backlog and its note would pass ${max} characters — the new note was not added: file it under another name.`,
     },
     // CLI human output (--json output is the structured result, never localized).
     cliOutput: {
@@ -2941,12 +2945,15 @@ const brief = {
     files: "## Files (_Implements:_)",
     // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
     reuse: "## Reuse — search before you write",
-    reuseRule: "Before writing any helper, component, client, validator or formatter, search the codebase by concept and synonyms (references/code-reuse-and-quality.md): reuse, then extend, then create. Your report's **Reuse** block says what you reused, extended or created, and why.",
+    reuseRule: "Before writing any helper, component, client, validator or formatter, search the codebase by concept and synonyms (references/code-reuse-and-quality.md): reuse, then extend, then create. A unit to extend outside this task's files (_Implements:_) is never edited silently — stop and ask (NEEDS_CONTEXT), or create locally and name it in the report. Your report's **Reuse** block says what you reused, extended or created, and why.",
     reuseEntries: "The design's Reuse & Integration entries for this task — reuse or extend these before writing anything new:",
     reuseOmitted: (n) => `${n} more matching item(s) — read them in design.md (Reuse & Integration).`,
     reuseNoMatch: (n) => `The design's Reuse & Integration lists ${n} item(s), none naming this task's files or criteria — read it before creating anything new.`,
     reuseFiles: "Existing source files next to this task's files — look here first:",
-    reuseFilesMore: (n) => `…and ${n} more in the same folder(s).`,
+    // R review 4: atLeast — a folder was read only up to its first entries, so the count is a lower bound (0: "possibly more")
+    reuseFilesMore: (n, atLeast) => (!atLeast ? `…and ${n} more in the same folder(s).`
+      : n ? `…and at least ${n} more in the same folder(s) — a large folder: only its first entries were read.`
+        : "…and possibly more in the same folder(s) — a large folder: only its first entries were read."),
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,
     designOmitted: "Relevant but not included (size) — read them in design.md:",

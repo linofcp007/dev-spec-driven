@@ -16168,7 +16168,7 @@ function endRun() {
       !b5.reuse.files.length &&
       b1W.reuse === undefined && js(b1W.refs.reuse) === js({ entries: 1, files: ["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"] }) &&
       js(b1Mcp.refs.reuse) === js(b1W.refs.reuse) && b1Mcp.reuse === undefined && /## Reuse — search before you write/.test(b1File),
-      "1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); the section leaves Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
+      "1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); a Reuse & Integration section not naming the task stays out of Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
       js([b1.reuse, b2.reuse.entries, b3.reuse, b4.reuse.more, b5.reuse, b1W.refs, b1.designSections]) + ")");
 
     // R2 — bounded: at most 8 entries (the rest counted in `omitted`), a 200,000-character line with no '/' is read once (the path
@@ -16259,6 +16259,181 @@ function endRun() {
     ok(dmDoc.verdict === "pass" && /^design approved before 1\.19/.test(chk(dmDoc, "design-reuse").detail) && !dmDoc.checks.some((c) => c.status === "warn") && !fxBad.length,
       "1.19 R1: examples/demo-project stays doctor PASS with no warning (its pre-1.19 design approval → design-reuse passes with the note); evals/fixtures specs-en / specs-es designs pass design-reuse once approved, and so do the " + fxSeen + " approved design(s) of the built behavioural fixtures (got " +
       js([dmDoc.verdict, chk(dmDoc, "design-reuse").detail, fxBad]) + ")");
+
+    // 1.19 R review 1 (security) — a network _Implements:_ never reaches the file system: the brief decides on the TEXT that a UNC
+    // reference (//host/share, \\host\share, \\?\UNC\…, a UNC glob) lies outside the project, before any stat — it opened an SMB
+    // connection to the host a spec named (4.7–7.2 s on an unreachable one; NTLM credentials on Windows). A non-resolving name and
+    // TEST-NET-1, in a child process with a timeout. A `..` or absolute reference outside the project names nothing either; an
+    // absolute path INTO the project reads as its relative spelling.
+    const rv = rDir("rv-net"), rvOut = rDir("rv-outside");
+    S.initProject(rv, ["core"], "en");
+    const rvf = S.createFeature(rv, "Orders", ["core"]);
+    fs.writeFileSync(path.join(rvf.dir, "requirements.md"), REQ);
+    wDesign(rvf, design(REUSE2));
+    const rvPut = (base, rel) => { const p = path.join(base, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, "x"); };
+    for (const n of ["api.ts", "repo.ts", "helpers.ts"]) rvPut(rv, "src/orders/" + n);
+    for (const n of ["other.ts", "secret-helper.ts"]) rvPut(rvOut, n);
+    for (let i = 0; i < 1005; i++) rvPut(rv, "src/big/b" + String(i).padStart(4, "0") + ".ts");
+    const fwd = (p) => p.split(path.sep).join("/");
+    fs.writeFileSync(path.join(rvf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      "- [ ] 1. [US1] A\n  - _Implements: //nonexistent-host-zz9.invalid/share/x.ts_\n" +
+      "- [ ] 2. [US1] B\n  - _Implements: \\\\192.0.2.1\\share\\y.ts_\n" +
+      "- [ ] 3. [US1] C\n  - _Implements: //nonexistent-host-zz9.invalid/share/*.ts, \\\\?\\UNC\\192.0.2.1\\share\\z.ts_\n" +
+      "- [ ] 4. [US1] D\n  - _Implements: ../p19r-rv-outside/other.ts_\n" +
+      "- [ ] 5. [US1] E\n  - _Implements: " + fwd(rvOut) + "/_\n" +
+      "- [ ] 6. [US1] F\n  - _Implements: " + fwd(path.join(rv, "src", "orders", "api.ts")) + "_\n" +
+      "- [ ] 7. [US1] G\n  - _Implements: src/link/new.ts_\n" +
+      "- [ ] 8. [US1] H\n  - _Implements: src/link/_\n" +
+      "- [ ] 9. [US1] I\n  - _Implements: src/link/sub/deep.ts_\n" +
+      "- [ ] 10. [US1] J\n  - _Implements: src/big/_\n");
+    const rvChild = path.join(tmp, "p19r-rv-child.js");
+    fs.writeFileSync(rvChild, "const S = require(" + JSON.stringify(path.join(root, "mcp", "lib", "spec.js")) + ");\n" +
+      "const out = [1, 2, 3].map((n) => { const t0 = Date.now(); const b = S.taskBrief(" + JSON.stringify(rv) + ", " + JSON.stringify(rvf.slug) + ", n);\n" +
+      "  return { n, ms: Date.now() - t0, ok: b.ok, files: b.reuse ? b.reuse.files : [], entries: b.reuse ? b.reuse.entries : [] }; });\n" +
+      "process.stdout.write(JSON.stringify(out));\n");
+    const rvT0 = Date.now();
+    const rvNet = spawnSync(process.execPath, [rvChild], { encoding: "utf8", timeout: 20000 });
+    const rvWall = Date.now() - rvT0;
+    let rvGot = null;
+    try { rvGot = JSON.parse(rvNet.stdout); } catch { rvGot = null; }
+    const [rv4, rv5, rv6] = [4, 5, 6].map((n) => S.taskBrief(rv, rvf.slug, n));
+    ok(!rvNet.error && rvNet.status === 0 && Array.isArray(rvGot) && rvGot.length === 3 && rvGot.every((x) => x.ok && x.ms < 3000 && !x.files.length && !x.entries.length) && rvWall < 15000 &&
+      !rv4.reuse.files.length && !rv4.reuse.entries.length && !rv5.reuse.files.length && !js([rv4, rv5]).includes("secret-helper") &&
+      js(rv6.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts"]) && rv6.reuse.entries.length === 1 && /src\/orders\/repo\.ts/.test(rv6.reuse.entries[0]),
+      "1.19 R review 1: a UNC _Implements:_ (//host/share, \\\\host\\share on TEST-NET, \\\\?\\UNC\\…, a UNC glob) makes no fs call — each brief returns at once (child process, 20 s timeout); a `..` or absolute reference outside the project lists nothing; an absolute path into the project reads as its relative spelling (got " +
+      js([rvNet.error && rvNet.error.code, rvNet.status, rvWall, rvGot, (rvNet.stderr || "").slice(0, 300), rv4.reuse, rv5.reuse, rv6.reuse]) + ")");
+
+    // 1.19 R review 3 (security) — a folder reached through a link (a junction on Windows, a symlink elsewhere) is never listed:
+    // each segment below the project root is lstat'ed and nothing is followed (src/link → a folder outside listed its files).
+    let rvLink = true;
+    try { fs.symlinkSync(rvOut, path.join(rv, "src", "link"), "junction"); } catch (e) { rvLink = e.code || String(e); }
+    const rvL = [7, 8, 9].map((n) => S.taskBrief(rv, rvf.slug, n));
+    ok(rvLink !== true || (rvL.every((b) => b.ok && !(b.reuse && b.reuse.files.length)) && !js(rvL).includes("secret-helper") && !js(rvL).includes("other.ts")),
+      "1.19 R review 3: a task implementing src/link/new.ts, src/link/ or src/link/sub/deep.ts, where src/link is a junction / symlink to a folder outside the project, lists none of its files (got " +
+      js([rvLink, rvL.map((b) => b.reuse)]) + ")");
+
+    // 1.19 R review 4 — a folder read up to its cap: at most 1,000 entries per folder (opendir, never the whole listing), and the
+    // count past the 15 listed is a lower bound — "at least N more" (EN / PT / ES / pt-BR; "possibly more" when none is counted).
+    const rvBig = S.taskBrief(rv, rvf.slug, 10);
+    const moreTxt = ["en", "pt", "es", "pt-BR"].map((l) => I.brief(l).reuseFilesMore(985, true));
+    ok(rvBig.reuse.files.length === 15 && rvBig.reuse.more === 985 && rvBig.reuse.truncated === true &&
+      /\n…and at least 985 more in the same folder\(s\) — a large folder: only its first entries were read\.\n/.test(rvBig.brief) &&
+      b4.reuse.truncated === undefined && /pelo menos mais 985/.test(moreTxt[1]) && /al menos 985 más/.test(moreTxt[2]) && moreTxt[3] === I.toPtBr(moreTxt[1]) &&
+      /possibly more/.test(I.brief("en").reuseFilesMore(0, true)) && I.brief("en").reuseFilesMore(15, false) === "…and 15 more in the same folder(s).",
+      "1.19 R review 4: a 1,005-file folder lists 15 and says 'at least 985 more' (truncated: true — only its first 1,000 entries are read); a small one keeps the exact count; PT / ES / pt-BR (got " +
+      js([rvBig.reuse.files.length, rvBig.reuse.more, rvBig.reuse.truncated, moreTxt]) + ")");
+
+    // 1.19 R review 2 — the design context. Differential vs 1.18 for designs WITHOUT a Reuse & Integration section: the sections a
+    // synonym names ("Integration Points" with a handler's contract bullets, "Existing code", "Reuse of HTTP connections") are
+    // selected exactly as 1.18 did (ref118: the needle rule — the task's ACs, files and 5+-character basenames in a `##` section's
+    // title or body) and quoted whole. With a Reuse & Integration section, only THAT one leaves Design context, and only when the
+    // Reuse part quotes all of it (every entry, no code block); a second synonym section ("Integration Points") always stays.
+    const ref118 = (text, files, acs) => {
+      const secs = [];
+      let cur = null;
+      for (const l of text.split("\n")) { const m = /^## (.*)$/.exec(l); if (m) { cur = { title: m[1].trim(), body: [] }; secs.push(cur); } else if (cur) cur.body.push(l); }
+      const needles = [...acs, ...files, ...files.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
+      return secs.filter((s) => needles.some((x) => (s.title + "\n" + s.body.join("\n").trim()).includes(x))).map((s) => s.title);
+    };
+    const cx = rDir("rv-ctx");
+    S.initProject(cx, ["core"], "en");
+    const cxf = S.createFeature(cx, "Hooks", ["core"]);
+    fs.writeFileSync(path.join(cxf.dir, "requirements.md"), REQ);
+    const cxTasks = [["src/hooks/stripe.ts", "US-1.AC-1"], ["src/lib/money.ts", "US-1.AC-2"], ["src/http/pool.ts", null], ["src/other/x.ts", null]];
+    fs.writeFileSync(path.join(cxf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      cxTasks.map(([f, ac], i) => `- [ ] ${i + 1}. [US1] Task ${i + 1}\n` + (ac ? `  - _Requirements: ${ac}_\n` : "") + `  - _Implements: ${f}_\n`).join(""));
+    const D118 = "# Design: Hooks\n\n## Overview\nStripe webhooks.\n\n## Integration Points\nThe Stripe webhook handler src/hooks/stripe.ts:\n" +
+      "- verifies the X-Sig header with HMAC-SHA256 over the raw body\n- dedups on event.id in the processed_events table\n\n" +
+      "## Existing code\n- src/lib/money.ts formats amounts (reuse it in the receipt)\n\n## Reuse of HTTP connections\nA keep-alive agent in src/http/pool.ts.\n\n" +
+      "## Data Models\nEvent {id}.\n";
+    wDesign(cxf, D118);
+    const cx118 = cxTasks.map(([f, ac], i) => {
+      const b = S.taskBrief(cx, cxf.slug, i + 1);
+      const want = ref118(D118, [f], ac ? [ac] : []);
+      return { n: i + 1, got: b.designSections, want, same: js(b.designSections) === js(want), ctx: (b.brief.split("\n## Design context\n")[1] || "") };
+    });
+    const RI = (rows) => "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" + rows + "\n";
+    const IP = "## Integration Points\n- src/hooks/stripe.ts answers 2xx within 3 s; Stripe retries for 3 days\n\n";
+    const rowHook = "| Extend | the webhook router | `src/hooks/stripe.ts` | registers the handler |\n";
+    const cxWith = (reuse) => { wDesign(cxf, "# Design: Hooks\n\n## Overview\nStripe webhooks.\n\n" + reuse + IP + "## Data Models\nEvent {id}.\n"); return S.taskBrief(cx, cxf.slug, 1); };
+    const cxAll = cxWith(RI(rowHook));
+    const cxPart = cxWith(RI(rowHook + "| Reuse | Money | `src/lib/money.ts` | formats amounts |\n"));
+    const cxCode = cxWith(RI(rowHook) + "```ts\nexport function register(r: Router): void\n```\n\n");
+    ok(cx118.every((r) => r.same) && /dedups on event\.id in the processed_events table/.test(cx118[0].ctx) && /X-Sig header/.test(cx118[0].ctx) &&
+      js(cx118[0].got) === js(["Integration Points"]) && js(cx118[1].got) === js(["Existing code"]) && js(cx118[2].got) === js(["Reuse of HTTP connections"]) && !cx118[3].got.length &&
+      js(cxAll.designSections) === js(["Integration Points"]) && js(cxAll.reuse.entries) === js([rowHook.trim()]) &&
+      js(cxPart.designSections) === js(["Reuse & Integration", "Integration Points"]) && cxPart.reuse.entries.length === 1 &&
+      js(cxCode.designSections) === js(["Reuse & Integration", "Integration Points"]),
+      "1.19 R review 2: a 1.18-style design (Integration Points with its contract bullets, Existing code, Reuse of HTTP connections) gets the 1.18 Design context, whole; with a Reuse & Integration section only that one leaves it, and only when the Reuse part quotes all of it (not with a row left out or a code block); Integration Points beside it stays (got " +
+      js([cx118.map((r) => [r.n, r.got, r.want]), cxAll.designSections, cxPart.designSections, cxCode.designSections]) + ")");
+
+    // T review 6 — a task emitting metrics reads the design's observability: on an +obs feature (and saas + obs) its [OBS] Telemetry
+    // section reaches the brief although the task cites a core AC; without _Emits metrics:_ it doesn't; PT's heading too.
+    const ob = rDir("rv-obs");
+    S.initProject(ob, ["core"], "en");
+    const obTasks = "# Tasks\n\n## Story US-1 (P1)\n- [ ] 1. [US1] Count orders\n  - _Requirements: US-1.AC-1_\n  - _Emits metrics: orders_placed_total_\n  - _Implements: src/orders/api.ts_\n" +
+      "- [ ] 2. [US1] Store orders\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/store.ts_\n";
+    const obBrief = (name, tracks, lang) => {
+      const f = S.createFeature(ob, name, tracks, "", undefined, lang);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), obTasks);
+      // the sections quoted, plus the "Relevant but not included (size)" line (a section that didn't fit the design budget still counts)
+      return [1, 2].map((n) => { const b = S.taskBrief(ob, f.slug, n); return [...b.designSections, ...(b.brief.match(/^Relevant(?:es)? [^\n]*$/m) || [])]; });
+    };
+    const obEn = obBrief("Metrics", ["core", "obs"], "en"), obBoth = obBrief("Metrics Saas", ["core", "saas", "obs"], "en"), obPt = obBrief("Métricas", ["core", "obs"], "pt");
+    ok(obEn[0].includes("[OBS] Telemetry") && !obEn[1].includes("[OBS] Telemetry") &&
+      obBoth[0].includes("[OBS] Telemetry") && obBoth[0].includes("[SaaS] Observability") && obPt[0].includes("[OBS] Telemetria") && !obPt[1].includes("[OBS] Telemetria"),
+      "1.19 R review T-6: _Emits metrics:_ pulls the +obs feature's [OBS] Telemetry section into the brief (with [SaaS] Observability on a saas + obs feature; PT Telemetria) for a task citing a core AC; a task without it doesn't (got " +
+      js([obEn, obBoth, obPt]) + ")");
+
+    // 1.19 R review 5 — spec_backlog add of a name already there keeps the entry and APPENDS the new note (one line, ' · '): a second
+    // refactor candidate filed under the same name was dropped while add answered ok. exists / appended / a localized note; the same
+    // note again changes nothing; a note past 2,000 characters is refused (nothing written); PT project → PT note.
+    const bl = rDir("rv-backlog");
+    S.initProject(bl, ["core"], "en");
+    const blAdd = async (p, name, note) => payload(await call("spec_backlog", { projectDir: p, action: "add", name, note }));
+    const bl1 = await blAdd(bl, "refactor-pricing", "refactor: Repeated Switches in pricing.ts, invoice.ts");
+    const bl2 = await blAdd(bl, "Refactor-Pricing", "refactor: a rounding helper copied in cart.ts");
+    const bl3 = await blAdd(bl, "refactor-pricing", "refactor: a rounding helper copied in cart.ts");
+    const blBig = await blAdd(bl, "refactor-pricing", "x".repeat(2000));
+    const blNote = (S.backlog(bl, "list").backlog.find((b) => b.name === "refactor-pricing") || {}).note;
+    const blp = rDir("rv-backlog-pt");
+    S.initProject(blp, ["core"], "pt");
+    await blAdd(blp, "refactor-precos", "refactor: a");
+    const blPt = await blAdd(blp, "refactor-precos", "refactor: b");
+    ok(bl1.exists === undefined && bl2.exists === true && bl2.appended === true && bl2.note === "'refactor-pricing' is already in the backlog — the new note was appended to its note." &&
+      bl3.exists === true && bl3.appended === false && /with that note — nothing changed/.test(bl3.note) &&
+      blBig.exists === true && /would pass 2000 characters — the new note was not added/.test(blBig.error || "") &&
+      blNote === "refactor: Repeated Switches in pricing.ts, invoice.ts · refactor: a rounding helper copied in cart.ts" &&
+      S.backlog(bl, "list").backlog.length === 1 && blPt.appended === true && /já está no backlog — a nova nota foi acrescentada/.test(blPt.note) &&
+      I.toPtBr(blPt.note) === I.msg("pt-BR").featureOps.backlogAppended("refactor-precos"),
+      "1.19 R review 5: backlog add of an existing name (case-insensitive) appends the new note to its entry (exists, appended, a localized note — EN / PT / pt-BR), the same note twice changes nothing, past 2,000 characters it is refused; one entry, both notes (got " +
+      js([bl1, bl2, bl3, blBig, blNote, blPt]) + ")");
+
+    // 1.19 R review 6 — the PT / ES "integration with the existing system" headings name the section (EN had it); and the prose: a
+    // unit to extend OUTSIDE the task's files is never edited silently — NEEDS_CONTEXT / a converge task (spec_append_tasks) or a note
+    // in the report, the scope guard named — in the implementer, the guide, the protocol, /executeTask and the brief (EN / PT / ES /
+    // pt-BR); refactor candidates get one name each (an existing name appends).
+    const sysGot = [["pt", "## Integração com o sistema existente\n- O serviço de encomendas (`src/orders/service.ts`).\n"],
+      ["pt-BR", "## Integracao com o sistema existente\n- O serviço de pedidos.\n"],
+      ["es", "## Integración con el sistema existente\n- El servicio de pedidos (`src/orders/service.ts`).\n"]].map(([lang, sec], i) => {
+      const f = S.createFeature(hp, "Sistema " + i, ["core"], "", undefined, lang);
+      wDesign(f, hand(sec));
+      return reuseSt(S.specDoctor(hp, f.slug));
+    });
+    const impl6 = rRd("agents", "spec-implementer.md"), guide6 = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const sub6 = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md"), exec6 = rRd("commands", "executeTask.md");
+    const step3 = cut(impl6, "3. **Search before you write**", "4. If anything is unclear");
+    const outside6 = cut(guide6, "**Extending a unit outside the task's files.**", "## Module boundaries");
+    const rules6 = ["en", "pt", "es", "pt-BR"].map((l) => I.brief(l).reuseRule);
+    ok(sysGot.every((s) => s === "pass") &&
+      /never edited silently/.test(step3) && /\*\*NEEDS_CONTEXT\*\*/.test(step3) && /spec_append_tasks/.test(step3) && /meta\.guard: "scope"/.test(step3) &&
+      /NEEDS_CONTEXT/.test(outside6) && /spec_append_tasks/.test(outside6) && /meta\.guard: "scope"/.test(outside6) && /Reuse\*\* block/.test(outside6) &&
+      /extend a unit outside\s+the task's files/.test(sub6) && /One name per candidate/.test(sub6) && /spec_append_tasks/.test(cut(exec6, "**Search before you write**", "**Can't run the")) &&
+      /its \*\*own name\*\*/.test(guide6) && /never edited silently — stop and ask \(NEEDS_CONTEXT\)/.test(rules6[0]) && /nunca é editada em silêncio — pede contexto \(NEEDS_CONTEXT\)/.test(rules6[1]) &&
+      /nunca se edita en silencio/.test(rules6[2]) && rules6[3] === I.toPtBr(rules6[1]) && /peça contexto/.test(rules6[3]) &&
+      [step3, outside6].every((t) => !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.19 R review 6: PT / ES 'integração com o sistema existente' / 'integración con el sistema existente' name the Reuse section; extending a unit outside the task's files is NEEDS_CONTEXT or a converge task, never a silent edit (the scope guard named) — implementer, guide, protocol, /executeTask and the brief's rule in EN / PT / ES / pt-BR; one backlog name per refactor candidate (got " +
+      js([sysGot, step3.length, outside6.length, rules6.map((r) => r.slice(-160))]) + ")");
   }
 
   // 1.19 package (T) — the +api, +ui and +obs tracks.

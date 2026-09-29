@@ -1289,6 +1289,9 @@ const msg = {
       removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: dev-spec status ${slug}).`,
+      backlogAppended: (name) => `'${name}' já está no backlog — a nova nota foi acrescentada à sua nota.`,
+      backlogKept: (name) => `'${name}' já está no backlog com essa nota — nada mudou.`,
+      backlogNoteFull: (name, max) => `'${name}' já está no backlog e a sua nota passaria de ${max} caracteres — a nova nota não foi acrescentada: regista-a com outro nome.`,
     },
     cliOutput: {
       words: { pass: "ok", warn: "aviso", fail: "falha", "gaps-found": "com lacunas", clear: "clara", "needs-clarification": "precisa de clarificação", error: "erro" },
@@ -2815,12 +2818,14 @@ const brief = {
     files: "## Ficheiros (_Implements:_)",
     // 1.19 R2 — pesquisar antes de escrever: as entradas de Reutilização e Integração do design para esta tarefa, e os ficheiros ao lado dos seus
     reuse: "## Reutilização — pesquisar antes de escrever",
-    reuseRule: "Procura no código, pelo conceito e por sinónimos (references/code-reuse-and-quality.md), antes de escrever qualquer helper, componente, cliente, validador ou formatador: primeiro reutilizar, depois estender, só então criar. O bloco **Reuse** do teu relatório diz o que foi reutilizado, estendido ou criado, e porquê.",
+    reuseRule: "Procura no código, pelo conceito e por sinónimos (references/code-reuse-and-quality.md), antes de escrever qualquer helper, componente, cliente, validador ou formatador: primeiro reutilizar, depois estender, só então criar. Uma unidade a estender fora dos ficheiros desta tarefa (_Implements:_) nunca é editada em silêncio — pede contexto (NEEDS_CONTEXT), ou cria localmente e indica-a no relatório. O bloco **Reuse** do teu relatório diz o que foi reutilizado, estendido ou criado, e porquê.",
     reuseEntries: "As entradas de Reutilização e Integração do design para esta tarefa — reutilizar ou estender isto antes de escrever algo novo:",
     reuseOmitted: (n) => `Mais ${n} item(ns) correspondem — lê-os no design.md (Reutilização e Integração).`,
     reuseNoMatch: (n) => `A secção Reutilização e Integração do design lista ${n} item(ns), nenhum com os ficheiros ou os critérios desta tarefa — lê-a antes de criar algo novo.`,
     reuseFiles: "Ficheiros de código existentes ao lado dos desta tarefa — procura aqui primeiro:",
-    reuseFilesMore: (n) => `…e mais ${n} na(s) mesma(s) pasta(s).`,
+    reuseFilesMore: (n, atLeast) => (!atLeast ? `…e mais ${n} na(s) mesma(s) pasta(s).`
+      : n ? `…e pelo menos mais ${n} na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas.`
+        : "…e possivelmente mais na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas."),
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,
     designOmitted: "Relevantes mas não incluídas (tamanho) — lê-as no design.md:",
