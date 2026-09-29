@@ -14367,6 +14367,12 @@ function endRun() {
       "1.16 verify NEW-1: a meta.milestones that is no list is left as it is by a rename (milestonesInvalid {notList}) and ROADMAP.md says it is not a list (got " + js([vRen2.milestonesInvalid, vRep2.milestonesInvalid]) + ")");
   }
 
+  // 1.17 package (D) — +dist track: distributed systems and data consistency.
+
+  // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
+
+  // 1.17 package (F) — spec_import fluidplan.
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

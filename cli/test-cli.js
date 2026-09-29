@@ -34,6 +34,7 @@ SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section 
 SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
 SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
 SECTIONS.push("p16u", "p16c", "p16q", "p16e"); // 1.16 packages U / C / Q / E — each branch fills its own section
+SECTIONS.push("p17d", "p17a", "p17f"); // 1.17 packages D / A / F — each branch fills its own section
 SECTIONS.push("fftracks"); // 1.15 feature F4 — project-defined tracks (track packs)
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
@@ -3956,6 +3957,12 @@ if (inSection("p16e")) {
   ok(brk.code === 1 && /roadmap\.json is not valid JSON/.test(brk.out) && !/No milestones yet/.test(brk.out) && brkJ.code === 1 && brkDoc && brkDoc.ok === false && /roadmap\.json/.test(brkDoc.error),
     "1.16 E review (CLI) extra: milestone list on a roadmap.json that doesn't parse exits 1 with its error (--json: the {ok: false} result) — never 'No milestones yet' (got " + js([brk.code, brk.out]) + ")");
 }
+
+// 1.17 package (D): if (inSection("p17d")) { … }
+
+// 1.17 package (A): if (inSection("p17a")) { … }
+
+// 1.17 package (F): if (inSection("p17f")) { … }
 
 // unknown command errors
 if (inSection("main")) ok(run(["wat"]).code === 1, "unknown command exits non-zero");
